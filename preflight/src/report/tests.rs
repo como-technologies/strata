@@ -1,5 +1,5 @@
 use super::*;
-use crate::probe::Ran;
+use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
 use std::time::Duration;
 use strata::api::Method;
@@ -264,8 +264,7 @@ rules:
         messages: vec![],
         elapsed: Duration::from_millis(1),
         ran: Ran::Exec {
-            line: "aws service-quotas get-service-quota".into(),
-            answer: Some("exit 0".into()),
+            first: Invocation::ended("aws service-quotas get-service-quota", 0),
             also: None,
             request,
         },
@@ -337,9 +336,11 @@ rules:
         messages: vec![],
         elapsed: Duration::from_millis(1),
         ran: Ran::Exec {
-            line: "aws iam list-attached-role-policies".into(),
-            answer: Some("exit 0".into()),
-            also: Some("aws service-quotas get-service-quota".into()),
+            first: Invocation::ended("aws iam list-attached-role-policies", 0),
+            also: Some(Invocation::ended(
+                "aws service-quotas get-service-quota",
+                254,
+            )),
             request: None,
         },
     };
@@ -355,7 +356,76 @@ rules:
     assert!(lines[2].contains("--argjson out"), "{}", lines[2]);
     assert!(lines[2].contains("--argjson also"), "{}", lines[2]);
     assert!(lines[2].contains(".exec = {exit: 0"), "{}", lines[2]);
-    assert!(lines[2].contains(".also = {exit: 0"), "{}", lines[2]);
+    assert!(lines[2].contains(".also = {exit: 254"), "{}", lines[2]);
+}
+
+#[test]
+fn the_report_line_of_a_check_with_a_second_command_shows_the_exit_code_of_each_command() {
+    let section = r#"
+section: identity
+title: I
+rules:
+  - id: iam-role-policy-quota
+    title: t
+    engines: [aws]
+    tier: cloud
+    status: seen
+    what: w
+    check:
+      kind: exec
+      needs: [aws]
+      argv: [aws, iam, list-attached-role-policies]
+      also: [aws, service-quotas, get-service-quota]
+      expr: ".exec.exit == 0"
+"#;
+    let mut catalog = Catalog::default();
+    catalog
+        .push(
+            Catalog::parse_section(section, std::path::Path::new("i.yaml")).unwrap(),
+            std::path::Path::new("i.yaml"),
+        )
+        .unwrap();
+    let outcome = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Exec {
+            first: Invocation::ended("aws iam list-attached-role-policies", 0),
+            also: Some(Invocation::ended(
+                "aws service-quotas get-service-quota",
+                254,
+            )),
+            request: None,
+        },
+    };
+    let world = serde_json::json!({"cloud": "aws"});
+    let report = assemble(
+        Assembly {
+            catalog: &catalog,
+            outcomes: vec![(catalog.rule("iam-role-policy-quota").unwrap(), outcome)],
+            confidence: BTreeMap::new(),
+            world: &world,
+            subject: Subject {
+                cloud: "aws".into(),
+                release: None,
+                source: "c.json".into(),
+                name: "fred".into(),
+                cluster_uid: None,
+            },
+            options: options(),
+            generated_at: "2026-09-30T00:00:00Z".into(),
+        },
+        &Jq::new(),
+    );
+    let check = &report.checks[0];
+    assert_eq!(check.answer.as_deref(), Some("exit 0; exit 254"));
+    assert_eq!(
+        check.ran_lines(),
+        [
+            "aws iam list-attached-role-policies; aws service-quotas get-service-quota -> exit 0; exit 254"
+        ]
+    );
+    assert!(check.requests.is_empty());
 }
 
 #[test]

@@ -528,11 +528,12 @@ fn a_table_has_a_call_unless_every_rule_of_the_fact_is_for_a_cloud_that_the_lab_
     azure.rules = vec!["azure-vcpu-quota".to_string()];
     azure.table.as_mut().unwrap().holds = vec!["4".to_string()];
     sources.facts.push(azure);
+    hold(&mut sources, "azure-vcpu-quota", ".limit >= 4");
     assert_eq!(faults_of(&sources), Vec::<String>::new());
 }
 
 #[test]
-fn a_text_value_of_a_table_must_be_in_a_program_of_the_rule_and_a_number_need_not() {
+fn a_text_value_of_a_table_must_be_in_a_program_of_the_rule() {
     let mut sources = world();
     sources.facts[2].table.as_mut().unwrap().holds =
         vec!["use1-az3".to_string(), "use1-az4".to_string()];
@@ -540,14 +541,49 @@ fn a_text_value_of_a_table_must_be_in_a_program_of_the_rule_and_a_number_need_no
         &sources,
         "the table holds `use1-az4`, and no rule of the fact does",
     );
+}
+
+/// The default quota of managed policies is 20 in the table and in the program of the rule. The
+/// program is the text that the rule holds, so a number of the table is a word of that text.
+#[test]
+fn a_number_of_a_table_must_be_a_whole_word_in_a_program_of_the_rule() {
     let mut sources = world();
-    sources.facts[2]
-        .table
-        .as_mut()
-        .unwrap()
-        .holds
-        .push("10".to_string());
+    sources.facts[2].table.as_mut().unwrap().holds = vec!["20".to_string()];
+    hold(
+        &mut sources,
+        "eks-unsupported-zone",
+        "20 as $default | .AvailabilityZones[].ZoneName",
+    );
     assert_eq!(faults_of(&sources), Vec::<String>::new());
+    // the rule holds another default than the table: the table changed, and the rule did not
+    hold(
+        &mut sources,
+        "eks-unsupported-zone",
+        "10 as $default | .AvailabilityZones[].ZoneName",
+    );
+    assert_one_fault(
+        &sources,
+        "the table holds `20`, and no rule of the fact does",
+    );
+    // a longer number, a decimal, and a quota code hold the digits and are not the number
+    for program in [
+        ".[:200]",
+        "20.5 as $default",
+        "2.20 as $default",
+        "L-0DA420",
+        "us-east-20",
+        "x20 as $default",
+    ] {
+        hold(&mut sources, "eks-unsupported-zone", program);
+        assert_one_fault(
+            &sources,
+            "the table holds `20`, and no rule of the fact does",
+        );
+    }
+    for program in ["(.a // 20)", ".a == 20", "[20, 30]", "\"{{ 20 }}\"", "20"] {
+        hold(&mut sources, "eks-unsupported-zone", program);
+        assert_eq!(faults_of(&sources), Vec::<String>::new(), "{program}");
+    }
 }
 
 #[test]

@@ -23,7 +23,7 @@ use palette::run_palette;
 
 pub use backend::{Backend, ExecOutput, FixtureBackend, LiveBackend, Reader, Response, is_answer};
 pub use exec::{shell_words, tool_on_path};
-pub use outcome::{Call, Outcome, Ran, Verdict};
+pub use outcome::{Call, Invocation, Outcome, Ran, Verdict};
 
 /// Run the check of `rule` on `world`, through `backend`. A rule with no check is `NOT CHECKED`.
 pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> Outcome {

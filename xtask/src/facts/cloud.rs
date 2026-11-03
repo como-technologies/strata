@@ -402,8 +402,8 @@ fn calls_read_only(sources: &Sources) -> Vec<String> {
 }
 
 /// A table has a call that lists its values, unless each rule of the fact is for a cloud that the
-/// lab has no account of. Each value of the table is in a program of its rules, unless it is a
-/// number: a limit is a number that a program holds in its own way.
+/// lab has no account of. Each value of the table is in a program of its rules. A number is there as
+/// a whole word, so a rule that holds another default than the table fails the check.
 fn tables_proven(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in clouds(sources) {
@@ -431,13 +431,13 @@ fn tables_proven(sources: &Sources) -> Vec<String> {
                 "fact `{id}`: the table has no call, and a rule of the fact is for a cloud of the lab"
             ));
         }
-        for value in table.holds.iter().filter(|v| v.parse::<f64>().is_err()) {
+        for value in &table.holds {
             let held = fact.rules.iter().any(|r| {
                 sources
                     .cloud
                     .programs
                     .get(r)
-                    .is_some_and(|program| program.contains(value.as_str()))
+                    .is_some_and(|program| holds_value(program, value))
             });
             if !held {
                 bad.push(format!(
@@ -447,6 +447,20 @@ fn tables_proven(sources: &Sources) -> Vec<String> {
         }
     }
     bad
+}
+
+/// True when `program` holds `value`. A number is a whole word: `20` is not in `200`, in `20.5`, or
+/// in `L-0DA4ABF3`. Another value is a part of the text.
+fn holds_value(program: &str, value: &str) -> bool {
+    if value.parse::<f64>().is_err() {
+        return program.contains(value);
+    }
+    // an escaped number always compiles
+    Regex::new(&format!(
+        r"(?:^|[^\w.-]){}(?:$|[^\w.-])",
+        regex::escape(value)
+    ))
+    .is_ok_and(|word| word.is_match(program))
 }
 
 /// The route of Palette beside a call is a fact of the kind `request`, or a route that no such fact

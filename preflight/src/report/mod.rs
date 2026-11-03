@@ -149,10 +149,12 @@ pub struct CheckResult {
     /// The request or the command the check ran.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ran: Option<String>,
-    /// The answer of the call: `HTTP 200`, or `exit 0`.
+    /// The answer of the call: `HTTP 200`, or `exit 0`. A check with a second command has the
+    /// exit code of each command, in the order of `ran`: `exit 0; exit 254`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
-    /// The requests of a check with `each`, one for each item, in the order of the list.
+    /// The requests of a check with `each`, one for each item, in the order of the list. A check of
+    /// kind `exec` with `palette` has one entry, the read of Palette, beside `ran` and `answer`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requests: Vec<Call>,
     /// What a person runs by hand to see the same thing.
@@ -475,7 +477,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             messages: outcome.messages.clone(),
             elapsed_ms: outcome.elapsed.as_millis() as u64,
             ran: outcome.ran.text(),
-            answer: outcome.ran.answer().map(str::to_string),
+            answer: outcome.ran.answer(),
             requests: outcome.ran.requests().to_vec(),
             reproduce,
             fix: rule.fix.clone(),

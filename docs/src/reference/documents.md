@@ -720,11 +720,12 @@ what it answered.
   - `messages[]`: one for each failure, or the reason for another verdict.
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code. A check with a second command shows
-    both commands in `ran`, with `; ` between them. Then `answer` is the exit
-    code of the first command.
-  - `requests[]`, for a rule with `each`: one entry for each request, in the
-    order of the list, with `method`, `path`, and `answer`. Such a check has no
-    `ran` and no `answer` of its own.
+    both commands in `ran`, with `; ` between them. Then `answer` has the exit
+    code of each command in the same order, such as `exit 0; exit 254`.
+  - `requests[]`: one entry for each request, with `method`, `path`, and
+    `answer`. A rule with `each` has one entry for each item, in the order of
+    the list, and no `ran` and no `answer` of its own. A check of kind `exec`
+    with `palette` has one entry, the read of Palette, beside `ran` and `answer`.
   - `reproduce[]`: the lines a person runs to see the same thing.
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
     `owner` is `palette`, `provider`, `lab`, `strata`, `operator`, or `none`.

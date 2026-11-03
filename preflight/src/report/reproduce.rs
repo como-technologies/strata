@@ -4,7 +4,7 @@ use strata::api::{API_KEY_HEADER, Method, PROJECT_UID_HEADER, cluster_events_pat
 use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
 use super::Subject;
-use crate::probe::{Outcome, Ran};
+use crate::probe::{Invocation, Outcome, Ran};
 use crate::rule::{Check, ExecCheck, PaletteCheck, Rule};
 
 /// The jq object that a program reads as `.response`, built from the `curl` of a request: the status
@@ -88,10 +88,9 @@ pub(super) fn auto_reproduce(
 /// program reads `.exec`, `.also` after a second command, and `.response` after a read.
 fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>) {
     let Ran::Exec {
-        line,
+        first,
         also,
         request,
-        ..
     } = &outcome.ran
     else {
         return;
@@ -109,18 +108,28 @@ fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>)
         }
         None => (String::new(), String::new()),
     };
-    lines.push(line.clone());
+    lines.push(first.line.clone());
     flags.push_str("--argjson out \"$(<the output>)\" ");
-    set.push_str(".exec = {exit: 0, stdout: $out, stderr: \"\"} | ");
+    set.push_str(&output_in_world("exec", "out", first));
     if let Some(also) = also {
-        lines.push(also.clone());
+        lines.push(also.line.clone());
         flags.push_str("--argjson also \"$(<the output of the second command>)\" ");
-        set.push_str(".also = {exit: 0, stdout: $also, stderr: \"\"} | ");
+        set.push_str(&output_in_world("also", "also", also));
     }
     lines.push(format!(
         "jq {flags}'{set}{}' {dir}/world.json",
         one_line(expr)
     ));
+}
+
+/// The step of the `jq` program that puts the output of `command` in the world as `.key`. The
+/// exit code is the one that the command gave. A command that did not start has none, so the step
+/// has a placeholder for the exit code.
+fn output_in_world(key: &str, output: &str, command: &Invocation) -> String {
+    let exit = command
+        .exit
+        .map_or_else(|| "<the exit code>".to_string(), |exit| exit.to_string());
+    format!(".{key} = {{exit: {exit}, stdout: ${output}, stderr: \"\"}} | ")
 }
 
 /// The `curl` that reads `path` of Palette.

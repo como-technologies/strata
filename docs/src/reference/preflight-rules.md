@@ -331,9 +331,10 @@ A second command that fails is an answer, as the first command is. The program r
 and decides: the rule `iam-role-policy-quota` uses the default quota when the read of the quota
 fails. A command that cannot start is an `ERROR`.
 
-The report shows both commands in `ran`, with `; ` between them. `answer` is the exit code of the
-first command. A fixture holds an output for each command under `_exec`, and a fixture that lacks
-one makes the check `ERROR`.
+The report shows both commands in `ran`, with `; ` between them. `answer` has the exit code of each
+command in the same order, such as `exit 0; exit 254`. The lines in `reproduce` put the same exit
+codes in the world. A fixture holds an output for each command under `_exec`, and a fixture that
+lacks one makes the check `ERROR`.
 
 ## The world document
 

@@ -1521,6 +1521,93 @@ fn the_rule_of_the_managed_policies_of_a_role_uses_the_default_when_it_cannot_re
     );
 }
 
+/// The second command exits 254 in the fixture. The answer of the check holds the exit code of
+/// each command, so a failed read of the quota does not show as `exit 0`.
+#[test]
+fn the_answer_of_the_rule_of_the_managed_policies_of_a_role_shows_the_exit_code_of_the_quota_read()
+{
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("iam-role-policy-quota").unwrap();
+    let path = catalog::rules_dir().join("fixtures/eks/nodes-policies-quota-unread.json");
+    let outcome = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+    assert_eq!(outcome.ran.answer().as_deref(), Some("exit 0; exit 254"));
+    let path = catalog::rules_dir().join("fixtures/eks/nodes-policies-over-quota.json");
+    let outcome = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+    assert_eq!(outcome.ran.answer().as_deref(), Some("exit 0; exit 0"));
+}
+
+/// A run of the ledger that names an id the catalog does not hold counts for no rule, and the
+/// loader says nothing. When a rule changes its id, rename its runs. When a rule leaves the
+/// catalog, drop its runs. The ledger holds the ids of the custom probes of the lab too, so the
+/// catalog of the test holds them.
+#[test]
+fn each_run_of_the_ledger_of_the_binary_names_a_rule_of_the_catalog_or_of_the_lab_probes() {
+    let lab =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/live/preflight/lab-probes.yaml");
+    let catalog = catalog::with_probes(&[lab]).unwrap();
+    let ledger = catalog::builtin_ledger().unwrap();
+    let unknown: BTreeSet<&str> = ledger
+        .runs
+        .iter()
+        .flat_map(|run| &run.results)
+        .map(|result| result.rule.as_str())
+        .filter(|id| catalog.rule(id).is_none())
+        .collect();
+    assert!(
+        unknown.is_empty(),
+        "the ledger names rules that no catalog holds, so their runs count for no rule: {unknown:?}"
+    );
+}
+
+/// The rules that read the instance type route. Each writes the lookup itself: the two messages
+/// of a refusal, and the read of `cpu` for a pool. A rule file has no shared jq definition, so the
+/// lookup is in four places. The fifth rule that reads the route moves the lookup to one section of
+/// jq definitions in the catalog. Then this list is not needed (#575). The check of the facts in
+/// `xtask` keeps the query of each rule equal to the query of its fact.
+const INSTANCE_TYPE_READERS: [&str; 4] = [
+    "aws-quotas",
+    "azure-vcpu-quota",
+    "gcp-quotas",
+    "instance-offering",
+];
+
+#[test]
+fn four_rules_read_the_instance_type_route_and_a_fifth_moves_the_lookup_to_shared_definitions() {
+    let catalog = catalog::builtin().unwrap();
+    let reads = |rule: &Rule| match &rule.check {
+        Some(Check::Palette(check)) => check.path.contains("/instancetypes?"),
+        Some(Check::Exec(ExecCheck {
+            palette: Some(read),
+            ..
+        })) => read.path.contains("/instancetypes?"),
+        _ => false,
+    };
+    let readers: BTreeSet<&str> = catalog
+        .rules()
+        .filter(|rule| reads(rule))
+        .map(|rule| rule.id.as_str())
+        .collect();
+    assert_eq!(
+        readers,
+        BTreeSet::from(INSTANCE_TYPE_READERS),
+        "a rule reads the instance type route that INSTANCE_TYPE_READERS lacks, or one of the four \
+         does not: with a fifth copy, move the two refusal messages and the read of `cpu` to one \
+         section of jq definitions in the catalog"
+    );
+}
+
+/// The 13 clean results of the rule `iam-ten-policies` hold for the rule `iam-role-policy-quota`: a
+/// clean build that passes the quota of 10 passes the quota of 20. 9 are on `aws`, and 4 are on
+/// `eks`. A later run adds to these counts, so the test names a floor (#575).
+#[test]
+fn the_clean_runs_of_the_old_id_of_the_managed_policy_rule_count_for_the_new_id() {
+    let ledger = catalog::builtin_ledger().unwrap();
+    let id = "iam-role-policy-quota";
+    let passed = |engine: &str| ledger.counts_for(id, engine, None).passed;
+    assert!(passed("aws") >= 9, "the runs on aws");
+    assert!(passed("eks") >= 4, "the runs on eks");
+}
+
 /// The rule keeps no figure of the quota: the old id is not in the catalog, and the new id has no
 /// number (#540).
 #[test]

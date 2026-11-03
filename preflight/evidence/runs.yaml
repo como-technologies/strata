@@ -16,7 +16,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
@@ -28,7 +28,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -50,7 +49,7 @@ runs:
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: eks-core-policies, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
       - {rule: eks-fargate-govcloud, result: passed, note: "the clean entity"}
       - {rule: aws-quotas, result: passed, note: "the clean entity"}
@@ -64,10 +63,8 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: cilium-on-eks, result: passed, note: "the clean entity"}
       - {rule: eks-worker-needed, result: passed, note: "the clean entity"}
-      - {rule: eks-ami-type, result: passed, note: "the clean entity"}
       - {rule: eks-version-not-offered, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: eks-default-storageclass, result: passed, note: "the clean entity"}
       - {rule: eks-csi-iam, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
@@ -79,7 +76,6 @@ runs:
     engine: gke
     release: ""
     results:
-      - {rule: gke-pool-multiple-3, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
       - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
       - {rule: gke-no-release-channel, result: caught, note: "the fault was made: .spec.cloudConfig.overrideClusterAPIConfig = \"\""}
       - {rule: gke-no-gpu, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].cloudConfig.instanceType = \"a2-highgpu-1g\""}
@@ -98,13 +94,11 @@ runs:
       - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: gcp-name-length, result: passed, note: "the clean entity"}
-      - {rule: gke-pool-multiple-3, result: passed, note: "the clean entity"}
       - {rule: gke-no-gpu, result: passed, note: "the clean entity"}
       - {rule: gke-autopilot, result: passed, note: "the clean entity"}
       - {rule: gke-no-release-channel, result: passed, note: "the clean entity"}
       - {rule: gke-version-not-offered, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -130,7 +124,6 @@ runs:
       - {rule: gcp-name-length, result: passed, note: "the clean entity"}
       - {rule: gcp-image-not-shared, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -154,7 +147,6 @@ runs:
       - {rule: gcp-name-length, result: passed, note: "the clean entity"}
       - {rule: gcp-image-not-shared, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -173,7 +165,7 @@ runs:
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: eks-core-policies, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
       - {rule: eks-fargate-govcloud, result: passed, note: "the clean entity"}
       - {rule: aws-quotas, result: passed, note: "the clean entity"}
@@ -187,10 +179,8 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: cilium-on-eks, result: passed, note: "the clean entity"}
       - {rule: eks-worker-needed, result: passed, note: "the clean entity"}
-      - {rule: eks-ami-type, result: passed, note: "the clean entity"}
       - {rule: eks-version-not-offered, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: eks-default-storageclass, result: passed, note: "the clean entity"}
       - {rule: eks-csi-iam, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
@@ -202,7 +192,6 @@ runs:
     engine: gke
     release: ""
     results:
-      - {rule: gke-pool-multiple-3, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
       - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; .spec.machinepoolconfig[0] |= resize(4)"}
       - {rule: gke-no-release-channel, result: caught, note: "the fault was made: .spec.cloudConfig.overrideClusterAPIConfig = \"\""}
       - {rule: gke-no-gpu, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].cloudConfig.instanceType = \"a2-highgpu-1g\""}
@@ -219,13 +208,11 @@ runs:
       - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: gcp-name-length, result: passed, note: "the clean entity"}
-      - {rule: gke-pool-multiple-3, result: passed, note: "the clean entity"}
       - {rule: gke-no-gpu, result: passed, note: "the clean entity"}
       - {rule: gke-autopilot, result: passed, note: "the clean entity"}
       - {rule: gke-no-release-channel, result: passed, note: "the clean entity"}
       - {rule: gke-version-not-offered, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -245,13 +232,11 @@ runs:
       - {rule: api-endpoint-reach, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gcp-name-length, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: gke-pool-multiple-3, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gke-no-gpu, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gke-autopilot, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gke-no-release-channel, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gke-version-not-offered, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -274,7 +259,7 @@ runs:
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: eks-core-policies, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
       - {rule: eks-fargate-govcloud, result: passed, note: "the clean entity"}
       - {rule: aws-quotas, result: passed, note: "the clean entity"}
@@ -287,10 +272,8 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: cilium-on-eks, result: passed, note: "the clean entity"}
       - {rule: eks-worker-needed, result: passed, note: "the clean entity"}
-      - {rule: eks-ami-type, result: passed, note: "the clean entity"}
       - {rule: eks-version-not-offered, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: eks-default-storageclass, result: passed, note: "the clean entity"}
       - {rule: eks-csi-iam, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
@@ -308,7 +291,7 @@ runs:
       - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-core-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: iam-ten-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-region-not-enabled, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-fargate-govcloud, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-quotas, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -321,10 +304,8 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: cilium-on-eks, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-worker-needed, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: eks-ami-type, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-version-not-offered, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-default-storageclass, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: eks-csi-iam, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -347,7 +328,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
@@ -359,7 +340,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -373,7 +353,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: iam-ten-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: iaas-pod-identity, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-region-not-enabled, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -385,7 +365,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-ami, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -413,7 +392,6 @@ runs:
       - {rule: gcp-name-length, result: passed, note: "the clean entity"}
       - {rule: gcp-image-not-shared, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -436,7 +414,6 @@ runs:
       - {rule: gcp-name-length, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: gcp-image-not-shared, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -455,7 +432,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
@@ -467,7 +444,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -485,7 +461,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
@@ -497,7 +473,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -511,7 +486,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: account-missing, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: iam-ten-policies, result: passed, note: "the cluster as Palette holds it, after a clean build"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: iaas-pod-identity, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-region-not-enabled, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -523,7 +498,6 @@ runs:
       - {rule: proxy-no-proxy, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: aws-ami, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-cloud-support, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-state, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: pack-dependency, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: template-outside, result: passed, note: "the cluster as Palette holds it, after a clean build"}
@@ -545,7 +519,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: false-fail, note: "the clean entity: AmazonEBSCSIDriverPolicy is not on the nodes role, and the policyARNs of the cloud account do not name it: ebs-csi-controller crash-loops with UnauthorizedOpera"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: ssh-key-pair, result: passed, note: "the clean entity"}
@@ -559,7 +533,6 @@ runs:
       - {rule: instance-offering, result: false-fail, note: "the clean entity: pool cp-pool: the type t3.xlarge is not in the list of region us-east-2; pool worker-pool: the type t3.xlarge is not in the list of region us-east-2"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -579,7 +552,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: false-fail, note: "the clean entity: AmazonEBSCSIDriverPolicy is not on the nodes role, and the policyARNs of the cloud account do not name it: ebs-csi-controller crash-loops with UnauthorizedOpera"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: ssh-key-pair, result: passed, note: "the clean entity"}
@@ -593,7 +566,6 @@ runs:
       - {rule: instance-offering, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
@@ -613,7 +585,7 @@ runs:
       - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
       - {rule: account-missing, result: passed, note: "the clean entity"}
       - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
-      - {rule: iam-ten-policies, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
       - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
       - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
       - {rule: ssh-key-pair, result: passed, note: "the clean entity"}
@@ -627,7 +599,6 @@ runs:
       - {rule: instance-offering, result: passed, note: "the clean entity"}
       - {rule: aws-ami, result: passed, note: "the clean entity"}
       - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
-      - {rule: profile-cloud-mismatch, result: passed, note: "the clean entity"}
       - {rule: pack-state, result: passed, note: "the clean entity"}
       - {rule: pack-dependency, result: passed, note: "the clean entity"}
       - {rule: template-outside, result: passed, note: "the clean entity"}
