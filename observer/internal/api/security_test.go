@@ -13,7 +13,7 @@ import (
 
 // The four headers, as the issue states them.
 var wantHeaders = map[string]string{
-	"Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+	"Content-Security-Policy": "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
 	"X-Content-Type-Options":  "nosniff",
 	"Referrer-Policy":         "no-referrer",
 	"Cache-Control":           "no-store",

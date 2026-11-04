@@ -194,3 +194,7 @@ heading, and their own knowledge do not? If not, delete it.
 
 `docs/gruvbox/` and `docs/mermaid*.js` are generated and tracked. `just
 docs-theme` installs them again.
+
+`docs/theme/favicon.svg` is the favicon of the book. It is a copy of the light
+mark in `assets/logo/`, and a test of the observer makes sure that it stays
+the same. The book keeps its gruvbox theme.

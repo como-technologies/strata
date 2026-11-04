@@ -120,15 +120,17 @@ the next request asks again.
 
 ## The page
 
-The route `/` serves the dashboard. The page is three files and two fonts, and the
-program carries them. A person opens it through the port-forward of
+The route `/` serves the dashboard. The page is four files, two icons, and two fonts,
+and the program carries them. A person opens it through the port-forward of
 [the gate](#the-gate). `observer/internal/web/assets/` holds these files:
 
 | File | What it holds |
 | --- | --- |
-| `index.html` | The frame: the nav, the top bar, and the place of each screen. |
+| `index.html` | The frame: the nav, the control of the theme, the top bar, and the place of each screen. |
 | `app.js` | The routes, the screens, and the read of the API. |
-| `app.css` | The style, and the two `@font-face` rules. |
+| `theme.js` | The choice of a theme. It runs in the head, before the first paint. |
+| `app.css` | The style, the colors, and the two `@font-face` rules. |
+| `favicon-light.svg`, `favicon-dark.svg` | The mark of the logo, one file for each color scheme. |
 | `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
 | `LICENSES.md` | The version, the checksum, and the license of each font. |
 
@@ -159,8 +161,8 @@ checked".
 | `page` | The page shows |
 | --- | --- |
 | `ok` | The data. |
-| `first-load` | A blue bar. The tiles show `-`. |
-| `no-records` | A blue bar with the text about records. The tiles show `-`, and the page lists no newer version, because `behind` needs a record. |
+| `first-load` | A violet bar. The tiles show `-`. |
+| `no-records` | A violet bar with the text about records. The tiles show `-`, and the page lists no newer version, because `behind` needs a record. |
 | `stale` | An amber bar with the time of the last content check. The counts are from then. |
 | `lost` | A red bar. The counts are from the last good check, and no finding clears until a check proves it. |
 
@@ -181,24 +183,65 @@ has a pill, and each screen says "No person approved these records". With
 - The page says nothing that it cannot know: not what a new pod pulls, and not
   what the pipeline of a team does.
 
+### The colors and the theme
+
+The page has a light theme and a dark theme. A control at the foot of the nav
+has three buttons: Auto, Light, and Dark. Each button says its state with
+`aria-pressed`. Auto follows the system, and it is the default. Light and Dark
+override the system.
+
+The choice stays in the `localStorage` of this browser. It goes nowhere else.
+When a browser refuses the storage, the choice lasts for the page. When a person
+chooses Auto again, the page removes the stored value.
+
+`theme.js` is a file of its own in the head, and it is not part of `app.js`. It
+runs before the first paint, so a person who chose Dark sees no white flash. The
+policy allows it because it is a file of the server. It sets `data-theme` on the
+root, and `app.css` reads that attribute.
+
+Each color is one line of `app.css`, in the form `light-dark(light, dark)`. The
+file has no `prefers-color-scheme` rule, so no color has a second copy.
+`data-theme` sets `color-scheme` and no color. The colors have these meanings:
+
+| Color | Use |
+| --- | --- |
+| Purple | The accent: links, the selected filter, and the focus. |
+| Violet | A newer version. It stays neutral. |
+| Amber | A warning: stale, first-seen, and repave. |
+| Pink | The chip "new", the logo, and the brand line over the top bar. It is no status. |
+| Red | A drift. The pill is white on `#c9252f` in both themes. |
+| Green | OK. |
+
+The logo is the mark of four tilted slabs in the colors of the brand line. The
+nav is dark in both themes, so the nav shows the dark mark.
+
 ### The files
 
 The server sends each file with the type of its kind: `html`, `js`, `css`,
-`woff2`, and `md`. A file of another kind is not served. The page has no icon,
-so `/favicon.ico` gives `204`, and the console of the browser shows no error.
+`svg`, `woff2`, and `md`. A file of another kind is not served. The page links
+two SVG icons, one for each color scheme. A browser that does not use them asks
+for `/favicon.ico`. That path gives `204`, and the console of the browser shows
+no error.
 
-The policy of the server allows the script, the style, and the fonts from the
-server itself. A cluster can have no egress, so the fonts are files, and the page
-asks no other host for anything. So the files of `assets/` keep these rules,
-and a test of `internal/web` fails when one breaks them:
+The policy of the server allows the script, the style, the fonts, and the icons
+from the server itself. A cluster can have no egress, so the fonts and the icons
+are files, and the page asks no other host for anything. The policy stops an inline
+style, so an icon is two files and not one file with a `<style>`. So the files of
+`assets/` keep these rules, and a test of `internal/web` fails when one breaks
+them:
 
-- No address of another host: no `http://` and no `https://`, except in `LICENSES.md`.
-- No inline style and no inline script: no `style=`, no `<style>`, no `<script>`
-  with content, and no event attribute in `index.html` or in a string of `app.js`.
+- No address of another host: no `http://` and no `https://`, except in `LICENSES.md`
+  and in the `xmlns` of an icon.
+- No inline style and no inline script: no `style=`, no `<style>`, and no `<script>`
+  with content. No event attribute in `index.html`, in an icon, or in a string of `app.js`.
 - One write of markup. `app.js` writes in one function, `put`, and every value
   goes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
-  that holds `<img src=x>` shows as text.
+  that holds `<img src=x>` shows as text. `theme.js` writes no markup, and it sets
+  only the attributes `data-theme` and `aria-pressed`.
 - No `max-width` on `.page`, `.main`, `.app`, or `body`. The content fills the window.
+- No copy of the logo that differs from its source. `assets/logo/` at the root
+  of the repository holds the six files of the logo. The two icons, the favicon of
+  the book, and the inline mark in `index.html` copy the mark from it.
 
 ### The layout
 
@@ -268,7 +311,7 @@ log is not written, because a path can hold the name of a profile.
 - **Four headers on each answer,** also on `404`, `405`, and `421`:
 
   ```text
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cache-Control: no-store

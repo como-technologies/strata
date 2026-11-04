@@ -341,7 +341,7 @@ function newsOf(x) {
     case STATUS.NEWER: {
       if (ms.length === 1) {
         const row = newerRowOf(subject, ms[0]);
-        return h`${ms[0].name} ${ms[0].version}${ARROW}${ms[0].newer}${row && row.new ? h` <span class="badge y">new</span>` : ""}`;
+        return h`${ms[0].name} ${ms[0].version}${ARROW}${ms[0].newer}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
       }
       const rows = D.newer.filter(r => r.profiles.includes(subject));
       const repave = rows.filter(r => r.impact === "repave").length, may = rows.filter(r => r.impact === "may-repave").length;
@@ -431,7 +431,7 @@ function viewNewer() {
           g.rows.map(r => {
             const k = p ? p.packs.find(q => q.name === r.name && q.version === r.version) : null;
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
-            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactBadge(r.impact)}</td><td class="n"><b>${r.fold.settings}</b></td><td class="n narrow-hide">${r.images}</td><td class="n narrow-hide">${r.charts}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge b">new</span>` : ""}</td></tr>`;
+            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactBadge(r.impact)}</td><td class="n"><b>${r.fold.settings}</b></td><td class="n narrow-hide">${r.images}</td><td class="n narrow-hide">${r.charts}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td></tr>`;
           })];
       })}</tbody></table></div>`;
   }

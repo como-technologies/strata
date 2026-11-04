@@ -14,18 +14,19 @@ var pageTypes = map[string]string{
 	".js":    "text/javascript; charset=utf-8",
 	".css":   "text/css; charset=utf-8",
 	".woff2": "font/woff2",
+	".svg":   "image/svg+xml",
 	".md":    "text/markdown; charset=utf-8",
 }
 
 // pageIndex is the file that the route `/` serves.
 const pageIndex = "index.html"
 
-// pageIcon is the path that a browser asks for with no link in the page.
+// pageIcon is the path that a browser asks for when it does not use the SVG icons that the page links.
 const pageIcon = "favicon.ico"
 
 // Page serves the files of the page from files. The route `/` gives index.html. A path gives the file
-// with that name, if the file has a type in pageTypes. Any other path gets 404. The page has no icon,
-// so the path of the icon gets 204, and the console of the browser shows no error.
+// with that name, if the file has a type in pageTypes. Any other path gets 404. The page links its
+// icons as SVG files, so the path of the icon gets 204, and the console of the browser shows no error.
 func Page(files fs.FS) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/")

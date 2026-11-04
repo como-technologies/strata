@@ -1,10 +1,10 @@
-// Package web holds the files of the dashboard: the page, its script, its style, and its fonts.
+// Package web holds the files of the dashboard: the page, its scripts, its style, its icons, and its fonts.
 //
-// The files are in assets/, and the program carries them. The page loads its script, its style, and
-// its fonts from the server itself and from nowhere else, because the policy of the server is
-// `script-src 'self'; style-src 'self'; font-src 'self'`, and a cluster can have no egress. So the
-// page has no inline style, no inline script, and no address of another host. A test of this package
-// fails when a file breaks one of these rules. internal/api serves the files: see api.Page.
+// The files are in assets/, and the program carries them. The page loads its scripts, its style, its
+// fonts, and its icons from the server itself and from nowhere else, because the policy of the server
+// is `script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'`, and a cluster can have no
+// egress. So the page has no inline style, no inline script, and no address of another host. A test of
+// this package fails when a file breaks one of these rules. internal/api serves the files: see api.Page.
 package web
 
 import (

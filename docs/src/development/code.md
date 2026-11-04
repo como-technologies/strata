@@ -281,7 +281,9 @@ code, and these rules are for the Go code.
 - `internal/web` carries the files of the page with `embed`, and `internal/api`
   serves them. A test fails when a file of `assets/` has an external
   address, an inline style, an inline script, or a second write of markup. It also
-  fails on a `max-width` on `.page`. See [The page](./observer-api.md#the-page).
+  fails on a `max-width` on `.page`. Other tests of the package fail on a copy of the
+  logo that differs from `assets/logo/`. They also fail on a `prefers-color-scheme`
+  rule in `app.css`, and on a drift that is not white on `#c9252f`. See [The page](./observer-api.md#the-page).
 - `internal/web/devdata` and `internal/web/devserver` serve test data for the page,
   with no `strata` binary. A test decodes each file of each set into the type of
   its route, so the data cannot drift from the API.
