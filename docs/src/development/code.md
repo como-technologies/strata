@@ -278,6 +278,13 @@ code, and these rules are for the Go code.
   detail tier has one. A test walks the types.
 - Only `internal/api` imports `net` or `net/http`, and only `health.go` makes an
   HTTP request. No code sends a `POST`. A test makes sure of each rule.
+- `internal/web` carries the files of the page with `embed`, and `internal/api`
+  serves them. A test fails when a file of `assets/` has an external
+  address, an inline style, an inline script, or a second write of markup. It also
+  fails on a `max-width` on `.page`. See [The page](./observer-api.md#the-page).
+- `internal/web/devdata` and `internal/web/devserver` serve test data for the page,
+  with no `strata` binary. A test decodes each file of each set into the type of
+  its route, so the data cannot drift from the API.
 - A server answers on a loopback address only. It sets the four headers on each
   answer, it refuses a `Host` that is not loopback, and it logs no request.
 - One worker holds the one slot for a `strata` process. A cycle and a request of

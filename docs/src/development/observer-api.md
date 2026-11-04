@@ -72,8 +72,8 @@ Only `GET` is allowed. Another method gets `405` and the header `Allow: GET`.
 
 Each summary route serves a part of the summary in [The
 summary](./observer.md#the-summary), with the same field names. Each answer is
-JSON, except `/healthz`, which is plain text. The route `/` is for the page of
-the dashboard. This version has no page, so `/` gives `404`.
+JSON, except `/healthz`, which is plain text. The route `/` serves the page of
+the dashboard: see [The page](#the-page).
 
 - `{name}` and `{profile}` are `name@version` of a profile. A name with no
   version works when only one profile has that name.
@@ -117,6 +117,131 @@ at a time. It sends no `POST`.
 
 A request that waits too long gets `503`. A compare that fails gets `502`, and
 the next request asks again.
+
+## The page
+
+The route `/` serves the dashboard. The page is three files and two fonts, and the
+program carries them. A person opens it through the port-forward of
+[the gate](#the-gate). `observer/internal/web/assets/` holds these files:
+
+| File | What it holds |
+| --- | --- |
+| `index.html` | The frame: the nav, the top bar, and the place of each screen. |
+| `app.js` | The routes, the screens, and the read of the API. |
+| `app.css` | The style, and the two `@font-face` rules. |
+| `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
+| `LICENSES.md` | The version, the checksum, and the license of each font. |
+
+The page reads the six summary routes at the start, and again each 30 seconds.
+It reads the detail route when a person opens a pack. The hash of the address
+names the screen:
+
+| Hash | Screen |
+| --- | --- |
+| `#overview` | The tiles, the findings, the events, what a check does not cover, and the profiles. |
+| `#findings` | The findings, and the newer versions. |
+| `#profiles` | The table of the profiles. |
+| `#newer` | The newer versions, by profile. |
+| `#notchecked` | The causes of "Not checked", and what a check does not cover. |
+| `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
+| `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
+
+The comparison of a pack shows the settings as a table. It folds "Follows the
+version" and "Repeats the lists" with their counts. It lists the operation and
+the name of each manifest, and does not show the text of a manifest.
+
+### The state of the page
+
+`page` from `/v1/cluster` sets the state. The top bar shows the two clocks:
+the content check and the read of the versions. The page never shows one "last
+checked".
+
+| `page` | The page shows |
+| --- | --- |
+| `ok` | The data. |
+| `first-load` | A blue bar. The tiles show `-`. |
+| `no-records` | A blue bar with the text about records. The tiles show `-`, and the page lists no newer version, because `behind` needs a record. |
+| `stale` | An amber bar with the time of the last content check. The counts are from then. |
+| `lost` | A red bar. The counts are from the last good check, and no finding clears until a check proves it. |
+
+The baseline of the records adds to each screen. With `first-seen`, the top bar
+has a pill, and each screen says "No person approved these records". With
+`unknown`, the top bar says "Baseline unknown".
+
+### What the page keeps
+
+- Four kinds of news, and no single color of health. A drift is red. A newer
+  version stays neutral at each level. "Not checked" is grey, and it never
+  raises a severity.
+- "Not checked" blocks the text "No change". A pack that was not checked never
+  reads "current".
+- `re-baseline needed` sits beside a drift and does not replace it.
+- `same-content` reads "Same content" on the row of the cluster copy. It is not
+  a drift.
+- The page says nothing that it cannot know: not what a new pod pulls, and not
+  what the pipeline of a team does.
+
+### The files
+
+The server sends each file with the type of its kind: `html`, `js`, `css`,
+`woff2`, and `md`. A file of another kind is not served. The page has no icon,
+so `/favicon.ico` gives `204`, and the console of the browser shows no error.
+
+The policy of the server allows the script, the style, and the fonts from the
+server itself. A cluster can have no egress, so the fonts are files, and the page
+asks no other host for anything. So the files of `assets/` keep these rules,
+and a test of `internal/web` fails when one breaks them:
+
+- No address of another host: no `http://` and no `https://`, except in `LICENSES.md`.
+- No inline style and no inline script: no `style=`, no `<style>`, no `<script>`
+  with content, and no event attribute in `index.html` or in a string of `app.js`.
+- One write of markup. `app.js` writes in one function, `put`, and every value
+  goes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
+  that holds `<img src=x>` shows as text.
+- No `max-width` on `.page`, `.main`, `.app`, or `body`. The content fills the window.
+
+### The layout
+
+- At 1024 pixels and below, the nav becomes a bar at the top. Its items scroll
+  sideways.
+- At 760 pixels and below, the compact layout starts. A table drops its columns
+  with the class `narrow-hide`. In the events table, the object moves under the
+  message.
+- The tiles fill each row. The page never scrolls sideways: a table that does
+  not fit scrolls inside its own card.
+
+### Try each state
+
+`just observer-dev` serves the page from test data. It needs no `strata` binary,
+no records, and no Palette.
+
+```bash
+just observer-dev          # the set ok
+just observer-dev stale    # the set stale
+```
+
+The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
+sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`, and
+`first-seen`. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
+another loopback address, and `-data` takes another directory of sets.
+
+A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
+of each route as a JSON file. The dev server serves them through the real server
+of `internal/api`, so the headers are those of the real server. It moves each
+time of a set by the gap between now and the time of the data. So the ages on
+the page are those of the data.
+
+- The set `ok` holds made-up data: 12 profiles, 29 packs, 1 finding, 10 newer
+  versions in 6 profiles, 2 causes of "Not checked", and 26 of 29 packs in full.
+- The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
+  `cluster.json` only.
+
+A test decodes each file of each set into the type of its route, with no field
+to spare. So the test data cannot drift from the API. When `node` is on the
+`PATH`, `go test` also renders each screen of each set with `app.js`. It fails on
+a screen that throws, and on a value that reaches the page as markup. It skips
+these tests when `node` is not there. It cannot see the layout, so a person looks
+at the render.
 
 ## What no answer carries
 

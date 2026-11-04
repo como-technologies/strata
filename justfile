@@ -28,6 +28,10 @@ observer-build:
 observer-contract *args: build stand-in
     scripts/observer-contract.sh {{args}}
 
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen
+observer-dev state="ok":
+    go -C observer run ./internal/web/devserver -state {{state}}
+
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
 
