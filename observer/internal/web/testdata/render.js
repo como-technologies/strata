@@ -14,11 +14,16 @@
 //   node render.js ASSETS_DIR API_DIR STATE ago SECONDS...
 //
 // With "ago", it prints no screen. It prints one JSON list: what ago() says for each age in seconds.
+//
+//   node render.js ASSETS_DIR API_DIR STATE retry HASH
+//
+// With "retry", the detail route answers 503 once. It shows the screen HASH two times, and it prints
+// one JSON list of the two renders. The second render must ask the route again.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const [assetsDir, apiDir, state, mode, ...ages] = process.argv.slice(2);
+const [assetsDir, apiDir, state, mode, ...args] = process.argv.slice(2);
 const EVIL = "<img src=x onerror=alert(1)>\"'&";
 
 function read(name) {
@@ -78,6 +83,7 @@ function poison(d) {
 
 const served = mode === "poison" ? poison(data) : data;
 
+let failDiffs = 0;
 const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events"};
 async function fakeFetch(url) {
   const u = new URL(url, "http://127.0.0.1");
@@ -86,6 +92,10 @@ async function fakeFetch(url) {
     body = served[ROUTES[u.pathname]];
   } else {
     const m = /^\/v1\/packs\/([^/]+)\/([^/]+)\/([^/]+)\/diff$/.exec(u.pathname);
+    if (m && failDiffs > 0) {
+      failDiffs--;
+      return {ok: false, status: 503, json: async () => ({error: "service unavailable"})};
+    }
     if (m) {
       const [profile, layer, name] = m.slice(1).map(decodeURIComponent);
       body = served.diffs.find(d => d.profile === profile && d.key === `${layer}/${name}` && d.side === u.searchParams.get("side")) || null;
@@ -117,7 +127,15 @@ async function main() {
   if (mode === "ago") {
     // The clock stops, so that each age is the number of seconds that the caller names.
     run("(() => { const now = Date.now(); Date.now = () => now; })()");
-    process.stdout.write(JSON.stringify(ages.map(s => run(`ago(new Date(Date.now() - ${Number(s)} * 1000).toISOString())`))));
+    process.stdout.write(JSON.stringify(args.map(s => run(`ago(new Date(Date.now() - ${Number(s)} * 1000).toISOString())`))));
+    return;
+  }
+  if (mode === "retry") {
+    failDiffs = 1;
+    await run("refresh()");
+    const first = await show(args[0]);
+    const second = await show(args[0]);
+    process.stdout.write(JSON.stringify([first, second]));
     return;
   }
   await run("refresh()");
@@ -153,6 +171,7 @@ async function main() {
     if (keys.length) await add(hash, "open", `${JSON.stringify(keys)}.forEach(k => { S.open[k] = true; })`);
     for (const m of html.matchAll(/data-id="([^"]*)"/g)) {
       await add(hash, "side", `S.side[${JSON.stringify(unescape(m[1]))}] = "cluster"`);
+      await add(hash, "side published", `S.side[${JSON.stringify(unescape(m[1]))}] = "published"`);
     }
   }
   process.stdout.write(JSON.stringify(screens));

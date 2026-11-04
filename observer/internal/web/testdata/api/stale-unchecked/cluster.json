@@ -1,0 +1,9 @@
+{
+  "cluster": {"uid":"7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35","name":""},
+  "page": "stale",
+  "strataVersion": "",
+  "records": {"count":0,"baseline":"unknown","startedAt":"2026-11-03T11:30:00Z"},
+  "content": {"checkedAt":null,"every":"15m","failedRuns":3,"lastError":{"kind":"unknown"}},
+  "versions": {"readAt":null,"every":"6h","failedRuns":0,"lastError":null},
+  "counts": {"findings":0,"drift":0,"newer":0,"newerProfiles":0,"notChecked":0,"packs":0,"packsInFull":0,"profiles":0}
+}

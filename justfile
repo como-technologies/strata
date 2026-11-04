@@ -32,7 +32,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
 

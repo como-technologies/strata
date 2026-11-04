@@ -19,6 +19,7 @@ const REFRESH_MS = 30000;
 const PAGE = {OK: "ok", FIRST_LOAD: "first-load", NO_RECORDS: "no-records", STALE: "stale", LOST: "lost"};
 const BASELINE = {APPROVED: "approved", FIRST_SEEN: "first-seen", UNKNOWN: "unknown"};
 const STATUS = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", OK: "ok", NO_RECORD: "no-record"};
+const VERIFY = {UNCHANGED: "unchanged", DRIFTED: "drifted", ERROR: "error"};
 const COPY = {SAME: "same", SAME_CONTENT: "same-content", DIFFERS: "differs", NOT_ON_CLUSTER: "not-on-this-cluster", NOT_READ: "not-read"};
 const KIND = {PUBLISHED: "published-changed", OVERWRITTEN: "overwritten", RENAMED: "renamed", GONE: "gone", CLUSTER: "cluster-differs", IMAGE_ID: "image-id-changed"};
 const SIDE = {PUBLISHED: "published", CLUSTER: "cluster", NEWER: "newer"};
@@ -57,7 +58,7 @@ const CAUSE_TEXT = {
   [CAUSE.OLD_COPY]: "Current against an older copy of the registry. A newer version can be missing here.",
   [CAUSE.NO_RECORD]: "No record holds this profile, so strata cannot say that anything changed.",
   [CAUSE.READ_ERROR]: "Strata could not read the record or its answer.",
-  [CAUSE.PIN_ERROR]: "Palette gave an error for this pack, so strata cannot look for a newer version.",
+  [CAUSE.PIN_ERROR]: "Strata could not look for a newer version of this pack, or could not compare it with the newest version.",
 };
 // What a profile says in the list for a cause, with the names of its packs.
 const CAUSE_LINE = {
@@ -65,7 +66,7 @@ const CAUSE_LINE = {
   [CAUSE.OLD_COPY]: (names, registry) => `${names} is current against an older copy of ${registry}.`,
   [CAUSE.NO_RECORD]: () => "No record.",
   [CAUSE.READ_ERROR]: () => "Strata could not read the record.",
-  [CAUSE.PIN_ERROR]: (names) => `Palette gave an error for ${names}.`,
+  [CAUSE.PIN_ERROR]: (names) => `Strata could not check ${names} for newer versions.`,
 };
 const ERROR_TEXT = {
   api: status => status === 401 || status === 403 ? `HTTP ${status}, the API key was refused` : `HTTP ${status}, Palette gave an error`,
@@ -106,15 +107,27 @@ async function refresh() {
   render();
 }
 
+// answering is true while the page renders because a detail request ended. The render shows the answer
+// of that request and starts nothing new.
+let answering = false;
+
 // diffOf gives the state of one detail request, and starts the request the first time. The key holds
-// the clock of the cycle that the side comes from, so a new cycle asks again.
+// the clock of the cycle that the side comes from, so a new cycle asks again. A request that failed is
+// not kept: a 503 is a normal answer while a cycle holds the slot. So the next render that the person or
+// the clock causes asks again. A render that an answer causes does not, or two requests that fail would
+// ask each other again without end.
 function diffOf(subject, p, side) {
   const stamp = side === SIDE.NEWER ? D.cluster.versions.readAt : D.cluster.content.checkedAt;
   const key = [subject, p.key, side, stamp].join("|");
+  if (!answering && S.diffs[key] && S.diffs[key].state === "error") delete S.diffs[key];
   if (!S.diffs[key]) {
     S.diffs[key] = {state: "loading"};
     const diffs = S.diffs;
-    fetchDiff(subject, p, side).then(r => { diffs[key] = r; render(); });
+    fetchDiff(subject, p, side).then(r => {
+      diffs[key] = r;
+      answering = true;
+      try { render(); } finally { answering = false; }
+    });
   }
   return S.diffs[key];
 }
@@ -149,8 +162,16 @@ const ago = iso => {
   const d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60);
   return d ? `${d}d` : hh ? (mm ? `${hh}h ${mm}m` : `${hh}h`) : s < 60 ? "under 1m" : `${mm}m`;
 };
-const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !== PAGE.NO_RECORDS;
+// neverChecked says that no content check has ended well, as at the first start or after a restart in an
+// outage. The counts of the page are then 0 because nothing was read, and not because nothing is wrong.
+const neverChecked = () => !D.cluster.content.checkedAt;
+const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !== PAGE.NO_RECORDS && !neverChecked();
 const num = n => hasChecks() ? n : "-";
+const known = n => neverChecked() ? "-" : n;
+const NEEDS_RECORD = "Strata needs a record to look for newer versions. A record is the copy your team approved. Your pipeline writes records from Git.";
+const NOT_READ_YET = "No check has ended well, so this page has nothing to show yet.";
+// noChecksWords says why the page has no newer version to show.
+const noChecksWords = () => D.cluster.page === PAGE.NO_RECORDS ? NEEDS_RECORD : NOT_READ_YET;
 const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
 const packName = key => key.slice(key.indexOf("/") + 1);
 const profileOf = subject => D.profiles.find(p => subjectOf(p) === subject);
@@ -168,6 +189,9 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
+// moveUnread says that strata could not compare the two versions of a pack. The row has no counts, and Not checked names the pack.
+const moveUnread = (subject, p) => !!p && D.notChecked.some(r => r.cause === CAUSE.PIN_ERROR && r.profiles.includes(subject) && r.packs.includes(p.key));
+const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not read") : impactBadge(row.impact);
 // worstOf gives the status that wins in a list of statuses.
 const worstOf = list => SEVERITY.find(s => list.includes(s)) || STATUS.OK;
 
@@ -181,7 +205,7 @@ function errorWords(err) {
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
   const items = [["overview", "Overview", ""], ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
-    ["profiles", "Profiles", h`<span class="cnt">${n.profiles}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
+    ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
     ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`]];
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
@@ -251,8 +275,8 @@ function tiles() {
   const none = n.notChecked === 0;
   let driftSub, newerSub, notCheckedSub;
   if (!checked) {
-    const word = p === PAGE.FIRST_LOAD ? "Not read yet" : "No records";
-    driftSub = word; newerSub = p === PAGE.FIRST_LOAD ? "Not read yet" : "Needs a record"; notCheckedSub = word;
+    const noRecords = p === PAGE.NO_RECORDS, word = noRecords ? "No records" : "Not read yet";
+    driftSub = word; newerSub = noRecords ? "Needs a record" : word; notCheckedSub = word;
   } else {
     driftSub = n.drift === 0 ? (none ? "Nothing changed" : "None in what was checked") : n.drift === 1 ? driftSubject() : `${n.drift} profiles`;
     const fresh = D.newer.filter(r => r.new).length;
@@ -263,7 +287,7 @@ function tiles() {
     ${T(!checked ? "y" : n.drift ? "r" : "g", "Drift", num(n.drift), driftSub, "findings")}
     ${T("b", "Newer versions", num(n.newer), newerSub, "newer")}
     ${T("y", "Not checked", num(n.notChecked), notCheckedSub, "notchecked")}
-    ${T("", "Profiles", p === PAGE.FIRST_LOAD ? "-" : n.profiles, `${n.packs} packs on this cluster`, "profiles")}
+    ${T("", "Profiles", known(n.profiles), neverChecked() ? "Not read yet" : `${n.packs} packs on this cluster`, "profiles")}
   </section>`;
 }
 
@@ -284,8 +308,8 @@ function findingsCard() {
     return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.DRIFT)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}</td>
       <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${f.packs.map(k => lab("pack", packName(k)))}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
       <td class="n mut small w60 nw narrow-hide">${ago(f.firstSeen)}</td></tr>`;
-  })}</tbody></table></div>` : h`<div class="body mut">Nothing needs attention.</div>`;
-  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${rows.length}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
+  })}</tbody></table></div>` : h`<div class="body mut">${neverChecked() ? "Not read yet." : "Nothing needs attention."}</div>`;
+  return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${known(rows.length)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
 }
 
 function eventRows(list) {
@@ -377,7 +401,7 @@ function profilesCard() {
     return h`<tr class="link" data-go="${profileHash(subject)}"><td class="w110">${statusBadge(x.status)}</td><td class="m nw"><a href="${profileHash(subject)}">${x.name}</a><span class="mut">@${x.version}</span></td><td class="mut narrow-hide">${x.type}</td><td class="narrow-hide nw">${hbar(x)}</td><td class="msg">${newsOf(x)}</td></tr>`;
   });
   const empty = h`<tr><td colspan="5" class="mut">${D.profiles.length ? "No profile matches." : "No profile yet."}</td></tr>`;
-  return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs</span></h2>
+  return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${neverChecked() ? "Not read yet" : `${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs`}</span></h2>
     <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${cnt[k]}</button>`)}</div>
     <input class="search" id="q" type="search" placeholder="Filter by name" aria-label="Filter by name" value="${S.q}"></div></div>
     <div class="tw"><table id="pt"><thead><tr><th>Status</th><th>Profile</th><th class="narrow-hide">Type</th><th class="narrow-hide">Packs</th><th>Message</th></tr></thead><tbody>${rows.length ? rows : empty}</tbody></table></div></section>`;
@@ -395,12 +419,12 @@ function viewProfiles() {
 function viewFindings() {
   const rows = D.newer;
   const card = checked => {
-    if (!checked) return h`<div class="body mut">Strata needs a record to look for newer versions. A record is the copy your team approved. Your pipeline writes records from Git.</div>`;
+    if (!checked) return h`<div class="body mut">${noChecksWords()}</div>`;
     if (!rows.length) return h`<div class="body mut">${D.cluster.counts.notChecked ? "No newer version is listed." : `All ${D.cluster.counts.packs} packs are current.`}</div>`;
     return h`<div class="tw"><table><tbody>${rows.map(r => {
       const first = r.profiles[0], p = first ? profileOf(first) : null, k = p ? p.packs.find(q => q.name === r.name && q.version === r.version) : null;
       const href = k ? packHash(first, k) : first ? profileHash(first) : "#newer";
-      return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${r.name} ${r.version}${ARROW}${r.newest}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactBadge(r.impact)}</td></tr>`;
+      return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${r.name} ${r.version}${ARROW}${r.newest}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
     })}</tbody></table></div>`;
   };
   const count = hasChecks() ? rows.length : "-";
@@ -412,7 +436,7 @@ function viewNewer() {
   const n = D.cluster.counts, rows = D.newer;
   let body;
   if (!hasChecks()) {
-    body = h`<div class="body mut">Strata needs a record to look for newer versions. A record is the copy your team approved. Your pipeline writes records from Git.</div>`;
+    body = h`<div class="body mut">${noChecksWords()}</div>`;
   } else if (!rows.length) {
     body = h`<div class="body mut">${n.notChecked ? "No newer version is listed." : `All ${n.packs} packs are current.`}</div>`;
   } else {
@@ -431,7 +455,8 @@ function viewNewer() {
           g.rows.map(r => {
             const k = p ? p.packs.find(q => q.name === r.name && q.version === r.version) : null;
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
-            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactBadge(r.impact)}</td><td class="n"><b>${r.fold.settings}</b></td><td class="n narrow-hide">${r.images}</td><td class="n narrow-hide">${r.charts}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td></tr>`;
+            const count = v => moveUnread(g.subject, k) ? DASH : v;
+            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td></tr>`;
           })];
       })}</tbody></table></div>`;
   }
@@ -455,6 +480,8 @@ function viewNotChecked() {
   let body;
   if (D.cluster.page === PAGE.FIRST_LOAD) {
     body = h`<div class="body mut">The first check has not ended yet.</div>`;
+  } else if (neverChecked()) {
+    body = h`<div class="body mut">${NOT_READ_YET}</div>`;
   } else if (!rows.length) {
     body = h`<div class="body mut">Nothing. All ${D.cluster.counts.packs} packs were checked in full.</div>`;
   } else {
@@ -480,9 +507,9 @@ function verdict(x) {
   let pubCard;
   if (!pub) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
-  } else if (pub.status === "drifted") {
+  } else if (pub.status === VERIFY.DRIFTED) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.DRIFT)}</div><div class="m mt6">root <span class="was">${root(pub.rootRecorded)}</span>${ARROW}<span class="now">${root(pub.rootLive)}</span></div></div>`;
-  } else if (pub.status === "unchanged") {
+  } else if (pub.status === VERIFY.UNCHANGED) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.OK)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Unchanged since the record</div></div>`;
   } else {
     pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.NOT_CHECKED)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Strata could not read this version.</div></div>`;
@@ -627,10 +654,15 @@ function driftCard(subject, x, p) {
   const to = side === SIDE.CLUSTER ? cp && cp.rootB : pub && pub.rootLive;
   const select = sides.length > 1 ? h`<select id="side" class="search auto" data-id="${id}" aria-label="Compare">${sides.map(([k, l]) => h`<option value="${k}" ${k === side ? raw("selected") : ""}>${l}</option>`)}</select>` : h`<span>${sides[0][1]}</span>`;
   const d = diffOf(subject, p, side);
-  const state = d.state === "ok" ? (d.data.status === "unchanged" ? badge("g", "Identical") : badge("r", "Changed")) : d.state === "none" ? badge("g", "Identical") : "";
+  // A side that strata could not read has no answer, and no answer is not an identical copy.
+  const unread = side === SIDE.PUBLISHED && !(pub && pub.status !== VERIFY.ERROR);
+  const identical = unread ? badge("y", "Not read") : badge("g", "Identical");
+  const state = d.state === "ok" ? (d.data.status === "unchanged" ? badge("g", "Identical") : badge("r", "Changed")) : d.state === "none" ? identical : "";
   const head = h`<label for="side" class="small mut">Compare</label>${select}<span class="m mut">root ${root(pub && pub.rootRecorded)}${ARROW}${root(to)}</span>${state}`;
   const tabId = id + "-" + side;
-  const none = side === SIDE.CLUSTER ? "Identical. This cluster's copy still holds what the record holds." : "Identical. The published version still holds what the record holds.";
+  let none = "Identical. The published version still holds what the record holds.";
+  if (side === SIDE.CLUSTER) none = "Identical. This cluster's copy still holds what the record holds.";
+  else if (unread) none = "Not read. Strata could not read the published version.";
   return compareCard(tabId, head, d, none);
 }
 
@@ -638,12 +670,13 @@ function moveCards(subject, p) {
   const row = newerRowOf(subject, p);
   if (!row) return "";
   const f = row.fold, total = f.settings + f.followsTheVersion + f.repeatsTheLists;
+  const unread = moveUnread(subject, p), count = v => unread ? DASH : v;
   const pinned = PINNED[row.pinnedState];
   const d = diffOf(subject, p, SIDE.NEWER);
   const head = h`<span class="small mut">Compare</span><span>Pack ${row.version}${ARROW}pack ${row.newest}</span>`;
-  const summary = h`<section class="card"><div class="chead"><h2>Move to ${row.newest} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactBadge(row.impact)}</div><div class="body">
-    <div class="meta mt0"><div><span>Settings</span><b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}</div><div><span>Images</span>${row.images}</div><div><span>Charts</span>${row.charts}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
-    <div class="small mut mt9">${impactOf(row.impact)[1]} is a hint from strata's table.${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div></div></section>`;
+  const summary = h`<section class="card"><div class="chead"><h2>Move to ${row.newest} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
+    <div class="meta mt0"><div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
+    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div></div></section>`;
   return h`${summary}${compareCard("move-" + subject + "-" + p.key, head, d, "The observer holds no changes for this move.")}`;
 }
 

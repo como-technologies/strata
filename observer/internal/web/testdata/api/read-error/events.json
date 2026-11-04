@@ -1,0 +1,6 @@
+{
+  "events": [
+    {"type":"drift","reason":"ClusterDiffers","time":"2026-11-03T06:09:00Z","object":"fred-identity@2.3.0","message":"This cluster runs other content than its record."},
+    {"type":"newer","reason":"NewVersion","time":"2026-10-20T12:00:00Z","object":"bambam-secrets@2.0.1","message":"vault 0.32.0 is listed."}
+  ]
+}

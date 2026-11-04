@@ -1,0 +1,5 @@
+{
+  "findings": [
+    {"id":"9475a5ccddc5583a","kind":"cluster-differs","profile":"fred-identity@2.3.0","packs":["addon/dex"],"impact":"cluster-wide","alsoOnCluster":false,"reBaselineNeeded":false,"firstSeen":"2026-11-03T06:09:00Z","lastSeen":"2026-11-03T11:54:00Z","who":[],"whoUnread":false}
+  ]
+}

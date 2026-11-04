@@ -1,0 +1,3 @@
+[
+  {"profile":"fred-identity@2.3.0","key":"addon/dex","side":"cluster","status":"changed","impact":{"level":"cluster-wide","text":"Every node of the cluster takes the change."},"flags":["AUTHORED"],"values":{"parseable":true,"settings":[{"op":"changed","path":"charts.dex.config.expiry.idTokens","old":"24h","new":"168h"}],"followsTheVersion":[],"repeatsTheLists":[]},"imageChanges":[],"chartChanges":[],"masked":[],"manifests":[],"paramChanges":[]}
+]

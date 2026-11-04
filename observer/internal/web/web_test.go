@@ -497,6 +497,9 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
 		{devdata.StateLost, []string{"Lost contact with Palette", "HTTP 401, the API key was refused", "no finding clears until a check proves it"}},
 		{devdata.StateFirstSeen, []string{"First-seen records", "No person approved these records"}},
+		{devdata.StateLostUnchecked, []string{"Lost contact with Palette", "The last 3 checks failed: HTTP 401, the API key was refused. No check has ended well", "Not read yet"}},
+		{devdata.StateStaleUnchecked, []string{"Checks stopped", "No check has ended well", "Not read yet"}},
+		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -511,6 +514,111 @@ func TestEachSetShowsItsWords(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Before the first good check, the page claims nothing. A restart in an outage reaches this state: the
+// state file holds the failed runs, and the memory holds no answer. The page then has page lost or
+// stale, with checkedAt null, and each count is 0 because nothing was read.
+func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
+	banned := []string{"Nothing changed", "All 0 packs", "0 of 0 packs", "0 packs on this cluster", "Nothing needs attention", "needs a record", "Nothing. All"}
+	for _, state := range []devdata.State{devdata.StateLostUnchecked, devdata.StateStaleUnchecked} {
+		t.Run(string(state), func(t *testing.T) {
+			screens := render(t, state, false)
+			if len(screens) < 5 {
+				t.Fatalf("only %d screens", len(screens))
+			}
+			for _, s := range screens {
+				for _, b := range banned {
+					if strings.Contains(s.HTML, b) {
+						t.Errorf("%s %s says %q", s.Hash, s.Variant, b)
+					}
+				}
+			}
+			for _, s := range screens {
+				if s.Hash == "#overview" && s.Variant == "" {
+					for _, want := range []string{"Not read yet", "No check has ended well"} {
+						if !strings.Contains(s.HTML, want) {
+							t.Errorf("the overview has no %q", want)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+// A published side that strata could not read has no answer. The route gives 404 for it, and the page
+// says that it was not read. It never says that the published version is identical.
+func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T) {
+	const hash = "#k-fred-identity@2.3.0/addon/dex"
+	var published, cluster bool
+	for _, s := range render(t, devdata.StateReadError, false) {
+		if s.Hash != hash {
+			continue
+		}
+		switch s.Variant {
+		case "side published":
+			published = true
+			if strings.Contains(s.HTML, "Identical") || !strings.Contains(s.HTML, "Not read. Strata could not read the published version.") {
+				t.Errorf("the published side of a row with an error: %.600s", s.HTML)
+			}
+		case "":
+			// The finding is on the cluster side, and the cluster side was read.
+			cluster = true
+			if !strings.Contains(s.HTML, "Changed") || !strings.Contains(s.HTML, "charts.dex.config.expiry.idTokens") {
+				t.Errorf("the cluster side: %.600s", s.HTML)
+			}
+		}
+	}
+	if !published || !cluster {
+		t.Errorf("screens: published %v, cluster %v", published, cluster)
+	}
+}
+
+// A move that strata could not compare keeps its row, and the row has no counts and no impact.
+func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
+	var table, pack bool
+	for _, s := range render(t, devdata.StateReadError, false) {
+		switch {
+		case s.Hash == "#newer" && s.Variant == "":
+			table = true
+			for _, row := range strings.Split(s.HTML, "</tr>") {
+				switch {
+				case strings.Contains(row, ">vault<"):
+					if !strings.Contains(row, "Not read") || strings.Contains(row, "<b>0</b>") {
+						t.Errorf("the row of the move that was not read: %s", row)
+					}
+				case strings.Contains(row, ">ubuntu-aws<"):
+					if strings.Contains(row, "Not read") || !strings.Contains(row, "Repave") {
+						t.Errorf("the row of the move that was read: %s", row)
+					}
+				}
+			}
+		case s.Hash == "#k-bambam-secrets@2.0.1/addon/vault" && s.Variant == "":
+			pack = true
+			if !strings.Contains(s.HTML, "Strata could not compare these versions now") || strings.Contains(s.HTML, "is a hint from strata") {
+				t.Errorf("the pack of the move that was not read: %.800s", s.HTML)
+			}
+		}
+	}
+	if !table || !pack {
+		t.Errorf("screens: table %v, pack %v", table, pack)
+	}
+}
+
+// A request of the detail route that fails is not kept. A 503 is a normal answer while a cycle holds the
+// slot, so the next render asks again.
+func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
+	var pages []string
+	if err := json.Unmarshal(runNode(t, devdata.StateOK, "retry", "#k-fred-identity@2.3.0/addon/dex"), &pages); err != nil || len(pages) != 2 {
+		t.Fatalf("the output of render.js: %v, %d renders", err, len(pages))
+	}
+	if !strings.Contains(pages[0], "Try again later") {
+		t.Errorf("the first render does not say that the request failed: %.600s", pages[0])
+	}
+	if strings.Contains(pages[1], "Try again later") || !strings.Contains(pages[1], "charts.dex.config.expiry.idTokens") {
+		t.Errorf("the second render did not ask again: %.600s", pages[1])
 	}
 }
 
