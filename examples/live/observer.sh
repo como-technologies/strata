@@ -4,9 +4,10 @@
 #
 #   examples/live/observer.sh [FROM_STAGE]
 #
-#   1  the records and the settings: a record of cluster A and of each profile that it runs, the
-#      namespace, the ConfigMap, the Secret of the key, the pull Secret of the image, and the
-#      records of the Git revision that is checked out
+#   1  the records and the settings: the pull Secret of the image, a record of cluster A and of each
+#      profile that it runs, the namespace, the ConfigMap, the Secret of the key, and the records of
+#      the Git revision that is checked out. When the token file fails, the run stops at the pull
+#      Secret, before it changes the cluster
 #   2  way 1, a plain kubectl apply: the manifests, with the image, the pull Secret, and two short
 #      periods set in an overlay. The pod is admitted, Ready, and hardened, and its first cycle
 #      reaches Palette. At the baseline the page holds no finding. Its status of each profile is
@@ -26,9 +27,13 @@
 #
 # The first cycle of the observer reads Palette from a node of cluster A. So stage 2 shows whether a
 # workload cluster reaches the API. The key is never in a profile and never in a file of the run. It
-# goes to its Secret through standard input. The pull Secret comes from `gh auth token`, which needs
-# the scope read:packages, and it goes the same way. The kubeconfig lives in a temporary file that the
-# script deletes at its end. A check with `?` records a result without judging it.
+# goes to its Secret through standard input. The pull Secret comes from a token file, and it goes the
+# same way. The file holds a token with only the scope read:packages. Whoever reads the Secret in the
+# cluster has each scope of that token. So a token of a person, with more scopes, must not go there. A
+# person makes the file. The script never prints it, and it has no fallback to `gh auth token`. It
+# refuses a file that is absent, empty, or open to a group or to others. The kubeconfig lives in a
+# temporary file that the script deletes at its end. A check with `?` records a result without judging
+# it.
 #
 # A failed reaches-palette ends the run before stage 4, because the later stages need the page. The
 # undo runs at the end, also after a failed check or an error. The edit in place, the profile of way
@@ -36,9 +41,10 @@
 # that FROM_STAGE can resume the run.
 #
 # Needs the live example at its baseline with cluster A Running (just live-up) and the strata release
-# binary. It also needs kubectl, curl, jq, gh, git, go, and the key of verify.sh. OBSERVER_IMAGE
-# names the image (default: the image of the version in Cargo.toml). PORT is the local port of the port-forward
-# (default 18080). CYCLE_TRIES is the number of looks, 5 seconds apart, in a wait for the page
+# binary. It also needs kubectl, curl, jq, gh, git, go, the key of verify.sh, and the token file.
+# GHCR_PULL_TOKEN_FILE names the token file (default: ~/.config/strata/ghcr-pull-token, mode 0600).
+# OBSERVER_IMAGE names the image (default: the image of the version in Cargo.toml). PORT is the local
+# port of the port-forward (default 18080). CYCLE_TRIES is the number of looks, 5 seconds apart, in a wait for the page
 # (default 60). Results go under runs/<UTC time>/observer/, or OUT; FROM_STAGE resumes a run in OUT.
 # Exit 0 only when no check fails.
 set -uo pipefail
@@ -62,6 +68,7 @@ esac
 case "${image##*:}" in */*) die "OBSERVER_IMAGE needs a tag or a digest" ;; esac
 port=${PORT:-18080}
 tries=${CYCLE_TRIES:-60}
+pull_file=${GHCR_PULL_TOKEN_FILE:-$HOME/.config/strata/ghcr-pull-token}
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/observer}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -165,10 +172,31 @@ snapshot_profiles() {
     "$strata" snapshot "$uid" -o "record-$n.json" -q || return 1
   done < uids.txt
 }
-# pull_secret: the Secret ghcr-pull from the token of gh. The token goes through standard input.
+# pull_token: the pull token on standard output, from the token file. The file holds a token with only
+# the scope read:packages. When the file is absent, empty, or open to a group or to others, the
+# function prints one line on standard error and fails.
+pull_token() {
+  local token mode
+  token=$(tr -d '[:space:]' 2> /dev/null < "$pull_file")
+  if [ -z "$token" ]; then
+    echo "no token in $pull_file: it must hold a token with only the scope read:packages" >&2
+    return 1
+  fi
+  mode=$(stat -c %a "$pull_file" 2> /dev/null || stat -f %Lp "$pull_file") \
+    || { echo "cannot read the mode of $pull_file" >&2; return 1; }
+  if [ $((8#$mode & 077)) != 0 ]; then
+    echo "$pull_file has the mode $mode: run chmod 600 on it. It must hold a token with only the scope read:packages" >&2
+    return 1
+  fi
+  printf %s "$token"
+}
+# pull_secret: the Secret ghcr-pull from the token file. The token goes through standard input. The
+# function reads the file first, so a file that fails changes nothing in the cluster. The Secret
+# needs the namespace, so the function applies it.
 pull_secret() {
   local token user
-  token=$(gh auth token) && [ -n "$token" ] || return 1
+  token=$(pull_token) || return 1
+  kc apply -f "$root/deploy/observer/namespace.yaml" || return 1
   user=$(gh api user --jq .login 2> /dev/null)
   printf %s "$token" \
     | jq -Rs --arg u "${user:-strata-observer}" \
@@ -177,10 +205,10 @@ pull_secret() {
 }
 # records_apply: the records of this revision. A client-side apply fails above 256 KiB, so it is --server-side.
 records_apply() { "$records_script" --revision "$revision" record-*.json | kc apply --server-side -f -; }
-# prepare_settings: the namespace and what the pod reads. Stage 1 runs each step as a check.
+# prepare_settings: the pull Secret, the namespace, and what the pod reads. Stage 1 runs each step as
+# a check. The pull Secret comes first, because it reads the token file before any change.
 prepare_settings() {
-  kc apply -f "$root/deploy/observer/namespace.yaml" && observer_config && observer_key "$palette_key" \
-    && pull_secret && records_apply
+  pull_secret && observer_config && observer_key "$palette_key" && records_apply
 }
 # overlay: base/ is a copy of deploy/observer. kustomization.yaml sets the image and the pull Secret,
 # and gives the two timers short periods, so that the run takes minutes.
@@ -590,11 +618,17 @@ undo() {
 profile_gone() {
   [ -z "$OP" ] && [ "$("$strata" list profiles --json | jq --arg n "$profile_name" '[.profiles[] | select(.name == $n)] | length')" = 0 ]
 }
-# secret_in_run: a file of the run holds the key or the token of gh. Each goes to grep through a pipe.
+# secret_in_run: a file of the run holds the key, the pull token, or the token of gh. The token of gh
+# never goes to the cluster, but no file of the run must hold it either. Each secret goes to grep
+# through a pipe. The function skips an empty one, because an empty pattern matches each line.
 secret_in_run() {
-  local token
-  token=$(gh auth token) && [ -n "$token" ] || return 2
-  grep -rIlF -f <(printf %s "$palette_key") -f <(printf %s "$token") .
+  local secret found=1
+  for secret in "$palette_key" "$(pull_token 2> /dev/null)" "$(gh auth token 2> /dev/null)"; do
+    [ -n "$secret" ] || continue
+    grep -rIlF -f <(printf %s "$secret") .
+    case $? in 0) found=0 ;; 1) ;; *) return 2 ;; esac
+  done
+  return $found
 }
 
 summary() {
@@ -619,6 +653,14 @@ skip_without_page() {
 
 if stage 1 "the records and the settings"; then
   require_baseline
+  check pull-secret 0 '#656: the Secret ghcr-pull holds the token of the file, which has only read:packages and comes through standard input' -- \
+    pull_secret
+  if [ "$failures" != 0 ]; then
+    # pull_secret reads the file before any change, so a file that fails leaves nothing to undo
+    pull_token > /dev/null 2>&1 || undone=1
+    { cat pull-secret.err; echo "the run stops: the pull Secret needs the token file"; } | tee -a steps.log
+    exit 1
+  fi
   check cluster-record 0 '#656: a record of cluster A. Only the check of the variables and the last verify read it' -- \
     "$strata" snapshot "cluster:$C" -o cluster.json
   check profile-records 0 '#656: a record of each profile that cluster A runs, in record-<n>.json' -- snapshot_profiles
@@ -626,7 +668,6 @@ if stage 1 "the records and the settings"; then
     kc apply -f "$root/deploy/observer/namespace.yaml"
   check config 0 '#656: the ConfigMap holds the cluster, the address of Palette, and the project' -- observer_config
   check key 0 '#656: the Secret holds the key, which comes through standard input' -- observer_key "$palette_key"
-  check pull-secret 0 '#656: the Secret ghcr-pull holds the token of gh, which comes through standard input' -- pull_secret
   check records-apply 0 '#656: the records of this revision apply with --server-side' -- records_apply
 fi
 
@@ -702,7 +743,7 @@ if stage 7 "the end" && [ "${KEEP:-}" != 1 ]; then
   undo
   check undo-profile 0 '#656: no profile of way 2 stays in Palette' -- profile_gone
   check undo-namespace 0 '#656: the namespace is gone' -- namespace_gone
-  check no-secret-in-run 1 '#656: no file of the run holds the key or the token of gh' -- secret_in_run
+  check no-secret-in-run 1 '#656: no file of the run holds the key, the pull token, or the token of gh' -- secret_in_run
   check undo-baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
 fi
 

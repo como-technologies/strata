@@ -59,7 +59,8 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
 > write`, and `id-token: write`. `tests/workflows.rs` requires the three.
 
 The image is in a private repository. A team that pulls it names a Secret of
-the registry in `imagePullSecrets`.
+the registry in `imagePullSecrets`. The token in that Secret needs only the scope
+`read:packages`.
 
 ## The manifests
 
@@ -165,8 +166,10 @@ for `strata`. `tests/workflows.rs` tests the steps of the workflow.
 ## Check a real cluster
 
 `just live-observer` runs [`observer.sh`](./live-runs.md#observersh) on cluster
-A of the live example. It needs `kubectl`, `gh`, and `go`. `OBSERVER_IMAGE`
-names the image. The default is the image of the version in `Cargo.toml`.
+A of the live example. It needs `kubectl`, `gh`, `go`, and a token file for the
+pull Secret. The file holds a token with only the scope `read:packages`.
+`OBSERVER_IMAGE` names the image. The default is the image of the version in
+`Cargo.toml`.
 
 The script installs the observer in two ways, one after the other. Way 1 is a
 plain `kubectl apply` of the output of `kubectl kustomize`. An overlay in the

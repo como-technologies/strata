@@ -8216,8 +8216,18 @@ COUNTER
 chmod +x "$out"
 "##;
 
-/// The token of `gh auth token` in the tests of observer.sh.
+/// The token of `gh auth token` in the tests of observer.sh. It has the scopes of a person, so it
+/// never reaches the cluster.
 const OBSERVER_GH_TOKEN: &str = "ghp_token_that_no_log_shows";
+/// The token in the token file of observer.sh. It has only the scope read:packages.
+const OBSERVER_PULL_TOKEN: &str = "ghp_pull_token_that_no_log_shows";
+
+/// Write `body` to `path` with the mode `mode`.
+fn write_with_mode(path: &Path, body: &str, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, body).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+}
 /// The key of the tenant in the tests of observer.sh.
 const OBSERVER_KEY: &str = "key-that-no-log-shows";
 
@@ -8348,9 +8358,14 @@ fn observer_stage() -> Stage {
         r#"{"profiles":[{"name":"strata-live-profile","uid":"r-1"},{"name":"strata-live-addon","uid":"ad-1"}]}"#,
     );
 
+    // the token file is outside the folder of the run, so that the look for it in the run is fair
+    let token_file = stage.path("ghcr-pull-token");
+    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
+
     let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
     stage.env("PATH", &path);
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
+    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
     stage
@@ -8364,12 +8379,12 @@ fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
 
 /// Each check of observer.sh, in the order that it runs on a good run.
 const OBSERVER_CHECKS: [&str; 58] = [
+    "pull-secret",
     "cluster-record",
     "profile-records",
     "namespace",
     "config",
     "key",
-    "pull-secret",
     "records-apply",
     "manifests-render",
     "manifests-apply",
@@ -8513,10 +8528,10 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         assert!(kubectl.contains(call), "{call}:\n{kubectl}");
     }
 
-    // the pull secret holds the token of gh, and the key Secret holds the right key at the end
+    // the pull secret holds the token of the file, and the key Secret holds the right key at the end
     let pull = observer_log(&stage, "pull.seen");
     let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
-    assert_eq!(auths["auths"]["ghcr.io"]["password"], OBSERVER_GH_TOKEN);
+    assert_eq!(auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN);
     assert_eq!(auths["auths"]["ghcr.io"]["username"], "tester");
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     assert_eq!(
@@ -8587,7 +8602,7 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
         ("the calls of api.sh", observer_log(&stage, "api.log")),
         ("the calls of strata", all_text(&stage.path("strata"))),
     ] {
-        for secret in [OBSERVER_KEY, OBSERVER_GH_TOKEN] {
+        for secret in [OBSERVER_KEY, OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
             if haystack.contains(secret) {
                 shown.push(format!("{secret} in {name}"));
             }
@@ -8595,7 +8610,7 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
     }
     assert!(shown.is_empty(), "{shown:?}");
     // the two reach their Secrets through standard input
-    assert!(observer_log(&stage, "pull.seen").contains(OBSERVER_GH_TOKEN));
+    assert!(observer_log(&stage, "pull.seen").contains(OBSERVER_PULL_TOKEN));
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     // the kubeconfig is a credential: no file of it stays in the run or in the temporary directory
     let kubeconfigs: Vec<_> = files_under(&stage.path("out"))
@@ -8608,6 +8623,118 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
         .filter(|(_, c)| c.contains("fake-kubeconfig"))
         .collect();
     assert!(left.is_empty(), "the kubeconfig stays: {left:?}");
+}
+
+/// The token file of the stage holds `body` with the mode `mode`. `None` removes the file.
+fn observer_token_file(stage: &Stage, body: Option<&str>, mode: u32) {
+    let path = stage.path("ghcr-pull-token");
+    match body {
+        Some(body) => write_with_mode(&path, body, mode),
+        None => std::fs::remove_file(path).unwrap(),
+    }
+}
+
+/// The run of `stage` stops at `pull-secret`: it is the one check, it fails, and its line names the
+/// file and the scope. No call changes the cluster, and no call makes a Secret.
+fn assert_observer_stops_at_the_pull_secret(stage: &Stage, why: &str) {
+    let (o, steps) = run_observer(stage, &[]);
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "{why}:\n{steps}{}",
+        text(&o.stderr)
+    );
+    assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
+    failed(&steps, &["pull-secret"]);
+    let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
+    assert_eq!(said.lines().count(), 1, "{why}: one line:\n{said}");
+    assert!(
+        said.contains(stage.path("ghcr-pull-token").to_str().unwrap())
+            && said.contains("read:packages"),
+        "{why}: the line names the file and the scope:\n{said}"
+    );
+    assert!(
+        steps.contains(said.trim()),
+        "{why}: the log holds it:\n{steps}"
+    );
+    assert_eq!(
+        observer_log(stage, "kubectl.log"),
+        "",
+        "{why}: no call to the cluster"
+    );
+    assert_eq!(observer_log(stage, "pull.seen"), "", "{why}: no Secret");
+    // the token of gh is no fallback, and no secret is in a place that the run shows
+    for secret in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN, OBSERVER_KEY] {
+        assert!(!text(&o.stdout).contains(secret), "{why}: {secret}");
+        assert!(
+            !all_text(&stage.path("out")).contains(secret),
+            "{why}: {secret}"
+        );
+    }
+}
+
+#[test]
+fn observer_sh_stops_at_the_pull_secret_when_the_token_file_is_absent_or_empty() {
+    for (why, body) in [
+        ("absent", None),
+        ("empty", Some("")),
+        ("only white space", Some(" \n\t\n")),
+    ] {
+        let stage = observer_stage();
+        observer_token_file(&stage, body, 0o600);
+        assert_observer_stops_at_the_pull_secret(&stage, why);
+    }
+}
+
+#[test]
+fn observer_sh_stops_at_the_pull_secret_when_a_group_or_others_can_read_the_token_file() {
+    for mode in [0o644, 0o640, 0o604, 0o660] {
+        let stage = observer_stage();
+        observer_token_file(&stage, Some(OBSERVER_PULL_TOKEN), mode);
+        assert_observer_stops_at_the_pull_secret(&stage, &format!("mode {mode:o}"));
+    }
+}
+
+#[test]
+fn observer_sh_sends_the_token_of_gh_to_no_call_and_no_input_of_kubectl() {
+    let stage = observer_stage();
+    let (o, steps) = run_observer(&stage, &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    // the stand-in keeps the calls, the key, the pull Secret, and the input of each apply
+    let kept = files_under(&stage.path("obs"));
+    for file in ["kubectl.log", "key.current", "pull.seen", "applied.yaml"] {
+        assert!(kept.iter().any(|(path, _)| path == file), "{file} is kept");
+    }
+    for (path, content) in kept {
+        assert!(!content.contains(OBSERVER_GH_TOKEN), "in {path}");
+    }
+}
+
+#[test]
+fn observer_sh_finds_the_pull_token_or_the_token_of_gh_in_a_file_of_the_run() {
+    for leak in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
+        let mut stage = observer_stage();
+        stage.env("FAKE_LEAK_SECRET", leak);
+        stage.wrap_strata(
+            r#"#!/usr/bin/env bash
+out=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+case "$*" in
+  "snapshot op-1 -o "*) echo "{\"manifest\": \"$FAKE_LEAK_SECRET\"}" > "$out"; exit 0 ;;
+esac
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#,
+        );
+        let (o, steps) = run_observer(&stage, &[]);
+        assert_eq!(
+            o.status.code(),
+            Some(1),
+            "{leak}:\n{steps}{}",
+            text(&o.stderr)
+        );
+        failed(&steps, &["no-secret-in-run"]);
+        passed(&steps, &["no-key-in-profile", "undo-namespace"]);
+    }
 }
 
 #[test]

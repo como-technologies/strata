@@ -1368,8 +1368,9 @@ before the run on the real cluster.
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A, `fred`,
 in two ways. Way 1 is a plain `kubectl apply` of the rendered manifests. Way 2
 is an add-on profile in Palette, with the rendered manifests as one manifest
-layer. It needs the example at its baseline with cluster A Running, the key,
-`kubectl`, `gh`, `git`, and `go`. `OBSERVER_IMAGE` names the image.
+layer. It needs the example at its baseline with cluster A Running, the key, the
+token file of the pull Secret, `kubectl`, `gh`, `git`, and `go`. `OBSERVER_IMAGE`
+names the image.
 
 The first cycle of the pod reads Palette from a node of cluster A. So
 `reaches-palette` answers whether a workload cluster reaches the API. A failed
@@ -1380,9 +1381,21 @@ cycle.
 The script sets two short periods in an overlay: one minute for the content
 cycle and five minutes for the versions cycle. The key goes to its Secret
 through standard input. It is never in a profile, because a profile variable is
-in clear in the copy of the cluster. The pull Secret comes from `gh auth token`
-and goes the same way. The kubeconfig lives in a temporary file that the script
-deletes.
+in clear in the copy of the cluster. The kubeconfig lives in a temporary file
+that the script deletes.
+
+The pull Secret comes from a token file, and it goes the same way. The file is
+`GHCR_PULL_TOKEN_FILE`, or `~/.config/strata/ghcr-pull-token` when the variable
+is not set. It holds a token with only the scope `read:packages`. The pull needs
+no other scope. Whoever reads the Secret in the cluster has each scope of its
+token. So the token of `gh auth token`, with the scopes of a person, never goes
+to the cluster.
+
+A person makes the file with the mode `0600`. The script never prints it, and it
+has no fallback. When the file is absent, empty, or open to a group or to
+others, `pull-secret` fails with one line. The line names the file and the
+scope. The run stops before it changes the cluster. `no-secret-in-run` looks for
+the pull token and for the token of `gh` in the files of the run.
 
 Stage 4 counts the requests of the cycles. `count-requests` is a small Go
 program that sits between `strata` and Palette. It writes one line for each
@@ -1399,8 +1412,9 @@ result without judging it.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
+| `pull-secret` | 0 | #656: the token file holds a token with only `read:packages`, and it goes to the Secret `ghcr-pull` through standard input. A file that fails stops the run before any change (no result yet: the Wave 15 window runs it) |
 | `cluster-record`, `profile-records` | 0 | #656: a record of cluster A, and a record of each profile that it runs (no result yet: the Wave 15 window runs it) |
-| `namespace`, `config`, `key`, `pull-secret` | 0 | #656: the namespace, the ConfigMap, and the two Secrets. A secret goes through standard input (no result yet: the Wave 15 window runs it) |
+| `namespace`, `config`, `key` | 0 | #656: the namespace, the ConfigMap, and the Secret of the key. The key goes through standard input (no result yet: the Wave 15 window runs it) |
 | `records-apply` | 0 | #656: the records of the Git revision apply with `--server-side` (no result yet: the Wave 15 window runs it) |
 | `manifests-render`, `manifests-apply` | 0 | #656: `kubectl kustomize` renders the overlay, and a plain `kubectl apply -f observer.yaml` installs it (no result yet: the Wave 15 window runs it) |
 | `apply-admitted` | 0 | #656: the namespace enforces `restricted`, and the standard admits the pod (no result yet: the Wave 15 window runs it) |
@@ -1436,7 +1450,7 @@ result without judging it.
 | `no-repave` | ? | #656: cluster A keeps its machines when the layer goes on. The output lists the machines before and after (no result yet: the Wave 15 window runs it) |
 | `profile-detach`, `profile-removal` | 0 | #656: the profile comes off cluster A, and the Deployment goes (no result yet: the Wave 15 window runs it) |
 | `undo-profile`, `undo-namespace` | 0 | #656: no profile of way 2 stays in Palette, and the namespace is gone (no result yet: the Wave 15 window runs it) |
-| `no-secret-in-run` | 1 | #656: no file of the run holds the key or the token of `gh` (no result yet: the Wave 15 window runs it) |
+| `no-secret-in-run` | 1 | #656: no file of the run holds the key, the pull token, or the `gh` token (no result yet: the Wave 15 window runs it) |
 | `undo-baseline` | 0 | the example is at its baseline (no result yet: the Wave 15 window runs it) |
 
 

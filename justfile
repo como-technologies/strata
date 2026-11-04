@@ -323,7 +323,7 @@ live-loop: build
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
 
-# The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, and go. Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
+# The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
 live-observer: build
     examples/live/observer.sh
 
