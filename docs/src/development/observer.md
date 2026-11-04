@@ -57,7 +57,8 @@ move.
 - A cluster side holds the clear values of the variables. So `--work` must be
   a volume in memory.
 - With no record, a cycle runs no `verify` and no `behind`, because each needs
-  a file.
+  a file. The versions cycle then reads no version, so `versions.readAt` is
+  `null`.
 - The observer reads the directory of the records again at each cycle,
   because the kubelet updates a mounted Secret.
 
@@ -66,7 +67,10 @@ move.
 A content cycle fails when each row of its `verify` has an `error`, or when the
 `snapshot` of the cluster fails. A versions cycle fails when `behind` fails, or
 when each pin has an `error`. A row with an `error` beside good rows is a
-cause in [Not checked](#not-checked), and not a failed cycle.
+cause in [Not checked](#not-checked), and not a failed cycle. A failed `compare`
+of a move does not fail the cycle: see [The newer
+versions](#the-newer-versions). A failed read of one part of a record is not a
+failed cycle: see [A failed read](#a-failed-read).
 
 A failed cycle keeps the last good result. It adds 1 to `failedRuns` and keeps
 the kind and the status of the error. It never keeps the message, because the
@@ -76,6 +80,23 @@ cycle sets `failedRuns` to 0.
 A `snapshot` writes a plain line and no JSON, so its kind is `unknown`. The
 kind of the failed cycle then comes from `records[].error` of the `verify`, and
 from `pins[].error` of the `behind`.
+
+### A failed read
+
+One failed read of one part of one record is not a failed cycle. It is a
+`verify` row with an `error`, or a side of the cluster that `snapshot` or
+`compare` could not read. Such a read tells nothing about the drift.
+
+- The observer takes the last good answer of that part from its memory. It
+  puts the answer in the new result, so the finding stays with its first
+  sight.
+- The record has the cause `read-error` in [Not checked](#not-checked), also
+  when it holds the last good answer.
+- Only a read that works clears a finding.
+- A new process has no last answer in memory. The state still keeps the first
+  sight of each finding of that part. A later read that shows the drift keeps
+  the date.
+- A record that changed since the last good answer gets no old answer.
 
 ## The records
 
@@ -156,13 +177,14 @@ severity.
 | `no-upstream-digest` | `diff.upstreamUnknown` names a pack, or a row has the status `unverified`. | Pack |
 | `older-registry-copy` | `pin.registrySync` is present. | Registry |
 | `no-record` | A profile that the cluster runs has no record. | Profile |
-| `read-error` | `records[].error` is set, or a record file cannot be read. | Record |
-| `pin-error` | `pin.error` is set. | Pin |
+| `read-error` | `records[].error` is set, a side of the cluster could not be read, or a record file cannot be read. | Record |
+| `pin-error` | `pin.error` is set, or the `compare` of the move of the pin failed. | Pin |
 
 `counts.packs` is the sum of the packs of the records that the cluster runs. A
 profile with no record adds no pack. `counts.packsInFull` is `counts.packs`
 minus the packs that a cause names. All the packs of a record that has a
-`read-error` are named.
+`read-error` are named. A side that was not read is not `ok`: the profile and
+its packs are `not-checked`, and `counts.packsInFull` does not count them.
 
 ## The newer versions
 
@@ -173,9 +195,14 @@ counts of images and charts, and the three counts of `fold`. `new` is true when
 `listed` is in the last 7 days.
 
 The cache of a move has the key `<registryUid>/<name>@<version>-><newest>` and
-the version of the binary. A new binary asks again. A compare that fails is not
-cached. The cache holds counts. The changed values go out of scope after the
-compare, and the state never holds them.
+the version of the binary. A new binary asks again. The cache holds counts. The
+changed values go out of scope after the compare, and the state never holds
+them.
+
+A compare that fails is not cached, and it does not fail the cycle. The row of
+the pin stays in the list with no counts and no impact, and the cause
+`pin-error` names its pack. The other pins keep their compare. The next cycle
+asks again for that move only.
 
 ## The page state
 
@@ -215,9 +242,14 @@ value of a variable.
 
 The status of a profile and of a pack is `drift`, `newer`, `not-checked`, `ok`,
 or `no-record`. The first status that holds wins, in that order. A pack is never
-`no-record`. `clusterCopy.status` is `same`, `same-content`, `differs`,
+`no-record`. A finding of the kind `overwritten`, `renamed`, or `gone` names no
+pack. A pack of its profile that has changes is `drift`.
+
+`clusterCopy.status` is `same`, `same-content`, `differs`,
 `not-on-this-cluster`, or `not-read`. `not-read` says that the side or the
-compare of one profile failed while the others worked.
+compare of one profile failed while the others worked, and that no last good
+answer exists. With a last good answer, `clusterCopy` shows it: see [A failed
+read](#a-failed-read).
 
 The pack row joins the record with the other answers. `registry` is the name in
 the pin with the same `registryUid`, or the uid. `kind` is
@@ -253,8 +285,9 @@ event is older than 7 days.
 `--state/state.json` holds these facts, and no value:
 
 - `startedAt`: the first start with this directory.
-- `findings`: `firstSeen` of each finding, by `id`. A finding that is gone
-  leaves the file.
+- `findings`: `firstSeen` of each finding, by `id`. A finding that a read
+  cleared leaves the file. A finding whose part could not be read stays: see
+  [A failed read](#a-failed-read).
 - `moves`: the counts of each move.
 - `content` and `versions`: `failedRuns` and `lastError`.
 
