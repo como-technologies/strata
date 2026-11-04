@@ -1424,6 +1424,7 @@ result without judging it.
 | `key-back`, `ok-after-key-back` | 0 | #656: the key back and a restart, and the page returns to `ok` (no result yet: the Wave 15 window runs it) |
 | `restart-keeps-working` | 0 | #656: after `kubectl rollout restart`, the page goes to `ok`. The start of its state is later, because the state goes with the pod (no result yet: the Wave 15 window runs it) |
 | `restart-first-load` | ? | #656: the page showed `first-load` after the restart. `pages-after-restart.txt` lists the states in order (no result yet: the Wave 15 window runs it) |
+| `first-seen-starts-again` | 0 | #656: an edit gives a finding, and a restart gives it a later `firstSeen`. The state goes with the pod (no result yet: the Wave 15 window runs it) |
 | `manifests-delete`, `removal-is-clean` | 0 | #656: `kubectl delete -f observer.yaml` removes the namespace, and no object of the observer stays (no result yet: the Wave 15 window runs it) |
 | `fred-unchanged` | 0 | #656: `strata verify` says that cluster A did not change (no result yet: the Wave 15 window runs it) |
 | `profile-prepare`, `nodes-before` | 0 | #656: the namespace and the Secrets, made with `kubectl` before the profile. The machines of cluster A, before the layer (no result yet: the Wave 15 window runs it) |

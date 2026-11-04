@@ -435,6 +435,10 @@ page_lost() { page_is lost; }
 lost_after_wrong_key() { poll "$tries" page_lost; }
 # ok_after_key_back: with the key back, the page is ok again
 ok_after_key_back() { poll "$tries" page_ok; }
+# later A B: the time B is after the time A. Both are RFC 3339 times, with or without a fraction.
+later() {
+  jq -en --arg a "$1" --arg b "$2" '($b | sub("\\.[0-9]+"; "") | fromdate) > ($a | sub("\\.[0-9]+"; "") | fromdate)' > /dev/null
+}
 # restart_keeps_working: after a restart, the page goes from first-load to ok. The start of its state
 # is later, because the state goes with the pod. pages-after-restart.txt lists the states.
 restart_keeps_working() {
@@ -451,9 +455,25 @@ restart_keeps_working() {
     sleep 2
   done
   [ "$(tail -n 1 pages-after-restart.txt)" = ok ] || return 1
-  before=$(cat started-before.txt) after=$(jq -r '.records.startedAt' page.json)
-  jq -en --arg a "$before" --arg b "$after" \
-    '($b | sub("\\.[0-9]+"; "") | fromdate) > ($a | sub("\\.[0-9]+"; "") | fromdate)' > /dev/null
+  later "$(cat started-before.txt)" "$(jq -r '.records.startedAt' page.json)"
+}
+# first_seen: the first sight of the finding published-changed, in findings.json
+first_seen() { jq -r '[.findings[] | select(.kind == "published-changed") | .firstSeen] | first // empty' findings.json; }
+# first_seen_starts_again: the pod keeps the first sight of a finding in its state, and the state goes
+# with the pod. So a finding that lives through a restart has a later first sight. The edit goes back at the end.
+first_seen_starts_again() {
+  local before after bad=0
+  drift_edit && poll "$tries" drift_seen || bad=1
+  if [ "$bad" = 0 ]; then
+    before=$(first_seen)
+    restart_pod && pf_start && poll "$tries" drift_seen || bad=1
+    after=$(first_seen)
+  fi
+  drift_undo || bad=1
+  [ "$bad" = 0 ] || return 1
+  echo "before the restart: $before"
+  echo "after the restart:  $after"
+  later "$before" "$after"
 }
 # restart_first_load: the page showed first-load after the restart
 restart_first_load() { grep -qx first-load pages-after-restart.txt; }
@@ -657,6 +677,7 @@ if stage 5 "failure and restart" && skip_without_page; then
   check ok-after-key-back 0 '#656: the page returns to ok' -- ok_after_key_back
   check restart-keeps-working 0 '#656: after kubectl rollout restart the page goes to ok, and the start of its state is later' -- restart_keeps_working
   check restart-first-load ? '#656: the page showed first-load after the restart (pages-after-restart.txt)' -- restart_first_load
+  check first-seen-starts-again 0 '#656: a finding that lives through a restart has a later firstSeen, because the state goes with the pod' -- first_seen_starts_again
   check manifests-delete 0 '#656: kubectl delete -f observer.yaml' -- manifests_delete
   check removal-is-clean 0 '#656: the namespace is gone, and no object of the observer stays' -- removal_is_clean
   check fred-unchanged 0 '#656: strata verify says that cluster A did not change' -- "$strata" verify cluster.json

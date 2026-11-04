@@ -8150,6 +8150,7 @@ exit 0
 /// The `curl` of observer.sh: the routes of the observer, from the state of `$FAKE_OBS`. The page is
 /// lost with the wrong key, and first-load once after a restart. `FAKE_NO_PALETTE` keeps it in
 /// first-load with a `lastError`, and `FAKE_LEAK` puts the value of a variable in `/v1/events`.
+/// With `FAKE_STATE_KEPT`, the first sight of a finding does not change at a restart.
 const FAKE_CURL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 url=${*: -1}
@@ -8167,8 +8168,9 @@ profiles='{"profiles":[
   {"name":"strata-live-addon","version":"1.0.0","status":"ok","published":{"status":"unchanged"},"clusterCopy":{"status":"same"}}]}'
 [ -f "$obs/drifted" ] && profiles=$(jq '(.profiles[] | select(.name == "strata-live-addon") | .published.status) = "drifted"' <<<"$profiles")
 [ -f "$obs/attached" ] && profiles=$(jq '.profiles += [{"name":"strata-observer-live","version":"1.0.0","status":"no-record"}]' <<<"$profiles")
+seen=$restarts; [ -z "${FAKE_STATE_KEPT-}" ] || seen=0
 findings='{"findings":[]}'
-[ -f "$obs/drifted" ] && findings='{"findings":[{"kind":"published-changed","profile":"strata-live-addon@1.0.0","packs":["addon/strata-live-config"],"who":[{"actor":"ada@example.com","actorType":"user","action":"update"}]}]}'
+[ -f "$obs/drifted" ] && findings=$(printf '{"findings":[{"kind":"published-changed","profile":"strata-live-addon@1.0.0","packs":["addon/strata-live-config"],"firstSeen":"2026-11-04T10:%02d:30Z","who":[{"actor":"ada@example.com","actorType":"user","action":"update"}]}]}' "$seen")
 case "$path" in
   /healthz) echo ok ;;
   /v1/cluster)
@@ -8361,7 +8363,7 @@ fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
 }
 
 /// Each check of observer.sh, in the order that it runs on a good run.
-const OBSERVER_CHECKS: [&str; 57] = [
+const OBSERVER_CHECKS: [&str; 58] = [
     "cluster-record",
     "profile-records",
     "namespace",
@@ -8400,6 +8402,7 @@ const OBSERVER_CHECKS: [&str; 57] = [
     "ok-after-key-back",
     "restart-keeps-working",
     "restart-first-load",
+    "first-seen-starts-again",
     "manifests-delete",
     "removal-is-clean",
     "fred-unchanged",
@@ -8518,8 +8521,8 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     assert_eq!(
         observer_log(&stage, "restarts").trim(),
-        "3",
-        "the wrong key, the key back, and the restart"
+        "4",
+        "the wrong key, the key back, the restart, and the restart with a finding"
     );
 
     // way 2 sends the rendered file as the one manifest, and takes the profile off at the end
@@ -8860,4 +8863,22 @@ fn observer_sh_keeps_the_install_for_a_resume_when_keep_is_1_and_refuses_a_stage
         "{}",
         text(&o.stdout)
     );
+}
+
+#[test]
+fn observer_sh_fails_the_first_sight_check_when_a_restart_keeps_the_state_and_restores_the_version()
+{
+    let mut stage = observer_stage();
+    stage.env("FAKE_STATE_KEPT", "1");
+    let (o, steps) = run_observer(&stage, &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["first-seen-starts-again"]);
+    passed(
+        &steps,
+        &["restart-keeps-working", "drift-clears", "undo-namespace"],
+    );
+    let api = observer_log(&stage, "api.log");
+    let edits = api.lines().filter(|l| l.starts_with("edit ")).count();
+    assert_eq!(edits, 4, "two edits and two undos: {api}");
+    assert!(!stage.path("obs/drifted").exists());
 }
