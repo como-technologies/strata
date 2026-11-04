@@ -59,7 +59,8 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
 > write`, and `id-token: write`. `tests/workflows.rs` requires the three.
 
 The image is in a private repository. A team that pulls it names a Secret of
-the registry in `imagePullSecrets`.
+the registry in `imagePullSecrets`. The token in that Secret needs only the scope
+`read:packages`.
 
 ## The manifests
 
@@ -144,6 +145,7 @@ writes only the records of its profiles.
 just observer-manifests     # kubectl kustomize deploy/observer holds four objects
 just observer-image         # strata-observer:dev, from the static binary of this tree
 just live-observer-kind     # the observer on kind
+just live-observer          # the observer on cluster A, from a kubectl apply and from a profile
 ```
 
 `just observer-image` needs `cross` and Docker. `just live-observer-kind` runs
@@ -160,3 +162,40 @@ sure of these facts:
 `tests/observer_deploy.rs` ties each manifest to the code of the observer and
 to the records script. `tests/ci_scripts.rs` tests the script with a stand-in
 for `strata`. `tests/workflows.rs` tests the steps of the workflow.
+
+## Check a real cluster
+
+`just live-observer` runs [`observer.sh`](./live-runs.md#observersh) on cluster
+A of the live example. It needs `kubectl`, `gh`, `go`, and a token file for the
+pull Secret. The file holds a token with only the scope `read:packages`.
+`OBSERVER_IMAGE` names the image. The default is the image of the version in
+`Cargo.toml`.
+
+The script installs the observer in two ways, one after the other. Way 1 is a
+plain `kubectl apply` of the output of `kubectl kustomize`. An overlay in the
+folder of the run sets the image, the pull Secret, and two short periods. Way 2
+is an add-on profile in Palette. The profile holds the rendered manifests as one
+manifest layer. The namespace and the Secrets are made with `kubectl` first,
+because the key must not be in a profile.
+
+The script makes sure of these facts:
+
+- The first cycle of the pod reaches Palette from a node of the cluster.
+- The page holds no finding at the baseline, and its status of each profile is
+  the status of `strata verify` and `strata compare`.
+- A user with only the reader role opens the page. A user with no role does not.
+  A pod of another namespace cannot connect.
+- An edit in place of the add-on version gives the finding `published-changed`
+  with the actor. No route and no line of the log shows the value of a variable.
+- A wrong key sends the page to `lost`, and the right key brings it back to
+  `ok`. A restart starts the state again.
+- A profile of the observer shows as `no-record` under "Not checked". It is not a
+  drift, and the other profiles of the cluster stay the same.
+
+The script counts the requests of a content cycle and of a versions cycle.
+`count-requests` sits between `strata` and Palette, and writes one line for each
+request. The lines hold the method and the path, and no query and no key.
+
+The undo runs at the end, also after a failed check. The edit goes back, the
+profile comes off the cluster, and the namespace goes. The script deletes no
+cluster. `just live-down` deletes it.

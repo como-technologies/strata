@@ -58,7 +58,7 @@ build-target target:
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
 # on random input.
 
-# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), strata-fuzz, strata-report-endpoint, and the Go observer. No network.
+# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), strata-fuzz, strata-report-endpoint, the Go observer, and the request counter of the live example. No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
@@ -67,6 +67,7 @@ test: stand-in
     cargo test -p strata-fuzz
     cargo test -p strata-report-endpoint
     go -C observer test ./...
+    go -C examples/live/count-requests test ./...
 
 # The benchmarks are the package strata-benches in benches/. They are not tests. `just test` does
 # not run them, and no recipe fails on a time. See "The benchmarks" in
@@ -90,17 +91,20 @@ bench-short:
 # So `just lint` needs both.
 rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
 
-# The last line fails when a module enters observer/go.mod: the observer uses the standard library only.
+# The last two lines fail when a module enters observer/go.mod or the go.mod of the request counter: both use the standard library only.
 
-# Test the format, the clippy lints, and the rustdoc of the public items and of all items, and the format and the vet of the Go observer
+# Test the format, the clippy lints, and the rustdoc of the public items and of all items, and the format and the vet of the Go observer and of the request counter
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
     {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz
     {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz --document-private-items
     test -z "$(gofmt -l observer)"
+    test -z "$(gofmt -l examples/live/count-requests)"
     go -C observer vet ./...
+    go -C examples/live/count-requests vet ./...
     ! grep -q '^require' observer/go.mod
+    ! grep -q '^require' examples/live/count-requests/go.mod
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:
@@ -318,6 +322,10 @@ live-loop: build
 # The observer on kind (#644): the manifests, the records, the pod, and the page, as a user with only the reader role sees them. Needs live-up, docker, kind, and kubectl. Makes a kind cluster and deletes it; writes nothing to the tenant.
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
+
+# The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
+live-observer: build
+    examples/live/observer.sh
 
 # The managed engine test on EKS: the release, the shape tier, and the repave answers of Palette, and a change of the node group (#89). Needs cloud = "eks" in terraform.tfvars and live-up.
 live-eks: build

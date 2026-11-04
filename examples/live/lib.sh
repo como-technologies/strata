@@ -294,14 +294,20 @@ wait_running() {
 }
 
 # kube CLUSTER_UID ARGS...: run kubectl with ARGS inside the cluster, and print its output and its
-# errors. The kubeconfig lives in a temporary file that this function deletes. It is a credential:
-# no script saves it or prints it to a log.
+# errors, with a limit of 60 seconds. KUBE_TIMEOUT gives another limit in seconds. KUBE_STDERR=1
+# keeps the errors on standard error, so that a caller can read JSON. The kubeconfig lives in a
+# temporary file that this function deletes. It is a credential: no script saves it or prints it to a
+# log.
 kube() {
   local k rc cluster=$1
   shift
   k=$(mktemp)
   "$live/api.sh" get-kubeconfig "$cluster" > "$k" 2> /dev/null
-  KUBECONFIG=$k timeout 60 kubectl "$@" 2>&1
+  if [ -n "${KUBE_STDERR:-}" ]; then
+    KUBECONFIG=$k timeout "${KUBE_TIMEOUT:-60}" kubectl "$@"
+  else
+    KUBECONFIG=$k timeout "${KUBE_TIMEOUT:-60}" kubectl "$@" 2>&1
+  fi
   rc=$?
   rm -f "$k"
   return "$rc"
@@ -348,4 +354,44 @@ restore_addon() {
     sleep 30
   done
   die "cluster A does not run the restored add-on profile after 15 minutes"
+}
+
+# ---- the observer ------------------------------------------------------------------------------------
+
+# from_env_file NAME: the value of NAME in ~/.palette.env; empty when the file or the name is absent
+from_env_file() {
+  [ -f "$HOME/.palette.env" ] || return 0
+  (set -a; . "$HOME/.palette.env" >/dev/null 2>&1; printf %s "${!1:-}")
+}
+
+# palette_settings: set $palette_key and $API from the environment or ~/.palette.env, as api.sh reads
+# them. It stops the script when there is no key.
+palette_settings() {
+  palette_key=${PALETTE_API_KEY:-$(from_env_file PALETTE_API_KEY)}
+  [ -n "$palette_key" ] || die "set PALETTE_API_KEY or put it in ~/.palette.env"
+  API=${PALETTE_API:-$(from_env_file PALETTE_API)}
+  API=${API:-https://api.spectrocloud.com}
+}
+
+# The two objects that the observer needs and that deploy/observer does not hold. Each function runs
+# `kc`, the kubectl of the cluster, and reads $ns, $C, $API, and $PALETTE_PROJECT_UID. The script
+# defines them.
+# observer_config: the ConfigMap with the cluster, the address of Palette, and the project
+observer_config() {
+  kc -n "$ns" create configmap strata-observer --from-literal=cluster-uid="$C" \
+    --from-literal=palette-api="$API" --from-literal=project-uid="$PALETTE_PROJECT_UID"
+}
+# observer_key KEY: the Secret of the key. The key goes through standard input, and it is in no log.
+observer_key() {
+  printf %s "$1" | kc -n "$ns" create secret generic strata-observer-key --from-file=api-key=/dev/stdin
+}
+# other_pod_refused: a pod of the namespace default cannot connect to the pod of the observer on its
+# port. The test pod prints "refused" when wget fails, so a pod that did not start is no refusal.
+other_pod_refused() {
+  local ip answer
+  ip=$(kc -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o jsonpath='{.items[0].status.podIP}') \
+    && [ -n "$ip" ] || return 1
+  answer=$(kc -n default run observer-probe --rm -i --restart=Never --image=busybox:1.37 --command -- \
+    sh -c "wget -T 5 -qO- http://$ip:8080/healthz && echo reached || echo refused" < /dev/null)
+  grep -qx refused <<<"$answer"
 }
