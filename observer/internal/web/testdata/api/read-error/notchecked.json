@@ -1,0 +1,8 @@
+{
+  "notChecked": [
+    {"cause":"read-error","profiles":["barney-base@1.5.0"],"packs":["k8s/kubernetes","os/ubuntu-aws"],"registry":""},
+    {"cause":"read-error","profiles":["fred-identity@2.3.0"],"packs":["addon/dex","addon/reloader"],"registry":""},
+    {"cause":"pin-error","profiles":["bambam-secrets@2.0.1"],"packs":["addon/vault"],"registry":""}
+  ],
+  "limits": {"imagesNamedByATag":0,"helmPacks":0,"maskedPaths":0}
+}

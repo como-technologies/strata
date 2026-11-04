@@ -6,7 +6,8 @@
 // A set is a directory of testdata/api. It holds one file for each route: the answer of the route as
 // the API sends it. A set can name another set in a file `base`. A file that the set does not hold
 // then comes from the other set. The sets stale, lost, and first-seen use this, because they differ
-// from ok in cluster.json only.
+// from ok in cluster.json only. The sets stale-unchecked and lost-unchecked differ from first-load in
+// cluster.json only.
 package devdata
 
 import (
@@ -30,8 +31,9 @@ import (
 // State names a set of test data.
 type State string
 
-// The states of the page that the dev server shows. Quiet and first-seen are states of the data, and
-// the others are the values of `page`.
+// The states of the page that the dev server shows. Quiet, first-seen, and read-error are states of the
+// data, and the others are the values of `page`. The sets stale-unchecked and lost-unchecked are a page
+// that no content check has ended well for, as after a restart in an outage.
 const (
 	StateOK        State = "ok"
 	StateQuiet     State = "quiet"
@@ -40,10 +42,15 @@ const (
 	StateStale     State = "stale"
 	StateLost      State = "lost"
 	StateFirstSeen State = "first-seen"
+
+	StateStaleUnchecked State = "stale-unchecked"
+	StateLostUnchecked  State = "lost-unchecked"
+	StateReadError      State = "read-error"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
-var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen}
+var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
+	StateStaleUnchecked, StateLostUnchecked, StateReadError}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.

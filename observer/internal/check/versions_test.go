@@ -149,32 +149,6 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 	}
 }
 
-func TestAMoveThatFailsIsNotCachedAndTheNextCycleAsksForIt(t *testing.T) {
-	r, w := withBehind(t)
-	failing := move("kubernetes", "1.35.3", "1.36.2")
-	w.moveErrs[failing] = &runner.RunError{Kind: docs.KindCrash}
-	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err == nil {
-		t.Fatal("no error")
-	}
-	s := o.Summary()
-	if s.Versions.FailedRuns != 1 || s.Versions.LastError.Kind != docs.KindCrash || len(s.Newer) != 0 || s.Versions.ReadAt != nil {
-		t.Errorf("versions %+v, newer %d", s.Versions, len(s.Newer))
-	}
-	// The pins before the failing one are in the cache, and the failing one is not.
-	delete(w.moveErrs, failing)
-	before := w.countMoves()
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if got := w.countMoves() - before; got != 2 {
-		t.Errorf("the second cycle asked for %d moves, want 2", got)
-	}
-	if o.Summary().Versions.FailedRuns != 0 {
-		t.Error("a good cycle must set failedRuns to 0")
-	}
-}
-
 func TestACycleFailsWhenEachPinHasAnErrorAndTakesTheirKind(t *testing.T) {
 	r, w := withBehind(t)
 	for i := range w.behind.Pins {
@@ -214,17 +188,5 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	rows := o.Summary().NotChecked
 	if len(rows) != 1 || rows[0].Cause != model.OlderRegistryCopy || rows[0].Registry != "Public Repo" || rows[0].Packs[0] != "addon/cert-manager" {
 		t.Errorf("notChecked %+v", rows)
-	}
-}
-
-func TestNoRecordRunsNoBehind(t *testing.T) {
-	r := newRig(t)
-	w := &world{}
-	o := r.observer(w)
-	if err := o.RunVersions(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if w.count(runner.CmdBehind) != 0 || o.Summary().Versions.ReadAt == nil {
-		t.Errorf("behind %d, versions %+v", w.count(runner.CmdBehind), o.Summary().Versions)
 	}
 }

@@ -69,8 +69,9 @@ func rank(c Cause) int {
 	return slices.Index(causeOrder, c)
 }
 
-// fromContent adds the causes that a content cycle shows. The packs of a record that `verify` could
-// not read are all named, because none of them was checked.
+// fromContent adds the causes that a content cycle shows. The packs of a record are all named when a
+// read of the cycle failed for it, because none of them was checked in full. A read that failed is a
+// cause also when the record holds the last good answer of that part.
 func (c *causes) fromContent(content *Content) {
 	if content == nil {
 		return
@@ -80,7 +81,7 @@ func (c *causes) fromContent(content *Content) {
 	}
 	for _, r := range content.Records {
 		subject := r.subject()
-		if r.Row == nil || r.Row.Status == docs.VerifyError {
+		if r.readError() {
 			c.add(ReadError, subject, "", subject, recordKeys(r)...)
 			continue
 		}
@@ -99,7 +100,8 @@ func (c *causes) fromContent(content *Content) {
 	}
 }
 
-// fromVersions adds the causes that a versions cycle shows.
+// fromVersions adds the causes that a versions cycle shows. A pin whose move was not read is a
+// pin-error too: the page knows that a newer version exists, and it cannot count what the move changes.
 func (c *causes) fromVersions(v *Versions) {
 	if v == nil {
 		return
@@ -107,13 +109,13 @@ func (c *causes) fromVersions(v *Versions) {
 	for _, pin := range v.Pins {
 		key := pin.Layer + "/" + pin.Name
 		registry := registryName(pin)
-		switch {
-		case pin.Error != nil:
+		if pin.Error != nil || v.Unread[MoveKey(pin)] {
 			group := pin.RegistryUID + "/" + key + "@" + pin.Version
 			for _, by := range pin.PinnedBy {
 				c.add(PinError, group, "", by.Subject, key)
 			}
-		case pin.RegistrySync != nil:
+		}
+		if pin.Error == nil && pin.RegistrySync != nil {
 			for _, by := range pin.PinnedBy {
 				c.add(OlderRegistryCopy, registry, registry, by.Subject, key)
 			}

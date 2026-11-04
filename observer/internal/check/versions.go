@@ -12,14 +12,13 @@ import (
 
 // versionsCycle runs one versions cycle. It asks `behind` for the pins of the records and compares
 // each pinned version with the newest one. files is -1 when the directory was not read. With no record,
-// it runs no `behind`, because the command needs a file.
+// it runs no `behind`, because the command needs a file. It then reads no version, so At stays zero.
 func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, files int, err error) {
 	set, err := baseline.Load(o.cfg.Records)
 	if err != nil {
 		return versions, -1, failure(docs.KindIO)
 	}
 	if len(set.Entries) == 0 {
-		versions.At = o.now()
 		return versions, set.Files(), nil
 	}
 	err = o.withCycleDir(func(dir string) error {
@@ -49,16 +48,17 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 		return &runner.RunError{Kind: e.Kind, Status: e.Status}
 	}
 	versions.Strata, versions.Pins = doc.Tool.Version, doc.Pins
-	versions.Moves, err = o.moves(ctx, dir, doc)
+	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc)
 	versions.At = o.now()
 	return err
 }
 
 // moves compares the pinned version of each pin that is behind with its newest version. A move that
-// the cache knows costs no request. A compare that fails is not cached, and it fails the cycle: the
-// next cycle asks again for that move only.
-func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[string]model.Move, error) {
-	moves := map[string]model.Move{}
+// the cache knows costs no request. A compare that fails is one row of the list with no counts: it is
+// in the second result, it is not cached, and the next cycle asks again for that move only. The other
+// pins stay in the cycle. Only a stop of ctx ends the loop, and then the error is the one of ctx.
+func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[string]model.Move, map[string]bool, error) {
+	moves, unread := map[string]model.Move{}, map[string]bool{}
 	used := map[string]bool{}
 	for _, pin := range doc.Pins {
 		key := model.MoveKey(pin)
@@ -69,8 +69,12 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 		move, ok := o.cachedMove(cacheKey)
 		if !ok {
 			diff, err := o.compareMove(ctx, dir, pin)
+			if ctx.Err() != nil {
+				return moves, unread, ctx.Err()
+			}
 			if err != nil {
-				return moves, err
+				unread[key] = true
+				continue
 			}
 			// The counts go to the state. The pack, with its changed values, stays in memory.
 			move = model.MoveOf(diff)
@@ -82,7 +86,7 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 		moves[key], used[cacheKey] = move, true
 	}
 	o.pruneMoves(used)
-	return moves, nil
+	return moves, unread, nil
 }
 
 // compareMove compares the pinned version of a pin with its newest version. The caller keeps the counts

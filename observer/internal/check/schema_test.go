@@ -69,32 +69,42 @@ func TestACompareWithAnotherSchemaBesideGoodSidesIsAProfileThatTheCycleDidNotRea
 	}
 }
 
-func TestABehindOrAMoveWithAnotherSchemaIsAFailedReadWithTheKindSchema(t *testing.T) {
-	cases := []struct {
-		name  string
-		setup func(w *world)
-	}{
-		{"behind", func(w *world) { w.behind.Schema = otherSchema }},
-		{"the compare of a move", func(w *world) {
-			kubernetes := move("kubernetes", "1.35.3", "1.36.2")
-			d := w.moves[kubernetes]
-			d.Schema = otherSchema
-			w.moves[kubernetes] = d
-		}},
+func TestABehindWithAnotherSchemaIsAFailedReadWithTheKindSchema(t *testing.T) {
+	r, w := withBehind(t)
+	w.behind.Schema = otherSchema
+	o := r.observer(w)
+	err := o.RunVersions(context.Background())
+	if err == nil || kindOf(t, err) != docs.KindSchema {
+		t.Fatalf("error %v", err)
 	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			r, w := withBehind(t)
-			c.setup(w)
-			o := r.observer(w)
-			err := o.RunVersions(context.Background())
-			if err == nil || kindOf(t, err) != docs.KindSchema {
-				t.Fatalf("error %v", err)
-			}
-			s := o.Summary()
-			if len(s.Newer) != 0 || s.Versions.FailedRuns != 1 || s.Versions.LastError == nil || s.Versions.LastError.Kind != docs.KindSchema {
-				t.Errorf("newer %+v, versions %+v", s.Newer, s.Versions)
-			}
-		})
+	s := o.Summary()
+	if len(s.Newer) != 0 || s.Versions.FailedRuns != 1 || s.Versions.LastError == nil || s.Versions.LastError.Kind != docs.KindSchema {
+		t.Errorf("newer %+v, versions %+v", s.Newer, s.Versions)
+	}
+}
+
+// A compare that fails is one row of the list with no counts, and it does not fail the cycle. A compare
+// with another schema fails as any other compare does, so the row has no counts of the other document.
+func TestAMoveWithAnotherSchemaIsAMoveThatWasNotRead(t *testing.T) {
+	r, w := withBehind(t)
+	kubernetes := move("kubernetes", "1.35.3", "1.36.2")
+	d := w.moves[kubernetes]
+	d.Schema = otherSchema
+	w.moves[kubernetes] = d
+	o := r.observer(w)
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatalf("a move with another schema failed the cycle: %v", err)
+	}
+	s := o.Summary()
+	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 {
+		t.Fatalf("versions %+v, newer %d", s.Versions, len(s.Newer))
+	}
+	for _, n := range s.Newer {
+		if hasCounts := n.Impact != "" && n.Images > 0; (n.Name == "kubernetes") == hasCounts {
+			t.Errorf("%s: impact %q, images %d", n.Name, n.Impact, n.Images)
+		}
+	}
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" {
+		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }

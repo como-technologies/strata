@@ -131,6 +131,8 @@ func (o *Observer) RunContent(ctx context.Context) error {
 		o.fail("content", &o.state.Content, start, err)
 		return err
 	}
+	// A read that failed tells nothing about the drift, so the last good answer of that part stays.
+	content.Carry(o.content)
 	o.content, o.contentAt = &content, &content.At
 	o.state.Content = ClockState{}
 	o.keepFirstSeen(content)
@@ -157,7 +159,11 @@ func (o *Observer) RunVersions(ctx context.Context) error {
 		o.fail("versions", &o.state.Versions, start, err)
 		return err
 	}
-	o.versions, o.versionsAt = &versions, &versions.At
+	// A cycle with no record reads no version, so it has no end to show.
+	o.versions, o.versionsAt = &versions, nil
+	if !versions.At.IsZero() {
+		o.versionsAt = &versions.At
+	}
 	o.state.Versions = ClockState{}
 	o.log.Info("cycle", "cycle", "versions", "verdict", "ok", "duration", time.Since(start).Round(time.Millisecond))
 	o.save()
@@ -185,7 +191,9 @@ func (o *Observer) fail(name string, clock *ClockState, start time.Time, err err
 	o.save()
 }
 
-// keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others.
+// keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others. A part
+// of a record that the cycle could not read keeps its first sights too, because only a read that
+// works clears a finding. This holds also when the process has no last answer in memory.
 func (o *Observer) keepFirstSeen(content model.Content) {
 	kept := map[string]FindingState{}
 	for _, f := range model.FindingsOf(content) {
@@ -194,6 +202,13 @@ func (o *Observer) keepFirstSeen(content model.Content) {
 			seen = FindingState{FirstSeen: content.At.UTC().Truncate(time.Second)}
 		}
 		kept[f.ID] = seen
+	}
+	for _, id := range model.HeldIDs(content) {
+		if seen, ok := o.state.Findings[id]; ok {
+			if _, found := kept[id]; !found {
+				kept[id] = seen
+			}
+		}
 	}
 	o.state.Findings = kept
 }

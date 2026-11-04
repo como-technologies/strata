@@ -108,6 +108,11 @@ checked".
 | `stale` | An amber bar with the time of the last content check. The counts are from then. |
 | `lost` | A red bar. The counts are from the last good check, and no finding clears until a check proves it. |
 
+A restart in an outage gives `stale` or `lost` with `checkedAt` null, because no
+check has ended well. The memory holds no answer, so each count is 0. The page
+then shows `-` and "Not read yet". No screen says "Nothing changed", "Nothing
+needs attention", or "All 0 packs current".
+
 The baseline of the records adds to each screen. With `first-seen`, the top bar
 has a pill, and each screen says "No person approved these records". With
 `unknown`, the top bar says "Baseline unknown".
@@ -119,6 +124,15 @@ has a pill, and each screen says "No person approved these records". With
   raises a severity.
 - "Not checked" blocks the text "No change". A pack that was not checked never
   reads "current".
+- A side that strata could not read says "Not read". It never reads "Identical".
+  The published side of a pack with an `error` row has no answer, and the route
+  gives 404 for it.
+- A move that strata could not compare has no counts. Its row shows a dash and
+  "Not read", and "Not checked" names its pack.
+- A detail request that fails is not kept. A 503 is a normal answer while a
+  cycle holds the slot. The next render that a person or the clock causes asks
+  again. A render that an answer causes does not, so two requests that fail do
+  not ask each other again without end.
 - `re-baseline needed` sits beside a drift and does not replace it.
 - `same-content` reads "Same content" on the row of the cluster copy. It is not
   a drift.
@@ -206,9 +220,10 @@ just observer-dev stale    # the set stale
 ```
 
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
-sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`, and
-`first-seen`. The server listens on `127.0.0.1:8080`. The flag `-listen` takes
-another loopback address, and `-data` takes another directory of sets.
+sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
+`first-seen`, `stale-unchecked`, `lost-unchecked`, and `read-error`. The server
+listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
+and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
@@ -220,6 +235,14 @@ the page are those of the data.
   versions in 6 profiles, 2 causes of "Not checked", and 26 of 29 packs in full.
 - The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
   `cluster.json` only.
+- The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file
+  `base`. They differ in `cluster.json` only. They show a page that no good
+  content check has ended for.
+- The set `read-error` holds 3 profiles. One has a `verify` row that strata could
+  not read, and one has a cluster side that it could not read. One has a move
+  that it could not compare.
+- The set `no-records` is the output of the observer with no record. A test runs
+  the observer on a stand-in and makes sure of this.
 
 A test decodes each file of each set into the type of its route, with no field
 to spare. So the test data cannot drift from the API. When `node` is on the

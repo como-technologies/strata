@@ -187,6 +187,9 @@ type Record struct {
 		// Cluster is here only so that the observer can refuse a cluster record. It keeps no field.
 		Cluster *struct{} `json:"cluster"`
 	} `json:"source"`
+	// Root says whether a record changed: the observer keeps the last good answer of a part only for the
+	// same root.
+	Root  string       `json:"root"`
 	Packs []RecordPack `json:"packs"`
 }
 

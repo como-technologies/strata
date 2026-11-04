@@ -8,11 +8,14 @@ import (
 )
 
 // Record is one record of the baseline, with the answers that a content cycle got about it.
+// RowCarried and SideCarried say that the read of the last cycle failed for that part. Row or
+// Cluster.Diff is then the last good answer: see Content.Carry.
 type Record struct {
-	File    string
-	Doc     docs.Record
-	Row     *docs.VerifyRow
-	Cluster ClusterSide
+	File                    string
+	Doc                     docs.Record
+	Row                     *docs.VerifyRow
+	Cluster                 ClusterSide
+	RowCarried, SideCarried bool
 }
 
 // ClusterSide is the compare of a record and the side of the cluster that has the profile of the
@@ -34,12 +37,14 @@ type Content struct {
 }
 
 // Versions is what one good versions cycle read. Moves holds a Move for each pin that is behind,
-// by MoveKey.
+// by MoveKey. Unread holds the MoveKey of each pin that is behind and whose compare failed: its row
+// has no counts.
 type Versions struct {
 	At     time.Time
 	Strata string
 	Pins   []docs.Pin
 	Moves  map[string]Move
+	Unread map[string]bool
 }
 
 // Clock is the state of one timer.

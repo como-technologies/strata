@@ -17,9 +17,10 @@ func pk(layer, name, version string) docs.RecordPack {
 		RegistryProviderType: "spectro", Images: []string{"a/b:1", "a/c@sha256:abc"}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
 }
 
-// rec makes a record that the cluster runs, with a `verify` row of the given status.
+// rec makes a record that the cluster runs, with a `verify` row of the given status. The compare with
+// the cluster side read well and found no change.
 func rec(name, version, status string, packs ...docs.RecordPack) Record {
-	r := Record{File: name + ".json.gz", Row: &docs.VerifyRow{Status: status, Name: name, Version: version, RootRecorded: "r1", RootLive: "r1"}, Cluster: ClusterSide{Runs: true}}
+	r := Record{File: name + ".json.gz", Row: &docs.VerifyRow{Status: status, Name: name, Version: version, RootRecorded: "r1", RootLive: "r1"}, Cluster: ClusterSide{Runs: true, Diff: &docs.Diff{Same: true, SameContent: true}}}
 	r.Doc.Schema = docs.SnapshotSchema
 	r.Doc.Tool.Version = "0.28.0"
 	r.Doc.Source.Name, r.Doc.Source.Version, r.Doc.Source.Type = name, version, "cluster"

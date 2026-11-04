@@ -63,14 +63,16 @@ type view struct {
 	// newerProfiles holds the profiles that a pin that is behind names.
 	newerProfiles map[string]bool
 	// findingProfiles and findingPacks hold the profiles and the packs that a finding names.
-	findingProfiles map[string]bool
-	findingPacks    map[string]bool
-	findings        []Finding
+	// packlessProfiles holds the profiles with a finding that names no pack, such as overwritten.
+	findingProfiles  map[string]bool
+	findingPacks     map[string]bool
+	packlessProfiles map[string]bool
+	findings         []Finding
 }
 
 func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, newerProfiles: map[string]bool{},
-		findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}}
+		findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
 	if in.Versions != nil {
 		for _, pin := range in.Versions.Pins {
 			if pin.Registry != "" {
@@ -90,6 +92,9 @@ func newView(in Input, c *causes) *view {
 		stamp(v.findings, in.FirstSeen, utc(in.Content.At))
 		for _, f := range v.findings {
 			v.findingProfiles[f.Profile] = true
+			if len(f.Packs) == 0 {
+				v.packlessProfiles[f.Profile] = true
+			}
 			for _, key := range f.Packs {
 				v.findingPacks[packID(f.Profile, key)] = true
 			}
@@ -180,7 +185,8 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	}
 	p.Flags, p.Fold = changesOf(r, rp.Key)
 	switch {
-	case v.findingPacks[id]:
+	// One finding names the profile and no pack. A pack that has changes then belongs to it.
+	case v.findingPacks[id], v.packlessProfiles[r.subject()] && p.Fold != nil:
 		p.Status = StatusDrift
 	case p.Newer != "":
 		p.Status = StatusNewer
