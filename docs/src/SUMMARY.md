@@ -121,6 +121,7 @@
 - [How a change lands](./development/changes.md)
 - [Release](./development/release.md)
 - [Write the code](./development/code.md)
+- [The checks of the observer](./development/observer.md)
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)

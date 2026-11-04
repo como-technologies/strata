@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
 )
 
 // fake writes a script that stands for the strata binary.
@@ -38,7 +40,7 @@ func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
 func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
 	_, err := fake(t, `echo '{"error":{"kind":"api","message":"HTTP 401","status":401}}' >&2; exit 2`).Run(context.Background(), "verify", "a.json", "--json", "-q")
 	var re *RunError
-	if !errors.As(err, &re) || re.Kind != "api" || re.Status != 401 {
+	if !errors.As(err, &re) || re.Kind != docs.KindAPI || re.Status != 401 {
 		t.Fatalf("error %v", err)
 	}
 }
@@ -60,7 +62,7 @@ func TestATimeoutKillsTheRun(t *testing.T) {
 	x.Timeout = 100 * time.Millisecond
 	_, err := x.Run(context.Background(), "verify", "a.json", "--json", "-q")
 	var re *RunError
-	if !errors.As(err, &re) || re.Kind != "timeout" {
+	if !errors.As(err, &re) || re.Kind != docs.KindTimeout {
 		t.Fatalf("error %v", err)
 	}
 }

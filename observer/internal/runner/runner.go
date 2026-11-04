@@ -68,13 +68,13 @@ func (r Runner) Run(ctx context.Context, args ...string) (Result, error) {
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
 	if ctx.Err() != nil {
-		return Result{}, &RunError{Kind: "timeout"}
+		return Result{}, &RunError{Kind: docs.KindTimeout}
 	}
 	exit := 0
 	if err != nil {
 		var ee *exec.ExitError
 		if !errors.As(err, &ee) {
-			return Result{}, &RunError{Kind: "no-process"}
+			return Result{}, &RunError{Kind: docs.KindNoProcess}
 		}
 		exit = ee.ExitCode()
 	}
@@ -82,7 +82,7 @@ func (r Runner) Run(ctx context.Context, args ...string) (Result, error) {
 		return Result{}, parseError(stderr.Bytes())
 	}
 	if exit > 2 || exit < 0 {
-		return Result{}, &RunError{Kind: "crash"}
+		return Result{}, &RunError{Kind: docs.KindCrash}
 	}
 	return Result{Exit: exit, Stdout: stdout.Bytes()}, nil
 }
@@ -114,7 +114,7 @@ func parseError(line []byte) error {
 		Error docs.Error `json:"error"`
 	}
 	if err := json.Unmarshal(line, &doc); err != nil || doc.Error.Kind == "" {
-		return &RunError{Kind: "unknown"}
+		return &RunError{Kind: docs.KindUnknown}
 	}
 	return &RunError{Kind: doc.Error.Kind, Status: doc.Error.Status}
 }

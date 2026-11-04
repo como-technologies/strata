@@ -143,7 +143,7 @@ func TestTheKindOfAFailedCheckIsInTheRow(t *testing.T) {
 	}
 	var down VerifySummary
 	decodeFile(t, dir, "verify-summary-down.json", &down)
-	if len(down.Records) != 1 || down.Records[0].Status != "error" || down.Records[0].Error == nil || down.Records[0].Error.Kind != "transport" {
+	if len(down.Records) != 1 || down.Records[0].Status != VerifyError || down.Records[0].Error == nil || down.Records[0].Error.Kind != KindTransport {
 		t.Fatalf("records: %+v", down.Records)
 	}
 }
@@ -155,7 +155,7 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	}
 	var drift VerifySummary
 	decodeFile(t, dir, "verify-summary-drift.json", &drift)
-	if len(drift.Records) == 0 || drift.Records[0].Status != "drifted" || drift.Records[0].Diff.Verify.Who == nil {
+	if len(drift.Records) == 0 || drift.Records[0].Status != VerifyDrifted || drift.Records[0].Diff.Verify.Who == nil {
 		t.Errorf("drift: %+v", drift.Records)
 	}
 	var behind Behind

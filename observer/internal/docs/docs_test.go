@@ -98,7 +98,7 @@ func TestTheDriftDocumentDecodes(t *testing.T) {
 		t.Fatalf("schema %q, %d records", got.Schema, len(got.Records))
 	}
 	r := got.Records[0]
-	if r.Status != "drifted" || r.Diff == nil || r.Diff.Verify == nil {
+	if r.Status != VerifyDrifted || r.Diff == nil || r.Diff.Verify == nil {
 		t.Fatalf("status %q, diff %v", r.Status, r.Diff)
 	}
 	if len(r.Diff.Verify.Who) != 1 || r.Diff.Verify.Who[0].Actor == "" {
