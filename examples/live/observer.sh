@@ -58,17 +58,9 @@ for tool in kubectl curl jq gh git go timeout; do
 done
 
 root=$(cd "$live/../.." && pwd)
-version=$(grep -m1 '^version' "$root/Cargo.toml" | cut -d'"' -f2)
-image=${OBSERVER_IMAGE:-ghcr.io/como-technologies/strata-observer:v$version}
-case "$image" in
-  *@sha256:*) image_name=${image%%@*}; image_pin="digest: ${image#*@}" ;;
-  *:*) image_name=${image%:*}; image_pin="newTag: ${image##*:}" ;;
-  *) die "OBSERVER_IMAGE needs a tag or a digest" ;;
-esac
-case "${image##*:}" in */*) die "OBSERVER_IMAGE needs a tag or a digest" ;; esac
+observer_image
 port=${PORT:-18080}
 tries=${CYCLE_TRIES:-60}
-pull_file=${GHCR_PULL_TOKEN_FILE:-$HOME/.config/strata/ghcr-pull-token}
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/observer}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -100,60 +92,15 @@ target=${target%/}
 OP= edited= attached=
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-kubeconfig= pf_pid= pf_user= no_palette= undone=
-
-# kc ARGS...: kubectl in cluster A. kj does the same with the errors on standard error, for JSON.
-kc() { kube "$C" "$@"; }
-kj() { KUBE_STDERR=1 kube "$C" "$@"; }
-
-# poll COUNT COMMAND...: run COMMAND until it succeeds, at most COUNT times, 5 seconds apart
-poll() {
-  local count=$1 _
-  shift
-  for _ in $(seq "$count"); do
-    "$@" && return 0
-    sleep 5
-  done
-  return 1
-}
+no_palette= undone=
 
 # ---- the page ------------------------------------------------------------------------------------------
 
-# pf_stop: end the port-forward
-pf_stop() {
-  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; wait "$pf_pid" 2> /dev/null; }
-  pf_pid= pf_user=
-}
-# pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The
-# kubeconfig is a credential: it lives in a temporary file until the end of the run.
-pf_start() {
-  local _
-  pf_stop
-  if [ ! -s "$kubeconfig" ]; then
-    kubeconfig=$(mktemp) || return 1
-    if ! "$live/api.sh" get-kubeconfig "$C" > "$kubeconfig" 2> /dev/null || [ ! -s "$kubeconfig" ]; then
-      rm -f "$kubeconfig"
-      kubeconfig=
-      return 1
-    fi
-  fi
-  kubectl --kubeconfig "$kubeconfig" ${1:+--as="$1"} -n "$ns" port-forward deploy/strata-observer "$port:8080" > port-forward.log 2>&1 < /dev/null &
-  pf_pid=$! pf_user=${1:-}
-  for _ in $(seq 30); do
-    grep -q 'Forwarding from' port-forward.log && return 0
-    # the process can end after it prints its line, so the log gets a last look
-    kill -0 "$pf_pid" 2> /dev/null || { grep -q 'Forwarding from' port-forward.log; return; }
-    sleep 1
-  done
-  return 1
-}
 # pf_ensure: a port-forward as the admin of the cluster, to the pod that runs now
 pf_ensure() {
   [ -n "$pf_pid" ] && [ -z "$pf_user" ] && kill -0 "$pf_pid" 2> /dev/null && return 0
   pf_start
 }
-# page PATH: the answer of the observer through the port-forward
-page() { curl -fsS --max-time 20 "http://127.0.0.1:$port$1"; }
 # page_is STATE: the page has the state STATE. page.json keeps /v1/cluster.
 page_is() { page /v1/cluster > page.json 2> /dev/null && jq -e --arg s "$1" '.page == $s' page.json > /dev/null; }
 # page_ok: the page is ok, and a content cycle ended well
@@ -172,37 +119,6 @@ snapshot_profiles() {
     "$strata" snapshot "$uid" -o "record-$n.json" -q || return 1
   done < uids.txt
 }
-# pull_token: the pull token on standard output, from the token file. The file holds a token with only
-# the scope read:packages. When the file is absent, empty, or open to a group or to others, the
-# function prints one line on standard error and fails.
-pull_token() {
-  local token mode
-  token=$(tr -d '[:space:]' 2> /dev/null < "$pull_file")
-  if [ -z "$token" ]; then
-    echo "no token in $pull_file: it must hold a token with only the scope read:packages" >&2
-    return 1
-  fi
-  mode=$(stat -c %a "$pull_file" 2> /dev/null || stat -f %Lp "$pull_file") \
-    || { echo "cannot read the mode of $pull_file" >&2; return 1; }
-  if [ $((8#$mode & 077)) != 0 ]; then
-    echo "$pull_file has the mode $mode: run chmod 600 on it. It must hold a token with only the scope read:packages" >&2
-    return 1
-  fi
-  printf %s "$token"
-}
-# pull_secret: the Secret ghcr-pull from the token file. The token goes through standard input. The
-# function reads the file first, so a file that fails changes nothing in the cluster. The Secret
-# needs the namespace, so the function applies it.
-pull_secret() {
-  local token user
-  token=$(pull_token) || return 1
-  kc apply -f "$root/deploy/observer/namespace.yaml" || return 1
-  user=$(gh api user --jq .login 2> /dev/null)
-  printf %s "$token" \
-    | jq -Rs --arg u "${user:-strata-observer}" \
-      '. as $t | {auths: {"ghcr.io": {username: $u, password: $t, auth: ("\($u):\($t)" | @base64)}}}' \
-    | kc -n "$ns" create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
-}
 # records_apply: the records of this revision. A client-side apply fails above 256 KiB, so it is --server-side.
 records_apply() { "$records_script" --revision "$revision" record-*.json | kc apply --server-side -f -; }
 # prepare_settings: the pull Secret, the namespace, and what the pod reads. Stage 1 runs each step as
@@ -210,38 +126,9 @@ records_apply() { "$records_script" --revision "$revision" record-*.json | kc ap
 prepare_settings() {
   pull_secret && observer_config && observer_key "$palette_key" && records_apply
 }
-# overlay: base/ is a copy of deploy/observer. kustomization.yaml sets the image and the pull Secret,
-# and gives the two timers short periods, so that the run takes minutes.
-overlay() {
-  mkdir -p base && cp "$root"/deploy/observer/*.yaml base/ || return 1
-  cat > kustomization.yaml << EOF
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - base
-images:
-  - name: ghcr.io/como-technologies/strata-observer
-    newName: $image_name
-    $image_pin
-patches:
-  - target:
-      kind: Deployment
-      name: strata-observer
-    patch: |-
-      - op: add
-        path: /spec/template/spec/imagePullSecrets
-        value:
-          - name: ghcr-pull
-      - op: add
-        path: /spec/template/spec/containers/0/args/-
-        value: --content-every=1m
-      - op: add
-        path: /spec/template/spec/containers/0/args/-
-        value: --versions-every=5m
-EOF
-}
-# render: observer.yaml, the plainest install that a person can run
-render() { overlay && kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
+# render: observer.yaml, the plainest install that a person can run. The overlay gives the two timers short
+# periods, so that the run takes minutes.
+render() { observer_overlay --content-every=1m --versions-every=5m && kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
 
 # ---- the checks of way 1 -----------------------------------------------------------------------------
 
@@ -309,15 +196,13 @@ reader_can_open() {
   pf_start "$reader_user" || { cat port-forward.log; return 1; }
   [ "$(page /healthz)" = ok ] && page /v1/cluster | jq -e --arg c "$C" '.cluster.uid == $c' > /dev/null
 }
-# can_i ARGS...: yes or no, as kubectl auth can-i gives it
-can_i() { kc -n "$ns" auth can-i "$@" | tail -n 1; }
 # reader_cannot_read: the user reads no Secret and runs no exec
 reader_cannot_read() {
-  [ "$(can_i get secrets --as="$reader_user")" = no ] \
-    && [ "$(can_i create pods --subresource=exec --as="$reader_user")" = no ]
+  [ "$(can_i -n "$ns" get secrets --as="$reader_user")" = no ] \
+    && [ "$(can_i -n "$ns" create pods --subresource=exec --as="$reader_user")" = no ]
 }
 # nobody_cannot_open: a user with no role opens no port-forward
-nobody_cannot_open() { [ "$(can_i create pods --subresource=portforward --as="$nobody_user")" = no ]; }
+nobody_cannot_open() { [ "$(can_i -n "$ns" create pods --subresource=portforward --as="$nobody_user")" = no ]; }
 # probe_refused: the check of lib.sh, with the time that a pull of the test image needs
 probe_refused() { KUBE_TIMEOUT=180 other_pod_refused; }
 
@@ -507,15 +392,6 @@ first_seen_starts_again() {
 restart_first_load() { grep -qx first-load pages-after-restart.txt; }
 # manifests_delete: kubectl delete -f observer.yaml, which holds the Namespace
 manifests_delete() { KUBE_TIMEOUT=300 kc delete -f observer.yaml; }
-# not_found ARGS...: kubectl in cluster A says that ARGS name nothing
-not_found() {
-  local answer
-  answer=$(kc "$@")
-  case "$answer" in
-    *"not found"*) return 0 ;;
-  esac
-  return 1
-}
 namespace_gone() { not_found get namespace "$ns"; }
 # removal_is_clean: the Namespace is gone, and no object with the label of the observer stays
 removal_is_clean() {
@@ -655,12 +531,7 @@ if stage 1 "the records and the settings"; then
   require_baseline
   check pull-secret 0 '#656: the Secret ghcr-pull holds the token of the file, which has only read:packages and comes through standard input' -- \
     pull_secret
-  if [ "$failures" != 0 ]; then
-    # pull_secret reads the file before any change, so a file that fails leaves nothing to undo
-    pull_token > /dev/null 2>&1 || undone=1
-    { cat pull-secret.err; echo "the run stops: the pull Secret needs the token file"; } | tee -a steps.log
-    exit 1
-  fi
+  [ "$failures" = 0 ] || pull_secret_stop
   check cluster-record 0 '#656: a record of cluster A. Only the check of the variables and the last verify read it' -- \
     "$strata" snapshot "cluster:$C" -o cluster.json
   check profile-records 0 '#656: a record of each profile that cluster A runs, in record-<n>.json' -- snapshot_profiles

@@ -47,6 +47,7 @@ for tool in docker kind kubectl curl jq git; do
 done
 image=${IMAGE:-strata-observer:dev}
 port=${PORT:-18080}
+tries=${CYCLE_WAIT:-60}
 registry=strata-observer-registry
 registry_port=${REGISTRY_PORT:-5001}
 docker image inspect "$image" > /dev/null 2>&1 || die "no image $image; run just observer-image"
@@ -71,11 +72,12 @@ palette_settings
 cluster=strata-observer-test
 ns=strata-observer
 reader=system:serviceaccount:$ns:reader
-pf_pid=
 deleted=
 mirror_made=
 # kc ARGS...: kubectl in the kind cluster of this run. Exported, so that a check in bash -c has it.
 kc() { kubectl --context "kind-$cluster" "$@"; }
+# cluster_kubeconfig: pf_start of lib.sh opens its port-forward in the kind cluster of this run.
+cluster_kubeconfig() { kind get kubeconfig --name "$cluster"; }
 export -f kc
 export cluster ns reader port revision C
 
@@ -84,7 +86,8 @@ summary() {
 }
 # the port-forward and the kind cluster go at the end, also when a check stops the script
 cleanup() {
-  [ -z "$pf_pid" ] || kill "$pf_pid" 2> /dev/null
+  pf_stop
+  [ -z "$kubeconfig" ] || rm -f "$kubeconfig"
   [ -z "$mirror_made" ] || mirror_remove >> steps.log 2>&1
   [ -n "$deleted" ] || [ "${KEEP_CLUSTER:-}" = 1 ] || kind delete cluster --name "$cluster" >> steps.log 2>&1
   summary
@@ -131,6 +134,9 @@ if stage 3 "the pod"; then
     jq -e '.items[0].status.containerStatuses[0] | .ready == true and .restartCount == 0' pod.json
 fi
 
+# records_named: the summary of the cluster names the records, which the first content cycle reads
+records_named() { page /v1/cluster 2> /dev/null | jq -e '.records.count > 0' > /dev/null 2>&1; }
+
 if stage 4 "the page, as a user with only the reader role"; then
   check reader-role 0 '#644: the reader role and a binding for the account reader' -- \
     bash -c "kc apply --server-side -f \"$root/deploy/observer/reader-role.yaml\" && kc -n \"\$ns\" create serviceaccount reader && kc -n \"\$ns\" create rolebinding reader --role=strata-observer-reader --serviceaccount=\$ns:reader"
@@ -140,26 +146,16 @@ if stage 4 "the page, as a user with only the reader role"; then
     kc -n "$ns" auth can-i get secrets --as="$reader"
   check reader-no-exec 1 '#644: the reader can run no exec' -- \
     kc -n "$ns" auth can-i create pods --subresource=exec --as="$reader"
-  kubectl --context "kind-$cluster" -n "$ns" --as="$reader" port-forward deploy/strata-observer "$port:8080" > port-forward.log 2>&1 &
-  pf_pid=$!
-  for _ in $(seq 30); do
-    grep -q 'Forwarding from' port-forward.log && break
-    sleep 1
-  done
-  check reader-forward 0 '#644: kubectl port-forward deploy/strata-observer works for the reader' -- \
-    grep -q 'Forwarding from' port-forward.log
+  check reader-forward 0 '#644: kubectl port-forward deploy/strata-observer works for the reader' -- pf_start "$reader"
   check reader-health 0 '#644: the health route answers ok' -- \
     bash -c "curl -fsS http://127.0.0.1:$port/healthz | grep -qx ok"
   check reader-page 0 '#644: the route / serves the page' -- \
     bash -c "curl -fsS -o page.html -w '%{http_code}' http://127.0.0.1:$port/ | grep -qx 200 && grep -qi '<html' page.html"
   # the summary names the records after the first content cycle, which waits for the requests to Palette
-  for _ in $(seq "${CYCLE_WAIT:-60}"); do
-    curl -fsS "http://127.0.0.1:$port/v1/cluster" | jq -e '.records.count > 0' > /dev/null 2>&1 && break
-    sleep 5
-  done
+  poll "$tries" records_named
   check reader-cluster 0 '#644: the summary names the cluster and the approved records of the revision' -- \
     bash -c "curl -fsS http://127.0.0.1:$port/v1/cluster | jq -e --arg c \"\$C\" --arg r \"\$revision\" '.cluster.uid == \$c and .records.count == 2 and .records.baseline == \"approved\" and .records.revision == \$r'"
-  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; pf_pid=; }
+  pf_stop
 fi
 
 if stage 5 "another pod"; then
@@ -259,25 +255,6 @@ component_apply() {
     | kc apply --server-side -f - \
     && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
 }
-# images_page: /v1/images, as the observer gives it. The answer is in images.json.
-images_page() {
-  curl -fsS --max-time 20 "http://127.0.0.1:$port/v1/images" > images.json 2> /dev/null
-}
-# component_read: the observer reads the pods through the token of the component
-component_read() {
-  local _
-  kubectl --context "kind-$cluster" -n "$ns" port-forward deploy/strata-observer "$port:8080" > component-forward.log 2>&1 &
-  pf_pid=$!
-  for _ in $(seq 30); do
-    grep -q 'Forwarding from' component-forward.log && break
-    sleep 1
-  done
-  for _ in $(seq "${CYCLE_WAIT:-60}"); do
-    images_page && jq -e '.pods == "read" and .readAt != null' images.json > /dev/null && break
-    sleep 5
-  done
-  jq '{pods, readAt, error, counts}' images.json && jq -e '.pods == "read" and .readAt != null and .error == null' images.json > /dev/null
-}
 # mirror_report POD: what the pod reports for its image, and the row that the observer shows for the
 # string of the pod. It succeeds when the row holds a digest. It exits 2 when the pod or the row is
 # missing.
@@ -286,7 +263,7 @@ mirror_report() {
   kc -n default get pod "$1" -o json > "$1.json" || return 2
   jq -r '.spec.containers[0].image as $ref | .status.containerStatuses[0] | "spec.image:   \($ref)\nstatus.image: \(.image)\nimageID:      \(.imageID)"' "$1.json"
   ref=$(jq -r '.spec.containers[0].image' "$1.json")
-  curl -fsS --max-time 20 "http://127.0.0.1:$port/v1/images/$(jq -rn --arg r "$ref" '$r | @uri')" > "$1-row.json" \
+  page "/v1/images/$(uri "$ref")" > "$1-row.json" \
     || { echo "the observer shows no row for $ref"; return 2; }
   jq '.image | {ref, status, match, digests}' "$1-row.json"
   jq -e '[.image.digests[] | select(.digest != null)] | length > 0' "$1-row.json" > /dev/null
@@ -310,12 +287,12 @@ if stage 7 "the pods and a mirror"; then
   check mirror-nodes 0 '#646: containerd on each node asks the registry first for vendor.example' -- mirror_nodes
   check mirror-pods 0 '#646: a pod that names vendor.example and a pod that names the registry are Ready' -- mirror_pods_ready
   check component-apply 0 '#646: deploy/observer/pods applies, and the Deployment becomes available' -- component_apply
-  check component-read 0 '#646: the observer reads the pods through the token of the component: /v1/images says read' -- component_read
+  check component-read 0 '#646: the observer reads the pods through the token of the component: /v1/images says read' -- pods_read
   check mirror-image-id ? '#646: the pod that names vendor.example: what it reports, and the row of the observer. 0 says the row holds a digest' -- \
     mirror_report mirror-id
   check mirror-image-string ? '#646: the pod that names the registry: what it reports, and the row of the observer. 0 says the row holds a digest' -- \
     mirror_report mirror-string
-  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; pf_pid=; }
+  pf_stop
   check mirror-clean 0 '#646: the pods, the files of containerd, and the registry go' -- mirror_remove
 fi
 

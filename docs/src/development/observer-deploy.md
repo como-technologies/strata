@@ -267,19 +267,27 @@ cluster. `just live-down` deletes it.
 
 `just live-observer-images` runs
 [`observer-images.sh`](./live-runs.md#observer-imagessh) on cluster A. It needs
-`docker`, `crane`, and `kubectl`. It pushes the image of the observer to `ttl.sh`,
-and it installs the observer with the component. Cluster A is billable until `just
-live-down`.
+`kubectl`, `gh`, `crane`, and a token file for the pull Secret. `OBSERVER_IMAGE`
+names the image of the observer, and the image must hold the code of the commit
+that you test. The script installs the observer with the component. Cluster A is
+billable until `just live-down`.
 
-A throwaway tag on `ttl.sh` holds one image, and then another. The script runs
-pods on the tag and makes sure of these facts:
+The image of the observer stays on its private package. The nodes pull it with the
+Secret `ghcr-pull`, as in [Check a real cluster](#check-a-real-cluster). The script
+never pushes that image to another registry. A pull request that changes the
+observer builds the image with the tag `test-<short sha>`.
+
+A throwaway tag on `ttl.sh` holds one image, and then another. The images on
+`ttl.sh` are copies of public images. The script runs pods on the tag and makes
+sure of these facts:
 
 - The first pod shows the first digest, and no finding names the tag.
 - A new pod on the moved tag gives the finding `image-split`. When the first pod
   is replaced, the finding is `image-moved`.
 - A container that never started reads Not checked. A container in a crash loop
   keeps its digest.
-- The images of the agents of Palette match no pack, and make no finding.
+- The images that match no pack, such as the images of the agents of Palette,
+  make no finding.
 - The token of the observer gets and lists pods, and does nothing else.
 
 The check `pull-policy` shows what the cluster does with a pod made with

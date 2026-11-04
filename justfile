@@ -332,8 +332,8 @@ live-loop: build
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
 
-# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. Needs live-up (billable until live-down), docker, kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
-live-observer-images: build observer-image
+# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and a pull Secret from a token file with only read:packages (GHCR_PULL_TOKEN_FILE) gives it to the nodes. Needs live-up (billable until live-down), kubectl, gh, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
+live-observer-images: build
     examples/live/observer-images.sh
 
 # The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.

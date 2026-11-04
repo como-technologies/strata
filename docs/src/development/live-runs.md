@@ -1399,15 +1399,22 @@ end of Wave 15.
 
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A with the
 component `deploy/observer/pods`, and it reads the digest of each pod image. It
-needs the example at its baseline with cluster A (billable until `just
-live-down`), the key, `docker`, `crane`, `kubectl`, `curl`, `jq`, and `git`. The
-recipe `just live-observer-images` builds the image of `just observer-image` first.
+needs the example at its baseline with cluster A, which is billable until `just
+live-down`. It also needs the key, the token file of the pull Secret, `crane`,
+`kubectl`, `curl`, `jq`, `gh`, and `git`. `OBSERVER_IMAGE` names the image of the
+observer. That image must hold the code of the commit that you test.
 
-A throwaway tag on `ttl.sh` holds one image, and then another. The names of the
-images hold a random suffix, and `ttl.sh` removes an image two hours after its
-push. The script pushes the image of the observer to `ttl.sh` too, so that the
-nodes of cluster A can pull it. A copy with `crane copy` keeps the digest of the
-index of a multi-arch image.
+The image of the observer is on a private package of GitHub. The script never
+tags it, never pushes it, and never copies it to another registry. The nodes of
+cluster A pull it with the Secret `ghcr-pull`. The Secret comes from the token
+file, as in [`observer.sh`](#observersh). The file is `GHCR_PULL_TOKEN_FILE`, and
+it holds a token with only the scope `read:packages`. When the file fails,
+`pull-secret` fails, and the run stops before it changes the cluster.
+
+A throwaway tag on `ttl.sh` holds one image, and then another. These images are
+copies of public images. The names of the images hold a random suffix, and
+`ttl.sh` removes an image two hours after its push. A copy with `crane copy`
+keeps the digest of the index of a multi-arch image.
 
 The only write to the tenant is an edit in place of the values of one pack of the
 add-on. The values list the images of the run, so that a pack names them. The
@@ -1420,15 +1427,17 @@ also after a failed check or an error. The script deletes no cluster. `KEEP=1`
 skips the undo, so that `observer-images.sh N` can resume the run at stage N. A
 check with `?` records its result without judging it.
 
-`AGENT_NAMESPACES` is the regular expression of the namespaces of the agents of
-Palette. The default matches `cluster-<uid>`, `capi-*`, `capa-*`, and `capg-*`.
-`image-agents-no-finding` fails when no pod runs in such a namespace.
+The check `image-agents-no-finding` takes the images from the answer of the page.
+It looks at each image with the match `none`. A cluster that Palette builds runs
+agents of Palette, and no pack names them. The check fails when the page shows no
+such image, or when a finding names one. It uses no list of namespaces.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
+| `pull-secret` | 0 | #646: the Secret `ghcr-pull` holds the token of the file. The token comes through standard input (no result yet: the Wave 15 window runs it) |
 | `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place (no result yet: the Wave 15 window runs it) |
-| `namespaces`, `settings`, `records` | 0 | #646: the namespaces, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag (no result yet: the Wave 15 window runs it) |
-| `observer-push`, `observer-apply`, `observer-ready` | 0 | #646: the image of the observer is on `ttl.sh`. The overlay lists the component, and the Deployment becomes available (no result yet: the Wave 15 window runs it) |
+| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag (no result yet: the Wave 15 window runs it) |
+| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component, the image of `OBSERVER_IMAGE`, and the pull Secret. The Deployment becomes available (no result yet: the Wave 15 window runs it) |
 | `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node (no result yet: the Wave 15 window runs it) |
 | `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A (no result yet: the Wave 15 window runs it) |
 | `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag (no result yet: the Wave 15 window runs it) |
@@ -1436,7 +1445,7 @@ Palette. The default matches `cluster-<uid>`, `capi-*`, `capa-*`, and `capg-*`.
 | `image-moved` | 0 | #646: the first pod is replaced, so each pod runs the second digest. The row says `moved`, and the finding `image-moved` replaces the split (no result yet: the Wave 15 window runs it) |
 | `image-never-started` | 0 | #646: a pull that fails leaves the image id empty. The row reads Not checked, with the digest status `not-started`, and it makes no finding (no result yet: the Wave 15 window runs it) |
 | `image-crash-loop` | 0 | #646: a container that restarted keeps its digest. The row shows that digest as the first digest, and it makes no finding (no result yet: the Wave 15 window runs it) |
-| `image-agents-no-finding` | 0 | #646: the images of the agents of Palette match no pack. No finding names one (no result yet: the Wave 15 window runs it) |
+| `image-agents-no-finding` | 0 | #646: the images that match no pack, such as those of the agents of Palette, make no finding. The answer of the page names them (no result yet: the Wave 15 window runs it) |
 | `pull-policy` | ? | #646: a pod made with `IfNotPresent`. An admission plugin such as `AlwaysPullImages` can set `Always`. Exit 0 says that the cluster set `Always`, and 1 says that the policy stayed (no result yet: the Wave 15 window runs it) |
 | `undo-values`, `undo-namespaces`, `undo-role` | 0 | #646: the pack names none of the images of the run. Both namespaces, the role, and the binding are gone (no result yet: the Wave 15 window runs it) |
 | `undo-baseline` | 0 | the example is at its baseline |

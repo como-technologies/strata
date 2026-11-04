@@ -1047,16 +1047,19 @@ fn step_7_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() 
 }
 
 /// The live run makes the same Secret, patch, and binding. So a person who follows the steps
-/// meets what the run checked.
+/// meets what the run checked. The Secret and the patch are in `lib.sh`, which `observer.sh` sources.
 #[test]
 fn the_live_run_makes_the_pull_secret_the_patch_and_the_binding_of_the_install_steps() {
-    let live = repo_file("examples/live/observer.sh");
+    let live = repo_file("examples/live/observer.sh") + &repo_file("examples/live/lib.sh");
     for needle in [
         "create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin",
         "path: /spec/template/spec/imagePullSecrets",
         "- name: ghcr-pull",
         "create rolebinding reader --role=strata-observer-reader",
     ] {
-        assert!(live.contains(needle), "observer.sh lacks {needle:?}");
+        assert!(
+            live.contains(needle),
+            "observer.sh and lib.sh lack {needle:?}"
+        );
     }
 }

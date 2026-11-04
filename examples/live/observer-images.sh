@@ -2,26 +2,32 @@
 # The digest that each pod runs (#646). The observer reads the pods of cluster A with the component
 # deploy/observer/pods. A throwaway tag on ttl.sh moves from one image to another while pods run it.
 # The page of the observer shows each step. It shows the first sight of a tag, a split, and a move.
-# It shows a pod that never started, a pod in a crash loop, and the agents of Palette.
+# It shows a pod that never started, a pod in a crash loop, and the images that match no pack, such as
+# the images of the agents of Palette.
 #
 #   examples/live/observer-images.sh [FROM_STAGE]
 #
-#   1  the setup: the tag on ttl.sh holds its first image, and the values of the add-on list the
-#      tag. A record of each profile applies. The observer installs with the component, from an
-#      image that the script pushes to ttl.sh. It has the role of the component, and it reads the
-#      pods
+#   1  the setup: the pull Secret of the image of the observer, the tag on ttl.sh holds its first
+#      image, and the values of the add-on list the tag. A record of each profile applies. The
+#      observer installs with the component, from the image of OBSERVER_IMAGE. It has the role of the
+#      component, and it reads the pods. When the token file fails, the run stops at the pull Secret,
+#      before it changes the cluster
 #   2  the first sight: a pod runs the tag. The observer shows the first digest and no finding
 #   3  the tag moves to a second image, and a new pod runs it. The observer shows a split. Then the
 #      first pod is replaced, so each pod runs the second image. The observer shows a move
 #   4  a pod that never starts, and a pod in a crash loop
-#   5  the agents of Palette match no pack and make no finding. A pod made with IfNotPresent shows
-#      the pull policy that the cluster sets
+#   5  the images that match no pack, such as the images of the agents of Palette, make no finding. A
+#      pod made with IfNotPresent shows the pull policy that the cluster sets
 #   6  the end: the pods, the observer, the role, and the values of the add-on go back
 #
 # Every pod of the run pulls with Always, so a new pod pulls the tag again. A cluster can turn on the
 # admission plugin AlwaysPullImages, which sets Always for each pod. The check pull-policy shows what
 # cluster A does. An image on ttl.sh lives for two hours from its push. The names of the images hold a
 # random suffix.
+#
+# The image of the observer is on a private package of GitHub, and the script never pushes it to
+# another registry. The nodes pull it with the Secret ghcr-pull, which comes from a token file. The
+# images on ttl.sh are copies of public images only.
 #
 # The only write to the tenant is an edit in place of the values of the add-on. It lists the images
 # of the run, so that a pack names them. The undo puts the values back. The script applies no update
@@ -30,14 +36,13 @@
 # The namespaces, the role, and the binding go at the end, also after a failed check or an error. The
 # script deletes no cluster. KEEP=1 skips the undo, so that FROM_STAGE can resume the run.
 #
-# Needs the live example at its baseline with cluster A, the strata release binary, docker, crane,
-# kubectl, curl, jq, git, and the key of verify.sh. Run just live-up first. It is billable until
-# live-down. IMAGE names the image of the observer (default strata-observer:dev, which just
-# observer-image builds). PORT is the local port of the port-forward (default 18080). CYCLE_TRIES is
-# the number of looks, 5 seconds apart, in a wait for the observer (default 60).
-#
-# AGENT_NAMESPACES is the regular expression of the namespaces of the agents of Palette. The default
-# is cluster-<uid>, capi-*, capa-*, and capg-*.
+# Needs the live example at its baseline with cluster A, the strata release binary, crane, kubectl,
+# curl, jq, gh, git, the key of verify.sh, and the token file. Run just live-up first. It is billable
+# until live-down. OBSERVER_IMAGE names the image of the observer, which must hold the code of this
+# commit (default: the image of the version in Cargo.toml). GHCR_PULL_TOKEN_FILE names the token file
+# (default: ~/.config/strata/ghcr-pull-token, mode 0600). It holds a token with only the scope
+# read:packages. PORT is the local port of the port-forward (default 18080). CYCLE_TRIES is the number
+# of looks, 5 seconds apart, in a wait for the observer (default 60).
 #
 # Results go under runs/<UTC time>/observer-images/, or OUT. FROM_STAGE resumes a run in OUT. Exit 0
 # only when no check fails. A check with ? records a result without judging it.
@@ -47,14 +52,13 @@ from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$from" in 1|2|3|4|5|6) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
-for tool in docker crane kubectl curl jq git timeout; do
+for tool in crane kubectl curl jq gh git timeout; do
   command -v "$tool" > /dev/null || die "$tool is needed"
 done
-image=${IMAGE:-strata-observer:dev}
+root=$(cd "$live/../.." && pwd)
+observer_image
 port=${PORT:-18080}
 tries=${CYCLE_TRIES:-60}
-agent_namespaces=${AGENT_NAMESPACES:-'^(cluster-[0-9a-f]+|capi-.*|capa-.*|capg-.*)$'}
-docker image inspect "$image" > /dev/null 2>&1 || die "no image $image; run just observer-image"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/observer-images}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -67,7 +71,6 @@ REL=$(out release_profile_uid)
 [ -n "$C" ] || die "no cluster A; run just live-up"
 export PALETTE_PROJECT_UID=$(out project_uid)
 export STRATA_BIN=$strata
-root=$(cd "$live/../.." && pwd)
 records_script=$root/scripts/ci/observer-records.sh
 revision=$(git -C "$root" rev-parse HEAD)
 palette_settings
@@ -86,68 +89,20 @@ if [ ! -f ids.env ]; then
 fi
 . ./ids.env
 # The tag that moves. The second name has no image: a pull of it fails. The third is a copy of an image
-# with a shell, for the pod in a crash loop. The last is the image of the observer.
+# with a shell, for the pod in a crash loop.
 moving=ttl.sh/strata-live-$suffix:2h
 absent=ttl.sh/strata-live-$suffix-absent:2h
 crash=ttl.sh/strata-live-$suffix-crash:2h
-observer_ref=ttl.sh/strata-live-$suffix-observer:2h
 # The tag holds source_one first and source_two later. source_crash has a shell, for the crash loop.
 # source_policy is the image of the pod that asks for IfNotPresent. A copy keeps the digest of the index.
 source_one=registry.k8s.io/pause:3.9
 source_two=registry.k8s.io/pause:3.10
 source_crash=docker.io/library/busybox:1.37
 source_policy=registry.k8s.io/pause:3.9
-kubeconfig= pf_pid= undone=
-
-# kc ARGS...: kubectl in cluster A. kj does the same with the errors on standard error, for JSON.
-kc() { kube "$C" "$@"; }
-kj() { KUBE_STDERR=1 kube "$C" "$@"; }
-
-# poll COUNT COMMAND...: run COMMAND until it succeeds, at most COUNT times, 5 seconds apart
-poll() {
-  local count=$1 _
-  shift
-  for _ in $(seq "$count"); do
-    "$@" && return 0
-    sleep 5
-  done
-  return 1
-}
+undone=
 
 # ---- the page ------------------------------------------------------------------------------------------
 
-# pf_stop: end the port-forward
-pf_stop() {
-  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; wait "$pf_pid" 2> /dev/null; }
-  pf_pid=
-}
-# pf_start: open kubectl port-forward deploy/strata-observer. The kubeconfig is a credential: it lives in
-# a temporary file until the end of the run.
-pf_start() {
-  local _
-  pf_stop
-  if [ ! -s "$kubeconfig" ]; then
-    kubeconfig=$(mktemp) || return 1
-    if ! "$live/api.sh" get-kubeconfig "$C" > "$kubeconfig" 2> /dev/null || [ ! -s "$kubeconfig" ]; then
-      rm -f "$kubeconfig"
-      kubeconfig=
-      return 1
-    fi
-  fi
-  kubectl --kubeconfig "$kubeconfig" -n "$ns" port-forward deploy/strata-observer "$port:8080" > port-forward.log 2>&1 < /dev/null &
-  pf_pid=$!
-  for _ in $(seq 30); do
-    grep -q 'Forwarding from' port-forward.log && return 0
-    # the process can end after it prints its line, so the log gets a last look
-    kill -0 "$pf_pid" 2> /dev/null || { grep -q 'Forwarding from' port-forward.log; return; }
-    sleep 1
-  done
-  return 1
-}
-# page PATH: the answer of the observer through the port-forward
-page() { curl -fsS --max-time 20 "http://127.0.0.1:$port$1"; }
-# uri TEXT: TEXT as one segment of a path
-uri() { jq -rn --arg r "$1" '$r | @uri'; }
 # row_check REF FILTER [JQ OPTION...]: the row of the image REF holds what FILTER says. image.json keeps
 # the row.
 row_check() {
@@ -192,10 +147,9 @@ values_edit() {
   edited=1 && save edited 1
   "$live/api.sh" set-values "$AD" "$pack" "$(images_values)"
 }
-# namespaces: the namespace of the observer, with the restricted standard, and the namespace of the pods
-namespaces_make() {
-  kc apply -f "$root/deploy/observer/namespace.yaml" && kc create namespace "$tns"
-}
+# namespaces_make: the namespace of the pods. The pull Secret made the namespace of the observer, with the
+# restricted standard.
+namespaces_make() { kc create namespace "$tns"; }
 observer_settings() { observer_config && observer_key "$palette_key"; }
 # records: a record of the release profile and of the add-on profile, after the edit. The add-on record
 # lists the tag in a pack. The records apply with --server-side.
@@ -204,32 +158,11 @@ records_make() {
     && jq -e --arg p "$pack" --arg i "$moving" '[.packs[] | select(.name == $p) | .images[]?] | index($i) != null' addon.json > /dev/null \
     && "$records_script" --revision "$revision" release.json addon.json | kc apply --server-side -f -
 }
-# observer_push: the image of the observer goes to ttl.sh, where the nodes of cluster A pull it
-observer_push() { docker tag "$image" "$observer_ref" && docker push "$observer_ref"; }
-# overlay: base/ is a copy of deploy/observer, and pods/ is a copy of the component. kustomization.yaml
-# lists the component as a team does. It sets the image, and it gives the content cycle a short period.
+# overlay: the overlay of lib.sh, with the component. pods/ is a copy of the component, and
+# kustomization.yaml lists it as a team does. The content cycle gets a short period.
 overlay() {
-  mkdir -p base pods && cp "$root"/deploy/observer/*.yaml base/ && cp "$root"/deploy/observer/pods/*.yaml pods/ || return 1
-  cat > kustomization.yaml << EOF
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources:
-  - base
-components:
-  - pods
-images:
-  - name: ghcr.io/como-technologies/strata-observer
-    newName: ${observer_ref%:*}
-    newTag: ${observer_ref##*:}
-patches:
-  - target:
-      kind: Deployment
-      name: strata-observer
-    patch: |-
-      - op: add
-        path: /spec/template/spec/containers/0/args/-
-        value: --content-every=1m
-EOF
+  observer_overlay --content-every=1m && mkdir -p pods && cp "$root"/deploy/observer/pods/*.yaml pods/ \
+    && printf 'components:\n  - pods\n' >> kustomization.yaml
 }
 # observer_apply: render the overlay, make sure that the component is in it, and apply it
 observer_apply() {
@@ -240,8 +173,6 @@ observer_ready() { KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-obs
 
 # ---- the read ------------------------------------------------------------------------------------------
 
-# can_i ARGS...: yes or no, as kubectl auth can-i gives it
-can_i() { kc auth can-i "$@" | tail -n 1; }
 # pods_role: the service account of the observer gets and lists pods in each namespace, and it does
 # nothing else
 pods_role() {
@@ -257,16 +188,6 @@ pods_role() {
     [ "$(can_i "$verb" secrets --all-namespaces "$as")" = no ] || { echo "$verb secrets"; return 1; }
   done
   echo "get and list on pods, and nothing else"
-}
-# read_ok: the observer says that it read the pods, and the read gave images
-read_ok() {
-  page /v1/images > images.json 2> /dev/null \
-    && jq -e '.pods == "read" and .readAt != null and .error == null and .counts.images > 0' images.json > /dev/null
-}
-pods_read() {
-  pf_start || { cat port-forward.log; return 1; }
-  poll "$tries" read_ok || { jq '{pods, readAt, error, counts}' images.json; return 1; }
-  jq '{pods, readAt, counts}' images.json
 }
 
 # ---- the pods ------------------------------------------------------------------------------------------
@@ -370,22 +291,17 @@ crash_loop() {
   poll "$tries" crash_row || { show_row; return 1; }
   show_row
 }
-# agents_unmatched: the images of the pods in the namespaces of the agents match no pack, and no
-# finding names one. agent-images.txt keeps the images.
+# agents_unmatched: the answer of the page names the images that match no pack. These are the images of
+# the agents of Palette and of the system, which no pack names. The cluster runs some, and no finding
+# names one. agent-images.txt keeps the images.
 agents_unmatched() {
-  local ref
-  kj get pods --all-namespaces -o json \
-    | jq -r --arg re "$agent_namespaces" '[.items[] | select(.metadata.namespace | test($re))
-        | .spec.containers[], (.spec.initContainers // [])[] | .image] | unique[]' > agent-images.txt || return 1
-  [ -s agent-images.txt ] || { echo "no pod in a namespace that matches $agent_namespaces"; return 1; }
-  while IFS= read -r ref; do
-    row_check "$ref" '.image.match == "none"' || { echo "$ref: no row, or it matches a pack"; return 1; }
-  done < agent-images.txt
-  page /v1/findings > findings.json || return 1
+  page /v1/images > images.json && page /v1/findings > findings.json || return 1
+  jq -r '.images[] | select(.match == "none") | .ref' images.json | sort -u > agent-images.txt
+  [ -s agent-images.txt ] || { echo "no image matches no pack: the answer of the page holds no agent"; return 1; }
   jq -e --rawfile list agent-images.txt '($list | split("\n") | map(select(. != ""))) as $agents
     | [.findings[] | (.images // [])[] | select(. as $i | $agents | index($i) != null)] | length == 0' findings.json > /dev/null \
-    || { echo "a finding names an image of an agent"; return 1; }
-  echo "$(wc -l < agent-images.txt | tr -d ' ') images of agents: each matches no pack, and no finding names one"
+    || { echo "a finding names an image that matches no pack"; return 1; }
+  echo "$(wc -l < agent-images.txt | tr -d ' ') images match no pack, and no finding names one"
 }
 # pull_policy: a pod made with IfNotPresent. The output says what the cluster did to the policy. It
 # succeeds when the cluster set Always.
@@ -398,15 +314,6 @@ pull_policy() {
 
 # ---- the end -------------------------------------------------------------------------------------------
 
-# not_found ARGS...: kubectl in cluster A says that ARGS name nothing
-not_found() {
-  local answer
-  answer=$(kc "$@")
-  case "$answer" in
-    *"not found"*) return 0 ;;
-  esac
-  return 1
-}
 namespace_gone() { not_found get namespace "$1"; }
 # namespaces_gone: both namespaces are gone. A namespace stays in Terminating for a while.
 namespaces_gone() { poll 36 namespace_gone "$ns" && poll 36 namespace_gone "$tns"; }
@@ -428,7 +335,6 @@ undo() {
   KUBE_TIMEOUT=300 kc delete namespace "$ns" --ignore-not-found >> steps.log 2>&1
   kc delete clusterrolebinding "$role" --ignore-not-found >> steps.log 2>&1
   kc delete clusterrole "$role" --ignore-not-found >> steps.log 2>&1
-  docker rmi "$observer_ref" >> steps.log 2>&1
   undone=1
 }
 
@@ -447,13 +353,14 @@ trap finish EXIT
 
 if stage 1 "the setup"; then
   require_baseline
+  check pull-secret 0 '#646: the Secret ghcr-pull holds the token of the file, which has only read:packages and comes through standard input' -- pull_secret
+  [ "$failures" = 0 ] || pull_secret_stop
   check tag-first 0 '#646: the tag on ttl.sh holds its first image, and an image with a shell is there for the crash loop' -- tag_first
   check values-edit 0 "#646: the pack $pack of the add-on lists the three images of the run, in place" -- values_edit
-  check namespaces 0 '#646: the namespace of the observer, with the restricted standard, and the namespace of the pods' -- namespaces_make
+  check namespaces 0 '#646: the namespace of the pods' -- namespaces_make
   check settings 0 '#646: the ConfigMap holds the cluster, the address of Palette, and the project. The Secret holds the key' -- observer_settings
   check records 0 '#646: a record of each profile, with the tag in the add-on record, applies with --server-side' -- records_make
-  check observer-push 0 '#646: the image of the observer is on ttl.sh' -- observer_push
-  check observer-apply 0 '#646: the overlay lists the component, and it applies' -- observer_apply
+  check observer-apply 0 '#646: the overlay lists the component, the image of OBSERVER_IMAGE, and the pull Secret, and it applies' -- observer_apply
   check observer-ready 0 '#646: the Deployment becomes available' -- observer_ready
 fi
 
@@ -473,8 +380,8 @@ if stage 4 "a pod that never starts, and a pod in a crash loop"; then
   check image-crash-loop 0 '#646: a container in a crash loop keeps its digest. The row shows it, and it makes no finding' -- crash_loop
 fi
 
-if stage 5 "the agents of Palette, and the pull policy"; then
-  check image-agents-no-finding 0 '#646: the images in the namespaces of the agents match no pack, and no finding names one' -- agents_unmatched
+if stage 5 "the images that match no pack, and the pull policy"; then
+  check image-agents-no-finding 0 '#646: the images that match no pack, such as those of the agents of Palette, make no finding: the answer of the page names them' -- agents_unmatched
   check pull-policy ? '#646: a pod made with IfNotPresent: 0 says that the cluster set Always, and 1 says that the policy stayed' -- pull_policy
 fi
 
