@@ -485,7 +485,7 @@ without it. Each stage makes one edit in place through the API, reads what
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 | `noaudit-record`, `noaudit-edit` | 0 | #664: record the add-on version, and edit it in place through the API |
 | `noaudit-who`, `noaudit-who-verdict` | 1, 0 | #664: with a key that cannot read the audit log, the record still reports `DRIFT` and the exit is `1`. The output starts with the verdict (no result yet: the Wave 15 window runs it) |
-| `noaudit-who-says` | 0 | #664: the output has the line `who: not read: HTTP 403: ` and the body of Palette with the code `AccessDenied` (no result yet: the Wave 15 window runs it) |
+| `noaudit-who-says` | 0 | #664: the line `who: not read: HTTP 403: <body>` has the code `AccessDenied` (no result yet: the Wave 15 window runs it) |
 | `noaudit-who-json` | 0 | #664: `--json` gives `verify.whoError` that starts with `HTTP 403`, no `verify.who`, and the status `drifted` (no result yet: the Wave 15 window runs it) |
 | `noaudit-undo`, `noaudit-restored` | 0 | the edit is put back, and the record verifies again |
 

@@ -693,9 +693,10 @@ impl Error {
         )
     }
 
-    /// The reason that a record or a verdict keeps for a read that failed beside an answer that
-    /// stands on its own: `HTTP <status>: <body>` for an answer of Palette that is an error, and
-    /// the message for each other error.
+    /// The reason that a record or a verdict keeps for a read that failed.
+    ///
+    /// An answer of Palette that is an error gives `HTTP <status>: <body>`. Each other error gives
+    /// its message.
     pub(crate) fn reason(&self) -> String {
         match self {
             Error::Api { status, body, .. } => unread_reason(*status, body),

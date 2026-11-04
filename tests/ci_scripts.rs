@@ -4002,8 +4002,8 @@ fn verify_report_asks_who_changed_a_record_that_drifted_and_puts_the_answer_in_i
 
 #[test]
 fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_audit_log() {
-    // The report is the one that the library prints for a key without the permission of the audit
-    // log, so that the script and the renderer cannot differ.
+    // The library prints the report for a key without the permission of the audit log. So the
+    // script and the renderer cannot differ.
     let dir = tempfile::tempdir().unwrap();
     make_fixtures(dir.path());
     let recorded = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
