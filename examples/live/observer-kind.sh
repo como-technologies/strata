@@ -16,7 +16,11 @@
 #      Secret and no exec
 #   5  another pod in the cluster does not reach the page
 #   6  the records of --first-seen apply too, and their meta.json says first-seen
-#   7  the end: the kind cluster is deleted, also when a check fails; KEEP_CLUSTER=1 keeps it
+#   7  the pods and a mirror (#646): a local registry, and a containerd mirror for vendor.example on
+#      each node. One pod names vendor.example, and one names the registry itself. The component
+#      deploy/observer/pods applies, and the observer reads the pods. The checks mirror-image-id
+#      and mirror-image-string record what each pod reports and what the observer shows for it
+#   8  the end: the kind cluster is deleted, also when a check fails; KEEP_CLUSTER=1 keeps it
 #
 # The image is distroless: it has no shell, so the checks of stage 3 read the spec of the pod, and
 # the kubelet enforces it. The cluster that the observer watches is cluster A of the live example.
@@ -27,21 +31,24 @@
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # docker, kind, kubectl, curl, jq, and the key of verify.sh. IMAGE names the image (default
-# strata-observer:dev). PORT is the local port of the port-forward (default 18080). The key goes to
-# the Secret of the cluster through standard input, and it is not in a log. Results go under
+# strata-observer:dev). PORT is the local port of the port-forward (default 18080). REGISTRY_PORT is
+# the local port of the registry of stage 7 (default 5001). The key goes to the Secret of the
+# cluster through standard input, and it is not in a log. Results go under
 # runs/<UTC time>/observer-kind/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check
 # fails.
 set -uo pipefail
 script=observer-kind
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2|3|4|5|6|7) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7|8) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 for tool in docker kind kubectl curl jq git; do
   command -v "$tool" > /dev/null || die "$tool is needed"
 done
 image=${IMAGE:-strata-observer:dev}
 port=${PORT:-18080}
+registry=strata-observer-registry
+registry_port=${REGISTRY_PORT:-5001}
 docker image inspect "$image" > /dev/null 2>&1 || die "no image $image; run just observer-image"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/observer-kind}
@@ -66,6 +73,7 @@ ns=strata-observer
 reader=system:serviceaccount:$ns:reader
 pf_pid=
 deleted=
+mirror_made=
 # kc ARGS...: kubectl in the kind cluster of this run. Exported, so that a check in bash -c has it.
 kc() { kubectl --context "kind-$cluster" "$@"; }
 export -f kc
@@ -77,6 +85,7 @@ summary() {
 # the port-forward and the kind cluster go at the end, also when a check stops the script
 cleanup() {
   [ -z "$pf_pid" ] || kill "$pf_pid" 2> /dev/null
+  [ -z "$mirror_made" ] || mirror_remove >> steps.log 2>&1
   [ -n "$deleted" ] || [ "${KEEP_CLUSTER:-}" = 1 ] || kind delete cluster --name "$cluster" >> steps.log 2>&1
   summary
 }
@@ -164,7 +173,153 @@ if stage 6 "the records of --first-seen"; then
     bash -c "kc -n \"\$ns\" get secret strata-observer-records-0 -o jsonpath='{.data.meta\\.json}' | base64 -d | jq -e --arg c \"\$C\" '.baseline == \"first-seen\" and .firstSeenFrom == \$c and (has(\"revision\") | not)'"
 fi
 
-if stage 7 "the end: the kind cluster goes"; then
+# ---- the pods and a mirror (stage 7) ---------------------------------------------------------------
+
+# The registry is a container on the network of kind. A node reaches it by its name. vendor.example
+# stands for the host of a vendor: containerd on each node asks the registry first for it. The image is
+# one small image under two names. mirror-id names vendor.example, as a pack does, and the node mirror
+# serves it. mirror-string names the registry, as an admission rule that rewrites the string does.
+vendor=vendor.example
+mirror_pods="mirror-id mirror-string"
+
+# mirror_image POD: the image that the pod names
+mirror_image() {
+  case "$1" in
+    mirror-id) echo "$vendor/product:1.0" ;;
+    mirror-string) echo "$registry:5000/product:1.0" ;;
+  esac
+}
+# mirror_registry: start the registry, and push the image product:1.0 to it. The registry needs a
+# moment before it takes a push.
+mirror_registry() {
+  local _
+  mirror_made=1
+  # a registry of an earlier run that stopped goes first
+  docker rm -f "$registry" > /dev/null 2>&1
+  docker run -d --name "$registry" --network kind -p "127.0.0.1:$registry_port:5000" registry:2.8.3 \
+    && docker pull registry.k8s.io/pause:3.10 \
+    && docker tag registry.k8s.io/pause:3.10 "localhost:$registry_port/product:1.0" || return 1
+  for _ in $(seq 20); do
+    docker push "localhost:$registry_port/product:1.0" && return 0
+    sleep 1
+  done
+  return 1
+}
+# mirror_hosts NODE: write the two files of containerd on NODE. vendor.example goes to the registry
+# first. The registry has no TLS, so its own name needs a file that says http.
+mirror_hosts() {
+  local node=$1
+  docker exec "$node" grep -q config_path /etc/containerd/config.toml \
+    || { echo "$node: containerd reads no folder certs.d"; return 1; }
+  docker exec -i "$node" sh -c "mkdir -p /etc/containerd/certs.d/$vendor && cat > /etc/containerd/certs.d/$vendor/hosts.toml" << EOF
+server = "https://$vendor"
+
+[host."http://$registry:5000"]
+  capabilities = ["pull", "resolve"]
+EOF
+  docker exec -i "$node" sh -c "mkdir -p /etc/containerd/certs.d/$registry:5000 && cat > /etc/containerd/certs.d/$registry:5000/hosts.toml" << EOF
+server = "http://$registry:5000"
+
+[host."http://$registry:5000"]
+  capabilities = ["pull", "resolve"]
+EOF
+}
+mirror_nodes() {
+  local node
+  for node in $(kind get nodes --name "$cluster"); do
+    mirror_hosts "$node" || return 1
+  done
+}
+# mirror_pod POD: a pod in the namespace default that names the image of POD, and waits to be Ready
+mirror_pod() {
+  kc apply --server-side -f - << EOF || return 1
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $1
+  namespace: default
+spec:
+  containers:
+    - name: pause
+      image: $(mirror_image "$1")
+      imagePullPolicy: Always
+EOF
+  kc -n default wait --for=condition=Ready "pod/$1" --timeout=120s
+}
+mirror_pods_ready() {
+  local pod
+  for pod in $mirror_pods; do
+    mirror_pod "$pod" || return 1
+  done
+}
+# component_apply: the component deploy/observer/pods, as a team lists it. The first cycle of the new
+# pod reads the pods, so the pods of the mirror are in the first read.
+component_apply() {
+  kubectl kustomize "$root/deploy/observer/pods/example" | sed "s#ghcr.io/como-technologies/strata-observer:VERSION#$image#" \
+    | kc apply --server-side -f - \
+    && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
+}
+# images_page: /v1/images, as the observer gives it. The answer is in images.json.
+images_page() {
+  curl -fsS --max-time 20 "http://127.0.0.1:$port/v1/images" > images.json 2> /dev/null
+}
+# component_read: the observer reads the pods through the token of the component
+component_read() {
+  local _
+  kubectl --context "kind-$cluster" -n "$ns" port-forward deploy/strata-observer "$port:8080" > component-forward.log 2>&1 &
+  pf_pid=$!
+  for _ in $(seq 30); do
+    grep -q 'Forwarding from' component-forward.log && break
+    sleep 1
+  done
+  for _ in $(seq "${CYCLE_WAIT:-60}"); do
+    images_page && jq -e '.pods == "read" and .readAt != null' images.json > /dev/null && break
+    sleep 5
+  done
+  jq '{pods, readAt, error, counts}' images.json && jq -e '.pods == "read" and .readAt != null and .error == null' images.json > /dev/null
+}
+# mirror_report POD: what the pod reports for its image, and the row that the observer shows for the
+# string of the pod. It succeeds when the row holds a digest. It exits 2 when the pod or the row is
+# missing.
+mirror_report() {
+  local ref
+  kc -n default get pod "$1" -o json > "$1.json" || return 2
+  jq -r '.spec.containers[0].image as $ref | .status.containerStatuses[0] | "spec.image:   \($ref)\nstatus.image: \(.image)\nimageID:      \(.imageID)"' "$1.json"
+  ref=$(jq -r '.spec.containers[0].image' "$1.json")
+  curl -fsS --max-time 20 "http://127.0.0.1:$port/v1/images/$(jq -rn --arg r "$ref" '$r | @uri')" > "$1-row.json" \
+    || { echo "the observer shows no row for $ref"; return 2; }
+  jq '.image | {ref, status, match, digests}' "$1-row.json"
+  jq -e '[.image.digests[] | select(.digest != null)] | length > 0' "$1-row.json" > /dev/null
+}
+# mirror_remove: the pods, the files of containerd, and the registry go. It is safe to run again.
+mirror_remove() {
+  local node pod bad=0
+  for pod in $mirror_pods; do
+    kc -n default delete pod "$pod" --ignore-not-found --wait=false || bad=1
+  done
+  for node in $(kind get nodes --name "$cluster" 2> /dev/null); do
+    docker exec "$node" rm -rf "/etc/containerd/certs.d/$vendor" "/etc/containerd/certs.d/$registry:5000" || bad=1
+  done
+  docker rm -f "$registry" || bad=1
+  mirror_made=
+  return "$bad"
+}
+
+if stage 7 "the pods and a mirror"; then
+  check mirror-registry 0 '#646: a registry on the network of kind holds product:1.0' -- mirror_registry
+  check mirror-nodes 0 '#646: containerd on each node asks the registry first for vendor.example' -- mirror_nodes
+  check mirror-pods 0 '#646: a pod that names vendor.example and a pod that names the registry are Ready' -- mirror_pods_ready
+  check component-apply 0 '#646: deploy/observer/pods applies, and the Deployment becomes available' -- component_apply
+  check component-read 0 '#646: the observer reads the pods through the token of the component: /v1/images says read' -- component_read
+  check mirror-image-id ? '#646: the pod that names vendor.example: what it reports, and the row of the observer. 0 says the row holds a digest' -- \
+    mirror_report mirror-id
+  check mirror-image-string ? '#646: the pod that names the registry: what it reports, and the row of the observer. 0 says the row holds a digest' -- \
+    mirror_report mirror-string
+  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; pf_pid=; }
+  check mirror-clean 0 '#646: the pods, the files of containerd, and the registry go' -- mirror_remove
+fi
+
+if stage 8 "the end: the kind cluster goes"; then
   if [ "${KEEP_CLUSTER:-}" = 1 ]; then
     echo "KEEP_CLUSTER=1: the kind cluster $cluster stays" | tee -a steps.log
   else

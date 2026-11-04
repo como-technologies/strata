@@ -47,14 +47,16 @@ func holds(t reflect.Type, banned []reflect.Type, path string, seen map[reflect.
 // and this test keep a changed value out of a summary route.
 func TestNoTypeOfTheSummaryTierHoldsAChangedValue(t *testing.T) {
 	summary := map[string]reflect.Type{
-		"model.Summary":  reflect.TypeOf(model.Summary{}),
-		"ClusterView":    reflect.TypeOf(ClusterView{}),
-		"FindingsView":   reflect.TypeOf(FindingsView{}),
-		"ProfilesView":   reflect.TypeOf(ProfilesView{}),
-		"ProfileView":    reflect.TypeOf(ProfileView{}),
-		"NewerView":      reflect.TypeOf(NewerView{}),
-		"NotCheckedView": reflect.TypeOf(NotCheckedView{}),
-		"EventsView":     reflect.TypeOf(EventsView{}),
+		"model.Summary":   reflect.TypeOf(model.Summary{}),
+		"ClusterView":     reflect.TypeOf(ClusterView{}),
+		"FindingsView":    reflect.TypeOf(FindingsView{}),
+		"ProfilesView":    reflect.TypeOf(ProfilesView{}),
+		"ProfileView":     reflect.TypeOf(ProfileView{}),
+		"NewerView":       reflect.TypeOf(NewerView{}),
+		"NotCheckedView":  reflect.TypeOf(NotCheckedView{}),
+		"EventsView":      reflect.TypeOf(EventsView{}),
+		"model.Observed":  reflect.TypeOf(model.Observed{}),
+		"model.ImageView": reflect.TypeOf(model.ImageView{}),
 	}
 	for name, typ := range summary {
 		var found []string

@@ -32,6 +32,8 @@ const detailTimeout = 50 * time.Second
 type Source interface {
 	// Summary gives the summary at this time.
 	Summary() model.Summary
+	// Observed gives the document of the pods: the images, with the digests that the pods run.
+	Observed() model.Observed
 	// PackDiff gives the entry of a pack in the diff of one side of a profile, with its changed
 	// values. The profile is name@version. The second result is false when nothing is known.
 	PackDiff(ctx context.Context, profile, key string, side model.Side) (docs.Pack, bool, error)
@@ -63,6 +65,8 @@ const (
 	patternNewer      = "/v1/newer"
 	patternNotChecked = "/v1/notchecked"
 	patternEvents     = "/v1/events"
+	patternImages     = "/v1/images"
+	patternImage      = "/v1/images/{ref}"
 	patternPackDiff   = "/v1/packs/{profile}/{layer}/{name}/diff"
 )
 
@@ -90,6 +94,8 @@ func (s *Server) table() []entry {
 		{Route{patternNewer, TierSummary}, s.newer},
 		{Route{patternNotChecked, TierSummary}, s.notChecked},
 		{Route{patternEvents, TierSummary}, s.events},
+		{Route{patternImages, TierSummary}, s.images},
+		{Route{patternImage, TierSummary}, s.image},
 		{Route{patternPackDiff, TierDetail}, s.packDiff},
 	}
 }
@@ -224,6 +230,22 @@ func (s *Server) notChecked(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) events(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, EventsView{Events: s.Source.Summary().Events})
+}
+
+// images serves strata-observed/1. With the read of the pods off, it says so and lists no image.
+func (s *Server) images(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.Source.Observed())
+}
+
+// image serves one row of the document. The reference of the image is one escaped segment of the path.
+// An image that no pod runs gets 404, and the answer does not name the input.
+func (s *Server) image(w http.ResponseWriter, r *http.Request) {
+	view, ok := s.Source.Observed().ImageOf(r.PathValue("ref"))
+	if !ok {
+		notFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
 }
 
 // packDiff serves the one route of the detail tier. A profile, a pack, or a side that is unknown gets

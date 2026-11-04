@@ -415,7 +415,7 @@ variable_in_raw() {
 }
 # leak_paths: each route of the page, and the detail route of each pack that a finding names
 leak_paths() {
-  printf '%s\n' / /healthz /v1/cluster /v1/findings /v1/profiles /v1/newer /v1/notchecked /v1/events
+  printf '%s\n' / /healthz /v1/cluster /v1/findings /v1/profiles /v1/newer /v1/notchecked /v1/events /v1/images
   jq -r '.findings[] | .profile as $p | .packs[] | "/v1/packs/\($p)/\(.)/diff?side=published", "/v1/packs/\($p)/\(.)/diff?side=cluster"' findings.json
 }
 # no_value_leaves: no route and no line of the log holds the value of the variable

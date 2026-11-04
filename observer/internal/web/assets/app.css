@@ -140,6 +140,8 @@ ul.tight li{margin:4px 0}
 details summary{cursor:pointer;padding:9px 15px;font-size:13px;color:var(--mut);border-top:1px solid var(--line)}
 details summary:hover{background:var(--panel2)}
 .nw{white-space:nowrap}
+.wrap{overflow-wrap:anywhere}
+.lab.wrap{white-space:normal}
 .msg{min-width:220px}
 .fw{font-weight:500}
 .fw a{color:inherit}

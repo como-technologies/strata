@@ -1,0 +1,6 @@
+{
+  "findings": [
+    {"id":"d863304c47464efb","kind":"published-changed","profile":"fred-identity@2.3.0","packs":["addon/dex"],"impact":"in-place","alsoOnCluster":false,"reBaselineNeeded":false,"firstSeen":"2026-11-03T06:09:00Z","lastSeen":"2026-11-03T11:54:00Z","who":[{"time":"2026-11-03T05:56:00Z","actor":"Betty Rubble","actorType":"user","action":"updated the version"}],"whoUnread":false},
+    {"id":"078cb394c037e1e8","kind":"image-split","profile":"wilma-gateway@3.1.2","packs":["addon/vendor-product"],"images":["vendor.example/product:2026.2"],"impact":"","alsoOnCluster":false,"reBaselineNeeded":false,"firstSeen":"2026-11-02T10:12:00Z","lastSeen":"2026-11-03T11:54:00Z","who":[],"whoUnread":false}
+  ]
+}

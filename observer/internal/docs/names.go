@@ -13,7 +13,9 @@ const (
 // The kinds of an error that the observer names. The first four come from strata. The others come
 // from the runner, which cannot read a kind from a process that wrote a plain line, and from the
 // check of a document: KindSchema says that the schema id of a document is not the one that the
-// observer knows. A kind never carries a message.
+// observer knows. The three kinds that start with kube come from the read of the pods: the API
+// server answered with a status, no request got an answer, or the credentials are not usable. A
+// kind never carries a message.
 const (
 	KindAPI       = "api"
 	KindTransport = "transport"
@@ -24,6 +26,10 @@ const (
 	KindCrash     = "crash"
 	KindUnknown   = "unknown"
 	KindSchema    = "schema"
+
+	KindKubeAPI       = "kube-api"
+	KindKubeTransport = "kube-transport"
+	KindKubeConfig    = "kube-config"
 )
 
 // The statuses of a row of strata-verify-summary/1.

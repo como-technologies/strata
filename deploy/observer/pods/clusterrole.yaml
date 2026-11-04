@@ -1,0 +1,12 @@
+# The observer reads the pods of the cluster. This role gives `get` and `list` on pods, and no other
+# verb or resource.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: strata-observer-pods
+  labels:
+    app.kubernetes.io/name: strata-observer
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]

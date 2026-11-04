@@ -46,7 +46,7 @@ func TestFindingsOfEachKind(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := FindingsOf(content(t, c.record))
+			got := FindingsOf(content(t, c.record), nil)
 			if c.nothing {
 				if len(got) != 0 {
 					t.Fatalf("findings %+v", got)
@@ -70,7 +70,7 @@ func TestFindingsOfEachKind(t *testing.T) {
 func TestAnEditWithAnotherRootOnTheClusterIsTwoFindings(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
 		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("csi/csi-aws-ebs", "charts.a.b")}})
-	got := FindingsOf(content(t, r))
+	got := FindingsOf(content(t, r), nil)
 	if len(got) != 2 || got[0].Kind != ClusterDiffers || got[1].Kind != PublishedChanged || got[1].AlsoOnCluster {
 		t.Fatalf("findings %+v", got)
 	}
@@ -78,7 +78,7 @@ func TestAnEditWithAnotherRootOnTheClusterIsTwoFindings(t *testing.T) {
 
 func TestACompareThatIsDifferentAndHasAnImageIDGivesBothFindings(t *testing.T) {
 	r := onCluster(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), docs.Diff{ImageIDsChanged: []docs.KeyOnly{{Key: "os/ubuntu"}}})
-	got := FindingsOf(content(t, r))
+	got := FindingsOf(content(t, r), nil)
 	if len(got) != 2 || got[0].Kind != ClusterDiffers || got[1].Kind != ImageIDChanged {
 		t.Fatalf("findings %+v", got)
 	}
@@ -86,7 +86,7 @@ func TestACompareThatIsDifferentAndHasAnImageIDGivesBothFindings(t *testing.T) {
 
 func TestEachFindingHasAUniqueIDOfSixteenHexDigits(t *testing.T) {
 	seen := map[string]bool{}
-	for _, k := range []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged} {
+	for _, k := range allKinds {
 		for _, subject := range []string{"aws-stack@1.1.0", "aws-stack@1.1.1"} {
 			id := FindingID(k, subject)
 			if len(id) != 16 || strings.Trim(id, "0123456789abcdef") != "" || seen[id] || id != FindingID(k, subject) {
@@ -124,11 +124,11 @@ func TestAFindingOfARecordFromAnOlderMinorVersionNeedsARebaseline(t *testing.T) 
 	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs")
 	c := content(t, r)
 	c.Strata = "0.29.0"
-	if got := FindingsOf(c); len(got) != 1 || !got[0].ReBaselineNeeded {
+	if got := FindingsOf(c, nil); len(got) != 1 || !got[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", got)
 	}
 	r.Doc.Tool.Version = "0.29.1"
-	if got := FindingsOf(content(t, r)); len(got) != 1 || got[0].ReBaselineNeeded {
+	if got := FindingsOf(content(t, r), nil); len(got) != 1 || got[0].ReBaselineNeeded {
 		t.Fatalf("findings %+v", got)
 	}
 }
@@ -136,7 +136,7 @@ func TestAFindingOfARecordFromAnOlderMinorVersionNeedsARebaseline(t *testing.T) 
 func TestTheFindingsComeInTheOrderOfTheProfileAndTheKind(t *testing.T) {
 	b := drifted(rec("b-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{})
 	a := onCluster(drifted(rec("a-stack", "1.0.0", docs.VerifyUnchanged), &docs.Verify{}), docs.Diff{RootB: "other"})
-	got := FindingsOf(content(t, b, a))
+	got := FindingsOf(content(t, b, a), nil)
 	var order []string
 	for _, f := range got {
 		order = append(order, f.Profile+" "+string(f.Kind))

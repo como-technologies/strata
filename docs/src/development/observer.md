@@ -1,17 +1,21 @@
 # The checks of the observer
 
 `strata-observer` runs the `strata` binary on two timers and keeps the last
-answer of each. It answers five questions:
+answer of each. It answers six questions:
 
 - Does Palette still have the version that I recorded?
 - Does this cluster run its release?
 - Who changed it?
 - Does the registry have newer versions of what we pin?
 - What changed between two pack versions?
+- Which digest does each tag run as on this cluster?
 
-The observer holds no rule of its own. It reads the answers of `strata` through
-the allow-list of `internal/docs`, and it writes nothing to Palette. For the
-rules of the code, see [The Go of the observer](./code.md#the-go-of-the-observer).
+The observer holds no rule about a profile. It reads the answers of `strata`
+through the allow-list of `internal/docs`, and it writes nothing to Palette. The
+sixth question needs `--read-pods`. It comes from the Kubernetes API, not from
+`strata`: see [The read of the pods](#the-read-of-the-pods). The observer sends
+`GET` requests only. For the rules of the code, see [The Go of the
+observer](./code.md#the-go-of-the-observer).
 
 `once` prints the summary one time. `serve` keeps the answers and shows them on
 a loopback address: see [The server of the observer](./observer-api.md).
@@ -46,6 +50,9 @@ Steps 3 and 4 run for each record that the cluster runs. The side comes from
 the raw answers of step 2, so these two steps make no request.
 Step 2 of the versions cycle runs for each pin that is behind and has no cached
 move.
+
+With `--read-pods`, the content cycle lists the pods before step 1: see [The read of
+the pods](#the-read-of-the-pods).
 
 - A cycle starts at the start of the process, and then after its period. Each
   wait has a random 0 to 10 percent added.
@@ -82,7 +89,8 @@ it gives no document, or when the `schema` of its document is not the expected o
 A row with an `error` beside good rows is a cause in [Not checked](#not-checked), and
 not a failed cycle. A failed `compare` of a move does not fail the cycle: see [The
 newer versions](#the-newer-versions). A failed read of one part of a record is not a
-failed cycle: see [A failed read](#a-failed-read).
+failed cycle: see [A failed read](#a-failed-read). A failed read of the pods is
+no failed cycle either: see [A failed read of the pods](#a-failed-read-of-the-pods).
 
 A failed cycle keeps the last good result. It adds 1 to `failedRuns` and keeps
 the kind and the status of the error. It never keeps the message, because the
@@ -122,6 +130,96 @@ One failed read of one part of one record is not a failed cycle. It is a
   sight of each finding of that part. A later read that shows the drift keeps
   the date.
 - A record that changed since the last good answer gets no old answer.
+
+## The read of the pods
+
+`--read-pods` adds a read to the start of each content cycle. `internal/kube` lists
+the pods of the cluster, and `internal/model/images.go` builds the rows of the
+images from the list. With no flag, the observer makes no call to Kubernetes, and
+`GET /v1/images` says `off`. With the flag, the process exits 2 when
+`KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. The read plays no
+part in `page`.
+
+### The package `internal/kube`
+
+`internal/kube` is the one place that calls the Kubernetes API, and it uses the
+standard library only. The kubelet sets the two variables of the address, and
+`--kube-dir` names the directory of the token and the CA.
+
+- It sends one request, `GET /api/v1/pods?limit=500`. It sends no other method and
+  no other path.
+- It follows `continue` until the list ends, so a cluster of more than 500 pods
+  takes more than one request.
+- It reads the token and the CA again at each call, because the kubelet rotates the
+  token. It keeps no connection between two calls.
+- A request ends after 30 seconds, and the observer reads 128 MiB of one answer at
+  most.
+- It decodes `metadata.name` and `metadata.namespace`, the `name` and the `image` of
+  `spec.containers[]` and `spec.initContainers[]`, and the `name` and the `imageID`
+  of `status.containerStatuses[]` and `status.initContainerStatuses[]`. It decodes no
+  `env`, no node name, and no `state`.
+- It joins a container with its status by the name of the container. The observer
+  matches the image of the spec. It never reads the `image` of the status, because the
+  runtime rewrites it.
+- The namespace and the name of a pod stay in memory, to count the pods of an image.
+  They reach no answer, no log, and no state.
+- A failure is an error with a kind and a status, and never a message. The answer of
+  the API server can name an object. [The error of a
+  read](../reference/observer-api.md#the-error-of-a-read) lists the kinds.
+
+### A failed read of the pods
+
+A failed read is not a failed cycle, because the pods are not the content. The cycle
+continues with its commands.
+
+- The content gets the cause `pods-not-read`. Its row has no profile and no pack, and
+  no status of a profile or a pack changes.
+- The content keeps the containers and the time of the last good read, as for any
+  failed read: see [A failed read](#a-failed-read). `readAt` of the document is the
+  time of that read, and `error` holds the kind of the failure.
+- A read that never ended well gives the state `not-read` and no row.
+- The state keeps the first sight of the image findings of each record, because a
+  failed read tells nothing about the drift.
+- The log has one line `pods` for each read. It holds a verdict and a duration. A failed
+  read adds the kind and the status. It holds no pod.
+
+### The images
+
+A row is one image reference, as the spec of a pod names it. The observer joins it
+with the packs of the records that the cluster runs.
+
+- **The match.** The exact text of an image in a pack wins. If there is none, the
+  observer compares the name and the tag. It removes `docker.io/library/`,
+  `docker.io/`, and the part after `@` first. A host other than Docker Hub stays in
+  the name, so a mirror string matches a pack only when the pack names the same
+  string. `match` is `none` when no pack matches.
+- **The digest of a container.** An `imageID` that holds `@sha256:` gives the digest
+  after the `@`. An `imageID` with no such part is `no-repo-digest`: a local image has
+  an id and no repository digest. An empty `imageID` is `not-started`.
+- **The first digest.** The state keeps it, for each reference, from the first sight.
+  When two digests run at that sight, the digest of more pods wins, and the smaller
+  text wins a tie. A read that failed adds none.
+- **A real digest** is a digest that a repository holds. `no-repo-digest` and
+  `not-started` are no real digest. They read "Not checked", they never read "OK", and
+  they make no finding.
+
+The status of an image comes from its real digests. The first row that holds wins:
+
+| `status` | When |
+| --- | --- |
+| `split` | Two real digests or more run at one time. |
+| `moved` | One real digest runs, and it differs from the first digest. |
+| `steady` | One real digest runs, and it is the first digest. |
+| `not-checked` | No real digest runs. |
+
+A real digest is `first-digest` when it is the first digest, or when the state holds
+no first digest for the reference. Another real digest is `another-digest`. `moved`
+clears when the digest comes back, or at a new revision of the records.
+
+An image makes a finding when its `match` is not `none`, its reference names a tag,
+and its status is `moved` or `split`. A reference that names a digest cannot move, so
+`byDigest` is true and no finding exists. An image that no pack names, such as an
+agent of Palette, shows in the list and makes no finding.
 
 ## The records
 
@@ -163,6 +261,8 @@ gives it. The observer never lowers a drift.
 | `gone` | `verify.gone` is true. | The profile. |
 | `cluster-differs` | The compare of the record and the cluster side has `same` false and `sameContent` false. | The profile, and each changed pack. |
 | `image-id-changed` | The compare has entries in `imageIdsChanged`, also when `same` is true. | The profile, and each `key`. |
+| `image-moved` | An image matches a pack, its reference names a tag, and its status is `moved`. | The profile, each pack that the image matches, and each image reference. |
+| `image-split` | The same, with the status `split`. | The same. |
 
 - A finding holds `who` from `verify.who[]`: `time`, `actor`, `actorType`, and
   `action`.
@@ -178,6 +278,13 @@ gives it. The observer never lowers a drift.
 - `updatesPending` and `repavePending` of the cluster are in the summary only
   when a finding exists. Palette shows these two flags on its own pages, so the
   observer does not repeat them.
+- A finding of the pods comes from [the images](#the-images). It holds the new field
+  `images`, with the references. It has one finding for each kind and profile. Its
+  `impact` is empty, because no `strata` command gives an impact for a digest. Its
+  `reBaselineNeeded` is false, because no record moves.
+- A finding of the pods sets the status of no profile and of no pack. `counts.drift`
+  does not count it. `counts.findings` counts it, so the list "Needs attention" and
+  the count in the nav hold it. `once` exits 1 when any finding exists.
 
 ### Same content
 
@@ -207,6 +314,7 @@ severity.
 | `no-record` | A profile that the cluster runs has no record. | Profile |
 | `read-error` | `records[].error` is set, a side of the cluster could not be read, or a record file cannot be read. | Record |
 | `pin-error` | `pin.error` is set, or the `compare` of the move of the pin failed. | Pin |
+| `pods-not-read` | The read of the pods failed in the newest content cycle. | The cluster: one row, with no profile, no pack, and no registry |
 
 `counts.packs` is the sum of the packs of the records that the cluster runs. A
 profile with no record adds no pack. `counts.packsInFull` is `counts.packs`
@@ -300,7 +408,7 @@ severity.
 
 | `type` | `reason` | When | `time` |
 | --- | --- | --- | --- |
-| `drift` | `DriftFound`, `Overwritten`, `Renamed`, `Gone`, `ClusterDiffers`, or `ImageIDChanged`, by the `kind` of the finding | A finding exists. | `firstSeen` of the finding. |
+| `drift` | `DriftFound`, `Overwritten`, `Renamed`, `Gone`, `ClusterDiffers`, `ImageIDChanged`, `ImageMoved`, or `ImageSplit`, by the `kind` of the finding | A finding exists. | `firstSeen` of the finding. |
 | `info` | `ProfileUpdated` | A finding holds `who`. One event for each write. | `time` of the write. |
 | `info` | `AuditUnread` | A finding has `whoUnread` true. The message is "The audit log could not be read, so this does not say who made the change." | `lastSeen` of the finding. |
 | `newer` | `NewVersion` | A pin is behind. | `listed` of the newest version. |
@@ -309,6 +417,11 @@ severity.
 The `object` is the profile. For `NewVersion` and `OldCopy`, it is the profiles
 that the pins name, separated by commas. A finding stays in `findings` when its
 event is older than 7 days.
+
+The two messages of the pods are:
+
+- `ImageMoved`: "A tag runs another digest than the first one that the observer saw."
+- `ImageSplit`: "Pods run one tag with two digests."
 
 ## The state
 
@@ -320,10 +433,19 @@ event is older than 7 days.
   [A failed read](#a-failed-read).
 - `moves`: the counts of each move.
 - `content` and `versions`: `failedRuns` and `lastError`.
+- `images`: the `revision` of the records, and `first`, which maps the id of an image
+  to its first digest. The id is the first 16 hex digits of the SHA-256 of `image`,
+  a newline, and the reference. The file holds no reference, no pod name, and no
+  namespace. A new revision of the records empties `first`. `first` holds 2048 images
+  at most: above that, the observer drops the images that the last read did not show.
 
 The observer writes the file to a temporary file and renames it. A file that it
 cannot read is a log line and an empty state. So two runs of `once` with one
 state directory reach `lost` when the cluster does not answer.
+
+The manifests make `state` an `emptyDir`. A new pod of the observer then starts with
+an empty state. It loses the first sight of each finding. It takes the first digests
+again from the pods that it sees.
 
 A log line holds a verdict, an exit code, a duration, an error kind, and a
 status. One more line says that strata could not read the audit log. It names

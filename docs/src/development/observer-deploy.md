@@ -70,7 +70,7 @@ make the Secret and name it.
 | File | Object | What it does |
 | --- | --- | --- |
 | `namespace.yaml` | `Namespace` | Sets `pod-security.kubernetes.io/enforce: restricted`. |
-| `serviceaccount.yaml` | `ServiceAccount` | Has no role. The pod gets no token, because the observer calls no Kubernetes API. |
+| `serviceaccount.yaml` | `ServiceAccount` | Has no role. The pod gets no token, because the base calls no Kubernetes API. [The component](#the-component-that-reads-the-pods) adds both. |
 | `networkpolicy.yaml` | `NetworkPolicy` | Lets no pod connect to the observer. The observer connects to DNS and to HTTPS only. A team can narrow the HTTPS rule to the address of Palette. |
 | `deployment.yaml` | `Deployment` | Runs one pod with `Recreate`, as non-root, with a read-only root and no capability. |
 
@@ -99,6 +99,62 @@ A team makes three objects that the kustomization does not hold:
 A kustomization of the team sets the image tag and a patch that adds
 `imagePullSecrets`. The key of Palette is never a profile variable. A profile
 variable is in clear in the copy of the cluster.
+
+## The component that reads the pods
+
+The base of `deploy/observer` calls no Kubernetes API. The component
+`deploy/observer/pods/` lets the observer read the pods of the cluster, for the
+digest of each pod image. It is optional. A team lists it under `components:` of
+its own kustomization:
+
+```yaml
+resources:
+  - deploy/observer
+components:
+  - deploy/observer/pods
+```
+
+`deploy/observer/pods/example/kustomization.yaml` is such a kustomization.
+`just observer-manifests-pods` renders it, and makes sure that it holds six
+objects and the flag `--read-pods`.
+
+| File | What it adds |
+| --- | --- |
+| `clusterrole.yaml` | A `ClusterRole` with one rule: `get` and `list` on `pods`. It has no other verb, resource, or group. |
+| `clusterrolebinding.yaml` | A binding of that role to the service account `strata-observer` of the namespace `strata-observer`. |
+| `kustomization.yaml` | A patch of the Deployment and a patch of the NetworkPolicy. |
+
+The patch of the Deployment adds the flags `--read-pods` and `--kube-dir`. It
+adds a `projected` volume, mounted read-only at
+`/var/run/secrets/kubernetes.io/serviceaccount`. The volume holds a token of the
+service account and `ca.crt` of the ConfigMap `kube-root-ca.crt`. The token
+expires in 3600 seconds, and the kubelet renews it. The observer reads both files
+again at each call.
+
+The pod keeps `automountServiceAccountToken: false`. The volume of the component
+is the only token in the pod, and its name does not start with `kube-api-access`.
+
+The patch of the NetworkPolicy adds an egress rule for TCP 6443 beside 443. The
+service of the API server uses port 443. A CNI can apply the policy after the
+address of the service changes to the address of a node, and that address uses
+port 6443. The lab cluster runs Cilium.
+
+> **Ask the owner of the cluster before you list the component.** The verb `list`
+> on pods gives the whole spec of each pod to the holder of the token. The spec
+> holds the `env` of each container. The observer decodes no `env`, but the token
+> can read it.
+
+A delete of the namespace does not delete the role or the binding, because they
+are not in a namespace. Delete both by name:
+
+```bash
+kubectl delete clusterrolebinding,clusterrole strata-observer-pods
+```
+
+With the component, the observer shows the digest that each pod runs, and the
+findings `image-moved` and `image-split`. With no component, `/v1/images` says
+that the observer does not read pods, and the observer makes no call to
+Kubernetes.
 
 ## The records
 
@@ -146,9 +202,11 @@ writes only the records of its profiles.
 
 ```bash
 just observer-manifests     # kubectl kustomize deploy/observer holds four objects
+just observer-manifests-pods # the same with the component: six objects and the flag --read-pods
 just observer-image         # strata-observer:dev, from the static binary of this tree
 just live-observer-kind     # the observer on kind
 just live-observer          # the observer on cluster A, from a kubectl apply and from a profile
+just live-observer-images   # the observer on cluster A reads the digest of each pod image
 ```
 
 `just observer-image` needs `cross` and Docker. `just live-observer-kind` runs
@@ -161,9 +219,11 @@ sure of these facts:
 - The page answers through `kubectl port-forward deploy/strata-observer` for a
   user with only the reader role.
 - Another pod does not reach the page.
+- A mirror for `vendor.example` serves a pod, and the component lets the observer read
+  the pods (stage 7).
 
-`tests/observer_deploy.rs` ties each manifest to the code of the observer and
-to the records script. `tests/ci_scripts.rs` tests the script with a stand-in
+`tests/observer_deploy.rs` ties each manifest and the component to the code of the
+observer and to the records script. `tests/ci_scripts.rs` tests the script with a stand-in
 for `strata`. `tests/workflows.rs` tests the steps of the workflow.
 
 ## Check a real cluster
@@ -202,3 +262,30 @@ request. The lines hold the method and the path, and no query and no key.
 The undo runs at the end, also after a failed check. The edit goes back, the
 profile leaves the cluster, and the namespace goes. The script deletes no
 cluster. `just live-down` deletes it.
+
+## Check the digests on a real cluster
+
+`just live-observer-images` runs
+[`observer-images.sh`](./live-runs.md#observer-imagessh) on cluster A. It needs
+`docker`, `crane`, and `kubectl`. It pushes the image of the observer to `ttl.sh`,
+and it installs the observer with the component. Cluster A is billable until `just
+live-down`.
+
+A throwaway tag on `ttl.sh` holds one image, and then another. The script runs
+pods on the tag and makes sure of these facts:
+
+- The first pod shows the first digest, and no finding names the tag.
+- A new pod on the moved tag gives the finding `image-split`. When the first pod
+  is replaced, the finding is `image-moved`.
+- A container that never started reads Not checked. A container in a crash loop
+  keeps its digest.
+- The images of the agents of Palette match no pack, and make no finding.
+- The token of the observer gets and lists pods, and does nothing else.
+
+The check `pull-policy` shows what the cluster does with a pod made with
+`IfNotPresent`. The undo removes the pods, the observer, the role, and the
+binding, and it puts the values of the add-on back.
+
+[`observer-kind.sh`](./live-runs.md#observer-kindsh) has a stage with a local
+registry and a containerd mirror for `vendor.example`. It shows how pods reach a
+mirror.

@@ -26,8 +26,8 @@ func packID(subject, key string) string {
 	return subject + "|" + key
 }
 
-// add puts a profile and some packs under the cause of a group. It makes the row at the first call.
-func (c *causes) add(cause Cause, group, registry, subject string, keys ...string) {
+// row finds the row of a cause and a group, and makes it at the first call.
+func (c *causes) row(cause Cause, group, registry string) *NotChecked {
 	id := string(cause) + "\n" + group
 	row, ok := c.rows[id]
 	if !ok {
@@ -35,6 +35,12 @@ func (c *causes) add(cause Cause, group, registry, subject string, keys ...strin
 		c.rows[id] = row
 		c.order = append(c.order, id)
 	}
+	return row
+}
+
+// add puts a profile and some packs under the cause of a group. It makes the row at the first call.
+func (c *causes) add(cause Cause, group, registry, subject string, keys ...string) {
+	row := c.row(cause, group, registry)
 	if !slices.Contains(row.Profiles, subject) {
 		row.Profiles = append(row.Profiles, subject)
 	}
@@ -78,6 +84,10 @@ func (c *causes) fromContent(content *Content) {
 	}
 	for _, name := range content.Unreadable {
 		c.add(ReadError, name, "", name)
+	}
+	// The pods are not the content, so this cause names no profile and no pack, and no status changes.
+	if content.Pods.Err != nil {
+		c.row(PodsNotRead, "", "")
 	}
 	for _, r := range content.Records {
 		subject := r.subject()

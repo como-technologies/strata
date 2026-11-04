@@ -31,13 +31,18 @@ func (r Record) readError() bool {
 
 // Carry puts the last good answer into each part of a record whose read failed in this cycle. A
 // failed read tells nothing about the drift, so a finding stays until a read that works clears it.
-// The record keeps RowCarried or SideCarried, and the page lists it in "Not checked".
+// The record keeps RowCarried or SideCarried, and the page lists it in "Not checked". The read of the
+// pods follows the same rule. When it failed, the content keeps the containers of the last good read,
+// with the time of that read.
 //
 // A part gets no answer in three cases. The last cycle held no good answer for it. The last cycle did
 // not hold the record. The record changed since then.
 func (c *Content) Carry(last *Content) {
 	if last == nil {
 		return
+	}
+	if c.Pods.Err != nil && !c.Pods.read() && last.Pods.read() {
+		c.Pods.Containers, c.Pods.At = last.Pods.Containers, last.Pods.At
 	}
 	for i := range c.Records {
 		r := &c.Records[i]
@@ -64,9 +69,10 @@ func (c Content) recordOf(subject string) (Record, bool) {
 	return Record{}, false
 }
 
-// HeldIDs gives the ids of the findings that this content cannot clear: the findings that each part
-// of a record could give, when the cycle could not read that part. The caller keeps the first sight
-// of each, also when no finding exists, because no answer is there to say that the drift is gone.
+// HeldIDs gives the ids of the findings that this content cannot clear. These are the findings that
+// each part of a record could give when the cycle could not read that part. A failed read of the pods
+// holds the image findings of each record in the same way. The caller keeps the first sight of each, also
+// when no finding exists, because no answer is there to say that the drift is gone.
 func HeldIDs(c Content) []string {
 	var ids []string
 	for _, r := range c.Records {
@@ -78,6 +84,11 @@ func HeldIDs(c Content) []string {
 		}
 		if r.sideUnread() {
 			for _, kind := range clusterKinds {
+				ids = append(ids, FindingID(kind, subject))
+			}
+		}
+		if c.Pods.Err != nil {
+			for _, kind := range imageKinds {
 				ids = append(ids, FindingID(kind, subject))
 			}
 		}

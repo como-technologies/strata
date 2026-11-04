@@ -11,13 +11,17 @@ const (
 	Gone             Kind = "gone"
 	ClusterDiffers   Kind = "cluster-differs"
 	ImageIDChanged   Kind = "image-id-changed"
+	ImageMoved       Kind = "image-moved"
+	ImageSplit       Kind = "image-split"
 )
 
-// The kinds that each part of a record gives. `verify` gives the published kinds, and the compare with
-// the cluster side gives the cluster kinds. A kind is in one list only.
+// The kinds that each part of a record gives. `verify` gives the published kinds, the compare with
+// the cluster side gives the cluster kinds, and the read of the pods gives the image kinds. A kind
+// is in one list only.
 var (
 	publishedKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone}
 	clusterKinds   = []Kind{ClusterDiffers, ImageIDChanged}
+	imageKinds     = []Kind{ImageMoved, ImageSplit}
 )
 
 // Cause is the reason that a check did not cover a profile or a pack.
@@ -30,6 +34,7 @@ const (
 	NoRecord          Cause = "no-record"
 	ReadError         Cause = "read-error"
 	PinError          Cause = "pin-error"
+	PodsNotRead       Cause = "pods-not-read"
 )
 
 // Status is the state of a profile or a pack. The order of the constants is the order of the
@@ -109,4 +114,4 @@ const (
 )
 
 // causeOrder is the order of the rows of "Not checked": the order of the table of the causes.
-var causeOrder = []Cause{NoUpstreamDigest, OlderRegistryCopy, NoRecord, ReadError, PinError}
+var causeOrder = []Cause{NoUpstreamDigest, OlderRegistryCopy, NoRecord, ReadError, PinError, PodsNotRead}

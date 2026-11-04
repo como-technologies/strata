@@ -19,6 +19,11 @@
 //
 // With "retry", the detail route answers 503 once. It shows the screen HASH two times, and it prints
 // one JSON list of the two renders. The second render must ask the route again.
+//
+//   node render.js ASSETS_DIR API_DIR STATE show HASH...
+//
+// With "show", it follows no link. It shows the screens HASH..., and it prints one JSON list of their
+// markup, in the same order.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -35,7 +40,7 @@ function read(name) {
 
 const data = {
   cluster: read("cluster.json"), findings: read("findings.json"), profiles: read("profiles.json"), newer: read("newer.json"),
-  notchecked: read("notchecked.json"), events: read("events.json"), diffs: read("diffs.json"),
+  notchecked: read("notchecked.json"), events: read("events.json"), diffs: read("diffs.json"), images: read("images.json"),
 };
 
 // poison puts the injection after each name that the page shows, in each file. A name that appears in
@@ -44,6 +49,8 @@ function poison(d) {
   const tokens = new Set([d.cluster.cluster.name]);
   d.profiles.profiles.forEach(p => { tokens.add(p.name); p.packs.forEach(k => { tokens.add(k.name); tokens.add(k.registry); }); });
   d.findings.findings.forEach(f => f.who.forEach(w => tokens.add(w.actor)));
+  // An image reference is a token too, so that the finding of an image and its page keep the same reference.
+  d.images.images.forEach(i => tokens.add(i.ref));
   const words = [...tokens].filter(Boolean).sort((a, b) => b.length - a.length).map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const re = new RegExp(words.join("|"), "g");
   const walk = v => {
@@ -71,6 +78,7 @@ function poison(d) {
   });
   out.newer.newer.forEach(r => { r.version = tag(r.version); r.newest = tag(r.newest); r.drops = r.drops.map(tag); });
   out.events.events.forEach(e => { e.reason = tag(e.reason); });
+  out.images.images.forEach(i => i.digests.forEach(d => { d.digest = tag(d.digest); }));
   out.diffs.forEach(df => {
     const leaves = [df.values.settings, df.values.followsTheVersion, df.values.repeatsTheLists].flat();
     leaves.forEach(l => { l.path = tag(l.path); l.old = tag(l.old); l.new = tag(l.new); });
@@ -84,7 +92,7 @@ function poison(d) {
 const served = mode === "poison" ? poison(data) : data;
 
 let failDiffs = 0;
-const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events"};
+const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events", "/v1/images": "images"};
 async function fakeFetch(url) {
   const u = new URL(url, "http://127.0.0.1");
   let body = null;
@@ -138,6 +146,13 @@ async function main() {
     process.stdout.write(JSON.stringify([first, second]));
     return;
   }
+  if (mode === "show") {
+    await run("refresh()");
+    const pages = [];
+    for (const hash of args) pages.push(await show(hash));
+    process.stdout.write(JSON.stringify(pages));
+    return;
+  }
   await run("refresh()");
   const screens = [];
   const seen = new Set();
@@ -162,7 +177,7 @@ async function main() {
     const html = await add(hash, "", "");
     for (const m of html.matchAll(/(?:href|data-go)="(#[^"]*)"/g)) queue.push(unescape(m[1]));
     for (const m of html.matchAll(/data-tab="([^"]*)" data-k="([^"]*)"/g)) {
-      await add(hash, `tab ${m[1]}`, `S.tabs[${JSON.stringify(unescape(m[1]))}] = ${JSON.stringify(unescape(m[2]))}`);
+      await add(hash, `tab ${m[1]} ${m[2]}`, `S.tabs[${JSON.stringify(unescape(m[1]))}] = ${JSON.stringify(unescape(m[2]))}`);
     }
     for (const m of html.matchAll(/data-filter="([^"]*)"/g)) await add(hash, `filter ${m[1]}`, `S.filter = ${JSON.stringify(unescape(m[1]))}`);
     await add(hash, "search", "S.q = \"e\"");

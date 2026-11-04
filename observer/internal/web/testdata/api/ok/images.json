@@ -1,0 +1,16 @@
+{
+  "schema": "strata-observed/1",
+  "pods": "read",
+  "readAt": "2026-11-03T11:54:00Z",
+  "counts": {"images":8,"matched":6,"changed":0},
+  "images": [
+    {"ref":"docker.io/traefik:v3.6.1","status":"steady","match":"name-and-tag","byDigest":false,"packs":[{"profile":"wilma-gateway@3.1.2","key":"addon/traefik"}],"digests":[{"digest":"sha256:858bd5f51000cf273d4de32ef14ac9c5887cce3076ab8f8f1b2e30fd499afab6","status":"first-digest","pods":2}]},
+    {"ref":"registry.example/palette-agents/cluster-api-controller:v4.7.3","status":"steady","match":"none","byDigest":false,"packs":[],"digests":[{"digest":"sha256:d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824","status":"first-digest","pods":1},{"status":"not-started","pods":1}]},
+    {"ref":"us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.3","status":"steady","match":"exact","byDigest":false,"packs":[{"profile":"barney-base@1.5.0","key":"k8s/kubernetes"}],"digests":[{"digest":"sha256:7fa1c04de2b96ea60f84ded654daf646aa04dcb764806ae2905011b7c83fe2d4","status":"first-digest","pods":3}]},
+    {"ref":"us-docker.pkg.dev/palette-images/packs/cert-manager/1.20.3/cert-manager-controller:v1.20.3","status":"steady","match":"exact","byDigest":false,"packs":[{"profile":"barney-base@1.5.0","key":"addon/cert-manager"}],"digests":[{"digest":"sha256:2c88ae31f07dbc8b9d4a025bf3143a91628caf4ed74036041ab99fa8082c7491","status":"first-digest","pods":1}]},
+    {"ref":"us-docker.pkg.dev/palette-images/packs/dex/2.42.0/dex:v2.42.0","status":"steady","match":"exact","byDigest":false,"packs":[{"profile":"fred-identity@2.3.0","key":"addon/dex"}],"digests":[{"digest":"sha256:51d7c3a0e8f446f1435072f2b0212084752ef4601bd6b012fbbe61b6c5e03930","status":"first-digest","pods":2}]},
+    {"ref":"us-docker.pkg.dev/palette-images/packs/reloader/2.2.3/reloader@sha256:4e76026fbffe28a7d52ffcd9d4d53bddc752f478d35f4a3da3f25479bbfc0afc","status":"steady","match":"exact","byDigest":true,"packs":[{"profile":"fred-identity@2.3.0","key":"addon/reloader"}],"digests":[{"digest":"sha256:4e76026fbffe28a7d52ffcd9d4d53bddc752f478d35f4a3da3f25479bbfc0afc","status":"first-digest","pods":1}]},
+    {"ref":"vendor.example/product:2026.2","status":"steady","match":"exact","byDigest":false,"packs":[{"profile":"wilma-gateway@3.1.2","key":"addon/vendor-product"}],"digests":[{"digest":"sha256:9e91fb8523e94d447695b87c74cb928b44f7ad721e39747d83f194f439837efc","status":"first-digest","pods":3}]},
+    {"ref":"local/debug-tools:dev","status":"not-checked","match":"none","byDigest":false,"packs":[],"digests":[{"status":"no-repo-digest","pods":1}]}
+  ]
+}

@@ -138,7 +138,7 @@ func TestCarryPutsTheLastGoodAnswerInPlaceOfAReadThatFailed(t *testing.T) {
 				t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
 			}
 			var kinds []Kind
-			for _, f := range FindingsOf(now) {
+			for _, f := range FindingsOf(now, nil) {
 				kinds = append(kinds, f.Kind)
 			}
 			if !slices.Equal(kinds, c.wantFindings) {
@@ -169,7 +169,7 @@ func TestCarryTakesNothingFromAnAnswerThatIsNotGood(t *testing.T) {
 			if r := now.Records[0]; r.RowCarried || r.Row.Status != docs.VerifyError {
 				t.Errorf("record %+v", r)
 			}
-			if len(FindingsOf(now)) != 0 {
+			if len(FindingsOf(now, nil)) != 0 {
 				t.Error("a finding came from nowhere")
 			}
 		})
@@ -183,7 +183,7 @@ func TestCarryKeepsTheAnswerThroughTwoFailedCycles(t *testing.T) {
 	second.Carry(&last)
 	third := content(t, notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)))
 	third.Carry(&second)
-	if len(FindingsOf(third)) != 1 || !third.Records[0].RowCarried {
+	if len(FindingsOf(third, nil)) != 1 || !third.Records[0].RowCarried {
 		t.Errorf("record %+v", third.Records[0])
 	}
 }
@@ -241,13 +241,18 @@ func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	}
 }
 
-// A finding comes from the row of `verify` or from the compare with the cluster side, and from one of
-// them only. A kind in no list, or in both, would hold or drop a first sight by mistake.
+// A finding comes from the row of `verify`, from the compare with the cluster side, or from the read of
+// the pods, and from one of them only. A kind in no list, or in both, would hold or drop a first sight by mistake.
 func TestEachKindOfFindingComesFromOnePart(t *testing.T) {
-	for _, kind := range []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged} {
-		fromRow, fromSide := slices.Contains(publishedKinds, kind), slices.Contains(clusterKinds, kind)
-		if fromRow == fromSide {
-			t.Errorf("%s: published list %v, cluster list %v", kind, fromRow, fromSide)
+	for _, kind := range allKinds {
+		lists := 0
+		for _, list := range [][]Kind{publishedKinds, clusterKinds, imageKinds} {
+			if slices.Contains(list, kind) {
+				lists++
+			}
+		}
+		if lists != 1 {
+			t.Errorf("%s is in %d lists of kinds", kind, lists)
 		}
 	}
 }

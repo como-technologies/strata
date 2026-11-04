@@ -76,7 +76,7 @@ and the program carries them. A person opens it through the port-forward of
 | `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
 | `LICENSES.md` | The version, the checksum, and the license of each font. |
 
-The page reads the six summary routes at the start, and again each 30 seconds.
+The page reads the seven summary routes at the start, and again each 30 seconds.
 It reads the detail route when a person opens a pack. The hash of the address
 names the screen:
 
@@ -87,6 +87,8 @@ names the screen:
 | `#profiles` | The table of the profiles. |
 | `#newer` | The newer versions, by profile. |
 | `#notchecked` | The causes of "Not checked", and what a check does not cover. |
+| `#images` | The images that the pods run, with the status of each. |
+| `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
 | `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
 | `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
 
@@ -133,10 +135,12 @@ has a pill, and each screen says "No person approved these records". With
   cycle holds the slot. The next render that a person or the clock causes asks
   again. A render that an answer causes does not, so two requests that fail do
   not ask each other again without end.
+- A pod that never started and a local image with no repository digest read "Not
+  checked". They never read "OK".
 - `re-baseline needed` sits beside a drift and does not replace it.
 - `same-content` reads "Same content" on the row of the cluster copy. It is not
   a drift.
-- The page says nothing that it cannot know: not what a new pod pulls, and not
+- The page says nothing that it cannot know: not what a pod pulls next, and not
   what the pipeline of a team does.
 
 ### The colors and the theme
@@ -221,7 +225,8 @@ just observer-dev stale    # the set stale
 
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
-`first-seen`, `stale-unchecked`, `lost-unchecked`, and `read-error`. The server
+`first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
+`images-split`, `images-off`, and `images-unread`. The server
 listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
 and `-data` takes another directory of sets.
 
@@ -231,8 +236,9 @@ of `internal/api`, so the headers are those of the real server. It moves each
 time of a set by the gap between now and the time of the data. So the ages on
 the page are those of the data.
 
-- The set `ok` holds made-up data: 12 profiles, 29 packs, 1 finding, 10 newer
-  versions in 6 profiles, 2 causes of "Not checked", and 26 of 29 packs in full.
+- The set `ok` holds made-up data. It has 12 profiles, 29 packs, 1 finding, and 10
+  newer versions in 6 profiles. It also has 2 causes of "Not checked", 26 of 29 packs
+  in full, and 8 images that pods run.
 - The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
   `cluster.json` only.
 - The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file
@@ -243,6 +249,11 @@ the page are those of the data.
   that it could not compare.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
+- The sets `images`, `images-split`, `images-off`, and `images-unread` differ in
+  `images.json`, the document `strata-observed/1`. `images` holds one moved tag, and
+  `images-split` holds one tag with two digests. `images-off` has the state `off`.
+  `images-unread` has the state `not-read`, after a refused read. See [The
+  images](../reference/observer-api.md#the-images).
 
 A test decodes each file of each set into the type of its route, and it refuses a
 field that the type lacks. So the test data cannot drift from the API. When `node` is on the
@@ -284,6 +295,7 @@ log is not written, because a path can hold the name of a profile.
 
 - **Four timeouts.** The server sets `ReadHeaderTimeout`, `ReadTimeout`,
   `WriteTimeout`, and `IdleTimeout`.
-- **One HTTP client.** The only client is the `health` check. It calls a
-  loopback address. The code sends no `POST`, and only `internal/api` imports
-  `net` or `net/http`. A test makes sure of both rules.
+- **Two HTTP clients.** The `health` check in `internal/api` calls a loopback
+  address. The read of the pods in `internal/kube` calls the API server. The code
+  sends no `POST`. Only `internal/api` and `internal/kube` import `net` or
+  `net/http`. A test makes sure of each rule.

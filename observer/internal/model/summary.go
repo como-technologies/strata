@@ -84,14 +84,16 @@ type Counts struct {
 	Profiles      int `json:"profiles"`
 }
 
-// Finding is one cause of drift in one profile. WhoUnread says that strata could not read the audit
-// log, so Who is empty and does not name the writer. The summary carries the flag and never the text
-// of the error: the log of the observer holds the text.
+// Finding is one cause of drift in one profile. Images names the image references of a finding of the
+// pods, image-moved or image-split, and the other kinds have none. WhoUnread says that strata could
+// not read the audit log, so Who is empty and does not name the writer. The summary carries the flag
+// and never the text of the error: the log of the observer holds the text.
 type Finding struct {
 	ID               string     `json:"id"`
 	Kind             Kind       `json:"kind"`
 	Profile          string     `json:"profile"`
 	Packs            []string   `json:"packs"`
+	Images           []string   `json:"images,omitempty"`
 	Impact           string     `json:"impact"`
 	AlsoOnCluster    bool       `json:"alsoOnCluster"`
 	ReBaselineNeeded bool       `json:"reBaselineNeeded"`

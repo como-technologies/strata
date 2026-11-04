@@ -17,6 +17,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -127,11 +128,13 @@ type rig struct {
 	records, work, state string
 	log                  *bytes.Buffer
 	fixtures             string
+	// pods is what the observer reads. A test sets it to nil to turn the read off.
+	pods check.Pods
 }
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t)}
+	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
 	record, err := json.Marshal(map[string]any{
 		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
 		"source": map[string]any{"uid": "u1", "name": "aws-stack", "version": "1.1.0", "type": "cluster"},
@@ -158,8 +161,20 @@ func (r *rig) config() check.Config {
 // observer makes an observer on the directories. A second call is a restart of the process.
 func (r *rig) observer(s check.Strata) *check.Observer {
 	r.t.Helper()
-	return check.New(r.config(), s, slog.New(slog.NewTextHandler(r.log, nil)))
+	o := check.New(r.config(), s, slog.New(slog.NewTextHandler(r.log, nil)))
+	if r.pods != nil {
+		o.WithPods(r.pods)
+	}
+	return o
 }
+
+// imageDigest is the digest that the pod of oneImage runs.
+const imageDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+
+// oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names.
+var oneImage = check.PodsFunc(func(context.Context) ([]kube.Container, error) {
+	return []kube.Container{{Pod: "ns/web-1", Image: "a/b:1", ImageID: "a/b@" + imageDigest}}, nil
+})
 
 // cycled makes an observer that ran one content cycle and one versions cycle.
 func (r *rig) cycled(s check.Strata) *check.Observer {
@@ -199,7 +214,8 @@ func decode(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 // stub is a Source with a fixed summary and no detail.
 type stub struct{ sum model.Summary }
 
-func (s stub) Summary() model.Summary { return s.sum }
+func (s stub) Summary() model.Summary   { return s.sum }
+func (s stub) Observed() model.Observed { return model.Observed{} }
 func (s stub) PackDiff(context.Context, string, string, model.Side) (docs.Pack, bool, error) {
 	return docs.Pack{}, false, nil
 }

@@ -8,8 +8,12 @@ It writes nothing to Palette.
 Your pipeline runs strata when a change happens: a pull request, a merge, a
 night. The observer asks the same questions all day. A person who opens the page
 sees the answer of the last content cycle. A cycle starts every 15 minutes, with a
-random delay of 10 percent at most. The observer holds no rule of its own. Each
-answer is the answer of a `strata` command.
+random delay of 10 percent at most. The observer holds no rule about a profile.
+Each answer about a profile is the answer of a `strata` command.
+
+A team can also let the observer read the pods of the cluster. It then shows
+which digest each tag runs. That read is off by default: see [The pods of the
+cluster](#the-pods-of-the-cluster).
 
 <div class="playground-demo">
 
@@ -20,7 +24,7 @@ alone, so that you can run the commands below.
 
 </div>
 
-## The five questions
+## The six questions
 
 | Question | Where the page answers it | What the observer runs |
 | --- | --- | --- |
@@ -29,6 +33,7 @@ alone, so that you can run the commands below.
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
 | Does the registry have newer versions of what we pin? | The list of newer versions. | `strata behind` |
 | What changed between two pack versions? | The detail of a newer version. | `strata compare pack:...` |
+| Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
 
 [The checks of the observer](../development/observer.md) gives each command, each
 finding, and each state of the page.
@@ -37,7 +42,7 @@ finding, and each state of the page.
 
 - **A content cycle** runs every 15 minutes. It checks each record against
   Palette, reads the cluster, and compares each record with the copy that Palette
-  holds for the cluster.
+  holds for the cluster. With `--read-pods`, it lists the pods first.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
   in the registry, and compares each pin with its newest version.
 - Each cycle starts when the process starts. One `strata` process runs at a time.
@@ -109,8 +114,8 @@ shows the edit of `aws-stack@1.0.0`:
 ### Options
 
 ```bash
-strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR
-strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--listen ADDR]
+strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]]
+strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--listen ADDR]
 ```
 
 `serve` takes the flags of `once` and the flag `--listen`. It keeps the answers, and it
@@ -127,6 +132,8 @@ lists the routes.
 | `--state` | required | A directory for `state.json`. It holds times and counts, and no value. |
 | `--content-every` | `15m` | The period of the content cycle. |
 | `--versions-every` | `6h` | The period of the versions cycle. |
+| `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when `KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. |
+| `--kube-dir` | `/var/run/secrets/kubernetes.io/serviceaccount` | Names the directory with the files `token` and `ca.crt` of the projected volume. It has an effect only with `--read-pods`. |
 
 ## Install
 
@@ -306,22 +313,153 @@ To move to approved records, record each profile with `strata snapshot`. Let a r
 approve the files, and commit them. Then run the script with `--revision`. `meta.json`
 then says `approved`, and the screens drop the notice.
 
+## The pods of the cluster
+
+The observer can read the pods of its cluster. It then answers a sixth question:
+which digest does each tag run as on this cluster? No route of Palette gives that
+digest, so the read repeats nothing that Palette answers. See [The pods of a
+cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
+
+With `--read-pods`, each content cycle starts with a `list` of the pods of every
+namespace. The observer takes the image of each container from the spec of its pod,
+and the digest from the `imageID` that the node reports. It shows no other fact of a
+pod. Then it counts the pods of each digest for each image reference. The Images
+screen shows the result. [The API of the observer](../reference/observer-api.md#the-images)
+lists the routes and the fields.
+
+The observer matches a reference with the images that the packs of the records
+name. The exact text wins. If it finds none, the observer compares the name and the
+tag, after it removes `docker.io/library/` and `docker.io/`. The page labels this
+second match "matched by name and tag". Each image has one status: `steady`,
+`moved`, `split`, or `not-checked`. [The images](../development/observer.md#the-images)
+gives the rule of each status.
+
+### What the read catches and what it does not
+
+A pod runs the digest that its node pulled. A registry can move a tag, but the move
+reaches a pod only when a node pulls the tag again. So the read catches these cases:
+
+- **A tag that a new node pulls from a mutable registry.** The new node runs the
+  new digest. The old nodes keep the old one. The tag then has two digests, and the
+  finding is `image-split`.
+- **A pull at a restart.** A pod with the pull policy `Always`, or with the tag
+  `:latest`, pulls the tag again when it starts. When each pod runs the new digest,
+  the finding is `image-moved`.
+- **A mutable mirror.** A mirror can serve another digest under one tag. A pod that
+  pulls from the mirror then runs the new digest.
+
+The read does not catch these cases:
+
+- **A move with no new pull.** A pod that runs keeps the digest that it pulled. The
+  read shows no move until a pod pulls the new image.
+- **An image that no pod runs.** The read sees the pods that exist now. A pack that
+  names an image that no pod runs has no row.
+- **A difference between clusters.** One observer reads one cluster. It compares no
+  two clusters.
+
+[A vendor rebuilds an image under one tag](../use-cases/image-tag.md) describes a
+team that copies each image, by digest, to a private registry. The pods of that team
+pull an unchanged digest from the mirror. The read then shows the status `steady`,
+and it makes no finding. That is the right answer, because nothing that runs
+changed. The read finds a rebuilt tag only when a pod pulls the rebuilt image.
+
+A mirror can work in two ways. The pod can name the image string of the mirror.
+Or the node can fetch from the mirror and keep the string of the pod. A string of
+the mirror matches a pack only when the pack names the same string. Otherwise the
+image shows as `no pack` and makes no finding.
+
+No run shows yet which way a mirror works for the match. The checks
+`mirror-image-string` and `mirror-image-id` of
+[observer-kind.sh](../development/live-runs.md#observer-kindsh) test both ways.
+
+### The findings
+
+The read makes two kinds of finding:
+
+- `image-moved`: a tag runs another digest than the first one that the observer saw.
+- `image-split`: pods run one tag with two digests.
+
+An image makes a finding only when it matches a pack and its reference names a tag.
+A reference that names a digest cannot move, so it makes no finding. An image with
+no pack, such as an agent of Palette, shows in the list and makes no finding. A
+finding of the pods changes no status of a profile or of a pack, and the Drift tile
+does not count it. The list "Needs attention" holds it. For the fix, see [What to
+do](../use-cases/image-tag.md#what-to-do).
+
+### Add the read
+
+The base of `deploy/observer` has no role and no token. The component
+`deploy/observer/pods/` adds what the read needs:
+
+- A `ClusterRole` with `get` and `list` on `pods`, and its binding to the service
+  account of the observer.
+- A projected volume with a token that expires after one hour, and the CA of the
+  cluster.
+- The flag `--read-pods` in the arguments of the observer.
+- An egress rule for TCP 6443, beside 443.
+
+The read costs a role and a token: see [The role for the read of the
+pods](#the-role-for-the-read-of-the-pods). To add the read, name the component in the
+kustomization of step 6 of [Install](#install):
+
+```yaml
+components:
+  - deploy/observer/pods
+```
+
+Then apply the kustomization again:
+
+```bash
+kubectl apply -k .
+```
+
+The kubelet sets `KUBERNETES_SERVICE_HOST` and `KUBERNETES_SERVICE_PORT`, and the
+observer reads the address of the API server from them. `--kube-dir` names the
+directory of the token and the CA. A CNI can apply the egress policy after the
+address of the service changes to the address of the API server. The rule names TCP
+6443, the port that the API server of a kubeadm cluster uses. When yours uses another
+port, change the rule.
+
+### What the state keeps
+
+The observer keeps the first digest that it sees for each image in `state.json`. The
+file holds an id for the image and the digest, and never the reference. The team
+approved the content of the records, so a new revision of the records empties the
+digests. `image-moved` clears when the digest comes back, or at a new revision.
+
+`state` is an `emptyDir`. A new pod of the observer starts again from the digests
+that it sees, so a tag that moved before that start reads `steady`. A new pod also
+loses the first-seen dates of the findings.
+
+### A failed read of the pods
+
+A failed read of the pods is not a failed cycle, because the pods are not the
+content. The cause `pods-not-read` appears under "Not checked", and no status of a
+profile changes. The answer keeps the images of the last good read. [A failed read
+of the pods](../development/observer.md#a-failed-read-of-the-pods) gives the rules.
+
 ## What the observer does not see
 
 Each limit below is a fact of this release. The page shows the numbers of `limits`,
 and it never reads "No change" for a pack that it did not check.
 
-1. **A tag that moves at its source.** A record names a tag. Strata reads no
-   registry, and the service reads no pod in this release. So a rebuilt tag shows no
-   change, and the profile stays `ok`. A pin in the pack, or the copy step of your
-   pipeline, closes this. See [What OK does not cover](../commands/verify.md#what-ok-does-not-cover)
+1. **A tag that moves at its source.** A record names a tag, and strata reads no
+   registry. So a rebuilt tag shows no change, and the profile stays `ok`. With
+   `--read-pods`, the observer sees the move after a pull only: see [What the read
+   catches](#what-the-read-catches-and-what-it-does-not). A pin in the pack, or the
+   copy step of your pipeline, closes this. See [What OK does not cover](../commands/verify.md#what-ok-does-not-cover)
    and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md).
 2. **A change on the cluster with `kubectl edit`.** The service compares what
-   Palette holds. It reads no object in the cluster, so it does not see such an edit.
+   Palette holds. Without `--read-pods`, it reads no object in the cluster. With the
+   flag, it reads the pods and names no edit. So it does not see such an edit.
    No run shows what Palette does with it: see [What no run
    covers](../internals/palette/limits.md).
 3. **What the workload runs.** "This cluster's copy in Palette" is the copy that
    Palette holds for this cluster. It is not the objects that run in the cluster.
+   The page does not show the health of a workload: `OK` means that the content
+   matches. A live run showed that a crash loop left each count and each status the
+   same. See the check `image-crash-loop` of
+   [observer-images.sh](../development/live-runs.md#observer-imagessh).
 4. **The value of a cluster variable.** It is outside the root, so a change of one
    does not show. The service also never shows the value: see
    [The API of the observer](../reference/observer-api.md#what-no-answer-carries).
@@ -338,6 +476,7 @@ and it never reads "No change" for a pack that it did not check.
 3. **Egress to Palette** from the cluster. The network policy of the observer allows
    DNS and HTTPS only. A team can narrow the HTTPS rule to the address of Palette.
    A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
+   The read of the pods adds TCP 6443: see [Add the read](#add-the-read).
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
    reads the cluster, and it reads the profile version of each record. For a record
    that drifted, it reads the audit log too. A versions cycle reads the registries
@@ -364,6 +503,9 @@ that drifted. A later versions cycle sends the 13 requests of `behind`, and
 the requests of the moves that are new. [What the live example
 verifies](../development/live-runs.md#observersh) holds the counts.
 
+With `--read-pods`, a content cycle also sends one request to the Kubernetes API
+for each 500 pods. The request lists the pods, and it never reads one pod alone.
+
 ### The least role of the key
 
 The key reads the cluster, its profiles, the registries, and the audit log.
@@ -382,6 +524,22 @@ lists each permission and each refusal.
 - **No live run has used this role yet.** `just live-observer-role` tests it. It
   sends each request of the cycles with a second key, and
   [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the checks.
+
+### The role for the read of the pods
+
+The read adds a role and a token to the pod. The base of `deploy/observer` has
+neither. [Add the read](#add-the-read) tells how to ask for them.
+
+- **`list` on `pods` gives the whole spec of each pod, with its `env`.** Whoever holds
+  the token reads every `env` of the cluster. A value there is in clear. A team must
+  ask for this on purpose. The observer decodes no `env`.
+- **The role holds `get` and `list` on `pods`, and no other verb.** It is a
+  `ClusterRole`, so it covers every namespace. It gives no write, and it gives no
+  Secret.
+- **The token expires after one hour.** The kubelet renews it, and the observer reads
+  the file again at each call.
+- **The egress rule adds TCP 6443 beside 443.** The pod can then reach the API server
+  of the cluster.
 
 ## `re-baseline needed`
 

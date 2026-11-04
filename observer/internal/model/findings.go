@@ -16,13 +16,20 @@ const idLength = 16
 
 // FindingID is the first 16 hex digits of the SHA-256 of the kind and the subject.
 func FindingID(kind Kind, subject string) string {
-	sum := sha256.Sum256([]byte(string(kind) + "\n" + subject))
+	return shortID(string(kind), subject)
+}
+
+// shortID is the first 16 hex digits of the SHA-256 of a word and a subject. It makes the id of a
+// finding and the id of an image in the state.
+func shortID(word, subject string) string {
+	sum := sha256.Sum256([]byte(word + "\n" + subject))
 	return hex.EncodeToString(sum[:])[:idLength]
 }
 
 // FindingsOf gives one finding for each cause, in the order of the profile and the kind. The
 // severity is a table in the page, and a finding never lowers a drift. It leaves the times empty.
-func FindingsOf(c Content) []Finding {
+// first holds the first digest of each image by ImageKey: the image findings read it.
+func FindingsOf(c Content, first map[string]string) []Finding {
 	out := []Finding{}
 	for _, r := range c.Records {
 		for _, f := range recordFindings(r) {
@@ -30,6 +37,8 @@ func FindingsOf(c Content) []Finding {
 			out = append(out, f)
 		}
 	}
+	// A finding of the pods says nothing about a record, so a new version of strata does not move it.
+	out = append(out, imageFindings(c, first)...)
 	slices.SortStableFunc(out, func(a, b Finding) int {
 		if c := strings.Compare(a.Profile, b.Profile); c != 0 {
 			return c

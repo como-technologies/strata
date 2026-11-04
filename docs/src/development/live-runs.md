@@ -1360,6 +1360,18 @@ policy. The observer also listens on `127.0.0.1` only, so the connection of anot
 pod fails in both cases. Each check passes against the real tenant, with cluster A
 up.
 
+Stage 7 (#646) shows how pods reach a mirror. It starts a registry in Docker on
+the network of kind. It points containerd on each node at that registry for the
+host `vendor.example`. One pod names `vendor.example`, as a pack does. Another
+pod names the registry itself, as a rule that rewrites the image string does.
+
+Then the component `deploy/observer/pods` applies, and the observer reads the
+pods. The checks `mirror-image-id` and `mirror-image-string` print what each pod
+reports and the row that the observer shows for it. They show whether the image
+string or the image id decides which match works. The stage removes the pods, the
+files of containerd, and the registry. Its rows wait for the live window of the
+end of Wave 15.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `kind-create`, `image-load` | 0 | #644: a kind cluster, and the image of the observer in its nodes |
@@ -1376,7 +1388,58 @@ up.
 | `reader-cluster` | 0 | #644: after the first cycle, the summary names cluster A and its two approved records |
 | `other-pod-refused` | 0 | #644: a pod of another namespace cannot connect to the page |
 | `first-seen-apply`, `first-seen-meta` | 0 | #644: the output of `observer-records.sh --first-seen` applies with `--server-side`, and `meta.json` says `first-seen` |
+| `mirror-registry`, `mirror-nodes`, `mirror-pods` | 0 | #646: a registry on the network of kind holds `product:1.0`. Containerd on each node asks it first for `vendor.example`. A pod that names `vendor.example` and a pod that names the registry are Ready (no result yet: the Wave 15 window runs it) |
+| `component-apply`, `component-read` | 0 | #646: `deploy/observer/pods/example` applies, and `/v1/images` says `read`. The token, the role, and the policy of the component work on kind (no result yet: the Wave 15 window runs it) |
+| `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
+| `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
+| `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go (no result yet: the Wave 15 window runs it) |
 | `kind-delete` | 0 | the kind cluster is deleted |
+
+## observer-images.sh
+
+Read-write. It runs [the observer](./observer-deploy.md) on cluster A with the
+component `deploy/observer/pods`, and it reads the digest of each pod image. It
+needs the example at its baseline with cluster A (billable until `just
+live-down`), the key, `docker`, `crane`, `kubectl`, `curl`, `jq`, and `git`. The
+recipe `just live-observer-images` builds the image of `just observer-image` first.
+
+A throwaway tag on `ttl.sh` holds one image, and then another. The names of the
+images hold a random suffix, and `ttl.sh` removes an image two hours after its
+push. The script pushes the image of the observer to `ttl.sh` too, so that the
+nodes of cluster A can pull it. A copy with `crane copy` keeps the digest of the
+index of a multi-arch image.
+
+The only write to the tenant is an edit in place of the values of one pack of the
+add-on. The values list the images of the run, so that a pack names them. The
+observer makes a finding only for an image that a pack names. The undo puts the
+values back. The script applies no update to cluster A.
+
+Every pod of the run pulls with `Always`, so a new pod pulls the tag again. The
+undo removes the pods, the observer, the role, the binding, and the namespaces,
+also after a failed check or an error. The script deletes no cluster. `KEEP=1`
+skips the undo, so that `observer-images.sh N` can resume the run at stage N. A
+check with `?` records its result without judging it.
+
+`AGENT_NAMESPACES` is the regular expression of the namespaces of the agents of
+Palette. The default matches `cluster-<uid>`, `capi-*`, `capa-*`, and `capg-*`.
+`image-agents-no-finding` fails when no pod runs in such a namespace.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place (no result yet: the Wave 15 window runs it) |
+| `namespaces`, `settings`, `records` | 0 | #646: the namespaces, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag (no result yet: the Wave 15 window runs it) |
+| `observer-push`, `observer-apply`, `observer-ready` | 0 | #646: the image of the observer is on `ttl.sh`. The overlay lists the component, and the Deployment becomes available (no result yet: the Wave 15 window runs it) |
+| `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node (no result yet: the Wave 15 window runs it) |
+| `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A (no result yet: the Wave 15 window runs it) |
+| `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag (no result yet: the Wave 15 window runs it) |
+| `image-split` | 0 | #646: the tag moves, and a new pod pulls it. The row says `split`, with the first digest and another digest. The finding `image-split` names the tag (no result yet: the Wave 15 window runs it) |
+| `image-moved` | 0 | #646: the first pod is replaced, so each pod runs the second digest. The row says `moved`, and the finding `image-moved` replaces the split (no result yet: the Wave 15 window runs it) |
+| `image-never-started` | 0 | #646: a pull that fails leaves the image id empty. The row reads Not checked, with the digest status `not-started`, and it makes no finding (no result yet: the Wave 15 window runs it) |
+| `image-crash-loop` | 0 | #646: a container that restarted keeps its digest. The row shows that digest as the first digest, and it makes no finding (no result yet: the Wave 15 window runs it) |
+| `image-agents-no-finding` | 0 | #646: the images of the agents of Palette match no pack. No finding names one (no result yet: the Wave 15 window runs it) |
+| `pull-policy` | ? | #646: a pod made with `IfNotPresent`. An admission plugin such as `AlwaysPullImages` can set `Always`. Exit 0 says that the cluster set `Always`, and 1 says that the policy stayed (no result yet: the Wave 15 window runs it) |
+| `undo-values`, `undo-namespaces`, `undo-role` | 0 | #646: the pack names none of the images of the run. Both namespaces, the role, and the binding are gone (no result yet: the Wave 15 window runs it) |
+| `undo-baseline` | 0 | the example is at its baseline |
 
 ## observer.sh
 

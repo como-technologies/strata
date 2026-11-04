@@ -39,7 +39,8 @@ func files(t *testing.T) fs.FS {
 // noSource is a Source with no data: these tests serve the page only.
 type noSource struct{}
 
-func (noSource) Summary() model.Summary { return model.Summary{} }
+func (noSource) Summary() model.Summary   { return model.Summary{} }
+func (noSource) Observed() model.Observed { return model.Observed{} }
 func (noSource) PackDiff(context.Context, string, string, model.Side) (docs.Pack, bool, error) {
 	return docs.Pack{}, false, nil
 }
@@ -389,15 +390,34 @@ type screen struct {
 	Error   string `json:"error"`
 }
 
-// runNode runs testdata/render.js for one set, with the arguments that follow the set, and gives
-// what it prints. It skips the test when node is not there.
+// whenNodeIsMissing ends a test that needs node. With the variable CI set, the test fails: a runner with
+// no node would skip each render test, and the checks would pass with nothing checked. Else the test
+// skips, and the lead checks the render.
+func whenNodeIsMissing(ci string, fail, skip func(args ...any)) {
+	if ci != "" {
+		fail("node is not on the PATH, and CI is set: a runner must have node, or the render tests check nothing")
+		return
+	}
+	skip("node is not on the PATH: the lead checks the render")
+}
+
+// runNode runs testdata/render.js for one set of testdata/api, with the arguments that follow the
+// set, and gives what it prints.
 func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
+	t.Helper()
+	return runNodeIn(t, "testdata/api", state, extra...)
+}
+
+// runNodeIn does the same for a set in another directory of sets. It skips the test when node is not
+// there, and it fails the test when node is not there and CI is set.
+func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
-		t.Skip("node is not on the PATH: the lead checks the render")
+		whenNodeIsMissing(os.Getenv("CI"), t.Fatal, t.Skip)
+		return nil
 	}
-	args := append([]string{"testdata/render.js", "assets", "testdata/api", string(state)}, extra...)
+	args := append([]string{"testdata/render.js", "assets", apiDir, string(state)}, extra...)
 	out, err := exec.Command(node, args...).Output()
 	if err != nil {
 		var exit *exec.ExitError
@@ -490,8 +510,8 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		state devdata.State
 		words []string
 	}{
-		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Strata compares the name and the tag.", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "Nothing needs attention."}},
+		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
+		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "Nothing needs attention.", "Pods not read", "Strata compares the name and the tag."}},
 		{devdata.StateFirstLoad, []string{"The first check has not ended", "Baseline unknown"}},
 		{devdata.StateNoRecords, []string{"No records yet", "A record is the copy your team approved. Your pipeline writes records from Git.", "Baseline unknown", "Needs a record"}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
@@ -500,6 +520,13 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateLostUnchecked, []string{"Lost contact with Palette", "The last 3 checks failed: HTTP 401, the API key was refused. No check has ended well", "Not read yet"}},
 		{devdata.StateStaleUnchecked, []string{"Checks stopped", "No check has ended well", "Not read yet"}},
 		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
+		{devdata.StateImages, []string{"Needs attention", "Image moved", "A tag runs another digest than the first one seen", "Moved or split", "Image changes"}},
+		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
+		{devdata.StateImagesOff, []string{"Image changes", "Pods not read", "Strata compares the name and the tag."}},
+		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
+	}
+	if len(cases) != len(devdata.States) {
+		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -650,6 +677,11 @@ func TestTheCrawlReachesEachProfileAndEachPack(t *testing.T) {
 	reached := map[string]bool{}
 	for _, s := range render(t, devdata.StateOK, false) {
 		reached[s.Hash] = true
+	}
+	for _, img := range set.Images.Images {
+		if h := imageHash(img.Ref); !reached[h] {
+			t.Errorf("the crawl did not reach %s", h)
+		}
 	}
 	for _, p := range set.Profiles.Profiles {
 		if h := "#p-" + p.Name + "@" + p.Version; !reached[h] {
@@ -1171,5 +1203,594 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 	}
 	if strings.Contains(string(readPage(t, "app.js")), "localStorage") {
 		t.Error("app.js reads the storage: the choice of a theme is in theme.js")
+	}
+}
+
+/* The tests below hold the screens of the pods: the list of images, the page of an image, the finding of
+an image, the tile, the nav, and the words for a read that is off or failed. They run with node as the
+tests above do. */
+
+// With the variable CI set, a missing node fails the test. Else it skips. This test needs no node.
+func TestWithCISetAMissingNodeFailsTheTest(t *testing.T) {
+	for _, c := range []struct {
+		name, ci      string
+		failed, skips bool
+	}{{"no CI", "", false, true}, {"CI is true", "true", true, false}, {"CI is 1", "1", true, false}} {
+		t.Run(c.name, func(t *testing.T) {
+			var failed, skipped bool
+			whenNodeIsMissing(c.ci, func(...any) { failed = true }, func(...any) { skipped = true })
+			if failed != c.failed || skipped != c.skips {
+				t.Errorf("failed %v and skipped %v, want %v and %v", failed, skipped, c.failed, c.skips)
+			}
+		})
+	}
+}
+
+// encodeURIComponent writes a text as the function of the same name does in the page. The page keeps
+// the @ of a name.
+func encodeURIComponent(s string) string {
+	var b strings.Builder
+	for _, c := range []byte(s) {
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("-_.!~*'()@", c) >= 0 {
+			b.WriteByte(c)
+		} else {
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
+}
+
+// imageHash is the hash of the page of an image.
+func imageHash(ref string) string { return "#i-" + encodeURIComponent(ref) }
+
+func loadSet(t *testing.T, state devdata.State) *devdata.Set {
+	t.Helper()
+	set, err := devdata.Load(os.DirFS("testdata/api"), state, devdata.Reference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return set
+}
+
+// pageOf finds the screen of a crawl by its hash and its variant, and gives its markup.
+func pageOf(t *testing.T, screens []screen, hash, variant string) string {
+	t.Helper()
+	for _, s := range screens {
+		if s.Hash == hash && s.Variant == variant {
+			return s.HTML
+		}
+	}
+	t.Fatalf("the crawl has no screen %s %q", hash, variant)
+	return ""
+}
+
+// rowWith gives the first row of a table in the markup that holds the text.
+func rowWith(t *testing.T, html, text string) string {
+	t.Helper()
+	for _, row := range strings.Split(html, "</tr>") {
+		if strings.Contains(row, text) {
+			return row
+		}
+	}
+	t.Fatalf("no row holds %q", text)
+	return ""
+}
+
+func mustHold(t *testing.T, where, html string, words ...string) {
+	t.Helper()
+	for _, w := range words {
+		if !strings.Contains(html, w) {
+			t.Errorf("%s has no %q", where, w)
+		}
+	}
+}
+
+func mustNotHold(t *testing.T, where, html string, words ...string) {
+	t.Helper()
+	for _, w := range words {
+		if strings.Contains(html, w) {
+			t.Errorf("%s holds %q", where, w)
+		}
+	}
+}
+
+// The badge of an image, and the badge of one digest, as the page draws them.
+var (
+	imageBadges = map[model.ImageStatus]string{
+		model.ImageStatusSteady:     `<span class="badge g">First digest</span>`,
+		model.ImageStatusMoved:      `<span class="badge a">Image moved</span>`,
+		model.ImageStatusSplit:      `<span class="badge r">Two digests</span>`,
+		model.ImageStatusNotChecked: `<span class="badge y">Not checked</span>`,
+	}
+	digestBadges = map[model.DigestStatus]string{
+		model.FirstDigest:   `<span class="badge g">First digest</span>`,
+		model.AnotherDigest: `<span class="badge r">Another digest</span>`,
+		model.NoRepoDigest:  `<span class="badge y">Not checked</span> <span class="mut">No repo digest</span>`,
+		model.NotStarted:    `<span class="badge y">Not checked</span> <span class="mut">Not started</span>`,
+	}
+)
+
+// profileBadges is the badge of the status of a profile. The row Record of an image shows it.
+var profileBadges = map[model.Status]string{
+	model.StatusDrift:      `<span class="badge r">Drift</span>`,
+	model.StatusNewer:      `<span class="badge b">Newer</span>`,
+	model.StatusNotChecked: `<span class="badge y">Not checked</span>`,
+	model.StatusOK:         `<span class="badge g">OK</span>`,
+	model.StatusNoRecord:   `<span class="badge y">No record</span>`,
+}
+
+// cutDigest writes a digest as the page does: sha256: and 12 digits.
+func cutDigest(d string) string { return "sha256:" + strings.TrimPrefix(d, "sha256:")[:12] }
+
+// packName is the name of a pack of the key layer/name.
+func packName(key string) string { _, name, _ := strings.Cut(key, "/"); return name }
+
+// The sets that hold images that a pod runs.
+var imageSets = []devdata.State{devdata.StateOK, devdata.StateImages, devdata.StateImagesSplit}
+
+// The list shows the count line, and one row for each image: its status, its reference, its pack, the
+// number of its pods, and its digest. An image with no digest of a repo reads Not checked and never OK.
+func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.T) {
+	for _, state := range imageSets {
+		t.Run(string(state), func(t *testing.T) {
+			set := loadSet(t, state)
+			o := set.Images
+			list := pageOf(t, render(t, state, false), "#images", "")
+			mustHold(t, "the list", list, fmt.Sprintf(`<h2>Images <span class="sub">%d images. %d match a pack. %d do not.</span></h2>`, o.Counts.Images, o.Counts.Matched, o.Counts.Images-o.Counts.Matched),
+				`<th>Status</th><th>Image</th><th class="narrow-hide">Pack</th><th class="n narrow-hide">Pods</th><th>Digest</th>`)
+			if got := strings.Count(list, `<tr class="link"`); got != len(o.Images) {
+				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
+			}
+			for _, img := range o.Images {
+				row := rowWith(t, list, `data-go="`+imageHash(img.Ref)+`"`)
+				mustHold(t, img.Ref, row, imageBadges[img.Status], `<td class="m wrap"><a href="`+imageHash(img.Ref)+`">`+img.Ref+`</a>`)
+				var pods int
+				var real []string
+				for _, d := range img.Digests {
+					pods += d.Pods
+					if d.Digest != "" {
+						real = append(real, d.Digest)
+					}
+				}
+				mustHold(t, img.Ref, row, fmt.Sprintf(`<td class="n narrow-hide">%d</td>`, pods))
+				switch {
+				case len(real) == 0:
+					mustHold(t, img.Ref, row, `<td class="m nw"><span class="mut">Not checked</span></td>`)
+					mustNotHold(t, img.Ref, row, ">OK<", "sha256:")
+				case len(real) == 1:
+					mustHold(t, img.Ref, row, `>`+cutDigest(real[0])+`</span></td>`)
+				default:
+					mustHold(t, img.Ref, row, `>`+cutDigest(real[0])+`</span> <span class="mut">+`+strconv.Itoa(len(real)-1)+`</span></td>`)
+				}
+				if img.Match == model.MatchNone {
+					mustHold(t, img.Ref, row, `<span class="mut">no pack</span>`)
+					mustNotHold(t, img.Ref, row, "<i>pack=</i>", "matched by name and tag")
+				} else {
+					mustHold(t, img.Ref, row, `<i>pack=</i>"`+packName(img.Packs[0].Key)+`"`)
+				}
+				if (img.Match == model.MatchNameAndTag) != strings.Contains(row, "matched by name and tag") {
+					t.Errorf("%s has the match %s, and the row says %v about name and tag", img.Ref, img.Match, strings.Contains(row, "matched by name and tag"))
+				}
+			}
+		})
+	}
+}
+
+// At 760 pixels and below, the columns Pack and Pods go, and the pack moves under the image, so that
+// the row fits: the block with the class narrow-show holds what the cell with the class narrow-hide holds.
+func TestTheListOfImagesMovesThePackUnderTheImageOnAPhone(t *testing.T) {
+	cell := regexp.MustCompile(`<td class="narrow-hide">(.*?)</td>`)
+	list := pageOf(t, render(t, devdata.StateImages, false), "#images", "")
+	var rows int
+	for _, row := range strings.Split(list, "</tr>") {
+		m := cell.FindStringSubmatch(row)
+		if m == nil {
+			continue
+		}
+		rows++
+		if !strings.Contains(row, `<div class="narrow-show">`+m[1]+`</div>`) {
+			t.Errorf("the row has no block narrow-show with %q: %s", m[1], row)
+		}
+	}
+	if rows == 0 {
+		t.Error("no row of the list has a pack cell")
+	}
+}
+
+// The page of an image shows its header, the two tabs, and the table of the record and of the pods.
+// A moved or split image has a note and the sentence of the fix. A digest that is not a repo digest
+// reads Not checked, with the reason.
+func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
+	for _, state := range imageSets {
+		t.Run(string(state), func(t *testing.T) {
+			set := loadSet(t, state)
+			screens := render(t, state, false)
+			for _, img := range set.Images.Images {
+				page := pageOf(t, screens, imageHash(img.Ref), "")
+				named, match := "a tag", "Exact"
+				if img.ByDigest {
+					named = "a digest"
+				}
+				switch img.Match {
+				case model.MatchNameAndTag:
+					match = "Matched by name and tag"
+				case model.MatchNone:
+					match = "No pack"
+				}
+				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], "<span>Named by</span>"+named+"</div>", "<span>Match</span>"+match+"</div>",
+					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> <span>/</span> <b>`+img.Ref+`</b></nav>`,
+					`data-k="this">This image</button>`, `data-k="catch">What pods do catch</button>`,
+					`<th>Where</th><th class="narrow-hide">Reference</th><th>Digest</th><th>Status</th>`)
+				mustNotHold(t, img.Ref, page, "Your real case", "With a source read")
+				for _, p := range img.Packs {
+					mustHold(t, img.Ref, page, `<i>pack=</i>"`+packName(p.Key)+`"`, `<a class="m" href="#p-`+encodeURIComponent(p.Profile)+`">`+p.Profile+`</a>`)
+				}
+				if got := strings.Count(page, "<td>Record"); got != len(img.Packs) {
+					t.Errorf("%s has %d rows of the record for %d packs", img.Ref, got, len(img.Packs))
+				}
+				for _, p := range img.Packs {
+					record := rowWith(t, page, "<tr><td>Record")
+					if img.ByDigest {
+						mustHold(t, img.Ref, record, `<td class="m nw">digest</td>`)
+					} else {
+						mustHold(t, img.Ref, record, `<td class="m nw"><span class="mut">tag only</span></td>`)
+					}
+					for _, x := range set.Profiles.Profiles {
+						if model.Subject(x.Name, x.Version) == p.Profile {
+							mustHold(t, img.Ref, record, profileBadges[x.Status])
+						}
+					}
+				}
+				var pods []string
+				for _, row := range strings.Split(page, "</tr>") {
+					if strings.Contains(row, "<tr><td>Pods (") {
+						pods = append(pods, row)
+					}
+				}
+				if len(pods) != len(img.Digests) {
+					t.Fatalf("%s has %d rows of pods for %d digests", img.Ref, len(pods), len(img.Digests))
+				}
+				for i, d := range img.Digests {
+					mustHold(t, img.Ref, pods[i], fmt.Sprintf("<td>Pods (%d)</td>", d.Pods), digestBadges[d.Status], `<td class="m wrap narrow-hide">`+img.Ref+`</td>`)
+					if d.Digest == "" {
+						mustHold(t, img.Ref, pods[i], `<td class="m nw"><span class="mut">none</span></td>`)
+					} else {
+						mustHold(t, img.Ref, pods[i], `<td class="m nw"><span title="`+d.Digest+`">`+cutDigest(d.Digest)+`</span></td>`)
+					}
+				}
+				if img.Status == model.ImageStatusMoved || img.Status == model.ImageStatusSplit {
+					cls := map[model.ImageStatus]string{model.ImageStatusMoved: "a", model.ImageStatusSplit: "r"}[img.Status]
+					mustHold(t, img.Ref, page, `<div class="note `+cls+` small">`, "<h2>The fix</h2>", `The use case "A vendor rebuilds an image under one tag" in the book shows the fix.`)
+				} else {
+					mustNotHold(t, img.Ref, page, `class="note`, "The fix")
+				}
+			}
+		})
+	}
+}
+
+// Under the tab "What pods do catch", the page says what the read catches and what it does not. The tab
+// "This image" shows the table, and this one does not.
+func TestTheTabWhatPodsDoCatchIsTheSameForEachImage(t *testing.T) {
+	for _, state := range imageSets {
+		set := loadSet(t, state)
+		screens := render(t, state, false)
+		for _, img := range set.Images.Images {
+			id := "tab image-" + img.Ref
+			catch, this := pageOf(t, screens, imageHash(img.Ref), id+" catch"), pageOf(t, screens, imageHash(img.Ref), id+" this")
+			mustHold(t, img.Ref, catch, `<button class="tab on" role="tab" aria-selected="true" data-tab="image-`+img.Ref+`" data-k="catch">What pods do catch</button>`,
+				"<b>When this happens</b>", "A tag pulled directly from a mutable registry, when a pod lands on a node with no cached copy.",
+				`<span class="m">imagePullPolicy: Always</span> or <span class="m">:latest</span>, at any restart.`, "A mutable mirror, or a pipeline that copies over the same tag.",
+				"Needs read access to pods, and no registry and no credential. No Palette route has this digest.",
+				"<b>What it does not catch</b>", "A move with no new pull.", "An image that no pod runs.", "A difference between clusters.",
+				"It stays silent when the pods pull an unchanged digest from a mirror")
+			mustNotHold(t, img.Ref, catch, "<th>Where</th>", "<th>Digest</th>")
+			mustHold(t, img.Ref, this, `<button class="tab on" role="tab" aria-selected="true" data-tab="image-`+img.Ref+`" data-k="this">This image</button>`, "<th>Where</th>")
+			mustNotHold(t, img.Ref, this, "<b>When this happens</b>")
+		}
+	}
+}
+
+// The finding of an image has the badge of its image and not the badge of a drift, and it opens the page
+// of the image. The Drift tile does not count it.
+func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
+	for state, c := range map[devdata.State]struct{ badge, title string }{
+		devdata.StateImages:      {`<span class="badge a">Image moved</span>`, "A tag runs another digest than the first one seen"},
+		devdata.StateImagesSplit: {`<span class="badge r">Two digests</span>`, "One tag runs with two digests"},
+	} {
+		t.Run(string(state), func(t *testing.T) {
+			overview := pageOf(t, render(t, state, false), "#overview", "")
+			href := imageHash("vendor.example/product:2026.2")
+			row := rowWith(t, overview, `data-go="`+href+`"`)
+			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
+				`<span class="lab"><i>profile=</i>"wilma-gateway@3.1.2"</span>`, `<span class="lab wrap"><i>image=</i>"vendor.example/product:2026.2"</span>`)
+			mustNotHold(t, "the finding", row, ">Drift<")
+			mustHold(t, "the tile", overview, `<a class="tile r" href="#findings"><div class="l">Drift</div><div class="v">1</div>`)
+			mustHold(t, "the nav", overview, `<span class="cnt r">2</span>`)
+		})
+	}
+}
+
+// A profile that drifts, and a profile that does not, both say the finding of an image in the list.
+func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
+	profiles := pageOf(t, render(t, devdata.StateImages, false), "#profiles", "")
+	row := rowWith(t, profiles, `data-go="#p-wilma-gateway@3.1.2"`)
+	mustHold(t, "the row", row, "traefik 38.0.1", "<div>vendor-product ran another digest in pods than the first one seen.</div>")
+}
+
+var (
+	tileOfImages = regexp.MustCompile(`<a class="tile (\w+)" href="#images"><div class="l">Image changes</div><div class="v">([^<]*)</div><div class="s">([^<]*)</div></a>`)
+	navOfImages  = regexp.MustCompile(`<a href="#images" class="[^"]*"><span>Images</span><span class="cnt">([^<]*)</span></a>`)
+)
+
+// The tile "Image changes" sits between Drift and Newer versions. The nav item Images sits between Newer
+// versions and Not checked. Before a read of the pods, each says "-" and claims nothing.
+func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
+	cases := []struct {
+		state                    devdata.State
+		cls, value, sub, counted string
+	}{
+		{devdata.StateOK, "g", "0", "8 images in pods", "8"},
+		{devdata.StateImages, "a", "1", "Moved or split", "8"},
+		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8"},
+		{devdata.StateQuiet, "y", "-", "Pods not read", "-"},
+		{devdata.StateNoRecords, "y", "-", "Pods not read", "-"},
+		{devdata.StateReadError, "y", "-", "Pods not read", "-"},
+		{devdata.StateImagesOff, "y", "-", "Pods not read", "-"},
+		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-"},
+	}
+	for _, c := range cases {
+		t.Run(string(c.state), func(t *testing.T) {
+			overview := pageOf(t, render(t, c.state, false), "#overview", "")
+			m := tileOfImages.FindStringSubmatch(overview)
+			if m == nil || m[1] != c.cls || m[2] != c.value || m[3] != c.sub {
+				t.Errorf("the tile is %q, want %s %q %q", m, c.cls, c.value, c.sub)
+			}
+			n := navOfImages.FindStringSubmatch(overview)
+			if n == nil || n[1] != c.counted {
+				t.Errorf("the nav item is %q, want the count %q", n, c.counted)
+			}
+			drift, image, newer := strings.Index(overview, `href="#findings"><div class="l">Drift`), strings.Index(overview, `href="#images"><div class="l">Image changes`), strings.Index(overview, `href="#newer"><div class="l">Newer versions`)
+			if !(drift >= 0 && drift < image && image < newer) {
+				t.Errorf("the tiles are not in the order Drift, Image changes, Newer versions: %d %d %d", drift, image, newer)
+			}
+			navNewer, navImages, navNot := strings.Index(overview, `<a href="#newer" class=`), strings.Index(overview, `<a href="#images" class=`), strings.Index(overview, `<a href="#notchecked" class=`)
+			if !(navNewer >= 0 && navNewer < navImages && navImages < navNot) {
+				t.Errorf("the nav is not in the order Newer versions, Images, Not checked: %d %d %d", navNewer, navImages, navNot)
+			}
+		})
+	}
+}
+
+// With the read of the pods off, the screen says so in short sentences: why the read is opt-in, and where
+// the book says how to turn it on. It shows no table.
+func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) {
+	for _, state := range []devdata.State{devdata.StateImagesOff, devdata.StateQuiet} {
+		t.Run(string(state), func(t *testing.T) {
+			list := pageOf(t, render(t, state, false), "#images", "")
+			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, "The observer does not read pods. The read is opt-in.",
+				`A <span class="m">list</span> call on pods gives the whole spec of each pod to the holder of the token. So a team must ask for it.`,
+				`The page "The observer" in the book says how to turn it on.`)
+			mustNotHold(t, "the screen", list, "<table", "Compared with the first digest")
+		})
+	}
+}
+
+// With no read of the pods that ended well, the screen says that the observer could not read the pods,
+// with the words of the error.
+func TestWithAReadThatNeverEndedWellTheScreenOfTheImagesGivesTheError(t *testing.T) {
+	list := pageOf(t, render(t, devdata.StateImagesUnread, false), "#images", "")
+	mustHold(t, "the screen", list, `<span class="sub">Not read yet</span>`, "The observer could not read the pods yet.",
+		"The last read failed: HTTP 403, the role of the observer was refused.")
+	mustNotHold(t, "the screen", list, "<table", "The observer does not read pods.")
+}
+
+// The cause pods-not-read has a row with no profile and no pack. The row says "The pods", and a click goes
+// to the screen of the images. The page does not break on the empty list of profiles.
+func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T) {
+	screens := render(t, devdata.StateImagesUnread, false)
+	notChecked := pageOf(t, screens, "#notchecked", "")
+	row := rowWith(t, notChecked, `data-go="#images"`)
+	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m"><span class="mut">-</span></td>`,
+		"<td>The observer could not read the pods, so the list of images is old or empty.</td>")
+	mustHold(t, "the other rows", notChecked, `data-go="#p-gazoo-backup@1.2.0"`, `data-go="#p-hoppy-autoscale@1.3.0"`)
+	mustHold(t, "the heading", notChecked, `Not checked on this run <span class="sub">3.`)
+}
+
+// The row "Image behind a tag" says what the check does. With a read of the pods it links the images.
+// The card keeps its four rows.
+func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
+	const compared, named = `<a href="#images">Compared with the first digest seen in pods</a>`, "Strata compares the name and the tag."
+	for state, read := range map[devdata.State]bool{devdata.StateOK: true, devdata.StateImages: true, devdata.StateImagesOff: false, devdata.StateImagesUnread: false, devdata.StateQuiet: false} {
+		t.Run(string(state), func(t *testing.T) {
+			for _, hash := range []string{"#overview", "#notchecked"} {
+				page := pageOf(t, render(t, state, false), hash, "")
+				mustHold(t, hash, page, "Image behind a tag", "Bytes of a chart", "Masked values", "Edits with kubectl")
+				if read {
+					mustHold(t, hash, page, compared)
+					mustNotHold(t, hash, page, named)
+				} else {
+					mustHold(t, hash, page, named)
+					mustNotHold(t, hash, page, "Compared with the first digest")
+				}
+			}
+		})
+	}
+}
+
+// writeSet copies a set into a new directory of sets, as the set "scratch", with the files that edit
+// names changed. It gives the directory.
+func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []byte) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.MkdirAll(path.Join(dir, "scratch"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range devdata.Files {
+		raw, err := devdata.Read(os.DirFS("testdata/api"), from, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if f := edit[name]; f != nil {
+			raw = f(raw)
+		}
+		if err := os.WriteFile(path.Join(dir, "scratch", name), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// editImages changes the document of the pods of a set.
+func editImages(t *testing.T, change func(*model.Observed)) func([]byte) []byte {
+	return func(raw []byte) []byte {
+		var o model.Observed
+		if err := devdata.Decode(raw, &o); err != nil {
+			t.Fatal(err)
+		}
+		change(&o)
+		out, err := json.Marshal(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+}
+
+// editFindings changes the findings of a set.
+func editFindings(t *testing.T, change func(*api.FindingsView)) func([]byte) []byte {
+	return func(raw []byte) []byte {
+		var v api.FindingsView
+		if err := devdata.Decode(raw, &v); err != nil {
+			t.Fatal(err)
+		}
+		change(&v)
+		out, err := json.Marshal(v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+}
+
+// pagesOf shows some screens of a set in a directory of sets, with no crawl.
+func pagesOf(t *testing.T, dir string, hashes ...string) []string {
+	t.Helper()
+	var out []string
+	if err := json.Unmarshal(runNodeIn(t, dir, "scratch", append([]string{"show"}, hashes...)...), &out); err != nil || len(out) != len(hashes) {
+		t.Fatalf("the output of render.js: %v, %d screens for %d hashes", err, len(out), len(hashes))
+	}
+	return out
+}
+
+// A read that failed after a good one keeps the list of the good read. Each screen says so in an amber
+// bar, with the words of the error and the time of the read that the list shows.
+func TestAReadThatFailedAfterAGoodOneShowsAnAmberBarOnEachScreen(t *testing.T) {
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
+		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+	})
+	const bar = `<div class="alertbar a">The last read of the pods failed: HTTP 403, the role of the observer was refused. <span>The list shows the read of 11:54Z.</span></div>`
+	pages := pagesOf(t, dir, "#overview", "#images", imageHash("vendor.example/product:2026.2"))
+	for i, page := range pages {
+		mustHold(t, []string{"the overview", "the list", "the page of the image"}[i], page, bar)
+	}
+	mustHold(t, "the list", pages[1], "8 images", `<tr class="link"`)
+	for _, hash := range []string{"#overview", "#images"} {
+		mustNotHold(t, hash, pagesOf(t, writeSet(t, devdata.StateOK, nil), hash)[0], "The last read of the pods failed")
+	}
+}
+
+// The words of a failed read name the API server and the role of the observer, and never Palette.
+func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
+	for _, c := range []struct {
+		err  model.ErrorRef
+		want string
+	}{
+		{model.ErrorRef{Kind: "kube-api", Status: 401}, "HTTP 401, the role of the observer was refused"},
+		{model.ErrorRef{Kind: "kube-api", Status: 403}, "HTTP 403, the role of the observer was refused"},
+		{model.ErrorRef{Kind: "kube-api", Status: 500}, "HTTP 500, the API server gave an error"},
+		{model.ErrorRef{Kind: "kube-transport"}, "the link to the API server failed"},
+		{model.ErrorRef{Kind: "kube-config"}, "the observer could not read its token or its CA file"},
+		{model.ErrorRef{Kind: "not-json"}, "the API server sent an answer that is not JSON"},
+		{model.ErrorRef{Kind: "timeout"}, "the API server did not answer in time"},
+	} {
+		t.Run(c.err.Kind+strconv.Itoa(c.err.Status), func(t *testing.T) {
+			dir := writeSet(t, devdata.StateImagesUnread, map[string]func([]byte) []byte{
+				"images.json": editImages(t, func(o *model.Observed) { o.Error = &c.err }),
+			})
+			list := pagesOf(t, dir, "#images")[0]
+			mustHold(t, "the list", list, "The last read failed: "+c.want+".")
+			mustNotHold(t, "the list", list, "Palette")
+		})
+	}
+}
+
+// An image reference with the text of a tag shows as text on the list, on the page of the image, and in
+// the finding. No screen holds the tag.
+func TestAnImageReferenceWithAnImgTagShowsAsText(t *testing.T) {
+	const evil = "<img src=x onerror=alert(1)>"
+	swap := func(raw []byte) []byte {
+		return []byte(strings.ReplaceAll(string(raw), "vendor.example/product:2026.2", evil))
+	}
+	dir := writeSet(t, devdata.StateImages, map[string]func([]byte) []byte{"images.json": swap, "findings.json": swap, "profiles.json": swap})
+	pages := pagesOf(t, dir, "#overview", "#images", imageHash(evil), imageHash(evil))
+	for i, page := range pages {
+		where := []string{"the overview", "the list", "the page of the image", "the page of the image"}[i]
+		checkMarkup(t, screen{Hash: where, HTML: page})
+		mustHold(t, where, page, injection)
+		mustNotHold(t, where, page, "<img")
+	}
+	mustHold(t, "the page of the image", pages[2], `<h1 class="m h1m">`+injection+`</h1>`)
+}
+
+// An image that the data does not hold shows the page of a missing item, under the nav item Images.
+func TestAnImageThatNoPodRunsShowsAMissingPage(t *testing.T) {
+	page := pagesOf(t, writeSet(t, devdata.StateOK, nil), imageHash("nobody.example/none:0"))[0]
+	mustHold(t, "the page", page, "This page is not in the data.", `<a href="#images" class="on">`)
+}
+
+// The line of a profile for a finding reads right for one pack and for many. The line of an image id
+// does not say "name" for one pack.
+func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
+	for _, c := range []struct {
+		kind  model.Kind
+		packs []string
+		want  string
+	}{
+		{model.ImageIDChanged, []string{"addon/dex"}, "dex changed the machine image on this cluster."},
+		{model.ImageIDChanged, []string{"addon/dex", "addon/reloader"}, "dex, reloader changed the machine image on this cluster."},
+		{model.ImageMoved, []string{"addon/dex"}, "dex ran another digest in pods than the first one seen."},
+		{model.ImageMoved, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran another digest in pods than the first one seen."},
+		{model.ImageSplit, []string{"addon/dex"}, "dex ran with two digests in pods at one time."},
+		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran with two digests in pods at one time."},
+	} {
+		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
+			add := editFindings(t, func(v *api.FindingsView) {
+				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, "fred-identity@2.3.0"), Kind: c.kind, Profile: "fred-identity@2.3.0", Packs: c.packs,
+					Images: []string{"a/b:1"}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
+			})
+			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"findings.json": add})
+			row := rowWith(t, pagesOf(t, dir, "#profiles")[0], `data-go="#p-fred-identity@2.3.0"`)
+			mustHold(t, "the row", row, c.want)
+		})
+	}
+}
+
+// The old words of the line of an image id are gone from the script: they read wrong for one pack.
+func TestTheLineOfAnImageIdNoLongerSaysNameAnotherMachineImage(t *testing.T) {
+	script := string(readPage(t, "app.js"))
+	mustNotHold(t, "app.js", script, "name another machine image")
+	mustHold(t, "app.js", script, "changed the machine image on this cluster.")
+}
+
+// The rules that let a long reference wrap are in the style: the reference of an image has no space, and
+// it must not push a table out of its card.
+func TestALongReferenceCanWrap(t *testing.T) {
+	css := string(readPage(t, "app.css"))
+	if got := ruleOf(css, ".wrap"); got != "overflow-wrap:anywhere;" {
+		t.Errorf("the rule of .wrap is %q", got)
+	}
+	if got := ruleOf(css, ".lab.wrap"); got != "white-space:normal;" {
+		t.Errorf("the rule of .lab.wrap is %q", got)
 	}
 }

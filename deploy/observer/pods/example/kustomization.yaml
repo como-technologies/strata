@@ -1,0 +1,7 @@
+# This kustomization lists the component as a team does. `just observer-manifests-pods` renders it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../..
+components:
+  - ..
