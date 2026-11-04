@@ -75,6 +75,7 @@
 - [Find the fleet from Palette](./use-cases/fleet.md)
 - [Can Palette build this cluster?](./use-cases/stop-a-build.md)
 - [Palette gives a value that strata does not know](./use-cases/unknown-value.md)
+- [The observer shows an edit in place](./use-cases/observer.md)
 
 # Automation
 
@@ -88,6 +89,7 @@
 - [The Rust library](./automation/library.md)
 - [The knurl adapter](./automation/knurl.md)
 - [Preflight in a pipeline](./automation/preflight.md)
+- [The observer](./automation/observer.md)
 
 # Reference
 
@@ -102,6 +104,7 @@
 - [Versions and compatibility](./reference/compatibility.md)
 - [What strata can report](./reference/report.md)
 - [The rule format](./reference/preflight-rules.md)
+- [The API of the observer](./reference/observer-api.md)
 
 # How it works
 

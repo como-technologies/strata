@@ -92,6 +92,7 @@ impact on running clusters.
   pipeline one job at a time, and what a normal day holds.
 - [Use cases](./use-cases/index.md): a problem, the commands, and the fix.
 - [Commands](./commands/index.md): each command, its output, and its options.
+- [The observer](./automation/observer.md): the same checks on a timer in one cluster, with a page.
 - [Palette gives a value that strata does not know](./use-cases/unknown-value.md): what to do about a
   note of a value that this release does not know. It also shows how to tell the maintainers: by
   hand, with the setting `STRATA_REPORT`, or with a yes to the one question.

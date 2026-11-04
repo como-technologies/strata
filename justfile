@@ -28,6 +28,10 @@ observer-build:
 observer-contract *args: build stand-in
     scripts/observer-contract.sh {{args}}
 
+# Run the observer on this machine against the stand-in for Palette, and serve the page at http://127.0.0.1:8080
+observer-playground chapter="observer-2": build observer-build
+    scripts/observer-playground.sh {{chapter}}
+
 # Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
@@ -184,7 +188,7 @@ api-docs *args:
 # book's own commands use.
 
 # Write the output of each command that the book shows into docs/src/output/
-docs-examples: examples stand-in
+docs-examples: examples stand-in observer-build
     cargo run --quiet -p xtask -- docs-examples
 
 # Build the development tooling: the stand-in for Palette, and the runner for the book
@@ -192,7 +196,7 @@ stand-in:
     cargo build --quiet -p xtask
 
 # Fail when docs/src/output/ is not the output of this build of strata
-docs-check: examples stand-in
+docs-check: examples stand-in observer-build
     cargo run --quiet -p xtask -- docs-examples --check
 
 # The list is in xtask/facts/. A script reads the JSON with jq. See docs/src/development/facts.md.
@@ -326,6 +330,10 @@ live-observer-kind: build observer-image
 # The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
 live-observer: build
     examples/live/observer.sh
+
+# The least role of the key of the observer (#645): each request of its cycles, with the key of the example and with a second key. Needs live-up, OBSERVER_ROLE, and OBSERVER_ROLE_KEY; only reads. A user in the tenant with the role under test is for brett.
+live-observer-role: build
+    examples/live/observer-role.sh
 
 # The managed engine test on EKS: the release, the shape tier, and the repave answers of Palette, and a change of the node group (#89). Needs cloud = "eks" in terraform.tfvars and live-up.
 live-eks: build

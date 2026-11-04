@@ -6,7 +6,7 @@ its checks establishes, so you can see the coverage without running anything.
 
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
-`packs.sh`, `knurl.sh`, and `observer-kind.sh` read too. The other scripts below write to the tenant;
+`packs.sh`, `knurl.sh`, `observer-kind.sh`, and `observer-role.sh` read too. The other scripts below write to the tenant;
 `pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
 in stage 4, which deletes the profile that it makes. `route-bodies.sh` deletes each
 profile that it makes.
@@ -683,7 +683,8 @@ Read-write. It needs the example at its baseline with cluster A, `kubectl`, and
 `crane`. Stage 2 lists the image with its digest in `pack.content.images`, and
 has the manifest make a Deployment that names the tag. Stage 3 names the digest
 in the manifest. Each stage reads the image field of the Deployment and the
-image of the pod. Stage 4 puts each change back.
+image of the pod. Stage 4 puts each change back and deletes the Deployment with `kubectl`,
+because Palette leaves an object that an edit drops from a manifest.
 
 The manifest stands for a chart. The example has no chart that cluster A runs.
 The script keeps the kubeconfig in a temporary file. No row has a result yet:
@@ -702,7 +703,10 @@ records its result without judging it, because the run finds the result.
 | `digest-compare`, `digest-compare-flag` | 1, 0 | #630: `compare` names a changed value with `AUTHORED`, and no change of the list (no result yet: the Wave 15 window runs it) |
 | `digest-accept`, `digest-deployed` | 0 | #630: cluster A takes the update, and the image field holds the digest (no result yet: the Wave 15 window runs it) |
 | `digest-spec`, `digest-pod` | ? | #630: what the Deployment and the pod run, when the manifest has the digest (no result yet: the Wave 15 window runs it) |
-| `undo-manifest`, `undo-values`, `undo-accept`, `undo-gone`, `undo-baseline` | 0 | the manifest and the values back, the Deployment gone, and the baseline (no result yet: the Wave 15 window runs it) |
+| `undo-manifest`, `undo-values`, `undo-accept` | 0 | the manifest and the values back, and cluster A takes them (no result yet: the Wave 15 window runs it) |
+| `undo-gone` | ? | #630: the Deployment stays on cluster A after the edit drops it from the manifest. The check waited 20 minutes and the Deployment was still there. See [An object that an edit drops from a manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest) |
+| `undo-delete`, `undo-clean` | 0 | #630: `kubectl` deletes the Deployment, and cluster A runs no Deployment of the example. The run leaves the cluster clean (no result yet: the Wave 15 window runs it) |
+| `undo-baseline` | 0 | the example is at its baseline (no result yet: the Wave 15 window runs it) |
 
 ## macro-repave.sh
 
@@ -1453,6 +1457,31 @@ result without judging it.
 | `no-secret-in-run` | 1 | #656: no file of the run holds the key, the pull token, or the `gh` token (no result yet: the Wave 15 window runs it) |
 | `undo-baseline` | 0 | the example is at its baseline (no result yet: the Wave 15 window runs it) |
 
+
+## observer-role.sh
+
+Read-only. It sends each request of the two cycles of [the observer](./observer-deploy.md)
+twice. The first key is the key of the example. The second key belongs to a user with
+the role under test. The script records the status and the error code of each answer.
+
+The script then runs `verify --who`, a record of cluster A, and `behind` with both keys. It needs the example at its baseline with cluster A,
+`OBSERVER_ROLE_KEY`, and `OBSERVER_ROLE`, the name of the role. With no key, it says
+`could not check` and exits `2`.
+
+Making the user is for brett. The steps are in the header of the script and in [The
+live example](./live-example.md). Run the script once for each role under test, such
+as Project Viewer and Cluster Viewer. The checks with `?` record the answer and do not
+judge it, because the run finds the answer. The code of Palette says that Project
+Viewer gives every answer: see [The role that a key
+needs](../internals/palette/clusters.md#the-role-that-a-key-needs). No row has a result
+yet: the lead runs the script in the live window of Wave 15 when the user exists.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `control-<name>` | 0 | #645: the key of the example reads each request of the cycles (no result yet: the Wave 15 window runs it) |
+| `role-<name>` | ? | #645: the status and the error code of the same request with the key of the role under test. The output of each check holds `HTTP`, the status, and the code (no result yet: the Wave 15 window runs it) |
+| `command-record`, `command-control-verify`, `command-control-cluster` | 0 | #645: with the key of the example, `verify --who` and two records (no result yet: the Wave 15 window runs it) |
+| `command-role-verify`, `command-role-cluster`, `command-control-behind`, `command-role-behind` | ? | #645: the same commands with the key of the role, and `behind` with both keys. The exit code says whether strata gets an answer (no result yet: the Wave 15 window runs it) |
 
 ## version-states.sh
 

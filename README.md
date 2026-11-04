@@ -79,6 +79,7 @@ just docs-serve   # build the book and open it at http://localhost:3000
 | [Use cases](docs/src/use-cases/index.md) | a problem, the commands, the output, and the fix |
 | [Commands](docs/src/commands/index.md) | each command, its output, and its options |
 | [Automation](docs/src/automation/scripts.md) | scripts, pull request comments, drift issues, the library |
+| [The observer](docs/src/automation/observer.md) | a service that shows the checks on a page in one cluster |
 
 The source is in `docs/src/`.
 

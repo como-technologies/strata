@@ -19,6 +19,11 @@ use crate::palette::REPORT_ENDPOINT;
 use crate::process::CommandExt;
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
+mod binaries;
+
+use binaries::OBSERVER_BINARY;
+pub(crate) use binaries::{built_examples, built_observer};
+
 /// How many runners this process started, so that two runners of one process (two tests) work in
 /// two directories.
 static RUNNERS: AtomicU32 = AtomicU32::new(0);
@@ -44,23 +49,6 @@ pub enum Mode {
         /// The directory that gets one directory for each chapter.
         into: PathBuf,
     },
-}
-
-/// The first profile that `just examples` writes: the tenants of the book read their pack data from
-/// the raw profiles.
-const FIRST_EXAMPLE: &str = "examples/profiles/raw/aws-stack@1.1.1/profile.json";
-
-/// Check that `just examples` ran in the repository `repo`.
-///
-/// # Errors
-///
-/// The message to show when the user did not build the examples.
-pub(crate) fn built_examples(repo: &Path) -> Result<(), String> {
-    if repo.join(FIRST_EXAMPLE).is_file() {
-        Ok(())
-    } else {
-        Err("the examples are not built. Run: just examples".to_string())
-    }
 }
 
 /// Split the name that `just playground NAME` takes into its chapter and its state.
@@ -133,6 +121,11 @@ impl Runner {
         std::fs::create_dir_all(&bin)?;
         std::fs::create_dir_all(work.join("home"))?;
         symlink(strata, &bin.join("strata"))?;
+        // A served chapter runs no step, so it needs no observer. The link waits for the binary.
+        let observer = repo.join(OBSERVER_BINARY);
+        if observer.is_file() {
+            symlink(&observer, &bin.join("strata-observer"))?;
+        }
 
         let port_file = work.join("port");
         // The server gets a pipe for standard input and no share of this process's output. It

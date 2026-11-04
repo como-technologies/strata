@@ -202,6 +202,64 @@ and a cluster record says whether an update waits: see
 update: `cluster:<uid>@pending` reads it. See
 [The update that waits](other-objects.md#the-update-that-waits).
 
+## An object that an edit drops from a manifest
+
+A manifest layer holds manifests, and a manifest holds objects. At each reconcile,
+Palette applies each object that the content of the layer names. It keeps no list
+of what it applied, and it puts no label or owner on the objects. So it never
+compares the old content with the new content.
+
+When an edit in place drops an object from a manifest, and the cluster takes the
+update, the object stays on the cluster. Palette does not delete it. A live run
+shows this for a Deployment: the cluster took the update, and the Deployment was
+still there after 20 minutes. See [image-digest.sh](../../development/live-runs.md#image-digestsh).
+
+| Step | What Palette does |
+| --- | --- |
+| An edit drops an object, and the cluster takes the update | The object stays. Palette applies the objects that the content still names. |
+| A person deletes an object that the content still names | Palette makes it again at the next reconcile. |
+| A person takes the whole layer off the cluster | Palette deletes the objects that the content names at that time, and the namespaces that the layer owns. |
+| The same, for an object that an earlier edit dropped | The object stays, because the content does not name it. A namespace that Palette deletes takes the objects in it. |
+
+To remove an object that the content dropped, delete it on the cluster with
+`kubectl`. Palette has no request for it. Edit the content first. A delete before
+the edit is undone at the next reconcile. The check `undo-delete` of
+`image-digest.sh` does this, so the run leaves the cluster clean.
+
+## The role that a key needs
+
+A key has the role of its user. Each request of strata carries the uid of the
+project. So a role in that project is enough for the requests of
+[the observer](../../automation/observer.md), and it needs no tenant role. The
+code of Palette gives these permissions. No run has used a key with a smaller
+role yet: [observer-role.sh](../../development/live-runs.md#observer-rolesh)
+tests it.
+
+| Requests | Permission | Built-in roles that hold it |
+| --- | --- | --- |
+| A profile version, its manifests, and its variables | `clusterProfile.get` | Cluster Profile Viewer, Cluster Viewer, Project Viewer, Tenant Viewer |
+| A cluster, its variables, its role bindings, and its namespaces | `cluster.get` | Cluster Viewer, Project Viewer, Tenant Viewer |
+| The manifests of a cluster | `cluster.get` and `clusterProfile.get` | Cluster Viewer, Project Viewer, Tenant Viewer |
+| The audit log, for `verify --who` | `audit.list` | Project Viewer, Tenant Viewer. A Cluster or Cluster Profile role does not hold it. |
+| The registries and their summaries | `packRegistry.list` | Cluster Profile Viewer, Cluster Viewer, Project Viewer, Tenant Viewer |
+| The tags of a pack in one registry | `packRegistry.get` | The same roles. Any member of the project reads a registry of the system or the tenant. |
+| The notifications of a cluster, and the list of packs | None | Any role in the project |
+
+**Project Viewer is the smallest built-in role that gives every answer,
+`verify --who` included.** Cluster Viewer alone gives every answer except the
+audit log. A custom role at project scope needs `cluster.get`,
+`clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and
+`audit.list`. A virtual cluster needs `virtualCluster.get` too.
+
+A request without its permission gets one of these answers:
+
+| Code | HTTP status | When |
+| --- | --- | --- |
+| `AccessDenied` | 403 | The route as a whole is refused: the audit log and the lists of registries. |
+| `OperationForbidden` | 500 | One object is refused: a profile, a cluster, or a registry. |
+| `NoRolesAssociated` | 500 | The user has no role at all. |
+| `ResourceAccessDenied` | 500 | The user has no role in the project of the request. |
+
 ## The order of the profiles of a cluster
 
 `spec.clusterProfileTemplates` of a cluster lists its profiles in the order the

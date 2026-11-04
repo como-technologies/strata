@@ -2288,6 +2288,92 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
     assert_no_faults(&faults);
 }
 
+// ---- the observer ------------------------------------------------------------------------------
+
+/// The pages that the observer adds to the book (#645): the service, the use case, and the API.
+const OBSERVER_PAGES: [&str; 3] = [
+    "automation/observer.md",
+    "use-cases/observer.md",
+    "reference/observer-api.md",
+];
+
+/// The pages of the observer keep to the limits of "The style rules" like the pages of the report.
+#[test]
+fn the_pages_of_the_observer_keep_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for page in OBSERVER_PAGES {
+        let text = read(&docs().join(page));
+        for block in blocks_of(&text) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// The service page states the four limits and the five costs of the issue, and each as a numbered
+/// item. A page that loses one fails here, and a reader who comes for the cost of the key finds it.
+#[test]
+fn the_page_of_the_service_states_four_limits_and_five_costs() {
+    let page = read(&docs().join("automation/observer.md"));
+    let section = |from: &str, to: &str| {
+        let start = page
+            .find(from)
+            .unwrap_or_else(|| panic!("no section {from}"));
+        let end = page[start..]
+            .find(to)
+            .unwrap_or_else(|| panic!("no section {to}"));
+        page[start..start + end].to_string()
+    };
+    let limits = section(
+        "## What the observer does not see",
+        "## What you give the observer",
+    );
+    let costs = section("## What you give the observer", "## `re-baseline needed`");
+    let items = |text: &str| {
+        text.lines()
+            .filter(|l| l.starts_with(|c: char| c.is_ascii_digit()))
+            .count()
+    };
+    assert_eq!(items(&limits), 4, "{limits}");
+    assert_eq!(items(&costs), 5, "{costs}");
+    for fact in [
+        "A tag that moves at its source",
+        "A change on the cluster with `kubectl edit`",
+        "What the workload runs",
+        "The value of a cluster variable",
+    ] {
+        assert!(limits.contains(fact), "the limit '{fact}'");
+    }
+    for fact in [
+        "An API key in the cluster",
+        "Never a profile variable for the key",
+        "Egress to Palette",
+        "Requests",
+        "The page holds pack values",
+        "`create` on `pods/portforward`",
+    ] {
+        assert!(costs.contains(fact), "the cost '{fact}'");
+    }
+    assert!(page.contains("## First-seen records"));
+    assert!(page.contains("## `re-baseline needed`"));
+}
+
+/// The README gains one line for the observer, and the book names the page in its summary.
+#[test]
+fn the_readme_has_one_line_for_the_observer_and_the_summary_lists_the_three_pages() {
+    let readme = repo_file("README.md");
+    let lines = readme.lines().filter(|l| l.contains("observer")).count();
+    assert_eq!(lines, 1, "one line only");
+    let summary = read(&docs().join("SUMMARY.md"));
+    for page in OBSERVER_PAGES {
+        assert!(
+            summary.contains(&format!("./{page}")),
+            "{page} in SUMMARY.md"
+        );
+    }
+}
+
 /// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of
 /// them. The lab machine has no IPv6 route. So a failed `curl -6` shows a fault of the route of the
 /// machine, and the page says so.

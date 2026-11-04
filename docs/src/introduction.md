@@ -25,6 +25,8 @@ command that shows the same thing by hand. See
   request to the retire, with the output of each command.
 - [Where each part belongs](./boundary.md) says what Palette does, what strata
   adds, and why the record lives in your repository.
+- [The observer](./automation/observer.md) runs the checks in one cluster, on a timer, and shows
+  the answers on a page.
 
 ## The model
 

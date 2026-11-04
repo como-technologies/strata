@@ -1,5 +1,6 @@
 //! The tests of the runner.
 
+use super::binaries::FIRST_EXAMPLE;
 use super::*;
 use crate::process::executable;
 
@@ -155,4 +156,30 @@ fn a_step_of_the_book_gets_the_stand_in_for_the_endpoint_and_no_setting_of_the_m
     // the step starts from an empty environment: a setting of the machine does not reach it
     let (code, setting, _) = r.run("printf '%s' \"${STRATA_REPORT-unset}\"", false);
     assert_eq!((code, setting.as_str()), (0, "unset"));
+}
+
+#[test]
+fn a_step_runs_the_observer_of_the_repository_by_its_name() {
+    let repo = tempfile::tempdir().unwrap();
+    let binary = repo.path().join(OBSERVER_BINARY);
+    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    executable(&binary, "#!/bin/sh\necho the observer\n");
+    let mut r = runner(Mode::Write, repo.path());
+    r.chapter("observed", &[]);
+    r.step("observer-run", 0, false, "strata-observer");
+    let text = std::fs::read_to_string(r.out.join("observer-run.txt")).unwrap();
+    assert_eq!(text, "$ strata-observer\nthe observer\n");
+}
+
+#[test]
+fn the_check_for_the_observer_names_the_recipe_that_builds_it() {
+    let repo = tempfile::tempdir().unwrap();
+    assert_eq!(
+        built_observer(repo.path()),
+        Err("the observer is not built. Run: just observer-build".to_string())
+    );
+    let binary = repo.path().join(OBSERVER_BINARY);
+    std::fs::create_dir_all(binary.parent().unwrap()).unwrap();
+    std::fs::write(&binary, "").unwrap();
+    assert_eq!(built_observer(repo.path()), Ok(()));
 }

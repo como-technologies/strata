@@ -1291,12 +1291,20 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
 /// that kubeconfig is the one the fake Palette serves. With `$FAKE_KUBE_PUT`, it answers as a
 /// cluster that runs the Deployment in the body of that PUT of a profile. The image field is the
 /// first `image:` line, and the cluster has a pod. A body with no such line gives no Deployment.
+/// With `$FAKE_KUBE_ORPHAN`, the Deployment stays after a body drops it, until `delete deployment`.
 const FAKE_KUBECTL: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_KUBECTL_LOG"
 grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no kubeconfig" >&2; exit 1; }
 if [ -n "${FAKE_KUBE_PUT:-}" ]; then
   # The cluster runs the Deployment that the last PUT of the profile holds: the first image: line.
   image=$(jq -r '[.spec.template.packs[].manifests[].content] | join("\n") | capture("image: (?<i>[^\n]*)\n") | .i' "$FAKE_KUBE_PUT" 2>/dev/null)
+  # With $FAKE_KUBE_ORPHAN, a Deployment that the content once named stays after the content drops it,
+  # as Palette leaves it, until a delete. The marker files sit beside the path that the variable names.
+  if [ -n "${FAKE_KUBE_ORPHAN:-}" ]; then
+    [ -z "$image" ] || touch "$FAKE_KUBE_ORPHAN.seen"
+    case "$*" in *"delete deployment"*) touch "$FAKE_KUBE_ORPHAN.deleted"; echo deleted; exit 0 ;; esac
+    if [ -z "$image" ] && [ -f "$FAKE_KUBE_ORPHAN.seen" ] && [ ! -f "$FAKE_KUBE_ORPHAN.deleted" ]; then image=orphan; fi
+  fi
   case "$*" in
     *"get pods"*) [ -z "$image" ] || echo "registry.k8s.io/pause@sha256:aaaa" ;;
     *"get deployment"*)
@@ -7569,7 +7577,8 @@ fn image_digest_sh_puts_the_digest_in_the_list_and_then_in_the_manifest_and_read
             "undo-manifest",
             "undo-values",
             "undo-accept",
-            "undo-gone",
+            "undo-delete",
+            "undo-clean",
             "undo-baseline",
         ],
     );
@@ -7579,6 +7588,7 @@ fn image_digest_sh_puts_the_digest_in_the_list_and_then_in_the_manifest_and_read
         "list-pod",
         "digest-spec",
         "digest-pod",
+        "undo-gone",
     ] {
         assert!(
             has_verdict(&steps, "SEEN", id),
@@ -7647,6 +7657,44 @@ fn image_digest_sh_puts_the_digest_in_the_list_and_then_in_the_manifest_and_read
     assert!(
         kubectl.contains("get deployment strata-live-image -n default"),
         "{kubectl}"
+    );
+}
+
+/// Palette applies each object that the content names. It removes none that a later edit drops. The
+/// Deployment stays after the undo, so `undo-gone` records its result and judges nothing. The undo
+/// then deletes the Deployment with kubectl, and the run leaves the cluster clean.
+#[test]
+fn image_digest_sh_deletes_the_deployment_that_stays_after_the_content_drops_it() {
+    let image = format!("registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}");
+    let mut stage = image_digest_stage(&format!(r#"["{image}"]"#));
+    let marker = stage.path("orphan");
+    stage.env("FAKE_KUBE_ORPHAN", marker.to_str().unwrap());
+    let (o, steps) = stage.run("image-digest.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    assert!(
+        has_verdict(&steps, "SEEN", "undo-gone"),
+        "the check records its result:\n{steps}"
+    );
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("SEEN") && l.contains("undo-gone") && l.ends_with("got 1")),
+        "the Deployment stayed, so the wait ended with 1:\n{steps}"
+    );
+    passed(&steps, &["undo-delete", "undo-clean", "undo-baseline"]);
+    let kubectl = std::fs::read_to_string(stage.path("kubectl.log")).unwrap();
+    let delete = kubectl
+        .lines()
+        .position(|l| l.contains("delete deployment strata-live-image -n default"))
+        .unwrap_or_else(|| panic!("no delete in:\n{kubectl}"));
+    let lines: Vec<&str> = kubectl.lines().collect();
+    let last_get = lines
+        .iter()
+        .rposition(|l| l.contains("get deployment strata-live-image -n default"))
+        .unwrap();
+    assert!(
+        delete < last_get,
+        "undo-clean reads after the delete:\n{kubectl}"
     );
 }
 
@@ -9035,4 +9083,152 @@ fn observer_sh_fails_the_first_sight_check_when_a_restart_keeps_the_state_and_re
     let edits = api.lines().filter(|l| l.starts_with("edit ")).count();
     assert_eq!(edits, 4, "two edits and two undos: {api}");
     assert!(!stage.path("obs/drifted").exists());
+}
+
+// ---- the least role of the key of the observer (#645) ----------------------------------------------
+
+/// A `strata` that logs each call with the name of the key it read. The name is `role` for the
+/// second key, and `lab` for the key of the example. A real key never appears in the log.
+const FAKE_STRATA_ROLE: &str = r#"#!/usr/bin/env bash
+who=lab; [ "${PALETTE_API_KEY:-}" = role-k ] && who=role
+echo "$who $*" >> "$FAKE_STRATA/keys"
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+/// The requests of the cycles that `observer-role.sh` sends, with the paths of the baseline stage.
+const OBSERVER_ROLE_ROUTES: [(&str, &str); 16] = [
+    ("cluster", "/v1/spectroclusters/c-a"),
+    (
+        "cluster-manifests",
+        "/v1/spectroclusters/c-a/profiles/packs/manifests",
+    ),
+    ("cluster-variables", "/v1/spectroclusters/c-a/variables"),
+    ("cluster-rbacs", "/v1/spectroclusters/c-a/config/rbacs"),
+    (
+        "cluster-namespaces",
+        "/v1/spectroclusters/c-a/config/namespaces",
+    ),
+    ("notifications", "/v1/notifications/spectrocluster/c-a"),
+    ("profile", "/v1/clusterprofiles/ad-1"),
+    (
+        "profile-manifests",
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+    ),
+    ("profile-variables", "/v1/clusterprofiles/ad-1/variables"),
+    ("audits", "/v1/audits"),
+    ("registries", "/v1/registries/metadata"),
+    ("registry-pack-summary", "/v1/registries/pack/summary"),
+    ("registry-helm-summary", "/v1/registries/helm/summary"),
+    ("registry-oci-summary", "/v1/registries/oci/summary"),
+    ("packs", "/v1/packs"),
+    ("pack-tags", "/v1/packs/cert-manager/registries/reg-1"),
+];
+
+/// A stage of `observer-role.sh`: Palette answers each request to the key of the example. The
+/// registry listing names `Public Repo`.
+fn observer_role_stage() -> Stage {
+    let mut stage = baseline_stage();
+    stage.wrap_strata(FAKE_STRATA_ROLE);
+    for (_, path) in OBSERVER_ROLE_ROUTES {
+        stage.route(path, "{}");
+    }
+    stage.route(
+        "/v1/registries/metadata",
+        r#"{"items":[{"name":"Public Repo","uid":"reg-1"}]}"#,
+    );
+    stage.env("OBSERVER_ROLE", "Project Viewer");
+    stage.env("OBSERVER_ROLE_KEY", "role-k");
+    stage
+}
+
+#[test]
+fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() {
+    let stage = observer_role_stage();
+    // the second key lacks the permission of the audit log: Palette refuses the whole route
+    stage.route_as(
+        "/v1/audits",
+        "role-k",
+        403,
+        r#"{"code":"AccessDenied","message":"no audit.list"}"#,
+    );
+    let (o, steps) = stage.run("observer-role.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    for (name, _) in OBSERVER_ROLE_ROUTES {
+        assert!(
+            has_verdict(&steps, "PASS", &format!("control-{name}")),
+            "control-{name} passes:\n{steps}"
+        );
+        assert!(
+            has_verdict(&steps, "SEEN", &format!("role-{name}")),
+            "role-{name} is recorded:\n{steps}"
+        );
+    }
+    let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
+    assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
+    assert_eq!(said("role-cluster").trim(), "HTTP 200");
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("SEEN") && l.contains("role-audits") && l.ends_with("got 1")),
+        "a refusal is recorded as a failed request:\n{steps}"
+    );
+    passed(
+        &steps,
+        &[
+            "command-record",
+            "command-control-verify",
+            "command-control-cluster",
+        ],
+    );
+    for id in [
+        "command-role-verify",
+        "command-role-cluster",
+        "command-control-behind",
+        "command-role-behind",
+    ] {
+        assert!(
+            has_verdict(&steps, "SEEN", id),
+            "{id} is recorded:\n{steps}"
+        );
+    }
+}
+
+#[test]
+fn observer_role_sh_gives_the_second_key_to_strata_in_the_environment_and_saves_it_nowhere() {
+    let stage = observer_role_stage();
+    let (o, steps) = stage.run("observer-role.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    let keys = std::fs::read_to_string(stage.path("strata/keys")).unwrap();
+    for call in [
+        "role verify addon.json --who",
+        "role snapshot cluster:c-a -o cluster-role.json",
+        "role behind addon.json --no-impact --json --compact",
+        "lab verify addon.json --who",
+    ] {
+        assert!(keys.lines().any(|l| l == call), "{call} in:\n{keys}");
+    }
+    // the key is in no argument of a request, in no file of the run, and in no output
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!curl.contains("role-k"), "{curl}");
+    for (name, body) in files_under(&stage.path("out")) {
+        assert!(!body.contains("role-k"), "{name} holds the key");
+    }
+    assert!(!text(&o.stdout).contains("role-k") && !text(&o.stderr).contains("role-k"));
+}
+
+#[test]
+fn observer_role_sh_stops_before_any_request_when_it_has_no_key_or_no_role_name() {
+    for missing in ["OBSERVER_ROLE_KEY", "OBSERVER_ROLE"] {
+        let mut stage = observer_role_stage();
+        stage.env.retain(|(k, _)| k != missing);
+        let (o, steps) = stage.run("observer-role.sh", &[]);
+        assert_eq!(o.status.code(), Some(2), "{missing}");
+        assert!(
+            text(&o.stderr).contains("could not check"),
+            "{}",
+            text(&o.stderr)
+        );
+        assert!(steps.is_empty(), "no stage ran: {steps}");
+        assert!(!stage.path("routes/sent").exists(), "no request to Palette");
+    }
 }

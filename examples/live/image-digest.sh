@@ -12,7 +12,9 @@
 #      field of the Deployment inside the cluster, and the image of its pod
 #   3  the manifest names the image with its digest, where the workload reads it. Cluster A takes
 #      the update. The result is the same two images
-#   4  undo: the manifest and the values back, cluster A takes them, and the Deployment is gone
+#   4  undo: the manifest and the values back, cluster A takes them, and the Deployment is deleted with
+#      kubectl. Palette applies each object that the content names, and it keeps no list of what it
+#      applied. So the Deployment stays after the edit drops it, and the undo deletes it
 #
 # What varies: the place of the digest, in the list of the values or in the manifest. What holds: the
 # image, the cluster, and the baseline that the run starts from and returns to (lib.sh). The
@@ -130,6 +132,8 @@ wait_gone() {
 }
 # pod_after_wait: the image of the pod, when the pod reports one within the time
 pod_after_wait() { wait_pod && pod_image_id; }
+# delete_deployment: delete the Deployment from cluster A. No error when it is gone already.
+delete_deployment() { kube "$C" delete deployment "$deploy" -n default --ignore-not-found; }
 # deployment_absent: cluster A has no Deployment of the example
 deployment_absent() { ! kube "$C" get deployment "$deploy" -n default > /dev/null 2>&1; }
 # names_a_value_alone: compare names a changed value, and no change of the image list
@@ -185,7 +189,9 @@ if stage 4 "undo"; then
   check undo-manifest 0 "the manifest of $addon back" -- undo_manifest
   check undo-values 0 "the values of the pack back" -- "$live/api.sh" set-values "$AD" "$pack" ""
   check undo-accept 0 'cluster A takes it' -- "$live/api.sh" apply "$C"
-  check undo-gone 0 "#630: the Deployment is gone from cluster A within $minutes minutes" -- wait_gone
+  check undo-gone ? "#630: the Deployment is gone from cluster A within $minutes minutes (0), or it stays after the content drops it (1)" -- wait_gone
+  check undo-delete 0 "#630: kubectl deletes the Deployment, so that the run leaves cluster A clean" -- delete_deployment
+  check undo-clean 0 "#630: cluster A runs no Deployment $deploy" -- deployment_absent
   check undo-baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
 fi
 

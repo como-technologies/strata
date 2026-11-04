@@ -106,6 +106,12 @@ fn examples(mode: book::Mode) -> ExitCode {
     if let Err(message) = book::built_examples(&repo) {
         return fail(&message);
     }
+    // a run that writes or checks the output runs the steps, and a step runs the observer
+    if matches!(mode, book::Mode::Write | book::Mode::Check)
+        && let Err(message) = book::built_observer(&repo)
+    {
+        return fail(&message);
+    }
     let xtask = std::env::current_exe().expect("this binary has a path");
     let mut runner = match book::Runner::start(&repo, &strata, &xtask, mode) {
         Ok(r) => r,

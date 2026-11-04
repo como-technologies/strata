@@ -26,21 +26,7 @@ strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR
 JSON on standard output, and the log on standard error. It prints the summary
 also when a cycle failed.
 
-| Exit | Meaning |
-| --- | --- |
-| `0` | No finding exists, and the two cycles ended well. |
-| `1` | A finding exists, as with `strata verify`. The other cycle can have failed: `failedRuns` says so. |
-| `2` | No finding exists and a cycle failed, or a flag is wrong. |
-
-| Flag | Default | What it does |
-| --- | --- | --- |
-| `--strata` | `strata`, on `PATH` | Names the binary. The session image has `/usr/local/bin/strata`. |
-| `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. |
-| `--records` | required | The directory of `*.json.gz` records and `meta.json`. |
-| `--work` | required | A volume in memory for the files of a cycle. |
-| `--state` | required | A directory for `state.json`. |
-| `--content-every` | `15m` | The period of the content cycle. |
-| `--versions-every` | `6h` | The period of the versions cycle. |
+[The service page](../automation/observer.md#run-it-once) gives the exit codes and the flags, with the output of a run.
 
 ## The two cycles
 

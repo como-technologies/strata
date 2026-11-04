@@ -1,0 +1,2 @@
+$ scripts/ci/observer-records.sh --first-seen 64f1000000000000000000e1 | grep ' meta.json:' | cut -d' ' -f4 | base64 -d; echo
+{"baseline":"first-seen","firstSeenFrom":"64f1000000000000000000e1"}

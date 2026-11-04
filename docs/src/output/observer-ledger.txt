@@ -1,0 +1,3 @@
+$ strata-observer once --cluster-uid 64f1000000000000000000e3 --records records --work work --state state-ledger 2>/dev/null | jq -c '.findings[] | {kind, profile, packs}'
+{"kind":"published-changed","profile":"aws-stack@1.0.0","packs":["csi/csi-aws-ebs"]}
+{"kind":"cluster-differs","profile":"aws-stack@1.1.0","packs":["csi/csi-aws-ebs"]}

@@ -45,6 +45,7 @@ show.
 | `loop.sh` | [One change, start to end](../walkthrough.md), end to end: a change, the gates, the publish, the questions to Palette about a move, `preflight` on the body of a create, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81, #385). It needs cluster A, and undoes each change. |
 | `observer-kind.sh` | [The observer](./observer-deploy.md) on a kind cluster: its manifests, the records that `observer-records.sh` writes, the pod, and the page for a user with only the reader role (#644). It reads cluster A and the two profiles of the release from the tenant, and writes nothing to it. It needs docker, kind, and kubectl, and it deletes the kind cluster. |
 | `observer.sh` | [The observer](./observer-deploy.md) on cluster A, in two ways: a plain `kubectl apply` of the rendered manifests, and an add-on profile in Palette with the manifests as one manifest layer (#656). It checks the pod, the answer of Palette to a workload cluster, who can open the page, an edit in place and its finding, the requests of the cycles, a wrong key, a restart, and the removal. It needs cluster A, `kubectl`, `gh`, and `go`. It makes a namespace and a profile, and it removes both. |
+| `observer-role.sh` | The least role of the key of the observer (#645): each request of a content cycle and of a versions cycle, with the key of the example and with a second key, and the commands of the cycles. It only reads. It needs cluster A and a second key: making the user is for brett. |
 | `eks-nodegroups.sh` | The EKS node groups of cluster A, from AWS; `--delete` deletes those of the example, a step of the recovery of [An EKS cluster](#an-eks-cluster). |
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `gke.sh` | On a GKE cluster: the release and its packs, the shape tier of a node pool, the repave answer of Palette for a Kubernetes bump, and, with `GKE_POOL_CHANGE=1`, a change of the node pool (#90). It needs `cloud = "gke"` and cluster A. |
@@ -282,6 +283,7 @@ back to false with the default variables (`apply_baseline`).
   [An EKS cluster](#an-eks-cluster).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
+- For `observer-role.sh` only: the key of a user with the role under test in `OBSERVER_ROLE_KEY`, and the name of the role in `OBSERVER_ROLE`. The script never prints the key.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
   `curl`, `helm`, `crane`, and a Rust toolchain.
 - Read access to an OCI pack registry in the tenant, and a login to it that
@@ -591,6 +593,7 @@ just live-upstream                                                             #
 just live-loop                                                                 # #81, needs just live-up
 just live-observer-kind                                                        # #644, needs just live-up, docker, kind, and kubectl; makes a kind cluster
 just live-observer                                                             # #656, needs just live-up, kubectl, gh, and go; makes a namespace and a profile in cluster A, and removes both
+just live-observer-role                                                         # #645, needs just live-up, OBSERVER_ROLE, and OBSERVER_ROLE_KEY; only reads
 just live-version-states                                                       # #81, needs just live-up
 just live-eks                                                                  # #89, needs cloud = "eks" and just live-up
 ```

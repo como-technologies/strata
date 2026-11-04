@@ -1,0 +1,5 @@
+$ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null | jq -c '.newer[] | {name, version, newest, impact}'
+{"name":"cni-cilium-oss","version":"1.19.6","newest":"1.20.1","impact":"cluster-wide"}
+{"name":"csi-aws-ebs","version":"1.63.1","newest":"1.65.0","impact":"cluster-wide"}
+{"name":"kubernetes","version":"1.35.3","newest":"1.36.2","impact":"repave"}
+{"name":"ubuntu-aws","version":"20.04","newest":"24.04","impact":"repave"}

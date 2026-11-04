@@ -39,6 +39,9 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
+- The objects of a manifest that a person removes from a layer in whole, and not by an edit
+  of its text. The code of Palette has a path for this, and no run uses it. See
+  [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
 - The image that a node pulls when only `pack.content.images` names a digest.
   Palette pulls no image, and it holds no digest of one unless the pack text
   names it, so the list can pin nothing. No run shows what a node pulls in this
