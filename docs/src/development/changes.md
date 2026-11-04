@@ -104,9 +104,9 @@ strata gets an issue of its own.
 
 The work and the verify can run in a container of the session image.
 `riff.toml` names the image by its digest, and `deploy/session/Dockerfile`
-builds it. The image has the Rust of CI, the Rust of `rust-version`, and each
-tool of the checks above. It has no key of Palette and no AWS profile, so a
-session in the container makes no live request.
+builds it. The image has the Rust of CI, the Rust of `rust-version`, the Go of
+the observer, and each tool of the checks above. It has no key of Palette and no
+AWS profile, so a session in the container makes no live request.
 
 To change a tool or a version:
 
@@ -119,6 +119,12 @@ To change a tool or a version:
 CI builds with the latest stable Rust. When Rust releases a new stable version,
 change `RUST_VERSION` in the same way. Then clippy finds the same lints in the
 container and in CI.
+
+The image has the latest stable Go. When Go releases a new stable version, change
+`GO_VERSION` and `GO_SHA256` in the same way. Take the checksum of the
+`linux-amd64` archive from `https://go.dev/dl/?mode=json`. The image sets
+`GOTOOLCHAIN=local` and `GOPROXY=off`. A build then fails when code needs another
+Go, or a module outside the standard library.
 
 ## The code of Palette
 
