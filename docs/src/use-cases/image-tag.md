@@ -124,6 +124,9 @@ digest in the values of a chart, such as `image.digest`, works the same way:
 - `images` keeps the `image` of each entry in the list. A `digest` field beside
   it is not part of the list, so `IMAGES` does not show a new value of it.
   `AUTHORED` and the changed value show it.
+- A chart that a person pushes again under one version is the same class. Palette
+  keeps the first digest, and `verify` says `OK`. See
+  [What OK means for a Helm pack](../commands/verify.md#what-ok-means-for-a-helm-pack).
 - No run shows which image a node pulls when only `pack.content.images` names a
   digest. The check is in
   [image-digest.sh](../development/live-runs.md#image-digestsh).
