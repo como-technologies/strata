@@ -131,6 +131,7 @@ digest in the values of a chart, such as `image.digest`, works the same way:
 - A chart that a person pushes again under one version is the same class. Palette
   keeps the first digest, and `verify` says `OK`. See
   [What OK means for a Helm pack](../commands/verify.md#what-ok-means-for-a-helm-pack).
-- No run shows which image a node pulls when only `pack.content.images` names a
-  digest. The check is in
+- A digest in `pack.content.images` alone does not pin the image. A live run named
+  the digest there only, and the Deployment kept the tag. A digest in the manifest
+  that the workload reads pinned the image. See
   [image-digest.sh](../development/live-runs.md#image-digestsh).

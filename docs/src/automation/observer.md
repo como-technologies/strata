@@ -208,6 +208,34 @@ A Secret with no record is empty. The next apply then removes the old content.
 The pipeline of your team runs the script at each merge that changes a record, so
 the records are the files that the team approved.
 
+A live run applied these steps to a cluster that Palette built. The pod passed the
+`restricted` standard and became Ready. Its first cycle reached Palette, so a
+workload cluster reaches the API. A user with only the reader role opened the page
+with the port-forward. A pod of another namespace could not connect. After a
+restart, the page worked again.
+
+## Install with a profile in Palette
+
+You can put the manifests in an add-on profile, and attach the profile to the
+cluster. The profile holds the rendered manifests as one manifest layer, and Palette
+applies them to the cluster. Make the namespace, the ConfigMap, the Secret of the
+key, and the records with `kubectl` first, as in [Install](#install). The profile
+holds no key, because a profile variable is in clear in the copy of the cluster.
+
+A live run shows what Palette does with the layer:
+
+- **The nodes stay.** Palette replaces no node when it applies the layer.
+- **The other profiles stay.** Each other profile of the cluster still agrees with
+  its record.
+- **The profile of the observer has no record.** The page lists it under "Not
+  checked", and it shows no finding for it.
+- **A removal is clean.** When you remove the profile from the cluster, Palette deletes
+  the Deployment.
+
+An edit of the profile that drops an object from the manifest leaves the object on
+the cluster. To remove it, delete it with `kubectl`. See [An object that an edit
+drops from a manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest).
+
 ## First-seen records
 
 You can start with no approved record. `--first-seen` records what each profile
@@ -266,15 +294,32 @@ and it never reads "No change" for a pack that it did not check.
    copy of the cluster. So the key stays there in clear. Make the Secret with `kubectl`.
 3. **Egress to Palette** from the cluster. The network policy of the observer allows
    DNS and HTTPS only. A team can narrow the HTTPS rule to the address of Palette.
+   A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
    reads the cluster and each profile that it runs. For a record that drifted, it
    reads the audit log too. A versions cycle reads the registries and the packs that
-   the records pin. [What the live example
-   verifies](../development/live-runs.md#observersh) holds the counts of both cycles.
+   the records pin. [The requests of a cycle](#the-requests-of-a-cycle) gives the
+   counts of both cycles.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
    a pack. A secret typed into a value that the schema does not mark passes through.
    `create` on `pods/portforward` is the gate: whoever has that verb opens the page.
    The reader role gives no Secret and no `exec`.
+
+### The requests of a cycle
+
+A live run counted the requests of each cycle on a cluster with two profiles and
+five packs. The counts grow with the number of profiles and packs.
+
+| Command | At the baseline | With a finding |
+| --- | --- | --- |
+| A content cycle | 12 | 13 |
+| `strata behind`, the first command of a versions cycle | 13 | 13 |
+| The moves of the first versions cycle after a start | 28 | 28 |
+
+The one extra request reads the audit log. `verify --who` sends it for a record
+that drifted. A later versions cycle sends the 13 requests of `behind`, and
+the requests of the moves that are new. [What the live example
+verifies](../development/live-runs.md#observersh) holds the counts.
 
 ### The least role of the key
 

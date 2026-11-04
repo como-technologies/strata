@@ -1083,6 +1083,7 @@ facts:
       - image-digest.sh:undo-gone
       - image-digest.sh:undo-delete
       - image-digest.sh:undo-clean
+      - observer.sh:profile-removal
     pages:
       - internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest
     code:

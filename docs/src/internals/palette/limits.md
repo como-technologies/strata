@@ -39,15 +39,10 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
-- The objects of a manifest that a person removes from a layer in whole, and not by an edit
-  of its text. The code of Palette has a path for this, and no run uses it. See
-  [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
-- The image that a node pulls when only `pack.content.images` names a digest.
-  Palette pulls no image, and it holds no digest of one unless the pack text
-  names it, so the list can pin nothing. No run shows what a node pulls in this
-  case, or when the manifest or a chart value names the digest. See
-  [A vendor rebuilds an image under one tag](../../use-cases/image-tag.md) and
-  [image-digest.sh](../../development/live-runs.md#image-digestsh).
+- Two cases of a layer that a person removes from the cluster. No run shows what
+  Palette does with an object that an earlier edit dropped from the manifest, or
+  with a namespace that the layer owns. A run shows only a Deployment that the
+  content names. See [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
 - A change of the endpoint or the values of a cluster group: the run of
   [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) changes
   the CPU limit alone. See

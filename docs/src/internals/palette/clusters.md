@@ -214,11 +214,15 @@ update, the object stays on the cluster. Palette does not delete it. A live run
 shows this for a Deployment: the cluster took the update, and the Deployment was
 still there after 20 minutes. See [image-digest.sh](../../development/live-runs.md#image-digestsh).
 
+A person can remove the whole layer from the cluster. A live run did this, and
+Palette deleted the Deployment of the layer. See
+[observer.sh](../../development/live-runs.md#observersh).
+
 | Step | What Palette does |
 | --- | --- |
 | An edit drops an object, and the cluster takes the update | The object stays. Palette applies the objects that the content still names. |
 | A person deletes an object that the content still names | Palette makes it again at the next reconcile. |
-| A person takes the whole layer off the cluster | Palette deletes the objects that the content names at that time, and the namespaces that the layer owns. |
+| A person removes the whole layer from the cluster | Palette deletes the objects that the content names at that time, and the namespaces that the layer owns. A live run shows it for a Deployment. |
 | The same, for an object that an earlier edit dropped | The object stays, because the content does not name it. A namespace that Palette deletes takes the objects in it. |
 
 To remove an object that the content dropped, delete it on the cluster with
