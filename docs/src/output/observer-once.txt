@@ -31,7 +31,8 @@ $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records 
           "actorType": "user",
           "action": "update"
         }
-      ]
+      ],
+      "whoUnread": false
     }
   ]
 }
