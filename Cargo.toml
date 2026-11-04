@@ -26,7 +26,7 @@ repository = "https://github.com/como-technologies/strata"
 
 [package]
 name = "strata"
-version = "0.28.0"
+version = "0.29.0"
 edition = "2024"
 rust-version.workspace = true
 description = "Record, compare, and check Spectro Cloud Palette profile versions, the clusters and other objects that run them, and pack versions"
