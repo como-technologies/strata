@@ -245,9 +245,16 @@ code, and these rules are for the Go code.
 - The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
   function that fails returns an `error`.
 - `internal/runner` is the one place that starts a process. It refuses a
-  command or a flag that is not in its lists.
+  command or a flag that is not in its lists. A process gets the variables of
+  its list and `STRATA_REPORT=0`, and no other variable.
+- An error of a run holds a kind and a status. It never holds a message,
+  because the message of the kind `api` can hold the body of an answer from
+  Palette.
 - `internal/docs` is the allow-list of the fields that the observer reads. A
   document never decodes into a map, and no code forwards a document.
+- A test of `internal/docs` writes a marker at the path of a field that is not
+  in the list. It fails when the marker comes out. `just observer-contract`
+  fails when a field of the list is not in the schema of the binary.
 - A log line holds a verdict, an exit code, a duration, and an error kind. It
   never holds a value or the output of a process.
 - A test uses a table when it has more than two cases. A test that needs the

@@ -3,6 +3,7 @@
 ```bash
 just build             # target/release/strata and target/release/strata-preflight
 just observer-build    # target/observer/strata-observer, a static Go binary
+just observer-contract # the documents of this build of strata go through the allow-list of the observer
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
@@ -19,6 +20,20 @@ The observer needs Go. The line `go` in `observer/go.mod` names the version, and
 the job `check` of CI installs that version from the file. `just lint` fails when
 a line of `observer/go.mod` starts with `require`, because the observer uses the
 standard library only.
+
+`just observer-contract` gives the documents of the strata binary of this commit
+to the allow-list of the observer. It builds `strata` and the stand-in, serves
+four chapters of the book in turn, and runs the commands of the observer against
+each one. Then it runs the contract tests of `internal/docs` on the documents.
+One test fails when a field of the allow-list is not in the schema of the
+binary. One test fails when the clear value of a cluster variable passes the
+allow-list.
+
+`just observer-contract --write` also copies five documents to
+`observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
+not edit them by hand. `go test` reads them, so it needs neither the binary nor
+the network, and the contract tests skip. The job `check` of CI runs
+`just observer-contract` after `just examples`.
 
 `just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build
@@ -81,7 +96,7 @@ that version.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `observer/` | `strata-observer`, a Go program in a module of its own: see [The Go of the observer](./code.md#the-go-of-the-observer). `main.go` holds the command line, and `main_test.go` holds its tests. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
+| `observer/` | `strata-observer`, a Go program in a module of its own: see [The Go of the observer](./code.md#the-go-of-the-observer). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs` is the allow-list of the fields that the observer reads, `internal/runner` runs the `strata` binary, and `scripts/observer-contract.sh` gives them the documents of the binary. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |
 | `preflight/src/rule/` | `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. |
 | `preflight/src/probe/` | `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. |
@@ -489,7 +504,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
+| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, and `just observer-contract` |
 | docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
@@ -516,7 +531,7 @@ tracked can hide a failure:
 
 ```bash
 git worktree add --detach ../strata-check HEAD
-cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
+cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
 ```
 
 ## A change to how strata reads Palette
