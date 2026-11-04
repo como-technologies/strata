@@ -772,13 +772,14 @@ pin_profile() {
 
 # manifest_profile NAME PACK FILE: create and publish an add-on profile NAME@1.0.0 with one manifest
 # layer. The layer is PACK, a pack of type manifest, and its one manifest, also named PACK, holds
-# the text of FILE. The profile has no variable. Prints the uid of the profile.
+# the text of FILE. The profile has no variable. Prints the uid of the profile. Palette refuses a
+# manifest pack with no uid, with the code ShouldNotBeEmpty, so the pack names the uid of a manifest pack.
 manifest_profile() {
   local name=${1:-} pack=${2:-} file=${3:-} body
   [ -f "$file" ] || die "usage: api.sh manifest-profile NAME PACK FILE"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
   jq -n --arg p "$pack" --rawfile c "$file" \
-    '{name: $p, tag: "1.0.0", type: "manifest", layer: "addon", values: "", manifests: [{name: $p, content: $c}]}' \
+    '{name: $p, uid: "spectro-manifest-pack", tag: "1.0.0", type: "manifest", layer: "addon", values: "", manifests: [{name: $p, content: $c}]}' \
     | addon_body "$name" all > "$body"
   create_published "$body"
 }
