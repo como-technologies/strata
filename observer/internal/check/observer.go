@@ -34,7 +34,7 @@ type Config struct {
 }
 
 // Observer runs the cycles and keeps the last good answer of each. One worker runs the cycles, so
-// one strata process runs at a time. Summary may be called while a cycle runs.
+// one strata process runs at a time. A call of Summary can happen while a cycle runs.
 type Observer struct {
 	cfg    Config
 	strata Strata

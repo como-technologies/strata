@@ -15,7 +15,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// The exits of a strata command that are an answer. A verify and a behind exit 2 with a document
+// The exits of a strata command that are an answer. `verify` and `behind` exit 2 with a document
 // when a row has an error. The others give a document with 0 or 1, or write a file with 0.
 var (
 	exitsWithDocument = []int{0, 1, 2}
@@ -67,7 +67,7 @@ func decode[T any](raw []byte) (T, error) {
 	return doc, nil
 }
 
-// rowsByPath maps the rows of a verify to the files that it read.
+// rowsByPath maps the rows of `verify` to the files that it read.
 func rowsByPath(doc docs.VerifySummary) map[string]docs.VerifyRow {
 	rows := make(map[string]docs.VerifyRow, len(doc.Records))
 	for _, r := range doc.Records {
@@ -92,8 +92,8 @@ func allRowsFailed(rows []docs.VerifyRow) bool {
 	return len(rows) > 0 && !slices.ContainsFunc(rows, func(r docs.VerifyRow) bool { return r.Error == nil })
 }
 
-// kindOfARowError gives the error of a failed command with the kind of a row of the verify. A
-// snapshot writes a plain line, so its kind is unknown, and the rows know the cause.
+// kindOfARowError gives the error of a failed command with the kind of a row of `verify`. A
+// `snapshot` writes a plain line, so its kind is unknown, and the rows know the cause.
 func kindOfARowError(err error, rows []docs.VerifyRow) error {
 	var re *runner.RunError
 	if !errors.As(err, &re) || re.Kind != docs.KindUnknown {
@@ -105,8 +105,9 @@ func kindOfARowError(err error, rows []docs.VerifyRow) error {
 	return err
 }
 
-// contentCycle runs one content cycle: verify the records, read the cluster, and compare each record
-// that the cluster runs with its side of the cluster. files is -1 when the directory was not read.
+// contentCycle runs one content cycle. It runs `verify` on the records and reads the cluster. Then it
+// compares each record that the cluster runs with its side of the cluster. files is -1 when the
+// directory was not read.
 func (o *Observer) contentCycle(ctx context.Context) (content model.Content, files int, err error) {
 	set, err := baseline.Load(o.cfg.Records)
 	if err != nil {
@@ -142,7 +143,7 @@ func (o *Observer) readContent(ctx context.Context, dir string, set baseline.Set
 }
 
 func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs.VerifySummary, error) {
-	args := append([]string{"verify"}, names...)
+	args := append([]string{runner.CmdVerify}, names...)
 	args = append(args, "--summary", "--who", "--json", "--compact", "-q")
 	res, err := o.run(ctx, dir, exitsWithDocument, args...)
 	if err != nil {
@@ -161,7 +162,7 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 
 // readCluster takes the cluster in a snapshot, with the raw answers of Palette in raw/ for the sides.
 func (o *Observer) readCluster(ctx context.Context, dir string) (docs.ClusterRead, error) {
-	if _, err := o.run(ctx, dir, exitsOfAWrite, "snapshot", "cluster:"+o.cfg.ClusterUID, "--raw-dir", "raw", "-o", "cluster.json", "-q"); err != nil {
+	if _, err := o.run(ctx, dir, exitsOfAWrite, runner.CmdSnapshot, "cluster:"+o.cfg.ClusterUID, "--raw-dir", "raw", "-o", "cluster.json", "-q"); err != nil {
 		return docs.ClusterRead{}, err
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "cluster.json"))
@@ -178,7 +179,7 @@ func runsProfile(read docs.ClusterRead, r docs.Record) bool {
 	})
 }
 
-// compareRecords gives each record its verify row and, when the cluster runs it, its compare with
+// compareRecords gives each record its `verify` row and, when the cluster runs it, its `compare` with
 // the cluster side. The side comes from the raw answers, so it makes no request. When a side or a
 // compare fails, the record gets no Diff and the page says "not read". When all of them fail, the
 // cycle fails, because the cluster side is then not readable at all.
@@ -196,7 +197,9 @@ func (o *Observer) compareRecords(ctx context.Context, dir string, entries []bas
 			diff, err := o.compareSide(ctx, dir, names[i], i, e.Record.Source.Name)
 			if err != nil {
 				failed++
-				first = cmpOr(first, err)
+				if first == nil {
+					first = err
+				}
 			}
 			rec.Cluster.Diff = diff
 		}
@@ -208,20 +211,13 @@ func (o *Observer) compareRecords(ctx context.Context, dir string, entries []bas
 	return out, nil
 }
 
-func cmpOr(first, err error) error {
-	if first != nil {
-		return first
-	}
-	return err
-}
-
 // compareSide reads the side of one profile from the raw answers and compares the record with it.
 func (o *Observer) compareSide(ctx context.Context, dir, record string, index int, profile string) (*docs.Diff, error) {
 	side := fmt.Sprintf("side-%d.json", index)
-	if _, err := o.run(ctx, dir, exitsOfAWrite, "snapshot", "cluster:"+o.cfg.ClusterUID+"/"+profile, "--from-raw", "raw", "-o", side, "-q"); err != nil {
+	if _, err := o.run(ctx, dir, exitsOfAWrite, runner.CmdSnapshot, "cluster:"+o.cfg.ClusterUID+"/"+profile, "--from-raw", "raw", "-o", side, "-q"); err != nil {
 		return nil, err
 	}
-	res, err := o.run(ctx, dir, exitsOfACompare, "compare", record, side, "--json", "--compact", "-q")
+	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, record, side, "--json", "--compact", "-q")
 	if err != nil {
 		return nil, err
 	}

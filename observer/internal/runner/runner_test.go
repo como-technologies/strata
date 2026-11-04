@@ -24,21 +24,21 @@ func fake(t *testing.T, body string) Runner {
 }
 
 func TestExitOneIsAnAnswer(t *testing.T) {
-	r, err := fake(t, `echo '{"same":false}'; exit 1`).Run(context.Background(), "compare", "a.json", "b.json", "--json", "-q")
+	r, err := fake(t, `echo '{"same":false}'; exit 1`).Run(context.Background(), CmdCompare, "a.json", "b.json", "--json", "-q")
 	if err != nil || r.Exit != 1 || !strings.Contains(string(r.Stdout), "same") {
 		t.Fatalf("result %+v, error %v", r, err)
 	}
 }
 
 func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
-	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), "behind", "a.json", "--json", "-q")
+	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), CmdBehind, "a.json", "--json", "-q")
 	if err != nil || r.Exit != 2 {
 		t.Fatalf("result %+v, error %v", r, err)
 	}
 }
 
 func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
-	_, err := fake(t, `echo '{"error":{"kind":"api","message":"HTTP 401","status":401}}' >&2; exit 2`).Run(context.Background(), "verify", "a.json", "--json", "-q")
+	_, err := fake(t, `echo '{"error":{"kind":"api","message":"HTTP 401","status":401}}' >&2; exit 2`).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 	var re *RunError
 	if !errors.As(err, &re) || re.Kind != docs.KindAPI || re.Status != 401 {
 		t.Fatalf("error %v", err)
@@ -50,7 +50,7 @@ func TestStderrStaysOutOfTheError(t *testing.T) {
 		`echo 'SENTINEL value' >&2; exit 2`,
 		`echo '{"error":{"kind":"api","message":"SENTINEL body of Palette","status":500}}' >&2; exit 2`,
 	} {
-		_, err := fake(t, body).Run(context.Background(), "verify", "a.json", "--json", "-q")
+		_, err := fake(t, body).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 		if err == nil || strings.Contains(err.Error(), "SENTINEL") {
 			t.Fatalf("error %v", err)
 		}
@@ -60,7 +60,7 @@ func TestStderrStaysOutOfTheError(t *testing.T) {
 func TestATimeoutKillsTheRun(t *testing.T) {
 	x := fake(t, `exec sleep 30`)
 	x.Timeout = 100 * time.Millisecond
-	_, err := x.Run(context.Background(), "verify", "a.json", "--json", "-q")
+	_, err := x.Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 	var re *RunError
 	if !errors.As(err, &re) || re.Kind != docs.KindTimeout {
 		t.Fatalf("error %v", err)
@@ -72,10 +72,10 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 	for _, args := range [][]string{
 		{"report", "--link"},
 		{"preflight"},
-		{"compare", "a", "b", "--validate"},
-		{"compare", "a", "b", "--repave"},
-		{"compare", "a", "b", "--full"},
-		{"snapshot", "x", "--validate"},
+		{CmdCompare, "a", "b", "--validate"},
+		{CmdCompare, "a", "b", "--repave"},
+		{CmdCompare, "a", "b", "--full"},
+		{CmdSnapshot, "x", "--validate"},
 	} {
 		if _, err := x.Run(context.Background(), args...); err == nil {
 			t.Errorf("%v ran", args)
@@ -89,7 +89,7 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 func TestTheProcessGetsNoOtherVariable(t *testing.T) {
 	t.Setenv("PALETTE_API_KEY", "key")
 	t.Setenv("SOME_OTHER_SECRET", "SENTINEL")
-	r, err := fake(t, `env`).Run(context.Background(), "verify", "a.json")
+	r, err := fake(t, `env`).Run(context.Background(), CmdVerify, "a.json")
 	if err != nil {
 		t.Fatal(err)
 	}

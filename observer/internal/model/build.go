@@ -35,7 +35,7 @@ func Build(in Input) Summary {
 	}
 	if in.Versions != nil {
 		s.StrataVersion = in.Versions.Strata
-		s.Newer = newerRows(in.Versions, now)
+		s.Newer = newerRows(in.Versions, v, now)
 	}
 	if in.Content != nil && in.Content.Strata != "" {
 		s.StrataVersion = in.Content.Strata
@@ -191,9 +191,9 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	return p
 }
 
-// changesOf joins the flags and the changed paths of a pack from the two diffs of a record: the
-// verify and the compare with the cluster. The fold counts the joined paths, so a path that the
-// two diffs share counts once.
+// changesOf joins the flags and the changed paths of a pack from the two diffs of a record. They
+// are the `verify` diff and the `compare` with the cluster. The fold counts the joined paths, so a
+// path that the two diffs share counts once.
 func changesOf(r Record, key string) ([]string, []string, *docs.Fold) {
 	flags, paths := []string{}, []string{}
 	var diffs []*docs.Diff
@@ -231,14 +231,8 @@ func changesOf(r Record, key string) ([]string, []string, *docs.Fold) {
 }
 
 // newerRows gives one row for each pin that is behind, in the order of the pins.
-func newerRows(vs *Versions, now time.Time) []Newer {
+func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 	rows := []Newer{}
-	registries := map[string]string{}
-	for _, pin := range vs.Pins {
-		if pin.Registry != "" {
-			registries[pin.RegistryUID] = pin.Registry
-		}
-	}
 	for _, pin := range vs.Pins {
 		if !pin.Behind || len(pin.Newer) == 0 {
 			continue
@@ -247,10 +241,6 @@ func newerRows(vs *Versions, now time.Time) []Newer {
 		move, ok := vs.Moves[MoveKey(pin)]
 		if !ok || move.Flags == nil {
 			move.Flags = []string{}
-		}
-		registry := registries[pin.RegistryUID]
-		if registry == "" {
-			registry = pin.RegistryUID
 		}
 		profiles := []string{}
 		for _, by := range pin.PinnedBy {
@@ -261,7 +251,7 @@ func newerRows(vs *Versions, now time.Time) []Newer {
 		if drops == nil {
 			drops = []string{}
 		}
-		rows = append(rows, Newer{Name: pin.Name, Registry: registry, RegistryUID: pin.RegistryUID, Version: pin.Version,
+		rows = append(rows, Newer{Name: pin.Name, Registry: v.registry(pin.RegistryUID), RegistryUID: pin.RegistryUID, Version: pin.Version,
 			Newest: newest.Version, Listed: newest.Listed, New: listedWithin(newest.Listed, now), Floating: pin.Floating,
 			PinnedState: pin.PinnedState, Drops: drops, Profiles: profiles, Move: move})
 	}

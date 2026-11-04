@@ -39,7 +39,7 @@ func FindingsOf(c Content) []Finding {
 	return out
 }
 
-// recordFindings reads the verify row and the compare of one record.
+// recordFindings reads the `verify` row and the `compare` of one record.
 func recordFindings(r Record) []Finding {
 	subject := r.subject()
 	var published *Finding

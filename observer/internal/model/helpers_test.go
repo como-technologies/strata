@@ -17,7 +17,7 @@ func pk(layer, name, version string) docs.RecordPack {
 		RegistryProviderType: "spectro", Images: []string{"a/b:1", "a/c@sha256:abc"}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
 }
 
-// rec makes a record that the cluster runs, with a verify row of the given status.
+// rec makes a record that the cluster runs, with a `verify` row of the given status.
 func rec(name, version, status string, packs ...docs.RecordPack) Record {
 	r := Record{File: name + ".json.gz", Row: &docs.VerifyRow{Status: status, Name: name, Version: version, RootRecorded: "r1", RootLive: "r1"}, Cluster: ClusterSide{Runs: true}}
 	r.Doc.Schema = docs.SnapshotSchema
@@ -27,7 +27,7 @@ func rec(name, version, status string, packs ...docs.RecordPack) Record {
 	return r
 }
 
-// drifted makes a verify row that drifted, with a diff that changes one pack.
+// drifted makes a `verify` row that drifted, with a diff that changes one pack.
 func drifted(r Record, v *docs.Verify, keys ...string) Record {
 	r.Row.Status = docs.VerifyDrifted
 	r.Row.RootLive = "r2"

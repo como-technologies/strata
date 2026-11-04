@@ -110,7 +110,7 @@ type Profile struct {
 	Packs       []Pack       `json:"packs"`
 }
 
-// Published is the answer of the verify of the record.
+// Published is the answer of `verify` for the record.
 type Published struct {
 	Status       string `json:"status"`
 	RootRecorded string `json:"rootRecorded,omitempty"`

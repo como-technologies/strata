@@ -68,7 +68,7 @@ func TestTheVersionsCycleComparesEachMoveAndFillsTheRows(t *testing.T) {
 		byName[n.Name] = n
 	}
 	k := byName["kubernetes"]
-	if k.Newest != "1.36.2" || k.Impact != "repave" || k.Images != 8 || !slices.Equal(k.Flags, []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES"}) ||
+	if k.Newest != "1.36.2" || k.Impact != "repave" || k.Images != 8 || !slices.Equal(k.Flags, []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored, docs.FlagImages}) ||
 		k.Fold.Settings+k.Fold.Follows+k.Fold.Repeats != 11 || !slices.Equal(k.Drops, []string{"arm64"}) || !slices.Equal(k.Profiles, []string{"aws-stack@1.0.0"}) {
 		t.Errorf("kubernetes %+v", k)
 	}
@@ -91,7 +91,7 @@ func TestTheCacheAsksEachMoveOnce(t *testing.T) {
 	if got := w.countMoves(); got != 4 {
 		t.Fatalf("%d compares of two packs after three cycles", got)
 	}
-	if got := w.count("behind"); got != 3 {
+	if got := w.count(runner.CmdBehind); got != 3 {
 		t.Errorf("%d behind", got)
 	}
 }
@@ -224,7 +224,7 @@ func TestNoRecordRunsNoBehind(t *testing.T) {
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if w.count("behind") != 0 || o.Summary().Versions.ReadAt == nil {
-		t.Errorf("behind %d, versions %+v", w.count("behind"), o.Summary().Versions)
+	if w.count(runner.CmdBehind) != 0 || o.Summary().Versions.ReadAt == nil {
+		t.Errorf("behind %d, versions %+v", w.count(runner.CmdBehind), o.Summary().Versions)
 	}
 }

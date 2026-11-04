@@ -22,7 +22,7 @@ import (
 )
 
 // The tests give the observer a fake strata. The fake answers from a world: the documents that the
-// real binary would print, and the errors that it would give. It records each call.
+// real binary prints, and the errors that it gives. It records each call.
 
 var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 
@@ -30,7 +30,7 @@ const sentinel = "SENTINEL-CLEAR-VALUE"
 
 // world holds the answers of the fake strata. A record is known by its index: record-<i>.json.
 type world struct {
-	// verify gives one row for each record, by index. The fake sets the path of the row.
+	// rows gives one `verify` row for each record, by index. The fake sets the path of the row.
 	rows       []docs.VerifyRow
 	verifyTool string
 	verifyExit int
@@ -77,13 +77,13 @@ func (w *world) Run(_ context.Context, dir string, args ...string) (runner.Resul
 	}()
 	time.Sleep(w.delay)
 	switch args[0] {
-	case "verify":
+	case runner.CmdVerify:
 		return w.runVerify(args)
-	case "snapshot":
+	case runner.CmdSnapshot:
 		return w.runSnapshot(dir, args)
-	case "compare":
+	case runner.CmdCompare:
 		return w.runCompare(args)
-	case "behind":
+	case runner.CmdBehind:
 		return w.runBehind()
 	}
 	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
@@ -210,7 +210,7 @@ func (w *world) countMoves() int {
 	defer w.mu.Unlock()
 	n := 0
 	for _, c := range w.calls {
-		if c[0] == "compare" && strings.HasPrefix(c[1], "pack:") {
+		if c[0] == runner.CmdCompare && strings.HasPrefix(c[1], "pack:") {
 			n++
 		}
 	}

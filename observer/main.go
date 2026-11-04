@@ -80,8 +80,8 @@ func (o *options) parse(name string, args []string, stderr io.Writer) error {
 }
 
 // once runs one content cycle and one versions cycle, and prints the summary. It exits 1 when a
-// finding exists, as `strata verify` does, and 2 when no finding exists and a cycle failed, or when
-// the flags are wrong.
+// finding exists, as `strata verify` does. It exits 2 when no finding exists and a cycle failed, or
+// when the flags are wrong.
 func once(args []string, stdout, stderr io.Writer) int {
 	var o options
 	if err := o.parse("once", args, stderr); err != nil {

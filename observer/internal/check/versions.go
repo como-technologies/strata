@@ -10,8 +10,8 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// versionsCycle runs one versions cycle: ask `behind` for the pins of the records, and compare each
-// pinned version with the newest one. files is -1 when the directory was not read. With no record,
+// versionsCycle runs one versions cycle. It asks `behind` for the pins of the records and compares
+// each pinned version with the newest one. files is -1 when the directory was not read. With no record,
 // it runs no `behind`, because the command needs a file.
 func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, files int, err error) {
 	set, err := baseline.Load(o.cfg.Records)
@@ -33,7 +33,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	if err != nil {
 		return err
 	}
-	args := append([]string{"behind"}, names...)
+	args := append([]string{runner.CmdBehind}, names...)
 	args = append(args, "--no-impact", "--json", "--compact", "-q")
 	res, err := o.run(ctx, dir, exitsWithDocument, args...)
 	if err != nil {
@@ -82,7 +82,7 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 
 func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (model.Move, error) {
 	ref := "pack:" + pin.RegistryUID + "/" + pin.Name + "@"
-	res, err := o.run(ctx, dir, exitsOfACompare, "compare", ref+pin.Version, ref+pin.Newer[0].Version, "--json", "--compact", "-q")
+	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, ref+pin.Version, ref+pin.Newer[0].Version, "--json", "--compact", "-q")
 	if err != nil {
 		return model.Move{}, err
 	}

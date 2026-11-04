@@ -15,7 +15,7 @@ const lostRuns = 2
 const stalePeriods = 2
 
 // PageOf gives the state of the page. The first row of the table that matches wins:
-// no-records, lost, stale, first-load, and ok. It reads the content clock only, because a good
+// no-records, lost, stale, first-load, and ok. It reads the content clock only. A good
 // content cycle shows that the key and the link work. filesKnown is false before the first read of
 // the directory of records.
 func PageOf(filesKnown bool, files int, content Clock, now time.Time) Page {
@@ -34,8 +34,8 @@ func PageOf(filesKnown bool, files int, content Clock, now time.Time) Page {
 	return PageOK
 }
 
-// isLost says that the key or the link to Palette does not work: a refusal of the key, a link that
-// does not carry, an answer that is no JSON, or a timeout. Another kind says that the cycle is
+// isLost says that the key or the link to Palette does not work. The kinds are a refusal of the
+// key, a link that does not carry, an answer that is no JSON, and a timeout. Another kind says that the cycle is
 // wrong, so the page is stale.
 func (e *ErrorRef) isLost() bool {
 	if e == nil {

@@ -106,7 +106,7 @@ func TestTheDriftDocumentDecodes(t *testing.T) {
 	}
 	var changed *Pack
 	for i := range r.Diff.Packs {
-		if r.Diff.Packs[i].Status == "changed" {
+		if r.Diff.Packs[i].Status == PackChanged {
 			changed = &r.Diff.Packs[i]
 		}
 	}

@@ -19,7 +19,15 @@ import (
 // validate or that prints content in full is not here: slice 1 sends no POST and holds no diff text.
 var allowedFlags = []string{"--summary", "--who", "--json", "--compact", "-q", "--no-impact", "--raw-dir", "--from-raw", "-o"}
 
-var allowedCommands = []string{"verify", "compare", "snapshot", "behind"}
+// The strata commands that the observer runs.
+const (
+	CmdVerify   = "verify"
+	CmdCompare  = "compare"
+	CmdSnapshot = "snapshot"
+	CmdBehind   = "behind"
+)
+
+var allowedCommands = []string{CmdVerify, CmdCompare, CmdSnapshot, CmdBehind}
 
 // allowedEnv holds each variable that a strata process gets. It sets STRATA_REPORT to 0 below.
 var allowedEnv = []string{"PALETTE_API", "PALETTE_API_KEY", "PALETTE_PROJECT_UID", "PALETTE_PROJECT", "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}

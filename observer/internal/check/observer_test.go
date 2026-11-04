@@ -257,11 +257,13 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndOneProcessRunsAtATime(t *testi
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	waitFor(t, func() bool { return w.count("verify") >= 1 && w.count("behind") >= 1 && w.countMoves() >= 4 })
+	waitFor(t, func() bool {
+		return w.count(runner.CmdVerify) >= 1 && w.count(runner.CmdBehind) >= 1 && w.countMoves() >= 4
+	})
 	cancel()
 	<-done
-	if w.count("verify") != 1 || w.count("behind") != 1 {
-		t.Errorf("verify %d, behind %d", w.count("verify"), w.count("behind"))
+	if w.count(runner.CmdVerify) != 1 || w.count(runner.CmdBehind) != 1 {
+		t.Errorf("verify %d, behind %d", w.count(runner.CmdVerify), w.count(runner.CmdBehind))
 	}
 	if w.maxActive != 1 {
 		t.Errorf("%d processes ran at once", w.maxActive)
@@ -275,7 +277,7 @@ func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	waitFor(t, func() bool { return w.count("verify") >= 3 && w.count("behind") >= 3 })
+	waitFor(t, func() bool { return w.count(runner.CmdVerify) >= 3 && w.count(runner.CmdBehind) >= 3 })
 	cancel()
 	<-done
 	if w.maxActive != 1 {
@@ -317,7 +319,7 @@ func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 	defer w.mu.Unlock()
 	snapshots := 0
 	for i, call := range w.calls {
-		if call[0] != "snapshot" {
+		if call[0] != runner.CmdSnapshot {
 			continue
 		}
 		snapshots++

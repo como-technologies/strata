@@ -14,7 +14,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// drift reads the real verify document that the stand-in gave for an edit in place.
+// drift reads the real `verify` document that the stand-in gave for an edit in place.
 func drift(t *testing.T) docs.VerifyRow {
 	t.Helper()
 	raw, err := os.ReadFile("../docs/testdata/verify-summary-drift.json")
@@ -109,8 +109,8 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 	if len(s.Profiles) != 2 || s.Profiles[0].Version != "1.0.0" || s.Profiles[0].ClusterCopy.Status != model.CopyNotOnThisCluster || s.Profiles[1].ClusterCopy.Status != model.CopySame {
 		t.Fatalf("profiles %+v", s.Profiles)
 	}
-	if w.count("compare") != 1 || s.Counts.Packs != 2 {
-		t.Errorf("compares %d, packs %d", w.count("compare"), s.Counts.Packs)
+	if w.count(runner.CmdCompare) != 1 || s.Counts.Packs != 2 {
+		t.Errorf("compares %d, packs %d", w.count(runner.CmdCompare), s.Counts.Packs)
 	}
 }
 
@@ -166,8 +166,8 @@ func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Page != model.PageNoRecords || w.count("verify") != 0 || w.count("behind") != 0 || s.Records.Baseline != "unknown" || s.Records.Count != 0 {
-		t.Errorf("page %q, verify %d, behind %d, records %+v", s.Page, w.count("verify"), w.count("behind"), s.Records)
+	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != "unknown" || s.Records.Count != 0 {
+		t.Errorf("page %q, verify %d, behind %d, records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestACycleFailsWhenEachRowOfTheVerifyHasAnError(t *testing.T) {
 	if s.Content.FailedRuns != 1 || s.Content.LastError.Kind != docs.KindTransport || s.Content.CheckedAt != nil {
 		t.Errorf("content %+v", s.Content)
 	}
-	if w.count("snapshot") != 0 {
+	if w.count(runner.CmdSnapshot) != 0 {
 		t.Error("the cycle read the cluster after it failed")
 	}
 }
@@ -331,7 +331,7 @@ type failOnce struct {
 }
 
 func (f *failOnce) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
-	if args[0] == "snapshot" && strings.HasSuffix(args[1], "/"+f.name) {
+	if args[0] == runner.CmdSnapshot && strings.HasSuffix(args[1], "/"+f.name) {
 		return runner.Result{}, &runner.RunError{Kind: docs.KindCrash}
 	}
 	return f.world.Run(ctx, dir, args...)

@@ -35,8 +35,8 @@ func TestAnUnknownCommandExitsTwo(t *testing.T) {
 	}
 }
 
-// fakeStrata writes a script that stands for the strata binary. compare is the line that the
-// compare prints, and verifyExit is the exit code of the verify.
+// fakeStrata writes a script that stands for the strata binary. compare is the line that
+// `compare` prints. verifyExit is the exit code of `verify`.
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
 	body := `#!/bin/sh

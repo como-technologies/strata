@@ -69,7 +69,7 @@ func rank(c Cause) int {
 	return slices.Index(causeOrder, c)
 }
 
-// fromContent adds the causes that a content cycle shows. The packs of a record that verify could
+// fromContent adds the causes that a content cycle shows. The packs of a record that `verify` could
 // not read are all named, because none of them was checked.
 func (c *causes) fromContent(content *Content) {
 	if content == nil {

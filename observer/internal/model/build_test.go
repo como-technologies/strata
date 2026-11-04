@@ -243,7 +243,7 @@ func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
 	fresh := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "other@1.0.0", "aws-stack@1.0.0")
 	fresh.Registry = ""
 	current := pin("cert-manager", "addon", "1.21.1", "", "aws-stack@1.0.0")
-	move := Move{Impact: "repave", Flags: []string{"IDENTITY", "AUTHORED"}, Fold: docs.Fold{Settings: 2, Follows: 1, Repeats: 8}, Images: 8, Charts: 1}
+	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored}, Fold: docs.Fold{Settings: 2, Follows: 1, Repeats: 8}, Images: 8, Charts: 1}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{floating, fresh, current}, Moves: map[string]Move{MoveKey(fresh): move}}
 	rows := build(nil, v).Newer
 	if len(rows) != 2 {
@@ -282,7 +282,7 @@ func TestAVersionIsNewForSevenDays(t *testing.T) {
 func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
 	dex.RegistryProviderType = ""
-	dex.Type = "helm"
+	dex.Type = docs.PackHelm
 	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
 	r.Doc.Source.ProjectUID = "p1"
 	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: "pack.content.images[0]"}, docs.Leaf{Path: "charts.dex.image.tag"})
@@ -293,8 +293,8 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 		t.Errorf("profile %+v", p)
 	}
 	got := p.Packs[0]
-	if got.Registry != "Public Repo" || got.Kind != "helm" || got.Upstream != "sha256:dex" || got.UpstreamSource != "packRef.digest" || got.Images != 2 ||
-		got.Newer != "2.44.0" || got.Status != StatusDrift || !slices.Equal(got.Flags, []string{"AUTHORED"}) {
+	if got.Registry != "Public Repo" || got.Kind != docs.PackHelm || got.Upstream != "sha256:dex" || got.UpstreamSource != "packRef.digest" || got.Images != 2 ||
+		got.Newer != "2.44.0" || got.Status != StatusDrift || !slices.Equal(got.Flags, []string{docs.FlagAuthored}) {
 		t.Errorf("pack %+v", got)
 	}
 	if want := []string{"charts.a.b", "charts.a.c", "charts.dex.image.tag", "pack.content.images[0]"}; !slices.Equal(got.ChangedPaths, want) {
@@ -389,7 +389,7 @@ func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 	d := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "repave", ImagesChanged: 8, ChartsChanged: 1}, Packs: []docs.Pack{{Identity: true, Authored: true, Images: true,
 		Values: docs.Values{Diff: []docs.Leaf{{Path: "pack.content.images[0]"}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
-	want := Move{Impact: "repave", Flags: []string{"IDENTITY", "AUTHORED", "IMAGES"}, Fold: docs.Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
+	want := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored, docs.FlagImages}, Fold: docs.Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
 	got := MoveOf(d)
 	if got.Impact != want.Impact || !slices.Equal(got.Flags, want.Flags) || got.Fold != want.Fold || got.Images != 8 || got.Charts != 1 {
 		t.Errorf("move %+v", got)
