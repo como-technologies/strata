@@ -11,9 +11,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
@@ -25,20 +27,35 @@ var version = "dev"
 const processTimeout = 10 * time.Minute
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := runContext(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
-const usage = "usage: strata-observer version | once --cluster-uid UID --records DIR --work DIR --state DIR"
+const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR"
 
-// run gives the exit code. The codes have the meaning that they have in strata: 1 says that a
-// finding exists, and 2 is an error.
 func run(args []string, stdout, stderr io.Writer) int {
-	switch {
-	case len(args) == 1 && args[0] == "version":
+	return runContext(context.Background(), args, stdout, stderr)
+}
+
+// runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
+// finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
+// a run of `serve`, and ends a cycle.
+func runContext(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "version" {
 		fmt.Fprintln(stdout, "strata-observer", version)
 		return 0
-	case len(args) >= 1 && args[0] == "once":
-		return once(args[1:], stdout, stderr)
+	}
+	if len(args) >= 1 {
+		switch args[0] {
+		case "once":
+			return once(ctx, args[1:], stdout, stderr)
+		case "serve":
+			return serve(ctx, args[1:], stderr)
+		case "health":
+			return health(ctx, args[1:], stderr)
+		}
 	}
 	fmt.Fprintln(stderr, usage)
 	return 2
@@ -60,11 +77,15 @@ func (o *options) flags(fs *flag.FlagSet) {
 	fs.DurationVar(&o.VersionsEvery, "versions-every", 6*time.Hour, "the period of a versions cycle")
 }
 
-// parse reads the flags and refuses a missing flag or a period that is not positive.
-func (o *options) parse(name string, args []string, stderr io.Writer) error {
+// parse reads the flags and refuses a missing flag or a period that is not positive. A command with
+// more flags adds them in extra.
+func (o *options) parse(name string, args []string, stderr io.Writer, extra ...func(*flag.FlagSet)) error {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	o.flags(fs)
+	for _, add := range extra {
+		add(fs)
+	}
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -79,20 +100,23 @@ func (o *options) parse(name string, args []string, stderr io.Writer) error {
 	return nil
 }
 
+// observer makes the observer of the flags. It runs the strata binary of the flags.
+func (o *options) observer(log *slog.Logger) *check.Observer {
+	strata := check.InDir{Runner: runner.Runner{Binary: o.strata, Timeout: processTimeout}}
+	return check.New(o.Config, strata, log)
+}
+
 // once runs one content cycle and one versions cycle, and prints the summary. It exits 1 when a
 // finding exists, as `strata verify` does. It exits 2 when no finding exists and a cycle failed, or
 // when the flags are wrong.
-func once(args []string, stdout, stderr io.Writer) int {
+func once(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var o options
 	if err := o.parse("once", args, stderr); err != nil {
 		fmt.Fprintln(stderr, "strata-observer:", err)
 		return 2
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	strata := check.InDir{Runner: runner.Runner{Binary: o.strata, Timeout: processTimeout}}
-	summary, err := check.New(o.Config, strata, log).Once(ctx)
+	summary, err := o.observer(log).Once(ctx)
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
@@ -106,6 +130,65 @@ func once(args []string, stdout, stderr io.Writer) int {
 		return 1
 	case err != nil:
 		return 2
+	}
+	return 0
+}
+
+// serve runs the two timers and serves the answers on a loopback address, until ctx ends. It exits 2
+// when the flags are wrong, when the address is not a loopback address, or when the server fails.
+func serve(ctx context.Context, args []string, stderr io.Writer) int {
+	var o options
+	listen := api.DefaultListen
+	err := o.parse("serve", args, stderr, func(fs *flag.FlagSet) {
+		fs.StringVar(&listen, "listen", api.DefaultListen, "a loopback IP address and a port; no other address is allowed")
+	})
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer:", err)
+		return 2
+	}
+	ln, err := api.Listen(listen)
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer: --listen:", err)
+		return 2
+	}
+	defer ln.Close()
+	log := slog.New(slog.NewTextHandler(stderr, nil))
+	obs := o.observer(log)
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	var worker sync.WaitGroup
+	worker.Add(1)
+	go func() {
+		defer worker.Done()
+		obs.Run(ctx)
+	}()
+	err = (&api.Server{Source: obs}).Serve(ctx, ln, log)
+	stop()
+	worker.Wait()
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer: the server stopped:", err)
+		return 2
+	}
+	return 0
+}
+
+// health asks the server for its health route, and exits 0 when it answers 200. It exits 1 when it does not,
+// and 2 when the flags are wrong. The probes of the Deployment run it.
+func health(ctx context.Context, args []string, stderr io.Writer) int {
+	fs := flag.NewFlagSet("health", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	listen := fs.String("listen", api.DefaultListen, "the loopback address of the server")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	err := api.Health(ctx, *listen)
+	switch {
+	case errors.Is(err, api.ErrNotLoopback):
+		fmt.Fprintln(stderr, "strata-observer: --listen:", err)
+		return 2
+	case err != nil:
+		fmt.Fprintln(stderr, "strata-observer:", err)
+		return 1
 	}
 	return 0
 }

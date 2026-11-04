@@ -68,11 +68,16 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 		cacheKey := doc.Tool.Version + " " + key
 		move, ok := o.cachedMove(cacheKey)
 		if !ok {
-			var err error
-			if move, err = o.compareMove(ctx, dir, pin); err != nil {
+			diff, err := o.compareMove(ctx, dir, pin)
+			if err != nil {
 				return moves, err
 			}
+			// The counts go to the state. The pack, with its changed values, stays in memory.
+			move = model.MoveOf(diff)
 			o.storeMove(cacheKey, move)
+			if pack, ok := movePack(diff); ok {
+				o.storeDetail(cacheKey, pack)
+			}
 		}
 		moves[key], used[cacheKey] = move, true
 	}
@@ -80,16 +85,13 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 	return moves, nil
 }
 
-func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (model.Move, error) {
+// compareMove compares the pinned version of a pin with its newest version. The caller keeps the counts
+// and the changed values apart.
+func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (docs.Diff, error) {
 	ref := "pack:" + pin.RegistryUID + "/" + pin.Name + "@"
 	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, ref+pin.Version, ref+pin.Newer[0].Version, "--json", "--compact", "-q")
 	if err != nil {
-		return model.Move{}, err
+		return docs.Diff{}, err
 	}
-	diff, err := decode[docs.Diff](res.Stdout)
-	if err != nil {
-		return model.Move{}, err
-	}
-	// The counts stay. The changed values go out of scope here, and the state never holds them.
-	return model.MoveOf(diff), nil
+	return decode[docs.Diff](res.Stdout)
 }

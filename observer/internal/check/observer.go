@@ -43,6 +43,10 @@ type Observer struct {
 	jitter func() float64
 	log    *slog.Logger
 
+	// worker has one slot. A strata process runs only while its holder has the slot, so that a cycle and
+	// a request of the detail tier never run two processes at once.
+	worker chan struct{}
+
 	mu       sync.Mutex
 	state    State
 	content  *model.Content
@@ -51,6 +55,9 @@ type Observer struct {
 	contentAt, versionsAt *time.Time
 	files                 int
 	filesKnown            bool
+	// details holds the pack of each move that the observer compared, by the key of the cache. It holds
+	// changed values, so it stays in memory: the state never holds it.
+	details map[string]docs.Pack
 }
 
 // New makes an observer. It reads the state, and starts with an empty state when the file cannot be
@@ -60,7 +67,8 @@ func New(cfg Config, strata Strata, log *slog.Logger) *Observer {
 }
 
 func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Time) *Observer {
-	o := &Observer{cfg: cfg, strata: strata, now: now, jitter: rand.Float64, log: log}
+	o := &Observer{cfg: cfg, strata: strata, now: now, jitter: rand.Float64, log: log,
+		worker: make(chan struct{}, 1), details: map[string]docs.Pack{}}
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -107,6 +115,10 @@ func (o *Observer) run(ctx context.Context, dir string, exits []int, args ...str
 
 // RunContent runs one content cycle, and keeps its answer or its failure.
 func (o *Observer) RunContent(ctx context.Context) error {
+	if err := o.acquire(ctx); err != nil {
+		return err
+	}
+	defer o.release()
 	start := time.Now()
 	content, files, err := o.contentCycle(ctx)
 	if ctx.Err() != nil {
@@ -129,6 +141,10 @@ func (o *Observer) RunContent(ctx context.Context) error {
 
 // RunVersions runs one versions cycle, and keeps its answer or its failure.
 func (o *Observer) RunVersions(ctx context.Context) error {
+	if err := o.acquire(ctx); err != nil {
+		return err
+	}
+	defer o.release()
 	start := time.Now()
 	versions, files, err := o.versionsCycle(ctx)
 	if ctx.Err() != nil {
@@ -183,7 +199,8 @@ func (o *Observer) keepFirstSeen(content model.Content) {
 }
 
 // cachedMove, storeMove, and pruneMoves are the cache of the moves. The key holds the version of the
-// binary, so a new binary asks again.
+// binary, so a new binary asks again. The state keeps the counts of a move. The memory keeps its
+// pack, with the changed values, in details.
 func (o *Observer) cachedMove(key string) (model.Move, bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -197,12 +214,30 @@ func (o *Observer) storeMove(key string, m model.Move) {
 	o.state.Moves[key] = m
 }
 
+func (o *Observer) cachedDetail(key string) (docs.Pack, bool) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	p, ok := o.details[key]
+	return p, ok
+}
+
+func (o *Observer) storeDetail(key string, p docs.Pack) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.details[key] = p
+}
+
 func (o *Observer) pruneMoves(used map[string]bool) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for k := range o.state.Moves {
 		if !used[k] {
 			delete(o.state.Moves, k)
+		}
+	}
+	for k := range o.details {
+		if !used[k] {
+			delete(o.details, k)
 		}
 	}
 }
@@ -276,4 +311,18 @@ func earlier(a, b time.Time) time.Time {
 		return b
 	}
 	return a
+}
+
+// acquire waits for the slot of the worker. It gives up when ctx ends.
+func (o *Observer) acquire(ctx context.Context) error {
+	select {
+	case o.worker <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (o *Observer) release() {
+	<-o.worker
 }

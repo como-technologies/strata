@@ -1,7 +1,6 @@
 package model
 
 import (
-	"slices"
 	"strings"
 	"time"
 
@@ -48,39 +47,6 @@ func (e *ErrorRef) isLost() bool {
 		return true
 	}
 	return false
-}
-
-// eventKinds names the event of each kind of finding. A finding is always a drift.
-var eventKinds = map[Kind]struct{ reason, message string }{
-	PublishedChanged: {"DriftFound", "The published version differs from its record."},
-	Overwritten:      {"Overwritten", "Another version replaced the recorded version in place."},
-	Renamed:          {"Renamed", "The recorded version has another name now."},
-	Gone:             {"Gone", "Palette no longer holds the recorded version."},
-	ClusterDiffers:   {"ClusterDiffers", "The cluster runs other content than the record."},
-	ImageIDChanged:   {"ImageIDChanged", "A pack names another machine image."},
-}
-
-// eventType is the type of each event: the observer reports drift only.
-const eventType = "drift"
-
-// eventsOf gives one event for each finding, the newest first.
-func eventsOf(findings []Finding) []Event {
-	out := make([]Event, 0, len(findings))
-	for _, f := range findings {
-		e := eventKinds[f.Kind]
-		out = append(out, Event{Type: eventType, Reason: e.reason, Time: f.FirstSeen, Object: f.Profile, Message: e.message})
-	}
-	sortEvents(out)
-	return out
-}
-
-func sortEvents(events []Event) {
-	slices.SortStableFunc(events, func(a, b Event) int {
-		if c := b.Time.Compare(a.Time); c != 0 {
-			return c
-		}
-		return strings.Compare(a.Object+a.Reason, b.Object+b.Reason)
-	})
 }
 
 // limitsOf counts what a check does not cover. The images and the Helm packs are those of the

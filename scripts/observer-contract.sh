@@ -6,7 +6,7 @@
 #
 # --write also copies the documents to observer/internal/docs/testdata/, for the tests with no binary.
 # It also builds strata-observer and runs `once` against the seeds, with the real binary of strata.
-# Needs just, go, jq, and target/release/strata.
+# Needs just, go, jq, curl, and target/release/strata.
 set -euo pipefail
 root=${STRATA_ROOT:-$(git rev-parse --show-toplevel)}
 observer=${STRATA_OBSERVER:-$root/observer}
@@ -15,7 +15,9 @@ work=$(mktemp -d)
 docs=$work/docs
 mkdir -p "$docs"
 pg=
+serve_pid=
 cleanup() {
+  [ -z "$serve_pid" ] || kill "$serve_pid" 2>/dev/null || true
   [ -z "$pg" ] || kill -- "-$pg" 2>/dev/null || true
   rm -rf "$work"
 }
@@ -71,6 +73,36 @@ once() {
     echo "once $1: exit $code, work empty, $(jq -c '{page, findings: [.findings[] | {kind, profile, packs, alsoOnCluster, who: (.who | length)}], content: (.content | {failedRuns, lastError})}' "$work/once-$1.json")"
   fi
 }
+
+# serve_up CLUSTER-UID RECORDS-NAME PORT starts `strata-observer serve` against the stand-in that runs now.
+# It returns when the first content cycle ended well, and fails when that takes more than two minutes.
+serve_up() {
+  mkdir -p "$work/serve-work"
+  "$observer_bin" serve --strata "$strata" --cluster-uid "$1" --records "$work/records-$2" --work "$work/serve-work" \
+    --state "$work/serve-state" --listen "127.0.0.1:$3" >"$work/serve.out" 2>"$work/serve.err" &
+  serve_pid=$!
+  for _ in $(seq 120); do
+    [ "$(curl -s "http://127.0.0.1:$3/v1/cluster" | jq -r '.page // empty')" = ok ] && return 0
+    sleep 1
+  done
+  cat "$work/serve.err" >&2
+  echo "the server did not reach the page state ok" >&2
+  exit 2
+}
+# serve_down stops the server with SIGTERM, and fails when its exit code is not 0.
+serve_down() {
+  kill "$serve_pid"
+  wait "$serve_pid" || { echo "the server exited with $?" >&2; exit 2; }
+  serve_pid=
+}
+# status NAME EXPECTED CURL-ARGUMENT... fails when the HTTP status that curl gets is not the expected one.
+status() {
+  local got
+  got=$(curl -s -o /dev/null -w '%{http_code}' "${@:3}")
+  [ "$got" = "$2" ] || { echo "$1: status $got, expected $2" >&2; exit 2; }
+  if [ -n "${OBSERVER_CONTRACT_SHOW:-}" ]; then echo "$1: status $got"; fi
+}
+
 # expect NAME FILTER fails when the jq filter is not true for the summary of once NAME.
 expect() {
   jq -e "$2" "$work/once-$1.json" >/dev/null || { echo "once $1: not true: $2" >&2; jq -c . "$work/once-$1.json" >&2; exit 2; }
@@ -140,6 +172,30 @@ if [ -n "${OBSERVER_CONTRACT_SHOW:-}" ]; then
   echo "grep -c team-payments:"
   (cd "$work" && grep -c team-payments docs/compare-values.json once-values.json once-values.err || true)
 fi
+
+# The server shows the tiers. A summary route holds no clear value, and the server refuses a POST and a
+# Host that is not loopback. The port is high, so that it does not meet a service of the host.
+port=$((20000 + RANDOM % 20000))
+base=http://127.0.0.1:$port
+serve_up "$uid" values "$port"
+for route in cluster findings profiles newer notchecked events; do
+  curl -s "$base/v1/$route" >"$work/serve-$route.json"
+  jq -e . "$work/serve-$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
+  ! grep -q team-payments "$work/serve-$route.json" || { echo "a clear value is in /v1/$route" >&2; exit 2; }
+done
+status "POST" 405 -X POST "$base/v1/cluster"
+status "Host: evil.example" 421 -H 'Host: evil.example' "$base/v1/cluster"
+status "unknown profile" 404 "$base/v1/profiles/nope"
+status "health" 200 "$base/healthz"
+"$observer_bin" health --listen "127.0.0.1:$port" || { echo "health failed with the server up" >&2; exit 2; }
+serve_down
+code=0
+"$observer_bin" health --listen "127.0.0.1:$port" 2>/dev/null || code=$?
+[ "$code" = 1 ] || { echo "health exited $code with no server, expected 1" >&2; exit 2; }
+code=0
+"$observer_bin" serve --strata "$strata" --cluster-uid "$uid" --records "$work/records-values" --work "$work/serve-work" \
+  --state "$work/serve-state" --listen=0.0.0.0:8080 2>/dev/null || code=$?
+[ "$code" = 2 ] || { echo "serve --listen=0.0.0.0:8080 exited $code, expected 2" >&2; exit 2; }
 stop
 
 

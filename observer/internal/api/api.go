@@ -1,0 +1,257 @@
+// Package api serves the answers of the observer on a loopback address, in two tiers.
+//
+// The summary tier carries verdicts, roots, counts, paths, and flags, and no value. Its types are
+// parts of model.Summary, and none of them has a field of type docs.Leaf, so the compiler keeps a
+// value out. The detail tier carries the old and the new value of a pack, and one route serves it.
+// The gate of the detail tier is Kubernetes: the address is loopback, so a person reaches it with
+// `kubectl port-forward`, and the RBAC verb `create pods/portforward` decides who can. The server
+// holds no key, makes no call to Kubernetes, and sends no POST.
+//
+// No answer carries a variable of a cluster, a whole record, a raw directory, or the environment of
+// a process: the types of internal/docs have no field for them.
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/model"
+)
+
+// detailTimeout limits one request of the detail tier. A request can wait for a cycle and then run
+// one compare. So the limit is long. It is shorter than the write timeout of the server.
+const detailTimeout = 50 * time.Second
+
+// Source is what the server serves. The Observer of internal/check is the Source of the program.
+type Source interface {
+	// Summary gives the summary at this time.
+	Summary() model.Summary
+	// PackDiff gives the entry of a pack in the diff of one side of a profile, with its changed
+	// values. The profile is name@version. The second result is false when nothing is known.
+	PackDiff(ctx context.Context, profile, key string, side model.Side) (docs.Pack, bool, error)
+}
+
+// Tier says what the answer of a route carries.
+type Tier string
+
+// The tiers of the routes.
+const (
+	TierHealth  Tier = "health"
+	TierSummary Tier = "summary"
+	TierDetail  Tier = "detail"
+)
+
+// Route names a route of the API and the tier of its answer.
+type Route struct {
+	Pattern string
+	Tier    Tier
+}
+
+// The patterns of the routes.
+const (
+	patternHealth     = "/healthz"
+	patternCluster    = "/v1/cluster"
+	patternFindings   = "/v1/findings"
+	patternProfiles   = "/v1/profiles"
+	patternProfile    = "/v1/profiles/{name}"
+	patternNewer      = "/v1/newer"
+	patternNotChecked = "/v1/notchecked"
+	patternEvents     = "/v1/events"
+	patternPackDiff   = "/v1/packs/{profile}/{layer}/{name}/diff"
+)
+
+// Server serves a Source. Page is the handler of the route `/` and of each path that no route owns.
+// With a nil Page, these paths get 404.
+type Server struct {
+	Source Source
+	Page   http.Handler
+}
+
+type entry struct {
+	Route
+	handler http.HandlerFunc
+}
+
+// table lists every route. The server registers no other route. A test fails when a summary route
+// has no line in the table of the sentinel test.
+func (s *Server) table() []entry {
+	return []entry{
+		{Route{patternHealth, TierHealth}, s.health},
+		{Route{patternCluster, TierSummary}, s.cluster},
+		{Route{patternFindings, TierSummary}, s.findings},
+		{Route{patternProfiles, TierSummary}, s.profiles},
+		{Route{patternProfile, TierSummary}, s.profile},
+		{Route{patternNewer, TierSummary}, s.newer},
+		{Route{patternNotChecked, TierSummary}, s.notChecked},
+		{Route{patternEvents, TierSummary}, s.events},
+		{Route{patternPackDiff, TierDetail}, s.packDiff},
+	}
+}
+
+// Routes lists the routes of the API, not counting the route of the page.
+func (s *Server) Routes() []Route {
+	var out []Route
+	for _, e := range s.table() {
+		out = append(out, e.Route)
+	}
+	return out
+}
+
+// Handler gives the handler of the server. It sets the headers on each answer, also on a refusal.
+// It refuses a request with a Host that is not loopback (421) and a method that is not GET (405).
+func (s *Server) Handler() http.Handler {
+	mux := http.NewServeMux()
+	for _, e := range s.table() {
+		mux.HandleFunc(e.Pattern, e.handler)
+	}
+	mux.HandleFunc("/v1/", notFound)
+	if s.Page != nil {
+		mux.Handle("/", s.Page)
+	} else {
+		mux.HandleFunc("/", notFound)
+	}
+	return guard(mux)
+}
+
+// The policy of the page. The page loads its script, style, and fonts from the server itself, and
+// from nowhere else.
+const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+
+// guard sets the four headers on each answer and refuses the requests that the server does not serve.
+func guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "no-referrer")
+		h.Set("Cache-Control", "no-store")
+		switch {
+		case !loopbackHost(r.Host):
+			// A page in the browser of a person can reach 127.0.0.1 after a DNS rebinding. Its Host is
+			// then the name of the page, and not a loopback name.
+			fail(w, http.StatusMisdirectedRequest)
+		case r.Method != http.MethodGet:
+			h.Set("Allow", http.MethodGet)
+			fail(w, http.StatusMethodNotAllowed)
+		default:
+			next.ServeHTTP(w, r)
+		}
+	})
+}
+
+// loopbackHost says that the Host of a request is localhost or a loopback address, with any port. A
+// person can choose the local port of a port-forward, so the port can be any port.
+func loopbackHost(host string) bool {
+	name := host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		name = h
+	} else if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		name = host[1 : len(host)-1]
+	}
+	if strings.EqualFold(name, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(name)
+	return ip != nil && ip.IsLoopback()
+}
+
+// errorBody is the body of a refusal. It has a fixed text, so that it names no value and echoes no
+// part of the request.
+type errorBody struct {
+	Error string `json:"error"`
+}
+
+func fail(w http.ResponseWriter, status int) {
+	writeJSON(w, status, errorBody{Error: strings.ToLower(http.StatusText(status))})
+}
+
+func notFound(w http.ResponseWriter, _ *http.Request) {
+	fail(w, http.StatusNotFound)
+}
+
+// writeJSON writes the whole answer or a 500. It encodes first, so that a failure never sends half a body.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	body, err := json.Marshal(v)
+	if err != nil {
+		status, body = http.StatusInternalServerError, []byte(`{"error":"internal server error"}`)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(append(body, '\n'))
+}
+
+func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	_, _ = w.Write([]byte("ok\n"))
+}
+
+func (s *Server) cluster(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, ClusterOf(s.Source.Summary()))
+}
+
+func (s *Server) findings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, FindingsView{Findings: s.Source.Summary().Findings})
+}
+
+func (s *Server) profiles(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, ProfilesOf(s.Source.Summary()))
+}
+
+func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
+	sum := s.Source.Summary()
+	p, ok := findProfile(sum.Profiles, r.PathValue("name"))
+	if !ok {
+		notFound(w, r)
+		return
+	}
+	writeJSON(w, http.StatusOK, profileView(p, sum.Findings))
+}
+
+func (s *Server) newer(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, NewerView{Newer: s.Source.Summary().Newer})
+}
+
+func (s *Server) notChecked(w http.ResponseWriter, _ *http.Request) {
+	sum := s.Source.Summary()
+	writeJSON(w, http.StatusOK, NotCheckedView{NotChecked: sum.NotChecked, Limits: sum.Limits})
+}
+
+func (s *Server) events(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, EventsView{Events: s.Source.Summary().Events})
+}
+
+// packDiff serves the one route of the detail tier. A profile, a pack, or a side that is unknown gets
+// 404, and a side that is no side gets 400. Neither answer names the input.
+func (s *Server) packDiff(w http.ResponseWriter, r *http.Request) {
+	side, ok := model.ParseSide(r.URL.Query().Get("side"))
+	if !ok {
+		fail(w, http.StatusBadRequest)
+		return
+	}
+	profile, ok := findProfile(s.Source.Summary().Profiles, r.PathValue("profile"))
+	if !ok {
+		notFound(w, r)
+		return
+	}
+	subject := model.Subject(profile.Name, profile.Version)
+	key := r.PathValue("layer") + "/" + r.PathValue("name")
+	ctx, cancel := context.WithTimeout(r.Context(), detailTimeout)
+	defer cancel()
+	pack, found, err := s.Source.PackDiff(ctx, subject, key, side)
+	switch {
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		fail(w, http.StatusServiceUnavailable)
+	case err != nil:
+		fail(w, http.StatusBadGateway)
+	case !found:
+		notFound(w, r)
+	default:
+		writeJSON(w, http.StatusOK, PackDiffOf(subject, key, side, pack))
+	}
+}

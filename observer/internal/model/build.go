@@ -9,7 +9,8 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 )
 
-// newWindow is the time that a version counts as new after its listing.
+// newWindow is the time that a version counts as new after its listing. It is also the window of
+// the list of events.
 const newWindow = 7 * 24 * time.Hour
 
 // Build joins the last good content cycle and the last good versions cycle into the summary. The
@@ -41,6 +42,7 @@ func Build(in Input) Summary {
 		s.StrataVersion = in.Content.Strata
 	}
 	s.NotChecked = c.list()
+	s.Events = eventsOf(v.findings, in.Versions, now)
 	s.Counts = s.counts(in, v)
 	s.Counts.Newer = len(s.Newer)
 	s.Counts.NewerProfiles = distinctProfiles(s.Newer)
@@ -126,7 +128,6 @@ func (s *Summary) fromContent(in Input, v *view) {
 	for _, p := range noRecordProfiles(c) {
 		s.Profiles = append(s.Profiles, Profile{Name: p.Name, Version: p.Version, Type: p.Type, Status: StatusNoRecord, Packs: []Pack{}})
 	}
-	s.Events = eventsOf(v.findings)
 	s.Limits = limitsOf(c)
 }
 
@@ -260,11 +261,8 @@ func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 
 // listedWithin says that a version came in the last 7 days. A time that does not parse is not new.
 func listedWithin(listed string, now time.Time) bool {
-	t, err := time.Parse(time.RFC3339, listed)
-	if err != nil {
-		return false
-	}
-	return now.Sub(t) <= newWindow
+	t, ok := parseTime(listed)
+	return ok && within(t, now)
 }
 
 func distinctProfiles(rows []Newer) int {

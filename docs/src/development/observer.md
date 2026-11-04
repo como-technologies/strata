@@ -13,6 +13,9 @@ The observer holds no rule of its own. It reads the answers of `strata` through
 the allow-list of `internal/docs`, and it writes nothing to Palette. For the
 rules of the code, see [The Go of the observer](./code.md#the-go-of-the-observer).
 
+`once` prints the summary one time. `serve` keeps the answers and shows them on
+a loopback address: see [The API of the observer](./observer-api.md).
+
 ## Run it once
 
 ```bash
@@ -216,7 +219,7 @@ value of a variable.
 | `newer` | One row for each pin that is behind. |
 | `notChecked` | One row for each cause. |
 | `limits` | `imagesNamedByATag`, `helmPacks`, and `maskedPaths`. |
-| `events` | One event for each finding, the newest first. |
+| `events` | The events of the last 7 days, the newest first: see [The events](#the-events). |
 
 The status of a profile and of a pack is `drift`, `newer`, `not-checked`, `ok`,
 or `no-record`. The first status that holds wins, in that order. A pack is never
@@ -233,6 +236,24 @@ is empty, and `project` otherwise. `upstream` is `hash.upstreamRaw`.
 The limits show what a check does not cover. They count the images that a tag
 names (an image with no `@sha256`), the packs of the type `helm`, and the
 masked paths of each diff.
+
+### The events
+
+The list holds the events of the last 7 days, the newest first. Each event has
+a `type`, a `reason`, a `time`, an `object`, and a `message`. The `type` is the
+kind of news. A newer version stays neutral, and `not-checked` never raises a
+severity.
+
+| `type` | `reason` | When | `time` |
+| --- | --- | --- | --- |
+| `drift` | `DriftFound`, `Overwritten`, `Renamed`, `Gone`, `ClusterDiffers`, or `ImageIDChanged`, by the `kind` of the finding | A finding exists. | `firstSeen` of the finding. |
+| `info` | `ProfileUpdated` | A finding holds `who`. One event for each write. | `time` of the write. |
+| `newer` | `NewVersion` | A pin is behind. | `listed` of the newest version. |
+| `not-checked` | `OldCopy` | A pin has `registrySync`. One event for each registry. | `lastSyncedTime` of the registry. |
+
+The `object` is the profile. For `NewVersion` and `OldCopy`, it is the profiles
+that the pins name, separated by commas. A finding stays in `findings` when its
+event is older than 7 days.
 
 ## The state
 
