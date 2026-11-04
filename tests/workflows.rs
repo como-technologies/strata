@@ -875,3 +875,56 @@ fn the_observer_build_writes_a_static_binary_that_names_the_version_of_cargo_tom
         "Cargo.toml has the line that the recipe reads"
     );
 }
+
+/// The contract test of the observer needs the strata binary and the stand-in of this commit. The
+/// recipe `observer-contract` builds both and runs the script, and gives it its arguments, so
+/// `--write` reaches it. The justfile names the recipe with `*args`, and the helper `recipe` does
+/// not read such a name.
+#[test]
+fn the_observer_contract_recipe_builds_strata_and_the_stand_in_and_runs_the_script() {
+    let justfile = repo_file("justfile");
+    let mut lines = justfile
+        .lines()
+        .skip_while(|line| !line.starts_with("observer-contract "));
+    assert_eq!(
+        lines.next(),
+        Some("observer-contract *args: build stand-in"),
+        "the recipe names its arguments and its two dependencies"
+    );
+    assert_eq!(
+        lines.next().map(str::trim),
+        Some("scripts/observer-contract.sh {{args}}")
+    );
+    assert!(
+        lines.next().is_none_or(|line| !line.starts_with(' ')),
+        "the recipe has one command"
+    );
+
+    let script = Command::new("bash")
+        .args(["-n", "scripts/observer-contract.sh"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(
+        script.status.success(),
+        "{}",
+        String::from_utf8_lossy(&script.stderr)
+    );
+}
+
+/// The job `check` runs the contract test of the observer after `just examples`, because the
+/// stand-in reads the examples that the recipe `examples` builds. The job has no step of its own
+/// for Go: the recipe starts it.
+#[test]
+fn the_check_job_runs_the_contract_of_the_observer_after_the_examples() {
+    let runs = runs_of("checks.yml", "lint and test");
+    let at = |recipe: &str| {
+        runs.iter()
+            .position(|run| run == recipe)
+            .unwrap_or_else(|| panic!("the job check runs {recipe}: {runs:?}"))
+    };
+    assert!(
+        at("just examples") < at("just observer-contract"),
+        "{runs:?}"
+    );
+}

@@ -33,6 +33,8 @@ jobs:
       - run: just library-example
       # the examples are built, not tracked: this keeps the generator working
       - run: just examples
+      # the documents of the strata binary of this commit go through the allow-list of the observer
+      - run: just observer-contract
 
   msrv:
     name: the lowest Rust version

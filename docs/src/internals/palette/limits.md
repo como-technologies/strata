@@ -195,6 +195,13 @@ makes no claim that depends on them.
   [Secrets in the values](profiles.md#secrets-in-the-values). When Palette
   masks the draft too, the values hold `********` already, and the mask of
   strata changes nothing.
+- **The variables in the pack values of a cluster.** Palette writes the value
+  of a variable into the pack values of a cluster on one condition. The request
+  sets `resolvePackValues` on `GET /v1/spectroclusters/{uid}`, or
+  `resolveMacros` on `GET /v1/spectroclusters/{uid}/profiles/packs/manifests`,
+  to true. Both are false by default, and strata sends neither. So the pack
+  values of a cluster record hold `{{.spectro.var.NAME}}`, and not the value.
+  Only `variables[]` of the record holds the value of a variable.
 - **The fields that repave, for each engine.** Palette keeps a list for the OS
   layer and the Kubernetes layer of each engine, and checks no other layer. A
   new pack version on either layer repaves on every engine. Strata does not copy

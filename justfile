@@ -24,6 +24,10 @@ build:
 observer-build:
     CGO_ENABLED=0 go -C observer build -trimpath -ldflags "-X main.version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" -o ../target/observer/strata-observer .
 
+# Give the documents of the strata binary of this commit to the allow-list of the observer. --write also refreshes its test data.
+observer-contract *args: build stand-in
+    scripts/observer-contract.sh {{args}}
+
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
 
