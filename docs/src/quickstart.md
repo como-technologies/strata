@@ -88,7 +88,7 @@ impact on running clusters.
 
 ## Next
 
-- [The everyday loop](./loop.md): when to reach for strata, how to add it to your
+- [The everyday loop](./loop.md): when to use strata, how to add it to your
   pipeline one job at a time, and what a normal day holds.
 - [Use cases](./use-cases/index.md): a problem, the commands, and the fix.
 - [Commands](./commands/index.md): each command, its output, and its options.

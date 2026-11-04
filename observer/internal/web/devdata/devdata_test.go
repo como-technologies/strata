@@ -47,8 +47,9 @@ func encoded(t *testing.T, v any) any {
 	return normal(t, raw)
 }
 
-// Each file of each set decodes into the type of its route with no field to spare, and it encodes to
-// the same document. So a field that the API adds or drops makes this test fail.
+// Each file of each set decodes into the type of its route, and the decode refuses a field that the
+// type lacks. It encodes to the same document. So a field that the API adds or drops makes this test
+// fail.
 func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 	for _, state := range States {
 		s := load(t, state)

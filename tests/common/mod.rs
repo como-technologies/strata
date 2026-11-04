@@ -781,6 +781,53 @@ pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// The section of the page `path` of the repository that starts at the line `heading`, such as
+/// `## Install`. It ends at the next heading of the same level.
+pub fn page_section(path: &str, heading: &str) -> String {
+    let page = repo_file(path);
+    let level = heading.split(' ').next().unwrap();
+    let from = page
+        .find(&format!("\n{heading}\n"))
+        .unwrap_or_else(|| panic!("{path} has no section {heading:?}"));
+    let to = page[from + 1..]
+        .find(&format!("\n{level} "))
+        .unwrap_or_else(|| panic!("no section follows {heading:?} in {path}"));
+    page[from..from + 1 + to].to_string()
+}
+
+/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
+/// opening fence, so the block of a list item reads as it does in a terminal.
+pub fn code_blocks(text: &str, lang: &str) -> Vec<String> {
+    let opening = format!("```{lang}");
+    let mut blocks = Vec::new();
+    let mut open: Option<(usize, Vec<&str>)> = None;
+    for line in text.lines() {
+        let body = line.trim_start();
+        let indent = line.len() - body.len();
+        match open.take() {
+            None => {
+                if body == opening {
+                    open = Some((indent, Vec::new()));
+                }
+            }
+            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
+            Some((strip, mut lines)) => {
+                lines.push(line.get(strip..).unwrap_or(""));
+                open = Some((strip, lines));
+            }
+        }
+    }
+    blocks
+}
+
+/// The first block of `lang` in `text` that holds `needle`.
+pub fn block_with(text: &str, lang: &str, needle: &str) -> String {
+    code_blocks(text, lang)
+        .into_iter()
+        .find(|block| block.contains(needle))
+        .unwrap_or_else(|| panic!("no {lang} block holds {needle:?}"))
+}
+
 /// The command lines of the recipe `name` of the justfile, trimmed. A `{{variable}}` that the
 /// justfile sets to a string in single quotes, such as `rustdoc`, is replaced with its value.
 pub fn recipe(name: &str) -> Vec<String> {
@@ -1137,6 +1184,44 @@ pub fn fake_bin(dir: &Path, commands: &[(&str, &str)]) -> std::path::PathBuf {
 /// real one.
 pub fn path_with(bin: &Path) -> String {
     format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
+}
+
+/// Run the shell text `command` in `dir`, as a reader runs the commands of a page. A stand-in
+/// `kubectl` writes its arguments to a file and its standard input to another: read them with
+/// [`kubectl_args`] and [`kubectl_input`].
+pub fn run_with_kubectl(dir: &Path, command: &str, envs: &[(&str, &str)]) -> Output {
+    let bin = fake_bin(
+        dir,
+        &[(
+            "kubectl",
+            "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
+        )],
+    );
+    Command::new("bash")
+        .arg("-c")
+        .arg(format!("set -euo pipefail\n{command}"))
+        .current_dir(dir)
+        .env("PATH", path_with(&bin))
+        .envs(envs.iter().copied())
+        .output_locked()
+        .unwrap()
+}
+
+/// The arguments of each call of the stand-in `kubectl` of [`run_with_kubectl`], one call on each
+/// line.
+pub fn kubectl_args(dir: &Path) -> String {
+    written(dir, "kubectl.args")
+}
+
+/// The text that the stand-in `kubectl` of [`run_with_kubectl`] got on standard input in its last
+/// call.
+pub fn kubectl_input(dir: &Path) -> String {
+    written(dir, "kubectl.in")
+}
+
+/// The file `name` that a stand-in command wrote in `dir`.
+fn written(dir: &Path, name: &str) -> String {
+    fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
 /// A `jq` that acts as jq 1.6, which the jq of Debian 12 is: `jq -e` exits with 0 when its input

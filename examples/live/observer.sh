@@ -735,7 +735,7 @@ if stage 6 "way 2, a profile in Palette" && skip_without_page; then
   check profile-record 0 '#656: a record of the profile of the observer' -- "$strata" snapshot "$OP" -o observer-profile.json -q
   check no-key-in-profile 1 '#656: the record of the profile does not hold the key' -- record_has_key observer-profile.json
   check no-repave ? '#656: cluster A keeps its machines when the layer goes on: 0 says it does, 1 says Palette replaced them' -- same_nodes
-  check profile-detach 0 '#656: the profile comes off cluster A, and the cluster is Running' -- profile_detach
+  check profile-detach 0 '#656: the profile leaves cluster A, and the cluster is Running' -- profile_detach
   check profile-removal 0 '#656: the Deployment goes' -- profile_removed
 fi
 

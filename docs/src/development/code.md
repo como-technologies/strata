@@ -285,11 +285,11 @@ code, and these rules are for the Go code.
 - A cycle makes its directory under `--work` and removes it at the end, also
   after an error. A test makes sure that `--work` is empty after a good cycle
   and after a failed cycle.
-- The one compare of versions in the Go code is the minor number of
+- The one compare of versions in the Go code is the major and minor number of
   `tool.version`, in `model.ReBaselineNeeded`. The observer does not order pack
   versions: `behind` gives the order in `newer[0]`.
 - `internal/api` serves the summary and the detail tiers: see
-  [The API of the observer](./observer-api.md). The summary tier uses types of
+  [The server of the observer](./observer-api.md). The summary tier uses types of
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the
   detail tier has one. A test walks the types.
 - Only `internal/api` imports `net` or `net/http`, and only `health.go` makes an

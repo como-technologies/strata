@@ -1,4 +1,4 @@
-# The API of the observer
+# The server of the observer
 
 `strata-observer serve` runs the two timers of [the checks of the
 observer](./observer.md) and serves the answers on a loopback address. The API
@@ -40,9 +40,9 @@ Kubernetes verb `create` on `pods/portforward` is the gate.
 
 - A process that listens on `127.0.0.1` in a pod answers through
   `kubectl port-forward`.
-- Another pod that connects to the address of the pod gets `Connection
-  refused`.
-- The API proxy of the pod gives `ServiceUnavailable`.
+- Another pod cannot connect to the address of the pod. The check
+  `other-pod-refused` prints `refused` for any failure of `wget`, so it does not
+  name the cause.
 
 A role that has `pods/portforward` and `get` and `list` on pods gives `yes` for
 `create` on the subresource. It gives `no` for `get secrets` and for `exec`.
@@ -244,8 +244,8 @@ the page are those of the data.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
 
-A test decodes each file of each set into the type of its route, with no field
-to spare. So the test data cannot drift from the API. When `node` is on the
+A test decodes each file of each set into the type of its route, and it refuses a
+field that the type lacks. So the test data cannot drift from the API. When `node` is on the
 `PATH`, `go test` also renders each screen of each set with `app.js`. It fails on
 a screen that throws, and on a value that reaches the page as markup. It skips
 these tests when `node` is not there. It cannot see the layout, so a person looks
@@ -254,8 +254,9 @@ at the render.
 ## What no answer carries
 
 [The API of the observer](../reference/observer-api.md#what-no-answer-carries) lists the fields that no
-answer carries. The allow-list of `internal/docs` has no field for them, so they never
-enter the process.
+answer carries. The allow-list of `internal/docs` has no field for them. The bytes
+can reach memory, but they reach no type of the observer. So no answer and no log
+carries them.
 
 The summary tier uses types of its own. None of them has a field of the type
 `docs.Leaf`, so the compiler keeps a value out. A test walks the types.

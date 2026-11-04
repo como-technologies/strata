@@ -7,8 +7,9 @@ It writes nothing to Palette.
 
 Your pipeline runs strata when a change happens: a pull request, a merge, a
 night. The observer asks the same questions all day. A person who opens the page
-sees an answer that is a few minutes old. The observer holds no rule of its own.
-Each answer is the answer of a `strata` command.
+sees the answer of the last content cycle. A cycle starts every 15 minutes, with a
+random delay of 10 percent at most. The observer holds no rule of its own. Each
+answer is the answer of a `strata` command.
 
 <div class="playground-demo">
 
@@ -35,8 +36,8 @@ finding, and each state of the page.
 ## What the service does
 
 - **A content cycle** runs every 15 minutes. It checks each record against
-  Palette, reads the cluster, and compares each record with the copy that the
-  cluster holds.
+  Palette, reads the cluster, and compares each record with the copy that Palette
+  holds for the cluster.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
   in the registry, and compares each pin with its newest version.
 - Each cycle starts when the process starts. One `strata` process runs at a time.
@@ -63,7 +64,7 @@ record. It names the pack, and `who` names the person and the time of the write.
 update. Both facts are on the page of the profile.
 
 The summary also lists the pins that have newer versions. `impact` is the impact
-of the move to the newest version, as `strata behind` gives it:
+of the move to the newest version, as `strata compare` gives it:
 
 ```text
 {{#include ../output/observer-newer.txt}}
@@ -76,22 +77,22 @@ The summary holds the status of each profile, and the limits of the check:
 ```
 
 `imagesNamedByATag` counts the images that a tag names, `helmPacks` counts the
-packs of type `helm`, and `maskedPaths` counts the values that Palette masks. Each
+packs of type `helm`, and `maskedPaths` counts the masked paths in each diff. Each
 of them is a place where `OK` says less: see [What the observer does not
 see](#what-the-observer-does-not-see).
 
 The log goes to standard error. A line holds a verdict, a duration, and an
-error kind, and never a value. The example drops the time and the duration, because they
-change at each run:
+error kind, and never a value. The example shows only the lines of the cycles, and
+it drops the time and the duration, because they change at each run:
 
 ```text
 {{#include ../output/observer-log.txt}}
 ```
 
 A cluster that differs from its release gives the finding `cluster-differs`. The
-cluster `ledger` runs `aws-stack@1.1.0`, and a person changed its copy on the
-cluster. The observer checks each record, so the run for `ledger` also shows the edit of
-`aws-stack@1.0.0`:
+cluster `ledger` runs `aws-stack@1.1.0`, and a person changed the copy that Palette
+holds for the cluster. The observer checks each record, so the run for `ledger` also
+shows the edit of `aws-stack@1.0.0`:
 
 ```text
 {{#include ../output/observer-ledger.txt}}
@@ -129,10 +130,13 @@ lists the routes.
 
 ## Install
 
-The observer needs a namespace, two settings, a key, the records, and the
-manifests. Make the settings before the Deployment, because the pod does not
-start without the ConfigMap and the key. Copy `deploy/observer/` into the
-repository of your team. The steps below run from that repository.
+The observer needs a namespace, a pull Secret, a ConfigMap with three settings, a
+Secret of the key, the records, and the manifests. Make the settings first,
+because the pod does not start without the pull Secret, the ConfigMap, and the key.
+
+Get `deploy/observer/` and `scripts/ci/observer-records.sh` from the repository of
+strata, at the tag of your release. Copy both into the repository of your team. The
+steps below run from that repository. They need `jq`, `gzip`, and `base64`.
 
 1. **Make the namespace.** It enforces the Pod Security standard `restricted`.
 
@@ -140,7 +144,18 @@ repository of your team. The steps below run from that repository.
    kubectl apply -f deploy/observer/namespace.yaml
    ```
 
-2. **Make the ConfigMap.** It names the cluster, the API of Palette, and the project.
+2. **Make the pull Secret.** The image is in a private repository. The token needs
+   only the scope `read:packages`. Send it on standard input, as for the key.
+
+   ```bash
+   printf %s "$GHCR_PULL_TOKEN" \
+     | jq -Rs --arg user "<github user>" \
+         '{auths: {"ghcr.io": {username: $user, password: ., auth: ("\($user):\(.)" | @base64)}}}' \
+     | kubectl -n strata-observer create secret generic ghcr-pull \
+         --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
+   ```
+
+3. **Make the ConfigMap.** It names the cluster, the API of Palette, and the project.
 
    ```bash
    kubectl -n strata-observer create configmap strata-observer \
@@ -149,7 +164,7 @@ repository of your team. The steps below run from that repository.
      --from-literal=project-uid=<project uid>
    ```
 
-3. **Make the Secret of the key.** Send the key on standard input. It then never
+4. **Make the Secret of the key.** Send the key on standard input. It then never
    appears in an argument or in a file.
 
    ```bash
@@ -158,17 +173,19 @@ repository of your team. The steps below run from that repository.
          --from-file=api-key=/dev/stdin
    ```
 
-4. **Write the records.** The records script writes four Secrets on standard output.
-   Use `--server-side`: a client-side apply copies each Secret to an annotation
-   that has a limit of 256 KiB.
+5. **Write the records.** The folder `releases/` holds one record for each profile
+   version that the cluster runs. The records script writes four Secrets on standard
+   output. It refuses a record of a cluster and two records of one profile version.
+   Use `--server-side`: a client-side apply copies each Secret to an annotation that
+   has a limit of 256 KiB.
 
    ```bash
    scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
      | kubectl apply --server-side -f -
    ```
 
-5. **Apply the manifests.** Write a `kustomization.yaml` that names the folder and
-   the tag of the image. The tag is the tag of the release of strata.
+6. **Apply the manifests.** Write a `kustomization.yaml` that names the folder, the
+   tag of the image, and the pull Secret. The tag is the tag of the release of strata.
 
    ```yaml
    apiVersion: kustomize.config.k8s.io/v1beta1
@@ -178,23 +195,41 @@ repository of your team. The steps below run from that repository.
    images:
      - name: ghcr.io/como-technologies/strata-observer
        newTag: <release tag>
+   patches:
+     - target:
+         kind: Deployment
+         name: strata-observer
+       patch: |-
+         - op: add
+           path: /spec/template/spec/imagePullSecrets
+           value:
+             - name: ghcr-pull
    ```
 
    ```bash
    kubectl apply -k .
    ```
 
-6. **Open the page.** The service listens on the loopback address of the pod. A
-   person reaches it with a port-forward, then opens `http://127.0.0.1:8080`.
+7. **Let your team open the page.** The role `strata-observer-reader` gives `create`
+   on `pods/portforward`. It gives no Secret and no `exec`. Bind it to a group of
+   your team.
+
+   ```bash
+   kubectl apply -f deploy/observer/reader-role.yaml
+   kubectl -n strata-observer create rolebinding reader \
+     --role=strata-observer-reader --group=<group of your team>
+   ```
+
+8. **Open the page.** The service listens on the loopback address of the pod. A
+   person with the role reaches it with a port-forward, then opens
+   `http://127.0.0.1:8080`.
 
    ```bash
    kubectl -n strata-observer port-forward deploy/strata-observer 8080
    ```
 
-The image is in a private repository. Name a pull Secret in `imagePullSecrets`.
-Its token needs only the scope `read:packages`. [The image and the manifests of
-the observer](../development/observer-deploy.md) gives the files, the signature
-check, and the role that lets a person open the page.
+[The image and the manifests of the observer](../development/observer-deploy.md)
+gives each file and the signature check of the image.
 
 The records script shows what it writes. Each Secret holds some records, and the
 first Secret also holds `meta.json`. The step shows the names, and cuts the
@@ -205,32 +240,39 @@ content:
 ```
 
 A Secret with no record is empty. The next apply then removes the old content.
-The pipeline of your team runs the script at each merge that changes a record, so
-the records are the files that the team approved.
+The pipeline of your team runs the script in its publish step, so the records are
+the files that the team approved.
 
-A live run applied these steps to a cluster that Palette built. The pod passed the
-`restricted` standard and became Ready. Its first cycle reached Palette, so a
-workload cluster reaches the API. A user with only the reader role opened the page
-with the port-forward. A pod of another namespace could not connect. After a
-restart, the page worked again.
+A live run applied these steps to a cluster that Palette built. The run took the
+token from a file and bound the role to one user. It also set short periods for the
+two cycles, and it applied the output of `kubectl kustomize`.
+
+The pod passed the `restricted` standard and became Ready. Its first cycle reached
+Palette, so a workload cluster reaches the API. A user with only the reader role
+opened the page with the port-forward. A pod of another namespace could not connect.
+After a restart, the page worked again.
 
 ## Install with a profile in Palette
 
 You can put the manifests in an add-on profile, and attach the profile to the
-cluster. The profile holds the rendered manifests as one manifest layer, and Palette
-applies them to the cluster. Make the namespace, the ConfigMap, the Secret of the
-key, and the records with `kubectl` first, as in [Install](#install). The profile
-holds no key, because a profile variable is in clear in the copy of the cluster.
+cluster. The profile holds the output of `kubectl kustomize .` as one manifest layer,
+and Palette applies it to the cluster. Make the namespace, the pull Secret, the
+ConfigMap, the Secret of the key, and the records with `kubectl` first, as in
+[Install](#install). The profile holds no key, because a profile variable is in
+clear in the copy of the cluster.
 
 A live run shows what Palette does with the layer:
 
-- **The nodes stay.** Palette replaces no node when it applies the layer.
+- **The nodes stay.** Palette replaces no node when it applies the layer. The check
+  `no-repave` of [observer.sh](../development/live-runs.md#observersh) shows it.
 - **The other profiles stay.** Each other profile of the cluster still agrees with
   its record.
 - **The profile of the observer has no record.** The page lists it under "Not
   checked", and it shows no finding for it.
-- **A removal is clean.** When you remove the profile from the cluster, Palette deletes
-  the Deployment.
+- **A removal leaves the namespace.** When you remove the profile from the cluster,
+  Palette deletes the Deployment. The run checks nothing else. Delete the namespace
+  with `kubectl delete namespace strata-observer`, so that the key goes. The
+  ConfigMap, the key, and the records stay until then.
 
 An edit of the profile that drops an object from the manifest leaves the object on
 the cluster. To remove it, delete it with `kubectl`. See [An object that an edit
@@ -251,7 +293,7 @@ The script writes the baseline in `meta.json`:
 {{#include ../output/observer-first-seen.txt}}
 ```
 
-This bends the rule of [Where each part belongs](../boundary.md#the-rule-that-decides):
+This is an exception to the rule of [Where each part belongs](../boundary.md#the-rule-that-decides):
 a record in Git holds the content that the team approved. A first-seen record holds
 the content that Palette gave at that time. No person approved it. If somebody edited
 a profile before that time, the record holds the edit, and the observer reports no
@@ -275,8 +317,9 @@ and it never reads "No change" for a pack that it did not check.
    pipeline, closes this. See [What OK does not cover](../commands/verify.md#what-ok-does-not-cover)
    and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md).
 2. **A change on the cluster with `kubectl edit`.** The service compares what
-   Palette holds. Palette does not report such an edit, and the service does not
-   either.
+   Palette holds. It reads no object in the cluster, so it does not see such an edit.
+   No run shows what Palette does with it: see [What no run
+   covers](../internals/palette/limits.md).
 3. **What the workload runs.** "This cluster's copy in Palette" is the copy that
    Palette holds for this cluster. It is not the objects that run in the cluster.
 4. **The value of a cluster variable.** It is outside the root, so a change of one
@@ -286,20 +329,20 @@ and it never reads "No change" for a pack that it did not check.
 ## What you give the observer
 
 1. **An API key in the cluster.** This is the first part of strata that holds a
-   credential in a workload cluster. A key has the reach of its user, and not the
-   reach of this cluster. Whoever can read the Secret `strata-observer-key` has that
-   reach. Use a dedicated user with the least role. [The least role of the
-   key](#the-least-role-of-the-key) says which role.
+   credential in a workload cluster. A key has each permission of its user in Palette,
+   not only those for this cluster. Whoever can read the Secret `strata-observer-key`
+   has those permissions. Use a dedicated user with the least role.
+   [The least role of the key](#the-least-role-of-the-key) says which role.
 2. **Never a profile variable for the key.** A profile variable is in clear in the
    copy of the cluster. So the key stays there in clear. Make the Secret with `kubectl`.
 3. **Egress to Palette** from the cluster. The network policy of the observer allows
    DNS and HTTPS only. A team can narrow the HTTPS rule to the address of Palette.
    A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
-   reads the cluster and each profile that it runs. For a record that drifted, it
-   reads the audit log too. A versions cycle reads the registries and the packs that
-   the records pin. [The requests of a cycle](#the-requests-of-a-cycle) gives the
-   counts of both cycles.
+   reads the cluster, and it reads the profile version of each record. For a record
+   that drifted, it reads the audit log too. A versions cycle reads the registries
+   and the packs that the records pin. [The requests of a cycle](#the-requests-of-a-cycle)
+   gives the counts of both cycles.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
    a pack. A secret typed into a value that the schema does not mark passes through.
    `create` on `pods/portforward` is the gate: whoever has that verb opens the page.
@@ -323,10 +366,10 @@ verifies](../development/live-runs.md#observersh) holds the counts.
 
 ### The least role of the key
 
-The key reads the cluster, its profiles, the registries, and the audit log. The code
-of Palette shows that **Project Viewer** in the project of the cluster gives every
-answer. The role is read-only, and the observer needs no tenant role, because each
-request names the project. [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs)
+The key reads the cluster, its profiles, the registries, and the audit log.
+**Project Viewer** in the project of the cluster holds each permission that these
+requests need. The role is read-only, and the observer needs no tenant role, because
+each request names the project. [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs)
 lists each permission and each refusal.
 
 - **Keep the audit log in the role, to name the writer.** Cluster Viewer alone does
@@ -336,11 +379,9 @@ lists each permission and each refusal.
   `packRegistry.get`, and `packRegistry.list`.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.
-- **This is the reading of the code of Palette.** No run has used a key with that
-  role yet. `just live-observer-role` sends each request of the cycles with a second
-  key, and [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the
-  checks. Making the user is for brett, so the live confirmation is left for brett
-  until a user with the role exists.
+- **No live run has used this role yet.** `just live-observer-role` tests it. It
+  sends each request of the cycles with a second key, and
+  [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the checks.
 
 ## `re-baseline needed`
 
@@ -354,7 +395,7 @@ compatibility](../reference/compatibility.md) for each change that moves a root.
 
 - [The API of the observer](../reference/observer-api.md): the routes, the two
   tiers, and the fields that never leave.
-- [The observer finds an edit in place](../use-cases/observer.md): the problem, the
+- [The observer shows an edit in place](../use-cases/observer.md): the problem, the
   commands, and the fix.
-- [The checks of the observer](../development/observer.md): the code, for a
-  maintainer.
+- [The checks of the observer](../development/observer.md): the command of each
+  step, each finding, and each state of the page.

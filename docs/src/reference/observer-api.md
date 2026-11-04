@@ -20,10 +20,10 @@ person reaches the port with a port-forward:
 kubectl -n strata-observer port-forward deploy/strata-observer 8080
 ```
 
-The Kubernetes verb `create` on `pods/portforward` is the gate. Another pod that
-connects to the address of the pod gets `Connection refused`. A person without that
-verb cannot open the page. [The API of the observer](../development/observer-api.md#the-gate)
-shows how to test the verb.
+The Kubernetes verb `create` on `pods/portforward` is the gate. Another pod cannot
+connect to the address of the pod. A person without that verb cannot open the page.
+[The server of the observer](../development/observer-api.md#the-gate) shows how to test
+the verb.
 
 ## The routes
 
@@ -92,7 +92,8 @@ memory holds no values for a move that the state knows. The route then asks for 
 No tier carries `a`, `b`, `cluster.variables`, `clusterVariables`,
 `variables.diff[]`, a whole record, the raw directory, or the environment of a pod.
 The observer reads the documents of `strata` through an allow-list that has no
-field for them, so they never enter the process.
+field for them. The bytes can reach memory, but they reach no type of the observer.
+So no answer and no log carries them.
 
 The API key stays in the environment of the process. It goes to no answer and to no
 log. No route shows the environment. The server writes no request log, because a

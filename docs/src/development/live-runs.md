@@ -1414,12 +1414,11 @@ the pull token and for the token of `gh` in the files of the run.
 
 Stage 4 counts the requests of the cycles. `count-requests` is a small Go
 program that sits between `strata` and Palette. It writes one line for each
-request, with no query and no key. The count of the content cycle, of the
-first command of the versions cycle, and of its moves replaces the figures on
-#637.
+request, with no query and no key. It counts the content cycle, the first command
+of the versions cycle, and its moves.
 
 The undo runs at the end, also after a failed check or an error. The edit in
-place goes back, the profile of way 2 comes off the cluster and goes, and the
+place goes back, the profile of way 2 leaves the cluster and goes, and the
 namespace goes. The script deletes no cluster. `KEEP=1` skips the undo, so that
 `observer.sh N` can resume the run at stage N. A check with `?` records its
 result without judging it.
@@ -1462,7 +1461,7 @@ finding, because `verify --who` then reads the audit log.
 | `drift-found`, `drift-who` | 0 | #656: within two content cycles, `/v1/findings` holds `published-changed` with the pack, and `who` names the actor |
 | `cluster-copy-unchanged` | 0 | #656: `clusterCopy` of that profile still says `same`, because the cluster did not take the update |
 | `variable-in-raw`, `no-value-leaves` | 0 | #656: the raw output of `strata compare` holds the value of a variable. No route and no line of the log holds it |
-| `drift-undo`, `drift-clears` | 0 | #656: the version goes back, and the finding goes in the next cycle |
+| `drift-undo`, `drift-clears` | 0 | #656: the version goes back, and the next cycle clears the finding |
 | `wrong-key`, `lost-after-wrong-key` | 0 | #656: a wrong key in the Secret and a restart of the pod. The page goes to `lost` after two cycles |
 | `key-back`, `ok-after-key-back` | 0 | #656: the key back and a restart, and the page returns to `ok` |
 | `restart-keeps-working` | 0 | #656: after `kubectl rollout restart`, the page goes to `ok`. The start of its state is later, because the state goes with the pod |
@@ -1493,7 +1492,7 @@ The script then runs `verify --who`, a record of cluster A, and `behind` with bo
 `OBSERVER_ROLE_KEY`, and `OBSERVER_ROLE`, the name of the role. With no key, it says
 `could not check` and exits `2`.
 
-Making the user is for brett. The steps are in the header of the script and in [The
+A maintainer makes the user. The steps are in the header of the script and in [The
 live example](./live-example.md). Run the script once for each role under test, such
 as Project Viewer and Cluster Viewer. The checks with `?` record the answer and do not
 judge it, because the run finds the answer. The code of Palette says that Project

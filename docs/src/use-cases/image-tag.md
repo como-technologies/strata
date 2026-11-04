@@ -66,6 +66,9 @@ clusters on this version can run two images. See
 The team publishes `aws-stack@1.1.14`. Its pack names the build tag
 `2026.2.0-1234.1` in place of `2026.2`.
 
+A vendor's registry can hold only the short tag `2026.2` of `vendor.example/product`.
+The build tag then exists only in the mirror of the team.
+
 ```text
 {{#include ../output/image-tag-compare-build.txt}}
 ```

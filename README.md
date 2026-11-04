@@ -19,7 +19,7 @@ the root, and keeps it in a record in your repository. Equal roots mean one
 release. When the roots differ, strata names the layer, the value, and the
 impact on running clusters. A record in Git holds the content that the team
 approved, and a check against Palette shows each change after the approval.
-[The everyday loop](docs/src/loop.md) says when to reach for strata, and how to start.
+[The everyday loop](docs/src/loop.md) says when to use strata, and how to start.
 
 ## Quick start
 
@@ -75,7 +75,7 @@ just docs-serve   # build the book and open it at http://localhost:3000
 | Page | For |
 | --- | --- |
 | [Quick start](docs/src/quickstart.md) | the first commands |
-| [The everyday loop](docs/src/loop.md) | when to reach for strata, how to start from nothing, and a normal day |
+| [The everyday loop](docs/src/loop.md) | when to use strata, how to start from nothing, and a normal day |
 | [Use cases](docs/src/use-cases/index.md) | a problem, the commands, the output, and the fix |
 | [Commands](docs/src/commands/index.md) | each command, its output, and its options |
 | [Automation](docs/src/automation/scripts.md) | scripts, pull request comments, drift issues, the library |
