@@ -2,12 +2,9 @@ package check
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +16,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // The tests give the observer a fake strata. The fake answers from a world: the documents that the
@@ -92,12 +90,10 @@ func (w *world) Run(_ context.Context, dir string, args ...string) (runner.Resul
 	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
 }
 
-func doc(v any) runner.Result {
+// doc makes the result of a command that prints v and exits with the code exit.
+func doc(v any, exit int) (runner.Result, error) {
 	b, err := json.Marshal(v)
-	if err != nil {
-		panic(err)
-	}
-	return runner.Result{Stdout: b}
+	return runner.Result{Stdout: b, Exit: exit}, err
 }
 
 func (w *world) runVerify(args []string) (runner.Result, error) {
@@ -116,22 +112,19 @@ func (w *world) runVerify(args []string) (runner.Result, error) {
 		row.Path = a
 		s.Records = append(s.Records, row)
 	}
-	res := doc(s)
-	res.Exit = w.verifyExit
-	return res, nil
+	return doc(s, w.verifyExit)
 }
 
-func fileIndex(name string) int {
+func fileIndex(name string) (int, error) {
 	digits := strings.TrimFunc(filepath.Base(name), func(r rune) bool { return r < '0' || r > '9' })
-	n, err := strconv.Atoi(digits)
-	if err != nil {
-		panic(err)
-	}
-	return n
+	return strconv.Atoi(digits)
 }
 
 func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
-	out := args[slicesIndex(args, "-o")+1]
+	out, err := testkit.OutFile(args)
+	if err != nil {
+		return runner.Result{}, err
+	}
 	if strings.Contains(args[1], "/") {
 		if w.sideErr != nil {
 			return runner.Result{}, w.sideErr
@@ -156,15 +149,6 @@ func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
 	return runner.Result{}, os.WriteFile(filepath.Join(dir, out), raw, 0o600)
 }
 
-func slicesIndex(args []string, want string) int {
-	for i, a := range args {
-		if a == want {
-			return i
-		}
-	}
-	panic("no " + want)
-}
-
 // schemaOr gives the schema id that a test set, or the right one when it set none.
 func schemaOr(set, right string) string {
 	if set != "" {
@@ -183,23 +167,27 @@ func (w *world) runCompare(args []string) (runner.Result, error) {
 		if !ok {
 			return runner.Result{}, fmt.Errorf("the fake has no move %q", key)
 		}
-		d.Schema = schemaOr(d.Schema, docs.DiffSchema)
-		res := doc(d)
-		if !d.Same {
-			res.Exit = 1
-		}
-		return res, nil
+		return diffDoc(d)
 	}
-	d, ok := w.compares[fileIndex(args[1])]
+	i, err := fileIndex(args[1])
+	if err != nil {
+		return runner.Result{}, err
+	}
+	d, ok := w.compares[i]
 	if !ok {
 		d = docs.Diff{Same: true, SameContent: true}
 	}
+	return diffDoc(d)
+}
+
+// diffDoc prints a diff, and exits 1 when the two sides differ, as `compare` does.
+func diffDoc(d docs.Diff) (runner.Result, error) {
 	d.Schema = schemaOr(d.Schema, docs.DiffSchema)
-	res := doc(d)
+	exit := 0
 	if !d.Same {
-		res.Exit = 1
+		exit = 1
 	}
-	return res, nil
+	return doc(d, exit)
 }
 
 func (w *world) runBehind() (runner.Result, error) {
@@ -208,9 +196,7 @@ func (w *world) runBehind() (runner.Result, error) {
 	}
 	b := w.behind
 	b.Schema = schemaOr(b.Schema, docs.BehindSchema)
-	res := doc(b)
-	res.Exit = w.behindExit
-	return res, nil
+	return doc(b, w.behindExit)
 }
 
 // count gives the number of calls of a command.
@@ -271,17 +257,7 @@ func (r *rig) record(name, version string, keys ...string) {
 	if err != nil {
 		r.t.Fatal(err)
 	}
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	if _, err := zw.Write(body); err != nil {
-		r.t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		r.t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(r.records, name+"@"+version+".json.gz"), buf.Bytes(), 0o600); err != nil {
-		r.t.Fatal(err)
-	}
+	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", string(body))
 }
 
 func (r *rig) meta(body string) {
@@ -302,25 +278,6 @@ func (r *rig) restart(w Strata) *Observer {
 	return r.observer(w)
 }
 
-// cluster makes a cluster read with the given profiles as name@version.
-func cluster(t *testing.T, name string, profiles ...string) docs.ClusterRead {
-	t.Helper()
-	list := []map[string]string{}
-	for _, p := range profiles {
-		n, v, _ := strings.Cut(p, "@")
-		list = append(list, map[string]string{"name": n, "version": v, "type": "cluster"})
-	}
-	raw, err := json.Marshal(map[string]any{"source": map[string]any{"cluster": map[string]any{"uid": "c1", "name": name, "profiles": list}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var c docs.ClusterRead
-	if err := json.Unmarshal(raw, &c); err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
 func unchanged() docs.VerifyRow {
 	return docs.VerifyRow{Status: docs.VerifyUnchanged, RootRecorded: "r1", RootLive: "r1"}
 }
@@ -336,22 +293,4 @@ func entries(t *testing.T, dir string) []string {
 		names = append(names, e.Name())
 	}
 	return names
-}
-
-func errorsAs(err error, target any) bool {
-	return errors.As(err, target)
-}
-
-// nil2 gives a logger that writes nowhere.
-func nil2() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
-
-func marshalForTest(t *testing.T, v any) string {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
 }

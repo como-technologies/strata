@@ -174,8 +174,8 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	if move.Schema != DiffSchema {
 		t.Errorf("compare states %q", move.Schema)
 	}
-	if got := FoldOf(move.Packs[0].Values); got.Settings+got.Follows+got.Repeats != len(move.Packs[0].Values.Diff) {
-		t.Errorf("fold: %+v", got)
+	if len(move.Packs) != 1 || len(move.Packs[0].Values.Diff) == 0 {
+		t.Errorf("the compare of a move holds %d packs, and the first holds no changed value", len(move.Packs))
 	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff

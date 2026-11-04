@@ -92,7 +92,7 @@ run verify drift-record.json --summary --who >"$docs/verify-summary-drift.json"
 
 # The record of the first seed against the second seed: the published version changed, with who.
 records_dir edited drift-record.json
-once edited "$("$strata" list | sed -n 's/.*cluster:\([0-9a-f]\{24\}\) *payments .*/\1/p')" edited
+once edited "$(cluster_uid payments)" edited
 expect edited '(.findings | length) == 1 and .findings[0].kind == "published-changed" and (.findings[0].who | length) >= 1'
 stop
 
@@ -106,7 +106,7 @@ run compare "pack:$registry/cni-cilium-oss@1.19.6" "pack:$registry/cni-cilium-os
 stop
 
 start cluster-release
-uid=$("$strata" list | sed -n 's/.*cluster:\([0-9a-f]\{24\}\) *payments.*/\1/p')
+uid=$(cluster_uid payments)
 "$strata" snapshot "cluster:$uid" --raw-dir raw -o "$docs/cluster-payments.json" -q
 "$strata" snapshot aws-stack@1.1.0 -o "$docs/record-aws-stack.json" -q
 "$strata" snapshot platform-addons@1.0.0 -o record-platform-addons.json -q
@@ -120,7 +120,7 @@ done
 # The seed serves no registry, so the versions cycle fails. The content cycle gives the answer.
 records_dir release "$docs/record-aws-stack.json" record-platform-addons.json
 for name in payments ledger; do
-  once "release-$name" "$("$strata" list | sed -n "s/.*cluster:\([0-9a-f]\{24\}\) *$name .*/\1/p")" release
+  once "release-$name" "$(cluster_uid "$name")" release
 done
 expect release-payments '.page == "ok" and .counts.findings == 0 and .content.failedRuns == 0 and .cluster.name == "payments"'
 expect release-ledger '.content.failedRuns == 0 and (.findings | length) == 1 and .findings[0].kind == "cluster-differs" and .findings[0].packs == ["csi/csi-aws-ebs"]'
@@ -132,7 +132,7 @@ PALETTE_API=http://127.0.0.1:9 STRATA_RETRIES=0 "$strata" verify "$docs/record-a
 
 # This cluster has the value team-payments in a variable, so the document holds a clear value.
 start cluster-values
-uid=$("$strata" list | sed -n 's/.*cluster:\([0-9a-f]\{24\}\) *payments.*/\1/p')
+uid=$(cluster_uid payments)
 "$strata" snapshot aws-stack@1.1.1 -o values-record.json -q
 run compare values-record.json "cluster:$uid/aws-stack" >"$docs/compare-values.json"
 

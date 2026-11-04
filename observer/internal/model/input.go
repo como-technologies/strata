@@ -80,6 +80,11 @@ func (r Record) subject() string {
 	return Subject(r.Doc.Source.Name, r.Doc.Source.Version)
 }
 
+// PackKey names the pack of a pin as a record does: <layer>/<name>.
+func PackKey(p docs.Pin) string {
+	return p.Layer + "/" + p.Name
+}
+
 // MoveKey names the move of a pin that is behind: <registryUid>/<name>@<version>-><newest>. It is
 // empty for a pin with no newer version.
 func MoveKey(p docs.Pin) string {
@@ -97,6 +102,6 @@ func MoveOf(d docs.Diff) Move {
 		return m
 	}
 	m.Flags = d.Packs[0].Flags()
-	m.Fold = docs.FoldOf(d.Packs[0].Values)
+	m.Fold = FoldOf(d.Packs[0].Values.Paths())
 	return m
 }

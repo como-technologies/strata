@@ -107,7 +107,7 @@ func (c *causes) fromVersions(v *Versions) {
 		return
 	}
 	for _, pin := range v.Pins {
-		key := pin.Layer + "/" + pin.Name
+		key := PackKey(pin)
 		registry := registryName(pin)
 		if pin.Error != nil || v.Unread[MoveKey(pin)] {
 			group := pin.RegistryUID + "/" + key + "@" + pin.Version

@@ -41,7 +41,7 @@ records_dir playground records/*.json
 stop
 
 start "$name"
-uid=$("$strata" list | sed -n "s/.*cluster:\\([0-9a-f]\\{24\\}\\) *$cluster .*/\\1/p" | head -n 1)
+uid=$(cluster_uid "$cluster")
 [ -n "$uid" ] || { echo "the tenant of $name has no cluster named $cluster" >&2; exit 2; }
 mkdir -p "$work/cycle" "$work/state-observer"
 echo "The page of cluster $cluster is at http://$listen. Stop with Ctrl-C."

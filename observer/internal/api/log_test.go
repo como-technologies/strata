@@ -11,6 +11,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // script writes a shell script that stands for the strata binary. It answers from the fixtures. A
@@ -19,43 +20,28 @@ import (
 // fail-behind, or fail-moves.
 func script(t *testing.T, fixtures string) string {
 	t.Helper()
-	body := `#!/bin/sh
-cmd=$1
-shift
-out=
-prev=
-for a in "$@"; do
-  if [ "$prev" = -o ]; then out=$a; fi
-  prev=$a
-done
-fail() {
-  echo '{"error":{"kind":"api","status":500,"message":"` + sentinelValue + `"}}' >&2
-  echo '` + sentinelValue + `' >&2
+	return testkit.Strata(t, `fail() {
+  echo '{"error":{"kind":"api","status":500,"message":"`+sentinelValue+`"}}' >&2
+  echo '`+sentinelValue+`' >&2
   exit 2
 }
 case $cmd in
 verify)
-  if [ -e '` + fixtures + `/fail-verify' ]; then fail; fi
-  cat '` + fixtures + `/verify.json'; exit 1 ;;
-snapshot) cp '` + fixtures + `/cluster.json' "$out"; exit 0 ;;
+  if [ -e '`+fixtures+`/fail-verify' ]; then fail; fi
+  cat '`+fixtures+`/verify.json'; exit 1 ;;
+snapshot) cp '`+fixtures+`/cluster.json' "$out"; exit 0 ;;
 compare)
-  case $1 in
+  case $ref in
   pack:*)
-    if [ -e '` + fixtures + `/fail-moves' ]; then fail; fi
-    cat '` + fixtures + `/move.json'; exit 1 ;;
-  *) cat '` + fixtures + `/compare-cluster.json'; exit 1 ;;
+    if [ -e '`+fixtures+`/fail-moves' ]; then fail; fi
+    cat '`+fixtures+`/move.json'; exit 1 ;;
+  *) cat '`+fixtures+`/compare-cluster.json'; exit 1 ;;
   esac ;;
 behind)
-  if [ -e '` + fixtures + `/fail-behind' ]; then fail; fi
-  cat '` + fixtures + `/behind.json'; exit 1 ;;
+  if [ -e '`+fixtures+`/fail-behind' ]; then fail; fi
+  cat '`+fixtures+`/behind.json'; exit 1 ;;
 esac
-exit 3
-`
-	path := filepath.Join(t.TempDir(), "strata")
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return path
+exit 3`)
 }
 
 func marker(t *testing.T, fixtures, name string) {

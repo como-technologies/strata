@@ -74,7 +74,7 @@ func (o *Observer) pinOf(subject, key string) (docs.Pin, string, bool) {
 		return docs.Pin{}, "", false
 	}
 	for _, pin := range o.versions.Pins {
-		if pin.Layer+"/"+pin.Name != key || !pin.Behind || pin.Error != nil || model.MoveKey(pin) == "" {
+		if model.PackKey(pin) != key || !pin.Behind || pin.Error != nil || model.MoveKey(pin) == "" {
 			continue
 		}
 		if slices.ContainsFunc(pin.PinnedBy, func(by docs.PinnedBy) bool { return by.Subject == subject }) {

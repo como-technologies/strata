@@ -9,6 +9,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func marshal(t *testing.T, v any) string {
@@ -142,7 +143,7 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 
 func TestAProfileThatTheClusterRunsWithNoRecordIsNoRecord(t *testing.T) {
 	c := content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))
-	c.Cluster = cluster(t, "payments", [2]string{"aws-stack", "1.1.0"}, [2]string{"platform-addons", "1.0.0"})
+	c.Cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
 	s := build(&c, nil)
 	if len(s.Profiles) != 2 || s.Profiles[1].Name != "platform-addons" || s.Profiles[1].Status != StatusNoRecord || s.Profiles[1].Published != nil || s.Profiles[1].ClusterCopy != nil {
 		t.Fatalf("profiles %+v", s.Profiles)
@@ -243,7 +244,7 @@ func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
 	fresh := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "other@1.0.0", "aws-stack@1.0.0")
 	fresh.Registry = ""
 	current := pin("cert-manager", "addon", "1.21.1", "", "aws-stack@1.0.0")
-	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored}, Fold: docs.Fold{Settings: 2, Follows: 1, Repeats: 8}, Images: 8, Charts: 1}
+	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored}, Fold: Fold{Settings: 2, Follows: 1, Repeats: 8}, Images: 8, Charts: 1}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{floating, fresh, current}, Moves: map[string]Move{MoveKey(fresh): move}}
 	rows := build(nil, v).Newer
 	if len(rows) != 2 {
@@ -297,7 +298,7 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 		got.Newer != "2.44.0" || got.Status != StatusDrift || !slices.Equal(got.Flags, []string{docs.FlagAuthored}) {
 		t.Errorf("pack %+v", got)
 	}
-	if got.Fold == nil || *got.Fold != (docs.Fold{Settings: 2, Follows: 1, Repeats: 1}) {
+	if got.Fold == nil || *got.Fold != (Fold{Settings: 2, Follows: 1, Repeats: 1}) {
 		t.Errorf("fold %+v", got.Fold)
 	}
 	if s.Limits != (Limits{ImagesNamedByATag: 1, HelmPacks: 1}) {
@@ -386,7 +387,7 @@ func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 	d := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "repave", ImagesChanged: 8, ChartsChanged: 1}, Packs: []docs.Pack{{Identity: true, Authored: true, Images: true,
 		Values: docs.Values{Diff: []docs.Leaf{{Path: "pack.content.images[0]"}, {Path: "charts.x.image.tag"}, {Path: "charts.x.replicas"}}}}}}
-	want := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored, docs.FlagImages}, Fold: docs.Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
+	want := Move{Impact: "repave", Flags: []string{docs.FlagIdentity, docs.FlagAuthored, docs.FlagImages}, Fold: Fold{Settings: 1, Follows: 1, Repeats: 1}, Images: 8, Charts: 1}
 	got := MoveOf(d)
 	if got.Impact != want.Impact || !slices.Equal(got.Flags, want.Flags) || got.Fold != want.Fold || got.Images != 8 || got.Charts != 1 {
 		t.Errorf("move %+v", got)
