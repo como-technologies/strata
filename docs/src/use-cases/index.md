@@ -168,6 +168,11 @@ maintainer cannot see your tenant.
   value that this release does not name. You decide whether to tell the maintainers: by hand, with
   the setting `STRATA_REPORT`, or with a yes to the one question.
 
+**10. A page in the cluster.** The checks of the pages above, on a timer, in one cluster.
+
+- [The observer shows an edit in place](./observer.md): the nightly job finds an edit
+  in place at its next run, and the team wants the answer, and who made the edit, sooner.
+
 ## The examples
 
 The pages use one team and one profile, `aws-stack`, with real pack data from the

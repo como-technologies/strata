@@ -22,41 +22,15 @@ cleanup() {
   rm -rf "$work"
 }
 trap cleanup EXIT
+records_revision=contract
+# shellcheck source=scripts/observer-lib.sh
+source "$root/scripts/observer-lib.sh"
 
-start() {
-  local log=$work/$1.log
-  (cd "$root" && exec setsid just playground "$1") >"$log" 2>&1 &
-  pg=$!
-  for _ in $(seq 300); do
-    grep -q 'export PALETTE_API=' "$log" && break
-    sleep 1
-  done
-  grep -q 'export PALETTE_API=' "$log" || { cat "$log" >&2; echo "the stand-in did not start: $1" >&2; exit 2; }
-  sleep 1
-  # shellcheck disable=SC1090
-  source <(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -E '^export [A-Z_]+=')
-  export STRATA_REPORT=0 XDG_STATE_HOME=$work/state STRATA_QUIET=1
-}
-stop() {
-  kill -- "-$pg" 2>/dev/null || true
-  wait "$pg" 2>/dev/null || true
-  pg=
-  sleep 1
-}
 # The exit code of a strata command that gives an answer is 0 or 1.
 run() { "$strata" "$@" --json --compact -q || [ "$?" -le 1 ]; }
 
 observer_bin=$work/strata-observer
 go -C "$observer" build -o "$observer_bin" .
-
-# records_dir NAME FILE... writes the records of a baseline as *.json.gz, with a meta.json.
-records_dir() {
-  local dir=$work/records-$1
-  shift
-  mkdir -p "$dir"
-  for file in "$@"; do gzip -c "$file" >"$dir/$(basename "$file" .json).json.gz"; done
-  echo '{"baseline":"approved","revision":"contract"}' >"$dir/meta.json"
-}
 
 # once NAME CLUSTER-UID RECORDS-NAME runs `strata-observer once` against the stand-in that runs now.
 # It keeps the summary in once-NAME.json and the log in once-NAME.err. A run that gives a document exits

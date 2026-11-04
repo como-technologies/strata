@@ -192,6 +192,15 @@ asks if that is what the reviewer read:
 `IDENTICAL` means that the content is the same, by its digest, and not by a tag or
 a name. A difference fails the job.
 
+When your team runs [the observer](./automation/observer.md), this step also writes the
+records into the cluster. The observer then compares Palette with the records that the
+step wrote:
+
+```bash
+scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
+  | kubectl apply --server-side -f -
+```
+
 ### You move a cluster
 
 Before the move, ask Palette if the move replaces the nodes:

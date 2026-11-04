@@ -2288,6 +2288,208 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
     assert_no_faults(&faults);
 }
 
+// ---- the observer ------------------------------------------------------------------------------
+
+/// The pages that the observer adds to the book (#645): the service, the use case, and the API.
+const OBSERVER_PAGES: [&str; 3] = [
+    "automation/observer.md",
+    "use-cases/observer.md",
+    "reference/observer-api.md",
+];
+
+/// The pages of the observer keep to the limits of "The style rules" like the pages of the report.
+#[test]
+fn the_pages_of_the_observer_keep_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for page in OBSERVER_PAGES {
+        let text = read(&docs().join(page));
+        for block in blocks_of(&text) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// The service page states the four limits and the five costs of the issue, and each as a numbered
+/// item. A page that loses one fails here, and a reader who comes for the cost of the key finds it.
+#[test]
+fn the_page_of_the_service_states_four_limits_and_five_costs() {
+    let page = read(&docs().join("automation/observer.md"));
+    let section = |from: &str, to: &str| {
+        let start = page
+            .find(from)
+            .unwrap_or_else(|| panic!("no section {from}"));
+        let end = page[start..]
+            .find(to)
+            .unwrap_or_else(|| panic!("no section {to}"));
+        page[start..start + end].to_string()
+    };
+    let limits = section(
+        "## What the observer does not see",
+        "## What you give the observer",
+    );
+    let costs = section("## What you give the observer", "## `re-baseline needed`");
+    let items = |text: &str| {
+        text.lines()
+            .filter(|l| l.starts_with(|c: char| c.is_ascii_digit()))
+            .count()
+    };
+    assert_eq!(items(&limits), 4, "{limits}");
+    assert_eq!(items(&costs), 5, "{costs}");
+    for fact in [
+        "A tag that moves at its source",
+        "A change on the cluster with `kubectl edit`",
+        "What the workload runs",
+        "The value of a cluster variable",
+    ] {
+        assert!(limits.contains(fact), "the limit '{fact}'");
+    }
+    for fact in [
+        "An API key in the cluster",
+        "Never a profile variable for the key",
+        "Egress to Palette",
+        "Requests",
+        "The page holds pack values",
+        "`create` on `pods/portforward`",
+    ] {
+        assert!(costs.contains(fact), "the cost '{fact}'");
+    }
+    assert!(page.contains("## First-seen records"));
+    assert!(page.contains("## `re-baseline needed`"));
+}
+
+/// The README gains one line for the observer, and the book names the page in its summary.
+#[test]
+fn the_readme_has_one_line_for_the_observer_and_the_summary_lists_the_three_pages() {
+    let readme = repo_file("README.md");
+    let lines = readme.lines().filter(|l| l.contains("observer")).count();
+    assert_eq!(lines, 1, "one line only");
+    let summary = read(&docs().join("SUMMARY.md"));
+    for page in OBSERVER_PAGES {
+        assert!(
+            summary.contains(&format!("./{page}")),
+            "{page} in SUMMARY.md"
+        );
+    }
+}
+
+/// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
+/// link is lost, and the page shows the raw target. Code fences are skipped.
+fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
+    let mut fenced = false;
+    let mut found = Vec::new();
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            fenced = !fenced;
+        }
+        if fenced || !line.starts_with('|') {
+            continue;
+        }
+        found.extend(
+            line.split('|')
+                .map(str::trim)
+                .filter(|cell| {
+                    ["(./", "(../", "(http://", "(https://"]
+                        .iter()
+                        .any(|start| cell.starts_with(start))
+                })
+                .map(str::to_string),
+        );
+    }
+    found
+}
+
+/// The row "A service in one cluster" of `boundary.md` lost the text of its link, and no check saw
+/// it (#645). A cell that starts with `(./` is such a loss. The test shows the fault on the broken
+/// row and none on the fixed row, then reads each page of the book.
+#[test]
+fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
+    let broken = "| A service in one cluster |(./automation/observer.md). It asks | Why |";
+    let fixed = "| A service in one cluster | [`strata-observer`](./automation/observer.md). It asks | Why |";
+    assert_eq!(
+        link_targets_alone_in_a_cell(broken),
+        ["(./automation/observer.md). It asks"]
+    );
+    assert!(link_targets_alone_in_a_cell(fixed).is_empty());
+    let fenced = "```text\n| (./a.md) | b |\n```\n";
+    assert!(link_targets_alone_in_a_cell(fenced).is_empty());
+
+    let mut faults = Vec::new();
+    for file in walk(&docs()) {
+        if file.extension().is_none_or(|e| e != "md") {
+            continue;
+        }
+        let name = file
+            .strip_prefix(docs())
+            .unwrap_or(&file)
+            .display()
+            .to_string();
+        for cell in link_targets_alone_in_a_cell(&read(&file)) {
+            faults.push(format!("{name}: {cell}"));
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "a cell lost the text of its link:\n{}",
+        faults.join("\n")
+    );
+}
+
+/// The lead ran `image-digest.sh`, `observer-kind.sh`, and `observer.sh` in the live window of Wave
+/// 15 (#645). Their sections state the results. The observer page states the request counts of
+/// cluster A. `limits.md` no longer says that no run covers a layer taken off or a digest in the
+/// image list.
+#[test]
+fn the_results_of_the_wave_15_live_window_are_in_the_book() {
+    let runs = read(&docs().join("development/live-runs.md"));
+    for script in ["image-digest.sh", "observer-kind.sh", "observer.sh"] {
+        let part = section(&runs, &format!("## {script}"), Some("\n## ")).to_lowercase();
+        for pending in ["no result yet", "has a result yet"] {
+            assert!(
+                !part.contains(pending),
+                "the section of {script} says {pending:?}"
+            );
+        }
+    }
+    let part = section(&runs, "## observer.sh", Some("\n## "));
+    let rows = [
+        "| A content cycle | 12 | 13 |",
+        "| `behind`, the first command of a versions cycle | 13 | 13 |",
+        "| The moves of the first versions cycle after a start | 28 | 28 |",
+    ];
+    let page = read(&docs().join("automation/observer.md"));
+    for row in rows {
+        assert!(part.contains(row), "live-runs.md lacks {row:?}");
+    }
+    let page = one_line(&page);
+    for needle in [
+        "| A content cycle | 12 | 13 |",
+        "| `strata behind`, the first command of a versions cycle | 13 | 13 |",
+        "| The moves of the first versions cycle after a start | 28 | 28 |",
+        "on a cluster with two profiles and five packs. The counts grow with the number of profiles and packs.",
+        "A pod on a cluster that Palette built reaches the API",
+        "## Install with a profile in Palette",
+        "Palette replaces no node when it applies the layer.",
+        "With that role, the verdict and the finding stay, and `who` is empty.",
+    ] {
+        assert!(page.contains(needle), "observer.md lacks {needle:?}");
+    }
+
+    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    for old in [
+        "and no run uses it",
+        "No run shows what a node pulls in this case",
+    ] {
+        assert!(!limits.contains(old), "limits.md still says {old:?}");
+    }
+    let clusters = one_line(&read(&docs().join("internals/palette/clusters.md")));
+    assert!(
+        clusters.contains("A live run did this, and Palette deleted the Deployment of the layer."),
+        "clusters.md lacks the result of the removal of a layer"
+    );
+}
+
 /// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of
 /// them. The lab machine has no IPv6 route. So a failed `curl -6` shows a fault of the route of the
 /// machine, and the page says so.

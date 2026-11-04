@@ -80,6 +80,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: extractions/setup-just@v4
       - uses: ./.github/actions/mdbook
+      # a step of the book runs the observer, which the recipe builds with the version of Go of its module
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: observer/go.mod
+          cache: false
       # each output in the book is the output of this build of strata
       - run: just docs-check
       # mdbook builds a broken link with no message; mdbook-lint finds it

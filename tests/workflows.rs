@@ -936,6 +936,108 @@ fn the_check_job_runs_the_contract_of_the_observer_after_the_examples() {
     );
 }
 
+// ---- the demo of the observer in the book (#645) ---------------------------------------------------
+
+/// A step of the book runs `strata-observer`, so the recipes that write and check the output build
+/// it first. The recipe `observer-playground` builds both binaries and runs the script with the
+/// chapter. The justfile names each recipe with an argument or a dependency, which the helper
+/// `recipe` does not read.
+#[test]
+fn the_book_recipes_build_the_observer_and_the_playground_recipe_runs_its_script() {
+    let justfile = repo_file("justfile");
+    let line = |start: &str| {
+        justfile
+            .lines()
+            .find(|l| l.starts_with(start))
+            .unwrap_or_else(|| panic!("the justfile has no recipe {start}"))
+            .to_string()
+    };
+    assert_eq!(
+        line("docs-examples:"),
+        "docs-examples: examples stand-in observer-build"
+    );
+    assert_eq!(
+        line("docs-check:"),
+        "docs-check: examples stand-in observer-build"
+    );
+    assert_eq!(
+        line("observer-playground "),
+        r#"observer-playground chapter="observer-2": build observer-build"#
+    );
+    let mut lines = justfile
+        .lines()
+        .skip_while(|l| !l.starts_with("observer-playground "))
+        .skip(1);
+    assert_eq!(
+        lines.next().map(str::trim),
+        Some("scripts/observer-playground.sh {{chapter}}")
+    );
+    assert!(
+        lines.next().is_none_or(|l| !l.starts_with(' ')),
+        "the recipe has one command"
+    );
+}
+
+/// The job `docs` runs the steps of the book, and a step runs the observer, which the recipe builds
+/// with Go. The job installs the version of the module, before the first recipe that builds.
+#[test]
+fn the_docs_job_installs_go_from_the_module_of_the_observer_before_it_checks_the_book() {
+    let doc = workflow("checks.yml");
+    let steps = doc["jobs"]["docs"]["steps"]
+        .as_sequence()
+        .expect("the job docs has steps");
+    let setup = steps
+        .iter()
+        .position(|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/setup-go@"))
+        })
+        .expect("the job docs installs Go");
+    assert_eq!(
+        steps[setup]["with"]["go-version-file"].as_str(),
+        Some("observer/go.mod")
+    );
+    assert_eq!(steps[setup]["with"]["cache"].as_bool(), Some(false));
+    let check = steps
+        .iter()
+        .position(|s| s["run"].as_str() == Some("just docs-check"))
+        .expect("the job docs runs just docs-check");
+    assert!(setup < check, "Go comes before the check of the output");
+}
+
+/// The contract script and the playground script keep one copy of three functions: they start the
+/// stand-in, stop it, and write the records. Both source `observer-lib.sh`, and no script defines
+/// them again.
+#[test]
+fn the_scripts_of_the_observer_keep_one_copy_of_start_stop_and_the_records_directory() {
+    let scripts = ["observer-contract.sh", "observer-playground.sh"];
+    for name in scripts {
+        let text = repo_file(&format!("scripts/{name}"));
+        assert!(
+            text.contains(r#"source "$root/scripts/observer-lib.sh""#),
+            "{name} sources the library"
+        );
+        for function in ["start()", "stop()", "records_dir()"] {
+            assert!(!text.contains(function), "{name} defines {function} again");
+        }
+        let syntax = Command::new("bash")
+            .args(["-n", &format!("scripts/{name}")])
+            .current_dir(env!("CARGO_MANIFEST_DIR"))
+            .output_locked()
+            .unwrap();
+        assert!(
+            syntax.status.success(),
+            "{}",
+            String::from_utf8_lossy(&syntax.stderr)
+        );
+    }
+    let lib = repo_file("scripts/observer-lib.sh");
+    for function in ["start()", "stop()", "records_dir()"] {
+        assert_eq!(lib.matches(function).count(), 1, "{function} once");
+    }
+}
+
 // ---- the image of the observer -------------------------------------------------------------------
 
 /// The rank of a permission level of GitHub.

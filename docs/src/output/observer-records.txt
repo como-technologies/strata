@@ -1,0 +1,14 @@
+$ scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
+  | grep -E '^(kind|  name|  [a-z]+[-_.0-9a-z]*[.]json(.gz)?):' | cut -c1-60
+kind: Secret
+  name: strata-observer-records-0
+  meta.json: eyJiYXNlbGluZSI6ImFwcHJvdmVkIiwicmV2aXNpb24iOiI
+  aws-stack_1.0.0.json.gz: H4sIAAAAAAACA+xc6XPiuLb/Pn+FH1N1+
+  aws-stack_1.1.0.json.gz: H4sIAAAAAAACA+xc63PiuJb/Pn+Fl6m6/
+  platform-addons_1.0.0.json.gz: H4sIAAAAAAACA41VuXLjRhDN9RU
+kind: Secret
+  name: strata-observer-records-1
+kind: Secret
+  name: strata-observer-records-2
+kind: Secret
+  name: strata-observer-records-3

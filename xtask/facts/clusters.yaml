@@ -1071,6 +1071,42 @@ facts:
     code:
       - src/api/palette/clusters.rs
 
+  # ---- clusters.md: An object that an edit drops from a manifest
+
+  - id: cluster-manifest-object-stays
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].spec.packs[].spec.manifests[]
+    stand_in: []
+    live:
+      - image-digest.sh:undo-gone
+      - image-digest.sh:undo-delete
+      - image-digest.sh:undo-clean
+      - observer.sh:profile-removal
+    pages:
+      - internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest
+    code:
+      - examples/live/image-digest.sh
+
+  # ---- clusters.md: The role that a key needs
+
+  - id: key-role-requests
+    kind: behavior
+    reads:
+      codes: [AccessDenied, OperationForbidden, NoRolesAssociated, ResourceAccessDenied]
+    stand_in: []
+    live:
+      - observer-role.sh:control-<name>
+      - observer-role.sh:role-<name>
+      - observer-role.sh:command-role-verify
+      - observer-role.sh:command-role-cluster
+      - observer-role.sh:command-role-behind
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+    code:
+      - examples/live/observer-role.sh
+
   # ---- clusters.md: The order of the profiles of a cluster
 
   - id: cluster-profile-order

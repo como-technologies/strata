@@ -17,6 +17,7 @@ mod fields;
 mod fleet;
 mod ids;
 mod objects;
+mod observer;
 mod preflight;
 mod release;
 mod repave;
@@ -67,6 +68,7 @@ pub fn run(r: &mut Runner) {
     repave::run(r);
     objects::run(r);
     fleet::run(r);
+    observer::run(r);
     automation::run(r);
     preflight::run(r);
     fields::run(r);
