@@ -464,8 +464,10 @@ way.
 ## who.sh
 
 Read-write. Stage 1 needs the profiles and no cluster. Stage 2 needs cluster A,
-and records nothing without it. Each stage makes one edit in place through the
-API, reads what `verify --who` says, and puts the edit back.
+and records nothing without it. Stage 3 needs `STRATA_LIVE_NO_AUDIT_KEY`, the
+key of a user with no permission to read the audit log, and records nothing
+without it. Each stage makes one edit in place through the API, reads what
+`verify --who` says, and puts the edit back.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -481,6 +483,11 @@ API, reads what `verify --who` says, and puts the edit back.
 | `cluster-record`, `cluster-edit`, `cluster-apply` | 0 | record cluster A, edit the add-on version it runs, and accept the update on the cluster through the API |
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
+| `noaudit-record`, `noaudit-edit` | 0 | #664: record the add-on version, and edit it in place through the API |
+| `noaudit-who`, `noaudit-who-verdict` | 1, 0 | #664: with a key that cannot read the audit log, the record still reports `DRIFT` and the exit is `1`. The output starts with the verdict (no result yet: the Wave 15 window runs it) |
+| `noaudit-who-says` | 0 | #664: the output has the line `who: not read: HTTP 403: ` and the body of Palette with the code `AccessDenied` (no result yet: the Wave 15 window runs it) |
+| `noaudit-who-json` | 0 | #664: `--json` gives `verify.whoError` that starts with `HTTP 403`, no `verify.who`, and the status `drifted` (no result yet: the Wave 15 window runs it) |
+| `noaudit-undo`, `noaudit-restored` | 0 | the edit is put back, and the record verifies again |
 
 ## draft.sh
 

@@ -4001,6 +4001,53 @@ fn verify_report_asks_who_changed_a_record_that_drifted_and_puts_the_answer_in_i
 }
 
 #[test]
+fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_audit_log() {
+    // The report is the one that the library prints for a key without the permission of the audit
+    // log, so that the script and the renderer cannot differ.
+    let dir = tempfile::tempdir().unwrap();
+    make_fixtures(dir.path());
+    let recorded = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let denied = r#"{"code":"AccessDenied"}"#;
+    let api = serve_fixture(strata::api::MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        format!(
+            "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
+        ),
+        403,
+        denied,
+    );
+    let options = strata::ops::VerifyOptions {
+        who: true,
+        ..Default::default()
+    };
+    let v = strata::ops::verify_with(
+        &recorded,
+        &strata::api::Palette::new(&api),
+        "t1",
+        &options,
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap();
+    let verdict = markdown().verdict(&v.diff).unwrap();
+
+    let d = Report::verify();
+    d.summary(1, &[("releases/b.json", "drifted", "lab-profile", "1.3.0")]);
+    // strata exits 1 for the drift: the refused audit log changes no status
+    d.record("b", 1, &format!("{verdict}\n"), "");
+    let o = d.run(&["releases/*.json", "--who", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let (out, err) = (text(&o.stdout), text(&o.stderr));
+    assert!(out.contains("**DRIFT**"), "{out}");
+    assert!(
+        out.contains(&format!("who: not read: HTTP 403: {denied}")),
+        "{out}"
+    );
+    assert!(
+        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 drifted"),
+        "{err}"
+    );
+    assert!(!out.contains("could not check"), "{out}");
+}
+#[test]
 fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     let root = tempfile::tempdir().unwrap();
     let live = root.path().join("examples/live");

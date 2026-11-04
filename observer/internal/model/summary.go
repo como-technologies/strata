@@ -84,7 +84,9 @@ type Counts struct {
 	Profiles      int `json:"profiles"`
 }
 
-// Finding is one cause of drift in one profile.
+// Finding is one cause of drift in one profile. WhoUnread says that strata could not read the audit
+// log, so Who is empty and does not name the writer. The summary carries the flag and never the text
+// of the error: the log of the observer holds the text.
 type Finding struct {
 	ID               string     `json:"id"`
 	Kind             Kind       `json:"kind"`
@@ -96,6 +98,7 @@ type Finding struct {
 	FirstSeen        time.Time  `json:"firstSeen"`
 	LastSeen         time.Time  `json:"lastSeen"`
 	Who              []docs.Who `json:"who"`
+	WhoUnread        bool       `json:"whoUnread"`
 }
 
 // Profile is one profile of the cluster or of the baseline.

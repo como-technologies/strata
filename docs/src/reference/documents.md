@@ -400,6 +400,12 @@ A comparison of two sides, `a` and `b`.
       when the entry has one.
     - `resource`, when Palette gives it: the `kind`, the `name`, and the `uid`
       of the object of the write.
+  - `whoError`, only with `--who` and for a drifted record that is not a pack
+    record: why strata could not read the audit log. Palette answered with an
+    error, such as HTTP 403 for a key without the permission, or HTTP 500. Or
+    the request did not complete. `who` is then absent. The error does not
+    change `status`. The text is `HTTP <status>: <body>`, or the message of the
+    request that did not complete.
   - `lastModified`: when Palette last changed the object of the record, from
     `metadata.lastModifiedTimestamp` of its document. The document is the
     profile, the app profile, the cluster, the edge host, or the cluster group.

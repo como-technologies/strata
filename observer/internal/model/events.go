@@ -19,17 +19,20 @@ var eventKinds = map[Kind]struct{ reason, message string }{
 	ImageIDChanged:   {"ImageIDChanged", "A pack names another machine image."},
 }
 
-// The reasons of the events that no finding makes.
+// The reasons of the events that no kind of finding names.
 const (
 	reasonProfileUpdated = "ProfileUpdated"
 	reasonNewVersion     = "NewVersion"
 	reasonOldCopy        = "OldCopy"
+	reasonAuditUnread    = "AuditUnread"
 )
 
 // eventsOf gives the events of the last 7 days, the newest first. A finding makes a drift event at
-// its first sight. Each write of its `who` makes an info event at the time of the write. A newer
-// version makes an event at its listing. A registry copy that is older makes one at its last sync.
-// An event that is older than the window is not in the list.
+// its first sight. Each write of its `who` makes an info event at the time of the write. A finding
+// whose audit log strata could not read makes one info event that says so, at its last sight: the
+// event states what is true now. A newer version makes an event at its listing. A registry copy
+// that is older makes one at its last sync. An event that is older than the window is not in the
+// list.
 func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 	out := []Event{}
 	add := func(e Event) {
@@ -46,6 +49,9 @@ func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 				add(Event{Type: EventInfo, Reason: reasonProfileUpdated, Time: t, Object: f.Profile, Message: whoMessage(w)})
 			}
 		}
+		if f.WhoUnread {
+			add(Event{Type: EventInfo, Reason: reasonAuditUnread, Time: f.LastSeen, Object: f.Profile, Message: whoUnreadMessage})
+		}
 	}
 	if versions != nil {
 		for _, e := range versionEvents(versions) {
@@ -55,6 +61,10 @@ func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 	sortEvents(out)
 	return out
 }
+
+// whoUnreadMessage is the event of a finding whose audit log strata could not read. It holds no text
+// of the error: the log of the observer holds it.
+const whoUnreadMessage = "The audit log could not be read, so this does not say who made the change."
 
 // whoMessage tells one write of the audit log: the actor, the type of the actor, and the action.
 func whoMessage(w docs.Who) string {

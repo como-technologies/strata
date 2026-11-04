@@ -44,7 +44,8 @@ pub struct Verification {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct VerifyOptions {
     /// For a profile or cluster record that drifted, read the writes to it from the audit log of
-    /// Palette since the record was taken, into `verify.who`.
+    /// Palette since the record was taken, into `verify.who`. When the read fails, the verdict
+    /// stays and `verify.whoError` gives the reason.
     pub who: bool,
     /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
     /// report still names the pack.
@@ -298,14 +299,11 @@ pub fn verify_with<A: PaletteApi>(
         .cluster_variables
         .as_ref()
         .map_or(0, |c| c.values.len());
-    let who = if options.who && !unchanged {
-        Some(who_wrote(recorded, &diff, palette, progress)?)
-    } else {
-        None
-    };
     if let Some(v) = diff.verify.as_mut() {
         v.cluster_values_changed = values_changed;
-        v.who = who;
+    }
+    if options.who && !unchanged {
+        add_who(recorded, &mut diff, palette, progress);
     }
     let status = settle(unchanged, &mut diff, options);
     Ok(Verification {
@@ -389,8 +387,36 @@ fn renamed_or_overwritten(
     }
 }
 
+/// Add what `--who` finds to the verdict of `diff`: `verify.who`, the writes since the record.
+///
+/// The verdict comes from the diff, and the audit log adds to it. A read that fails, such as a 403
+/// for a key without the permission or a 5xx, leaves `verify.who` absent and sets `verify.whoError`.
+/// The status and the exit follow the diff, as they do without `--who`.
+fn add_who<A: PaletteApi>(
+    recorded: &Snapshot,
+    diff: &mut Diff,
+    palette: &Palette<A>,
+    progress: &Progress,
+) {
+    let read = who_wrote(recorded, diff, palette, progress);
+    let Some(v) = diff.verify.as_mut() else {
+        return;
+    };
+    match read {
+        Ok(entries) => v.who = Some(entries),
+        Err(e) => {
+            let reason = e.reason();
+            progress.note(&format!(
+                "note: the audit log is unavailable ({reason}); the verdict names no writer"
+            ));
+            v.who_error = Some(reason);
+        }
+    }
+}
+
 /// The writes to the object of `recorded` since the record was taken, oldest first. It reads the
-/// audit log of the object, and that of each profile that `diff` shows as overwritten.
+/// audit log of the object, and that of each profile that `diff` shows as overwritten. One read
+/// that fails fails the whole list: a part of the list would read as the whole list.
 fn who_wrote<A: PaletteApi>(
     recorded: &Snapshot,
     diff: &Diff,

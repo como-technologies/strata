@@ -142,6 +142,7 @@ type Verify struct {
 	Gone            bool     `json:"gone"`
 	LastModified    string   `json:"lastModified"`
 	Who             []Who    `json:"who"`
+	WhoError        string   `json:"whoError"`
 }
 
 // Who is one write that the audit log of Palette holds.

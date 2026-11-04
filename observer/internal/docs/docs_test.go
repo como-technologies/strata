@@ -204,3 +204,16 @@ func TestGroupOfReadsThePathOfAValue(t *testing.T) {
 		}
 	}
 }
+
+func TestAVerdictWithAnUnreadAuditLogDecodesTheReason(t *testing.T) {
+	const doc = `{"schema":"strata-verify-summary/1","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"drifted","name":"aws-stack","version":"1.1.0",
+		"diff":{"schema":"strata-diff/1","verify":{"status":"drifted","whoError":"HTTP 403: {\"code\":\"AccessDenied\"}"}}}]}`
+	var got VerifySummary
+	if err := json.Unmarshal([]byte(doc), &got); err != nil {
+		t.Fatal(err)
+	}
+	r := got.Records[0]
+	if r.Status != VerifyDrifted || r.Error != nil || r.Diff.Verify.WhoError != `HTTP 403: {"code":"AccessDenied"}` || len(r.Diff.Verify.Who) != 0 {
+		t.Fatalf("row %+v, verify %+v", r, r.Diff.Verify)
+	}
+}

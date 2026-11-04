@@ -336,3 +336,45 @@ func (f *failOnce) Run(ctx context.Context, dir string, args ...string) (runner.
 	}
 	return f.world.Run(ctx, dir, args...)
 }
+
+func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *testing.T) {
+	const reason = `HTTP 403: {"code":"AccessDenied"}`
+	r, w := oneRecord(t, unchanged())
+	w.rows[0] = drift(t)
+	// strata keeps the verdict, and gives the reason in place of the writes
+	w.rows[0].Diff.Verify.Who = nil
+	w.rows[0].Diff.Verify.WhoError = reason
+	w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
+	s, err := r.observer(w).Once(context.Background())
+	if err != nil {
+		t.Fatalf("error %v", err)
+	}
+	if len(s.Findings) != 1 || s.Findings[0].Kind != model.PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
+		t.Fatalf("findings %+v", s.Findings)
+	}
+	if len(s.NotChecked) != 0 || s.Content.FailedRuns != 0 || s.Counts.Drift != 1 {
+		t.Errorf("notChecked %+v, content %+v, counts %+v", s.NotChecked, s.Content, s.Counts)
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "AccessDenied") {
+		t.Errorf("the summary holds the text of the error: %s", raw)
+	}
+	// the log of the pod holds the reason, with the profile it belongs to
+	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, "AccessDenied") || !strings.Contains(line, "profile=aws-stack@1.1.0") {
+		t.Errorf("log %q", line)
+	}
+}
+
+func TestARecordWhoseAuditLogWasReadWritesNoLineAboutIt(t *testing.T) {
+	r, w := oneRecord(t, unchanged())
+	w.rows[0] = drift(t)
+	if _, err := r.observer(w).Once(context.Background()); err != nil {
+		t.Fatalf("error %v", err)
+	}
+	if strings.Contains(r.log.String(), "audit log") {
+		t.Errorf("log %q", r.log.String())
+	}
+}

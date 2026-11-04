@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -115,6 +116,54 @@ func TestParseSideKnowsThreeSides(t *testing.T) {
 	for _, word := range []string{"", "Published", "behind", "published ", "../"} {
 		if _, ok := ParseSide(word); ok {
 			t.Errorf("%q is no side", word)
+		}
+	}
+}
+
+func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t *testing.T) {
+	const reason = "HTTP 403: AUDIT-REASON-SENTINEL"
+	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), &docs.Verify{WhoError: reason}, "addon/dex")
+	c := content(t, r)
+	s := build(&c, nil)
+	if len(s.Findings) != 1 || s.Findings[0].Kind != PublishedChanged || !s.Findings[0].WhoUnread || len(s.Findings[0].Who) != 0 {
+		t.Fatalf("findings %+v", s.Findings)
+	}
+	for _, n := range s.NotChecked {
+		if n.Cause == ReadError {
+			t.Errorf("the drift is a finding, and not a read-error: %+v", n)
+		}
+	}
+	if s.Counts.Drift != 1 || s.Counts.NotChecked != 0 {
+		t.Errorf("counts %+v", s.Counts)
+	}
+	// the notice is as new as the last sight, and the drift is as old as the first
+	want := []string{"info AuditUnread fred-identity@2.3.0", "drift DriftFound fred-identity@2.3.0"}
+	if got := reasons(s.Events); !slices.Equal(got, want) {
+		t.Fatalf("events %q\nwant %q", got, want)
+	}
+	if got := s.Events[0].Message; got != "The audit log could not be read, so this does not say who made the change." {
+		t.Errorf("message %q", got)
+	}
+	// the summary carries the flag, and never the text of the error
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "AUDIT-REASON-SENTINEL") || !strings.Contains(string(raw), `"whoUnread":true`) {
+		t.Errorf("the summary %s", raw)
+	}
+}
+
+func TestAFindingWithItsWritesSaysNothingOfAnUnreadAuditLog(t *testing.T) {
+	who := &docs.Verify{Who: []docs.Who{{Time: at(-time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
+	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
+	s := build(&c, nil)
+	if s.Findings[0].WhoUnread {
+		t.Errorf("finding %+v", s.Findings[0])
+	}
+	for _, e := range s.Events {
+		if e.Reason == reasonAuditUnread {
+			t.Errorf("event %+v", e)
 		}
 	}
 }

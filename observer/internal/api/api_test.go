@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -354,5 +357,60 @@ func TestTheDetailRouteAnswersWith503WhenTheWaitEnds(t *testing.T) {
 		if rec := get(h, pathNewer); rec.Code != http.StatusServiceUnavailable {
 			t.Errorf("%v gave %d", err, rec.Code)
 		}
+	}
+}
+
+func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *testing.T) {
+	r := newRig(t)
+	raw, err := os.ReadFile(filepath.Join(r.fixtures, "verify.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// strata keeps the verdict of the drifted record, and gives the reason in place of the writes
+	unread := regexp.MustCompile(`"who":\[[^\]]*\]`).ReplaceAllString(string(raw), `"whoError":"HTTP 403: AUDIT-REASON-SENTINEL"`)
+	if unread == string(raw) {
+		t.Fatal("the fixture holds no who")
+	}
+	if err := os.WriteFile(filepath.Join(r.fixtures, "verify.json"), []byte(unread), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
+	var findings FindingsView
+	decode(t, get(h, "/v1/findings"), &findings)
+	flagged := 0
+	for _, f := range findings.Findings {
+		if f.Kind == model.PublishedChanged && f.WhoUnread && len(f.Who) == 0 {
+			flagged++
+		}
+	}
+	if len(findings.Findings) != 2 || flagged != 1 {
+		t.Errorf("findings %+v", findings)
+	}
+	var notChecked NotCheckedView
+	decode(t, get(h, "/v1/notchecked"), &notChecked)
+	for _, n := range notChecked.NotChecked {
+		if n.Cause == model.ReadError {
+			t.Errorf("the drift is no read-error: %+v", n)
+		}
+	}
+	var events EventsView
+	decode(t, get(h, "/v1/events"), &events)
+	sentences := 0
+	for _, e := range events.Events {
+		if e.Reason == "AuditUnread" && e.Message == "The audit log could not be read, so this does not say who made the change." {
+			sentences++
+		}
+	}
+	if sentences != 1 {
+		t.Errorf("events %+v", events)
+	}
+	for _, route := range []string{"cluster", "findings", "profiles", "newer", "notchecked", "events"} {
+		if body := get(h, "/v1/"+route).Body.String(); strings.Contains(body, "AUDIT-REASON-SENTINEL") {
+			t.Errorf("/v1/%s holds the text of the error: %s", route, body)
+		}
+	}
+	// the log of the pod holds the text
+	if !strings.Contains(r.log.String(), "AUDIT-REASON-SENTINEL") {
+		t.Errorf("log %q", r.log.String())
 	}
 }
