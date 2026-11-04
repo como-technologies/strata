@@ -253,8 +253,9 @@ code, and these rules are for the Go code.
 - `internal/docs` is the allow-list of the fields that the observer reads. A
   document never decodes into a map, and no code forwards a document.
 - A test of `internal/docs` writes a marker at the path of a field that is not
-  in the list. It fails when the marker comes out. `just observer-contract`
-  fails when a field of the list is not in the schema of the binary.
+  in the list. It fails when the marker is in the output.
+  `just observer-contract` fails when a field of the list is not in the schema
+  of the binary.
 - A log line holds a verdict, an exit code, a duration, and an error kind. It
   never holds a value or the output of a process.
 - A test uses a table when it has more than two cases. A test that needs the

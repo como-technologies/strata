@@ -22,12 +22,12 @@ a line of `observer/go.mod` starts with `require`, because the observer uses the
 standard library only.
 
 `just observer-contract` gives the documents of the strata binary of this commit
-to the allow-list of the observer. It builds `strata` and the stand-in, serves
-four chapters of the book in turn, and runs the commands of the observer against
-each one. Then it runs the contract tests of `internal/docs` on the documents.
-One test fails when a field of the allow-list is not in the schema of the
-binary. One test fails when the clear value of a cluster variable passes the
-allow-list.
+to the allow-list of the observer. It builds `strata` and the stand-in. It
+serves four chapters of the book one at a time, and runs the commands of the
+observer against each one. Then it runs the contract tests of `internal/docs`
+on the documents. One test fails when a field of the allow-list is not in the
+schema of the binary. One test fails when the clear value of a cluster variable
+passes the allow-list.
 
 `just observer-contract --write` also copies five documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
