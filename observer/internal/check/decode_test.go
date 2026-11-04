@@ -25,19 +25,19 @@ func TestDecodeRefusesAnEmptyObjectAndAnotherSchemaAndKeepsTheRightOne(t *testin
 		{`{"schema":""}`, schema},
 		{`{"schema":"` + otherSchema + `"}`, schema},
 		{`{"schema":"strata-diff/2"}`, schema},
-		{`{"schema":"strata-behind/1"}`, schema},
-		{`{"schema":"strata-diff/1"}`, nil},
+		{`{"schema":"` + docs.BehindSchema + `"}`, schema},
+		{`{"schema":"` + docs.DiffSchema + `"}`, nil},
 		{`not json`, unknown},
 		{`[]`, unknown},
 	} {
 		_, err := decode[docs.Diff]([]byte(c.raw), docs.DiffSchema)
 		check("diff "+c.raw, err, c.want)
 	}
-	_, err := decode[docs.VerifySummary]([]byte(`{"schema":"strata-verify-summary/1"}`), docs.VerifySummarySchema)
+	_, err := decode[docs.VerifySummary]([]byte(`{"schema":"`+docs.VerifySummarySchema+`"}`), docs.VerifySummarySchema)
 	check("verify", err, nil)
-	_, err = decode[docs.Behind]([]byte(`{"schema":"strata-behind/1"}`), docs.BehindSchema)
+	_, err = decode[docs.Behind]([]byte(`{"schema":"`+docs.BehindSchema+`"}`), docs.BehindSchema)
 	check("behind", err, nil)
-	_, err = decode[docs.ClusterRead]([]byte(`{"schema":"strata-snapshot/1"}`), docs.SnapshotSchema)
+	_, err = decode[docs.ClusterRead]([]byte(`{"schema":"`+docs.SnapshotSchema+`"}`), docs.SnapshotSchema)
 	check("snapshot", err, nil)
 	_, err = decode[docs.ClusterRead]([]byte(`{}`), docs.SnapshotSchema)
 	check("snapshot with no schema", err, schema)

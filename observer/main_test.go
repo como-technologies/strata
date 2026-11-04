@@ -47,7 +47,7 @@ func TestAnUnknownCommandExitsTwo(t *testing.T) {
 // `compare` prints. verifyExit is the exit code of `verify`.
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
-	compare = strings.Replace(compare, "{", `{"schema":"strata-diff/1",`, 1)
+	compare = strings.Replace(compare, "{", `{"schema":"`+docs.DiffSchema+`",`, 1)
 	body := `#!/bin/sh
 cmd=$1
 shift
@@ -59,12 +59,12 @@ done
 case $cmd in
 verify)
   if [ ` + strconv.Itoa(verifyExit) + ` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
-  echo '{"schema":"strata-verify-summary/1","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
+snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
 compare) echo '` + compare + `'; case '` + compare + `' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
   if [ ` + strconv.FormatBool(behindFails) + ` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
-  echo '{"schema":"strata-behind/1","tool":{"version":"0.29.0"},"pins":[]}' ;;
+  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[]}' ;;
 esac
 `
 	bin := filepath.Join(t.TempDir(), "strata")
@@ -78,7 +78,7 @@ esac
 func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	records := t.TempDir()
-	record := `{"schema":"strata-snapshot/1","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`
+	record := `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	if _, err := zw.Write([]byte(record)); err != nil {
@@ -416,18 +416,18 @@ while [ $# -gt 0 ]; do
 done
 case $cmd in
 verify)
-  echo '{"schema":"strata-verify-summary/1","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
+snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
 compare)
   case $ref in
   pack:*)
     if [ -e '` + hold + `' ]; then echo $$ > '` + pids + `'; exec sleep 60; fi
-    echo '{"schema":"strata-diff/1","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
+    echo '{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
     exit 1 ;;
-  *) echo '{"schema":"strata-diff/1","same":true,"sameContent":true}' ;;
+  *) echo '{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}' ;;
   esac ;;
 behind)
-  echo '{"schema":"strata-behind/1","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
+  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
   exit 1 ;;
 esac
 `

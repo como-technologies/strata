@@ -24,10 +24,10 @@ func kindOf(t *testing.T, err error) string {
 }
 
 func TestADocumentWithAnotherSchemaIsAFailedReadWithTheKindSchemaAndMakesNoFinding(t *testing.T) {
+	// Each document would make a finding if the cycle read it: a drifted row, or a pack that changed.
 	cases := []struct {
 		name  string
 		setup func(t *testing.T, w *world)
-		// diff makes a finding if the cycle reads it: a drifted row, or a diff of a pack that changed.
 	}{
 		{"verify", func(t *testing.T, w *world) { w.rows[0], w.verifySchema = drift(t), otherSchema }},
 		{"the snapshot of the cluster", func(t *testing.T, w *world) { w.cluster.Schema = otherSchema }},

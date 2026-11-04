@@ -38,7 +38,7 @@ type world struct {
 	verifyExit   int
 	verifyErr    error
 
-	// A document that has no schema id gets the right one. A test that sets another id keeps it.
+	// The fake gives the right schema id to a document that has none. A test that sets another id keeps it.
 	cluster    docs.ClusterRead
 	clusterErr error
 	sideErr    error

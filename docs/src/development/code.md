@@ -245,13 +245,13 @@ code, and these rules are for the Go code.
 - The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
   function that fails returns an `error`.
 - `internal/runner` is the one place that starts a process. It refuses a
-  command or a flag that is not in its lists. A process gets these variables,
-  each when the observer has it: `PALETTE_API`, `PALETTE_API_KEY`,
+  command or a flag that is not in its lists. A process gets `STRATA_REPORT=0`,
+  which stops the send of the report, and each variable of its list that the
+  observer has. The list is `PALETTE_API`, `PALETTE_API_KEY`,
   `PALETTE_PROJECT_UID`, `PALETTE_PROJECT`, `HOME`, `TMPDIR`, `XDG_STATE_HOME`,
-  and `PATH`. It also gets `STRATA_REPORT=0`, which stops the send of the
-  report. It gets no other variable. `STRATA_QUIET` and `NO_COLOR` are not in
-  the list: each call has `-q`, and no call writes a terminal report. A test
-  holds the list.
+  and `PATH`. A process gets no other variable, and a test holds the list.
+  `STRATA_QUIET` and `NO_COLOR` are not in the list, because each call has `-q`
+  and no call writes a terminal report.
 - An error of a run holds a kind and a status. It never holds a message,
   because the message of the kind `api` can hold the body of an answer from
   Palette.
