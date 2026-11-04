@@ -258,6 +258,20 @@ code, and these rules are for the Go code.
   of the binary.
 - A log line holds a verdict, an exit code, a duration, and an error kind. It
   never holds a value or the output of a process.
+- `internal/baseline` reads the records, and decodes each one only into
+  `docs.Record`. `internal/model` holds the summary and the rules that build it.
+  `internal/check` runs the cycles through its `Strata` interface, so a test
+  gives it a fake that returns files from `testdata/`. See
+  [The checks of the observer](./observer.md).
+- The summary and the state hold no old value, no new value, and no value of a
+  variable. A test plants a marker in a changed value and in a variable.
+  It fails when the marker is in the summary, the state, or the log.
+- A cycle makes its directory under `--work` and removes it at the end, also
+  after an error. A test makes sure that `--work` is empty after a good cycle
+  and after a failed cycle.
+- The one compare of versions in the Go code is the minor number of
+  `tool.version`, in `model.ReBaselineNeeded`. The observer does not order pack
+  versions: `behind` gives the order in `newer[0]`.
 - A test uses a table when it has more than two cases. A test that needs the
   binary skips when `STRATA_BIN` is not set.
 

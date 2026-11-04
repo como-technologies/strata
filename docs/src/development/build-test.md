@@ -29,6 +29,20 @@ on the documents. One test fails when a field of the allow-list is not in the
 schema of the binary. One test fails when the clear value of a cluster variable
 passes the allow-list.
 
+The script also builds `strata-observer` and runs `once` with the real binary of
+`strata`. It needs `jq` for these checks. It makes sure of four facts:
+
+- On the chapter `cluster-release`, `payments` has no finding, and `ledger` has
+  one `cluster-differs` finding with the pack `csi/csi-aws-ebs`.
+- On the second chapter of `edited-in-place`, a record of the first chapter
+  gives one `published-changed` finding with `who`.
+- On the chapter `cluster-values`, the value `team-payments` is in the output of
+  `strata compare` and not in the output of `once`.
+- With the stand-in stopped, two runs of `once` with one state directory give
+  `page` `lost` and the error kind `transport`.
+
+After each run, the script makes sure that the work directory is empty.
+
 `just observer-contract --write` also copies five documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
 not edit them by hand. `go test` reads them, so it needs neither the binary nor
@@ -96,7 +110,7 @@ that version.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `observer/` | `strata-observer`, a Go program in a module of its own: see [The Go of the observer](./code.md#the-go-of-the-observer). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs` is the allow-list of the fields that the observer reads, `internal/runner` runs the `strata` binary, and `scripts/observer-contract.sh` gives them the documents of the binary. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
+| `observer/` | `strata-observer`, a Go program in a module of its own: see [The Go of the observer](./code.md#the-go-of-the-observer) and [The checks of the observer](./observer.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, and `internal/check` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |
 | `preflight/src/rule/` | `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. |
 | `preflight/src/probe/` | `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. |

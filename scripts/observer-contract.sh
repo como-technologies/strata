@@ -5,7 +5,8 @@
 #   scripts/observer-contract.sh [--write]
 #
 # --write also copies the documents to observer/internal/docs/testdata/, for the tests with no binary.
-# Needs just, go, and target/release/strata.
+# It also builds strata-observer and runs `once` against the seeds, with the real binary of strata.
+# Needs just, go, jq, and target/release/strata.
 set -euo pipefail
 root=${STRATA_ROOT:-$(git rev-parse --show-toplevel)}
 observer=${STRATA_OBSERVER:-$root/observer}
@@ -43,6 +44,38 @@ stop() {
 # The exit code of a strata command that gives an answer is 0 or 1.
 run() { "$strata" "$@" --json --compact -q || [ "$?" -le 1 ]; }
 
+observer_bin=$work/strata-observer
+go -C "$observer" build -o "$observer_bin" .
+
+# records_dir NAME FILE... writes the records of a baseline as *.json.gz, with a meta.json.
+records_dir() {
+  local dir=$work/records-$1
+  shift
+  mkdir -p "$dir"
+  for file in "$@"; do gzip -c "$file" >"$dir/$(basename "$file" .json).json.gz"; done
+  echo '{"baseline":"approved","revision":"contract"}' >"$dir/meta.json"
+}
+
+# once NAME CLUSTER-UID RECORDS-NAME runs `strata-observer once` against the stand-in that runs now.
+# It keeps the summary in once-NAME.json and the log in once-NAME.err. A run that gives a document exits
+# 0, 1 for a finding, or 2 for a failed cycle. The state directory is the same for the same NAME.
+# With OBSERVER_CONTRACT_SHOW set, it prints one line for each run, with no time and no value.
+once() {
+  local code=0
+  mkdir -p "$work/once-work"
+  "$observer_bin" once --strata "$strata" --cluster-uid "$2" --records "$work/records-$3" --work "$work/once-work" \
+    --state "$work/once-state-$1" >"$work/once-$1.json" 2>"$work/once-$1.err" || code=$?
+  [ "$code" -le 2 ] || { echo "once $1 exited $code" >&2; exit 2; }
+  [ -z "$(ls -A "$work/once-work")" ] || { echo "the work directory is not empty after once $1" >&2; exit 2; }
+  if [ -n "${OBSERVER_CONTRACT_SHOW:-}" ]; then
+    echo "once $1: exit $code, work empty, $(jq -c '{page, findings: [.findings[] | {kind, profile, packs, alsoOnCluster, who: (.who | length)}], content: (.content | {failedRuns, lastError})}' "$work/once-$1.json")"
+  fi
+}
+# expect NAME FILTER fails when the jq filter is not true for the summary of once NAME.
+expect() {
+  jq -e "$2" "$work/once-$1.json" >/dev/null || { echo "once $1: not true: $2" >&2; jq -c . "$work/once-$1.json" >&2; exit 2; }
+}
+
 cd "$work"
 
 start edited-in-place-1
@@ -50,6 +83,11 @@ start edited-in-place-1
 stop
 start edited-in-place-2
 run verify drift-record.json --summary --who >"$docs/verify-summary-drift.json"
+
+# The record of the first seed against the second seed: the published version changed, with who.
+records_dir edited drift-record.json
+once edited "$("$strata" list | sed -n 's/.*cluster:\([0-9a-f]\{24\}\) *payments .*/\1/p')" edited
+expect edited '(.findings | length) == 1 and .findings[0].kind == "published-changed" and (.findings[0].who | length) >= 1'
 stop
 
 start behind-2
@@ -72,6 +110,14 @@ for profile in aws-stack platform-addons; do
   "$strata" snapshot "cluster:$uid/$profile" --from-raw raw -o "side-$profile.json" -q
   run compare "$record" "side-$profile.json" >"$docs/compare-payments-$profile.json"
 done
+
+# The seed serves no registry, so the versions cycle fails. The content cycle gives the answer.
+records_dir release "$docs/record-aws-stack.json" record-platform-addons.json
+for name in payments ledger; do
+  once "release-$name" "$("$strata" list | sed -n "s/.*cluster:\([0-9a-f]\{24\}\) *$name .*/\1/p")" release
+done
+expect release-payments '.page == "ok" and .counts.findings == 0 and .content.failedRuns == 0 and .cluster.name == "payments"'
+expect release-ledger '.content.failedRuns == 0 and (.findings | length) == 1 and .findings[0].kind == "cluster-differs" and .findings[0].packs == ["csi/csi-aws-ebs"]'
 stop
 
 # Palette does not answer. A snapshot writes a plain line, so the kind comes from the row of a verify.
@@ -83,7 +129,27 @@ start cluster-values
 uid=$("$strata" list | sed -n 's/.*cluster:\([0-9a-f]\{24\}\) *payments.*/\1/p')
 "$strata" snapshot aws-stack@1.1.1 -o values-record.json -q
 run compare values-record.json "cluster:$uid/aws-stack" >"$docs/compare-values.json"
+
+# The raw output of strata holds the value, so the grep of the output of once proves something.
+grep -q team-payments "$docs/compare-values.json" || { echo "the compare holds no clear value" >&2; exit 2; }
+records_dir values values-record.json
+once values "$uid" values
+expect values '.content.failedRuns == 0'
+! grep -q team-payments "$work/once-values.json" "$work/once-values.err" || { echo "a clear value left the observer" >&2; exit 2; }
+if [ -n "${OBSERVER_CONTRACT_SHOW:-}" ]; then
+  echo "grep -c team-payments:"
+  (cd "$work" && grep -c team-payments docs/compare-values.json once-values.json once-values.err || true)
+fi
 stop
+
+
+# The stand-in is stopped. Two runs with one state directory reach lost, with the kind transport. One
+# record keeps the retries of strata short.
+records_dir stopped record-platform-addons.json
+once stopped "$uid" stopped
+expect stopped '.page == "first-load" and .content.failedRuns == 1'
+once stopped "$uid" stopped
+expect stopped '.page == "lost" and .content.failedRuns == 2 and .content.lastError.kind == "transport"'
 
 STRATA_BIN=$strata STRATA_DOCS=$docs go -C "$observer" test ./internal/docs/ -count=1 -run 'Schema|DocumentsOfTheBinary|ClearValue|KindOfAFailedCheck'
 if [ "${1:-}" = --write ]; then
