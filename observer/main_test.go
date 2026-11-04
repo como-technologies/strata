@@ -353,28 +353,17 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
 	stop, _ := startServe(t, args, addr)
 	defer stop()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
+	waitFor(t, "the page state ok", func() bool {
 		resp, err := http.Get("http://" + addr + "/v1/cluster")
 		if err != nil {
-			t.Fatal(err)
+			return false
 		}
+		defer resp.Body.Close()
 		var got struct {
 			Page string `json:"page"`
 		}
-		err = json.NewDecoder(resp.Body).Decode(&got)
-		resp.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Page == string(model.PageOK) {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the page is %q", got.Page)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return json.NewDecoder(resp.Body).Decode(&got) == nil && got.Page == string(model.PageOK)
+	})
 }
 
 func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
