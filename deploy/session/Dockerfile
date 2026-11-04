@@ -1,8 +1,8 @@
 # The session image of strata: each riff session that does a work item or a verify runs in it.
-# It is riff-base, which has claude, git, gh, curl, and the CA certificates. It adds Rust and the
-# tools of the CI recipes in CLAUDE.md: just, mdbook with its preprocessors, mdbook-lint, and jq.
-# It also adds sccache, the build cache that riff.toml sets. The image holds no code of strata and
-# no secret.
+# It is riff-base, which has claude, git, gh, curl, and the CA certificates. It adds Rust, Go, and
+# the tools of the CI recipes in CLAUDE.md: just, mdbook with its preprocessors, mdbook-lint, and
+# jq. It also adds sccache, the build cache that riff.toml sets. The image holds no code of strata
+# and no secret.
 #
 # The workflow "Session image" builds the image on each change of this folder. riff.toml pins its
 # digest: a change of this file counts only after a change of that pin.
@@ -21,6 +21,10 @@ ARG MDBOOK_LINT_VERSION=0.16.2
 ARG SCCACHE_VERSION=0.18.0
 ARG JQ_VERSION=1.7.1
 ARG JQ_SHA256=5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5
+
+# The observer in observer/ is in Go. GO_VERSION is the latest stable Go at the build of the image.
+ARG GO_VERSION=1.27.3
+ARG GO_SHA256=65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40
 
 # gcc and libc6-dev: the linker of rustc, and the C code of a crate. make and pkg-config: the
 # build of a crate with C code.
@@ -65,5 +69,14 @@ RUN set -eu; \
 RUN cargo install --locked --root /usr/local \
       "mdbook-gruvbox@${MDBOOK_GRUVBOX_VERSION}" "mdbook-lint@${MDBOOK_LINT_VERSION}" \
  && rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git"
+
+# The Go of the observer. GOTOOLCHAIN=local stops a download of another Go. GOPROXY=off stops a
+# download of a module, because the observer uses the standard library only.
+ENV PATH=/usr/local/go/bin:$PATH GOTOOLCHAIN=local GOPROXY=off
+RUN curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
+ && echo "${GO_SHA256}  /tmp/go.tgz" | sha256sum -c - \
+ && tar -C /usr/local -xzf /tmp/go.tgz \
+ && rm /tmp/go.tgz \
+ && go version
 
 CMD ["bash"]
