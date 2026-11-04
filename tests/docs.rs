@@ -2490,14 +2490,13 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     );
 }
 
-/// The five pages of the observer, in the book: three for a reader and two for a maintainer.
-const OBSERVER_BOOK_PAGES: [&str; 5] = [
-    "automation/observer.md",
-    "use-cases/observer.md",
-    "reference/observer-api.md",
-    "development/observer.md",
-    "development/observer-api.md",
-];
+/// The five pages of the observer, in the book: the pages of `OBSERVER_PAGES` for a reader, and two
+/// for a maintainer.
+fn observer_book_pages() -> impl Iterator<Item = &'static str> {
+    OBSERVER_PAGES
+        .into_iter()
+        .chain(["development/observer.md", "development/observer-api.md"])
+}
 
 /// Each page of the observer has a title of its own, and the page and `SUMMARY.md` give it the same.
 /// Two pages had the title "The API of the observer". A link in the book names a page by its title.
@@ -2505,7 +2504,7 @@ const OBSERVER_BOOK_PAGES: [&str; 5] = [
 fn each_page_of_the_observer_has_its_own_title_and_the_summary_gives_the_same() {
     let summary = read(&docs().join("SUMMARY.md"));
     let mut titles = BTreeSet::new();
-    for page in OBSERVER_BOOK_PAGES {
+    for page in observer_book_pages() {
         let line = summary
             .lines()
             .find(|l| l.contains(&format!("(./{page})")))
@@ -2558,7 +2557,7 @@ fn the_pages_for_a_reader_name_no_person_and_no_plan_of_the_project() {
 #[test]
 fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() {
     let mut text = String::new();
-    for page in OBSERVER_BOOK_PAGES {
+    for page in observer_book_pages() {
         text.push_str(&read(&docs().join(page)));
         text.push('\n');
     }

@@ -8,8 +8,8 @@ use std::process::Command;
 use serde_yaml::Value;
 
 use crate::common::{
-    CommandExt, block_with, fake_bin, page_section, path_with, recipe, repo_file, script, steps,
-    text, workflow, workflow_text,
+    CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, page_section, path_with, recipe,
+    repo_file, run_with_kubectl, script, steps, text, workflow, workflow_text,
 };
 
 /// A file of `deploy/observer/`, parsed as one YAML document.
@@ -574,31 +574,6 @@ fn word_after<'a>(block: &'a str, before: &str) -> &'a str {
     words.next().expect("a word follows")
 }
 
-/// Run the shell text `block` in `dir`, as a reader runs the commands of a page. The stand-in
-/// `kubectl` writes its arguments to `kubectl.args` and its standard input to `kubectl.in`.
-fn run_block(dir: &Path, block: &str, env: &[(&str, &str)]) -> std::process::Output {
-    let bin = fake_bin(
-        dir,
-        &[(
-            "kubectl",
-            "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
-        )],
-    );
-    Command::new("bash")
-        .arg("-c")
-        .arg(format!("set -euo pipefail\n{block}"))
-        .current_dir(dir)
-        .env("PATH", path_with(&bin))
-        .envs(env.iter().copied())
-        .output_locked()
-        .unwrap()
-}
-
-/// The file `name` that a stand-in command wrote in `dir`.
-fn written(dir: &Path, name: &str) -> String {
-    std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
-}
-
 /// Step 2 of the install makes the Secret that the image pull needs. The token goes on standard
 /// input, as the key does, and no argument holds it.
 #[test]
@@ -606,7 +581,7 @@ fn step_2_of_the_install_makes_the_pull_secret_from_a_token_on_standard_input() 
     let block = block_with(&install_steps(), "bash", "create secret generic ghcr-pull");
     let dir = tempfile::tempdir().unwrap();
     let token = "s3cr3t-token";
-    let o = run_block(
+    let o = run_with_kubectl(
         dir.path(),
         &block.replace("<github user>", "octo"),
         &[("GHCR_PULL_TOKEN", token)],
@@ -617,15 +592,14 @@ fn step_2_of_the_install_makes_the_pull_secret_from_a_token_on_standard_input() 
         .as_str()
         .unwrap()
         .to_string();
-    let args = written(dir.path(), "kubectl.args");
+    let args = kubectl_args(dir.path());
     assert_eq!(
         args.trim(),
         format!(
             "-n {namespace} create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin"
         )
     );
-    let config: serde_json::Value =
-        serde_json::from_str(&written(dir.path(), "kubectl.in")).unwrap();
+    let config: serde_json::Value = serde_json::from_str(&kubectl_input(dir.path())).unwrap();
     let entry = &config["auths"]["ghcr.io"];
     assert_eq!(entry["username"], "octo");
     assert_eq!(entry["password"], token);

@@ -5095,8 +5095,8 @@ impl ObserverRecords {
     }
 
     /// The shell text `command` in the directory of the run, as a reader runs the command of a
-    /// page. The script is in `scripts/ci/`, as in the repository of a team. A stand-in `kubectl`
-    /// writes its arguments to `kubectl.args` and its standard input to `kubectl.in`.
+    /// page. The script is in `scripts/ci/`, as in the repository of a team. [`kubectl_input`]
+    /// gives what the stand-in `kubectl` got.
     fn run_shell(&self, command: &str, envs: &[(&str, &str)]) -> Output {
         let d = self.dir.path();
         std::fs::create_dir_all(d.join("scripts/ci")).unwrap();
@@ -5104,27 +5104,7 @@ impl ObserverRecords {
         if !link.exists() {
             std::os::unix::fs::symlink(script("ci/observer-records.sh"), link).unwrap();
         }
-        let bin = fake_bin(
-            d,
-            &[(
-                "kubectl",
-                "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
-            )],
-        );
-        let mut c = Command::new("bash");
-        c.arg("-c")
-            .arg(format!("set -euo pipefail\n{command}"))
-            .current_dir(d)
-            .env("PATH", path_with(&bin));
-        for (k, v) in envs {
-            c.env(k, v);
-        }
-        c.output_locked().unwrap()
-    }
-
-    /// The text that the stand-in `kubectl` got on standard input in the last run of a shell text.
-    fn applied(&self) -> String {
-        std::fs::read_to_string(self.dir.path().join("kubectl.in")).unwrap()
+        run_with_kubectl(d, command, envs)
     }
 
     fn strata_calls(&self) -> Vec<String> {
@@ -5499,7 +5479,7 @@ fn observer_records_sh_accepts_the_records_that_the_loop_page_names_on_the_layou
     let envs = [("GIT_SHA", "abc123")];
     let o = job.run_shell(&command, &envs);
     assert!(o.status.success(), "{}", text(&o.stderr));
-    let applied = job.applied();
+    let applied = kubectl_input(job.dir.path());
     for key in ["aws-stack_1.0.0.json.gz:", "aws-stack_1.1.0.json.gz:"] {
         assert_eq!(applied.matches(key).count(), 1, "{key}");
     }
@@ -5536,7 +5516,7 @@ fn observer_records_sh_accepts_the_folder_of_records_that_the_install_steps_name
     let envs = [("GIT_SHA", "abc123")];
     let o = job.run_shell(&command, &envs);
     assert!(o.status.success(), "{}", text(&o.stderr));
-    let applied = job.applied();
+    let applied = kubectl_input(job.dir.path());
     for key in [
         "aws-stack_1.0.0.json.gz:",
         "aws-stack_1.1.0.json.gz:",

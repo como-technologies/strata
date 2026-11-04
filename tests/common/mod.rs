@@ -1186,6 +1186,44 @@ pub fn path_with(bin: &Path) -> String {
     format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
 }
 
+/// Run the shell text `command` in `dir`, as a reader runs the commands of a page. A stand-in
+/// `kubectl` writes its arguments to a file and its standard input to another: read them with
+/// [`kubectl_args`] and [`kubectl_input`].
+pub fn run_with_kubectl(dir: &Path, command: &str, envs: &[(&str, &str)]) -> Output {
+    let bin = fake_bin(
+        dir,
+        &[(
+            "kubectl",
+            "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
+        )],
+    );
+    Command::new("bash")
+        .arg("-c")
+        .arg(format!("set -euo pipefail\n{command}"))
+        .current_dir(dir)
+        .env("PATH", path_with(&bin))
+        .envs(envs.iter().copied())
+        .output_locked()
+        .unwrap()
+}
+
+/// The arguments of each call of the stand-in `kubectl` of [`run_with_kubectl`], one call on each
+/// line.
+pub fn kubectl_args(dir: &Path) -> String {
+    written(dir, "kubectl.args")
+}
+
+/// The text that the stand-in `kubectl` of [`run_with_kubectl`] got on standard input in its last
+/// call.
+pub fn kubectl_input(dir: &Path) -> String {
+    written(dir, "kubectl.in")
+}
+
+/// The file `name` that a stand-in command wrote in `dir`.
+fn written(dir: &Path, name: &str) -> String {
+    fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
 /// A `jq` that acts as jq 1.6, which the jq of Debian 12 is: `jq -e` exits with 0 when its input
 /// is empty. jq 1.7 and later exit with 4. A call with `-s` or `-n` always has an input value, so
 /// it gets no fault. Each other call goes to the next `jq` in `PATH`. So a test shows the fault
