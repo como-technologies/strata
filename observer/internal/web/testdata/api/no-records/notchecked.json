@@ -1,0 +1,17 @@
+{
+  "notChecked": [
+    {"cause":"no-record","profiles":["fred-identity@2.3.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["barney-base@1.5.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["wilma-gateway@3.1.2"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["betty-observability@4.2.1"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["pebbles-policy@1.4.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["dino-storage@1.1.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["gazoo-backup@1.2.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["rubble-dns@1.0.3"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["hoppy-autoscale@1.3.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["bambam-secrets@2.0.1"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["arnold-mesh@2.1.0"],"packs":[],"registry":""},
+    {"cause":"no-record","profiles":["slate-dashboards@1.0.0"],"packs":[],"registry":""}
+  ],
+  "limits": {"imagesNamedByATag":0,"helmPacks":0,"maskedPaths":0}
+}

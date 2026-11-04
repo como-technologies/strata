@@ -18,6 +18,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/web"
 )
 
 // version is set by the build with -ldflags "-X main.version=...".
@@ -152,6 +153,11 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 2
 	}
 	defer ln.Close()
+	files, err := web.Files()
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer: the files of the page cannot be read")
+		return 2
+	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
 	obs := o.observer(log)
 	ctx, stop := context.WithCancel(ctx)
@@ -162,7 +168,7 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		defer worker.Done()
 		obs.Run(ctx)
 	}()
-	err = (&api.Server{Source: obs}).Serve(ctx, ln, log)
+	err = (&api.Server{Source: obs, Page: api.Page(files)}).Serve(ctx, ln, log)
 	stop()
 	worker.Wait()
 	if err != nil {

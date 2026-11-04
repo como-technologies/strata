@@ -1,0 +1,9 @@
+{
+  "cluster": {"uid":"7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35","name":"quarry-1","updatesPending":true,"repavePending":false},
+  "page": "ok",
+  "strataVersion": "0.28.0",
+  "records": {"count":12,"baseline":"first-seen","startedAt":"2026-10-25T12:00:00Z","firstSeenFrom":"3e8a52d1-9c47-4b06-a2f9-6d1e0b7c4a88"},
+  "content": {"checkedAt":"2026-11-03T11:54:00Z","every":"15m","failedRuns":0,"lastError":null},
+  "versions": {"readAt":"2026-11-03T10:00:00Z","every":"6h","failedRuns":0,"lastError":null},
+  "counts": {"findings":1,"drift":1,"newer":10,"newerProfiles":6,"notChecked":2,"packs":29,"packsInFull":26,"profiles":12}
+}

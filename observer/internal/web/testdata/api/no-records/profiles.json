@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {"name":"fred-identity","version":"2.3.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"barney-base","version":"1.5.0","type":"cluster","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"wilma-gateway","version":"3.1.2","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"betty-observability","version":"4.2.1","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"pebbles-policy","version":"1.4.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"dino-storage","version":"1.1.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"gazoo-backup","version":"1.2.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"rubble-dns","version":"1.0.3","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"hoppy-autoscale","version":"1.3.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"bambam-secrets","version":"2.0.1","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"arnold-mesh","version":"2.1.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]},
+    {"name":"slate-dashboards","version":"1.0.0","type":"add-on","status":"no-record","packs":[],"findings":[],"who":[]}
+  ]
+}

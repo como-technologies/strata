@@ -325,6 +325,13 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 	if resp := get("GET", "/v1/cluster", ""); resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/json" || resp.Header.Get("Cache-Control") != "no-store" {
 		t.Errorf("GET /v1/cluster: %d %v", resp.StatusCode, resp.Header)
 	}
+	// The route / serves the page, with the headers of the server.
+	if resp := get("GET", "/", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") || resp.Header.Get("Content-Security-Policy") == "" {
+		t.Errorf("GET /: %d %v", resp.StatusCode, resp.Header)
+	}
+	if resp := get("GET", "/app.js", ""); resp.StatusCode != 200 || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/javascript") {
+		t.Errorf("GET /app.js: %d %v", resp.StatusCode, resp.Header)
+	}
 	if resp := get("POST", "/v1/cluster", ""); resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("POST gave %d", resp.StatusCode)
 	}
