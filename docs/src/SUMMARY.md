@@ -123,6 +123,7 @@
 - [Write the code](./development/code.md)
 - [The checks of the observer](./development/observer.md)
   - [The API of the observer](./development/observer-api.md)
+  - [The image and the manifests of the observer](./development/observer-deploy.md)
 - [Write the documentation](./development/documentation.md)
 - [The offline examples](./development/examples.md)
 - [The live example](./development/live-example.md)

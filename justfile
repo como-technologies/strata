@@ -32,6 +32,17 @@ observer-contract *args: build stand-in
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
 
+# The image is distroless/static, so its strata binary must be the static musl build. The recipe `build` gives a glibc binary that the image cannot run, and `build-target` needs cross.
+
+# Build the image strata-observer:dev from a local binary, for a test on kind
+observer-image: (build-target "x86_64-unknown-linux-musl")
+    mkdir -p dist && cp target/x86_64-unknown-linux-musl/release/strata dist/strata-amd64
+    docker build -f deploy/observer/Dockerfile --build-arg VERSION=dev --platform linux/amd64 -t strata-observer:dev .
+
+# Render deploy/observer and make sure it holds four objects. Needs kubectl.
+observer-manifests:
+    test "$(kubectl kustomize deploy/observer | grep -c '^kind: ')" = 4
+
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
 
@@ -303,6 +314,10 @@ live-fleet: build
 # The everyday loop, end to end: a change, the gates, the publish, the questions to Palette about a move, preflight on the body of a create, the nightly jobs, an override, an edit in place, an incident, and a retire, with the records in a git repository (#81, #385). Needs live-up; undoes each change.
 live-loop: build
     examples/live/loop.sh
+
+# The observer on kind (#644): the manifests, the records, the pod, and the page, as a user with only the reader role sees them. Needs live-up, docker, kind, and kubectl. Makes a kind cluster and deletes it; writes nothing to the tenant.
+live-observer-kind: build observer-image
+    examples/live/observer-kind.sh
 
 # The managed engine test on EKS: the release, the shape tier, and the repave answers of Palette, and a change of the node group (#89). Needs cloud = "eks" in terraform.tfvars and live-up.
 live-eks: build

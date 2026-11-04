@@ -6,7 +6,7 @@ its checks establishes, so you can see the coverage without running anything.
 
 `verify.sh` is the read-only script over the cluster, and
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
-`packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant;
+`packs.sh`, `knurl.sh`, and `observer-kind.sh` read too. The other scripts below write to the tenant;
 `pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
 in stage 4, which deletes the profile that it makes. `route-bodies.sh` deletes each
 profile that it makes.
@@ -1328,6 +1328,40 @@ needs the example at its baseline with cluster A.
 | `retire` | 0 | #81: nothing runs the next version: the retire gate is open |
 | `report-log` | 0 | #396: `strata report` reads the log of the unknown values that this run wrote. The script sets `XDG_STATE_HOME` under the run directory, so the log holds this run alone. The command exits `0` when each line is a line of `strata-unknown/1`. The check passes. |
 | `baseline` | 0 | the example is at its baseline |
+
+## observer-kind.sh
+
+Read-only for the tenant. It makes a kind cluster, installs [the
+observer](./observer-deploy.md) in it, and deletes the cluster. It needs the
+example at its baseline with cluster A, `docker`, `kind`, `kubectl`, and the image
+of `just observer-image`. The observer watches cluster A, and its records are the
+release profile and the add-on profile. The key goes to the Secret through standard
+input, and it is in no log. `observer-kind.sh N` resumes at stage N, and
+`KEEP_CLUSTER=1` keeps the kind cluster.
+
+The image has no shell, so the checks of the pod read its spec, and the kubelet
+enforces the spec. The check of the refusal needs a kind that enforces network
+policy. The observer also listens on `127.0.0.1` only, so the connection of another
+pod fails in both cases. No row has a result yet: the lead runs the script on kind
+before the run on the real cluster.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `kind-create`, `image-load` | 0 | #644: a kind cluster, and the image of the observer in its nodes (no result yet: the Wave 15 window runs it) |
+| `namespace`, `config`, `key` | 0 | #644: the namespace with the restricted standard, the ConfigMap, and the Secret of the key (no result yet: the Wave 15 window runs it) |
+| `record-release`, `record-addon` | 0 | #644: a record of each profile that cluster A runs (no result yet: the Wave 15 window runs it) |
+| `records-apply`, `records-four`, `records-meta` | 0 | #644: the output of `observer-records.sh --revision` applies with `--server-side`. It makes four Secrets, and `meta.json` says `approved` with the revision (no result yet: the Wave 15 window runs it) |
+| `manifests-apply`, `rollout` | 0 | #644: `deploy/observer` applies with `--server-side` under the restricted standard, and the Deployment becomes available (no result yet: the Wave 15 window runs it) |
+| `pod-ready`, `pod-ready-status` | 0 | #644: the pod is Ready, and its container has not restarted (no result yet: the Wave 15 window runs it) |
+| `pod-non-root`, `pod-read-only-root` | 0 | #644: the pod runs as non-root and has a read-only root file system with no capability (no result yet: the Wave 15 window runs it) |
+| `pod-no-token` | 0 | #644: no volume and no mount holds a token of the service account (no result yet: the Wave 15 window runs it) |
+| `reader-role`, `reader-can-forward` | 0 | #644: the reader role, bound to an account, lets that account open a port-forward (no result yet: the Wave 15 window runs it) |
+| `reader-no-secret`, `reader-no-exec` | 1 | #644: the same account can read no Secret and run no exec (no result yet: the Wave 15 window runs it) |
+| `reader-forward`, `reader-health`, `reader-page` | 0 | #644: `kubectl port-forward deploy/strata-observer` works for that account, and the page answers (no result yet: the Wave 15 window runs it) |
+| `reader-cluster` | 0 | #644: after the first cycle, the summary names cluster A and its two approved records (no result yet: the Wave 15 window runs it) |
+| `other-pod-refused` | 0 | #644: a pod of another namespace cannot connect to the page (no result yet: the Wave 15 window runs it) |
+| `first-seen-apply`, `first-seen-meta` | 0 | #644: the output of `observer-records.sh --first-seen` applies with `--server-side`, and `meta.json` says `first-seen` (no result yet: the Wave 15 window runs it) |
+| `kind-delete` | 0 | the kind cluster is deleted |
 
 ## version-states.sh
 

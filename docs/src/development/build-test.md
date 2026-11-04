@@ -5,6 +5,8 @@ just build             # target/release/strata and target/release/strata-preflig
 just observer-build    # target/observer/strata-observer, a static Go binary
 just observer-contract # the documents of this build of strata go through the allow-list of the observer
 just observer-dev      # the page of the observer, from test data: see The API of the observer
+just observer-image    # strata-observer:dev, the image, from the static binary of this tree
+just observer-manifests # kubectl kustomize deploy/observer holds four objects
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
@@ -112,6 +114,7 @@ that version.
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The API of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/api`, and `internal/web` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
+| `deploy/observer/`, `scripts/ci/observer-records.sh` | The manifests and the Dockerfile of the observer: see [The image and the manifests of the observer](./observer-deploy.md). The script writes the records of the observer as Secrets. `.github/workflows/observer-image.yml` builds and signs the image. `tests/observer_deploy.rs` ties the manifests to the code of the observer. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |
 | `preflight/src/rule/` | `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. |
 | `preflight/src/probe/` | `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. |

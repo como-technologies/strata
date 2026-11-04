@@ -1,0 +1,18 @@
+# No pod can connect to the observer. A person reaches it with `kubectl port-forward`.
+# The observer can connect only to DNS and to HTTPS. A team can narrow the HTTPS rule to the address of Palette.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: strata-observer
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: strata-observer
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - ports:
+        - { protocol: TCP, port: 443 }

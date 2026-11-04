@@ -1,0 +1,18 @@
+# A person with this role opens the page with `kubectl port-forward deploy/strata-observer 8080`. The
+# role gives no Secret and no exec. Bind it to a group of your team.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: strata-observer-reader
+  namespace: strata-observer
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [strata-observer]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+  - apiGroups: [""]
+    resources: [pods/portforward]
+    verbs: [create]

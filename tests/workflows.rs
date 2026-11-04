@@ -275,16 +275,23 @@ impl StepRun {
 /// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
 /// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
 fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
+    let tools: Vec<(&str, &str)> = tools.iter().map(|tool| (*tool, LOGGING_TOOL)).collect();
+    run_step_with(file, step, env, &tools)
+}
+
+/// [`run_step`] with a stand-in of your own for each tool: its path under the directory, and the
+/// body of its script.
+fn run_step_with(file: &str, step: &str, env: &[(&str, &str)], tools: &[(&str, &str)]) -> StepRun {
     let doc = workflow(file);
     let step = steps(&doc)
         .find(|s| s["name"].as_str() == Some(step))
         .unwrap_or_else(|| panic!("{file} has no step named {step}"));
     let dir = tempfile::tempdir().unwrap();
     git(dir.path(), &["init", "-q"]);
-    for tool in tools {
+    for (tool, body) in tools {
         let at = dir.path().join(tool);
         std::fs::create_dir_all(at.parent().unwrap()).unwrap();
-        executable(&at, LOGGING_TOOL);
+        executable(&at, body);
     }
     let mut command = Command::new("bash");
     command
@@ -926,5 +933,293 @@ fn the_check_job_runs_the_contract_of_the_observer_after_the_examples() {
     assert!(
         at("just examples") < at("just observer-contract"),
         "{runs:?}"
+    );
+}
+
+// ---- the image of the observer -------------------------------------------------------------------
+
+/// The rank of a permission level of GitHub.
+fn permission_rank(level: &str) -> u8 {
+    match level {
+        "none" => 0,
+        "read" => 1,
+        "write" => 2,
+        other => panic!("{other} is no level of permission"),
+    }
+}
+
+/// The permissions that the workflow `doc` asks for: the ones of the workflow, and the ones of each
+/// job, as pairs of a permission and its level.
+fn permissions_asked(doc: &serde_yaml::Value) -> Vec<(String, String)> {
+    let mut asked = Vec::new();
+    let jobs = doc["jobs"].as_mapping().expect("a workflow has jobs");
+    for scope in
+        std::iter::once(&doc["permissions"]).chain(jobs.values().map(|j| &j["permissions"]))
+    {
+        for (name, level) in scope.as_mapping().into_iter().flatten() {
+            asked.push((
+                name.as_str().unwrap().to_string(),
+                level.as_str().unwrap().to_string(),
+            ));
+        }
+    }
+    asked
+}
+
+/// A called workflow cannot have more permission than the job that calls it. When the job grants
+/// less, GitHub refuses the whole run of the release at its start, and the next release does not
+/// ship. The workflow of the release has fewer permissions than the image needs, so the job sets
+/// its own and does not take the default of the workflow.
+#[test]
+fn the_observer_image_job_of_the_release_grants_what_the_called_workflow_needs() {
+    let release = workflow("release.yml");
+    let job = &release["jobs"]["observer-image"];
+    assert_eq!(job["needs"].as_str(), Some("release"));
+    assert_eq!(
+        job["uses"].as_str(),
+        Some("./.github/workflows/observer-image.yml")
+    );
+    let granted = job["permissions"]
+        .as_mapping()
+        .expect("the job sets its permissions");
+    for (permission, level) in [
+        ("contents", "read"),
+        ("packages", "write"),
+        ("id-token", "write"),
+    ] {
+        assert_eq!(
+            granted.get(permission).and_then(|l| l.as_str()),
+            Some(level),
+            "the job grants {permission}: {level}"
+        );
+    }
+    let level_of = |permission: &str| {
+        granted
+            .get(permission)
+            .and_then(|l| l.as_str())
+            .map_or(0, permission_rank)
+    };
+    let asked = permissions_asked(&workflow("observer-image.yml"));
+    assert!(
+        !asked.is_empty(),
+        "the called workflow asks for permissions"
+    );
+    for (permission, level) in asked {
+        assert!(
+            level_of(&permission) >= permission_rank(&level),
+            "the called workflow asks for {permission}: {level}, and the job grants less"
+        );
+    }
+    // the release gives the tag that it published as the release of the binaries and as the tag
+    assert_eq!(
+        job["with"]["version"].as_str(),
+        Some("${{ github.ref_name }}")
+    );
+    assert_eq!(job["with"]["tag"].as_str(), Some("${{ github.ref_name }}"));
+}
+
+/// The release calls the workflow, a person starts it from the default branch, and a pull request
+/// that changes the observer starts it with a test tag. A push builds no image.
+#[test]
+fn the_observer_image_workflow_runs_on_a_call_a_dispatch_and_a_pull_request_that_changes_the_observer()
+ {
+    let doc = workflow("observer-image.yml");
+    let on = &doc["on"];
+    for trigger in ["workflow_call", "workflow_dispatch"] {
+        for input in ["version", "tag"] {
+            assert!(
+                on[trigger]["inputs"][input].is_mapping(),
+                "{trigger} takes the input {input}"
+            );
+        }
+    }
+    assert_eq!(
+        on["workflow_dispatch"]["inputs"]["version"]["default"],
+        "latest"
+    );
+    assert_eq!(on["workflow_call"]["inputs"]["version"]["required"], true);
+    let paths: Vec<&str> = on["pull_request"]["paths"]
+        .as_sequence()
+        .expect("the pull request has paths")
+        .iter()
+        .filter_map(|p| p.as_str())
+        .collect();
+    assert_eq!(
+        paths,
+        [
+            "observer/**",
+            "deploy/observer/**",
+            ".github/workflows/observer-image.yml"
+        ]
+    );
+    for trigger in ["push", "schedule"] {
+        assert!(on.get(trigger).is_none(), "{trigger} builds no image");
+    }
+}
+
+/// The steps of the job `image`, in order: the installer gets the signed binaries of both targets,
+/// buildx builds both platforms and pushes, and cosign signs the digest and then verifies the
+/// signature. The installer holds the rule of the signature, so the workflow has no copy of it.
+#[test]
+fn the_observer_image_installs_the_signed_binaries_builds_two_platforms_then_signs_and_verifies() {
+    let doc = workflow("observer-image.yml");
+    let steps: Vec<&serde_yaml::Value> = steps(&doc).collect();
+    let position = |what: &str, wanted: &dyn Fn(&serde_yaml::Value) -> bool| {
+        steps
+            .iter()
+            .copied()
+            .position(wanted)
+            .unwrap_or_else(|| panic!("a step is missing: {what}"))
+    };
+    let uses = |prefix: &'static str| {
+        move |s: &serde_yaml::Value| s["uses"].as_str().is_some_and(|u| u.starts_with(prefix))
+    };
+    let runs = |part: &'static str| {
+        move |s: &serde_yaml::Value| s["run"].as_str().is_some_and(|r| r.contains(part))
+    };
+    let cosign = position("cosign", &uses("sigstore/cosign-installer@"));
+    let install = position("the installer", &runs("scripts/ci/install-strata.sh"));
+    let build = position("the build", &uses("docker/build-push-action@"));
+    let sign = position("the signature", &runs("cosign sign --yes"));
+    let verify = position("the check of the signature", &runs("cosign verify "));
+    assert!(
+        cosign < install && install < build && build < sign && sign < verify,
+        "cosign, the installer, the build, the signature, and its check come in that order"
+    );
+
+    let run = steps[install]["run"].as_str().unwrap();
+    for part in [
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
+        "--bin-only",
+        "--require-signature",
+    ] {
+        assert!(run.contains(part), "the installer gets {part}: {run}");
+    }
+    let with = &steps[build]["with"];
+    assert_eq!(with["platforms"], "linux/amd64,linux/arm64");
+    assert_eq!(with["push"], true);
+    assert_eq!(with["file"], "deploy/observer/Dockerfile");
+    assert_eq!(with["context"], ".");
+
+    // the signature covers the digest that the build gave, not a tag that can move
+    for step in [sign, verify] {
+        let run = steps[step]["run"].as_str().unwrap();
+        assert!(run.contains(r#""$IMAGE@$DIGEST""#), "{run}");
+        assert_eq!(
+            steps[step]["env"]["DIGEST"].as_str(),
+            Some("${{ steps.build.outputs.digest }}")
+        );
+    }
+    let verify_run = steps[verify]["run"].as_str().unwrap();
+    assert!(
+        verify_run.contains("observer-image\\.yml@")
+            && verify_run.contains("https://token.actions.githubusercontent.com"),
+        "the check names the workflow that signs: {verify_run}"
+    );
+
+    let text = workflow_text("observer-image.yml");
+    for copy in ["gh release download", "cosign verify-blob", "sha256sum"] {
+        assert!(
+            !text.contains(copy),
+            "the workflow has its own copy of `{copy}`; run scripts/ci/install-strata.sh"
+        );
+    }
+}
+
+/// The tag of the image is the tag that the caller gives. A pull request and a manual run with no
+/// tag get `test-` and the first seven characters of the commit. The name of the image is in
+/// lower case, as the registry needs.
+#[test]
+fn the_observer_image_step_names_the_image_from_the_repository_and_the_tag_of_the_call() {
+    let named = |tag: &str| {
+        let run = run_step(
+            "observer-image.yml",
+            "name the image",
+            &[
+                ("TAG", tag),
+                ("HEAD_SHA", "0123456789abcdef"),
+                ("GITHUB_REPOSITORY", "Como-Technologies/Strata"),
+                ("GITHUB_ENV", "env.txt"),
+            ],
+            &[],
+        );
+        assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+        std::fs::read_to_string(run.dir.path().join("env.txt")).unwrap()
+    };
+    assert_eq!(
+        named(""),
+        "IMAGE=ghcr.io/como-technologies/strata-observer\nIMAGE_TAG=test-0123456\n"
+    );
+    assert_eq!(
+        named("v0.29.0"),
+        "IMAGE=ghcr.io/como-technologies/strata-observer\nIMAGE_TAG=v0.29.0\n"
+    );
+}
+
+/// The step gets the binary of each platform from the installer, and puts it where the Dockerfile
+/// copies it from. It asks for the release that the caller names, and for `latest` when the pull
+/// request gives none.
+#[test]
+fn the_observer_image_step_puts_the_binary_of_each_platform_where_the_dockerfile_copies_it() {
+    // an installer that puts a binary in the directory of --dir, as the real one does
+    let installer = r#"#!/usr/bin/env bash
+echo "install-strata.sh $*" >> "$FAKE_LOG"
+dir=""; target=""; prev=""
+for a in "$@"; do
+  [ "$prev" = --dir ] && dir=$a
+  [ "$prev" = --target ] && target=$a
+  prev=$a
+done
+mkdir -p "$dir"
+echo "binary of $target" > "$dir/strata"
+"#;
+    for (release, asked) in [("v0.29.0", "v0.29.0"), ("", "latest")] {
+        let run = run_step_with(
+            "observer-image.yml",
+            "install the binaries of the release",
+            &[("RELEASE", asked)],
+            &[("scripts/ci/install-strata.sh", installer)],
+        );
+        assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+        let calls = run.calls();
+        assert_eq!(calls.len(), 2, "{calls:?}");
+        for call in &calls {
+            assert!(
+                call.contains(&format!("--version {asked} "))
+                    && call.contains("--bin-only")
+                    && call.contains("--require-signature"),
+                "{release}: {call}"
+            );
+        }
+        for (arch, target) in [
+            ("amd64", "x86_64-unknown-linux-musl"),
+            ("arm64", "aarch64-unknown-linux-musl"),
+        ] {
+            let copied =
+                std::fs::read_to_string(run.dir.path().join(format!("dist/strata-{arch}")))
+                    .unwrap();
+            assert_eq!(copied, format!("binary of {target}\n"));
+        }
+    }
+}
+
+/// The step reads the version out of `strata --version`, so the observer names the version of the
+/// binary that it carries, also when the caller asks for `latest`.
+#[test]
+fn the_observer_image_step_reads_the_version_of_the_binary_it_carries() {
+    let run = run_step_with(
+        "observer-image.yml",
+        "read the version of the binary",
+        &[("GITHUB_OUTPUT", "output.txt")],
+        &[(
+            "dist/strata-amd64",
+            "#!/usr/bin/env bash\necho strata 0.29.1\n",
+        )],
+    );
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        std::fs::read_to_string(run.dir.path().join("output.txt")).unwrap(),
+        "number=0.29.1\n"
     );
 }

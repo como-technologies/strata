@@ -1,0 +1,4 @@
+# The context is the root of the repository. The build needs observer/ and the binaries in dist/.
+*
+!observer
+!dist

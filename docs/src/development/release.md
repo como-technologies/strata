@@ -53,6 +53,15 @@ The release workflow then:
 5. publishes the GitHub release with generated notes
 6. installs the published release with `install-strata.sh --require-signature`,
    which checks the signature of `SHA256SUMS`, and runs each script it installed
+7. at the same time as step 6, builds the image of the observer from the signed
+   binaries of the release, signs its digest, and pushes it as
+   `ghcr.io/como-technologies/strata-observer:<tag>`
+
+The job of step 7 calls the workflow `observer-image.yml`: see [The
+image](./observer-deploy.md#the-image). A fault in the `permissions` of that job
+stops the whole run at its start, so change them with care. If the job fails after
+the release is published, the release stays. Start the workflow by hand to build
+the image again.
 
 Users install it as [Install](../install.md) shows. The version rules are in
 [Versions and compatibility](../reference/compatibility.md).
