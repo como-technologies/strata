@@ -119,7 +119,7 @@ lists the routes.
 
 | Flag | Default | What it does |
 | --- | --- | --- |
-| `--strata` | `strata`, on `PATH` | Names the binary. The image has `/usr/local/bin/strata`. |
+| `--strata` | `strata`, on `PATH` | Names the binary, as a path or as a name on `PATH`. A relative path starts at the directory where the observer starts. The image has `/usr/local/bin/strata`. |
 | `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. |
 | `--records` | required | The directory of `*.json.gz` records and `meta.json`. |
 | `--work` | required | A volume in memory for the files of a cycle. |

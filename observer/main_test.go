@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -45,6 +47,7 @@ func TestAnUnknownCommandExitsTwo(t *testing.T) {
 // `compare` prints. verifyExit is the exit code of `verify`.
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
+	compare = strings.Replace(compare, "{", `{"schema":"`+docs.DiffSchema+`",`, 1)
 	body := `#!/bin/sh
 cmd=$1
 shift
@@ -56,12 +59,12 @@ done
 case $cmd in
 verify)
   if [ ` + strconv.Itoa(verifyExit) + ` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
-  echo '{"schema":"strata-verify-summary/1","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
+snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
 compare) echo '` + compare + `'; case '` + compare + `' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
   if [ ` + strconv.FormatBool(behindFails) + ` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
-  echo '{"schema":"strata-behind/1","tool":{"version":"0.29.0"},"pins":[]}' ;;
+  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[]}' ;;
 esac
 `
 	bin := filepath.Join(t.TempDir(), "strata")
@@ -75,7 +78,7 @@ esac
 func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	records := t.TempDir()
-	record := `{"schema":"strata-snapshot/1","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`
+	record := `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	if _, err := zw.Write([]byte(record)); err != nil {
@@ -350,28 +353,17 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
 	stop, _ := startServe(t, args, addr)
 	defer stop()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
+	waitFor(t, "the page state ok", func() bool {
 		resp, err := http.Get("http://" + addr + "/v1/cluster")
 		if err != nil {
-			t.Fatal(err)
+			return false
 		}
+		defer resp.Body.Close()
 		var got struct {
 			Page string `json:"page"`
 		}
-		err = json.NewDecoder(resp.Body).Decode(&got)
-		resp.Body.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got.Page == string(model.PageOK) {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the page is %q", got.Page)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		return json.NewDecoder(resp.Body).Decode(&got) == nil && got.Page == string(model.PageOK)
+	})
 }
 
 func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
@@ -394,5 +386,150 @@ func TestHealthRefusesAWrongFlagAndAnAddressThatIsNotLoopback(t *testing.T) {
 		if code := run(args, io.Discard, &errs); code != 2 {
 			t.Errorf("%v: exit %d, stderr %q", args, code, errs.String())
 		}
+	}
+}
+
+// holdingStrata writes a script that stands for the strata binary, with one pin that is behind. While
+// the file hold exists, the compare of two packs writes its process id to pids and waits. It replaces
+// itself with the wait, so the process id is the one that the observer started.
+func holdingStrata(t *testing.T, hold, pids string) string {
+	t.Helper()
+	body := `#!/bin/sh
+cmd=$1
+shift
+ref=$1
+out=
+while [ $# -gt 0 ]; do
+  if [ "$1" = -o ]; then out=$2; fi
+  shift
+done
+case $cmd in
+verify)
+  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
+snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+compare)
+  case $ref in
+  pack:*)
+    if [ -e '` + hold + `' ]; then echo $$ > '` + pids + `'; exec sleep 60; fi
+    echo '{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
+    exit 1 ;;
+  *) echo '{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}' ;;
+  esac ;;
+behind)
+  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
+  exit 1 ;;
+esac
+`
+	bin := filepath.Join(t.TempDir(), "strata")
+	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// waitFor calls ready every 20 ms until it is true, and fails the test after 10 seconds.
+func waitFor(t *testing.T, what string, ready func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for !ready() {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s did not happen", what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// newerRows counts the rows of /v1/newer.
+func newerRows(addr string) int {
+	resp, err := http.Get("http://" + addr + "/v1/newer")
+	if err != nil {
+		return 0
+	}
+	defer resp.Body.Close()
+	var got struct {
+		Newer []json.RawMessage `json:"newer"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&got) != nil {
+		return 0
+	}
+	return len(got.Newer)
+}
+
+// After a restart the memory holds no values for a move, so a request of the newer side starts one
+// compare. A stop during that request must cancel it: the server exits 0, and no process stays.
+func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T) {
+	dir := t.TempDir()
+	hold, pids := filepath.Join(dir, "hold"), filepath.Join(dir, "pids")
+	args, addr := serveArgs(t, holdingStrata(t, hold, pids))
+	first, _ := startServe(t, args, addr)
+	waitFor(t, "the first versions cycle", func() bool { return newerRows(addr) == 1 })
+	if code := first(); code != 0 {
+		t.Fatalf("the first server exited %d", code)
+	}
+
+	// The restart: the state holds the counts of the move, and the compare waits.
+	if err := os.WriteFile(hold, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stop, stderr := startServe(t, args, addr)
+	waitFor(t, "the versions cycle after the restart", func() bool { return newerRows(addr) == 1 })
+	answered := make(chan struct{})
+	go func() {
+		defer close(answered)
+		client := &http.Client{Timeout: 30 * time.Second}
+		resp, err := client.Get("http://" + addr + "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer")
+		if err == nil {
+			resp.Body.Close()
+		}
+	}()
+	var pid int
+	waitFor(t, "the compare of the detail request", func() bool {
+		raw, err := os.ReadFile(pids)
+		if err != nil {
+			return false
+		}
+		pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil
+	})
+
+	if code := stop(); code != 0 {
+		t.Errorf("exit %d, stderr %s", code, stderr.String())
+	}
+	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("the process %d of the compare is still there: %v", pid, err)
+	}
+	select {
+	case <-answered:
+	case <-time.After(10 * time.Second):
+		t.Error("the detail request did not end")
+	}
+}
+
+// A process runs in the directory of its cycle, and Go reads a relative path of a command from the
+// directory of the process. So a relative --strata must become absolute at the start, or each run
+// fails with no process.
+func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
+	bin := fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)
+	dir := filepath.Dir(bin)
+	for _, c := range []struct{ name, path string }{
+		{"the current directory", "./strata"},
+		{"a sibling directory", "../" + filepath.Base(dir) + "/strata"},
+		{"a name on the path", "strata"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Chdir(dir)
+			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+			var out, errs bytes.Buffer
+			if code := run(onceArgs(t, c.path), &out, &errs); code != 0 {
+				t.Fatalf("exit %d, stderr %q", code, errs.String())
+			}
+			var s model.Summary
+			if err := json.Unmarshal(out.Bytes(), &s); err != nil {
+				t.Fatalf("stdout %q: %v", out.String(), err)
+			}
+			if s.Page != model.PageOK || s.Content.FailedRuns != 0 {
+				t.Errorf("summary %+v", s)
+			}
+		})
 	}
 }

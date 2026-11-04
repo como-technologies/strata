@@ -23,13 +23,9 @@ type VerifyRow struct {
 	Status       string `json:"status"`
 	Name         string `json:"name"`
 	Version      string `json:"version"`
-	UID          string `json:"uid"`
-	RecordedAt   string `json:"recordedAt"`
 	RootRecorded string `json:"rootRecorded"`
 	RootLive     string `json:"rootLive"`
 	MaxImpact    string `json:"maxImpact"`
-	PacksChanged int    `json:"packsChanged"`
-	LastModified string `json:"lastModified"`
 	Diff         *Diff  `json:"diff"`
 	Error        *Error `json:"error"`
 }
@@ -39,8 +35,6 @@ type Diff struct {
 	Schema          string      `json:"schema"`
 	Same            bool        `json:"same"`
 	SameContent     bool        `json:"sameContent"`
-	EditedInPlace   bool        `json:"editedInPlace"`
-	RootA           string      `json:"rootA"`
 	RootB           string      `json:"rootB"`
 	Summary         DiffSummary `json:"summary"`
 	Packs           []Pack      `json:"packs"`
@@ -56,9 +50,6 @@ type KeyOnly struct {
 
 // DiffSummary holds the counts of a comparison.
 type DiffSummary struct {
-	PacksChanged  int    `json:"packsChanged"`
-	PacksAdded    int    `json:"packsAdded"`
-	PacksRemoved  int    `json:"packsRemoved"`
 	ImagesChanged int    `json:"imagesChanged"`
 	ChartsChanged int    `json:"chartsChanged"`
 	MaxImpact     string `json:"maxImpact"`
@@ -77,8 +68,6 @@ type Pack struct {
 	Charts          bool     `json:"charts"`
 	UpstreamUnknown bool     `json:"upstreamUnknown"`
 	Impact          Impact   `json:"impact"`
-	A               *Side    `json:"a"`
-	B               *Side    `json:"b"`
 	Values          Values   `json:"values"`
 	Manifests       []Named  `json:"manifests"`
 	ParamChanges    []Named  `json:"paramChanges"`
@@ -93,20 +82,10 @@ type Impact struct {
 	Text  string `json:"text"`
 }
 
-// Side is one side of a pack.
-type Side struct {
-	Tag      string `json:"tag"`
-	Version  string `json:"version"`
-	Upstream string `json:"upstream"`
-}
-
 // Values holds the changes of the pack values. Only the detail tier sends Diff.
 type Values struct {
-	Parseable    bool   `json:"parseable"`
-	ChangedCount int    `json:"changedCount"`
-	AddedCount   int    `json:"addedCount"`
-	RemovedCount int    `json:"removedCount"`
-	Diff         []Leaf `json:"diff"`
+	Parseable bool   `json:"parseable"`
+	Diff      []Leaf `json:"diff"`
 }
 
 // Leaf is one changed value. Old and New are a scalar or an empty container.
@@ -133,14 +112,10 @@ type Change struct {
 
 // Verify is the verify block of strata-diff/1.
 type Verify struct {
-	Status          string   `json:"status"`
-	RecordedAt      string   `json:"recordedAt"`
-	CheckedAt       string   `json:"checkedAt"`
 	UpstreamUnknown []string `json:"upstreamUnknown"`
 	OverwrittenBy   string   `json:"overwrittenBy"`
 	RenamedTo       string   `json:"renamedTo"`
 	Gone            bool     `json:"gone"`
-	LastModified    string   `json:"lastModified"`
 	Who             []Who    `json:"who"`
 	WhoError        string   `json:"whoError"`
 }
@@ -167,9 +142,7 @@ type Pin struct {
 	Registry     string        `json:"registry"`
 	RegistryUID  string        `json:"registryUid"`
 	Version      string        `json:"version"`
-	Tag          string        `json:"tag"`
 	Floating     bool          `json:"floating"`
-	Resolved     string        `json:"resolved"`
 	PinnedState  string        `json:"pinnedState"`
 	PinnedBy     []PinnedBy    `json:"pinnedBy"`
 	Newer        []Newer       `json:"newer"`
@@ -193,7 +166,6 @@ type Newer struct {
 // RegistrySync says how old the copy of a registry in Palette is.
 type RegistrySync struct {
 	LastSyncedTime string `json:"lastSyncedTime"`
-	Status         string `json:"status"`
 }
 
 // Error is the error object of a document, and of the stderr line of a run that exits 2. It has no
@@ -208,17 +180,15 @@ type Record struct {
 	Schema string `json:"schema"`
 	Tool   Tool   `json:"tool"`
 	Source struct {
-		UID        string `json:"uid"`
 		ProjectUID string `json:"projectUid"`
 		Name       string `json:"name"`
 		Version    string `json:"version"`
 		Type       string `json:"type"`
-		FetchedAt  string `json:"fetchedAt"`
-		// Cluster is here only so that the observer can refuse a cluster record. It keeps no other field.
-		Cluster *struct {
-			UID string `json:"uid"`
-		} `json:"cluster"`
+		// Cluster is here only so that the observer can refuse a cluster record. It keeps no field.
+		Cluster *struct{} `json:"cluster"`
 	} `json:"source"`
+	// Root says whether a record changed: the observer keeps the last good answer of a part only for the
+	// same root.
 	Root  string       `json:"root"`
 	Packs []RecordPack `json:"packs"`
 }
@@ -244,6 +214,7 @@ type PackHash struct {
 
 // ClusterRead is the part of a cluster snapshot that the observer reads. It has no variables.
 type ClusterRead struct {
+	Schema string `json:"schema"`
 	Source struct {
 		Cluster struct {
 			UID            string           `json:"uid"`

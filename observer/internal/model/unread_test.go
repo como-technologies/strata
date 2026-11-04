@@ -95,7 +95,7 @@ func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 
 func TestAMoveThatWasNotReadKeepsTheCauseOfAnOlderRegistryCopy(t *testing.T) {
 	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
-	unread.RegistrySync = &docs.RegistrySync{Status: "failed"}
+	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{unread}, Moves: map[string]Move{}, Unread: map[string]bool{MoveKey(unread): true}}
 	var causes []Cause
 	for _, row := range build(nil, v).NotChecked {

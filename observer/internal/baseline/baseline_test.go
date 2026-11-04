@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
 )
 
 const marker = "SENTINEL-MUST-NOT-LEAVE"
@@ -34,7 +36,7 @@ func write(t *testing.T, dir, name, body string) {
 	}
 }
 
-const aws = `{"schema":"strata-snapshot/1","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"root":"r1","packs":[]}`
+const aws = `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"root":"r1","packs":[]}`
 
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
@@ -90,8 +92,8 @@ func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	dir := t.TempDir()
 	gz(t, dir, "a-good.json.gz", aws)
 	write(t, dir, "b-plain.json.gz", aws)
-	gz(t, dir, "c-other-schema.json.gz", `{"schema":"strata-diff/1"}`)
-	gz(t, dir, "d-cluster.json.gz", `{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"c1"}}}`)
+	gz(t, dir, "c-other-schema.json.gz", `{"schema":"`+docs.DiffSchema+`"}`)
+	gz(t, dir, "d-cluster.json.gz", `{"schema":"`+docs.SnapshotSchema+`","source":{"cluster":{"uid":"c1"}}}`)
 	gz(t, dir, "e-not-json.json.gz", `not json`)
 	gz(t, dir, "f-good.json.gz", aws)
 	set, err := Load(dir)
@@ -180,7 +182,7 @@ func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 
 func TestARecordAboveTheLimitIsUnreadable(t *testing.T) {
 	dir := t.TempDir()
-	gz(t, dir, "big.json.gz", `{"schema":"strata-snapshot/1","pad":"`+strings.Repeat("a", maxRecordBytes)+`"}`)
+	gz(t, dir, "big.json.gz", `{"schema":"`+docs.SnapshotSchema+`","pad":"`+strings.Repeat("a", maxRecordBytes)+`"}`)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 0 || len(set.Unreadable) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)

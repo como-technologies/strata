@@ -38,7 +38,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	if err != nil {
 		return err
 	}
-	doc, err := decode[docs.Behind](res.Stdout)
+	doc, err := decode[docs.Behind](res.Stdout, docs.BehindSchema)
 	if err != nil {
 		return err
 	}
@@ -97,5 +97,5 @@ func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (d
 	if err != nil {
 		return docs.Diff{}, err
 	}
-	return decode[docs.Diff](res.Stdout)
+	return decode[docs.Diff](res.Stdout, docs.DiffSchema)
 }

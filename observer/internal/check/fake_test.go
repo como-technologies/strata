@@ -31,11 +31,14 @@ const sentinel = "SENTINEL-CLEAR-VALUE"
 // world holds the answers of the fake strata. A record is known by its index: record-<i>.json.
 type world struct {
 	// rows gives one `verify` row for each record, by index. The fake sets the path of the row.
-	rows       []docs.VerifyRow
-	verifyTool string
-	verifyExit int
-	verifyErr  error
+	rows []docs.VerifyRow
+	// verifySchema is the schema id of the `verify` document. It is the right id when empty.
+	verifySchema string
+	verifyTool   string
+	verifyExit   int
+	verifyErr    error
 
+	// The fake gives the right schema id to a document that has none. A test that sets another id keeps it.
 	cluster    docs.ClusterRead
 	clusterErr error
 	sideErr    error
@@ -101,7 +104,10 @@ func (w *world) runVerify(args []string) (runner.Result, error) {
 	if w.verifyErr != nil {
 		return runner.Result{}, w.verifyErr
 	}
-	s := docs.VerifySummary{Schema: "strata-verify-summary/1", Tool: docs.Tool{Version: w.verifyTool}}
+	s := docs.VerifySummary{Schema: docs.VerifySummarySchema, Tool: docs.Tool{Version: w.verifyTool}}
+	if w.verifySchema != "" {
+		s.Schema = w.verifySchema
+	}
 	for i, a := range args[1:] {
 		if strings.HasPrefix(a, "-") || i >= len(w.rows) {
 			break
@@ -139,7 +145,11 @@ func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
 	if err := os.WriteFile(filepath.Join(dir, "clear-value.txt"), []byte(sentinel), 0o600); err != nil {
 		return runner.Result{}, err
 	}
-	raw, err := json.Marshal(w.cluster)
+	c := w.cluster
+	if c.Schema == "" {
+		c.Schema = docs.SnapshotSchema
+	}
+	raw, err := json.Marshal(c)
 	if err != nil {
 		return runner.Result{}, err
 	}
@@ -155,6 +165,14 @@ func slicesIndex(args []string, want string) int {
 	panic("no " + want)
 }
 
+// schemaOr gives the schema id that a test set, or the right one when it set none.
+func schemaOr(set, right string) string {
+	if set != "" {
+		return set
+	}
+	return right
+}
+
 func (w *world) runCompare(args []string) (runner.Result, error) {
 	if strings.HasPrefix(args[1], "pack:") {
 		key := args[1] + " " + args[2]
@@ -165,6 +183,7 @@ func (w *world) runCompare(args []string) (runner.Result, error) {
 		if !ok {
 			return runner.Result{}, fmt.Errorf("the fake has no move %q", key)
 		}
+		d.Schema = schemaOr(d.Schema, docs.DiffSchema)
 		res := doc(d)
 		if !d.Same {
 			res.Exit = 1
@@ -175,6 +194,7 @@ func (w *world) runCompare(args []string) (runner.Result, error) {
 	if !ok {
 		d = docs.Diff{Same: true, SameContent: true}
 	}
+	d.Schema = schemaOr(d.Schema, docs.DiffSchema)
 	res := doc(d)
 	if !d.Same {
 		res.Exit = 1
@@ -186,7 +206,9 @@ func (w *world) runBehind() (runner.Result, error) {
 	if w.behindErr != nil {
 		return runner.Result{}, w.behindErr
 	}
-	res := doc(w.behind)
+	b := w.behind
+	b.Schema = schemaOr(b.Schema, docs.BehindSchema)
+	res := doc(b)
 	res.Exit = w.behindExit
 	return res, nil
 }

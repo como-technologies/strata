@@ -140,7 +140,6 @@ type Pack struct {
 	Images         int        `json:"images"`
 	Newer          string     `json:"newer,omitempty"`
 	Flags          []string   `json:"flags"`
-	ChangedPaths   []string   `json:"changedPaths"`
 	Fold           *docs.Fold `json:"fold,omitempty"`
 }
 

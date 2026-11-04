@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
@@ -58,11 +59,17 @@ func writeRecords(dir string, entries []baseline.Entry) ([]string, error) {
 }
 
 // decode reads a document of strata into an allow-listed type. A document that does not decode is
-// of the kind unknown, because it is not the document that the command promises.
-func decode[T any](raw []byte) (T, error) {
+// of the kind unknown, because it is not the document that the command promises. A document that
+// states another schema id, or none, is of the kind schema: `--strata` can name another binary, and
+// the fields of its document would not mean what the observer reads.
+func decode[T docs.Document](raw []byte, schema string) (T, error) {
 	var doc T
 	if err := json.Unmarshal(raw, &doc); err != nil {
 		return doc, failure(docs.KindUnknown)
+	}
+	if doc.SchemaID() != schema {
+		var none T
+		return none, failure(docs.KindSchema)
 	}
 	return doc, nil
 }
@@ -149,7 +156,7 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 	if err != nil {
 		return docs.VerifySummary{}, err
 	}
-	doc, err := decode[docs.VerifySummary](res.Stdout)
+	doc, err := decode[docs.VerifySummary](res.Stdout, docs.VerifySummarySchema)
 	if err != nil {
 		return doc, err
 	}
@@ -161,13 +168,30 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 	return doc, nil
 }
 
+// unreadStatus matches the start of the reason that strata gives for an audit log that it could not
+// read: `HTTP <status>: <body>`. The other reasons are the message of a request that did not complete.
+var unreadStatus = regexp.MustCompile(`^HTTP [0-9]{3}(:|$)`)
+
+// noAnswer is what the log says when the reason of strata holds no status.
+const noAnswer = "no answer"
+
+// unreadReason gives the part of the reason of strata that a log line can hold: `HTTP <status>`, or
+// `no answer`. The body of an answer of Palette and the message of a failed request are output of a
+// process, so they never leave this function.
+func unreadReason(whoError string) string {
+	if unreadStatus.MatchString(whoError) {
+		return whoError[:len("HTTP 000")]
+	}
+	return noAnswer
+}
+
 // logUnreadAudits writes one line for each record whose audit log strata could not read, such as for a
 // key without the permission. The verdict of the record stays. The summary carries a flag and not
-// the text, so this line is the one place that holds the reason.
+// the reason. The line names the profile and the status, and never the body of the answer.
 func (o *Observer) logUnreadAudits(rows []docs.VerifyRow) {
 	for _, r := range rows {
 		if r.Diff != nil && r.Diff.Verify != nil && r.Diff.Verify.WhoError != "" {
-			o.log.Warn("the audit log could not be read", "profile", model.Subject(r.Name, r.Version), "reason", r.Diff.Verify.WhoError)
+			o.log.Warn("the audit log could not be read", "profile", model.Subject(r.Name, r.Version), "reason", unreadReason(r.Diff.Verify.WhoError))
 		}
 	}
 }
@@ -181,7 +205,7 @@ func (o *Observer) readCluster(ctx context.Context, dir string) (docs.ClusterRea
 	if err != nil {
 		return docs.ClusterRead{}, failure(docs.KindIO)
 	}
-	return decode[docs.ClusterRead](raw)
+	return decode[docs.ClusterRead](raw, docs.SnapshotSchema)
 }
 
 // runsProfile says that the cluster runs the version of the profile of a record.
@@ -233,7 +257,7 @@ func (o *Observer) compareSide(ctx context.Context, dir, record string, index in
 	if err != nil {
 		return nil, err
 	}
-	diff, err := decode[docs.Diff](res.Stdout)
+	diff, err := decode[docs.Diff](res.Stdout, docs.DiffSchema)
 	if err != nil {
 		return nil, err
 	}

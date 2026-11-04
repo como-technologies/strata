@@ -35,7 +35,7 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	kubernetes.Newer[0].Listed = at(-48 * time.Hour)
 	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", "hoppy-autoscale@1.0.0")
 	bitnami.Registry = "Bitnami"
-	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z", Status: "Done"}
+	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{kubernetes, bitnami}, Moves: map[string]Move{}}
 	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
 	want := []string{

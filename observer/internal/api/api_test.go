@@ -349,6 +349,45 @@ func (s slow) PackDiff(context.Context, string, string, model.Side) (docs.Pack, 
 	return docs.Pack{}, false, s.err
 }
 
+// strata writes a list item as [name=<value>], so the name of an item can be in a changed path. A path
+// is a value of the cluster, and only the detail tier sends it.
+func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
+	const pathMarker = "PATH-MARKER"
+	r := newRig(t)
+	raw, err := os.ReadFile(filepath.Join(r.fixtures, "verify.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planted := strings.Replace(string(raw), "controller.replicaCount", "clients[name="+pathMarker+"].id", 1)
+	if planted == string(raw) {
+		t.Fatal("the fixture holds no path to change")
+	}
+	if err := os.WriteFile(filepath.Join(r.fixtures, "verify.json"), []byte(planted), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	o := r.observer(&fakeStrata{dir: r.fixtures})
+	once, err := o.Once(context.Background())
+	if err != nil {
+		t.Fatalf("the cycles failed: %v", err)
+	}
+	printed, err := json.Marshal(once)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(printed), pathMarker) {
+		t.Errorf("once prints the path: %s", printed)
+	}
+	h := handlerOf(o)
+	for _, path := range summaryRoutes {
+		if body := get(h, path).Body.String(); strings.Contains(body, pathMarker) {
+			t.Errorf("%s holds the path: %s", path, body)
+		}
+	}
+	if body := get(h, pathPublished).Body.String(); !strings.Contains(body, pathMarker) {
+		t.Errorf("the detail route does not hold the path, so the marker tests nothing: %s", body)
+	}
+}
+
 func TestTheDetailRouteAnswersWith503WhenTheWaitEnds(t *testing.T) {
 	r := newRig(t)
 	o := r.cycled(&fakeStrata{dir: r.fixtures})
@@ -409,8 +448,8 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 			t.Errorf("/v1/%s holds the text of the error: %s", route, body)
 		}
 	}
-	// the log of the pod holds the text
-	if !strings.Contains(r.log.String(), "AUDIT-REASON-SENTINEL") {
-		t.Errorf("log %q", r.log.String())
+	// the log of the pod names the status and never the body of the answer
+	if line := r.log.String(); strings.Contains(line, "AUDIT-REASON-SENTINEL") || !strings.Contains(line, `reason="HTTP 403"`) {
+		t.Errorf("log %q", line)
 	}
 }

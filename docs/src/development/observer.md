@@ -81,6 +81,19 @@ A `snapshot` writes a plain line and no JSON, so its kind is `unknown`. The
 kind of the failed cycle then comes from `records[].error` of the `verify`, and
 from `pins[].error` of the `behind`.
 
+The observer reads a document only when its `schema` is the one that the
+command promises:
+
+- `verify` writes `strata-verify-summary/1`.
+- `compare` writes `strata-diff/1`.
+- `behind` writes `strata-behind/1`.
+- `snapshot` of the cluster writes `strata-snapshot/1`.
+
+A document with another `schema`, or with none, is a failed read of the kind
+`schema`. It makes no finding, because `--strata` can name another binary. A
+`compare` with such a document makes the `clusterCopy` of its profile
+`not-read`, as any other failed `compare` does.
+
 ### A failed read
 
 One failed read of one part of one record is not a failed cycle. It is a
@@ -142,7 +155,7 @@ gives it. The observer never lowers a drift.
 - When `verify.whoError` is set, strata could not read the audit log. The row
   stays `drifted`, and the finding stays a finding. It has `whoUnread` true and
   an empty `who`. The record has no `read-error` row. The summary carries the flag, and
-  never the text of the error. The log of the observer holds the text.
+  never the text of the error. The log of the observer holds the status only.
 - When `published-changed` and `cluster-differs` hit one profile, and
   `rootLive` equals `rootB` of the compare, the observer makes one finding. It
   sets `alsoOnCluster` to true.
@@ -255,7 +268,9 @@ The pack row joins the record with the other answers. `registry` is the name in
 the pin with the same `registryUid`, or the uid. `kind` is
 `registryProviderType`, or `type`. `scope` is `tenant` when `source.projectUid`
 is empty, and `project` otherwise. `upstream` is `hash.upstreamRaw`.
-`changedPaths` names the paths of the changed values and never the values.
+A pack row holds `fold`, the three counts of its changed values. It names no
+path, because a path can hold the name of a list item, and that name is a value
+of the cluster. Only the detail tier sends a path.
 
 The limits show what a check does not cover. They count the images that a tag
 names (an image with no `@sha256`), the packs of the type `helm`, and the
@@ -295,6 +310,8 @@ The observer writes the file to a temporary file and renames it. A file that it
 cannot read is a log line and an empty state. So two runs of `once` with one
 state directory reach `lost` when the cluster does not answer.
 
-A log line holds a verdict, an exit code, a duration, and an error kind. One
-more line names a profile and the `verify.whoError` of its record: strata could
-not read the audit log. It never holds a value or other output of a process.
+A log line holds a verdict, an exit code, a duration, an error kind, and a
+status. One more line says that strata could not read the audit log. It names
+the profile and the status of `verify.whoError`: `HTTP <status>`, or
+`no answer` when the text has no status. A log line holds no output of a
+process. The body of the answer of Palette stays out of it.

@@ -180,7 +180,7 @@ func TestAPinWithAnErrorBesideGoodPinsIsACause(t *testing.T) {
 
 func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	r, w := withBehind(t)
-	w.behind.Pins[0].RegistrySync = &docs.RegistrySync{Status: "failed"}
+	w.behind.Pins[0].RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
