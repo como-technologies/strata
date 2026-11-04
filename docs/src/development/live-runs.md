@@ -677,6 +677,33 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 | `propagation` | 0 | #72: Palette writes the new value inside the cluster with no update to accept. It does this after 11 minutes in the recorded run. The check was recorded without an expected code |
 | `undo-edit`, `undo-accept`, `undo-settled`, `undo-macro`, `undo-flag`, `undo-baseline` | 0 | the manifest back, the macro deleted, and the baseline |
 
+## image-digest.sh
+
+Read-write. It needs the example at its baseline with cluster A, `kubectl`, and
+`crane`. Stage 2 lists the image with its digest in `pack.content.images`, and
+has the manifest make a Deployment that names the tag. Stage 3 names the digest
+in the manifest. Each stage reads the image field of the Deployment and the
+image of the pod. Stage 4 puts each change back.
+
+The manifest stands for a chart. The example has no chart that cluster A runs.
+The script keeps the kubeconfig in a temporary file. No row has a result yet:
+the lead runs the script in the live window of Wave 15. A check with `?`
+records its result without judging it, because the run finds the result.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `base-record`, `base-no-deployment` | 0 | #630: a record of the add-on version, and no Deployment in cluster A (no result yet: the Wave 15 window runs it) |
+| `list-values`, `list-manifest` | 0 | #630: Palette takes the list of images and the Deployment, in place (no result yet: the Wave 15 window runs it) |
+| `list-record`, `list-record-digest` | 0 | #630: a record holds the digest in the image list. Palette keeps the values of a manifest pack (no result yet: the Wave 15 window runs it) |
+| `list-compare`, `list-compare-flag` | 1, 0 | #630: `compare` names the list with `IMAGES` (no result yet: the Wave 15 window runs it) |
+| `list-accept`, `list-deployed` | 0 | #630: cluster A takes the update, and the Deployment runs there (no result yet: the Wave 15 window runs it) |
+| `list-spec`, `list-spec-digest`, `list-pod` | ? | #630: what the Deployment and the pod run, when only the list has the digest (no result yet: the Wave 15 window runs it) |
+| `digest-manifest`, `digest-record` | 0 | #630: the manifest names the image with its digest (no result yet: the Wave 15 window runs it) |
+| `digest-compare`, `digest-compare-flag` | 1, 0 | #630: `compare` names a changed value with `AUTHORED`, and no change of the list (no result yet: the Wave 15 window runs it) |
+| `digest-accept`, `digest-deployed` | 0 | #630: cluster A takes the update, and the image field holds the digest (no result yet: the Wave 15 window runs it) |
+| `digest-spec`, `digest-pod` | ? | #630: what the Deployment and the pod run, when the manifest has the digest (no result yet: the Wave 15 window runs it) |
+| `undo-manifest`, `undo-values`, `undo-accept`, `undo-gone`, `undo-baseline` | 0 | the manifest and the values back, the Deployment gone, and the baseline (no result yet: the Wave 15 window runs it) |
+
 ## macro-repave.sh
 
 Read-write, and it replaces the nodes of cluster A. It needs the example at its

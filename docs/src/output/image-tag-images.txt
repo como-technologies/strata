@@ -1,0 +1,2 @@
+$ jq -r '.packs[].images[]? | select(contains("product"))' releases/1.1.13/dev.json
+vendor.example/product:2026.2

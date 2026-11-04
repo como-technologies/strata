@@ -2,8 +2,9 @@
 
 ```bash
 just build             # target/release/strata and target/release/strata-preflight
-just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items
-just test              # the unit, library, binary, and script tests, and the tests of xtask
+just observer-build    # target/observer/strata-observer, a static Go binary
+just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer
+just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
 just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
@@ -13,6 +14,11 @@ just bench             # the benchmarks of benches/, with the time of each
 ```
 
 `just --list` shows each recipe.
+
+The observer needs Go. The line `go` in `observer/go.mod` names the version, and
+the job `check` of CI installs that version from the file. `just lint` fails when
+a line of `observer/go.mod` starts with `require`, because the observer uses the
+standard library only.
 
 `just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build
@@ -75,6 +81,7 @@ that version.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
+| `observer/` | `strata-observer`, a Go program in a module of its own: see [The Go of the observer](./code.md#the-go-of-the-observer). `main.go` holds the command line, and `main_test.go` holds its tests. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |
 | `preflight/src/rule/` | `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. |
 | `preflight/src/probe/` | `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. |

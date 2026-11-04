@@ -18,6 +18,12 @@ default: build
 build:
     cargo build --release -p strata -p strata-preflight
 
+# The observer is a Go program in observer/. The build is static (no cgo), and the version is that of Cargo.toml.
+
+# Build the observer as a static binary at target/observer/strata-observer
+observer-build:
+    CGO_ENABLED=0 go -C observer build -trimpath -ldflags "-X main.version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)" -o ../target/observer/strata-observer .
+
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
 
@@ -33,7 +39,7 @@ build-target target:
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
 # on random input.
 
-# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), strata-fuzz, and strata-report-endpoint. No network.
+# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), strata-fuzz, strata-report-endpoint, and the Go observer. No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
@@ -41,6 +47,7 @@ test: stand-in
     cargo test -p strata-benches
     cargo test -p strata-fuzz
     cargo test -p strata-report-endpoint
+    go -C observer test ./...
 
 # The benchmarks are the package strata-benches in benches/. They are not tests. `just test` does
 # not run them, and no recipe fails on a time. See "The benchmarks" in
@@ -64,12 +71,17 @@ bench-short:
 # So `just lint` needs both.
 rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
 
-# Test the format, the clippy lints, and the rustdoc of the public items and of all items
+# The last line fails when a module enters observer/go.mod: the observer uses the standard library only.
+
+# Test the format, the clippy lints, and the rustdoc of the public items and of all items, and the format and the vet of the Go observer
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
     {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz
     {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz --document-private-items
+    test -z "$(gofmt -l observer)"
+    go -C observer vet ./...
+    ! grep -q '^require' observer/go.mod
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:
@@ -389,6 +401,10 @@ live-edge-host: build
 # The macro test: what a project macro does to a version, a cluster copy, and a record, when it changes (#72). Needs live-up; undoes each change.
 live-macros: build
     examples/live/macros.sh
+
+# The image digest test: what cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). Needs live-up, kubectl, and crane; undoes each change.
+live-image-digest: build
+    examples/live/image-digest.sh
 
 # The macro repave test: a macro in a field that repaves cluster A, and what a change of its value alone does (#72). Needs live-up; ends with a repave that waits for approval, so live-down follows it.
 live-macro-repave: build

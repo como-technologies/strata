@@ -39,6 +39,12 @@ These are open:
   gives an OS pack an `imageId`. So no run shows if Palette replaces the nodes
   for a new image, or which `imageId` a cluster copy holds. See
   [The OS pack names a new machine image](../../use-cases/os-image.md).
+- The image that a node pulls when only `pack.content.images` names a digest.
+  Palette pulls no image, and it holds no digest of one unless the pack text
+  names it, so the list can pin nothing. No run shows what a node pulls in this
+  case, or when the manifest or a chart value names the digest. See
+  [A vendor rebuilds an image under one tag](../../use-cases/image-tag.md) and
+  [image-digest.sh](../../development/live-runs.md#image-digestsh).
 - A change of the endpoint or the values of a cluster group: the run of
   [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) changes
   the CPU limit alone. See

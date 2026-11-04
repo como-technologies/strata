@@ -1288,10 +1288,23 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
 }
 
 /// A `kubectl` that logs its arguments and the kubeconfig it was given, and answers only when
-/// that kubeconfig is the one the fake Palette serves.
+/// that kubeconfig is the one the fake Palette serves. With `$FAKE_KUBE_PUT`, it answers as a
+/// cluster that runs the Deployment in the body of that PUT of a profile. The image field is the
+/// first `image:` line, and the cluster has a pod. A body with no such line gives no Deployment.
 const FAKE_KUBECTL: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_KUBECTL_LOG"
 grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no kubeconfig" >&2; exit 1; }
+if [ -n "${FAKE_KUBE_PUT:-}" ]; then
+  # The cluster runs the Deployment that the last PUT of the profile holds: the first image: line.
+  image=$(jq -r '[.spec.template.packs[].manifests[].content] | join("\n") | capture("image: (?<i>[^\n]*)\n") | .i' "$FAKE_KUBE_PUT" 2>/dev/null)
+  case "$*" in
+    *"get pods"*) [ -z "$image" ] || echo "registry.k8s.io/pause@sha256:aaaa" ;;
+    *"get deployment"*)
+      [ -n "$image" ] || { echo "Error from server (NotFound): deployments.apps not found"; exit 1; }
+      case "$*" in *jsonpath*) echo "$image" ;; esac ;;
+  esac
+  exit 0
+fi
 echo "kubectl says: $*"
 "#;
 
@@ -7448,5 +7461,263 @@ fn report_send_sh_needs_the_address_and_the_tools_and_stops_before_it_runs_anyth
     assert!(
         !dir.path().join("strata.log").exists(),
         "no run before the arguments are right"
+    );
+}
+
+// ---- the image digest test (#630) ------------------------------------------------------------------
+
+/// The packs of the add-on version `ad-1` at the baseline: one manifest pack with no values.
+const ADDON_PACK: &str = r#"[{"name":"strata-live-config","tag":"1.0.0","type":"manifest",
+    "layer":"addon","packUid":"pk-1","values":""}]"#;
+
+/// The digest that the fake `crane` serves.
+const IMAGE_DIGEST: &str =
+    "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+/// A stage of `image-digest.sh`. Cluster A takes the updates of the add-on version `ad-1`, and runs
+/// the Deployment of the last PUT of the version. The answers of strata are the records and the
+/// comparisons that the script reads. The record of stage 2 holds `list_images`, a JSON list.
+fn image_digest_stage(list_images: &str) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.route(
+        &cluster_route("c-a"),
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
+            "spec":{"clusterProfileTemplates":[{"uid":"ad-1"}]}}"#,
+    );
+    stage.route(
+        "/v1/spectroclusters/c-a/assets/kubeconfig",
+        "apiVersion: v1 # fake-kubeconfig\n",
+    );
+    stage.route(
+        "/v1/spectroclusters/c-a/profiles/packs/manifests",
+        r#"{"profiles":[]}"#,
+    );
+    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    let manifests = r#"{"spec":{"packs":[{"spec":{"name":"strata-live-config","manifests":[
+        {"name":"strata-live-config","uid":"m-1","content":"edited: \"no\"\n"}]}}]}}"#;
+    stage.published("ad-1", ADDON_PACK, manifests);
+    // after a PUT, Palette gives the manifests of that PUT
+    let key = Stage::route_key("/v1/clusterprofiles/ad-1/packs/manifests");
+    let routes = stage.path("routes");
+    std::fs::write(routes.join(format!("{key}.first")), manifests).unwrap();
+    executable(
+        &routes.join(format!("{key}.sh")),
+        &format!(
+            r#"#!/usr/bin/env bash
+sent="$FAKE_ROUTES/sent/PUT_v1_clusterprofiles_ad-1"
+if [ -f "$sent" ]; then
+  jq '{{spec: {{packs: [.spec.template.packs[] | {{spec: {{name, manifests}}}}]}}}}' "$sent"
+else
+  cat "$FAKE_ROUTES/{key}.first"
+fi
+"#
+        ),
+    );
+    stage.command(
+        "crane",
+        &format!("#!/usr/bin/env bash\necho {IMAGE_DIGEST}\n"),
+    );
+    let put = stage.path("routes/sent/PUT_v1_clusterprofiles_ad-1");
+    stage.env("FAKE_KUBE_PUT", put.to_str().unwrap());
+    let image = format!("registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}");
+    let record = |images: &str| {
+        format!(r#"{{"root":"r","packs":[{{"name":"strata-live-config","images":{images}}}]}}"#)
+    };
+    stage.strata("snapshot ad-1 -o addon-0.json", 0, &record("[]"));
+    stage.strata("snapshot ad-1 -o addon-list.json", 0, &record(list_images));
+    stage.strata(
+        "snapshot ad-1 -o addon-digest.json",
+        0,
+        &record(&format!(r#"["{image}"]"#)),
+    );
+    stage.strata(
+        "compare addon-0.json ad-1",
+        1,
+        "~ [addon] strata-live-config AUTHORED IMAGES\n",
+    );
+    stage.strata(
+        "compare addon-list.json ad-1",
+        1,
+        "~ [addon] strata-live-config AUTHORED\n",
+    );
+    stage
+}
+
+#[test]
+fn image_digest_sh_puts_the_digest_in_the_list_and_then_in_the_manifest_and_reads_the_cluster() {
+    let image = format!("registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}");
+    let stage = image_digest_stage(&format!(r#"["{image}"]"#));
+    let (o, steps) = stage.run("image-digest.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "base-record",
+            "base-no-deployment",
+            "list-values",
+            "list-manifest",
+            "list-record-digest",
+            "list-compare",
+            "list-compare-flag",
+            "list-accept",
+            "list-deployed",
+            "digest-manifest",
+            "digest-compare",
+            "digest-compare-flag",
+            "digest-accept",
+            "digest-deployed",
+            "undo-manifest",
+            "undo-values",
+            "undo-accept",
+            "undo-gone",
+            "undo-baseline",
+        ],
+    );
+    for id in [
+        "list-spec",
+        "list-spec-digest",
+        "list-pod",
+        "digest-spec",
+        "digest-pod",
+    ] {
+        assert!(
+            has_verdict(&steps, "SEEN", id),
+            "{id} is recorded:\n{steps}"
+        );
+    }
+    let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
+    assert_eq!(said("list-spec").trim(), "registry.k8s.io/pause:3.10.2");
+    assert_eq!(
+        said("digest-spec").trim(),
+        format!("registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}")
+    );
+
+    // the first PUT gives the pack the list, and no PUT changes the tag, the uid, or the manifest uid
+    let puts = stage.sent("PUT", "/v1/clusterprofiles/ad-1");
+    assert_eq!(
+        puts.len(),
+        5,
+        "values, manifest, digest, manifest back, values back"
+    );
+    let pack = |n: usize| &puts[n]["spec"]["template"]["packs"][0];
+    assert_eq!(
+        pack(0)["values"],
+        format!(
+            "pack:\n  content:\n    images:\n      - image: registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}"
+        )
+    );
+    let manifest = |n: usize| {
+        pack(n)["manifests"][0]["content"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    assert!(
+        manifest(0).starts_with("edited: \"no\"\n"),
+        "{}",
+        manifest(0)
+    );
+    assert!(manifest(1).contains("image: registry.k8s.io/pause:3.10.2\n"));
+    assert!(
+        !manifest(1).contains("@sha256"),
+        "the tag alone: {}",
+        manifest(1)
+    );
+    assert!(manifest(2).contains(&format!(
+        "image: registry.k8s.io/pause:3.10.2@{IMAGE_DIGEST}\n"
+    )));
+    assert_eq!(manifest(3), "edited: \"no\"\n", "the manifest is back");
+    assert_eq!(pack(4)["values"], "", "the values are back");
+    for n in 0..5 {
+        assert_eq!(
+            pack(n)["manifests"][0]["uid"],
+            "m-1",
+            "PUT {n} keeps the manifest uid"
+        );
+        assert_eq!(pack(n)["tag"], "1.0.0");
+    }
+    // the kubeconfig is a credential: kubectl reads a file, and no file is left
+    let left = files_under(&stage.path("tmp"));
+    assert!(
+        left.iter()
+            .all(|(_, body)| !body.contains("fake-kubeconfig")),
+        "a kubeconfig is left: {left:?}"
+    );
+    let kubectl = std::fs::read_to_string(stage.path("kubectl.log")).unwrap();
+    assert!(
+        kubectl.contains("get deployment strata-live-image -n default"),
+        "{kubectl}"
+    );
+}
+
+#[test]
+fn image_digest_sh_fails_the_check_of_the_record_when_the_list_has_no_digest() {
+    let stage = image_digest_stage(r#"["registry.k8s.io/pause:3.10.2"]"#);
+    let (o, steps) = stage.run("image-digest.sh", &[]);
+    failed(&steps, &["list-record-digest"]);
+    assert_ne!(o.status.code(), Some(0));
+}
+
+#[test]
+fn image_digest_sh_stops_before_it_changes_anything_when_crane_cannot_read_the_digest() {
+    let stage = image_digest_stage("[]");
+    stage.command(
+        "crane",
+        "#!/usr/bin/env bash\necho 'UNAUTHORIZED' >&2\nexit 1\n",
+    );
+    let (o, steps) = stage.run("image-digest.sh", &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("crane cannot read the digest"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(steps.is_empty(), "no stage ran: {steps}");
+    assert!(!stage.path("routes/sent").exists(), "no request to Palette");
+}
+
+#[test]
+fn api_sh_set_values_replaces_the_values_of_one_pack_and_keeps_the_rest() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    addon_profile_routes(&routes);
+    let api = |args: &[&str]| run_live("api.sh", args, root.path(), &[]);
+    let o = api(&[
+        "set-values",
+        "prof-1",
+        "config",
+        "pack:\n  content:\n    images: []\n",
+    ]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let put = read_json(&routes.join("sent/PUT_v1_clusterprofiles_prof-1"));
+    let pack = &put["spec"]["template"]["packs"][0];
+    assert_eq!(pack["values"], "pack:\n  content:\n    images: []\n");
+    assert_eq!(
+        (pack["tag"].as_str(), pack["uid"].as_str()),
+        (Some("1.0.0"), Some("pk-1"))
+    );
+    assert_eq!(
+        pack["manifests"],
+        serde_json::json!([{"name": "config", "uid": "m-1", "content": "edited: \"no\"\n"}]),
+        "the manifest keeps its uid"
+    );
+    let calls = std::fs::read_to_string(root.path().join("curl.log")).unwrap();
+    assert!(
+        calls.contains("PATCH /v1/clusterprofiles/prof-1/publish"),
+        "{calls}"
+    );
+
+    // an empty text gives the pack no values
+    let o = api(&["set-values", "prof-1", "config", ""]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let put = read_json(&routes.join("sent/PUT_v1_clusterprofiles_prof-1"));
+    assert_eq!(put["spec"]["template"]["packs"][0]["values"], "");
+
+    let o = api(&["set-values", "prof-1", "other", "x"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no pack other in prof-1"),
+        "{}",
+        text(&o.stderr)
     );
 }

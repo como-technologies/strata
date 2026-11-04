@@ -41,6 +41,10 @@
 #       Rename the tag of one pack in a published profile version, in place. The pack uid, values,
 #       and manifests stay. PUT the version, then publish it. Exit 2 when the version has no such
 #       pack under FROM_TAG.
+#   api.sh set-values PROFILE_UID PACK TEXT
+#       Give the pack PACK of a published profile version the values TEXT, in place. The pack
+#       uid, the tag, and the manifests stay. PUT the version, then publish it. An empty TEXT
+#       gives the pack no values. Exit 2 when the version has no such pack.
 #   api.sh apply CLUSTER_UID [--keep-notification]
 #       Accept the waiting update of every profile a cluster runs. PUT the cluster's profiles with
 #       the uids it already has, each pack's values and manifests read from its profile, with
@@ -351,6 +355,17 @@ retag() {
     --arg p "$pack" --arg from "$from" --arg to "$to" > "$tmp/body"
   put_published "$uid" "$tmp"
   echo "retagged $pack in $uid in place: $from -> $to"
+}
+
+set_values() {
+  local uid=${1:-} pack=${2:-} text=${3-} tmp
+  [ -n "$pack" ] || die "usage: api.sh set-values PROFILE_UID PACK TEXT"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  fetch_published "$uid" "$tmp"
+  jq -e --arg p "$pack" '[.spec.published.packs[] | select(.name == $p)] | length == 1' "$tmp/profile" > /dev/null || die "no pack $pack in $uid"
+  body "$tmp" 'if .name == $p then .values = $v else . end' --arg p "$pack" --arg v "$text" > "$tmp/body"
+  put_published "$uid" "$tmp"
+  echo "set the values of $pack in $uid in place"
 }
 
 # profiles_body CLUSTER DIR [EXCLUDE_UID] [EXTRA_UID] -> DIR/body: the PUT body for the cluster's
@@ -841,6 +856,7 @@ case "${1:-}" in
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
   retag) shift; retag "$@" ;;
+  set-values) shift; set_values "$@" ;;
   edit-manifest) shift; edit_manifest "$@" ;;
   apply) shift; apply "$@" ;;
   attach) shift; attach "$@" ;;

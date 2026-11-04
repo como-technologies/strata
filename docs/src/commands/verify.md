@@ -333,6 +333,74 @@ an object from Palette, so it refuses the record with `usage`. It sends no
 request, and it needs no key. A record with no uid, such as the record of a
 candidate, gets `no-uid` in the same way.
 
+## What OK does not cover
+
+`OK` says that Palette holds the content that the record holds. It says nothing
+of the image behind a tag. Strata reads no registry, so it cannot see that a
+vendor gave a tag another image. It says nothing of the bytes behind a chart
+version either: see [What OK means for a Helm pack](#what-ok-means-for-a-helm-pack).
+
+A pack names an image by a tag. A vendor can push a new image under that tag,
+and the pack text does not change. So the record, the root, and the verdict stay
+the same: `OK` and exit `0`. `compare` of the record with the version exits `0`
+too, and `behind` shows pack versions alone.
+
+Palette pulls no image, and it holds no digest of an image unless the pack text
+names one. The nodes pull what the chart or the manifest names. So a tag in the
+pack is not a pin. Two fixes close the case:
+
+- Name the digest where the chart or the manifest reads it, such as the value
+  `image.digest` of a chart. The root then covers the digest, and a move of the
+  tag cannot change what the record says.
+- Copy each image to a registry with immutable tags, and name the copy.
+
+See [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). The
+rule `image-tag-not-digest` of `strata preflight` names the case as a note. No
+run shows which image a node pulls: see
+[What no run covers](../internals/palette/limits.md). The other cases that `OK`
+does not cover are in
+[What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
+
+## What OK means for a Helm pack
+
+For a chart, `OK` says that Palette lists the digest that the record holds. It
+does not say which bytes a cluster installs. Palette keeps the first digest of
+a chart, and a push again of the same version does not move it.
+
+A person pushes one version again with other bytes, and Palette reads the
+registry again. The verdict of a record from before depends on the pack:
+
+| The pack | Type | The digest in Palette | The verdict |
+| --- | --- | --- | --- |
+| Content in the pack: a Spectro pack registry, or OCI of provider type `pack` | `spectro`, `oci` | The digest of the new push | `DRIFT`, exit `1` |
+| A chart in a repository, synchronized: a Helm registry, or OCI of provider type `helm` | `helm`, `oci` | The first digest | `OK`, exit `0` |
+| No digest: a Helm registry with synchronization off, or OCI of provider type `zarf` | `helm`, `oci` | None | `UNVERIFIED`, exit `1` |
+| A manifest in the profile | `manifest` | Does not apply: the content is in the profile | `DRIFT` when the manifest changes |
+
+The second row is the case. A cluster installs a chart by its name and version,
+from what the registry serves at that time. A cluster that runs the chart keeps
+the first bytes. A cluster that installs the chart later gets the new bytes. So
+two clusters on one version can run different code, and the record of each says
+`OK`. `compare` exits `0` too, and `behind` shows pack versions alone.
+
+Strata reads no registry for a published profile, so it cannot see the new
+bytes. The profile document carries the digest that Palette keeps. An edit of a
+value or a manifest is `AUTHORED`, and `verify` says `DRIFT` for it.
+
+Close the case at the source, or find it:
+
+- Push each chart to a registry that refuses a push again of a version, such as
+  ECR with immutable tags. The first digest is then the only digest.
+- Run `strata preflight` on a cluster that attaches the profile. The rule
+  `helm-digest-frozen` warns about each such pack. Its `reproduce` lines compare
+  the digest in the registry with the digest in Palette. Run them by hand:
+  strata reads no registry.
+
+See [What a cluster installs of a Helm pack](../internals/palette/packs.md#what-a-cluster-installs-of-a-helm-pack)
+and [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
+[A chart pushed again, on a cluster](../development/live-runs.md#a-chart-pushed-again-on-a-cluster)
+holds the run. For a pack with no digest, see [A pack has no digest](../use-cases/no-digest.md).
+
 ## Run it on a schedule
 
 `scripts/ci/verify-report.sh` runs `verify` over each record, and keeps one GitHub

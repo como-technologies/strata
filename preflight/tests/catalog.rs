@@ -13,7 +13,7 @@ use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::report;
 use strata_preflight::rule::{
-    Catalog, Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule,
+    Catalog, Check, Evidence, EvidenceKind, ExecCheck, Owner, PaletteCheck, Rule, Severity,
 };
 use strata_preflight::world;
 
@@ -2611,5 +2611,26 @@ fn a_message_agrees_its_verb_and_its_pronoun_with_a_count_of_one_and_of_many_and
         keys(&["a", "b"])[0].ends_with("Palette lists 2 key pairs"),
         "{:?}",
         keys(&["a", "b"])
+    );
+}
+
+/// An image that a vendor rebuilds under one tag is a case for the operator, and not for Palette
+/// (#630). The row is a note, because a warning for each image fires on nearly each pack.
+#[test]
+fn the_rule_of_an_image_named_by_a_tag_is_a_note_for_the_operator_with_the_two_fixes() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("image-tag-not-digest").unwrap();
+    assert_eq!(rule.severity, Severity::Note);
+    let fix = rule.fix.as_ref().expect("the rule states a fix");
+    assert_eq!(fix.owner, Owner::Operator);
+    for fix_text in [
+        "Name the digest where the chart or the manifest reads it",
+        "copy each image to a registry with immutable tags",
+    ] {
+        assert!(fix.text.contains(fix_text), "{}", fix.text);
+    }
+    assert!(
+        rule.check.is_none(),
+        "a note that no check before the build finds"
     );
 }

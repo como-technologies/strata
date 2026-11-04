@@ -313,7 +313,8 @@ change. `verify` reports `OK`. See
 
 For a Helm pack, the digest in a record says what Palette listed, and not the
 bytes that a cluster runs. A registry that refuses a push again of a version,
-such as ECR with immutable tags, makes the two the same.
+such as ECR with immutable tags, makes the two the same. See
+[What OK means for a Helm pack](../../commands/verify.md#what-ok-means-for-a-helm-pack).
 
 ## Tag names
 

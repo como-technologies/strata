@@ -2,7 +2,8 @@
 
 These rules apply to each change to the Rust code. A reviewer refuses a change
 that breaks one. [Build and test](./build-test.md#where-the-code-goes) tells
-where each module goes.
+where each module goes. The Go code of the observer follows
+[its own rules](#the-go-of-the-observer).
 
 ## The layers
 
@@ -233,10 +234,32 @@ ASD-STE100.
   `std::env::temp_dir()`. The directory goes when the test ends, also when the
   test fails.
 
+## The Go of the observer
+
+The observer is the Go program in `observer/`. It runs the `strata` binary and
+shows the answers. It holds no rule of strata. The rules above are for the Rust
+code, and these rules are for the Go code.
+
+- The observer uses the standard library only. `go.mod` has no `require` line,
+  and `just lint` fails when it has one.
+- The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
+  function that fails returns an `error`.
+- `internal/runner` is the one place that starts a process. It refuses a
+  command or a flag that is not in its lists.
+- `internal/docs` is the allow-list of the fields that the observer reads. A
+  document never decodes into a map, and no code forwards a document.
+- A log line holds a verdict, an exit code, a duration, and an error kind. It
+  never holds a value or the output of a process.
+- A test uses a table when it has more than two cases. A test that needs the
+  binary skips when `STRATA_BIN` is not set.
+
+`just lint` runs `gofmt` and `go vet` on `observer/`, and `just test` runs
+`go test` there.
+
 ## Before the review
 
 ```bash
-just lint && just test     # fmt, clippy -D warnings, rustdoc -D warnings of all items, and the tests
+just lint && just test     # fmt, clippy -D warnings, rustdoc -D warnings of all items, gofmt and go vet of the observer, and the tests
 ```
 
 Then read the diff against each section of this page, and against
