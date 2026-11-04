@@ -59,15 +59,7 @@ root=$(cd "$live/../.." && pwd)
 records_script=$root/scripts/ci/observer-records.sh
 revision=$(git -C "$root" rev-parse HEAD)
 
-# the key and the address for the pod: as api.sh reads them
-from_env_file() {
-  [ -f "$HOME/.palette.env" ] || return 0
-  (set -a; . "$HOME/.palette.env" >/dev/null 2>&1; printf %s "${!1:-}")
-}
-palette_key=${PALETTE_API_KEY:-$(from_env_file PALETTE_API_KEY)}
-[ -n "$palette_key" ] || die "set PALETTE_API_KEY or put it in ~/.palette.env"
-API=${PALETTE_API:-$(from_env_file PALETTE_API)}
-API=${API:-https://api.spectrocloud.com}
+palette_settings
 
 cluster=strata-observer-test
 ns=strata-observer
@@ -77,7 +69,7 @@ deleted=
 # kc ARGS...: kubectl in the kind cluster of this run. Exported, so that a check in bash -c has it.
 kc() { kubectl --context "kind-$cluster" "$@"; }
 export -f kc
-export cluster ns reader port revision C palette_key
+export cluster ns reader port revision C
 
 summary() {
   write_summary "the observer on kind" ", cluster \`$C\`, image \`$image\`, revision \`$revision\`."
@@ -99,11 +91,8 @@ fi
 if stage 2 "the install: the namespace, the settings, the records, and the manifests"; then
   check namespace 0 '#644: the namespace holds the label that makes the restricted standard' -- \
     kc apply --server-side -f "$root/deploy/observer/namespace.yaml"
-  check config 0 '#644: the ConfigMap holds the cluster, the address of Palette, and the project' -- \
-    kc -n "$ns" create configmap strata-observer --from-literal=cluster-uid="$C" \
-      --from-literal=palette-api="$API" --from-literal=project-uid="$PALETTE_PROJECT_UID"
-  check key 0 '#644: the Secret holds the key, which comes through standard input' -- \
-    bash -c "printf %s \"\$palette_key\" | kc -n \"\$ns\" create secret generic strata-observer-key --from-file=api-key=/dev/stdin"
+  check config 0 '#644: the ConfigMap holds the cluster, the address of Palette, and the project' -- observer_config
+  check key 0 '#644: the Secret holds the key, which comes through standard input' -- observer_key "$palette_key"
   check record-release 0 '#644: a record of the release profile' -- "$strata" snapshot "$REL" -o release.json -q
   check record-addon 0 '#644: a record of the add-on profile' -- "$strata" snapshot "$AD" -o addon.json -q
   check records-apply 0 '#644: the output of the records script applies with --server-side' -- \
@@ -165,10 +154,7 @@ if stage 4 "the page, as a user with only the reader role"; then
 fi
 
 if stage 5 "another pod"; then
-  pod_ip=$(kc -n "$ns" get pod -l "$selector" -o jsonpath='{.items[0].status.podIP}')
-  # the pod prints "refused" when wget fails, so a pod that did not start is no refusal
-  check other-pod-refused 0 '#644: a pod of another namespace cannot connect to the page' -- \
-    bash -c "kc -n default run observer-probe --rm -i --restart=Never --image=busybox:1.37 --command -- sh -c 'wget -T 5 -qO- http://$pod_ip:8080/healthz && echo reached || echo refused' | grep -qx refused"
+  check other-pod-refused 0 '#644: a pod of another namespace cannot connect to the page' -- other_pod_refused
 fi
 
 if stage 6 "the records of --first-seen"; then

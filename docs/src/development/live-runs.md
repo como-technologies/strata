@@ -1363,6 +1363,82 @@ before the run on the real cluster.
 | `first-seen-apply`, `first-seen-meta` | 0 | #644: the output of `observer-records.sh --first-seen` applies with `--server-side`, and `meta.json` says `first-seen` (no result yet: the Wave 15 window runs it) |
 | `kind-delete` | 0 | the kind cluster is deleted |
 
+## observer.sh
+
+Read-write. It runs [the observer](./observer-deploy.md) on cluster A, `fred`,
+in two ways. Way 1 is a plain `kubectl apply` of the rendered manifests. Way 2
+is an add-on profile in Palette, with the rendered manifests as one manifest
+layer. It needs the example at its baseline with cluster A Running, the key,
+`kubectl`, `gh`, `git`, and `go`. `OBSERVER_IMAGE` names the image.
+
+The first cycle of the pod reads Palette from a node of cluster A. So
+`reaches-palette` answers whether a workload cluster reaches the API. A failed
+`reaches-palette` ends the run before stage 4, because the later stages need
+the page. Its output names `lastError`, the kind and the status of the failed
+cycle.
+
+The script sets two short periods in an overlay: one minute for the content
+cycle and five minutes for the versions cycle. The key goes to its Secret
+through standard input. It is never in a profile, because a profile variable is
+in clear in the copy of the cluster. The pull Secret comes from `gh auth token`
+and goes the same way. The kubeconfig lives in a temporary file that the script
+deletes.
+
+Stage 4 counts the requests of the cycles. `count-requests` is a small Go
+program that sits between `strata` and Palette. It writes one line for each
+request, with no query and no key. The count of the content cycle, of the
+first command of the versions cycle, and of its moves replaces the figures on
+#637.
+
+The undo runs at the end, also after a failed check or an error. The edit in
+place goes back, the profile of way 2 comes off the cluster and goes, and the
+namespace goes. The script deletes no cluster. `KEEP=1` skips the undo, so that
+`observer.sh N` can resume the run at stage N. No row has a result yet: the lead
+runs the script in the live window of Wave 15. A check with `?` records its
+result without judging it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `cluster-record`, `profile-records` | 0 | #656: a record of cluster A, and a record of each profile that it runs (no result yet: the Wave 15 window runs it) |
+| `namespace`, `config`, `key`, `pull-secret` | 0 | #656: the namespace, the ConfigMap, and the two Secrets. A secret goes through standard input (no result yet: the Wave 15 window runs it) |
+| `records-apply` | 0 | #656: the records of the Git revision apply with `--server-side` (no result yet: the Wave 15 window runs it) |
+| `manifests-render`, `manifests-apply` | 0 | #656: `kubectl kustomize` renders the overlay, and a plain `kubectl apply -f observer.yaml` installs it (no result yet: the Wave 15 window runs it) |
+| `apply-admitted` | 0 | #656: the namespace enforces `restricted`, and the standard admits the pod (no result yet: the Wave 15 window runs it) |
+| `pod-ready` | 0 | #656: the Deployment is Available in 3 minutes. `strata-observer health` exits 0 through `kubectl exec` (no result yet: the Wave 15 window runs it) |
+| `pod-hardened` | 0 | #656: the pod runs as non-root with a read-only root. It has no capability and no token volume (no result yet: the Wave 15 window runs it) |
+| `reaches-palette` | 0 | #656: `/v1/cluster` gives `page` `ok` and a `checkedAt` through `port-forward`. A workload cluster reaches the API (no result yet: the Wave 15 window runs it) |
+| `no-finding-at-baseline` | 0 | #656: `/v1/findings` is empty for the records that the run made (no result yet: the Wave 15 window runs it) |
+| `summary-matches-strata` | 0 | #656: the page shows the status that `strata verify` and `strata compare` give (no result yet: the Wave 15 window runs it) |
+| `reader-role`, `reader-can-open` | 0 | #656: a user with only the reader role opens the page with `kubectl port-forward` (no result yet: the Wave 15 window runs it) |
+| `reader-cannot-read` | 0 | #656: the same user gets `no` for `get secrets` and for `create pods --subresource=exec` (no result yet: the Wave 15 window runs it) |
+| `nobody-cannot-open` | 0 | #656: a user with no role gets `no` for `create pods --subresource=portforward` (no result yet: the Wave 15 window runs it) |
+| `other-pod-refused` | 0 | #656: a pod of another namespace cannot connect to the pod address on the port (no result yet: the Wave 15 window runs it) |
+| `page-admin`, `page-admin-again` | 0 | #656: the port-forward is back, as the admin of the cluster (no result yet: the Wave 15 window runs it) |
+| `requests-counted`, `requests-counted-drift` | ? | #656: the requests of a content cycle and of a versions cycle, at the baseline and with a finding. The files `*.out` and `*.log` hold the counts and the routes (no result yet: the Wave 15 window runs it) |
+| `drift-edit` | 0 | #656: an edit in place of the published add-on version (no result yet: the Wave 15 window runs it) |
+| `drift-found`, `drift-who` | 0 | #656: within two content cycles, `/v1/findings` holds `published-changed` with the pack, and `who` names the actor (no result yet: the Wave 15 window runs it) |
+| `cluster-copy-unchanged` | 0 | #656: `clusterCopy` of that profile still says `same`, because the cluster did not take the update (no result yet: the Wave 15 window runs it) |
+| `variable-in-raw`, `no-value-leaves` | 0 | #656: the raw output of `strata compare` holds the value of a variable. No route and no line of the log holds it (no result yet: the Wave 15 window runs it) |
+| `drift-undo`, `drift-clears` | 0 | #656: the version goes back, and the finding goes in the next cycle (no result yet: the Wave 15 window runs it) |
+| `wrong-key`, `lost-after-wrong-key` | 0 | #656: a wrong key in the Secret and a restart of the pod. The page goes to `lost` after two cycles (no result yet: the Wave 15 window runs it) |
+| `key-back`, `ok-after-key-back` | 0 | #656: the key back and a restart, and the page returns to `ok` (no result yet: the Wave 15 window runs it) |
+| `restart-keeps-working` | 0 | #656: after `kubectl rollout restart`, the page goes to `ok`. The start of its state is later, because the state goes with the pod (no result yet: the Wave 15 window runs it) |
+| `restart-first-load` | ? | #656: the page showed `first-load` after the restart. `pages-after-restart.txt` lists the states in order (no result yet: the Wave 15 window runs it) |
+| `manifests-delete`, `removal-is-clean` | 0 | #656: `kubectl delete -f observer.yaml` removes the namespace, and no object of the observer stays (no result yet: the Wave 15 window runs it) |
+| `fred-unchanged` | 0 | #656: `strata verify` says that cluster A did not change (no result yet: the Wave 15 window runs it) |
+| `profile-prepare`, `nodes-before` | 0 | #656: the namespace and the Secrets, made with `kubectl` before the profile. The machines of cluster A, before the layer (no result yet: the Wave 15 window runs it) |
+| `profile-create`, `profile-attach` | 0 | #656: an add-on profile with the rendered manifests as one manifest layer goes to cluster A. The cluster is Running (no result yet: the Wave 15 window runs it) |
+| `profile-applied` | 0 | #656: Palette applies the layer, and the pod is Ready (no result yet: the Wave 15 window runs it) |
+| `profile-does-not-disturb` | 0 | #656: each other profile of cluster A still agrees with its record (no result yet: the Wave 15 window runs it) |
+| `own-profile-not-checked` | 0 | #656: the profile of the observer shows as `no-record` under "Not checked", and as no finding (no result yet: the Wave 15 window runs it) |
+| `profile-record`, `no-key-in-profile` | 0, 1 | #656: a record of the profile of the observer. A search of it for the key finds nothing (no result yet: the Wave 15 window runs it) |
+| `no-repave` | ? | #656: cluster A keeps its machines when the layer goes on. The output lists the machines before and after (no result yet: the Wave 15 window runs it) |
+| `profile-detach`, `profile-removal` | 0 | #656: the profile comes off cluster A, and the Deployment goes (no result yet: the Wave 15 window runs it) |
+| `undo-profile`, `undo-namespace` | 0 | #656: no profile of way 2 stays in Palette, and the namespace is gone (no result yet: the Wave 15 window runs it) |
+| `no-secret-in-run` | 1 | #656: no file of the run holds the key or the token of `gh` (no result yet: the Wave 15 window runs it) |
+| `undo-baseline` | 0 | the example is at its baseline (no result yet: the Wave 15 window runs it) |
+
+
 ## version-states.sh
 
 This is the other answer to a version bump that overwrites a version. Each

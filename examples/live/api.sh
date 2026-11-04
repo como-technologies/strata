@@ -133,6 +133,9 @@
 #       listing a page at a time, and it stops at the first match. NAME limits the listing to the
 #       packs of that name. The options go to jq, such as --arg r REGISTRY_UID. Exit 0 when a pack
 #       matches, 1 when none does, and 2 when Palette refuses a page.
+#   api.sh manifest-profile NAME PACK FILE
+#       Make and publish an add-on profile NAME@1.0.0 with one manifest layer. The layer is the
+#       pack PACK, of type manifest, and its one manifest holds the text of FILE. Prints its uid.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -482,6 +485,14 @@ packs_where() {
   done
 }
 
+# create_published BODY_FILE: create the profile that BODY_FILE holds, publish it, and print its uid
+create_published() {
+  local uid
+  uid=$(call POST /v1/clusterprofiles "$1" | jq -r '.uid') || return 2
+  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
+  echo "$uid"
+}
+
 # addon_body NAME CLOUD: print the body of the create of the add-on profile NAME@1.0.0 of the cloud
 # type CLOUD. The standard input holds its one pack, a JSON document.
 addon_body() {
@@ -744,7 +755,7 @@ pack_registry_delete() {
 # Palette needs it for such a registry. Prints the uid of the profile.
 pin_profile() {
   local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} values=${6:-}
-  local layer=${7:-addon} tag=${8:-${5:-}} cloud=${9:-all} body uid pack_uid="" row
+  local layer=${7:-addon} tag=${8:-${5:-}} cloud=${9:-all} body pack_uid="" row
   [ -n "$version" ] ||
     die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
@@ -756,9 +767,20 @@ pin_profile() {
     --arg u "$pack_uid" --arg l "$layer" --rawfile values "${values:-/dev/null}" \
     '{name: $p, tag: $g, registryUid: $r, type: $t, layer: $l, values: $values}
       + (if $u == "" then {} else {uid: $u} end)' | addon_body "$name" "$cloud" > "$body"
-  uid=$(call POST /v1/clusterprofiles "$body" | jq -r '.uid') || return 2
-  call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
-  echo "$uid"
+  create_published "$body"
+}
+
+# manifest_profile NAME PACK FILE: create and publish an add-on profile NAME@1.0.0 with one manifest
+# layer. The layer is PACK, a pack of type manifest, and its one manifest, also named PACK, holds
+# the text of FILE. The profile has no variable. Prints the uid of the profile.
+manifest_profile() {
+  local name=${1:-} pack=${2:-} file=${3:-} body
+  [ -f "$file" ] || die "usage: api.sh manifest-profile NAME PACK FILE"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg p "$pack" --rawfile c "$file" \
+    '{name: $p, tag: "1.0.0", type: "manifest", layer: "addon", values: "", manifests: [{name: $p, content: $c}]}' \
+    | addon_body "$name" all > "$body"
+  create_published "$body"
 }
 
 # patch PATH JSON: PATCH one document of the API with the body JSON
@@ -878,6 +900,7 @@ case "${1:-}" in
   pack-registry-create) shift; pack_registry_create "$@" ;;
   pack-registry-delete) shift; pack_registry_delete "$@" ;;
   pin-profile) shift; pin_profile "$@" ;;
+  manifest-profile) shift; manifest_profile "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;
   packs-where) shift; packs_where "$@" ;;
   macro-set) shift; macro_set "$@" ;;
