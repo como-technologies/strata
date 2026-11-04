@@ -22,9 +22,13 @@ versions show the fixes.
 a pack, and the scheduled verify job. The job is
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground image-tag` serves this tenant on this
-machine, with no key and no cost. The tenant holds the Palette side alone. It
-has no registry for the image, so the text describes the rebuild.
+<div class="playground-demo">
+
+`just playground image-tag` serves this tenant on this machine, with no key and
+no cost. The tenant holds the Palette side alone. It has no registry for the
+image, so the text describes the rebuild.
+
+</div>
 
 ## 1. Record the version
 
