@@ -21,6 +21,11 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - uses: extractions/setup-just@v4
+      # The version of Go comes out of observer/go.mod, as the version of Rust comes out of Cargo.toml
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: observer/go.mod
+          cache: false
       # CI runs the same recipes a developer runs locally
       - run: just lint
       - run: just test
