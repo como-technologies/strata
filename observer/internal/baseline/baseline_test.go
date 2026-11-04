@@ -1,8 +1,6 @@
 package baseline
 
 import (
-	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,24 +8,10 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 const marker = "SENTINEL-MUST-NOT-LEAVE"
-
-func gz(t *testing.T, dir, name, body string) {
-	t.Helper()
-	var buf bytes.Buffer
-	w := gzip.NewWriter(&buf)
-	if _, err := w.Write([]byte(body)); err != nil {
-		t.Fatal(err)
-	}
-	if err := w.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, name), buf.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
 
 func write(t *testing.T, dir, name, body string) {
 	t.Helper()
@@ -40,7 +24,7 @@ const aws = `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"}
 
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
-	gz(t, dir, "aws-stack.json.gz", aws)
+	testkit.WriteGzip(t, dir, "aws-stack.json.gz", aws)
 	write(t, dir, "meta.json", `{"baseline":"approved","revision":"4e1c7a2"}`)
 	set, err := Load(dir)
 	if err != nil {
@@ -90,12 +74,12 @@ func TestABaselineWithNoMetaOrABadMetaIsUnknown(t *testing.T) {
 
 func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	dir := t.TempDir()
-	gz(t, dir, "a-good.json.gz", aws)
+	testkit.WriteGzip(t, dir, "a-good.json.gz", aws)
 	write(t, dir, "b-plain.json.gz", aws)
-	gz(t, dir, "c-other-schema.json.gz", `{"schema":"`+docs.DiffSchema+`"}`)
-	gz(t, dir, "d-cluster.json.gz", `{"schema":"`+docs.SnapshotSchema+`","source":{"cluster":{"uid":"c1"}}}`)
-	gz(t, dir, "e-not-json.json.gz", `not json`)
-	gz(t, dir, "f-good.json.gz", aws)
+	testkit.WriteGzip(t, dir, "c-other-schema.json.gz", `{"schema":"`+docs.DiffSchema+`"}`)
+	testkit.WriteGzip(t, dir, "d-cluster.json.gz", `{"schema":"`+docs.SnapshotSchema+`","source":{"cluster":{"uid":"c1"}}}`)
+	testkit.WriteGzip(t, dir, "e-not-json.json.gz", `not json`)
+	testkit.WriteGzip(t, dir, "f-good.json.gz", aws)
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +115,7 @@ func TestAMountedSecretWithLinksIsRead(t *testing.T) {
 	if err := os.Mkdir(data, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	gz(t, data, "aws-stack.json.gz", aws)
+	testkit.WriteGzip(t, data, "aws-stack.json.gz", aws)
 	if err := os.Symlink("..2026_11_03", filepath.Join(dir, "..data")); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +134,7 @@ func TestEachLoadReadsTheDirectoryAgain(t *testing.T) {
 	if err != nil || first.Files() != 0 {
 		t.Fatalf("first %+v, error %v", first, err)
 	}
-	gz(t, dir, "aws-stack.json.gz", aws)
+	testkit.WriteGzip(t, dir, "aws-stack.json.gz", aws)
 	second, err := Load(dir)
 	if err != nil || len(second.Entries) != 1 {
 		t.Fatalf("second %+v, error %v", second, err)
@@ -166,7 +150,7 @@ func TestADirectoryThatDoesNotExistIsAnError(t *testing.T) {
 func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 	dir := t.TempDir()
 	body := strings.Replace(aws, `"root":"r1"`, `"root":"r1","variables":[{"name":"x","value":"`+marker+`"}]`, 1)
-	gz(t, dir, "aws-stack.json.gz", body)
+	testkit.WriteGzip(t, dir, "aws-stack.json.gz", body)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)
@@ -182,7 +166,7 @@ func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 
 func TestARecordAboveTheLimitIsUnreadable(t *testing.T) {
 	dir := t.TempDir()
-	gz(t, dir, "big.json.gz", `{"schema":"`+docs.SnapshotSchema+`","pad":"`+strings.Repeat("a", maxRecordBytes)+`"}`)
+	testkit.WriteGzip(t, dir, "big.json.gz", `{"schema":"`+docs.SnapshotSchema+`","pad":"`+strings.Repeat("a", maxRecordBytes)+`"}`)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 0 || len(set.Unreadable) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)

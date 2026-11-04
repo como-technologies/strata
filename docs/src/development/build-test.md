@@ -54,8 +54,9 @@ observer watches that one. The default is `observer-2`, with one finding and the
 newer versions. `observer-1` is the tenant before the edit, with no finding.
 `OBSERVER_CLUSTER` names another cluster, such as `ledger`.
 
-`scripts/observer-lib.sh` holds the functions that start and stop the stand-in. The contract script and the
-playground script both source it.
+`scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
+It also holds `cluster_uid`, which gives the uid of a cluster by its name. The
+contract script and the playground script both source it.
 
 `just docs-examples` and `just docs-check` build `strata-observer` first, because a
 step of the chapter `observer` runs it. The runner puts it on the `PATH` of a step.
@@ -128,7 +129,7 @@ that version.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The API of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/api`, and `internal/web` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
+| `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The API of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
 | `examples/live/count-requests/` | A small Go program in a module of its own, with the standard library only. It runs a command and sends each request of the command on to Palette. It writes one line for each request, with no query and no key. `examples/live/observer.sh` uses it to count the requests of a cycle of the observer. `just lint` and `just test` check the module. |
 | `deploy/observer/`, `scripts/ci/observer-records.sh` | The manifests and the Dockerfile of the observer: see [The image and the manifests of the observer](./observer-deploy.md). The script writes the records of the observer as Secrets. `.github/workflows/observer-image.yml` builds and signs the image. `tests/observer_deploy.rs` ties the manifests to the code of the observer. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |

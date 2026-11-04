@@ -3,6 +3,7 @@ package check
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // drift reads the real `verify` document that the stand-in gave for an edit in place.
@@ -34,7 +36,7 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	r := newRig(t)
 	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
 	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
-	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: cluster(t, "payments", "aws-stack@1.1.0")}
+	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
 }
 
 // addPlatformAddons adds a second record that the cluster runs, platform-addons@1.0.0, with a good row.
@@ -43,7 +45,7 @@ func addPlatformAddons(t *testing.T, r *rig, w *world) {
 	t.Helper()
 	r.record("platform-addons", "1.0.0", "addon/cert-manager")
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = cluster(t, "payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
 }
 
 // twoRecords makes a world with the two records aws-stack@1.1.0 and platform-addons@1.0.0.
@@ -133,7 +135,7 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 
 func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	w.cluster = cluster(t, "payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
 	s, _ := r.observer(w).Once(context.Background())
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.NoRecord || s.Profiles[1].Status != model.StatusNoRecord || s.Counts.Packs != 2 {
 		t.Errorf("notChecked %+v, profiles %+v, counts %+v", s.NotChecked, s.Profiles, s.Counts)
@@ -175,7 +177,7 @@ func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 
 func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	r := newRig(t)
-	w := &world{cluster: cluster(t, "payments", "aws-stack@1.1.0")}
+	w := &world{cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
 	s, err := r.observer(w).Once(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -191,7 +193,7 @@ func TestAMissingRecordsDirectoryFailsTheCycleWithTheKindIO(t *testing.T) {
 	o := r.observer(&world{})
 	err := o.RunContent(context.Background())
 	var re *runner.RunError
-	if !errorsAs(err, &re) || re.Kind != docs.KindIO {
+	if !errors.As(err, &re) || re.Kind != docs.KindIO {
 		t.Fatalf("error %v", err)
 	}
 	if s := o.Summary(); s.Content.LastError == nil || s.Content.LastError.Kind != docs.KindIO || s.Page != model.PageFirstLoad {

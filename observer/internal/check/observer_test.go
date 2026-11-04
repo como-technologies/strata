@@ -2,6 +2,8 @@ package check
 
 import (
 	"context"
+	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -12,6 +14,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // edited is a world with a record that drifted, and a compare with the cluster that holds a clear value.
@@ -214,7 +217,11 @@ func TestNothingThatTheObserverWritesHoldsAValueOfTheCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	summary := marshalForTest(t, s)
+	raw, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := string(raw)
 	for name, text := range map[string]string{"summary": summary, "log": r.log.String()} {
 		if strings.Contains(text, sentinel) || strings.Contains(text, "OLD") {
 			t.Errorf("the %s holds a value: %s", name, text)
@@ -241,7 +248,7 @@ func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
 			t.Errorf("jitter %v: %v, want %v", c.jitter, got, c.want)
 		}
 	}
-	o := New(newRig(t).cfg, &world{}, nil2())
+	o := New(newRig(t).cfg, &world{}, slog.New(slog.DiscardHandler))
 	for range 100 {
 		if got := o.wait(time.Hour); got < time.Hour || got >= time.Hour+6*time.Minute {
 			t.Fatalf("wait %v", got)
@@ -253,11 +260,11 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndOneProcessRunsAtATime(t *testi
 	r, w := withBehind(t)
 	w.delay = 5 * time.Millisecond
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = time.Hour, time.Hour
-	o := New(r.cfg, w, nil2())
+	o := New(r.cfg, w, slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	waitFor(t, func() bool {
+	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
 		return w.count(runner.CmdVerify) >= 1 && w.count(runner.CmdBehind) >= 1 && w.countMoves() >= 4
 	})
 	cancel()
@@ -273,11 +280,11 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndOneProcessRunsAtATime(t *testi
 func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	r, w := withBehind(t)
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = 20*time.Millisecond, 30*time.Millisecond
-	o := New(r.cfg, w, nil2())
+	o := New(r.cfg, w, slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.Run(ctx); close(done) }()
-	waitFor(t, func() bool { return w.count(runner.CmdVerify) >= 3 && w.count(runner.CmdBehind) >= 3 })
+	testkit.WaitFor(t, "three cycles of each timer", func() bool { return w.count(runner.CmdVerify) >= 3 && w.count(runner.CmdBehind) >= 3 })
 	cancel()
 	<-done
 	if w.maxActive != 1 {
@@ -285,18 +292,7 @@ func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	}
 }
 
-func waitFor(t *testing.T, ok func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !ok() {
-		if time.Now().After(deadline) {
-			t.Fatal("the condition did not hold in time")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-}
-
-func TestACycleThatIsCancelledIsNoFailedRun(t *testing.T) {
+func TestACycleThatIsCanceledIsNoFailedRun(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

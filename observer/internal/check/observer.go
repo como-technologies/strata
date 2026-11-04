@@ -115,40 +115,47 @@ func (o *Observer) run(ctx context.Context, dir string, exits []int, args ...str
 
 // RunContent runs one content cycle, and keeps its answer or its failure.
 func (o *Observer) RunContent(ctx context.Context) error {
-	if err := o.acquire(ctx); err != nil {
-		return err
-	}
-	defer o.release()
-	start := time.Now()
-	content, files, err := o.contentCycle(ctx)
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	o.readFiles(files)
-	if err != nil {
-		o.fail("content", &o.state.Content, start, err)
-		return err
-	}
-	// A read that failed tells nothing about the drift, so the last good answer of that part stays.
-	content.Carry(o.content)
-	o.content, o.contentAt = &content, &content.At
-	o.state.Content = ClockState{}
-	o.keepFirstSeen(content)
-	o.log.Info("cycle", "cycle", "content", "verdict", "ok", "duration", time.Since(start).Round(time.Millisecond))
-	o.save()
-	return nil
+	var content model.Content
+	return o.runCycle(ctx, "content", &o.state.Content,
+		func(ctx context.Context) (files int, err error) {
+			content, files, err = o.contentCycle(ctx)
+			return files, err
+		},
+		func() {
+			// A read that failed tells nothing about the drift, so the last good answer of that part stays.
+			content.Carry(o.content)
+			o.content, o.contentAt = &content, &content.At
+			o.keepFirstSeen(content)
+		})
 }
 
 // RunVersions runs one versions cycle, and keeps its answer or its failure.
 func (o *Observer) RunVersions(ctx context.Context) error {
+	var versions model.Versions
+	return o.runCycle(ctx, "versions", &o.state.Versions,
+		func(ctx context.Context) (files int, err error) {
+			versions, files, err = o.versionsCycle(ctx)
+			return files, err
+		},
+		func() {
+			// A cycle with no record reads no version, so it has no end to show.
+			o.versions, o.versionsAt = &versions, nil
+			if !versions.At.IsZero() {
+				o.versionsAt = &versions.At
+			}
+		})
+}
+
+// runCycle runs one cycle in the slot of the worker. read runs the cycle and gives the number of
+// record files, which is -1 when the directory was not read. keep stores the answer of a cycle that
+// worked, with the lock held. A failure goes to clock, and a good cycle clears it.
+func (o *Observer) runCycle(ctx context.Context, name string, clock *ClockState, read func(context.Context) (int, error), keep func()) error {
 	if err := o.acquire(ctx); err != nil {
 		return err
 	}
 	defer o.release()
 	start := time.Now()
-	versions, files, err := o.versionsCycle(ctx)
+	files, err := read(ctx)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -156,16 +163,12 @@ func (o *Observer) RunVersions(ctx context.Context) error {
 	defer o.mu.Unlock()
 	o.readFiles(files)
 	if err != nil {
-		o.fail("versions", &o.state.Versions, start, err)
+		o.fail(name, clock, start, err)
 		return err
 	}
-	// A cycle with no record reads no version, so it has no end to show.
-	o.versions, o.versionsAt = &versions, nil
-	if !versions.At.IsZero() {
-		o.versionsAt = &versions.At
-	}
-	o.state.Versions = ClockState{}
-	o.log.Info("cycle", "cycle", "versions", "verdict", "ok", "duration", time.Since(start).Round(time.Millisecond))
+	keep()
+	*clock = ClockState{}
+	o.log.Info("cycle", "cycle", name, "verdict", "ok", "duration", time.Since(start).Round(time.Millisecond))
 	o.save()
 	return nil
 }

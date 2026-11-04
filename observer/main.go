@@ -38,10 +38,6 @@ func main() {
 
 const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR"
 
-func run(args []string, stdout, stderr io.Writer) int {
-	return runContext(context.Background(), args, stdout, stderr)
-}
-
 // runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
 // finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
 // a run of `serve`, and ends a cycle.

@@ -96,6 +96,15 @@ type Leaf struct {
 	New  any    `json:"new,omitempty"`
 }
 
+// Paths lists the path of each changed value, in the order of the diff.
+func (v Values) Paths() []string {
+	paths := make([]string, 0, len(v.Diff))
+	for _, l := range v.Diff {
+		paths = append(paths, l.Path)
+	}
+	return paths
+}
+
 // Named keeps the operation and the name of a change, and not its content.
 type Named struct {
 	Op   string `json:"op"`
