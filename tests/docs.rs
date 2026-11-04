@@ -327,6 +327,8 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
  {
     let checking: Vec<String> = common::workflow_files()
         .into_iter()
+        // `observer-image.yml` is for `release.yml` alone. It signs an image and installs for no caller.
+        .filter(|file| file != "observer-image.yml")
         .filter(|file| {
             let text = common::workflow_text(file);
             text.contains("workflow_call:") && text.contains("sigstore/cosign-installer@")

@@ -110,6 +110,7 @@ release and has everything.
 | [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted, is unverified, or could not be checked. |
 | [`upstream-report.sh`](./upstream-issues.md) | One issue per pack that a record pins behind a newer version of its registry. |
 | [`preflight.sh`](./preflight.md#on-another-host) | `strata preflight` with its options from variables, and the report as a comment. |
+| [`observer-records.sh`](../development/observer-deploy.md#the-records) | The records of the observer as four Kubernetes Secrets, on standard output. |
 | [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the signature and the checksums checked. |
 
 They run on GitHub and on GitLab. `examples/ci/github/strata.yml` and

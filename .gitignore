@@ -57,6 +57,9 @@ adapter/Cargo.lock
 # the book: `just docs` builds it
 docs/book/
 
+# the binaries that the image of the observer copies: the workflow and `just observer-image` put them here
+/dist/
+
 # records written by hand while walking a use case; the book keeps its own under docs/
 /addons/
 /releases/

@@ -43,6 +43,7 @@ show.
 | `fleet.sh` | `list clusters --tag` and `--filter`, `list filters`, and a record of each cluster of a set (#80). It labels cluster A through the API. |
 | `upstream.sh` | `strata behind` against the registries, and `upstream-report.sh` around a version that arrives in the example's own registry (#79). It needs no cluster. |
 | `loop.sh` | [One change, start to end](../walkthrough.md), end to end: a change, the gates, the publish, the questions to Palette about a move, `preflight` on the body of a create, the nightly jobs, a value overridden on a cluster, an edit in place, an incident, and a retire, with the records in a git repository that it builds (#81, #385). It needs cluster A, and undoes each change. |
+| `observer-kind.sh` | [The observer](./observer-deploy.md) on a kind cluster: its manifests, the records that `observer-records.sh` writes, the pod, and the page for a user with only the reader role (#644). It reads cluster A and the two profiles of the release from the tenant, and writes nothing to it. It needs docker, kind, and kubectl, and it deletes the kind cluster. |
 | `eks-nodegroups.sh` | The EKS node groups of cluster A, from AWS; `--delete` deletes those of the example, a step of the recovery of [An EKS cluster](#an-eks-cluster). |
 | `eks.sh` | On an EKS cluster: the release and its packs, the shape tier of a managed node group, the repave answer of Palette for each layer and for a Kubernetes bump, and a change of the node group (#89). It needs `cloud = "eks"` and cluster A. |
 | `gke.sh` | On a GKE cluster: the release and its packs, the shape tier of a node pool, the repave answer of Palette for a Kubernetes bump, and, with `GKE_POOL_CHANGE=1`, a change of the node pool (#90). It needs `cloud = "gke"` and cluster A. |
@@ -586,6 +587,7 @@ just live-app-profile                                                          #
 just live-fleet                                                                # #80, needs just live-up
 just live-upstream                                                             # #79, needs just live-profiles
 just live-loop                                                                 # #81, needs just live-up
+just live-observer-kind                                                        # #644, needs just live-up, docker, kind, and kubectl; makes a kind cluster
 just live-version-states                                                       # #81, needs just live-up
 just live-eks                                                                  # #89, needs cloud = "eks" and just live-up
 ```

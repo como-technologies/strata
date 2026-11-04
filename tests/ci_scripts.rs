@@ -12,12 +12,13 @@ use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
-const SHIPPED: [&str; 6] = [
+const SHIPPED: [&str; 7] = [
     "pr-comment.sh",
     "merge-gate.sh",
     "verify-report.sh",
     "upstream-report.sh",
     "preflight.sh",
+    "observer-records.sh",
     "install-strata.sh",
 ];
 
@@ -2214,6 +2215,7 @@ fn release() -> tempfile::TempDir {
             "#!/bin/sh\necho strata-preflight 9.9.9\n",
         ),
         ("10", "preflight.sh", "#!/bin/sh\necho preflight\n"),
+        ("11", "observer-records.sh", "#!/bin/sh\necho records\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -2295,6 +2297,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "merge-gate.sh",
         "verify-report.sh",
         "upstream-report.sh",
+        "observer-records.sh",
         "SHA256SUMS",
     ] {
         assert!(d.join("here").join(name).exists(), "{name} is installed");
@@ -2308,6 +2311,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
             "merge-gate.sh",
             "verify-report.sh",
             "upstream-report.sh",
+            "observer-records.sh",
         ] {
             let mode = std::fs::metadata(d.join("here").join(name))
                 .unwrap()
@@ -2398,6 +2402,7 @@ fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
         "merge-gate.sh",
         "verify-report.sh",
         "upstream-report.sh",
+        "observer-records.sh",
         "SHA256SUMS",
     ] {
         assert!(
@@ -4970,5 +4975,490 @@ fn preflight_sh_turns_a_failed_comment_into_exit_2_and_keeps_a_failed_status_of_
             "{}",
             text(&o.stderr)
         );
+    }
+}
+
+// ---- observer-records.sh -----------------------------------------------------------------------
+
+/// A `strata` for `observer-records.sh --first-seen`. It logs its arguments to `FAKE_LOG` and
+/// exits with `FAKE_EXIT` when that is set. `snapshot cluster:UID` writes the file `FAKE_CLUSTER`
+/// to the file of `-o`. `snapshot NAME@VERSION` writes a record of that profile.
+const FAKE_RECORDS_STRATA: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_LOG"
+[ -z "${FAKE_EXIT-}" ] || exit "$FAKE_EXIT"
+out=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+case "$2" in
+  cluster:*) cp "$FAKE_CLUSTER" "$out" ;;
+  *) jq -n --arg n "${2%@*}" --arg v "${2#*@}" \
+       '{schema: "strata-snapshot/1", source: {name: $n, version: $v}, packs: []}' > "$out" ;;
+esac
+"#;
+
+/// A directory for one run of `observer-records.sh`: the stand-in `strata` and the record files.
+struct ObserverRecords {
+    dir: tempfile::TempDir,
+}
+
+impl ObserverRecords {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        fake_bin(dir.path(), &[("strata", FAKE_RECORDS_STRATA)]);
+        std::fs::write(dir.path().join("strata.log"), "").unwrap();
+        ObserverRecords { dir }
+    }
+
+    /// A record file of a profile, with `padding` characters of text that gzip cannot shrink much.
+    fn record(&self, name: &str, version: &str, padding: usize) -> PathBuf {
+        let file = self
+            .dir
+            .path()
+            .join(format!("{}-{version}.json", name.replace('/', "-")));
+        let doc = serde_json::json!({
+            "schema": "strata-snapshot/1",
+            "source": {"name": name, "version": version},
+            "padding": noise(padding, padding as u64 + version.len() as u64),
+        });
+        std::fs::write(&file, doc.to_string()).unwrap();
+        file
+    }
+
+    /// A file with the document `doc`.
+    fn file(&self, name: &str, doc: &serde_json::Value) -> PathBuf {
+        let file = self.dir.path().join(name);
+        std::fs::write(&file, doc.to_string()).unwrap();
+        file
+    }
+
+    /// The script with the arguments `args` and the variables `envs`.
+    fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        let d = self.dir.path();
+        let mut c = Command::new("bash");
+        c.arg(script("ci/observer-records.sh"))
+            .args(args)
+            .current_dir(d)
+            .env("PATH", path_with(&d.join("bin")))
+            .env("STRATA_BIN", d.join("bin/strata"))
+            .env("FAKE_LOG", d.join("strata.log"))
+            .env("FAKE_CLUSTER", d.join("cluster.json"))
+            .env_remove("OBSERVER_SECRET_LIMIT")
+            .env_remove("FAKE_EXIT");
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        c.output_locked().unwrap()
+    }
+
+    fn strata_calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("strata.log"))
+    }
+}
+
+/// `len` characters of a fixed pseudo-random text of letters and digits.
+fn noise(len: usize, seed: u64) -> String {
+    let mut x = seed;
+    (0..len)
+        .map(|_| {
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            match (x >> 33) % 62 {
+                c @ 0..=9 => (b'0' + c as u8) as char,
+                c @ 10..=35 => (b'a' + (c - 10) as u8) as char,
+                c => (b'A' + (c - 36) as u8) as char,
+            }
+        })
+        .collect()
+}
+
+/// The four Secrets that the script wrote, in order.
+fn records_secrets(out: &str) -> Vec<serde_yaml::Value> {
+    use serde::Deserialize;
+    serde_yaml::Deserializer::from_str(out)
+        .map(|doc| serde_yaml::Value::deserialize(doc).unwrap())
+        .collect()
+}
+
+/// The keys of the `data` of one Secret, with their values.
+fn secret_data(secret: &serde_yaml::Value) -> Vec<(String, String)> {
+    secret["data"]
+        .as_mapping()
+        .expect("a Secret has a data mapping, also an empty one")
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.as_str().unwrap().to_string(),
+                v.as_str().unwrap().to_string(),
+            )
+        })
+        .collect()
+}
+
+/// The text of a value in a Secret: `base64 -d`, and `gunzip` when `gzipped`.
+fn unpacked(value: &str, gzipped: bool) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("value");
+    std::fs::write(&file, value).unwrap();
+    let pipe = if gzipped {
+        r#"base64 -d "$0" | gunzip"#
+    } else {
+        r#"base64 -d "$0""#
+    };
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(pipe)
+        .arg(&file)
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    text(&o.stdout)
+}
+
+/// A Kubernetes key of a Secret: letters, digits, `-`, `_`, and `.`.
+fn is_secret_key(key: &str) -> bool {
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+}
+
+/// The script refused the run with exit 2, and printed no Secret. A Secret that a refusal printed
+/// goes to `kubectl apply` in the pipe. Then the apply puts half of the records in the cluster.
+fn assert_refused(o: &Output, message: &str) {
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(message),
+        "the message says {message:?}: {}",
+        text(&o.stderr)
+    );
+    assert_eq!(text(&o.stdout), "", "a refusal prints no Secret");
+}
+
+#[test]
+fn observer_records_sh_writes_four_secrets_with_each_record_gzipped_and_the_empty_ones_empty() {
+    let job = ObserverRecords::new();
+    let release = job.record("aws-stack", "1.0.0", 40);
+    let addon = job.record("csi/addon", "2.1.0-rc.1", 40);
+    let o = job.run(
+        &[
+            "--revision",
+            "abc123",
+            release.to_str().unwrap(),
+            addon.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let secrets = records_secrets(&text(&o.stdout));
+    assert_eq!(secrets.len(), 4);
+    for (i, secret) in secrets.iter().enumerate() {
+        assert_eq!(secret["apiVersion"], "v1");
+        assert_eq!(secret["kind"], "Secret");
+        assert_eq!(secret["type"], "Opaque");
+        assert_eq!(
+            secret["metadata"]["name"],
+            format!("strata-observer-records-{i}").as_str()
+        );
+        assert_eq!(secret["metadata"]["namespace"], "strata-observer");
+        assert_eq!(
+            secret["metadata"]["labels"]["app.kubernetes.io/name"],
+            "strata-observer"
+        );
+    }
+    let first = secret_data(&secrets[0]);
+    let keys: Vec<&str> = first.iter().map(|(k, _)| k.as_str()).collect();
+    // the key of a name with a slash and a version with a plus or a dash stays in the alphabet
+    assert_eq!(
+        keys,
+        [
+            "meta.json",
+            "aws-stack_1.0.0.json.gz",
+            "csi_addon_2.1.0-rc.1.json.gz"
+        ]
+    );
+    assert!(keys.iter().all(|k| is_secret_key(k)), "{keys:?}");
+    for (key, value) in &first[1..] {
+        let file = if key.starts_with("aws") {
+            &release
+        } else {
+            &addon
+        };
+        let record: serde_json::Value = serde_json::from_str(&unpacked(value, true)).unwrap();
+        assert_eq!(
+            record,
+            serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(file).unwrap())
+                .unwrap(),
+            "{key} reads back as the record"
+        );
+    }
+    // an empty Secret in the apply removes the content that an older apply put there
+    for secret in &secrets[1..] {
+        assert!(secret_data(secret).is_empty(), "{secret:?}");
+    }
+}
+
+#[test]
+fn observer_records_sh_says_in_meta_json_that_a_review_approved_the_revision() {
+    let job = ObserverRecords::new();
+    let record = job.record("aws-stack", "1.0.0", 10);
+    let o = job.run(
+        &[
+            "--revision",
+            "0a1b2c3",
+            "--namespace",
+            "team-observer",
+            record.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let secrets = records_secrets(&text(&o.stdout));
+    let meta = &secret_data(&secrets[0])[0];
+    assert_eq!(meta.0, "meta.json");
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&unpacked(&meta.1, false)).unwrap(),
+        serde_json::json!({"baseline": "approved", "revision": "0a1b2c3"})
+    );
+    for secret in &secrets {
+        assert_eq!(secret["metadata"]["namespace"], "team-observer");
+    }
+}
+
+#[test]
+fn observer_records_sh_fills_the_first_secret_that_has_room_and_leaves_the_last_one_empty() {
+    let job = ObserverRecords::new();
+    let files: Vec<PathBuf> = ["a", "b", "c"]
+        .iter()
+        .map(|n| job.record(n, "1.0.0", 900))
+        .collect();
+    let args: Vec<&str> = ["--revision", "r"]
+        .into_iter()
+        .chain(files.iter().map(|f| f.to_str().unwrap()))
+        .collect();
+    // the limit holds one record and not two: the size of an encoded record is between 800 and 1500
+    let o = job.run(&args, &[("OBSERVER_SECRET_LIMIT", "1500")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let secrets = records_secrets(&text(&o.stdout));
+    let sizes: Vec<usize> = secrets
+        .iter()
+        .map(|s| {
+            secret_data(s)
+                .iter()
+                .filter(|(k, _)| k != "meta.json")
+                .count()
+        })
+        .collect();
+    assert_eq!(sizes, [1, 1, 1, 0], "one record in each of three Secrets");
+    for secret in &secrets[..3] {
+        let data = secret_data(secret);
+        let length = data.last().unwrap().1.len();
+        assert!(
+            (800..1500).contains(&length),
+            "the setup of the test: {length} characters"
+        );
+    }
+    assert!(secret_data(&secrets[3]).is_empty());
+}
+
+#[test]
+fn observer_records_sh_refuses_records_that_do_not_fit_in_four_secrets() {
+    let job = ObserverRecords::new();
+    let files: Vec<PathBuf> = ["a", "b", "c", "d", "e"]
+        .iter()
+        .map(|n| job.record(n, "1.0.0", 900))
+        .collect();
+    let args: Vec<&str> = ["--revision", "r"]
+        .into_iter()
+        .chain(files.iter().map(|f| f.to_str().unwrap()))
+        .collect();
+    let o = job.run(&args, &[("OBSERVER_SECRET_LIMIT", "1500")]);
+    assert_refused(
+        &o,
+        "the records do not fit in four Secrets: e_1.0.0.json.gz",
+    );
+    // one record that is larger than the limit fits no Secret at all
+    let o = job.run(
+        &["--revision", "r", files[0].to_str().unwrap()],
+        &[("OBSERVER_SECRET_LIMIT", "100")],
+    );
+    assert_refused(
+        &o,
+        "the records do not fit in four Secrets: a_1.0.0.json.gz",
+    );
+}
+
+#[test]
+fn observer_records_sh_refuses_a_run_that_gives_neither_flag_or_both() {
+    let job = ObserverRecords::new();
+    let record = job.record("aws-stack", "1.0.0", 10);
+    let record = record.to_str().unwrap();
+    let message = "give --revision or --first-seen, and not both";
+    assert_refused(&job.run(&[record], &[]), message);
+    assert_refused(
+        &job.run(&["--revision", "r", "--first-seen", "c-1", record], &[]),
+        message,
+    );
+    assert!(job.strata_calls().is_empty(), "strata did not run");
+}
+
+#[test]
+fn observer_records_sh_refuses_a_record_of_a_cluster_because_it_holds_clear_values() {
+    let job = ObserverRecords::new();
+    let cluster = job.file(
+        "payments.json",
+        &serde_json::json!({
+            "schema": "strata-snapshot/1",
+            "source": {"name": "payments", "version": "1.0.0",
+                       "cluster": {"uid": "c-1", "variables": {"token": "s3cr3t"}}},
+        }),
+    );
+    let good = job.record("aws-stack", "1.0.0", 10);
+    let o = job.run(
+        &[
+            "--revision",
+            "r",
+            good.to_str().unwrap(),
+            cluster.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_refused(&o, "payments.json is not a profile record");
+    assert!(!text(&o.stderr).contains("s3cr3t"), "{}", text(&o.stderr));
+}
+
+#[test]
+fn observer_records_sh_refuses_a_file_that_is_no_snapshot_and_a_file_that_is_no_json() {
+    let job = ObserverRecords::new();
+    let other = job.file(
+        "report.json",
+        &serde_json::json!({"schema": "strata-diff/1"}),
+    );
+    assert_refused(
+        &job.run(&["--revision", "r", other.to_str().unwrap()], &[]),
+        "report.json is not a profile record",
+    );
+    let text_file = job.dir.path().join("notes.txt");
+    std::fs::write(&text_file, "not json\n").unwrap();
+    assert_refused(
+        &job.run(&["--revision", "r", text_file.to_str().unwrap()], &[]),
+        "notes.txt is not a profile record",
+    );
+}
+
+#[test]
+fn observer_records_sh_refuses_two_records_of_one_profile_version() {
+    let job = ObserverRecords::new();
+    let one = job.record("aws-stack", "1.0.0", 10);
+    let other = job.dir.path().join("copy.json");
+    std::fs::copy(&one, &other).unwrap();
+    let o = job.run(
+        &[
+            "--revision",
+            "r",
+            one.to_str().unwrap(),
+            other.to_str().unwrap(),
+        ],
+        &[],
+    );
+    assert_refused(&o, "two records are for aws-stack_1.0.0.json.gz");
+}
+
+#[test]
+fn observer_records_sh_refuses_no_record_and_an_option_it_does_not_have() {
+    let job = ObserverRecords::new();
+    assert_refused(&job.run(&["--revision", "r"], &[]), "no record");
+    assert_refused(
+        &job.run(&["--revision", "r", "--dry-run"], &[]),
+        "unknown option --dry-run",
+    );
+    let o = job.run(&["--revision"], &[]);
+    assert_ne!(o.status.code(), Some(0));
+    assert_eq!(text(&o.stdout), "");
+    assert!(text(&o.stderr).contains("--revision needs a value"));
+}
+
+#[test]
+fn observer_records_sh_refuses_first_seen_with_a_record_file() {
+    let job = ObserverRecords::new();
+    let record = job.record("aws-stack", "1.0.0", 10);
+    let o = job.run(&["--first-seen", "c-1", record.to_str().unwrap()], &[]);
+    assert_refused(&o, "--first-seen takes no record file");
+    assert!(job.strata_calls().is_empty(), "strata did not run");
+}
+
+#[test]
+fn observer_records_sh_first_seen_records_each_profile_of_the_cluster_and_says_so_in_meta_json() {
+    let job = ObserverRecords::new();
+    job.file(
+        "cluster.json",
+        &serde_json::json!({
+            "schema": "strata-snapshot/1",
+            "source": {"cluster": {"uid": "c-1", "profiles": [
+                {"name": "aws-stack", "version": "1.0.0"},
+                {"name": "csi-addon", "version": "2.1.0"},
+            ]}},
+        }),
+    );
+    let o = job.run(&["--first-seen", "c-1"], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let calls = job.strata_calls();
+    assert_eq!(calls.len(), 3, "{calls:?}");
+    assert!(
+        calls[0].starts_with("snapshot cluster:c-1 -o ") && calls[0].ends_with(" -q"),
+        "{calls:?}"
+    );
+    assert!(calls[1].starts_with("snapshot aws-stack@1.0.0 -o "));
+    assert!(calls[2].starts_with("snapshot csi-addon@2.1.0 -o "));
+    let secrets = records_secrets(&text(&o.stdout));
+    let data = secret_data(&secrets[0]);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&unpacked(&data[0].1, false)).unwrap(),
+        serde_json::json!({"baseline": "first-seen", "firstSeenFrom": "c-1"}),
+        "no revision: no person approved this content"
+    );
+    let keys: Vec<&str> = data.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(
+        keys,
+        [
+            "meta.json",
+            "aws-stack_1.0.0.json.gz",
+            "csi-addon_2.1.0.json.gz"
+        ]
+    );
+    let record: serde_json::Value = serde_json::from_str(&unpacked(&data[1].1, true)).unwrap();
+    assert_eq!(record["source"]["name"], "aws-stack");
+    assert!(
+        !text(&o.stdout).contains("cluster:c-1"),
+        "no record of the cluster is in a Secret"
+    );
+}
+
+#[test]
+fn observer_records_sh_prints_no_secret_when_strata_fails() {
+    let job = ObserverRecords::new();
+    let o = job.run(&["--first-seen", "c-1"], &[("FAKE_EXIT", "2")]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), "", "a failed read prints no Secret");
+}
+
+#[test]
+fn observer_records_sh_leaves_no_file_of_its_work_in_the_temporary_directory() {
+    let job = ObserverRecords::new();
+    job.file(
+        "cluster.json",
+        &serde_json::json!({
+            "schema": "strata-snapshot/1",
+            "source": {"cluster": {"uid": "c-1", "profiles": [{"name": "aws-stack", "version": "1.0.0"}]}},
+        }),
+    );
+    let tmp = job.dir.path().join("tmp");
+    std::fs::create_dir(&tmp).unwrap();
+    let tmp_path = tmp.display().to_string();
+    // a clear value of a cluster could be in a file of the work directory
+    for envs in [vec![], vec![("FAKE_EXIT", "2")]] {
+        let mut all = vec![("TMPDIR", tmp_path.as_str())];
+        all.extend(envs);
+        job.run(&["--first-seen", "c-1"], &all);
+        assert_eq!(std::fs::read_dir(&tmp).unwrap().count(), 0);
     }
 }

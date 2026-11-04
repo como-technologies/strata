@@ -7721,3 +7721,321 @@ fn api_sh_set_values_replaces_the_values_of_one_pack_and_keeps_the_rest() {
         text(&o.stderr)
     );
 }
+
+// ---- observer-kind.sh --------------------------------------------------------------------------------
+
+/// A `kubectl` for observer-kind.sh. It logs each call to `$FAKE_OBS/kubectl.log`.
+///
+/// It keeps the state of the cluster in files of `$FAKE_OBS`. `applied.yaml` holds what each apply
+/// got. `meta.b64` and `count` come from the last apply of records. `key.seen` holds the key that
+/// came through standard input. `get pod -o json` prints `pod.json`.
+///
+/// The reader can open a port-forward and nothing else. `FAKE_READER_SECRETS` lets the reader read
+/// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page.
+const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/kubectl.log"
+case "$*" in
+  "kustomize "*) cat "$FAKE_REPO/deploy/observer/deployment.yaml" ;;
+  *"apply --server-side -f -"*)
+    body=$(cat)
+    printf '%s\n' "$body" >> "$obs/applied.yaml"
+    if grep -q 'meta.json:' <<<"$body"; then
+      grep -m1 'meta.json:' <<<"$body" | awk '{print $2}' > "$obs/meta.b64"
+      grep -c 'json.gz:' <<<"$body" > "$obs/count"
+    fi ;;
+  *"create secret generic strata-observer-key"*) cat > "$obs/key.seen" ;;
+  *"get secret -l"*) printf 'secret/strata-observer-records-%s\n' 0 1 2 3 ;;
+  *"get secret strata-observer-records-0"*) cat "$obs/meta.b64" ;;
+  *"get pod"*"jsonpath"*) echo 10.0.0.7 ;;
+  *"get pod"*) cat "$obs/pod.json" ;;
+  *"auth can-i"*)
+    case "$*" in
+      *portforward*) echo yes; exit 0 ;;
+      *"get secrets"*) [ -z "${FAKE_READER_SECRETS-}" ] || { echo yes; exit 0; } ;;
+    esac
+    echo no; exit 1 ;;
+  *"port-forward"*) echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080" ;;
+  *" run "*) if [ -n "${FAKE_REACHED-}" ]; then echo reached; else echo refused; fi ;;
+esac
+exit 0
+"#;
+
+/// A `curl` for observer-kind.sh: the page, the health route, and the summary of the cluster, which
+/// reads the records that the stand-in `kubectl` holds.
+const FAKE_CURL_OBSERVER: &str = r#"#!/usr/bin/env bash
+args=("$@")
+url=${args[${#args[@]}-1]}
+out=""
+for ((i = 0; i < ${#args[@]}; i++)); do [ "${args[i]}" = -o ] && out=${args[i+1]}; done
+case "$url" in
+  */healthz) body=ok ;;
+  */v1/cluster)
+    meta=$(base64 -d "$FAKE_OBS/meta.b64" 2>/dev/null || echo '{}')
+    body=$(jq -cn --argjson meta "$meta" --arg uid "$FAKE_CLUSTER_UID" \
+      --argjson n "$(cat "$FAKE_OBS/count" 2>/dev/null || echo 0)" \
+      '{cluster: {uid: $uid}, records: {count: $n, baseline: $meta.baseline, revision: $meta.revision}}') ;;
+  *) body='<!doctype html><html lang="en"></html>' ;;
+esac
+if [ -n "$out" ]; then printf '%s' "$body" > "$out"; printf 200; else printf '%s\n' "$body"; fi
+"#;
+
+/// The pod that the Deployment of the repository makes: its spec, and the status of a pod that is
+/// Ready. The cluster adds no volume for a token, because the pod asks for none.
+fn observer_pod() -> serde_json::Value {
+    let deployment: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("deploy/observer/deployment.yaml")).unwrap();
+    let spec = serde_json::to_value(&deployment["spec"]["template"]["spec"]).unwrap();
+    serde_json::json!({"items": [{
+        "spec": spec,
+        "status": {"podIP": "10.0.0.7", "containerStatuses": [{"ready": true, "restartCount": 0}]},
+    }]})
+}
+
+/// A profile record, as the stand-in `strata` writes it.
+fn observer_record(name: &str) -> String {
+    serde_json::json!({"schema": "strata-snapshot/1", "source": {"name": name, "version": "1.0.0"}})
+        .to_string()
+}
+
+/// A stage for observer-kind.sh with the stand-ins of the tools of the script. The key of the
+/// tenant is `key-that-no-log-shows`.
+fn observer_kind_stage() -> Stage {
+    let mut stage = Stage::new(serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a",
+        "release_profile_uid": "r-1", "addon_profile_uid": "ad-1",
+    }));
+    let obs = stage.path("obs");
+    std::fs::create_dir_all(&obs).unwrap();
+    std::fs::write(
+        obs.join("pod.json"),
+        serde_json::to_string(&observer_pod()).unwrap(),
+    )
+    .unwrap();
+    let bin = stage.path("obs-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for (name, body) in [
+        ("kubectl", FAKE_KUBECTL_OBSERVER),
+        ("curl", FAKE_CURL_OBSERVER),
+        (
+            "kind",
+            "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_OBS/kind.log\"\n",
+        ),
+        (
+            "docker",
+            "#!/usr/bin/env bash\n[ -z \"${FAKE_NO_IMAGE-}\" ]\n",
+        ),
+    ] {
+        executable(&bin.join(name), body);
+    }
+    stage.strata(
+        "snapshot r-1 -o release.json -q",
+        0,
+        &observer_record("strata-live-profile"),
+    );
+    stage.strata(
+        "snapshot ad-1 -o addon.json -q",
+        0,
+        &observer_record("strata-live-addon"),
+    );
+    stage.strata(
+        "snapshot cluster:c-a -o * -q",
+        0,
+        r#"{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"c-a","profiles":[
+            {"name":"strata-live-profile","version":"1.0.0"},
+            {"name":"strata-live-addon","version":"1.0.0"}]}}}"#,
+    );
+    stage.strata(
+        "snapshot strata-live-profile@1.0.0 -o * -q",
+        0,
+        &observer_record("strata-live-profile"),
+    );
+    stage.strata(
+        "snapshot strata-live-addon@1.0.0 -o * -q",
+        0,
+        &observer_record("strata-live-addon"),
+    );
+    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
+    stage.env("PATH", &path);
+    stage.env("PALETTE_API_KEY", "key-that-no-log-shows");
+    stage.env("FAKE_OBS", obs.to_str().unwrap());
+    stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
+    stage.env("FAKE_CLUSTER_UID", "c-a");
+    stage
+}
+
+/// Each check of observer-kind.sh, in the order that it runs.
+const OBSERVER_KIND_CHECKS: [&str; 29] = [
+    "kind-create",
+    "image-load",
+    "namespace",
+    "config",
+    "key",
+    "record-release",
+    "record-addon",
+    "records-apply",
+    "records-four",
+    "records-meta",
+    "manifests-apply",
+    "rollout",
+    "pod-ready",
+    "pod-non-root",
+    "pod-read-only-root",
+    "pod-no-token",
+    "pod-ready-status",
+    "reader-role",
+    "reader-can-forward",
+    "reader-no-secret",
+    "reader-no-exec",
+    "reader-forward",
+    "reader-health",
+    "reader-page",
+    "reader-cluster",
+    "other-pod-refused",
+    "first-seen-apply",
+    "first-seen-meta",
+    "kind-delete",
+];
+
+fn observer_log(stage: &Stage, file: &str) -> String {
+    std::fs::read_to_string(stage.path("obs").join(file)).unwrap_or_default()
+}
+
+#[test]
+fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_and_the_refusal() {
+    let stage = observer_kind_stage();
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(&steps, &OBSERVER_KIND_CHECKS);
+
+    let kubectl = observer_log(&stage, "kubectl.log");
+    for call in [
+        "create configmap strata-observer --from-literal=cluster-uid=c-a",
+        "--from-literal=project-uid=p-1",
+        "create secret generic strata-observer-key --from-file=api-key=/dev/stdin",
+        "--as=system:serviceaccount:strata-observer:reader port-forward deploy/strata-observer 18080:8080",
+        "auth can-i create pods --subresource=portforward --as=system:serviceaccount:strata-observer:reader",
+        "auth can-i get secrets --as=system:serviceaccount:strata-observer:reader",
+        "auth can-i create pods --subresource=exec --as=system:serviceaccount:strata-observer:reader",
+        "create rolebinding reader --role=strata-observer-reader --serviceaccount=strata-observer:reader",
+    ] {
+        assert!(kubectl.contains(call), "{call}:\n{kubectl}");
+    }
+    // Each apply is a server-side apply. A client-side apply copies each Secret to an annotation,
+    // and it fails above 256 KiB.
+    let applies: Vec<&str> = kubectl.lines().filter(|l| l.contains(" apply ")).collect();
+    assert_eq!(applies.len(), 5, "{applies:?}");
+    assert!(
+        applies.iter().all(|l| l.contains("--server-side")),
+        "{applies:?}"
+    );
+
+    let applied = observer_log(&stage, "applied.yaml");
+    assert!(
+        applied.contains("image: strata-observer:dev") && !applied.contains(":VERSION"),
+        "the manifests carry the image of this run"
+    );
+    assert_eq!(
+        applied.matches("kind: Secret").count(),
+        8,
+        "two applies of four Secrets"
+    );
+
+    // the key reaches the Secret through standard input, and no file or call shows it
+    assert_eq!(observer_log(&stage, "key.seen"), "key-that-no-log-shows");
+    let mut shown = Vec::new();
+    for dir in ["out", "obs"] {
+        for (file, content) in files_under(&stage.path(dir)) {
+            if file != "key.seen" && content.contains("key-that-no-log-shows") {
+                shown.push(format!("{dir}/{file}"));
+            }
+        }
+    }
+    assert!(shown.is_empty(), "the key is in {shown:?}");
+
+    let kind = observer_log(&stage, "kind.log");
+    assert_eq!(
+        kind.lines().collect::<Vec<_>>(),
+        [
+            "create cluster --name strata-observer-test --wait 120s",
+            "load docker-image strata-observer:dev --name strata-observer-test",
+            "delete cluster --name strata-observer-test",
+        ]
+    );
+    // the last records say first-seen, with no revision
+    let meta = observer_log(&stage, "meta.b64");
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!("echo {} | base64 -d", meta.trim()))
+        .output_locked()
+        .unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&text(&o.stdout)).unwrap(),
+        serde_json::json!({"baseline": "first-seen", "firstSeenFrom": "c-a"})
+    );
+}
+
+#[test]
+fn observer_kind_sh_fails_a_check_when_the_reader_can_read_a_secret_and_still_deletes_the_cluster()
+{
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_READER_SECRETS", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["reader-no-secret"]);
+    passed(&steps, &["reader-no-exec", "reader-page", "kind-delete"]);
+    assert!(observer_log(&stage, "kind.log").contains("delete cluster"));
+}
+
+#[test]
+fn observer_kind_sh_fails_the_checks_of_a_pod_that_runs_as_root_with_a_token_and_a_writable_root() {
+    let stage = observer_kind_stage();
+    let mut pod = observer_pod();
+    let spec = &mut pod["items"][0]["spec"];
+    spec["securityContext"]["runAsNonRoot"] = false.into();
+    spec["containers"][0]["securityContext"]["readOnlyRootFilesystem"] = false.into();
+    spec["automountServiceAccountToken"] = true.into();
+    spec["volumes"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"name": "kube-api-access-x7k2p", "projected": {}}));
+    std::fs::write(stage.path("obs/pod.json"), pod.to_string()).unwrap();
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(
+        &steps,
+        &["pod-non-root", "pod-read-only-root", "pod-no-token"],
+    );
+    passed(&steps, &["pod-ready", "pod-ready-status", "reader-page"]);
+}
+
+#[test]
+fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_the_page() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_REACHED", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["other-pod-refused"]);
+}
+
+#[test]
+fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_the_image() {
+    let mut stage = observer_kind_stage();
+    stage.env("KEEP_CLUSTER", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!observer_log(&stage, "kind.log").contains("delete"));
+    assert!(steps.contains("KEEP_CLUSTER=1: the kind cluster strata-observer-test stays"));
+
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_IMAGE", "1");
+    let (o, _) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no image strata-observer:dev; run just observer-image"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert_eq!(observer_log(&stage, "kind.log"), "", "no cluster was made");
+}

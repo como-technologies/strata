@@ -21,6 +21,7 @@ mod draft_secret;
 mod fuzz;
 mod live_scripts;
 mod masked;
+mod observer_deploy;
 mod presets;
 mod report;
 mod report_deploy;

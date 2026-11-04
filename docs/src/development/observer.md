@@ -94,6 +94,8 @@ from `pins[].error` of the `behind`.
 ## The records
 
 `--records` holds one `<name>.json.gz` file for each profile, and `meta.json`.
+In a cluster, the volume is four Secrets that the pipeline writes with
+`observer-records.sh`: see [The records](./observer-deploy.md#the-records).
 
 | `baseline` | `meta.json` | Meaning |
 | --- | --- | --- |
