@@ -13,6 +13,7 @@ func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 		"app.css":          {Data: []byte("a{}")},
 		"fonts/a.woff2":    {Data: []byte("font")},
 		"LICENSES.md":      {Data: []byte("# licenses")},
+		"favicon-dark.svg": {Data: []byte("<svg/>")},
 		"secret.json":      {Data: []byte("{}")},
 		"fonts/readme.txt": {Data: []byte("text")},
 	})}).Handler()
@@ -26,6 +27,7 @@ func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 		{"/app.css", "text/css; charset=utf-8", 200},
 		{"/fonts/a.woff2", "font/woff2", 200},
 		{"/LICENSES.md", "text/markdown; charset=utf-8", 200},
+		{"/favicon-dark.svg", "image/svg+xml", 200},
 		// A kind that has no type is not served, and nor is a file that does not exist.
 		{"/secret.json", "application/json", 404},
 		{"/fonts/readme.txt", "application/json", 404},

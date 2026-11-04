@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo/strata-lockup-horizontal-dark.svg">
+  <img src="assets/logo/strata-lockup-horizontal-light.svg" alt="strata" height="64">
+</picture>
+
 # strata
 
 [![version](https://img.shields.io/badge/version-0.28.0-blue)](Cargo.toml)

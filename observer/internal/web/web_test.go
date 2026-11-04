@@ -1,11 +1,13 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -58,6 +60,7 @@ var types = map[string]string{
 	".js":    "text/javascript; charset=utf-8",
 	".css":   "text/css; charset=utf-8",
 	".woff2": "font/woff2",
+	".svg":   "image/svg+xml",
 	".md":    "text/markdown; charset=utf-8",
 }
 
@@ -77,7 +80,8 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != want {
 			t.Errorf("%s: status %d, type %q, want %q", name, rec.Code, rec.Header().Get("Content-Type"), want)
 		}
-		if rec.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(rec.Header().Get("Content-Security-Policy"), "font-src 'self'") {
+		policy := rec.Header().Get("Content-Security-Policy")
+		if rec.Header().Get("X-Content-Type-Options") != "nosniff" || !strings.Contains(policy, "font-src 'self'") || !strings.Contains(policy, "img-src 'self'") {
 			t.Errorf("%s: the headers of the server are missing", name)
 		}
 		return nil
@@ -85,7 +89,7 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"index.html", "app.js", "app.css", "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
+	for _, want := range []string{"index.html", "app.js", "theme.js", "app.css", "favicon-light.svg", "favicon-dark.svg", "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
 		if !slices.Contains(found, want) {
 			t.Errorf("assets/ has no %s", want)
 		}
@@ -100,9 +104,15 @@ func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 	if rec := serve(t, "/"); rec.Code != http.StatusOK || rec.Body.String() != string(index) {
 		t.Errorf("/ gave %d", rec.Code)
 	}
-	// The page has no icon. A browser asks for one, and a 404 would be an error in its console.
+	// The page links two SVG icons, one for each color scheme. A browser that does not use them asks
+	// for /favicon.ico, and a 404 would be an error in its console.
 	if rec := serve(t, "/favicon.ico"); rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Errorf("/favicon.ico gave %d with %d bytes", rec.Code, rec.Body.Len())
+	}
+	for _, icon := range []string{"/favicon-light.svg", "/favicon-dark.svg"} {
+		if rec := serve(t, icon); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+			t.Errorf("%s gave %d with %d bytes", icon, rec.Code, rec.Body.Len())
+		}
 	}
 	for _, target := range []string{"/nowhere", "/fonts", "/fonts/", "/app.js/", "/app.txt", "/assets/app.js", "/../app.js", "/./app.js", "/v1/nowhere", "/index.html/x"} {
 		if rec := serve(t, target); rec.Code == http.StatusOK {
@@ -150,10 +160,14 @@ var (
 	rawArgument     = regexp.MustCompile(`^"[A-Za-z0-9&;# ]*"$`)
 	cssRule         = regexp.MustCompile(`([^{}]+)\{([^{}]*)\}`)
 	cssComment      = regexp.MustCompile(`(?s)/\*.*?\*/`)
+	setCall         = regexp.MustCompile(`setAttribute\(\s*([^,)]*)`)
 )
 
 // Selectors that must have no maximum width: the content fills the window at each desktop size.
 var wide = []string{".page", ".main", ".app", "body"}
+
+// svgNamespace is the one address that an SVG may hold. It is a name, and a browser does not load it.
+const svgNamespace = `xmlns="http://www.w3.org/2000/svg"`
 
 // problems lists what is wrong in the files of a page, in the words of the issue: an external
 // address, an inline style, an inline script, a value that is not escaped, and a maximum width.
@@ -166,14 +180,20 @@ func problems(files fs.FS) []string {
 		raw, _ := fs.ReadFile(files, name)
 		text := string(raw)
 		add := func(what string) { out = append(out, name+": "+what) }
+		if path.Ext(name) == ".svg" {
+			// The namespace of an SVG is a name, and no browser loads it.
+			text = strings.ReplaceAll(text, svgNamespace, "")
+		}
 		if m := externalAddress.FindString(text); m != "" {
 			add("an external address " + m)
 		}
 		switch path.Ext(name) {
 		case ".html":
 			problemsInPage(text, add)
+		case ".svg":
+			problemsInImage(text, add)
 		case ".js":
-			problemsInScript(text, add)
+			problemsInScript(name, text, add)
 		case ".css":
 			problemsInStyle(text, add)
 		}
@@ -196,7 +216,23 @@ func problemsInPage(text string, add func(string)) {
 	}
 }
 
-func problemsInScript(text string, add func(string)) {
+// problemsInImage lists what is wrong in an SVG that the page links: an SVG can hold a style, a
+// script, and an event attribute, as a page can.
+func problemsInImage(text string, add func(string)) {
+	problemsInPage(text, add)
+	if strings.Contains(strings.ToLower(text), "<script") {
+		add("a script")
+	}
+}
+
+// appScript is the script of the screens. It writes markup, so it has the rules for markup. theme.js
+// writes none, and it has the rules below instead.
+const appScript = "app.js"
+
+// themeAttributes are the two attributes that a script other than app.js can set, each with a fixed name.
+var themeAttributes = []string{`"data-theme"`, `"aria-pressed"`}
+
+func problemsInScript(name, text string, add func(string)) {
 	text = jsComment.ReplaceAllString(text, "")
 	if inlineStyle.MatchString(text) {
 		add("an inline style in a string of markup")
@@ -204,10 +240,25 @@ func problemsInScript(text string, add func(string)) {
 	if inlineHandler.MatchString(text) {
 		add("an inline event handler in a string of markup")
 	}
-	for _, banned := range []string{"insertAdjacentHTML", "outerHTML", "document.write", "eval(", "new Function", "setAttribute(", "javascript:", "srcdoc"} {
-		if strings.Contains(text, banned) {
-			add("it uses " + banned)
+	banned := []string{"insertAdjacentHTML", "outerHTML", "document.write", "eval(", "new Function", "javascript:", "srcdoc"}
+	if name == appScript {
+		banned = append(banned, "setAttribute(")
+	}
+	for _, word := range banned {
+		if strings.Contains(text, word) {
+			add("it uses " + word)
 		}
+	}
+	if name != appScript {
+		if strings.Contains(text, "innerHTML") {
+			add("it uses innerHTML: only " + appScript + " writes markup")
+		}
+		for _, m := range setCall.FindAllStringSubmatch(text, -1) {
+			if !slices.Contains(themeAttributes, strings.TrimSpace(m[1])) {
+				add("setAttribute(" + m[1] + ") sets more than a fixed attribute of the theme")
+			}
+		}
+		return
 	}
 	// The one write of markup is put(), and it writes what part() escapes.
 	if n := strings.Count(text, "innerHTML"); n != 1 || !strings.Contains(text, "el.innerHTML = part(markup);") {
@@ -286,6 +337,16 @@ const A = raw(" &rarr; ");`
 		{"a maximum width on a list of selectors", "app.css", `.x,.page{max-width:90vw}`, "holds a max-width"},
 		{"a maximum width in a media rule", "app.css", `@media (max-width:760px){.page{max-width:600px}}`, "holds a max-width"},
 		{"a maximum width on the app", "app.css", `.app{max-width:1400px;margin:auto}`, "holds a max-width"},
+		{"a script in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><script href="x.js"/></svg>`, "a script"},
+		{"an inline style in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:red" d="M0 0"/></svg>`, "an inline style"},
+		{"a style tag in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><style>path{fill:red}</style></svg>`, "an inline style"},
+		{"an address in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><image href="https://x.example/a.png"/></svg>`, "an external address"},
+		{"an event attribute in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg" onload="go()"></svg>`, "an inline event handler"},
+		{"innerHTML in the script of the theme", "theme.js", `document.body.innerHTML = x;`, "only app.js writes markup"},
+		{"an attribute that is not of the theme", "theme.js", `el.setAttribute("onclick", v);`, "sets more than a fixed attribute"},
+		{"an attribute with a name from a variable", "theme.js", `el.setAttribute(name, v);`, "sets more than a fixed attribute"},
+		{"eval in the script of the theme", "theme.js", `eval(x)`, "it uses eval("},
+		{"setAttribute in app.js", "app.js", good + "\nel.setAttribute(\"data-theme\", v);", "it uses setAttribute("},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -299,6 +360,8 @@ const A = raw(" &rarr; ");`
 	clean := fstest.MapFS{
 		"index.html": {Data: []byte(`<!DOCTYPE html><link rel="stylesheet" href="app.css"><script src="app.js"></script>`)},
 		"app.js":     {Data: []byte(good)},
+		"theme.js":   {Data: []byte(`document.documentElement.setAttribute("data-theme", v); b.setAttribute("aria-pressed", String(on));`)},
+		"icon.svg":   {Data: []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="#5b2fc4" d="M3 3L9 9Z"/></svg>`)},
 		"app.css":    {Data: []byte(`@font-face{src:url(fonts/a.woff2)} .page{padding:1px} .val{max-width:60ch} @media (max-width:760px){.page{padding:0}}`)},
 	}
 	if got := problems(clean); len(got) != 0 {
@@ -621,12 +684,13 @@ func TestAgoLeavesOutMinutesThatAreZero(t *testing.T) {
 	}
 }
 
-// ruleOf gives the declarations of the rules with exactly this selector, with no space.
+// ruleOf gives the declarations of the rules with exactly this selector. It removes each space, so
+// `light dark` reads `lightdark`, and it ends each rule with one semicolon.
 func ruleOf(css, selector string) string {
 	var out strings.Builder
 	for _, rule := range cssRule.FindAllStringSubmatch(cssComment.ReplaceAllString(css, ""), -1) {
 		if strings.TrimSpace(rule[1]) == selector {
-			out.WriteString(strings.Join(strings.Fields(rule[2]), "") + ";")
+			out.WriteString(strings.TrimSuffix(strings.Join(strings.Fields(rule[2]), ""), ";") + ";")
 		}
 	}
 	return out.String()
@@ -666,5 +730,303 @@ func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
 	}
 	if got := tabRowProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`); len(got) != 0 {
 		t.Errorf("a good rule has problems: %q", got)
+	}
+}
+
+/* The tests below hold the look of the page: the logo, the choice of a theme, and the colors. */
+
+// The logo lives in four places. assets/logo/ at the root of the repository is the source. The page
+// has a favicon for each color scheme and an inline mark in index.html, and the book has a favicon.
+const (
+	logoDir     = "../../../assets/logo/"
+	bookFavicon = "../../../docs/theme/favicon.svg"
+)
+
+var logoFiles = []string{
+	"strata-mark-light.svg",
+	"strata-mark-dark.svg",
+	"strata-lockup-horizontal-light.svg",
+	"strata-lockup-horizontal-dark.svg",
+	"strata-lockup-stacked-light.svg",
+	"strata-lockup-stacked-dark.svg",
+}
+
+var (
+	markPath = regexp.MustCompile(`<path [^>]*/>`)
+	markDiv  = regexp.MustCompile(`(?s)<div class="logo">(.*?)</div>`)
+)
+
+func readFile(t *testing.T, name string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func readPage(t *testing.T, name string) []byte {
+	t.Helper()
+	raw, err := fs.ReadFile(files(t), name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// copyProblem says how a copy differs from its source, or gives "" when it is the same, byte for byte.
+func copyProblem(name string, source, copy []byte) string {
+	if bytes.Equal(source, copy) {
+		return ""
+	}
+	at := 0
+	for at < len(source) && at < len(copy) && source[at] == copy[at] {
+		at++
+	}
+	return fmt.Sprintf("%s differs from its source at byte %d (%d bytes, the source has %d)", name, at, len(copy), len(source))
+}
+
+func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
+	for _, name := range logoFiles {
+		if raw := readFile(t, logoDir+name); !bytes.Contains(raw, []byte("<title>strata</title>")) {
+			t.Errorf("%s is not a logo of strata", name)
+		}
+	}
+	light, dark := readFile(t, logoDir+"strata-mark-light.svg"), readFile(t, logoDir+"strata-mark-dark.svg")
+	for _, c := range []struct {
+		name         string
+		source, copy []byte
+	}{
+		{"favicon-light.svg", light, readPage(t, "favicon-light.svg")},
+		{"favicon-dark.svg", dark, readPage(t, "favicon-dark.svg")},
+		{"the favicon of the book", light, readFile(t, bookFavicon)},
+	} {
+		if problem := copyProblem(c.name, c.source, c.copy); problem != "" {
+			t.Error(problem)
+		}
+	}
+	// The nav is dark in both schemes, so the inline mark is the dark mark.
+	div := markDiv.FindSubmatch(readPage(t, "index.html"))
+	if div == nil {
+		t.Fatal("index.html has no mark in the logo of the nav")
+	}
+	want := markPath.FindAll(dark, -1)
+	if got := markPath.FindAll(div[1], -1); len(want) != 4 || !slices.EqualFunc(got, want, bytes.Equal) {
+		t.Errorf("the inline mark of index.html has %d paths, and they are not the 4 paths of the dark mark", len(got))
+	}
+}
+
+// The check of a copy must be able to fail.
+func TestTheCheckOfACopyFindsAByteThatDiffers(t *testing.T) {
+	source := []byte(`<svg><path fill="#5b2fc4"/></svg>`)
+	if got := copyProblem("copy", source, slices.Clone(source)); got != "" {
+		t.Errorf("a copy that is the same has the problem %q", got)
+	}
+	for name, copy := range map[string][]byte{
+		"a byte of a color":   bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1),
+		"a missing last byte": source[:len(source)-1],
+		"a byte at the end":   append(slices.Clone(source), '\n'),
+	} {
+		if got := copyProblem("copy", source, copy); !strings.Contains(got, "differs from its source at byte") {
+			t.Errorf("%s: the problem is %q", name, got)
+		}
+	}
+	if got := copyProblem("copy", source, bytes.Replace(source, []byte("5b2fc4"), []byte("5b2fc5"), 1)); !strings.Contains(got, "at byte 23 ") {
+		t.Errorf("the problem is %q, want the byte 23", got)
+	}
+}
+
+// driftRed is the red of a drift. A drift is white on this red in both schemes, so its rule holds the
+// color itself: a token would take a second value in the dark scheme.
+const driftRed = "#c9252f"
+
+// driftProblems lists what is wrong in the two rules that paint a drift: the pill and the count in the nav.
+func driftProblems(css string) []string {
+	var out []string
+	for _, selector := range []string{".badge.r", ".cnt.r"} {
+		if got, want := ruleOf(css, selector), "background:"+driftRed+";color:#fff;"; got != want {
+			out = append(out, fmt.Sprintf("the rule of %s is %q, want %q", selector, got, want))
+		}
+	}
+	return out
+}
+
+func TestADriftIsWhiteOnRedInBothSchemes(t *testing.T) {
+	if got := driftProblems(string(readPage(t, "app.css"))); len(got) != 0 {
+		t.Errorf("%s", strings.Join(got, "\n"))
+	}
+	for name, css := range map[string]string{
+		"a token":            `.badge.r{background:var(--red);color:#fff}.cnt.r{background:#c9252f;color:#fff}`,
+		"another red":        `.badge.r{background:#d92d3a;color:#fff}.cnt.r{background:#c9252f;color:#fff}`,
+		"a dark copy":        `.badge.r{background:#c9252f;color:#fff}.cnt.r{background:#c9252f;color:#fff}@media (x){.badge.r{background:#ff6b77}}`,
+		"another text color": `.badge.r{background:#c9252f;color:#eee}.cnt.r{background:#c9252f;color:#fff}`,
+		"no count rule":      `.badge.r{background:#c9252f;color:#fff}`,
+	} {
+		if got := driftProblems(css); len(got) == 0 {
+			t.Errorf("%s: the check found nothing", name)
+		}
+	}
+	if got := driftProblems(`.badge.r{ background: #c9252f; color: #fff } .cnt.r{background:#c9252f;color:#fff;}`); len(got) != 0 {
+		t.Errorf("a good rule has problems: %q", got)
+	}
+}
+
+// The chip "new" is pink, which no status uses. It has the class fresh on each screen that shows it.
+func TestTheChipNewHasTheClassFreshAndItsPink(t *testing.T) {
+	if got, want := ruleOf(string(readPage(t, "app.css")), ".badge.fresh"), "background:light-dark(#fde8f0,#3f1830);color:light-dark(#b01b57,#ff9dbd);"; got != want {
+		t.Errorf("the rule of .badge.fresh is %q, want %q", got, want)
+	}
+	chips := regexp.MustCompile(`<span class="([^"]*)">new</span>`).FindAllSubmatch(readPage(t, "app.js"), -1)
+	if len(chips) == 0 {
+		t.Error("app.js has no chip new")
+	}
+	for _, c := range chips {
+		if string(c[1]) != "badge fresh" {
+			t.Errorf("a chip new has the class %q, want %q", c[1], "badge fresh")
+		}
+	}
+}
+
+var lightDark = regexp.MustCompile(`light-dark\(([^()]*)\)`)
+
+// themeProblems lists what is wrong in the way that a stylesheet holds the two color schemes. A color has
+// one line, `light-dark(light, dark)`, so that no color has a second copy for the dark scheme. A person
+// who chooses a theme sets data-theme on the root, and that sets color-scheme and no color.
+func themeProblems(css string) []string {
+	css = cssComment.ReplaceAllString(css, "")
+	var out []string
+	if strings.Contains(css, "prefers-color-scheme") {
+		out = append(out, "it has a prefers-color-scheme rule: a color would have a second copy")
+	}
+	if !strings.Contains(ruleOf(css, ":root"), "color-scheme:lightdark;") {
+		out = append(out, "the rule of :root does not set color-scheme to light dark")
+	}
+	choices := map[string]string{
+		`:root[data-theme="light"]`: "color-scheme:light;",
+		`:root[data-theme="dark"]`:  "color-scheme:dark;",
+	}
+	tokens := map[string]int{}
+	for _, rule := range cssRule.FindAllStringSubmatch(css, -1) {
+		selector := strings.TrimSpace(rule[1])
+		if _, ok := choices[selector]; !ok && strings.Contains(selector, "data-theme") {
+			out = append(out, "the rule of "+selector+" is not a choice of color-scheme")
+		}
+		for _, declaration := range strings.Split(rule[2], ";") {
+			if name, _, ok := strings.Cut(strings.TrimSpace(declaration), ":"); ok && strings.HasPrefix(name, "--") {
+				tokens[name]++
+			}
+		}
+	}
+	for selector, want := range choices {
+		if got := ruleOf(css, selector); got != want {
+			out = append(out, fmt.Sprintf("the rule of %s is %q, want %q", selector, got, want))
+		}
+	}
+	for name, n := range tokens {
+		if n > 1 {
+			out = append(out, fmt.Sprintf("the token %s has %d lines: a color has one", name, n))
+		}
+	}
+	for _, m := range lightDark.FindAllStringSubmatch(css, -1) {
+		parts := strings.Split(m[1], ",")
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == strings.TrimSpace(parts[1]) {
+			out = append(out, "light-dark("+m[1]+") does not hold two colors that differ")
+		}
+	}
+	return out
+}
+
+func TestNoColorHasTwoCopies(t *testing.T) {
+	css := string(readPage(t, "app.css"))
+	if got := themeProblems(css); len(got) != 0 {
+		t.Errorf("%s", strings.Join(got, "\n"))
+	}
+	// A token that differs between the schemes is a light-dark() and not a plain color.
+	root := ruleOf(css, ":root")
+	for _, token := range []string{"--bg", "--panel", "--ink", "--nav", "--accent", "--red", "--amb", "--violet", "--grn"} {
+		if !regexp.MustCompile(token + `:light-dark\(`).MatchString(root) {
+			t.Errorf("the token %s is not a light-dark()", token)
+		}
+	}
+	const good = `:root{color-scheme:light dark;--bg:light-dark(#fff,#000);--navink:#ccc}
+:root[data-theme="light"]{color-scheme:light}
+:root[data-theme="dark"]{color-scheme:dark}`
+	if got := themeProblems(good); len(got) != 0 {
+		t.Errorf("a good stylesheet has problems: %q", got)
+	}
+	for name, c := range map[string]struct{ css, want string }{
+		"a media query":         {good + `@media (prefers-color-scheme:dark){:root{--bg:#000}}`, "prefers-color-scheme"},
+		"a dark token":          {good + `:root[data-theme="dark"]{--bg:#000}`, `the rule of :root[data-theme="dark"]`},
+		"a dark rule":           {good + `:root[data-theme="dark"] .x{color:#fff}`, "is not a choice of color-scheme"},
+		"a second line":         {good + `:root{--bg:#eee}`, "has 2 lines"},
+		"one color twice":       {strings.Replace(good, "light-dark(#fff,#000)", "light-dark(#fff,#fff)", 1), "does not hold two colors that differ"},
+		"one color only":        {strings.Replace(good, "light-dark(#fff,#000)", "light-dark(#fff)", 1), "does not hold two colors that differ"},
+		"no scheme on the root": {strings.Replace(good, "color-scheme:light dark;", "", 1), "does not set color-scheme to light dark"},
+		"no choice of light":    {strings.Replace(good, `:root[data-theme="light"]{color-scheme:light}`, "", 1), `the rule of :root[data-theme="light"]`},
+		"a choice with a color": {strings.Replace(good, `{color-scheme:dark}`, `{color-scheme:dark;--bg:#000}`, 1), `the rule of :root[data-theme="dark"]`},
+	} {
+		if got := strings.Join(themeProblems(c.css), "\n"); !strings.Contains(got, c.want) {
+			t.Errorf("%s: problems %q, want one with %q", name, got, c.want)
+		}
+	}
+}
+
+// The old blue of the dashboard is gone from each file of assets/, in a color and in a token.
+func TestTheOldBlueIsGone(t *testing.T) {
+	_ = fs.WalkDir(files(t), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || path.Ext(name) == ".woff2" {
+			return err
+		}
+		text := strings.ToLower(string(readPage(t, name)))
+		for _, old := range []string{"2f6fde", "6ea2f7", "4d8df0", "--blue"} {
+			if strings.Contains(text, old) {
+				t.Errorf("%s still has %s", name, old)
+			}
+		}
+		return nil
+	})
+}
+
+var themeButton = regexp.MustCompile(`<button type="button" data-theme-choice="([a-z]+)" aria-pressed="(true|false)">([A-Za-z]+)</button>`)
+
+// The foot of the nav has three buttons, Auto, Light, and Dark. Each says its state with aria-pressed,
+// and Auto is pressed until theme.js reads the choice. theme.js is a file of its own in the head, so
+// that it runs before the first paint, and the head links the two icons.
+func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
+	index := string(readPage(t, "index.html"))
+	buttons := themeButton.FindAllStringSubmatch(index, -1)
+	want := [][]string{{"auto", "true", "Auto"}, {"light", "false", "Light"}, {"dark", "false", "Dark"}}
+	if len(buttons) != len(want) {
+		t.Fatalf("index.html has %d buttons of the theme, want %d", len(buttons), len(want))
+	}
+	for i, b := range buttons {
+		if !slices.Equal(b[1:], want[i]) {
+			t.Errorf("button %d is %q, want %q", i, b[1:], want[i])
+		}
+	}
+	nav, foot, last, end := strings.Index(index, `id="navl"`), strings.Index(index, `<div class="navfoot">`), strings.Index(index, `data-theme-choice="dark"`), strings.Index(index, "</aside>")
+	if nav < 0 || foot < nav || last < foot || end < last {
+		t.Error("the control of the theme is not at the foot of the nav, after the sections")
+	}
+	head, body, _ := strings.Cut(index, "</head>")
+	if !strings.Contains(head, `<script src="theme.js"></script>`) || strings.Contains(body, "theme.js") {
+		t.Error("theme.js must be a plain script in the head, and only there")
+	}
+	for _, icon := range []string{
+		`<link rel="icon" type="image/svg+xml" href="favicon-light.svg" media="(prefers-color-scheme: light)">`,
+		`<link rel="icon" type="image/svg+xml" href="favicon-dark.svg" media="(prefers-color-scheme: dark)">`,
+	} {
+		if !strings.Contains(head, icon) {
+			t.Errorf("the head has no %s", icon)
+		}
+	}
+	script := string(readPage(t, "theme.js"))
+	for _, word := range []string{`"strata-observer-theme"`, "localStorage.removeItem", "aria-pressed", "data-theme-choice", "catch"} {
+		if !strings.Contains(script, word) {
+			t.Errorf("theme.js has no %s", word)
+		}
+	}
+	if strings.Contains(string(readPage(t, "app.js")), "localStorage") {
+		t.Error("app.js reads the storage: the choice of a theme is in theme.js")
 	}
 }

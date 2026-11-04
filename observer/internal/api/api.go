@@ -119,9 +119,9 @@ func (s *Server) Handler() http.Handler {
 	return guard(mux)
 }
 
-// The policy of the page. The page loads its script, style, and fonts from the server itself, and
-// from nowhere else.
-const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+// The policy of the page. The page loads its script, style, fonts, and icons from the server itself,
+// and from nowhere else.
+const contentSecurityPolicy = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
 
 // guard sets the four headers on each answer and refuses the requests that the server does not serve.
 func guard(next http.Handler) http.Handler {
