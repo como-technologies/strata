@@ -58,9 +58,10 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
 > The job `observer-image` of `release.yml` sets `contents: read`, `packages:
 > write`, and `id-token: write`. `tests/workflows.rs` requires the three.
 
-The image is in a private repository. A team that pulls it names a Secret of
-the registry in `imagePullSecrets`. The token in that Secret needs only the scope
-`read:packages`.
+The image is in a private repository. A team that pulls it makes a Secret of the
+registry and names it in `imagePullSecrets`. The token in that Secret needs only the
+scope `read:packages`. Steps 2 and 6 of [Install](../automation/observer.md#install)
+make the Secret and name it.
 
 ## The manifests
 
@@ -88,14 +89,16 @@ The pod mounts three volumes:
   them.
 - `state` is on the disk of the node. It holds no value.
 
-A team makes two objects that the kustomization does not hold:
+A team makes three objects that the kustomization does not hold:
 
+- The pull Secret `ghcr-pull`, of the type `kubernetes.io/dockerconfigjson`.
 - The ConfigMap `strata-observer` with the keys `cluster-uid`, `palette-api`,
   and `project-uid`.
 - The Secret `strata-observer-key` with the key `api-key`.
 
-A kustomization of the team sets the image tag. The key of Palette is never a
-profile variable. A profile variable is in clear in the copy of the cluster.
+A kustomization of the team sets the image tag and a patch that adds
+`imagePullSecrets`. The key of Palette is never a profile variable. A profile
+variable is in clear in the copy of the cluster.
 
 ## The records
 
@@ -187,7 +190,7 @@ The script makes sure of these facts:
   A pod of another namespace cannot connect.
 - An edit in place of the add-on version gives the finding `published-changed`
   with the actor. No route and no line of the log shows the value of a variable.
-- A wrong key sends the page to `lost`, and the right key brings it back to
+- A wrong key sends the page to `lost`, and the right key returns the page to
   `ok`. A restart starts the state again.
 - A profile of the observer shows as `no-record` under "Not checked". It is not a
   drift, and the other profiles of the cluster stay the same.
@@ -197,5 +200,5 @@ The script counts the requests of a content cycle and of a versions cycle.
 request. The lines hold the method and the path, and no query and no key.
 
 The undo runs at the end, also after a failed check. The edit goes back, the
-profile comes off the cluster, and the namespace goes. The script deletes no
+profile leaves the cluster, and the namespace goes. The script deletes no
 cluster. `just live-down` deletes it.

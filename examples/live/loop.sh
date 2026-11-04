@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The everyday loop (#81): one change of one team, run end to end against the tenant, with the
-# records in a git repository that the script builds, as docs/src/loop.md tells it.
+# records in a git repository that the script builds, as docs/src/walkthrough.md tells it.
 #
 #   examples/live/loop.sh [FROM_STAGE]
 #

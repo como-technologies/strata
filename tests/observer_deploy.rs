@@ -556,3 +556,318 @@ fn the_recipe_observer_image_builds_the_static_binary_and_the_image_of_the_docke
         ]
     );
 }
+
+// ---- the steps of the page "The observer" ------------------------------------------------------------
+
+/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
+/// opening fence, so the block of a list item reads as it does in a terminal.
+fn code_blocks(text: &str, lang: &str) -> Vec<String> {
+    let opening = format!("```{lang}");
+    let mut blocks = Vec::new();
+    let mut open: Option<(usize, Vec<&str>)> = None;
+    for line in text.lines() {
+        let body = line.trim_start();
+        let indent = line.len() - body.len();
+        match open.take() {
+            None => {
+                if body == opening {
+                    open = Some((indent, Vec::new()));
+                }
+            }
+            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
+            Some((strip, mut lines)) => {
+                lines.push(line.get(strip..).unwrap_or(""));
+                open = Some((strip, lines));
+            }
+        }
+    }
+    blocks
+}
+
+/// The section "Install" of the page of the service, up to the next section.
+fn install_steps() -> String {
+    let page = repo_file("docs/src/automation/observer.md");
+    let from = page
+        .find("\n## Install\n")
+        .expect("the page has the section Install");
+    let to = page[from + 1..]
+        .find("\n## ")
+        .expect("a section follows Install");
+    page[from..from + 1 + to].to_string()
+}
+
+/// The first block of `lang` in `text` that holds `needle`.
+fn block_with(text: &str, lang: &str, needle: &str) -> String {
+    code_blocks(text, lang)
+        .into_iter()
+        .find(|block| block.contains(needle))
+        .unwrap_or_else(|| panic!("no {lang} block holds {needle:?}"))
+}
+
+/// The word of `block` after the word `before`.
+fn word_after<'a>(block: &'a str, before: &str) -> &'a str {
+    let mut words = block.split_whitespace();
+    words
+        .by_ref()
+        .find(|word| *word == before)
+        .unwrap_or_else(|| panic!("no word {before:?}"));
+    words.next().expect("a word follows")
+}
+
+/// Run the shell text `block` in `dir`, as a reader runs the commands of a page. The stand-in
+/// `kubectl` writes its arguments to `kubectl.args` and its standard input to `kubectl.in`. The
+/// records script is in `scripts/ci/`, as in the repository of a team.
+fn run_block(dir: &std::path::Path, block: &str, env: &[(&str, &str)]) -> std::process::Output {
+    let bin = fake_bin(
+        dir,
+        &[(
+            "kubectl",
+            "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
+        )],
+    );
+    let scripts = dir.join("scripts/ci");
+    std::fs::create_dir_all(&scripts).unwrap();
+    let link = scripts.join("observer-records.sh");
+    if !link.exists() {
+        std::os::unix::fs::symlink(script("ci/observer-records.sh"), link).unwrap();
+    }
+    Command::new("bash")
+        .arg("-c")
+        .arg(format!("set -euo pipefail\n{block}"))
+        .current_dir(dir)
+        .env("PATH", path_with(&bin))
+        .envs(env.iter().copied())
+        .output_locked()
+        .unwrap()
+}
+
+/// The file `name` that a stand-in command wrote in `dir`.
+fn written(dir: &std::path::Path, name: &str) -> String {
+    std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+/// Step 2 of the install makes the Secret that the image pull needs. The token goes on standard
+/// input, as the key does, and no argument holds it.
+#[test]
+fn step_2_of_the_install_makes_the_pull_secret_from_a_token_on_standard_input() {
+    let block = block_with(&install_steps(), "bash", "create secret generic ghcr-pull");
+    let dir = tempfile::tempdir().unwrap();
+    let token = "s3cr3t-token";
+    let o = run_block(
+        dir.path(),
+        &block.replace("<github user>", "octo"),
+        &[("GHCR_PULL_TOKEN", token)],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+
+    let namespace = deploy_doc("kustomization.yaml")["namespace"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let args = written(dir.path(), "kubectl.args");
+    assert_eq!(
+        args.trim(),
+        format!(
+            "-n {namespace} create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin"
+        )
+    );
+    let config: serde_json::Value =
+        serde_json::from_str(&written(dir.path(), "kubectl.in")).unwrap();
+    let entry = &config["auths"]["ghcr.io"];
+    assert_eq!(entry["username"], "octo");
+    assert_eq!(entry["password"], token);
+    // base64 of "octo:s3cr3t-token"
+    assert_eq!(entry["auth"], "b2N0bzpzM2NyM3QtdG9rZW4=");
+}
+
+/// Step 6 names the folder, the image, and a patch. The patch adds the pull Secret of step 2 to the
+/// Deployment of the folder, which has none.
+#[test]
+fn step_6_of_the_install_patches_the_deployment_of_the_folder_with_the_pull_secret_of_step_2() {
+    let steps = install_steps();
+    let secret = word_after(
+        &block_with(&steps, "bash", "create secret generic ghcr-pull"),
+        "generic",
+    )
+    .to_string();
+    let yaml = block_with(&steps, "yaml", "kind: Kustomization");
+    let kustomization: Value = serde_yaml::from_str(&yaml).unwrap();
+    assert_eq!(strings(&kustomization["resources"]), ["deploy/observer"]);
+
+    let image = container()["image"].as_str().unwrap().to_string();
+    let (name, _) = image.rsplit_once(':').expect("the image names a tag");
+    assert_eq!(kustomization["images"][0]["name"], name);
+
+    let deployment = deploy_doc("deployment.yaml");
+    let patch = &kustomization["patches"][0];
+    assert_eq!(patch["target"]["kind"], deployment["kind"]);
+    assert_eq!(patch["target"]["name"], deployment["metadata"]["name"]);
+    let ops: Value = serde_yaml::from_str(patch["patch"].as_str().unwrap()).unwrap();
+    let ops = ops.as_sequence().unwrap();
+    assert_eq!(ops.len(), 1);
+    assert_eq!(ops[0]["op"], "add");
+    assert_eq!(ops[0]["path"], "/spec/template/spec/imagePullSecrets");
+    assert_eq!(ops[0]["value"][0]["name"], secret.as_str());
+    assert!(
+        pod().get("imagePullSecrets").is_none(),
+        "the manifest has no pull Secret, so the patch is the only source"
+    );
+}
+
+/// Step 7 applies the reader role, which the kustomization omits, and binds it in its namespace.
+#[test]
+fn step_7_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() {
+    let block = block_with(&install_steps(), "bash", "create rolebinding");
+    let role = deploy_doc("reader-role.yaml");
+    assert!(block.contains("kubectl apply -f deploy/observer/reader-role.yaml"));
+    assert_eq!(
+        word_after(&block, "-n"),
+        role["metadata"]["namespace"].as_str().unwrap()
+    );
+    let role_flag = format!("--role={}", role["metadata"]["name"].as_str().unwrap());
+    let words: Vec<&str> = block.split_whitespace().collect();
+    assert!(words.contains(&role_flag.as_str()), "{block}");
+    assert!(
+        words
+            .iter()
+            .any(|w| w.starts_with("--group=") || w.starts_with("--user=")),
+        "{block}"
+    );
+}
+
+/// The live run makes the same Secret, patch, and binding. So a person who follows the steps
+/// meets what the run checked.
+#[test]
+fn the_live_run_makes_the_pull_secret_the_patch_and_the_binding_of_the_install_steps() {
+    let live = repo_file("examples/live/observer.sh");
+    for needle in [
+        "create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin",
+        "path: /spec/template/spec/imagePullSecrets",
+        "- name: ghcr-pull",
+        "create rolebinding reader --role=strata-observer-reader",
+    ] {
+        assert!(live.contains(needle), "observer.sh lacks {needle:?}");
+    }
+}
+
+/// A record as `strata snapshot` writes it. The records script reads the schema, the name, the
+/// version, and whether the source is a cluster.
+fn record_file(path: &std::path::Path, name: &str, version: &str, cluster: bool) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut source = serde_json::json!({"name": name, "version": version});
+    if cluster {
+        source["cluster"] = serde_json::json!({"profiles": []});
+    }
+    let doc = serde_json::json!({"schema": "strata-snapshot/1", "source": source});
+    std::fs::write(path, doc.to_string()).unwrap();
+}
+
+/// Run the records command of `block` in `dir`, with the glob `from` in place of the glob `to`.
+fn records_run(dir: &std::path::Path, block: &str, from: &str, to: &str) -> std::process::Output {
+    assert!(block.contains(from), "the page has no {from:?}: {block}");
+    run_block(dir, &block.replace(from, to), &[("GIT_SHA", "abc123")])
+}
+
+/// The records command of "The everyday loop" names the records of `dev`, one for each version. The
+/// layout is the one of "One change, start to end": a record of each project for each version, and a
+/// record of a cluster. The script runs on that layout. The globs that the page replaced fail on it.
+#[test]
+fn the_records_command_of_the_loop_page_accepts_the_layout_that_the_page_shows() {
+    let block = block_with(
+        &repo_file("docs/src/loop.md"),
+        "bash",
+        "observer-records.sh",
+    );
+    let dir = tempfile::tempdir().unwrap();
+    for version in ["1.0.0", "1.1.0"] {
+        for project in ["dev", "prod"] {
+            let file = dir
+                .path()
+                .join(format!("releases/{version}/{project}.json"));
+            record_file(&file, "aws-stack", version, false);
+        }
+    }
+    record_file(
+        &dir.path().join("fleet/prod/payments.json"),
+        "payments",
+        "",
+        true,
+    );
+
+    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        written(dir.path(), "kubectl.args").trim(),
+        "apply --server-side -f -"
+    );
+    let applied = written(dir.path(), "kubectl.in");
+    for key in ["aws-stack_1.0.0.json.gz:", "aws-stack_1.1.0.json.gz:"] {
+        assert_eq!(applied.matches(key).count(), 1, "{key}");
+    }
+
+    for (glob, message) in [
+        ("releases/*/*.json", "two records are for"),
+        ("releases/*.json", "is not a profile record"),
+        ("fleet/*/*.json", "is not a profile record"),
+    ] {
+        let o = records_run(dir.path(), &block, "releases/*/dev.json", glob);
+        assert_eq!(o.status.code(), Some(2), "{glob}: {}", text(&o.stderr));
+        assert!(
+            text(&o.stderr).contains(message),
+            "{glob}: {}",
+            text(&o.stderr)
+        );
+    }
+}
+
+/// The records command of the service page takes the folder `releases/` of one record for each
+/// profile version that the cluster runs. It refuses a record of a cluster and a second record of a
+/// version.
+#[test]
+fn the_records_command_of_the_service_page_accepts_one_record_for_each_profile_version() {
+    let block = block_with(&install_steps(), "bash", "observer-records.sh");
+    let dir = tempfile::tempdir().unwrap();
+    for (name, version) in [
+        ("aws-stack", "1.0.0"),
+        ("aws-stack", "1.1.0"),
+        ("platform-addons", "1.0.0"),
+    ] {
+        record_file(
+            &dir.path().join(format!("releases/{name}_{version}.json")),
+            name,
+            version,
+            false,
+        );
+    }
+    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let applied = written(dir.path(), "kubectl.in");
+    for key in [
+        "aws-stack_1.0.0.json.gz:",
+        "aws-stack_1.1.0.json.gz:",
+        "platform-addons_1.0.0.json.gz:",
+    ] {
+        assert_eq!(applied.matches(key).count(), 1, "{key}");
+    }
+
+    record_file(
+        &dir.path().join("releases/payments.json"),
+        "payments",
+        "",
+        true,
+    );
+    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("is not a profile record"));
+
+    std::fs::remove_file(dir.path().join("releases/payments.json")).unwrap();
+    record_file(
+        &dir.path().join("releases/aws-stack_1.0.0-copy.json"),
+        "aws-stack",
+        "1.0.0",
+        false,
+    );
+    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("two records are for aws-stack_1.0.0.json.gz"));
+}

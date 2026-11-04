@@ -14,7 +14,7 @@ the allow-list of `internal/docs`, and it writes nothing to Palette. For the
 rules of the code, see [The Go of the observer](./code.md#the-go-of-the-observer).
 
 `once` prints the summary one time. `serve` keeps the answers and shows them on
-a loopback address: see [The API of the observer](./observer-api.md).
+a loopback address: see [The server of the observer](./observer-api.md).
 
 ## Run it once
 
@@ -64,12 +64,24 @@ move.
 
 ### A failed cycle
 
-A content cycle fails when each row of its `verify` has an `error`, or when the
-`snapshot` of the cluster fails. A versions cycle fails when `behind` fails, or
-when each pin has an `error`. A row with an `error` beside good rows is a
-cause in [Not checked](#not-checked), and not a failed cycle. A failed `compare`
-of a move does not fail the cycle: see [The newer
-versions](#the-newer-versions). A failed read of one part of a record is not a
+A content cycle fails in these cases:
+
+- The directory of the records cannot be read, or a record cannot be written to
+  the directory of the cycle.
+- The `verify` command fails, or each row of its answer has an `error`.
+- The `snapshot` of the cluster fails.
+- The cluster runs at least one record, and each side or `compare` fails.
+
+A versions cycle fails in these cases:
+
+- The directory of the records cannot be read, or a record cannot be written.
+- The `behind` command fails, or each pin of its answer has an `error`.
+
+In both cycles, a command fails when it exits with a code that is no answer, when
+it gives no document, or when the `schema` of its document is not the expected one.
+A row with an `error` beside good rows is a cause in [Not checked](#not-checked), and
+not a failed cycle. A failed `compare` of a move does not fail the cycle: see [The
+newer versions](#the-newer-versions). A failed read of one part of a record is not a
 failed cycle: see [A failed read](#a-failed-read).
 
 A failed cycle keeps the last good result. It adds 1 to `failedRuns` and keeps
@@ -113,7 +125,8 @@ One failed read of one part of one record is not a failed cycle. It is a
 
 ## The records
 
-`--records` holds one `<name>.json.gz` file for each profile, and `meta.json`.
+`--records` holds one `<name>_<version>.json.gz` file for each profile version, and
+`meta.json`.
 In a cluster, the volume is four Secrets that the pipeline writes with
 `observer-records.sh`: see [The records](./observer-deploy.md#the-records).
 
@@ -125,9 +138,10 @@ In a cluster, the volume is four Secrets that the pipeline writes with
 
 A file that is not `strata-snapshot/1`, or that is a record of a cluster, is a
 `read-error` row in [Not checked](#not-checked). It does not stop the others.
-The observer decodes a record only into `docs.Record`, so a variable in a
-record never enters the process. It writes the unzipped file to the directory
-of the cycle for `strata`, and it keeps no other copy.
+The observer decodes a record only into `docs.Record`. The bytes of a variable
+in a record can reach memory, but they reach no type of the observer. It writes
+the unzipped file to the directory of the cycle for `strata`, and it keeps no
+other copy.
 
 The cluster runs a profile at a version. The baseline of that profile is the
 record with the same name and version. A profile with no such record is a
@@ -156,7 +170,7 @@ gives it. The observer never lowers a drift.
   stays `drifted`, and the finding stays a finding. It has `whoUnread` true and
   an empty `who`. The record has no `read-error` row. The summary carries the flag, and
   never the text of the error. The log of the observer holds the status only.
-- When `published-changed` and `cluster-differs` hit one profile, and
+- When `published-changed` and `cluster-differs` name one profile, and
   `rootLive` equals `rootB` of the compare, the observer makes one finding. It
   sets `alsoOnCluster` to true.
 - `firstSeen` comes from the state. `lastSeen` is the end of the last good
@@ -175,10 +189,11 @@ The observer makes no finding. The profile stays `ok`, `clusterCopy.status` is
 ### A new minor version of strata
 
 A new version of `strata` can move a root with no change of content. A finding
-has `reBaselineNeeded` true when the minor version of `tool.version` of its
-record is lower than the minor version of the binary. The finding stays. The
-observer never writes a record. This is the one compare of versions in the
-observer. `behind` gives the order of the pack versions.
+has `reBaselineNeeded` true when `tool.version` of its record is lower than the
+version of the binary in the major number, or in the minor number with the same
+major number. The patch number plays no part. The finding stays. The observer
+never writes a record. This is the one compare of versions in the observer.
+`behind` gives the order of the pack versions.
 
 ## Not checked
 
@@ -266,11 +281,11 @@ read](#a-failed-read).
 
 The pack row joins the record with the other answers. `registry` is the name in
 the pin with the same `registryUid`, or the uid. `kind` is
-`registryProviderType`, or `type`. `scope` is `tenant` when `source.projectUid`
-is empty, and `project` otherwise. `upstream` is `hash.upstreamRaw`.
+`registryProviderType`, or `type`. `upstream` is `hash.upstreamRaw`.
 A pack row holds `fold`, the three counts of its changed values. It names no
 path, because a path can hold the name of a list item, and that name is a value
-of the cluster. Only the detail tier sends a path.
+of the cluster. Only the detail tier sends a path. The profile row holds `scope`:
+`tenant` when `source.projectUid` is empty, and `project` otherwise.
 
 The limits show what a check does not cover. They count the images that a tag
 names (an image with no `@sha256`), the packs of the type `helm`, and the

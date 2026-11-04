@@ -1,7 +1,7 @@
 # One change, start to end
 
 This page follows one team through one change, with the output of each command.
-Read [The everyday loop](./loop.md) first: it says when to reach for strata, how to
+Read [The everyday loop](./loop.md) first: it says when to use strata, how to
 start, and what a normal day holds.
 
 ## Each step at a glance
@@ -22,6 +22,7 @@ the page of each job.
 | A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
 | You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
 | A job writes a note about a value that strata does not know | The value, the route that gave it, and a link that opens an issue of strata. Strata sends nothing unless you choose the send. | a person at a terminal, on the machine of the job |
+| You want the answers all day, between two nights | A page shows when Palette holds other content than the records, and who made the change. It also shows whether the cluster took it, and which pins have newer versions. | the observer, in the cluster |
 
 The chart shows the steps of one change. An arrow goes from a step to the step
 that it leads to. An issue of the night leads to a pull request.
@@ -63,6 +64,7 @@ of a job and the page that describes it.
 | A change | the author, in a pull request | Does Palette accept the packs? What does this change do to the clusters? | `snapshot --from-candidate --validate`, then `pr-comment.sh`: `snapshot --from-candidate` and `compare` | [Review a change](./use-cases/review.md) |
 | The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
 | The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
+| The publish | the pipeline of the team | Does the cluster hold the records that the team approved? | `observer-records.sh --revision`, then `kubectl apply --server-side` | [The observer](./automation/observer.md#install) |
 | The move of a cluster | the pipeline of the team | Does the move repave the nodes? Does Palette accept the packs? | `compare cluster:<name> <version> --repave` and `--validate`, and `pr-comment.sh --repave` on the pull request of the move | [Ask Palette if the change repaves](./commands/compare/repave.md), [Ask Palette if it accepts the packs](./commands/compare/validate.md) |
 | A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
 | Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight`: the static tier on the pull request, with `pr-comment.sh --preflight` for its comment, the live tier before the build, and the watch during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |

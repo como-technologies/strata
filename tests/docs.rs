@@ -1392,9 +1392,9 @@ fn names_a_command(text: &str, names: &[String]) -> bool {
 }
 
 /// A newcomer reads this page first. It opens with the reason for strata. Then it answers three
-/// questions, in order: when to reach for strata, how to start, and what a day holds.
+/// questions, in order: when to use strata, how to start, and what a day holds.
 #[test]
-fn the_everyday_loop_gives_the_reason_then_when_to_reach_for_strata_how_to_start_and_a_day() {
+fn the_everyday_loop_gives_the_reason_then_when_to_use_strata_how_to_start_and_a_day() {
     let page = read(&docs().join("loop.md"));
     let top = section(&page, "# The everyday loop", Some("\n## "));
     assert!(
@@ -1406,7 +1406,7 @@ fn the_everyday_loop_gives_the_reason_then_when_to_reach_for_strata_how_to_start
     assert_eq!(
         headings,
         [
-            "## When to reach for strata",
+            "## When to use strata",
             "## Start from nothing",
             "## A day of work",
             "## See all of it"
@@ -1447,7 +1447,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
 
     let names = command_words();
     let rows = table_rows(part);
-    assert_eq!(rows.len(), 10, "the table of the day has ten steps");
+    assert_eq!(rows.len(), 11, "the table of the day has eleven steps");
     for row in rows {
         assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
         for cell in &row {
@@ -1519,7 +1519,7 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         .find(|l| l.starts_with('|'))
         .expect("the section has a table");
     assert_eq!(header, "| When | Who | The question | What runs | Page |");
-    assert_eq!(table_rows(part).len(), 12, "the table has twelve jobs");
+    assert_eq!(table_rows(part).len(), 13, "the table has thirteen jobs");
 
     let spans = code_spans(part);
     for command in [
@@ -2488,6 +2488,164 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         clusters.contains("A live run did this, and Palette deleted the Deployment of the layer."),
         "clusters.md lacks the result of the removal of a layer"
     );
+}
+
+/// The five pages of the observer, in the book: three for a reader and two for a maintainer.
+const OBSERVER_BOOK_PAGES: [&str; 5] = [
+    "automation/observer.md",
+    "use-cases/observer.md",
+    "reference/observer-api.md",
+    "development/observer.md",
+    "development/observer-api.md",
+];
+
+/// Each page of the observer has a title of its own, and the page and `SUMMARY.md` give it the same.
+/// Two pages had the title "The API of the observer". A link in the book names a page by its title.
+#[test]
+fn each_page_of_the_observer_has_its_own_title_and_the_summary_gives_the_same() {
+    let summary = read(&docs().join("SUMMARY.md"));
+    let mut titles = BTreeSet::new();
+    for page in OBSERVER_BOOK_PAGES {
+        let line = summary
+            .lines()
+            .find(|l| l.contains(&format!("(./{page})")))
+            .unwrap_or_else(|| panic!("SUMMARY.md lacks {page}"));
+        let listed = line
+            .split_once('[')
+            .and_then(|(_, rest)| rest.split_once(']'))
+            .map(|(title, _)| title)
+            .unwrap();
+        let heading = read(&docs().join(page));
+        let heading = heading.lines().next().unwrap().trim_start_matches("# ");
+        assert_eq!(listed, heading, "{page}");
+        assert!(
+            titles.insert(listed.to_string()),
+            "two pages are '{listed}'"
+        );
+    }
+}
+
+/// A reader of the observer runs it. The pages for that reader name no person and no plan of the
+/// project. The pages of the observer name no maintainer.
+#[test]
+fn the_pages_for_a_reader_name_no_person_and_no_plan_of_the_project() {
+    for dir in ["automation", "use-cases", "reference"] {
+        for file in walk(&docs().join(dir)) {
+            if file.extension().is_none_or(|e| e != "md") {
+                continue;
+            }
+            let text = read(&file);
+            for refused in ["brett", "Wave 15", "#637", "the lead"] {
+                assert!(
+                    !text.contains(refused),
+                    "{} names {refused:?}",
+                    file.display()
+                );
+            }
+        }
+    }
+    for page in &OBSERVER_PAGES {
+        let text = read(&docs().join(page));
+        assert!(
+            !text.to_lowercase().contains("maintainer"),
+            "{page} names a maintainer"
+        );
+    }
+}
+
+/// The review of slice 1 named statements that the code or a live run does not back. The
+/// pages no longer hold them, and they hold what the code and the runs show.
+#[test]
+fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() {
+    let mut text = String::new();
+    for page in OBSERVER_BOOK_PAGES {
+        text.push_str(&read(&docs().join(page)));
+        text.push('\n');
+    }
+    text.push_str(&read(&docs().join("loop.md")));
+    text.push_str(&read(&docs().join("internals/palette/clusters.md")));
+    text.push_str(&read(&docs().join("development/live-runs.md")));
+    text.push_str(&read(&docs().join("development/live-example.md")));
+    let text = one_line(&text);
+    for old in [
+        "A removal is clean",
+        "a few minutes old",
+        "as `strata behind` gives it",
+        "counts the values that Palette masks",
+        "never enter the process",
+        "never enters the process",
+        "gets `Connection refused`",
+        "ServiceUnavailable",
+        "Palette does not report such an edit",
+        "a person changed its copy on the cluster",
+        "still runs the content that the record holds",
+        "reads the cluster and each profile that it runs",
+        "This bends the rule",
+        "the reach of its user",
+        "hit one profile",
+        "with no field to spare",
+        "brings it back",
+        "comes off",
+        "the finding goes in the next",
+        "Making the user is for brett",
+        "replaces the figures on #637",
+        "It keeps no list of what it applied",
+        "Palette has no request for it",
+        "at each merge that changes a record",
+        "The code of Palette shows that **Project Viewer**",
+        "`<name>.json.gz` file for each profile",
+        "`scope` is `tenant` when `source.projectUid` is empty, and `project` otherwise. `upstream`",
+        "reach for strata",
+    ] {
+        assert!(!text.contains(old), "the book still says {old:?}");
+    }
+    for new in [
+        "Palette deletes the Deployment. The run checks nothing else.",
+        "Delete the namespace with `kubectl delete namespace strata-observer`, so that the key goes.",
+        "the copy that Palette holds for the cluster",
+        "the next content cycle clears the finding",
+        "`<name>_<version>.json.gz` file for each profile version",
+        "The profile row holds `scope`",
+        "Palette applies the objects that the content names. An object that the content no longer names stays.",
+        "The check `no-repave` of [observer.sh](../development/live-runs.md#observersh) shows it.",
+        "The example shows only the lines of the cycles",
+        "The bytes can reach memory, but they reach no type of the observer. So no answer and no log carries them.",
+        "The cluster runs at least one record, and each side or `compare` fails.",
+    ] {
+        assert!(text.contains(new), "the book lacks {new:?}");
+    }
+}
+
+/// The deploy steps say where the records script comes from and name three settings. The page of
+/// the live runs and the page of the facts of Palette agree on the cases that no run shows.
+#[test]
+fn the_install_steps_say_where_the_script_comes_from_and_the_two_pages_of_palette_agree() {
+    let steps = one_line(&read(&docs().join("automation/observer.md")));
+    for needle in [
+        "Get `deploy/observer/` and `scripts/ci/observer-records.sh` from the repository of strata, at the tag of your release.",
+        "a ConfigMap with three settings",
+        "bind it to a group of your team",
+    ] {
+        assert!(
+            steps.to_lowercase().contains(&needle.to_lowercase()),
+            "the install lacks {needle:?}"
+        );
+    }
+    assert!(!steps.contains("two settings"));
+
+    let clusters = one_line(&read(&docs().join("internals/palette/clusters.md")));
+    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    assert!(
+        clusters.contains("No run shows what Palette does with a namespace that the layer owns.")
+    );
+    assert!(
+        clusters.contains(
+            "| The same, for an object that an earlier edit dropped | No run shows this."
+        )
+    );
+    assert!(limits.contains(
+        "No run shows what Palette does with an object that an earlier edit dropped from the manifest, or with a namespace that the layer owns."
+    ));
 }
 
 /// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of

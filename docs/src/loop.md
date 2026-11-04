@@ -5,11 +5,12 @@ a version, its content can still change, and its name and number stay the same.
 Strata keeps a copy of the approved content in your repository, and it tells you
 when Palette holds something else.
 
-Strata runs in your pipeline and at your terminal. It reads Palette and writes
-files. It publishes nothing and deletes nothing, so each write stays in your
-pipeline.
+Strata runs in your pipeline and at your terminal. [The observer](./automation/observer.md)
+runs it in one cluster, on a timer, and shows the answers on a page. Strata reads
+Palette and writes files. It publishes nothing and deletes nothing, so each write
+stays in your pipeline.
 
-## When to reach for strata
+## When to use strata
 
 Start from the question that you have.
 
@@ -21,6 +22,7 @@ Start from the question that you have.
 | Does Palette still hold what we approved? | `strata verify`. |
 | Does this cluster run the release that we approved? | `strata compare`. |
 | Do `dev` and `prod` hold one release? | `strata same-release`. |
+| Do I want these answers all day, on a page in the cluster, with the name of the person who made a change? | [The observer](./automation/observer.md). It runs `verify`, `snapshot`, `compare`, and `behind` on a timer. |
 | Can Palette build this cluster? | `strata preflight`. It checks the body of the create and asks Palette, before the build starts. |
 
 [Where each part belongs](./boundary.md) gives each feature of Palette, and what
@@ -128,6 +130,7 @@ Add each row when you need it. Each job is in the same file.
 | You delete old versions. | the job `retire-gate` | [Retire a version](./use-cases/retire.md) |
 | You want an issue when a pack that you pin has a newer version. | the job `upstream` | [Upstream issues](./automation/upstream-issues.md) |
 | A build fails late, after the work in the cloud starts. | the job `preflight` | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
+| You want the answers all day on a page, between two night jobs. | the observer, and `observer-records.sh` in the publish step | [The observer](./automation/observer.md) |
 
 ## A day of work
 
@@ -192,14 +195,20 @@ asks if that is what the reviewer read:
 `IDENTICAL` means that the content is the same, by its digest, and not by a tag or
 a name. A difference fails the job.
 
-When your team runs [the observer](./automation/observer.md), this step also writes the
-records into the cluster. The observer then compares Palette with the records that the
-step wrote:
+When your team runs [the observer](./automation/observer.md), the publish step also
+writes the records into the cluster. Name the records of the project of the cluster, one for each
+version. Here the observer watches the cluster `payments` of `dev`, so these are the
+records `releases/*/dev.json`. The observer then compares Palette with the records
+that the step wrote:
 
 ```bash
-scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
+scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*/dev.json \
   | kubectl apply --server-side -f -
 ```
+
+The script stops when two records are for one version. So the glob must not match
+the records of `prod`, which hold the same versions. It stops for a record of a
+cluster too, such as `fleet/prod/payments.json`.
 
 ### You move a cluster
 

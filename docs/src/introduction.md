@@ -19,7 +19,7 @@ the body of the create and reports what stops the build, in seconds, with the
 command that shows the same thing by hand. See
 [Can Palette build this cluster?](./use-cases/stop-a-build.md).
 
-- [The everyday loop](./loop.md) says when to reach for strata, how to start from
+- [The everyday loop](./loop.md) says when to use strata, how to start from
   nothing, and what a normal day holds.
 - [One change, start to end](./walkthrough.md) follows one change from the pull
   request to the retire, with the output of each command.

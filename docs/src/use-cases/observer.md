@@ -52,8 +52,9 @@ Exit `1`, as with `strata verify`. The finding has the kind `published-changed`.
 It names the pack `csi/csi-aws-ebs`, the impact, and who made the write. The
 `firstSeen` time is the end of the first cycle that found it.
 
-`clusterCopy` of the profile is `same`: `payments` still runs the content that the
-record holds. The edit reaches the cluster only when somebody accepts the update.
+`clusterCopy` of the profile is `same`: the copy that Palette holds for `payments` has
+the content of the record. The edit reaches that copy only when somebody accepts the
+update.
 [Read the two verdicts as a pair](./edited-in-place.md#read-the-two-verdicts-as-a-pair)
 gives the choices for each case.
 
@@ -68,9 +69,9 @@ See [The registry has newer versions](./behind.md).
 
 ## 3. A cluster differs from its release
 
-The cluster `ledger` runs `aws-stack@1.1.0`, and a person changed its copy on the
-cluster. The observer for `ledger` checks each record, so it reports the edit of
-`aws-stack@1.0.0` too:
+The cluster `ledger` runs `aws-stack@1.1.0`, and a person changed the copy that Palette
+holds for the cluster. The observer for `ledger` checks each record, so it reports the
+edit of `aws-stack@1.0.0` too:
 
 ```text
 {{#include ../output/observer-ledger.txt}}
@@ -98,8 +99,8 @@ the routes that carry each of them.
   version with the change through review, and move the clusters to it. See
   [What to do](./edited-in-place.md#what-to-do).
 - Read `who` first. It names the person and the time of the write.
-- When the version goes back to its record, the finding goes in the next content
-  cycle. A new record, written after a review, ends the finding too.
+- When the version goes back to its record, the next content cycle clears the
+  finding. A new record, written after a review, ends the finding too.
 - A cluster that differs needs its own decision: see
   [A cluster does not run its release](./cluster-release.md).
 

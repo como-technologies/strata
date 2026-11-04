@@ -205,9 +205,8 @@ update: `cluster:<uid>@pending` reads it. See
 ## An object that an edit drops from a manifest
 
 A manifest layer holds manifests, and a manifest holds objects. At each reconcile,
-Palette applies each object that the content of the layer names. It keeps no list
-of what it applied, and it puts no label or owner on the objects. So it never
-compares the old content with the new content.
+Palette applies the objects that the content names. An object that the content no
+longer names stays.
 
 When an edit in place drops an object from a manifest, and the cluster takes the
 update, the object stays on the cluster. Palette does not delete it. A live run
@@ -221,23 +220,23 @@ Palette deleted the Deployment of the layer. See
 | Step | What Palette does |
 | --- | --- |
 | An edit drops an object, and the cluster takes the update | The object stays. Palette applies the objects that the content still names. |
-| A person deletes an object that the content still names | Palette makes it again at the next reconcile. |
-| A person removes the whole layer from the cluster | Palette deletes the objects that the content names at that time, and the namespaces that the layer owns. A live run shows it for a Deployment. |
-| The same, for an object that an earlier edit dropped | The object stays, because the content does not name it. A namespace that Palette deletes takes the objects in it. |
+| A person deletes an object that the content still names | No run shows this. The code of Palette makes the object again at the next reconcile. |
+| A person removes the whole layer from the cluster | Palette deletes the objects that the content names at that time. A live run shows it for a Deployment. No run shows what Palette does with a namespace that the layer owns. |
+| The same, for an object that an earlier edit dropped | No run shows this. The content at that time does not name the object. |
 
 To remove an object that the content dropped, delete it on the cluster with
-`kubectl`. Palette has no request for it. Edit the content first. A delete before
-the edit is undone at the next reconcile. The check `undo-delete` of
-`image-digest.sh` does this, so the run leaves the cluster clean.
+`kubectl`. Edit the content first, because Palette applies each object that the
+content names. The check `undo-delete` of `image-digest.sh` does this, so the
+run leaves the cluster clean.
 
 ## The role that a key needs
 
 A key has the role of its user. Each request of strata carries the uid of the
 project. So a role in that project is enough for the requests of
 [the observer](../../automation/observer.md), and it needs no tenant role. The
-code of Palette gives these permissions. No run has used a key with a smaller
-role yet: [observer-role.sh](../../development/live-runs.md#observer-rolesh)
-tests it.
+table gives the permission of each request. No run has used a key with a smaller
+role yet, and [What no run covers](limits.md) lists it.
+[observer-role.sh](../../development/live-runs.md#observer-rolesh) tests it.
 
 | Requests | Permission | Built-in roles that hold it |
 | --- | --- | --- |

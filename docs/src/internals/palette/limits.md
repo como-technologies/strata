@@ -43,6 +43,12 @@ These are open:
   Palette does with an object that an earlier edit dropped from the manifest, or
   with a namespace that the layer owns. A run shows only a Deployment that the
   content names. See [An object that an edit drops from a manifest](clusters.md#an-object-that-an-edit-drops-from-a-manifest).
+- A change that a person makes with `kubectl` to an object that a manifest layer
+  applied, and a delete of such an object. No run shows what Palette does. See
+  [What the source of Palette says](#what-the-source-of-palette-says).
+- A key with a role smaller than the role of the example. No run has used a key
+  with Project Viewer, Cluster Viewer, or a custom role. See
+  [The role that a key needs](clusters.md#the-role-that-a-key-needs).
 - A change of the endpoint or the values of a cluster group: the run of
   [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) changes
   the CPU limit alone. See
@@ -152,6 +158,13 @@ examples/live/api.sh app-version            # HTTP 500
 The code of Palette gives these rules. No live run checks them, so strata
 makes no claim that depends on them.
 
+- **An object that a person changes in a workload cluster.** Palette applies each
+  object of a manifest layer again at each reconcile. So it creates an object again
+  after a delete. It can also restore the value that the manifest gives to a field.
+  Its API has no route and no field that compares the objects of the cluster with the
+  profile. The code of the apply reports no difference. The period of the reconcile
+  belongs to the deployment of Palette. So the observer does not see such an edit, and
+  no run shows that Palette reports it.
 - **The install order of the packs of two add-on profiles.** Palette sorts
   every add-on pack of a cluster by its install priority, over all its add-on
   profiles. The order of the profiles plays no part. Packs of one priority
