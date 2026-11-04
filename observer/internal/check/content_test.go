@@ -37,6 +37,23 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: cluster(t, "payments", "aws-stack@1.1.0")}
 }
 
+// addPlatformAddons adds a second record that the cluster runs, platform-addons@1.0.0, with a good row.
+// A row that fails for one of the two records is a cause and not a failed cycle, because the other row is good.
+func addPlatformAddons(t *testing.T, r *rig, w *world) {
+	t.Helper()
+	r.record("platform-addons", "1.0.0", "addon/cert-manager")
+	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
+	w.cluster = cluster(t, "payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+}
+
+// twoRecords makes a world with the two records aws-stack@1.1.0 and platform-addons@1.0.0.
+func twoRecords(t *testing.T) (*rig, *world) {
+	t.Helper()
+	r, w := oneRecord(t, unchanged())
+	addPlatformAddons(t, r, w)
+	return r, w
+}
+
 func changedPack(key string) docs.Pack {
 	return docs.Pack{Key: key, Status: docs.PackChanged, Authored: true, Values: docs.Values{Diff: []docs.Leaf{{Op: "changed", Path: "charts.a.b", Old: sentinel, New: "y"}}}}
 }
@@ -148,11 +165,8 @@ func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 }
 
 func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
-	r, w := oneRecord(t, unchanged())
-	r.record("platform-addons", "1.0.0", "addon/cert-manager")
-	bad := docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
-	w.rows = []docs.VerifyRow{unchanged(), bad}
-	w.cluster = cluster(t, "payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	r, w := twoRecords(t)
+	w.rows[1] = docs.VerifyRow{Status: docs.VerifyError, Error: &docs.Error{Kind: docs.KindAPI, Status: 404}}
 	s, _ := r.observer(w).Once(context.Background())
 	if s.Content.FailedRuns != 0 || len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "platform-addons@1.0.0" {
 		t.Errorf("content %+v, notChecked %+v", s.Content, s.NotChecked)
@@ -309,9 +323,7 @@ func TestACycleFailsWhenEverySideFails(t *testing.T) {
 		t.Fatal("no error")
 	}
 	// One side that fails beside good sides is a profile that the page says is not read.
-	r.record("platform-addons", "1.0.0", "addon/cert-manager")
-	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = cluster(t, "payments", "aws-stack@1.1.0", "platform-addons@1.0.0")
+	addPlatformAddons(t, r, w)
 	w.sideErr = nil
 	fails := &failOnce{world: w, name: "aws-stack"}
 	o = r.observer(fails)

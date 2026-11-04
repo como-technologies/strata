@@ -13,6 +13,13 @@ const (
 	ImageIDChanged   Kind = "image-id-changed"
 )
 
+// The kinds that each part of a record gives. `verify` gives the published kinds, and the compare with
+// the cluster side gives the cluster kinds. A kind is in one list only.
+var (
+	publishedKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone}
+	clusterKinds   = []Kind{ClusterDiffers, ImageIDChanged}
+)
+
 // Cause is the reason that a check did not cover a profile or a pack.
 type Cause string
 
