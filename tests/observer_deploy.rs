@@ -8,8 +8,8 @@ use std::process::Command;
 use serde_yaml::Value;
 
 use crate::common::{
-    CommandExt, fake_bin, path_with, recipe, repo_file, script, steps, text, workflow,
-    workflow_text,
+    CommandExt, block_with, fake_bin, page_section, path_with, recipe, repo_file, script, steps,
+    text, workflow, workflow_text,
 };
 
 /// A file of `deploy/observer/`, parsed as one YAML document.
@@ -559,49 +559,9 @@ fn the_recipe_observer_image_builds_the_static_binary_and_the_image_of_the_docke
 
 // ---- the steps of the page "The observer" ------------------------------------------------------------
 
-/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
-/// opening fence, so the block of a list item reads as it does in a terminal.
-fn code_blocks(text: &str, lang: &str) -> Vec<String> {
-    let opening = format!("```{lang}");
-    let mut blocks = Vec::new();
-    let mut open: Option<(usize, Vec<&str>)> = None;
-    for line in text.lines() {
-        let body = line.trim_start();
-        let indent = line.len() - body.len();
-        match open.take() {
-            None => {
-                if body == opening {
-                    open = Some((indent, Vec::new()));
-                }
-            }
-            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
-            Some((strip, mut lines)) => {
-                lines.push(line.get(strip..).unwrap_or(""));
-                open = Some((strip, lines));
-            }
-        }
-    }
-    blocks
-}
-
 /// The section "Install" of the page of the service, up to the next section.
 fn install_steps() -> String {
-    let page = repo_file("docs/src/automation/observer.md");
-    let from = page
-        .find("\n## Install\n")
-        .expect("the page has the section Install");
-    let to = page[from + 1..]
-        .find("\n## ")
-        .expect("a section follows Install");
-    page[from..from + 1 + to].to_string()
-}
-
-/// The first block of `lang` in `text` that holds `needle`.
-fn block_with(text: &str, lang: &str, needle: &str) -> String {
-    code_blocks(text, lang)
-        .into_iter()
-        .find(|block| block.contains(needle))
-        .unwrap_or_else(|| panic!("no {lang} block holds {needle:?}"))
+    page_section("docs/src/automation/observer.md", "## Install")
 }
 
 /// The word of `block` after the word `before`.
@@ -615,9 +575,8 @@ fn word_after<'a>(block: &'a str, before: &str) -> &'a str {
 }
 
 /// Run the shell text `block` in `dir`, as a reader runs the commands of a page. The stand-in
-/// `kubectl` writes its arguments to `kubectl.args` and its standard input to `kubectl.in`. The
-/// records script is in `scripts/ci/`, as in the repository of a team.
-fn run_block(dir: &std::path::Path, block: &str, env: &[(&str, &str)]) -> std::process::Output {
+/// `kubectl` writes its arguments to `kubectl.args` and its standard input to `kubectl.in`.
+fn run_block(dir: &Path, block: &str, env: &[(&str, &str)]) -> std::process::Output {
     let bin = fake_bin(
         dir,
         &[(
@@ -625,12 +584,6 @@ fn run_block(dir: &std::path::Path, block: &str, env: &[(&str, &str)]) -> std::p
             "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
         )],
     );
-    let scripts = dir.join("scripts/ci");
-    std::fs::create_dir_all(&scripts).unwrap();
-    let link = scripts.join("observer-records.sh");
-    if !link.exists() {
-        std::os::unix::fs::symlink(script("ci/observer-records.sh"), link).unwrap();
-    }
     Command::new("bash")
         .arg("-c")
         .arg(format!("set -euo pipefail\n{block}"))
@@ -642,7 +595,7 @@ fn run_block(dir: &std::path::Path, block: &str, env: &[(&str, &str)]) -> std::p
 }
 
 /// The file `name` that a stand-in command wrote in `dir`.
-fn written(dir: &std::path::Path, name: &str) -> String {
+fn written(dir: &Path, name: &str) -> String {
     std::fs::read_to_string(dir.join(name)).unwrap_or_else(|e| panic!("{name}: {e}"))
 }
 
@@ -748,126 +701,4 @@ fn the_live_run_makes_the_pull_secret_the_patch_and_the_binding_of_the_install_s
     ] {
         assert!(live.contains(needle), "observer.sh lacks {needle:?}");
     }
-}
-
-/// A record as `strata snapshot` writes it. The records script reads the schema, the name, the
-/// version, and whether the source is a cluster.
-fn record_file(path: &std::path::Path, name: &str, version: &str, cluster: bool) {
-    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    let mut source = serde_json::json!({"name": name, "version": version});
-    if cluster {
-        source["cluster"] = serde_json::json!({"profiles": []});
-    }
-    let doc = serde_json::json!({"schema": "strata-snapshot/1", "source": source});
-    std::fs::write(path, doc.to_string()).unwrap();
-}
-
-/// Run the records command of `block` in `dir`, with the glob `from` in place of the glob `to`.
-fn records_run(dir: &std::path::Path, block: &str, from: &str, to: &str) -> std::process::Output {
-    assert!(block.contains(from), "the page has no {from:?}: {block}");
-    run_block(dir, &block.replace(from, to), &[("GIT_SHA", "abc123")])
-}
-
-/// The records command of "The everyday loop" names the records of `dev`, one for each version. The
-/// layout is the one of "One change, start to end": a record of each project for each version, and a
-/// record of a cluster. The script runs on that layout. The globs that the page replaced fail on it.
-#[test]
-fn the_records_command_of_the_loop_page_accepts_the_layout_that_the_page_shows() {
-    let block = block_with(
-        &repo_file("docs/src/loop.md"),
-        "bash",
-        "observer-records.sh",
-    );
-    let dir = tempfile::tempdir().unwrap();
-    for version in ["1.0.0", "1.1.0"] {
-        for project in ["dev", "prod"] {
-            let file = dir
-                .path()
-                .join(format!("releases/{version}/{project}.json"));
-            record_file(&file, "aws-stack", version, false);
-        }
-    }
-    record_file(
-        &dir.path().join("fleet/prod/payments.json"),
-        "payments",
-        "",
-        true,
-    );
-
-    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
-    assert!(o.status.success(), "{}", text(&o.stderr));
-    assert_eq!(
-        written(dir.path(), "kubectl.args").trim(),
-        "apply --server-side -f -"
-    );
-    let applied = written(dir.path(), "kubectl.in");
-    for key in ["aws-stack_1.0.0.json.gz:", "aws-stack_1.1.0.json.gz:"] {
-        assert_eq!(applied.matches(key).count(), 1, "{key}");
-    }
-
-    for (glob, message) in [
-        ("releases/*/*.json", "two records are for"),
-        ("releases/*.json", "is not a profile record"),
-        ("fleet/*/*.json", "is not a profile record"),
-    ] {
-        let o = records_run(dir.path(), &block, "releases/*/dev.json", glob);
-        assert_eq!(o.status.code(), Some(2), "{glob}: {}", text(&o.stderr));
-        assert!(
-            text(&o.stderr).contains(message),
-            "{glob}: {}",
-            text(&o.stderr)
-        );
-    }
-}
-
-/// The records command of the service page takes the folder `releases/` of one record for each
-/// profile version that the cluster runs. It refuses a record of a cluster and a second record of a
-/// version.
-#[test]
-fn the_records_command_of_the_service_page_accepts_one_record_for_each_profile_version() {
-    let block = block_with(&install_steps(), "bash", "observer-records.sh");
-    let dir = tempfile::tempdir().unwrap();
-    for (name, version) in [
-        ("aws-stack", "1.0.0"),
-        ("aws-stack", "1.1.0"),
-        ("platform-addons", "1.0.0"),
-    ] {
-        record_file(
-            &dir.path().join(format!("releases/{name}_{version}.json")),
-            name,
-            version,
-            false,
-        );
-    }
-    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
-    assert!(o.status.success(), "{}", text(&o.stderr));
-    let applied = written(dir.path(), "kubectl.in");
-    for key in [
-        "aws-stack_1.0.0.json.gz:",
-        "aws-stack_1.1.0.json.gz:",
-        "platform-addons_1.0.0.json.gz:",
-    ] {
-        assert_eq!(applied.matches(key).count(), 1, "{key}");
-    }
-
-    record_file(
-        &dir.path().join("releases/payments.json"),
-        "payments",
-        "",
-        true,
-    );
-    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
-    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
-    assert!(text(&o.stderr).contains("is not a profile record"));
-
-    std::fs::remove_file(dir.path().join("releases/payments.json")).unwrap();
-    record_file(
-        &dir.path().join("releases/aws-stack_1.0.0-copy.json"),
-        "aws-stack",
-        "1.0.0",
-        false,
-    );
-    let o = run_block(dir.path(), &block, &[("GIT_SHA", "abc123")]);
-    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
-    assert!(text(&o.stderr).contains("two records are for aws-stack_1.0.0.json.gz"));
 }

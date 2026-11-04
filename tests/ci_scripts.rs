@@ -5061,18 +5061,16 @@ impl ObserverRecords {
             .dir
             .path()
             .join(format!("{}-{version}.json", name.replace('/', "-")));
-        let doc = serde_json::json!({
-            "schema": "strata-snapshot/1",
-            "source": {"name": name, "version": version},
-            "padding": noise(padding, padding as u64 + version.len() as u64),
-        });
+        let mut doc = profile_doc(name, version);
+        doc["padding"] = noise(padding, padding as u64 + version.len() as u64).into();
         std::fs::write(&file, doc.to_string()).unwrap();
         file
     }
 
-    /// A file with the document `doc`.
+    /// A file with the document `doc`. The folders of `name` are made.
     fn file(&self, name: &str, doc: &serde_json::Value) -> PathBuf {
         let file = self.dir.path().join(name);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, doc.to_string()).unwrap();
         file
     }
@@ -5096,9 +5094,51 @@ impl ObserverRecords {
         c.output_locked().unwrap()
     }
 
+    /// The shell text `command` in the directory of the run, as a reader runs the command of a
+    /// page. The script is in `scripts/ci/`, as in the repository of a team. A stand-in `kubectl`
+    /// writes its arguments to `kubectl.args` and its standard input to `kubectl.in`.
+    fn run_shell(&self, command: &str, envs: &[(&str, &str)]) -> Output {
+        let d = self.dir.path();
+        std::fs::create_dir_all(d.join("scripts/ci")).unwrap();
+        let link = d.join("scripts/ci/observer-records.sh");
+        if !link.exists() {
+            std::os::unix::fs::symlink(script("ci/observer-records.sh"), link).unwrap();
+        }
+        let bin = fake_bin(
+            d,
+            &[(
+                "kubectl",
+                "#!/usr/bin/env bash\necho \"$*\" >> kubectl.args\ncat > kubectl.in\n",
+            )],
+        );
+        let mut c = Command::new("bash");
+        c.arg("-c")
+            .arg(format!("set -euo pipefail\n{command}"))
+            .current_dir(d)
+            .env("PATH", path_with(&bin));
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        c.output_locked().unwrap()
+    }
+
+    /// The text that the stand-in `kubectl` got on standard input in the last run of a shell text.
+    fn applied(&self) -> String {
+        std::fs::read_to_string(self.dir.path().join("kubectl.in")).unwrap()
+    }
+
     fn strata_calls(&self) -> Vec<String> {
         lines_of(&self.dir.path().join("strata.log"))
     }
+}
+
+/// A record of a profile version, as `strata snapshot` writes it. The script reads the schema, the
+/// name, the version, and whether the source is a cluster.
+fn profile_doc(name: &str, version: &str) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "strata-snapshot/1",
+        "source": {"name": name, "version": version},
+    })
 }
 
 /// `len` characters of a fixed pseudo-random text of letters and digits.
@@ -5431,6 +5471,90 @@ fn observer_records_sh_refuses_first_seen_with_a_record_file() {
     let o = job.run(&["--first-seen", "c-1", record.to_str().unwrap()], &[]);
     assert_refused(&o, "--first-seen takes no record file");
     assert!(job.strata_calls().is_empty(), "strata did not run");
+}
+
+/// "The everyday loop" tells the pipeline to write the records of the project of the cluster, one
+/// for each version. The layout is the one of "One change, start to end". It holds a record of `dev`
+/// and of `prod` for each version, and a record of a cluster. The command of the page runs on it.
+/// The globs that the page replaced fail on it.
+#[test]
+fn observer_records_sh_accepts_the_records_that_the_loop_page_names_on_the_layout_of_the_walkthrough()
+ {
+    let job = ObserverRecords::new();
+    for version in ["1.0.0", "1.1.0"] {
+        for project in ["dev", "prod"] {
+            let file = format!("releases/{version}/{project}.json");
+            job.file(&file, &profile_doc("aws-stack", version));
+        }
+    }
+    let mut cluster = profile_doc("payments", "1.0.0");
+    cluster["source"]["cluster"] = serde_json::json!({"uid": "c-1"});
+    job.file("fleet/prod/payments.json", &cluster);
+
+    let command = block_with(
+        &repo_file("docs/src/loop.md"),
+        "bash",
+        "observer-records.sh",
+    );
+    let envs = [("GIT_SHA", "abc123")];
+    let o = job.run_shell(&command, &envs);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let applied = job.applied();
+    for key in ["aws-stack_1.0.0.json.gz:", "aws-stack_1.1.0.json.gz:"] {
+        assert_eq!(applied.matches(key).count(), 1, "{key}");
+    }
+
+    for (glob, message) in [
+        (
+            "releases/*/*.json",
+            "two records are for aws-stack_1.0.0.json.gz",
+        ),
+        ("releases/*.json", "releases/*.json is not a profile record"),
+        ("fleet/*/*.json", "payments.json is not a profile record"),
+    ] {
+        let o = job.run_shell(&command.replace("releases/*/dev.json", glob), &envs);
+        assert_refused(&o, message);
+    }
+}
+
+/// The install steps of the service page name the folder `releases/`, with one record for each
+/// profile version. The command of the page runs on that folder. A second record of a version and a
+/// record of a cluster stop it.
+#[test]
+fn observer_records_sh_accepts_the_folder_of_records_that_the_install_steps_name() {
+    let job = ObserverRecords::new();
+    for (name, version) in [
+        ("aws-stack", "1.0.0"),
+        ("aws-stack", "1.1.0"),
+        ("platform-addons", "1.0.0"),
+    ] {
+        let file = format!("releases/{name}_{version}.json");
+        job.file(&file, &profile_doc(name, version));
+    }
+    let steps = page_section("docs/src/automation/observer.md", "## Install");
+    let command = block_with(&steps, "bash", "observer-records.sh");
+    let envs = [("GIT_SHA", "abc123")];
+    let o = job.run_shell(&command, &envs);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let applied = job.applied();
+    for key in [
+        "aws-stack_1.0.0.json.gz:",
+        "aws-stack_1.1.0.json.gz:",
+        "platform-addons_1.0.0.json.gz:",
+    ] {
+        assert_eq!(applied.matches(key).count(), 1, "{key}");
+    }
+
+    let copy = job.file("releases/copy.json", &profile_doc("aws-stack", "1.0.0"));
+    let o = job.run_shell(&command, &envs);
+    assert_refused(&o, "two records are for aws-stack_1.0.0.json.gz");
+    std::fs::remove_file(copy).unwrap();
+
+    let mut cluster = profile_doc("payments", "1.0.0");
+    cluster["source"]["cluster"] = serde_json::json!({"uid": "c-1"});
+    job.file("releases/payments.json", &cluster);
+    let o = job.run_shell(&command, &envs);
+    assert_refused(&o, "payments.json is not a profile record");
 }
 
 #[test]
