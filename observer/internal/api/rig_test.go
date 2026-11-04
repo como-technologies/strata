@@ -2,10 +2,9 @@ package api
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +19,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // sentinelValue stands for a changed value. It is in each Leaf.Old, each Leaf.New, and each change of
@@ -75,12 +75,10 @@ type fakeStrata struct {
 	failBehind bool
 }
 
-func (f *fakeStrata) read(name string) []byte {
+// answer prints a fixture and exits with the code exit.
+func (f *fakeStrata) answer(exit int, name string) (runner.Result, error) {
 	raw, err := os.ReadFile(filepath.Join(f.dir, name))
-	if err != nil {
-		panic(err)
-	}
-	return raw
+	return runner.Result{Exit: exit, Stdout: raw}, err
 }
 
 func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.Result, error) {
@@ -88,41 +86,39 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 	defer f.mu.Unlock()
 	switch args[0] {
 	case runner.CmdVerify:
-		return runner.Result{Exit: 1, Stdout: f.read("verify.json")}, nil
+		return f.answer(1, "verify.json")
 	case runner.CmdSnapshot:
-		out := args[indexOf(args, "-o")+1]
-		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), f.read("cluster.json"), 0o600)
+		out, err := testkit.OutFile(args)
+		if err != nil {
+			return runner.Result{}, err
+		}
+		res, err := f.answer(0, "cluster.json")
+		if err != nil {
+			return runner.Result{}, err
+		}
+		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), res.Stdout, 0o600)
 	case runner.CmdCompare:
 		if !strings.HasPrefix(args[1], "pack:") {
-			return runner.Result{Exit: 1, Stdout: f.read("compare-cluster.json")}, nil
+			return f.answer(1, "compare-cluster.json")
 		}
 		f.moves++
 		if f.failMoves {
 			return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
 		}
-		return runner.Result{Exit: 1, Stdout: f.read("move.json")}, nil
+		return f.answer(1, "move.json")
 	case runner.CmdBehind:
 		if f.failBehind {
 			return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
 		}
-		return runner.Result{Exit: 1, Stdout: f.read("behind.json")}, nil
+		return f.answer(1, "behind.json")
 	}
-	panic("the fake does not know " + args[0])
+	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
 }
 
 func (f *fakeStrata) moveCompares() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.moves
-}
-
-func indexOf(args []string, want string) int {
-	for i, a := range args {
-		if a == want {
-			return i
-		}
-	}
-	panic("no " + want)
 }
 
 // rig holds the directories of one test. A test makes more than one observer on them, to show a restart.
@@ -148,17 +144,7 @@ func newRig(t *testing.T) *rig {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var zipped bytes.Buffer
-	zw := gzip.NewWriter(&zipped)
-	if _, err := zw.Write(record); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(r.records, "aws-stack@1.1.0.json.gz"), zipped.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteGzip(t, r.records, "aws-stack@1.1.0.json.gz", string(record))
 	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(`{"baseline":"approved","revision":"4e1c7a2"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -216,9 +202,4 @@ type stub struct{ sum model.Summary }
 func (s stub) Summary() model.Summary { return s.sum }
 func (s stub) PackDiff(context.Context, string, string, model.Side) (docs.Pack, bool, error) {
 	return docs.Pack{}, false, nil
-}
-
-// nil2 gives a logger that writes nowhere.
-func nil2() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }

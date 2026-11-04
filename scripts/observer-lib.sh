@@ -1,5 +1,6 @@
 # The functions that the scripts of the observer share. A script sources this file, after it sets:
 #   root  the root of the repository
+#   strata  the strata binary
 #   work  a directory that the script removes at its end
 #   pg    empty; start sets it to the process group of the stand-in, and stop empties it
 #   records_revision  the revision that meta.json of records_dir names
@@ -38,4 +39,12 @@ records_dir() {
   mkdir -p "$dir"
   for file in "$@"; do gzip -c "$file" >"$dir/$(basename "$file" .json).json.gz"; done
   echo "{\"baseline\":\"approved\",\"revision\":\"$records_revision\"}" >"$dir/meta.json"
+}
+
+# cluster_uid NAME gives the uid of the cluster NAME in the tenant of the stand-in that runs now. It
+# gives the first cluster with that name, and an empty line when there is none.
+cluster_uid() {
+  local uids
+  uids=$("$strata" list | sed -n "s/.*cluster:\\([0-9a-f]\\{24\\}\\) *$1 .*/\\1/p")
+  echo "${uids%%$'\n'*}"
 }

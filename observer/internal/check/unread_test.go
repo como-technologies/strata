@@ -13,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // notRead is the row of a record that Palette refused to answer for, such as with a 429.
@@ -275,7 +276,7 @@ func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
 		names = append(names, model.Subject(p.Name, p.Version))
 	}
 	r := newRig(t)
-	w := &world{cluster: cluster(t, "quarry-1", names...)}
+	w := &world{cluster: testkit.Cluster("quarry-1", names...)}
 	s, err := r.observer(w).Once(context.Background())
 	if err != nil {
 		t.Fatal(err)

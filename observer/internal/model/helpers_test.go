@@ -1,12 +1,12 @@
 package model
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
@@ -60,33 +60,15 @@ func notOnCluster(r Record) Record {
 	return r
 }
 
-// cluster makes a cluster read that runs the given profiles, as name@version.
-func cluster(t *testing.T, name string, profiles ...[2]string) docs.ClusterRead {
-	t.Helper()
-	list := []map[string]string{}
-	for _, p := range profiles {
-		list = append(list, map[string]string{"name": p[0], "version": p[1], "type": "cluster"})
-	}
-	raw, err := json.Marshal(map[string]any{"source": map[string]any{"cluster": map[string]any{"uid": "c1", "name": name, "profiles": list, "updatesPending": true}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var c docs.ClusterRead
-	if err := json.Unmarshal(raw, &c); err != nil {
-		t.Fatal(err)
-	}
-	return c
-}
-
 func content(t *testing.T, records ...Record) Content {
 	t.Helper()
-	var profiles [][2]string
+	var profiles []string
 	for _, r := range records {
 		if r.Cluster.Runs {
-			profiles = append(profiles, [2]string{r.Doc.Source.Name, r.Doc.Source.Version})
+			profiles = append(profiles, r.subject())
 		}
 	}
-	return Content{At: t0, Strata: "0.29.0", Cluster: cluster(t, "payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: "4e1c7a2"}, Records: records}
+	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster("payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: "4e1c7a2"}, Records: records}
 }
 
 func goodClock(every time.Duration, at time.Time) Clock {

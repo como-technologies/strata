@@ -12,17 +12,14 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // fake writes a script that stands for the strata binary.
 func fake(t *testing.T, body string) Runner {
 	t.Helper()
-	dir := t.TempDir()
-	p := filepath.Join(dir, "strata")
-	if err := os.WriteFile(p, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return Runner{Binary: p, Dir: dir, Timeout: 2 * time.Second}
+	p := testkit.Script(t, body)
+	return Runner{Binary: p, Dir: filepath.Dir(p), Timeout: 2 * time.Second}
 }
 
 func TestExitOneIsAnAnswer(t *testing.T) {

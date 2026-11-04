@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,7 +20,13 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
+
+// run runs a command with a context that never ends.
+func run(args []string, stdout, stderr io.Writer) int {
+	return runContext(context.Background(), args, stdout, stderr)
+}
 
 func TestVersionPrintsTheName(t *testing.T) {
 	var out, errs bytes.Buffer
@@ -48,48 +53,23 @@ func TestAnUnknownCommandExitsTwo(t *testing.T) {
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
 	compare = strings.Replace(compare, "{", `{"schema":"`+docs.DiffSchema+`",`, 1)
-	body := `#!/bin/sh
-cmd=$1
-shift
-out=
-while [ $# -gt 0 ]; do
-  if [ "$1" = -o ]; then out=$2; fi
-  shift
-done
-case $cmd in
+	return testkit.Strata(t, `case $cmd in
 verify)
-  if [ ` + strconv.Itoa(verifyExit) + ` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
-  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
-compare) echo '` + compare + `'; case '` + compare + `' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
+  if [ `+strconv.Itoa(verifyExit)+` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
+  echo '`+testkit.VerifyUnchanged+`' ;;
+snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
+compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
-  if [ ` + strconv.FormatBool(behindFails) + ` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
-  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[]}' ;;
-esac
-`
-	bin := filepath.Join(t.TempDir(), "strata")
-	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return bin
+  if [ `+strconv.FormatBool(behindFails)+` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
+  echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[]}' ;;
+esac`)
 }
 
 // onceArgs makes the directories of a run of `once` with one record.
 func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	records := t.TempDir()
-	record := `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`
-	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
-	if _, err := zw.Write([]byte(record)); err != nil {
-		t.Fatal(err)
-	}
-	if err := zw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(records, "aws-stack.json.gz"), buf.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteGzip(t, records, "aws-stack.json.gz", `{"schema":"`+docs.SnapshotSchema+`","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`)
 	return []string{"once", "--strata", bin, "--cluster-uid", "c1", "--records", records, "--work", t.TempDir(), "--state", filepath.Join(t.TempDir(), "state")}
 }
 
@@ -353,7 +333,7 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
 	stop, _ := startServe(t, args, addr)
 	defer stop()
-	waitFor(t, "the page state ok", func() bool {
+	testkit.WaitFor(t, "the page state ok", func() bool {
 		resp, err := http.Get("http://" + addr + "/v1/cluster")
 		if err != nil {
 			return false
@@ -394,49 +374,21 @@ func TestHealthRefusesAWrongFlagAndAnAddressThatIsNotLoopback(t *testing.T) {
 // itself with the wait, so the process id is the one that the observer started.
 func holdingStrata(t *testing.T, hold, pids string) string {
 	t.Helper()
-	body := `#!/bin/sh
-cmd=$1
-shift
-ref=$1
-out=
-while [ $# -gt 0 ]; do
-  if [ "$1" = -o ]; then out=$2; fi
-  shift
-done
-case $cmd in
-verify)
-  echo '{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+	return testkit.Strata(t, `case $cmd in
+verify) echo '`+testkit.VerifyUnchanged+`' ;;
+snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
 compare)
   case $ref in
   pack:*)
-    if [ -e '` + hold + `' ]; then echo $$ > '` + pids + `'; exec sleep 60; fi
-    echo '{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
+    if [ -e '`+hold+`' ]; then echo $$ > '`+pids+`'; exec sleep 60; fi
+    echo '{"schema":"`+docs.DiffSchema+`","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
     exit 1 ;;
-  *) echo '{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}' ;;
+  *) echo '`+testkit.CompareSame+`' ;;
   esac ;;
 behind)
-  echo '{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
+  echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
   exit 1 ;;
-esac
-`
-	bin := filepath.Join(t.TempDir(), "strata")
-	if err := os.WriteFile(bin, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return bin
-}
-
-// waitFor calls ready every 20 ms until it is true, and fails the test after 10 seconds.
-func waitFor(t *testing.T, what string, ready func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for !ready() {
-		if time.Now().After(deadline) {
-			t.Fatalf("%s did not happen", what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+esac`)
 }
 
 // newerRows counts the rows of /v1/newer.
@@ -462,7 +414,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	hold, pids := filepath.Join(dir, "hold"), filepath.Join(dir, "pids")
 	args, addr := serveArgs(t, holdingStrata(t, hold, pids))
 	first, _ := startServe(t, args, addr)
-	waitFor(t, "the first versions cycle", func() bool { return newerRows(addr) == 1 })
+	testkit.WaitFor(t, "the first versions cycle", func() bool { return newerRows(addr) == 1 })
 	if code := first(); code != 0 {
 		t.Fatalf("the first server exited %d", code)
 	}
@@ -472,7 +424,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 		t.Fatal(err)
 	}
 	stop, stderr := startServe(t, args, addr)
-	waitFor(t, "the versions cycle after the restart", func() bool { return newerRows(addr) == 1 })
+	testkit.WaitFor(t, "the versions cycle after the restart", func() bool { return newerRows(addr) == 1 })
 	answered := make(chan struct{})
 	go func() {
 		defer close(answered)
@@ -483,7 +435,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 		}
 	}()
 	var pid int
-	waitFor(t, "the compare of the detail request", func() bool {
+	testkit.WaitFor(t, "the compare of the detail request", func() bool {
 		raw, err := os.ReadFile(pids)
 		if err != nil {
 			return false

@@ -1,6 +1,10 @@
-package docs
+package model
 
-import "regexp"
+import (
+	"regexp"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
+)
 
 var (
 	repeatsTheLists = regexp.MustCompile(`^pack\.content\.(images|charts)(\[|\.|$)`)
@@ -22,6 +26,7 @@ const (
 	GroupSettings Group = iota
 	GroupFollows
 	GroupRepeats
+	groups
 )
 
 // GroupOf gives the group of the changed value at a path.
@@ -35,35 +40,25 @@ func GroupOf(path string) Group {
 	return GroupSettings
 }
 
-// FoldOf puts each changed value in one group.
-func FoldOf(v Values) Fold {
-	var f Fold
-	for _, l := range v.Diff {
-		switch GroupOf(l.Path) {
-		case GroupRepeats:
-			f.Repeats++
-		case GroupFollows:
-			f.Follows++
-		default:
-			f.Settings++
-		}
+// FoldOf puts the changed value at each path in one group, and counts the groups.
+func FoldOf(paths []string) Fold {
+	var n [groups]int
+	for _, p := range paths {
+		n[GroupOf(p)]++
 	}
-	return f
+	return Fold{Settings: n[GroupSettings], Follows: n[GroupFollows], Repeats: n[GroupRepeats]}
 }
 
 // Split puts each changed value in the list of its group, in the order of the diff. The three lists
-// hold the same values that FoldOf counts. Only the detail tier of the API sends them.
-func Split(v Values) (settings, follows, repeats []Leaf) {
-	settings, follows, repeats = []Leaf{}, []Leaf{}, []Leaf{}
-	for _, l := range v.Diff {
-		switch GroupOf(l.Path) {
-		case GroupRepeats:
-			repeats = append(repeats, l)
-		case GroupFollows:
-			follows = append(follows, l)
-		default:
-			settings = append(settings, l)
-		}
+// hold the values that FoldOf counts. Only the detail tier of the API sends them.
+func Split(v docs.Values) (settings, follows, repeats []docs.Leaf) {
+	var lists [groups][]docs.Leaf
+	for g := range lists {
+		lists[g] = []docs.Leaf{}
 	}
-	return settings, follows, repeats
+	for _, l := range v.Diff {
+		g := GroupOf(l.Path)
+		lists[g] = append(lists[g], l)
+	}
+	return lists[GroupSettings], lists[GroupFollows], lists[GroupRepeats]
 }

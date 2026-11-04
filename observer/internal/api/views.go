@@ -127,7 +127,7 @@ type ValueLists struct {
 // PackDiffOf makes the answer of the detail route. A list that the diff does not hold is empty and
 // not null.
 func PackDiffOf(profile, key string, side model.Side, p docs.Pack) PackDiff {
-	settings, follows, repeats := docs.Split(p.Values)
+	settings, follows, repeats := model.Split(p.Values)
 	return PackDiff{
 		Profile: profile, Key: key, Side: side, Status: p.Status, Impact: p.Impact, Flags: p.Flags(),
 		Values:       ValueLists{Parseable: p.Values.Parseable, Settings: settings, FollowsTheVersion: follows, RepeatsTheLists: repeats},

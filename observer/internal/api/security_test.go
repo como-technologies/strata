@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -158,7 +159,7 @@ func TestHealthSucceedsWithTheServerUpAndFailsWithNone(t *testing.T) {
 	ln := listener(t)
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- (&Server{Source: stub{}}).Serve(ctx, ln, nil2()) }()
+	go func() { done <- (&Server{Source: stub{}}).Serve(ctx, ln, slog.New(slog.DiscardHandler)) }()
 	if err := Health(context.Background(), ln.Addr().String()); err != nil {
 		t.Errorf("the server is up: %v", err)
 	}

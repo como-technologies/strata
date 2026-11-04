@@ -724,6 +724,41 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 	}
 }
 
+// chipCount reads the number of a chip of the filter: <button data-filter="drift">Drift 2</button>.
+var chipCount = regexp.MustCompile(`data-filter="[a-z-]+"[^>]*>[A-Za-z ]+ ([^<]*)</button>`)
+
+// The chips of the filter say "-" where the tiles do, because a count of 0 would claim a check that
+// did not happen. After a good check, they say a number.
+func TestTheChipsOfTheFilterSayDashWhenNothingWasRead(t *testing.T) {
+	cases := []struct {
+		state devdata.State
+		dash  bool
+	}{
+		{devdata.StateFirstLoad, true},
+		{devdata.StateNoRecords, true},
+		{devdata.StateLostUnchecked, true},
+		{devdata.StateStaleUnchecked, true},
+		{devdata.StateOK, false},
+		{devdata.StateQuiet, false},
+	}
+	for _, c := range cases {
+		t.Run(string(c.state), func(t *testing.T) {
+			var chips int
+			for _, s := range render(t, c.state, false) {
+				for _, m := range chipCount.FindAllStringSubmatch(s.HTML, -1) {
+					chips++
+					if _, err := strconv.Atoi(m[1]); (c.dash && m[1] != "-") || (!c.dash && err != nil) {
+						t.Errorf("%s %s: a chip says %q, want dash %v", s.Hash, s.Variant, m[1], c.dash)
+					}
+				}
+			}
+			if chips == 0 {
+				t.Error("no screen shows the chips of the filter")
+			}
+		})
+	}
+}
+
 var (
 	ageCell  = regexp.MustCompile(`<td class="([^"]*\bw60\b[^"]*)">([^<]*)</td>`)
 	anyBlock = regexp.MustCompile(`<div class="([^"]*)">([^<]*)</div>`)

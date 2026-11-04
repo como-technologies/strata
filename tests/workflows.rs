@@ -1006,11 +1006,12 @@ fn the_docs_job_installs_go_from_the_module_of_the_observer_before_it_checks_the
     assert!(setup < check, "Go comes before the check of the output");
 }
 
-/// The contract script and the playground script keep one copy of three functions: they start the
-/// stand-in, stop it, and write the records. Both source `observer-lib.sh`, and no script defines
-/// them again.
+/// The contract script and the playground script keep one copy of four functions: they start the
+/// stand-in, stop it, write the records, and find the uid of a cluster. Both source
+/// `observer-lib.sh`, and no script defines them again or reads the list of the tenant by itself.
 #[test]
-fn the_scripts_of_the_observer_keep_one_copy_of_start_stop_and_the_records_directory() {
+fn the_scripts_of_the_observer_keep_one_copy_of_each_function_of_the_library() {
+    let functions = ["start()", "stop()", "records_dir()", "cluster_uid()"];
     let scripts = ["observer-contract.sh", "observer-playground.sh"];
     for name in scripts {
         let text = repo_file(&format!("scripts/{name}"));
@@ -1018,9 +1019,13 @@ fn the_scripts_of_the_observer_keep_one_copy_of_start_stop_and_the_records_direc
             text.contains(r#"source "$root/scripts/observer-lib.sh""#),
             "{name} sources the library"
         );
-        for function in ["start()", "stop()", "records_dir()"] {
+        for function in functions {
             assert!(!text.contains(function), "{name} defines {function} again");
         }
+        assert!(
+            !text.contains(r#""$strata" list"#),
+            "{name} reads the list of the tenant, and cluster_uid does it"
+        );
         let syntax = Command::new("bash")
             .args(["-n", &format!("scripts/{name}")])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
@@ -1033,7 +1038,7 @@ fn the_scripts_of_the_observer_keep_one_copy_of_start_stop_and_the_records_direc
         );
     }
     let lib = repo_file("scripts/observer-lib.sh");
-    for function in ["start()", "stop()", "records_dir()"] {
+    for function in functions {
         assert_eq!(lib.matches(function).count(), 1, "{function} once");
     }
 }

@@ -120,7 +120,7 @@ has a pill, and each screen says "No person approved these records". With
 ### What the page keeps
 
 - Four kinds of news, and no single color of health. A drift is red. A newer
-  version stays neutral at each level. "Not checked" is grey, and it never
+  version stays neutral at each level. "Not checked" is gray, and it never
   raises a severity.
 - "Not checked" blocks the text "No change". A pack that was not checked never
   reads "current".

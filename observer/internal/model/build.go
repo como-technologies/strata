@@ -82,7 +82,7 @@ func newView(in Input, c *causes) *view {
 				continue
 			}
 			for _, by := range pin.PinnedBy {
-				v.newest[packID(by.Subject, pin.Layer+"/"+pin.Name)] = pin.Newer[0].Version
+				v.newest[packID(by.Subject, PackKey(pin))] = pin.Newer[0].Version
 				v.newerProfiles[by.Subject] = true
 			}
 		}
@@ -202,7 +202,7 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 // They are the `verify` diff and the `compare` with the cluster. The fold counts the joined paths, so
 // a path that the two diffs share counts once. A path can hold the name of a list item, which is a
 // value of the cluster, so the paths stay here and only their count leaves.
-func changesOf(r Record, key string) ([]string, *docs.Fold) {
+func changesOf(r Record, key string) ([]string, *Fold) {
 	flags, paths := []string{}, []string{}
 	var diffs []*docs.Diff
 	if r.Row != nil {
@@ -222,21 +222,14 @@ func changesOf(r Record, key string) ([]string, *docs.Fold) {
 					flags = append(flags, f)
 				}
 			}
-			for _, l := range p.Values.Diff {
-				paths = append(paths, l.Path)
-			}
+			paths = append(paths, p.Values.Paths()...)
 		}
 	}
 	if len(flags) == 0 && len(paths) == 0 {
 		return flags, nil
 	}
 	slices.Sort(paths)
-	paths = slices.Compact(paths)
-	leaves := make([]docs.Leaf, 0, len(paths))
-	for _, p := range paths {
-		leaves = append(leaves, docs.Leaf{Path: p})
-	}
-	fold := docs.FoldOf(docs.Values{Diff: leaves})
+	fold := FoldOf(slices.Compact(paths))
 	return flags, &fold
 }
 
@@ -252,18 +245,13 @@ func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 		if !ok || move.Flags == nil {
 			move.Flags = []string{}
 		}
-		profiles := []string{}
-		for _, by := range pin.PinnedBy {
-			profiles = append(profiles, by.Subject)
-		}
-		slices.Sort(profiles)
 		drops := newest.Drops
 		if drops == nil {
 			drops = []string{}
 		}
 		rows = append(rows, Newer{Name: pin.Name, Registry: v.registry(pin.RegistryUID), RegistryUID: pin.RegistryUID, Version: pin.Version,
 			Newest: newest.Version, Listed: newest.Listed, New: listedWithin(newest.Listed, now), Floating: pin.Floating,
-			PinnedState: pin.PinnedState, Drops: drops, Profiles: profiles, Move: move})
+			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin), Move: move})
 	}
 	return rows
 }

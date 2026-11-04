@@ -73,7 +73,7 @@ func TestAPackWithChangesUnderAFindingWithNoPackKeyDoesNotReadOK(t *testing.T) {
 func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 	read := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.1.0")
 	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
-	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity}, Fold: docs.Fold{Settings: 2}, Images: 8}
+	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity}, Fold: Fold{Settings: 2}, Images: 8}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{read, unread},
 		Moves: map[string]Move{MoveKey(read): move}, Unread: map[string]bool{MoveKey(unread): true}}
 	r := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("k8s", "kubernetes", "1.35.3"), pk("addon", "cert-manager", "1.20.3"))
@@ -84,7 +84,7 @@ func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 	if got := s.Newer[0]; got.Name != "kubernetes" || got.Impact != "repave" || got.Images != 8 {
 		t.Errorf("the move that was read has %+v", got.Move)
 	}
-	if got := s.Newer[1]; got.Name != "cert-manager" || got.Newest != "1.21.1" || got.Impact != "" || got.Images != 0 || got.Fold != (docs.Fold{}) {
+	if got := s.Newer[1]; got.Name != "cert-manager" || got.Newest != "1.21.1" || got.Impact != "" || got.Images != 0 || got.Fold != (Fold{}) {
 		t.Errorf("the move that was not read has counts: %+v", got)
 	}
 	want := NotChecked{Cause: PinError, Profiles: []string{"aws-stack@1.1.0"}, Packs: []string{"addon/cert-manager"}}

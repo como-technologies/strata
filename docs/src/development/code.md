@@ -243,7 +243,8 @@ code, and these rules are for the Go code.
 - The observer uses the standard library only. `go.mod` has no `require` line,
   and `just lint` fails when it has one.
 - The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
-  function that fails returns an `error`.
+  function that fails returns an `error`. The tests keep the rule: a fake
+  returns an `error`, and a test calls `t.Fatal`.
 - `internal/runner` is the one place that starts a process. It refuses a
   command or a flag that is not in its lists. A process gets `STRATA_REPORT=0`,
   which stops the send of the report, and each variable of its list that the
@@ -310,6 +311,9 @@ code, and these rules are for the Go code.
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the
   binary skips when `STRATA_BIN` is not set.
+- `internal/testkit` holds each helper that the tests of two packages use, such
+  as the script that stands for `strata`. Only test files import it. A helper
+  that one package uses stays in that package.
 
 `just lint` runs `gofmt` and `go vet` on `observer/`, and `just test` runs
 `go test` there.

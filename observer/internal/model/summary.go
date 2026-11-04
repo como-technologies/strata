@@ -128,29 +128,29 @@ type ClusterCopy struct {
 
 // Pack is one pack of a record.
 type Pack struct {
-	Key            string     `json:"key"`
-	Name           string     `json:"name"`
-	Layer          string     `json:"layer"`
-	Version        string     `json:"version"`
-	Status         Status     `json:"status"`
-	Registry       string     `json:"registry"`
-	Kind           string     `json:"kind"`
-	Upstream       string     `json:"upstream"`
-	UpstreamSource string     `json:"upstreamSource"`
-	Images         int        `json:"images"`
-	Newer          string     `json:"newer,omitempty"`
-	Flags          []string   `json:"flags"`
-	Fold           *docs.Fold `json:"fold,omitempty"`
+	Key            string   `json:"key"`
+	Name           string   `json:"name"`
+	Layer          string   `json:"layer"`
+	Version        string   `json:"version"`
+	Status         Status   `json:"status"`
+	Registry       string   `json:"registry"`
+	Kind           string   `json:"kind"`
+	Upstream       string   `json:"upstream"`
+	UpstreamSource string   `json:"upstreamSource"`
+	Images         int      `json:"images"`
+	Newer          string   `json:"newer,omitempty"`
+	Flags          []string `json:"flags"`
+	Fold           *Fold    `json:"fold,omitempty"`
 }
 
 // Move is what the observer keeps of the comparison of a pinned version and the newest version. The
 // counts go to the state. The changed values never do.
 type Move struct {
-	Impact string    `json:"impact"`
-	Flags  []string  `json:"flags"`
-	Fold   docs.Fold `json:"fold"`
-	Images int       `json:"images"`
-	Charts int       `json:"charts"`
+	Impact string   `json:"impact"`
+	Flags  []string `json:"flags"`
+	Fold   Fold     `json:"fold"`
+	Images int      `json:"images"`
+	Charts int      `json:"charts"`
 }
 
 // Newer is one pack that a newer version exists for.

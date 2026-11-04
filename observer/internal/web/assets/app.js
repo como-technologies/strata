@@ -50,7 +50,7 @@ const FINDING = {
   [KIND.OVERWRITTEN]: {title: "Another version replaced the recorded version", line: "Another version replaced the recorded version in place."},
   [KIND.RENAMED]: {title: "The recorded version has another name", line: "The recorded version has another name now."},
   [KIND.GONE]: {title: "Palette no longer holds the recorded version", line: "Palette no longer holds the recorded version."},
-  [KIND.CLUSTER]: {title: "This cluster runs other content than its record", line: "differ on this cluster."},
+  [KIND.CLUSTER]: {title: "This cluster runs other content than its record", line: "changed on this cluster."},
   [KIND.IMAGE_ID]: {title: "A pack names another machine image", line: "name another machine image."},
 };
 const CAUSE_TEXT = {
@@ -172,6 +172,8 @@ const NEEDS_RECORD = "Strata needs a record to look for newer versions. A record
 const NOT_READ_YET = "No check has ended well, so this page has nothing to show yet.";
 // noChecksWords says why the page has no newer version to show.
 const noChecksWords = () => D.cluster.page === PAGE.NO_RECORDS ? NEEDS_RECORD : NOT_READ_YET;
+// noNewerWords says why the list of newer versions is empty.
+const noNewerWords = () => D.cluster.counts.notChecked ? "No newer version is listed." : `All ${D.cluster.counts.packs} packs are current.`;
 const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
 const packName = key => key.slice(key.indexOf("/") + 1);
 const profileOf = subject => D.profiles.find(p => subjectOf(p) === subject);
@@ -189,6 +191,8 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
+// packOfRow finds the pack of a profile that a row of /v1/newer moves. A profile that is not known gives null.
+const packOfRow = (profile, r) => profile ? profile.packs.find(q => q.name === r.name && q.version === r.version) : null;
 // moveUnread says that strata could not compare the two versions of a pack. The row has no counts, and Not checked names the pack.
 const moveUnread = (subject, p) => !!p && D.notChecked.some(r => r.cause === CAUSE.PIN_ERROR && r.profiles.includes(subject) && r.packs.includes(p.key));
 const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not read") : impactBadge(row.impact);
@@ -402,7 +406,7 @@ function profilesCard() {
   });
   const empty = h`<tr><td colspan="5" class="mut">${D.profiles.length ? "No profile matches." : "No profile yet."}</td></tr>`;
   return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${neverChecked() ? "Not read yet" : `${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs`}</span></h2>
-    <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${cnt[k]}</button>`)}</div>
+    <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${num(cnt[k])}</button>`)}</div>
     <input class="search" id="q" type="search" placeholder="Filter by name" aria-label="Filter by name" value="${S.q}"></div></div>
     <div class="tw"><table id="pt"><thead><tr><th>Status</th><th>Profile</th><th class="narrow-hide">Type</th><th class="narrow-hide">Packs</th><th>Message</th></tr></thead><tbody>${rows.length ? rows : empty}</tbody></table></div></section>`;
 }
@@ -420,9 +424,9 @@ function viewFindings() {
   const rows = D.newer;
   const card = checked => {
     if (!checked) return h`<div class="body mut">${noChecksWords()}</div>`;
-    if (!rows.length) return h`<div class="body mut">${D.cluster.counts.notChecked ? "No newer version is listed." : `All ${D.cluster.counts.packs} packs are current.`}</div>`;
+    if (!rows.length) return h`<div class="body mut">${noNewerWords()}</div>`;
     return h`<div class="tw"><table><tbody>${rows.map(r => {
-      const first = r.profiles[0], p = first ? profileOf(first) : null, k = p ? p.packs.find(q => q.name === r.name && q.version === r.version) : null;
+      const first = r.profiles[0], k = packOfRow(first ? profileOf(first) : null, r);
       const href = k ? packHash(first, k) : first ? profileHash(first) : "#newer";
       return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${r.name} ${r.version}${ARROW}${r.newest}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
     })}</tbody></table></div>`;
@@ -438,7 +442,7 @@ function viewNewer() {
   if (!hasChecks()) {
     body = h`<div class="body mut">${noChecksWords()}</div>`;
   } else if (!rows.length) {
-    body = h`<div class="body mut">${n.notChecked ? "No newer version is listed." : `All ${n.packs} packs are current.`}</div>`;
+    body = h`<div class="body mut">${noNewerWords()}</div>`;
   } else {
     const groups = [];
     rows.forEach(r => r.profiles.forEach(s => {
@@ -453,7 +457,7 @@ function viewNewer() {
         const total = p ? p.packs.length : "";
         return [h`<tr class="g"><td colspan="7"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
           g.rows.map(r => {
-            const k = p ? p.packs.find(q => q.name === r.name && q.version === r.version) : null;
+            const k = packOfRow(p, r);
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
             const count = v => moveUnread(g.subject, k) ? DASH : v;
             return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td></tr>`;
