@@ -314,7 +314,7 @@ rules:
       Palette pulls no image, and it holds no digest of one unless the pack text names it. The nodes
       pull what the chart or the manifest names. A rebuilt image is not visible to Palette, to a
       record, or to `strata verify`. A digest in the pack text moves the root, and `strata compare`
-      shows it. This row is a note: a warning for each image would fire on nearly each pack.
+      shows it. This row is a note, because a warning for each image fires on nearly each pack.
     reproduce:
       - "crane digest <image>"
       - "kubectl get pods -A -o jsonpath='{range .items[*].status.containerStatuses[*]}{.image}{\"\\t\"}{.imageID}{\"\\n\"}{end}'"

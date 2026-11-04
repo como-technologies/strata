@@ -2615,7 +2615,7 @@ fn a_message_agrees_its_verb_and_its_pronoun_with_a_count_of_one_and_of_many_and
 }
 
 /// An image that a vendor rebuilds under one tag is a case for the operator, and not for Palette
-/// (#630). The row is a note, because a warning for each image would fire on nearly each pack.
+/// (#630). The row is a note, because a warning for each image fires on nearly each pack.
 #[test]
 fn the_rule_of_an_image_named_by_a_tag_is_a_note_for_the_operator_with_the_two_fixes() {
     let catalog = catalog::builtin().unwrap();
