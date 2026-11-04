@@ -147,7 +147,7 @@ const ago = iso => {
   if (Number.isNaN(when(iso))) return "";
   const s = Math.max(0, Math.floor((Date.now() - when(iso)) / 1000));
   const d = Math.floor(s / 86400), hh = Math.floor(s % 86400 / 3600), mm = Math.floor(s % 3600 / 60);
-  return d ? `${d}d` : hh ? `${hh}h ${mm}m` : s < 60 ? "under 1m" : `${mm}m`;
+  return d ? `${d}d` : hh ? (mm ? `${hh}h ${mm}m` : `${hh}h`) : s < 60 ? "under 1m" : `${mm}m`;
 };
 const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !== PAGE.NO_RECORDS;
 const num = n => hasChecks() ? n : "-";
@@ -282,8 +282,8 @@ function findingsCard() {
     const key = f.packs[0] && p ? p.packs.find(k => k.key === f.packs[0]) : null;
     const href = key ? packHash(f.profile, key) : profileHash(f.profile);
     return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.DRIFT)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}</td>
-      <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${f.packs.map(k => lab("pack", packName(k)))}</div></td>
-      <td class="n mut small w60 nw">${ago(f.firstSeen)}</td></tr>`;
+      <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${f.packs.map(k => lab("pack", packName(k)))}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
+      <td class="n mut small w60 nw narrow-hide">${ago(f.firstSeen)}</td></tr>`;
   })}</tbody></table></div>` : h`<div class="body mut">Nothing needs attention.</div>`;
   return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${rows.length}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
 }
@@ -365,7 +365,8 @@ function notCheckedLine(x) {
 }
 
 function profilesCard() {
-  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : asCount(x.status) === k || x.packs.some(p => p.status === k));
+  // A profile with a pack that has a newer version shows under "Newer", also when its status is a drift.
+  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
   const list = [...D.profiles].sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
   const cnt = {};
   FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });

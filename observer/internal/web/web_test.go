@@ -14,6 +14,7 @@ import (
 	"path"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -325,17 +326,15 @@ type screen struct {
 	Error   string `json:"error"`
 }
 
-// render runs testdata/render.js for one set. It skips the test when node is not there.
-func render(t *testing.T, state devdata.State, poison bool) []screen {
+// runNode runs testdata/render.js for one set, with the arguments that follow the set, and gives
+// what it prints. It skips the test when node is not there.
+func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
 	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node is not on the PATH: the lead checks the render")
 	}
-	args := []string{"testdata/render.js", "assets", "testdata/api", string(state)}
-	if poison {
-		args = append(args, "poison")
-	}
+	args := append([]string{"testdata/render.js", "assets", "testdata/api", string(state)}, extra...)
 	out, err := exec.Command(node, args...).Output()
 	if err != nil {
 		var exit *exec.ExitError
@@ -344,6 +343,17 @@ func render(t *testing.T, state devdata.State, poison bool) []screen {
 		}
 		t.Fatalf("node: %v", err)
 	}
+	return out
+}
+
+// render shows each screen of one set.
+func render(t *testing.T, state devdata.State, poison bool) []screen {
+	t.Helper()
+	var extra []string
+	if poison {
+		extra = append(extra, "poison")
+	}
+	out := runNode(t, state, extra...)
 	var screens []screen
 	if err := json.Unmarshal(out, &screens); err != nil {
 		t.Fatalf("the output of render.js is no JSON: %v", err)
@@ -479,5 +489,182 @@ func TestTheCrawlReachesEachProfileAndEachPack(t *testing.T) {
 				t.Errorf("the crawl did not reach %s", h)
 			}
 		}
+	}
+}
+
+// The filter "Newer" holds each profile with a pack that has a newer version, also a profile that
+// drifts. The tile of newer versions counts the same profiles.
+func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
+	cases := []struct {
+		state devdata.State
+		count int
+		names []string
+	}{
+		{devdata.StateOK, 6, []string{"fred-identity"}},
+		{devdata.StateQuiet, 0, nil},
+	}
+	for _, c := range cases {
+		t.Run(string(c.state), func(t *testing.T) {
+			set, err := devdata.Load(os.DirFS("testdata/api"), c.state, devdata.Reference)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var want []string
+			for _, p := range set.Profiles.Profiles {
+				if slices.ContainsFunc(p.Packs, func(k model.Pack) bool { return k.Newer != "" }) {
+					want = append(want, "#p-"+p.Name+"@"+p.Version)
+				}
+			}
+			if len(want) != c.count || set.Cluster.Counts.NewerProfiles != c.count {
+				t.Fatalf("the set has %d profiles with a newer pack and %d in the tile, want %d", len(want), set.Cluster.Counts.NewerProfiles, c.count)
+			}
+			button := regexp.MustCompile(`data-filter="newer"[^>]*>Newer ` + strconv.Itoa(c.count) + `<`)
+			var shown bool
+			for _, s := range render(t, c.state, false) {
+				if s.Hash != "#profiles" {
+					continue
+				}
+				switch s.Variant {
+				case "":
+					if !button.MatchString(s.HTML) {
+						t.Errorf("the button of the filter does not say Newer %d", c.count)
+					}
+				case "filter newer":
+					shown = true
+					if rows := strings.Count(s.HTML, `data-go="#p-`); rows != len(want) {
+						t.Errorf("the filter shows %d profiles, want %d", rows, len(want))
+					}
+					for _, h := range want {
+						if !strings.Contains(s.HTML, `href="`+h+`"`) {
+							t.Errorf("the filter does not show %s", h)
+						}
+					}
+					for _, name := range c.names {
+						if !strings.Contains(s.HTML, `href="#p-`+name+`@`) {
+							t.Errorf("the filter does not show %s", name)
+						}
+					}
+				}
+			}
+			if !shown {
+				t.Error("no screen shows the filter Newer")
+			}
+		})
+	}
+}
+
+var (
+	ageCell  = regexp.MustCompile(`<td class="([^"]*\bw60\b[^"]*)">([^<]*)</td>`)
+	anyBlock = regexp.MustCompile(`<div class="([^"]*)">([^<]*)</div>`)
+)
+
+// At 760 pixels and below, the age of a finding moves under the labels, so that the row fits with no
+// scroll: the cell of the age has the class narrow-hide, and the row holds the age again in a block
+// with the class narrow-show.
+func TestTheAgeOfAFindingMovesUnderTheLabelsOnAPhone(t *testing.T) {
+	var rows int
+	for _, s := range render(t, devdata.StateOK, false) {
+		for _, row := range strings.Split(s.HTML, "</tr>") {
+			cell := ageCell.FindStringSubmatch(row)
+			if cell == nil {
+				continue
+			}
+			rows++
+			if !slices.Contains(strings.Fields(cell[1]), "narrow-hide") || cell[2] == "" {
+				t.Errorf("%s: the cell of the age is %q with the text %q", s.Hash, cell[1], cell[2])
+			}
+			var under bool
+			for _, b := range anyBlock.FindAllStringSubmatch(row, -1) {
+				if slices.Contains(strings.Fields(b[1]), "narrow-show") && b[2] == cell[2] {
+					under = true
+				}
+			}
+			if !under {
+				t.Errorf("%s: the row has no block narrow-show with the age %q", s.Hash, cell[2])
+			}
+		}
+	}
+	if rows == 0 {
+		t.Error("no screen shows the age of a finding")
+	}
+}
+
+// ago leaves out the minutes when they are 0.
+func TestAgoLeavesOutMinutesThatAreZero(t *testing.T) {
+	cases := []struct {
+		seconds int
+		want    string
+	}{
+		{30, "under 1m"},
+		{60, "1m"},
+		{59 * 60, "59m"},
+		{2 * 3600, "2h"},
+		{2*3600 + 59, "2h"},
+		{5*3600 + 51*60, "5h 51m"},
+		{3 * 86400, "3d"},
+	}
+	var extra = []string{"ago"}
+	for _, c := range cases {
+		extra = append(extra, strconv.Itoa(c.seconds))
+	}
+	var got []string
+	if err := json.Unmarshal(runNode(t, devdata.StateOK, extra...), &got); err != nil {
+		t.Fatalf("the output of render.js is no JSON: %v", err)
+	}
+	if len(got) != len(cases) {
+		t.Fatalf("ago gave %d answers for %d ages", len(got), len(cases))
+	}
+	for i, c := range cases {
+		if got[i] != c.want {
+			t.Errorf("ago of %d seconds is %q, want %q", c.seconds, got[i], c.want)
+		}
+	}
+}
+
+// ruleOf gives the declarations of the rules with exactly this selector, with no space.
+func ruleOf(css, selector string) string {
+	var out strings.Builder
+	for _, rule := range cssRule.FindAllStringSubmatch(cssComment.ReplaceAllString(css, ""), -1) {
+		if strings.TrimSpace(rule[1]) == selector {
+			out.WriteString(strings.Join(strings.Fields(rule[2]), "") + ";")
+		}
+	}
+	return out.String()
+}
+
+// tabRowProblems lists what is missing in the rule of the row of tabs. A tab has a margin of -1px, so
+// the row overflows on the vertical axis, and a scrollbar shows. The row scrolls sideways on a phone.
+func tabRowProblems(css string) []string {
+	var out []string
+	rule := ruleOf(css, ".tabs")
+	for _, want := range []string{"overflow-x:auto;", "overflow-y:hidden;"} {
+		if !strings.Contains(rule, want) {
+			out = append(out, "the rule of .tabs has no "+strings.TrimSuffix(want, ";"))
+		}
+	}
+	return out
+}
+
+func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
+	css, err := fs.ReadFile(files(t), "app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := tabRowProblems(string(css)); len(got) != 0 {
+		t.Errorf("%s", strings.Join(got, "\n"))
+	}
+	// The check can fail.
+	for css, want := range map[string]string{
+		`.tabs{display:flex;overflow-x:auto}`:                         "no overflow-y:hidden",
+		`.tabs{display:flex;overflow-y:hidden}`:                       "no overflow-x:auto",
+		`.tab{overflow-y:hidden}`:                                     "no overflow-x:auto",
+		`@media (max-width:760px){.tabs{overflow-x:auto}} .tabs{a:b}`: "no overflow-y:hidden",
+	} {
+		if got := strings.Join(tabRowProblems(css), "\n"); !strings.Contains(got, want) {
+			t.Errorf("problems %q for %s, want one with %q", got, css, want)
+		}
+	}
+	if got := tabRowProblems(`.tabs{display:flex; overflow-x: auto; overflow-y: hidden}`); len(got) != 0 {
+		t.Errorf("a good rule has problems: %q", got)
 	}
 }

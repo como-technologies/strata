@@ -10,11 +10,15 @@
 // {hash, variant, error} for a screen that threw.
 //
 // With "poison", each name, path, and value of the data has the text of a markup injection in it.
+//
+//   node render.js ASSETS_DIR API_DIR STATE ago SECONDS...
+//
+// With "ago", it prints no screen. It prints one JSON list: what ago() says for each age in seconds.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const [assetsDir, apiDir, state, mode] = process.argv.slice(2);
+const [assetsDir, apiDir, state, mode, ...ages] = process.argv.slice(2);
 const EVIL = "<img src=x onerror=alert(1)>\"'&";
 
 function read(name) {
@@ -110,6 +114,12 @@ async function show(hash) {
 
 async function main() {
   run(fs.readFileSync(path.join(assetsDir, "app.js"), "utf8"));
+  if (mode === "ago") {
+    // The clock stops, so that each age is the number of seconds that the caller names.
+    run("(() => { const now = Date.now(); Date.now = () => now; })()");
+    process.stdout.write(JSON.stringify(ages.map(s => run(`ago(new Date(Date.now() - ${Number(s)} * 1000).toISOString())`))));
+    return;
+  }
   await run("refresh()");
   const screens = [];
   const seen = new Set();

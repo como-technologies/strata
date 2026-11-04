@@ -107,7 +107,7 @@ tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;
 .vs{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .vcard{border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:var(--panel2);min-width:0}
 .vcard .h{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:500;font-size:13px}
-.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 8px;overflow-x:auto}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);padding:0 8px;overflow-x:auto;overflow-y:hidden}
 .tab{background:none;border:0;border-bottom:2px solid transparent;padding:10px 12px 8px;cursor:pointer;color:var(--mut);font-weight:500;font-size:13.5px;margin-bottom:-1px;white-space:nowrap}
 .tab:hover{color:var(--ink)}
 .tab.on{color:var(--ink);border-bottom-color:var(--accent)}
