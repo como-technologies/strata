@@ -19,9 +19,10 @@ the body of the create and reports what stops the build, in seconds, with the
 command that shows the same thing by hand. See
 [Can Palette build this cluster?](./use-cases/stop-a-build.md).
 
-- [The everyday loop](./loop.md) shows who runs what, and when, with one change
-  from the pull request to the retire. It includes the questions to Palette
-  about a change, and `preflight` before a build.
+- [The everyday loop](./loop.md) says when to reach for strata, how to start from
+  nothing, and what a normal day holds.
+- [One change, start to end](./walkthrough.md) follows one change from the pull
+  request to the retire, with the output of each command.
 - [Where each part belongs](./boundary.md) says what Palette does, what strata
   adds, and why the record lives in your repository.
 
@@ -98,7 +99,7 @@ reviewer approved, by its content and not by a tag or a name.
 1. [Install](./install.md) strata.
 2. [Configure](./configure.md) the API key and the project.
 3. Do the [quick start](./quickstart.md).
-4. Read [The everyday loop](./loop.md), and put each step in your pipeline.
+4. Read [Start from nothing](./loop.md#start-from-nothing), and add one job at a time.
 5. Find your problem in [Use cases](./use-cases/index.md).
 
 ## The profile that the pages use
@@ -122,6 +123,8 @@ to `examples/profiles/`, so a page that reads a ref by name reads a file here:
 strata compare examples/profiles/aws-stack@1.0.0.json examples/profiles/aws-stack@1.1.0.json
 ```
 
+<div class="playground-demo">
+
 To run the commands of a page, with the names and the clusters it prints, serve
 the same tenant on this machine:
 
@@ -133,6 +136,8 @@ It prints the settings to export. A stand-in for the Palette API then answers
 `strata list`, `strata compare aws-stack@1.0.0 aws-stack@1.1.0`,
 `cluster:payments`, and the rest, with no key and no cost. `just playground
 <chapter>` serves the tenant of another chapter of this book.
+
+</div>
 
 Strata writes its report to standard output, and its progress to standard
 error. A block in this book that starts with a `strata:` line shows both. A

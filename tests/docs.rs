@@ -1343,9 +1343,9 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
 
 // ---- the everyday loop -------------------------------------------------------------------------
 
-/// The text of `docs/src/loop.md`.
+/// The text of `docs/src/loop.md`, and of `docs/src/walkthrough.md`, which holds each step of it.
 fn the_loop() -> String {
-    read(&docs().join("loop.md"))
+    read(&docs().join("loop.md")) + &read(&docs().join("walkthrough.md"))
 }
 
 /// The cells of each row of the first table in `text`, without the header and the rule line.
@@ -1389,30 +1389,51 @@ fn names_a_command(text: &str, names: &[String]) -> bool {
     })
 }
 
-/// The first two paragraphs name the reason before the contrast. A name alone does not fix the
-/// content of a version, so the record holds the content.
+/// A newcomer reads this page first. It opens with the reason for strata. Then it answers three
+/// questions, in order: when to reach for strata, how to start, and what a day holds.
 #[test]
-fn the_everyday_loop_opens_with_the_reason_that_the_record_holds_the_content_and_not_only_the_name()
-{
-    let text = the_loop();
-    let top = section(&text, "# The everyday loop", Some("\n## "));
-    let want = "# The everyday loop \
-        Strata is one loop, and each command is one step of it. A team reviews a change, \
-        and the pipeline publishes it. A record in the repository keeps the content that \
-        the team approved. From then on, each step compares Palette with that record. \
-        Each difference reaches a person as a comment, a gate that fails, or an issue. \
-        A name and a version do not tell you the content. Palette can update a \
-        published version after its publish, and the name stays. So the record holds the \
-        content, and not only the name. A record in Git, checked against Palette, shows \
-        each change after the approval. \
-        [Where each part belongs](./boundary.md) gives the reasons.";
-    assert_eq!(one_line(top), want);
+fn the_everyday_loop_gives_the_reason_then_when_to_reach_for_strata_how_to_start_and_a_day() {
+    let page = read(&docs().join("loop.md"));
+    let top = section(&page, "# The everyday loop", Some("\n## "));
+    assert!(
+        one_line(top)
+            .contains("its content can still change, and its name and number stay the same."),
+        "the page does not open with the reason: {top}"
+    );
+    let headings: Vec<&str> = page.lines().filter(|l| l.starts_with("## ")).collect();
+    assert_eq!(
+        headings,
+        [
+            "## When to reach for strata",
+            "## Start from nothing",
+            "## A day of work",
+            "## See all of it"
+        ]
+    );
+    // the jobs of the file that a team copies, in the order of the page
+    let start = section(&page, "## Start from nothing", Some("\n## "));
+    for job in [
+        "`comment`",
+        "`verify`",
+        "`gate`",
+        "`promote-gate`",
+        "`retire-gate`",
+        "`upstream`",
+        "`preflight`",
+    ] {
+        assert!(start.contains(job), "the page does not name the job {job}");
+        let name = job.trim_matches('`');
+        assert!(
+            repo_file("examples/ci/github/strata.yml").contains(&format!("\n  {name}:\n")),
+            "the file that a team copies has no job {name}"
+        );
+    }
 }
 
 #[test]
 fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_runs() {
     let text = the_loop();
-    let part = section(&text, "## A day of work", Some("\n## "));
+    let part = section(&text, "## Each step at a glance", Some("\n## "));
     let header = part
         .lines()
         .find(|l| l.starts_with('|'))
@@ -1443,7 +1464,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
 fn the_chart_of_the_everyday_loop_has_a_lane_for_you_the_pipeline_and_the_night_and_no_box_names_a_command()
  {
     let text = the_loop();
-    let part = section(&text, "## A day of work", Some("\n## "));
+    let part = section(&text, "## Each step at a glance", Some("\n## "));
     let chart = section(part, "```mermaid", Some("\n```\n"));
     let names = command_words();
 
@@ -1551,8 +1572,11 @@ fn the_everyday_loop_has_the_two_new_sections_and_the_quick_start_and_the_comman
     );
 
     for (page, link) in [
-        ("quickstart.md", "loop.md#a-day-of-work"),
-        ("commands/index.md", "loop.md#the-jobs-and-their-commands"),
+        ("quickstart.md", "loop.md"),
+        (
+            "commands/index.md",
+            "walkthrough.md#the-jobs-and-their-commands",
+        ),
     ] {
         assert!(
             read(&docs().join(page)).contains(link),
@@ -1675,7 +1699,7 @@ fn each_place_that_says_what_latest_picks_says_that_a_pre_release_is_not_the_pic
 #[test]
 fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_a_place() {
     let text = the_loop();
-    let part = section(&text, "## A day of work", Some("\n## "));
+    let part = section(&text, "## Each step at a glance", Some("\n## "));
     let names = command_words();
     for row in table_rows(part) {
         let place = &row[2];
@@ -2975,7 +2999,7 @@ fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() 
         "loop.md still says that only the setting starts the send"
     );
 
-    let day = section(&text, "## A day of work", Some("\n## "));
+    let day = section(&text, "## Each step at a glance", Some("\n## "));
     assert!(
         table_rows(day).iter().any(|row| row[0]
             == "A job writes a note about a value that strata does not know"
@@ -2995,9 +3019,7 @@ fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() 
 
     let unknown = section(&text, "## A value that strata does not know", Some("\n## "));
     assert!(
-        unknown.contains(
-            "**Follow along.** `just playground unknown-value` serves a tenant with such a value."
-        ),
+        unknown.contains("`just playground unknown-value` serves a tenant with such a value."),
         "the section of the note has no seed"
     );
     assert!(

@@ -13,10 +13,14 @@ team name to `platform_owner`.
 **Who runs this.** A person at a terminal. The scheduled verify job does not
 report a changed cluster value, so somebody must look.
 
-**Follow along.** `just playground cluster-values-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground cluster-values-1` serves this tenant on this
 machine, with no key and no cost. A person changes a value in step 3, so this
 page has two seeds. Each section names the one it needs, and each seed serves on
 its own port.
+
+</div>
 
 ## 1. Compare the clusters
 
@@ -51,9 +55,13 @@ can run more than one profile, so the name alone does not identify a value.
 
 ## 3. A value changes on the cluster
 
-**Follow along.** `just playground cluster-values-2` is the same tenant after a
+<div class="playground-demo">
+
+`just playground cluster-values-2` is the same tenant after a
 person changed `platform_owner` on `payments` to `team-platform`. Stop the first
 seed, and export what this one prints. Keep the record from step 2.
+
+</div>
 
 The record of the cluster keeps the cluster value from before that change:
 

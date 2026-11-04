@@ -141,9 +141,13 @@ The knurl side is `adapter/examples/observe.rs`. It is not a command on the
 and runs it. It reads the settings that the `strata` command reads, so it runs
 against a tenant too. It reads, and it never writes.
 
+<div class="playground-demo">
+
 ```bash
 just playground cluster-release        # terminal 1: it prints four export lines, and waits
 ```
+
+</div>
 
 ```bash
 # terminal 2, in this repository

@@ -23,10 +23,14 @@ the result. The reviewer reads that comment. The publish job proves what shipped
 | 4 | the [comment job](../automation/pr-comments.md) | each push to the pull request | no |
 | 5 | the publish job | after the merge | yes |
 
-**Follow along.** `just playground review-1` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground review-1` serves this tenant on this machine,
 with no key and no cost. The publication in step 5 changes the tenant, so this
 page has two seeds. Each section names the one it needs, and each seed serves on
 its own port.
+
+</div>
 
 The project `dev` has `aws-stack@1.0.0`, and a record of it is already in the
 repository, because the job that published 1.0.0 wrote one. The block below
@@ -106,9 +110,13 @@ See
 
 ## 5. The publish job proves it is the approved version
 
-**Follow along.** `just playground review-2` is the same tenant after somebody
+<div class="playground-demo">
+
+`just playground review-2` is the same tenant after somebody
 published 1.1.0. Stop the first seed, and export what this one prints. Keep
 `candidate.json` from step 2.
+
+</div>
 
 Record the published version, and ask whether it is the release the reviewer
 approved:
@@ -139,7 +147,7 @@ follow the publish. Does the move of a cluster to the version repave the nodes?
 Does Palette accept the packs on that cluster? See
 [Ask Palette if the change repaves](../commands/compare/repave.md) and
 [Ask Palette if it accepts the packs](../commands/compare/validate.md).
-[Step 3 of the everyday loop](../loop.md#3-the-publish) shows both.
+[Step 3 of One change, start to end](../walkthrough.md#3-the-publish) shows both.
 
 ## Palette behavior
 

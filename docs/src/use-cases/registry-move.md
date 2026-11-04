@@ -18,8 +18,12 @@ ones. The uid of the OCI registry and the pack uid it gives are stand-ins: see
 **Who runs this.** A person at a terminal, or the promotion gate, which runs
 `same-release` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
 
-**Follow along.** `just playground registry-move` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground registry-move` serves this tenant on this machine,
 with no key and no cost.
+
+</div>
 
 ## 1. Record each project's copy
 

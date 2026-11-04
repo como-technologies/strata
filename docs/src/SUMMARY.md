@@ -2,6 +2,7 @@
 
 [Introduction](./introduction.md)
 [The everyday loop](./loop.md)
+[One change, start to end](./walkthrough.md)
 [Where each part belongs](./boundary.md)
 
 # Getting started

@@ -17,10 +17,14 @@ the repository.
 **Who runs this.** A person at a terminal, or the job that comments on a change
 request. The reviewer reads the comparison.
 
-**Follow along.** `just playground draft-1` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground draft-1` serves this tenant on this machine,
 with no key and no cost. The draft and the publish change the tenant, so this
 page has three seeds. Each section names the one it needs, and each seed serves
 on a different port.
+
+</div>
 
 ## 1. The version has no draft
 
@@ -39,8 +43,12 @@ with the error `no-draft`:
 
 ## 2. A person edits the version, and does not publish
 
-**Follow along.** `just playground draft-2` is the same tenant with the draft.
+<div class="playground-demo">
+
+`just playground draft-2` is the same tenant with the draft.
 Stop the first seed. Then export what this one prints.
+
+</div>
 
 A person sets the reclaim policy of the CSI pack to `Retain`, and does not
 publish. Compare the version with its draft:
@@ -85,8 +93,12 @@ The file holds the values and the manifests of the draft. See
 
 ## 4. After the publish, the version holds the draft
 
-**Follow along.** `just playground draft-3` is the same tenant after the
+<div class="playground-demo">
+
+`just playground draft-3` is the same tenant after the
 publish. Stop the second seed. Then export what this one prints.
+
+</div>
 
 The record of the draft verifies against the version:
 

@@ -14,9 +14,13 @@ which no cluster runs and the cluster template `aws-standard` links.
 `consumers` for a job: see [The promotion gate and the retire gate](../automation/gates.md).
 Every step reads Palette, so each one needs a key.
 
-**Follow along.** `just playground retire` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground retire` serves this tenant on this machine,
 with no key and no cost. Nothing on this page changes the tenant, so one seed
 serves every step.
+
+</div>
 
 ## 1. A version in use
 

@@ -12,11 +12,15 @@ older packs, and `aws-stack@1.1.1`.
 **Who runs this.** A job on a schedule, beside the drift report, and a person who
 plans the next release.
 
-**Follow along.** `just playground behind-1` serves this tenant as it was last
+<div class="playground-demo">
+
+`just playground behind-1` serves this tenant as it was last
 week, before the registry published `csi-aws-ebs` 1.65.0, and
 `just playground behind-2` serves it today. `just playground behind-3` adds a
 profile that Palette refuses to move. `just playground behind-pre-release` serves a
 registry with a pre-release of `csi-aws-ebs`.
+
+</div>
 
 ## 1. Last week
 

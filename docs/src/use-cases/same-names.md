@@ -9,8 +9,12 @@ profile has one changed value.
 
 **Who runs this.** A person at a terminal, working out which object a name means.
 
-**Follow along.** `just playground same-names` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground same-names` serves this tenant on this machine,
 with no key and no cost.
+
+</div>
 
 ## 1. See every cluster
 

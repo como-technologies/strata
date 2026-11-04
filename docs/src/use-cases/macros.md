@@ -18,9 +18,13 @@ macro `region`, and the cluster `payments` runs it.
 the digests of the macro values. The job is
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground macros-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground macros-1` serves this tenant on this
 machine, with no key and no cost. `just playground macros-2` serves it after the
 macro changes. Each section names the seed it needs.
+
+</div>
 
 ## 1. Record the version and the cluster, with the macro values
 
@@ -39,9 +43,13 @@ See [Macros](../commands/snapshot/cluster.md#macros).
 
 ## 2. The macro gets another value
 
-**Follow along.** `just playground macros-2` is the same tenant after a person
+<div class="playground-demo">
+
+`just playground macros-2` is the same tenant after a person
 gave `region` another value. Stop the first seed, and export what this one
 prints. Keep the records from step 1.
+
+</div>
 
 The record of the version still verifies. Its report names the macro, because
 the root covers the name and not the value:

@@ -40,6 +40,7 @@ pub fn check(
     bad.extend(release_tags(repo));
     bad.extend(links_resolve(repo));
     bad.extend(follow_along_first(repo));
+    bad.extend(playground_in_a_callout(repo));
     bad.extend(command_flags(repo));
     bad.extend(playgrounds(repo, chapters));
     bad.extend(seeds(repo, states));
@@ -202,15 +203,75 @@ fn follow_along_first(repo: &Path) -> Vec<String> {
         let Some(block) = text.find("{{#include ../output/") else {
             continue;
         };
-        match text.find("**Follow along.**") {
+        match text.find(PLAYGROUND_OPEN) {
             None => bad.push(format!(
-                "{name} has output blocks and no '**Follow along.**' line: a reader cannot run it"
+                "{name} has output blocks and no callout of the playground: a reader cannot run it"
             )),
             Some(follow) if follow > block => bad.push(format!(
-                "{name} asks for a command before its '**Follow along.**' line"
+                "{name} asks for a command before its callout of the playground"
             )),
             Some(_) => {}
         }
+    }
+    bad
+}
+
+/// The first line of the callout of a playground demo. `docs/playground.css` styles it, and writes
+/// its label.
+const PLAYGROUND_OPEN: &str = "<div class=\"playground-demo\">";
+
+/// A reader must see each playground demo as one, on each page. So each `just playground` of the
+/// book is inside the callout, and each callout names the recipe. The pages of `development/`
+/// describe the recipe to a maintainer, and they demonstrate nothing.
+fn playground_in_a_callout(repo: &Path) -> Vec<String> {
+    let mut bad = Vec::new();
+    for page in pages(&book(repo)) {
+        if page.components().any(|c| c.as_os_str() == "development") {
+            continue;
+        }
+        let Some(text) = read(repo, &page, &mut bad) else {
+            continue;
+        };
+        bad.extend(
+            callout_faults(&text)
+                .into_iter()
+                .map(|fault| format!("{}: {fault}", shown(repo, &page))),
+        );
+    }
+    bad
+}
+
+/// The faults of the callouts of one page.
+fn callout_faults(text: &str) -> Vec<String> {
+    const RECIPE: &str = "just playground";
+    let mut bad = Vec::new();
+    let mut open: Option<(usize, bool)> = None;
+    for (index, line) in text.lines().enumerate() {
+        let number = index + 1;
+        match (line.trim(), open) {
+            (PLAYGROUND_OPEN, Some((start, _))) => {
+                bad.push(format!(
+                    "line {number}: a callout opens inside the callout of line {start}"
+                ));
+            }
+            (PLAYGROUND_OPEN, None) => open = Some((number, false)),
+            ("</div>", Some((start, named))) => {
+                if !named {
+                    bad.push(format!(
+                        "line {start}: the callout does not name `{RECIPE}`"
+                    ));
+                }
+                open = None;
+            }
+            (_, Some((start, _))) if line.contains(RECIPE) => open = Some((start, true)),
+            (_, None) if line.contains(RECIPE) => {
+                bad.push(format!("line {number}: `{RECIPE}` is outside a callout"));
+            }
+            _ => {}
+        }
+    }
+    if let Some((start, _)) = open {
+        bad.push(format!("line {start}: the callout does not end"));
     }
     bad
 }
@@ -401,6 +462,37 @@ fn run_ids(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_demo_of_the_playground_is_in_one_callout_that_names_the_recipe() {
+        let open = PLAYGROUND_OPEN;
+        let good = format!("# Page\n\n{open}\n\n`just playground list` serves it.\n\n</div>\n");
+        assert!(callout_faults(&good).is_empty());
+
+        let outside = "# Page\n\n`just playground list` serves it.\n";
+        assert_eq!(
+            callout_faults(outside),
+            ["line 3: `just playground` is outside a callout"]
+        );
+
+        let no_recipe = format!("{open}\n\nThe tenant.\n\n</div>\n");
+        assert_eq!(
+            callout_faults(&no_recipe),
+            ["line 1: the callout does not name `just playground`"]
+        );
+
+        let no_end = format!("{open}\n\n`just playground list`\n");
+        assert_eq!(
+            callout_faults(&no_end),
+            ["line 1: the callout does not end"]
+        );
+
+        let nested = format!("{open}\n{open}\n`just playground list`\n</div>\n");
+        assert_eq!(
+            callout_faults(&nested),
+            ["line 2: a callout opens inside the callout of line 1"]
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -446,13 +538,13 @@ mod tests {
             &BTreeSet::new(),
             &StandIn::default(),
         );
-        // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
+        // release_tags, links_resolve, follow_along_first, playground_in_a_callout, playgrounds, seeds, and cited_run_ids each
         // read the page
         let unread = bad
             .iter()
             .filter(|m| m.starts_with(&format!("{}: cannot read the file", shown(repo, &broken))))
             .count();
-        assert_eq!(unread, 6, "{bad:?}");
+        assert_eq!(unread, 7, "{bad:?}");
     }
 
     /// The chapters of a small runner: `list` with one state, and `loop` with four.

@@ -15,8 +15,12 @@ built prod's `1.1.1` by hand instead, and changed one value on the way.
 checks the pairs: see
 [The promotion gate and the retire gate](../automation/gates.md).
 
-**Follow along.** `just playground promote` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground promote` serves this tenant on this machine,
 with no key and no cost.
+
+</div>
 
 ## 1. Record each project's copy of each version
 

@@ -18,8 +18,12 @@ Its virtual clusters `tenant-a` and `tenant-b` run it, and `tenant-a` runs
 **Who runs this.** A job that checks each member of a group, and a person who
 changes the pin.
 
-**Follow along.** `just playground cluster-groups-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground cluster-groups-1` serves this tenant on this
 machine, with no key and no cost.
+
+</div>
 
 ## 1. Record the group
 
@@ -78,7 +82,11 @@ root stays, and `verify` of the record names the change:
 {{#include ../output/group-policy-verify.txt}}
 ```
 
+<div class="playground-demo">
+
 `just playground cluster-groups-2` serves the tenant after the change.
+
+</div>
 
 ## What to do
 

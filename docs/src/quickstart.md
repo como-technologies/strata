@@ -24,9 +24,14 @@ replaces no node.
 
 These steps use the tenant of this book. Its project `dev` holds the versions
 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. Its cluster `payments` runs 1.1.0.
-`just playground quickstart` serves that tenant on this machine. With your own
-tenant, put your project, profile, and cluster names in place of these.
-`strata list` prints yours.
+With your own tenant, put your project, profile, and cluster names in place of
+these. `strata list` prints yours.
+
+<div class="playground-demo">
+
+`just playground quickstart` serves that tenant on this machine, with no key and no cost.
+
+</div>
 
 ```bash
 export PALETTE_PROJECT=dev
@@ -83,9 +88,8 @@ impact on running clusters.
 
 ## Next
 
-- [The everyday loop](./loop.md#a-day-of-work): what you do in a day of work, what
-  strata tells you, and where each step runs. It adds the questions to Palette
-  about a change, and `preflight` before a build.
+- [The everyday loop](./loop.md): when to reach for strata, how to add it to your
+  pipeline one job at a time, and what a normal day holds.
 - [Use cases](./use-cases/index.md): a problem, the commands, and the fix.
 - [Commands](./commands/index.md): each command, its output, and its options.
 - [Palette gives a value that strata does not know](./use-cases/unknown-value.md): what to do about a

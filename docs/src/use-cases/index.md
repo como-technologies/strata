@@ -51,11 +51,15 @@ points at another pack build, `UPSTREAM` that the content digest moved, and
 running node, from `none` up to `repave`, which replaces every node.
 [Impact](../reference/impact.md) gives each flag and each level.
 
-**The playground** serves the tenant of one page on your machine, with no key
+<div class="playground-demo">
+
+The playground serves the tenant of one page on your machine, with no key
 and no cost: `just playground <name>`. A page whose steps change the tenant has
 more than one **seed**, and a seed is one state of that tenant, named
 `<page>-1`, `<page>-2`, and so on. Each page says which seed each of its
 sections needs, and each seed serves on its own port.
+
+</div>
 
 ## The pages, in order
 
@@ -64,7 +68,7 @@ from the top teach what the tool does. Each line also names the problem that
 sends you to its page: read down the list to find yours.
 
 **1. Compare two versions.** What changed, and what it does to a running
-cluster. [The everyday loop](../loop.md) puts each group below in the life of a
+cluster. [One change, start to end](../walkthrough.md) puts each group below in the life of a
 release.
 
 - [What changed between two pack versions](./pack-versions.md): a bump moves a

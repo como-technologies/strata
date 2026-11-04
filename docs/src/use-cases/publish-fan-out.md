@@ -23,7 +23,9 @@ records, and opens the next pull request. The recipes are
 step in the publish job is yours to write: strata ships no recipe for it,
 because the publish itself is yours.
 
-**Follow along.** This page takes its blocks from the pages it links, so no one
+<div class="playground-demo">
+
+This page takes its blocks from the pages it links, so no one
 page serves all of it. Each block below runs on the seed that its own page
 names:
 
@@ -34,6 +36,8 @@ names:
 
 The merge gate reads a git repository, which the playground
 does not build.
+
+</div>
 
 ## What each level holds, and what it records
 

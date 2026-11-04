@@ -21,10 +21,14 @@ In this example, `dev` has `aws-stack@1.1.1`, and the cluster `payments` runs it
 terminal works out what changed. The job is
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground edited-in-place-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground edited-in-place-1` serves this tenant on this
 machine, with no key and no cost. An edit in place changes the tenant, so this
 page has three seeds. Each section names the one it needs, and each seed serves
 on its own port.
+
+</div>
 
 ## 1. Record the version and the cluster
 
@@ -38,8 +42,12 @@ on its own port.
 
 ## 2. A person edits the version: verify reports drift
 
-**Follow along.** `just playground edited-in-place-2` is the same tenant after
+<div class="playground-demo">
+
+`just playground edited-in-place-2` is the same tenant after
 the edit. Stop the first seed, and export what this one prints.
+
+</div>
 
 The person changed the CSI reclaim policy from `Delete` to `Retain`. Your
 records from step 1 still hold the content from before it:
@@ -167,9 +175,13 @@ See [Drift issues](../automation/drift-issues.md).
 
 ## 6. The update reaches the old cluster
 
-**Follow along.** `just playground edited-in-place-3` is the same tenant after
+<div class="playground-demo">
+
+`just playground edited-in-place-3` is the same tenant after
 `payments` takes the update. Stop the second seed, and export what this one
 prints.
+
+</div>
 
 A person accepts the update on `payments`. Now its record drifts too:
 

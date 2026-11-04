@@ -16,9 +16,13 @@ In this example, `payments` and `search` run `aws-stack@1.1.1`.
 **Who runs this.** A person at a terminal during an incident, and a job that
 keeps a record of each cluster.
 
-**Follow along.** `just playground cluster-tiers-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground cluster-tiers-1` serves this tenant on this
 machine, with no key and no cost. A person changes the clusters in step 3, so
 this page has two seeds. Each section names the one it needs.
+
+</div>
 
 ## 1. Record each cluster, with its shape
 
@@ -46,8 +50,12 @@ One release, and each tier is the same.
 
 ## 3. The clusters change
 
-**Follow along.** `just playground cluster-tiers-2` is the same tenant after
+<div class="playground-demo">
+
+`just playground cluster-tiers-2` is the same tenant after
 four changes:
+
+</div>
 
 - The worker pool of `search` has three nodes and a taint.
 - `search` has another timezone and one more label.

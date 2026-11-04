@@ -16,9 +16,13 @@ runs it, and it is bound to the edge hosts `store-1` and `store-2`.
 **Who runs this.** A person at a terminal before a delete, and a job that keeps
 a record of each edge host.
 
-**Follow along.** `just playground edge-hosts-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground edge-hosts-1` serves this tenant on this
 machine, with no key and no cost. A person edits the profile in step 3, so this
 page has two seeds. Each section names the one it needs.
+
+</div>
 
 ## 1. Count the consumers
 
@@ -45,9 +49,13 @@ the profiles bound to the host, and has the root of the version:
 
 ## 3. A person edits the version in place
 
-**Follow along.** `just playground edge-hosts-2` is the same tenant after a
+<div class="playground-demo">
+
+`just playground edge-hosts-2` is the same tenant after a
 person edits the manifest of `platform-addons@1.0.0` in place. Stop the first
 seed, and export what this one prints.
+
+</div>
 
 ```text
 {{#include ../output/edge-verify.txt}}

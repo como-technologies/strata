@@ -17,10 +17,14 @@ shortens that profile uid to `...c3`. The other uid in each listing,
 scheduled verify job is what reports the overwrite first: see
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground overwritten-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground overwritten-1` serves this tenant on this
 machine, with no key and no cost. A bump changes the tenant, so this page has
 three seeds. Each section names the one it needs, and each seed serves on its
 own port.
+
+</div>
 
 ## 1. Record the version and the cluster
 
@@ -35,9 +39,13 @@ version. Keep the two files: every later step reads them.
 
 ## 2. The bump: the old version is gone
 
-**Follow along.** `just playground overwritten-2` is the same tenant after the
+<div class="playground-demo">
+
+`just playground overwritten-2` is the same tenant after the
 bump. Stop the first seed, and export what this one prints. Keep the two records
 from step 1.
+
+</div>
 
 ```text
 {{#include ../output/overwritten-list.txt}}
@@ -161,9 +169,13 @@ With the flag, a bump makes a new uid, and the old version stays. The provider
 also refuses a change of the content without a bump, at plan time. An edit
 through the API or the console is outside the plan, and changes the version.
 
-**Follow along.** `just playground overwritten-3` is the same tenant after the
+<div class="playground-demo">
+
+`just playground overwritten-3` is the same tenant after the
 same bump, with the flag on. Stop the second seed, and export what this one
 prints. Keep the two records from step 1.
+
+</div>
 
 ```text
 {{#include ../output/overwritten-flag-list.txt}}
