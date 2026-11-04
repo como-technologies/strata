@@ -134,7 +134,7 @@ gives it. The observer never lowers a drift.
   `action`.
 - When `verify.whoError` is set, strata could not read the audit log. The row
   stays `drifted`, and the finding stays a finding. It has `whoUnread` true and
-  an empty `who`. The row is no `read-error`. The summary carries the flag, and
+  an empty `who`. The record has no `read-error` row. The summary carries the flag, and
   never the text of the error. The log of the observer holds the text.
 - When `published-changed` and `cluster-differs` hit one profile, and
   `rootLive` equals `rootB` of the compare, the observer makes one finding. It
