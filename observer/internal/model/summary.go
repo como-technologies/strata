@@ -182,9 +182,10 @@ type Limits struct {
 	MaskedPaths       int `json:"maskedPaths"`
 }
 
-// Event is one line for the list of events, in the way of an event of Kubernetes.
+// Event is one line for the list of events, in the way of an event of Kubernetes. The list holds the
+// last 7 days.
 type Event struct {
-	Type    string    `json:"type"`
+	Type    EventType `json:"type"`
 	Reason  string    `json:"reason"`
 	Time    time.Time `json:"time"`
 	Object  string    `json:"object"`

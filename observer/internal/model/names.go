@@ -62,6 +62,39 @@ const (
 	PageOK        Page = "ok"
 )
 
+// Side is the comparison that a detail diff of a pack comes from.
+type Side string
+
+// The sides of a pack diff. The published side is the record against the published version, the
+// cluster side is the record against the cluster, and the newer side is the pinned version against
+// the newest version.
+const (
+	SidePublished Side = "published"
+	SideCluster   Side = "cluster"
+	SideNewer     Side = "newer"
+)
+
+// ParseSide reads the side of a request. The second result is false for a word that is no side.
+func ParseSide(word string) (Side, bool) {
+	s := Side(word)
+	switch s {
+	case SidePublished, SideCluster, SideNewer:
+		return s, true
+	}
+	return "", false
+}
+
+// EventType is the kind of news that an event gives.
+type EventType string
+
+// The types of an event. A newer version stays neutral, and "not checked" never raises a severity.
+const (
+	EventDrift      EventType = "drift"
+	EventNewer      EventType = "newer"
+	EventNotChecked EventType = "not-checked"
+	EventInfo       EventType = "info"
+)
+
 // The scopes of a profile.
 const (
 	ScopeTenant  = "tenant"

@@ -1,0 +1,1 @@
+{"source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}],"updatesPending":false,"repavePending":false,"variables":[{"name":"team","value":"SENTINEL-VARIABLE"}]}}}

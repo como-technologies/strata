@@ -152,3 +152,55 @@ func TestFoldMatchesTheRealMoves(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitPutsEachValueInTheListOfItsGroupAndTheListsMatchTheFold(t *testing.T) {
+	for _, file := range []string{"move-kubernetes.json", "move-cert-manager.json", "move-cni-cilium-oss.json"} {
+		var d Diff
+		if err := json.Unmarshal(read(t, file), &d); err != nil {
+			t.Fatal(err)
+		}
+		v := d.Packs[0].Values
+		settings, follows, repeats := Split(v)
+		want := FoldOf(v)
+		if len(settings) != want.Settings || len(follows) != want.Follows || len(repeats) != want.Repeats {
+			t.Errorf("%s: lists %d %d %d, fold %+v", file, len(settings), len(follows), len(repeats), want)
+		}
+		for _, l := range settings {
+			if GroupOf(l.Path) != GroupSettings {
+				t.Errorf("%s: %s is not a setting", file, l.Path)
+			}
+		}
+		for _, l := range follows {
+			if GroupOf(l.Path) != GroupFollows {
+				t.Errorf("%s: %s does not follow the version", file, l.Path)
+			}
+		}
+		for _, l := range repeats {
+			if GroupOf(l.Path) != GroupRepeats {
+				t.Errorf("%s: %s does not repeat the lists", file, l.Path)
+			}
+		}
+	}
+}
+
+func TestSplitGivesEmptyListsAndNeverNull(t *testing.T) {
+	settings, follows, repeats := Split(Values{})
+	if settings == nil || follows == nil || repeats == nil {
+		t.Errorf("%v %v %v", settings, follows, repeats)
+	}
+}
+
+func TestGroupOfReadsThePathOfAValue(t *testing.T) {
+	for path, want := range map[string]Group{
+		"pack.content.images[0].image":     GroupRepeats,
+		"pack.content.charts[1].version":   GroupRepeats,
+		"charts.dex.image.tag":             GroupFollows,
+		"charts.dex.image.repository":      GroupFollows,
+		"charts.dex.config.expiry.idToken": GroupSettings,
+		"pack.k8sHardening":                GroupSettings,
+	} {
+		if got := GroupOf(path); got != want {
+			t.Errorf("%s: %v, want %v", path, got, want)
+		}
+	}
+}

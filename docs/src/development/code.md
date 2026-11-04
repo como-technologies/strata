@@ -272,6 +272,18 @@ code, and these rules are for the Go code.
 - The one compare of versions in the Go code is the minor number of
   `tool.version`, in `model.ReBaselineNeeded`. The observer does not order pack
   versions: `behind` gives the order in `newer[0]`.
+- `internal/api` serves the summary and the detail tiers: see
+  [The API of the observer](./observer-api.md). The summary tier uses types of
+  its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the
+  detail tier has one. A test walks the types.
+- Only `internal/api` imports `net` or `net/http`, and only `health.go` makes an
+  HTTP request. No code sends a `POST`. A test makes sure of each rule.
+- A server answers on a loopback address only. It sets the four headers on each
+  answer, it refuses a `Host` that is not loopback, and it logs no request.
+- One worker holds the one slot for a `strata` process. A cycle and a request of
+  the detail tier take the slot in turn, so two processes never run together.
+- A test of a route has a line in the table of the sentinel test. The test fails
+  when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the
   binary skips when `STRATA_BIN` is not set.
 
