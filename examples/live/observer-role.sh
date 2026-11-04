@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The least role of the key of the observer (#645). The script sends each request that a cycle of the
-# observer sends, once with the key of the example and once with a second key, and records the status
-# and the error code of each answer. Then it runs the commands of the cycles with both keys.
+# The least role of the key of the observer (#645). The script sends each request of the two cycles of
+# the observer twice: with the key of the example, and with a second key. It records the status and the
+# error code of each answer. Then it runs the commands of the cycles with both keys.
 #
 #   OBSERVER_ROLE=NAME OBSERVER_ROLE_KEY=KEY examples/live/observer-role.sh [FROM_STAGE]
 #

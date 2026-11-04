@@ -1,9 +1,9 @@
 //! The chapter of the observer: a service in a cluster that checks the records of the team against
 //! Palette on a timer.
 //!
-//! One tenant holds all of it: a cluster with two profiles, a published version that a person
-//! edits after its record, a cluster that differs from its release, and a registry with newer
-//! versions. The steps run `strata-observer once`, which the runner puts on the `PATH`. The
+//! One tenant holds four things: a cluster with two profiles, and a published version that a
+//! person edits after its record. It also holds a cluster that differs from its release, and a
+//! registry with newer versions. The steps run `strata-observer once`, which the runner puts on the `PATH`. The
 //! playground script `scripts/observer-playground.sh` serves the page of the same tenant.
 
 use super::edits::RETAIN;
@@ -44,8 +44,8 @@ pub(super) fn run(r: &mut Runner) {
     answers(r);
 }
 
-/// The records of the pipeline of the team: one for each profile that its clusters run, the
-/// Secrets that the records script writes, and the folder that stands for them in the pod.
+/// The records of the pipeline of the team: one for each profile that its clusters run. The records
+/// script writes them as Secrets, and a folder stands for the Secrets in the pod.
 fn records(r: &mut Runner) {
     r.quiet("mkdir -p releases work state state-ledger");
     for (profile, file) in [

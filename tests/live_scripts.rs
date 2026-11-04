@@ -1298,8 +1298,8 @@ grep -q 'fake-kubeconfig' "${KUBECONFIG:-/dev/null}" 2>/dev/null || { echo "no k
 if [ -n "${FAKE_KUBE_PUT:-}" ]; then
   # The cluster runs the Deployment that the last PUT of the profile holds: the first image: line.
   image=$(jq -r '[.spec.template.packs[].manifests[].content] | join("\n") | capture("image: (?<i>[^\n]*)\n") | .i' "$FAKE_KUBE_PUT" 2>/dev/null)
-  # With $FAKE_KUBE_ORPHAN, a Deployment that the content once named stays after the content drops it,
-  # as Palette leaves it, until a delete. The marker files sit beside the path that the variable names.
+  # With $FAKE_KUBE_ORPHAN, a Deployment that the content once named stays after the content drops it.
+  # Palette leaves it so, until a delete. The marker files sit beside the path that the variable names.
   if [ -n "${FAKE_KUBE_ORPHAN:-}" ]; then
     [ -z "$image" ] || touch "$FAKE_KUBE_ORPHAN.seen"
     case "$*" in *"delete deployment"*) touch "$FAKE_KUBE_ORPHAN.deleted"; echo deleted; exit 0 ;; esac

@@ -1006,9 +1006,9 @@ fn the_docs_job_installs_go_from_the_module_of_the_observer_before_it_checks_the
     assert!(setup < check, "Go comes before the check of the output");
 }
 
-/// The contract script and the playground script keep one copy of the functions that start and
-/// stop the stand-in, and of the writer of the records. Both source `observer-lib.sh`, and no
-/// script defines them again.
+/// The contract script and the playground script keep one copy of three functions: they start the
+/// stand-in, stop it, and write the records. Both source `observer-lib.sh`, and no script defines
+/// them again.
 #[test]
 fn the_scripts_of_the_observer_keep_one_copy_of_start_stop_and_the_records_directory() {
     let scripts = ["observer-contract.sh", "observer-playground.sh"];
