@@ -8,22 +8,25 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::registry::Registries;
-use crate::api::{AuditKind, Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi};
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
 use crate::diff::{
-    self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
-    InvalidPack, Verify, VerifyStatus,
+    self, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel, InvalidPack, Verify,
+    VerifyStatus,
 };
 use crate::error::{Error, ErrorDocument, Result, found};
 use crate::json::{is_zero, text};
 use crate::reference::name_version;
-use crate::snapshot::{Pack, PackSource, Snapshot, SubjectKind, Tool};
+use crate::snapshot::{Pack, PackSource, Snapshot, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};
 
+use self::who::add_who;
 use super::live::{LiveObject, known_kind, read_live};
 use super::{connected, scope_of};
+
+mod who;
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -44,7 +47,8 @@ pub struct Verification {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct VerifyOptions {
     /// For a profile or cluster record that drifted, read the writes to it from the audit log of
-    /// Palette since the record was taken, into `verify.who`.
+    /// Palette since the record was taken, into `verify.who`. When the read fails, the verdict
+    /// stays and `verify.whoError` gives the reason.
     pub who: bool,
     /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
     /// report still names the pack.
@@ -124,42 +128,6 @@ pub fn check_verifiable(recorded: &Snapshot) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// The kind of the object of a record in the audit log of Palette, or `None` for a cluster.
-/// strata reads the log of a cluster by its uid alone. Palette logs the create and the delete of
-/// a virtual cluster under `virtualCluster`, not under `spectrocluster`.
-fn audit_kind(recorded: &Snapshot) -> Option<AuditKind> {
-    match &recorded.source.cluster {
-        Some(c) => match c.kind.known() {
-            Some(SubjectKind::EdgeHost) => Some(AuditKind::EdgeHost),
-            Some(SubjectKind::ClusterGroup) => Some(AuditKind::ClusterGroup),
-            // a cluster, and a kind that a later release wrote: the entries of the uid alone
-            Some(SubjectKind::Cluster) | None => None,
-        },
-        None if recorded.source.is_app() => Some(AuditKind::AppProfile),
-        None => Some(AuditKind::ClusterProfile),
-    }
-}
-
-/// The writes to one object that the audit log of Palette holds since `since`, oldest first.
-/// With no `kind`, the entries of each kind for the uid.
-fn writes<A: PaletteApi>(
-    palette: &Palette<A>,
-    kind: Option<AuditKind>,
-    uid: &str,
-    since: &str,
-    progress: &Progress,
-) -> Result<Vec<AuditEntry>> {
-    let object = kind.map_or_else(|| uid.to_string(), |k| format!("{} {uid}", k.as_str()));
-    progress.note(&format!("reading the audit log of {object} since {since}"));
-    let mut entries: Vec<AuditEntry> = palette
-        .audits(kind, uid, since)?
-        .iter()
-        .map(AuditEntry::from_palette)
-        .collect();
-    entries.reverse(); // Palette lists the newest first
-    Ok(entries)
 }
 
 /// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
@@ -298,14 +266,11 @@ pub fn verify_with<A: PaletteApi>(
         .cluster_variables
         .as_ref()
         .map_or(0, |c| c.values.len());
-    let who = if options.who && !unchanged {
-        Some(who_wrote(recorded, &diff, palette, progress)?)
-    } else {
-        None
-    };
     if let Some(v) = diff.verify.as_mut() {
         v.cluster_values_changed = values_changed;
-        v.who = who;
+    }
+    if options.who && !unchanged {
+        add_who(recorded, &mut diff, palette, progress);
     }
     let status = settle(unchanged, &mut diff, options);
     Ok(Verification {
@@ -387,49 +352,6 @@ fn renamed_or_overwritten(
     } else {
         (None, now_names)
     }
-}
-
-/// The writes to the object of `recorded` since the record was taken, oldest first. It reads the
-/// audit log of the object, and that of each profile that `diff` shows as overwritten.
-fn who_wrote<A: PaletteApi>(
-    recorded: &Snapshot,
-    diff: &Diff,
-    palette: &Palette<A>,
-    progress: &Progress,
-) -> Result<Vec<AuditEntry>> {
-    let uid = recorded.source.shown_uid();
-    let since = &recorded.source.fetched_at;
-    let mut entries = writes(palette, audit_kind(recorded), uid, since, progress)?;
-    let overwritten = diff
-        .verify
-        .as_ref()
-        .map(|v| v.profiles_overwritten.as_slice())
-        .unwrap_or_default();
-    // the write that overwrote a version that a cluster runs is an entry of the profile
-    for o in overwritten {
-        let mut more = writes(
-            palette,
-            Some(AuditKind::ClusterProfile),
-            &o.uid,
-            since,
-            progress,
-        )?;
-        // the line names the profile, also when Palette gives no resource on the entry
-        for e in &mut more {
-            let r = e.resource.get_or_insert_with(|| AuditResource {
-                kind: AuditKind::ClusterProfile.as_str().to_string(),
-                name: String::new(),
-                uid: o.uid.clone(),
-            });
-            if r.name.is_empty() {
-                r.name = o.name.clone();
-            }
-        }
-        entries.extend(more);
-    }
-    // oldest first over all the logs; each time has the same form, so the text sorts it
-    entries.sort_by(|a, b| a.time.cmp(&b.time));
-    Ok(entries)
 }
 
 /// Schema id of the document `verify` writes for several records.

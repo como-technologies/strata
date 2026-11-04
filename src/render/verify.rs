@@ -259,9 +259,21 @@ fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
 /// What `verify --who` states when the audit log holds no write since the record.
 const NO_AUDIT_ENTRY: &str = "no audit entry since the record";
 
-/// What `verify --who` found: `who: 2 writes in the audit log since the record`, or `who: no
-/// audit entry since the record`. `None` without `--who`.
+/// What `verify --who` states when strata could not read the audit log.
+///
+/// The line is `who: not read: <error>`, where the error is `HTTP 403: <body>` for a key without
+/// the permission.
+fn who_not_read(error: &str) -> String {
+    format!("who: not read: {error}")
+}
+
+/// What `verify --who` found: `who: 2 writes in the audit log since the record`, `who: no audit
+/// entry since the record`, or `who: not read: <the error>` when the read failed. `None` without
+/// `--who`.
 pub(crate) fn who_heading(v: &Verify) -> Option<String> {
+    if let Some(error) = &v.who_error {
+        return Some(who_not_read(error));
+    }
     let who = v.who.as_ref()?;
     Some(if who.is_empty() {
         format!("who: {NO_AUDIT_ENTRY}")
@@ -306,15 +318,16 @@ fn last_modified_suffix(v: &Verify) -> String {
     }
 }
 
-/// What the summary line of a drifted record adds with `--who`: the last write, or that the log
-/// holds none.
+/// What the summary line of a drifted record adds with `--who`: the last write, that the log
+/// holds none, or that strata could not read it.
 fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
-    let Some(who) = r
-        .diff
-        .as_ref()
-        .and_then(|d| d.verify.as_ref())
-        .and_then(|v| v.who.as_ref())
-    else {
+    let Some(v) = r.diff.as_ref().and_then(|d| d.verify.as_ref()) else {
+        return String::new();
+    };
+    if let Some(error) = &v.who_error {
+        return format!("; {}", who_not_read(error));
+    }
+    let Some(who) = v.who.as_ref() else {
         return String::new();
     };
     match who.last() {

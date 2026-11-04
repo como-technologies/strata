@@ -9,9 +9,13 @@
 #   2  with a cluster: record cluster A, edit the add-on version it runs, accept the update on the
 #      cluster through the API, and read who wrote to the cluster; then undo both. Without a
 #      cluster, the stage records nothing and says so
+#   3  a key with no permission to read the audit log, from STRATA_LIVE_NO_AUDIT_KEY: edit the
+#      add-on version, and make sure that the verdict stays and `--who` says that it could not
+#      read the log; then undo the edit. Without the key, the stage records nothing and says so
 #
 # Stage 1 needs the profiles (just live-profiles) and no cluster: no cost. Stage 2 needs
-# just live-up, and uses the cluster that is there. The script makes one edit at a time and
+# just live-up, and uses the cluster that is there. Stage 3 needs the key that brett makes for
+# just live-observer-role. The script makes one edit at a time and
 # undoes it, so it leaves the example as it found it. Needs the strata release binary, jq, and
 # the key as verify.sh needs it. Results go under runs/<UTC time>/who/, or OUT; FROM_STAGE resumes
 # a run in OUT. Exit 0 only when no check fails.
@@ -19,7 +23,7 @@ set -uo pipefail
 script=who
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 addon=strata-live-addon
@@ -114,6 +118,37 @@ if stage 2 "an update that a cluster accepts"; then
   fi
 fi
 
+# as_no_audit COMMAND...: run COMMAND with the key that cannot read the audit log
+as_no_audit() { PALETTE_API_KEY=$STRATA_LIVE_NO_AUDIT_KEY "$@"; }
+# no_audit_json: the document of the verdict, with that key. The status stays drifted, the reason is
+# there, and the writes are not. strata exits 1 for the drift, so the pipe takes the exit of jq.
+no_audit_json() {
+  (
+    set +o pipefail
+    as_no_audit "$strata" verify noaudit.json --who --json \
+      | jq -e '.verify | .status == "drifted" and (.whoError | startswith("HTTP 403")) and (has("who") | not)'
+  )
+}
+
+if stage 3 "a key with no permission to read the audit log"; then
+  if [ -z "${STRATA_LIVE_NO_AUDIT_KEY:-}" ]; then
+    echo "no key: set STRATA_LIVE_NO_AUDIT_KEY to the key of just live-observer-role; stage 3 records nothing" | tee -a steps.log
+  else
+    [ -n "${AD:-}" ] || die "no add-on version uid in ids.env; run stage 1 first"
+    check noaudit-record 0 "#664: record $addon@1.0.0" -- "$strata" snapshot "$AD" -o noaudit.json
+    check noaudit-edit 0 "#664: edit $addon@1.0.0 in place through the API" -- \
+      "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
+    check noaudit-who 1 '#664: the key cannot read the audit log, and the verdict stays: DRIFT, exit 1' -- \
+      as_no_audit "$strata" verify noaudit.json --who
+    check noaudit-who-verdict 0 '#664: the first line is the verdict DRIFT' -- grep -q '^DRIFT: ' noaudit-who.out
+    check noaudit-who-says 0 '#664: the output has the one line, with the refusal of Palette: HTTP 403 and AccessDenied' -- \
+      grep -Eq '^who: not read: HTTP 403: .*AccessDenied' noaudit-who.out
+    check noaudit-who-json 0 '#664: --json gives verify.whoError, no verify.who, and the status drifted' -- no_audit_json
+    check noaudit-undo 0 '#664: undo the edit through the API' -- \
+      "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
+    check noaudit-restored 0 '#664: the record verifies again after the undo' -- "$strata" verify noaudit.json
+  fi
+fi
 echo
 echo "$script: $(grep -c '^PASS' steps.log) passed, $failures failed; results in $run"
 [ "$failures" = 0 ]

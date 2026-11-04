@@ -65,6 +65,12 @@ pub struct Verify {
     /// an unchanged record, and for a pack record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub who: Option<Vec<AuditEntry>>,
+    /// With `--who`, for a drifted record: why strata could not read the audit log, when Palette
+    /// answered with an error, such as a 403 or a 5xx, or the request did not complete. `who` is
+    /// then absent, also when a read of the log of an overwritten profile fails after the log of
+    /// the object worked. It does not change `status`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub who_error: Option<String>,
     /// When Palette last changed the object of the record, from `metadata.lastModifiedTimestamp`
     /// of the document that `verify` reads: the profile, the app profile, the cluster, the edge
     /// host, or the cluster group. It costs no request. Absent when Palette gives no time, when
@@ -129,6 +135,7 @@ impl Verify {
             profiles_overwritten: Vec::new(),
             cluster_values_changed: 0,
             who: None,
+            who_error: None,
             last_modified: None,
             upstream_unknown: Vec::new(),
             macros_changed: Vec::new(),

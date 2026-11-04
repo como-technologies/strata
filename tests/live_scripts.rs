@@ -9232,3 +9232,131 @@ fn observer_role_sh_stops_before_any_request_when_it_has_no_key_or_no_role_name(
         assert!(!stage.path("routes/sent").exists(), "no request to Palette");
     }
 }
+
+/// A `strata` for who.sh stage 3. It knows the key `noaudit-k`, which cannot read the audit log:
+/// the verdict stays, and `--who` says that it could not read the log. Each call goes to the log
+/// `calls` with the key that it got.
+const FAKE_STRATA_NO_AUDIT: &str = r#"#!/usr/bin/env bash
+echo "key=${PALETTE_API_KEY:-} $*" >> "$FAKE_STRATA/calls"
+refused=; [ "${PALETTE_API_KEY:-}" = noaudit-k ] && refused=1
+case "$*" in
+  "snapshot prof-1 -o noaudit.json") echo '{"source":{"fetchedAt":"2026-11-04T09:00:00Z"}}' > noaudit.json ;;
+  "verify noaudit.json --who")
+    if [ -n "$refused" ]; then
+      echo 'DRIFT: published version strata-live-addon@1.0.0 differs'
+      echo 'who: not read: HTTP 403: {"code":"AccessDenied"}'
+      exit 1
+    fi ;;
+  "verify noaudit.json --who --json")
+    if [ -n "$refused" ]; then
+      echo '{"verify":{"status":"drifted","whoError":"HTTP 403: {\"code\":\"AccessDenied\"}"}}'
+      exit 1
+    fi ;;
+esac
+exit 0
+"#;
+
+/// A stage of who.sh whose add-on version is `prof-1`. The manifest of the version says what the
+/// last `PUT` sent, so that an edit and its undo both find their text.
+fn no_audit_stage() -> Stage {
+    let stage = Stage::new(serde_json::json!({}));
+    stage.command("fake-strata", FAKE_STRATA_NO_AUDIT);
+    let routes = stage.path("routes");
+    addon_profile_routes(&routes);
+    executable(
+        &routes.join("v1_clusterprofiles_prof-1_packs_manifests.sh"),
+        r#"#!/usr/bin/env bash
+content='edited: "no"'
+sent="$FAKE_ROUTES/sent/PUT_v1_clusterprofiles_prof-1"
+[ -f "$sent" ] && content=$(jq -r '.spec.template.packs[0].manifests[0].content' "$sent")
+jq -n --arg c "$content" '{metadata: {}, spec: {packs: [{metadata: {}, spec: {name: "config", manifests: [{name: "config", uid: "m-1", digest: "d", content: $c}]}}]}}'
+"#,
+    );
+    // stage 1 saved the uid of the version in an earlier run
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(stage.path("out/ids.env"), "AD=prof-1\n").unwrap();
+    stage
+}
+
+#[test]
+fn who_sh_stage_3_makes_sure_that_a_key_with_no_audit_permission_keeps_the_verdict() {
+    let mut stage = no_audit_stage();
+    stage.env("STRATA_LIVE_NO_AUDIT_KEY", "noaudit-k");
+
+    let (o, steps) = stage.run("who.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "noaudit-record",
+            "noaudit-edit",
+            "noaudit-who",
+            "noaudit-who-verdict",
+            "noaudit-who-says",
+            "noaudit-who-json",
+            "noaudit-undo",
+            "noaudit-restored",
+        ],
+    );
+    // the key is for the two reads of the verdict, and the edit and the record use the key of the lab
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| !l.ends_with("--version"))
+            .collect::<Vec<_>>(),
+        [
+            "key=k snapshot prof-1 -o noaudit.json",
+            "key=noaudit-k verify noaudit.json --who",
+            "key=noaudit-k verify noaudit.json --who --json",
+            "key=k verify noaudit.json",
+        ]
+    );
+    // the edit and its undo each sent one PUT
+    let texts: Vec<_> = stage
+        .sent("PUT", "/v1/clusterprofiles/prof-1")
+        .iter()
+        .map(|b| b["spec"]["template"]["packs"][0]["manifests"][0]["content"].clone())
+        .collect();
+    assert_eq!(texts.len(), 2, "{texts:?}");
+    assert_ne!(texts[0], texts[1], "the undo puts the text back: {texts:?}");
+    let printed = format!("{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        !printed.contains("noaudit-k"),
+        "the key is not printed: {printed}"
+    );
+    for (name, content) in files_under(&stage.path("out")) {
+        assert!(!content.contains("noaudit-k"), "{name} holds the key");
+    }
+}
+
+#[test]
+fn who_sh_stage_3_fails_the_check_of_the_verdict_when_the_key_still_reads_the_audit_log() {
+    let mut stage = no_audit_stage();
+    // a key that reads the log: the fake gives no refusal to it
+    stage.env("STRATA_LIVE_NO_AUDIT_KEY", "reader-k");
+
+    let (o, steps) = stage.run("who.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(
+        &steps,
+        &["noaudit-who", "noaudit-who-says", "noaudit-who-json"],
+    );
+}
+
+#[test]
+fn who_sh_stage_3_records_nothing_and_says_so_without_the_key() {
+    let stage = no_audit_stage();
+
+    let (o, steps) = stage.run("who.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(steps.contains("STRATA_LIVE_NO_AUDIT_KEY"), "{steps}");
+    assert!(!steps.contains("noaudit-"), "{steps}");
+    // only the report of the run asks strata for its version
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap_or_default();
+    assert!(
+        calls.lines().all(|l| l.ends_with("--version")),
+        "no call to strata without the key: {calls}"
+    );
+}

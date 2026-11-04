@@ -251,9 +251,11 @@ tests it.
 
 **Project Viewer is the smallest built-in role that gives every answer,
 `verify --who` included.** Cluster Viewer alone gives every answer except the
-audit log. A custom role at project scope needs `cluster.get`,
-`clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and
-`audit.list`. A virtual cluster needs `virtualCluster.get` too.
+audit log. Then `verify --who` keeps its verdict and cannot name the writer: see
+[Who changed it](../../commands/verify.md#who-changed-it). A custom role at
+project scope needs `cluster.get`, `clusterProfile.get`, `packRegistry.get`,
+`packRegistry.list`, and `audit.list`. A virtual cluster needs `virtualCluster.get`
+too.
 
 A request without its permission gets one of these answers:
 

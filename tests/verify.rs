@@ -8033,6 +8033,188 @@ fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_
     assert!(json["verify"]["who"][1].get("userMsg").is_none());
 }
 
+fn who_options() -> ops::VerifyOptions {
+    ops::VerifyOptions {
+        who: true,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_500() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let denied = r#"{"code":"AccessDenied","message":"no permission"}"#;
+    let fault = r#"{"code":"InternalError"}"#;
+    for (status, body) in [(403, denied), (500, fault)] {
+        // Palette ends a body with a newline: the reason has none
+        let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+            profile_audits("t0"),
+            status,
+            format!("{body}\n"),
+        );
+        let v = ops::verify_with(
+            &recorded,
+            &Palette::new(&api),
+            "t1",
+            &who_options(),
+            &Progress::silent(),
+        )
+        .unwrap();
+        let reason = format!("HTTP {status}: {body}");
+        assert!(!v.unchanged, "{status}");
+        assert_eq!(v.status, VerifyStatus::Drifted, "{status}");
+        let ver = v.diff.verify.as_ref().unwrap();
+        assert_eq!(ver.status, VerifyStatus::Drifted, "{status}");
+        assert!(ver.who.is_none(), "{status}");
+        assert_eq!(ver.who_error.as_deref(), Some(reason.as_str()));
+        let line = verdict_of(&v);
+        assert!(line.starts_with("DRIFT: "), "{line}");
+        assert!(
+            line.ends_with(&format!("\nwho: not read: {reason}")),
+            "the verdict ends with the one line: {line}"
+        );
+        let markdown = common::markdown().verdict(&v.diff).unwrap();
+        assert!(
+            markdown.contains(&format!("\n\nwho: not read: {reason}")),
+            "{markdown}"
+        );
+        let json = serde_json::to_value(&v.diff).unwrap();
+        assert_eq!(json["verify"]["whoError"], reason.as_str());
+        assert_eq!(json["verify"]["status"], "drifted");
+        assert!(json["verify"].get("who").is_none(), "{json}");
+    }
+}
+
+#[test]
+fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_several_records() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let denied = r#"{"code":"AccessDenied"}"#;
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        403,
+        denied,
+    );
+    let s = common::verify_summary_with(&recorded, &api, &who_options());
+    assert_eq!(s.summary.status, ops::RecordStatus::Drifted);
+    assert_eq!((s.summary.drifted, s.summary.errors), (1, 0));
+    assert_eq!(
+        s.exit_code(),
+        1,
+        "drift is exit 1, and not the exit 2 of an error"
+    );
+    let record = &s.records[0];
+    assert_eq!(record.status, ops::RecordStatus::Drifted);
+    assert!(record.error.is_none(), "{:?}", record.error);
+    let text = common::terminal().render_verify_summary(&s).unwrap();
+    assert!(
+        text.starts_with("DRIFT  ")
+            && text.contains(&format!("; who: not read: HTTP 403: {denied}\n")),
+        "{text}"
+    );
+    let json = serde_json::to_value(&s).unwrap();
+    assert_eq!(
+        json["records"][0]["diff"]["verify"]["whoError"],
+        format!("HTTP 403: {denied}").as_str()
+    );
+}
+
+#[test]
+fn verify_who_drops_the_writes_already_read_when_the_log_of_an_overwritten_profile_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-a"),
+        None,
+    )
+    .unwrap();
+    // a legacy version bump took the uid of the version that the cluster runs
+    let mut bumped = read_json(&dir.path().join("a/profile.json"));
+    bumped["spec"]["version"] = Value::from("1.3.0");
+    let cluster_log = cluster_audits("t0");
+    let profile_log = profile_audits("t0");
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(profile_route(UID_A), bumped)
+        .with(
+            cluster_log.clone(),
+            audits_page(
+                vec![audit_of(
+                    "au2",
+                    "2026-09-18T14:05:00.000Z",
+                    serde_json::json!({"kind": "spectrocluster", "name": "lab-cluster",
+                        "uid": CLUSTER_UID}),
+                    None,
+                )],
+                "",
+            ),
+        )
+        .failing(profile_log.clone(), 500, r#"{"code":"InternalError"}"#);
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    // the log of the cluster worked, and the log of the profile did not
+    assert_eq!((api.calls(&cluster_log), api.calls(&profile_log)), (1, 1));
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert!(
+        ver.who.is_none(),
+        "a part of the list reads as the whole list"
+    );
+    assert_eq!(
+        ver.who_error.as_deref(),
+        Some(r#"HTTP 500: {"code":"InternalError"}"#)
+    );
+    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: {\"code\":\"InternalError\"}"));
+}
+
+#[test]
+fn verify_who_names_a_request_that_does_not_complete_as_the_reason_and_keeps_the_verdict() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let live = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A);
+    let path = profile_audits("t0");
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(AuditsDropped(live, path.clone())),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(v.status, VerifyStatus::Drifted);
+    let ver = v.diff.verify.as_ref().unwrap();
+    assert!(ver.who.is_none());
+    assert_eq!(
+        ver.who_error.as_deref(),
+        Some(format!("GET {path}: connection reset").as_str())
+    );
+}
+
+/// A Palette whose audit log at `.1` drops the connection.
+struct AuditsDropped(MemoryApi, String);
+
+impl strata::api::PaletteApi for AuditsDropped {
+    fn get_json(&self, path: &str) -> strata::Result<Value> {
+        if path == self.1 {
+            return Err(Error::Transport {
+                method: Method::Get,
+                path: path.to_string(),
+                message: "connection reset".into(),
+            });
+        }
+        self.0.get_json(path)
+    }
+}
+
 #[test]
 fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_ends_with_it() {
     let dir = tempfile::tempdir().unwrap();

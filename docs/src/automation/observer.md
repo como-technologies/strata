@@ -329,9 +329,10 @@ answer. The role is read-only, and the observer needs no tenant role, because ea
 request names the project. [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs)
 lists each permission and each refusal.
 
-- **Keep the audit log in the role.** The observer reads the audit log to tell who
-  changed a version. Cluster Viewer alone does not hold `audit.list`. A custom role
-  needs `audit.list` beside `cluster.get`, `clusterProfile.get`,
+- **Keep the audit log in the role, to name the writer.** Cluster Viewer alone does
+  not hold `audit.list`. With that role, the verdict and the finding stay, and `who`
+  is empty. The page lists an event that says the audit log could not be read. A
+  custom role needs `audit.list` beside `cluster.get`, `clusterProfile.get`,
   `packRegistry.get`, and `packRegistry.list`.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.

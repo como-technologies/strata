@@ -256,8 +256,9 @@ code, and these rules are for the Go code.
   in the list. It fails when the marker is in the output.
   `just observer-contract` fails when a field of the list is not in the schema
   of the binary.
-- A log line holds a verdict, an exit code, a duration, and an error kind. It
-  never holds a value or the output of a process.
+- A log line holds a verdict, an exit code, a duration, and an error kind. One
+  more line names a profile and the `verify.whoError` of its record. It never
+  holds a value or other output of a process.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test

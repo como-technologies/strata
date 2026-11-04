@@ -2471,6 +2471,7 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "A pod on a cluster that Palette built reaches the API",
         "## Install with a profile in Palette",
         "Palette replaces no node when it applies the layer.",
+        "With that role, the verdict and the finding stay, and `who` is empty.",
     ] {
         assert!(page.contains(needle), "observer.md lacks {needle:?}");
     }
