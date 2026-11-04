@@ -307,23 +307,24 @@ rules:
     title: An image of a pack is named by a digest
     engines: [all]
     tier: race
-    severity: warn
+    severity: note
     status: seen
     what: |
-      The images that a pack declares in `pack.content.images` carry a tag and no digest, and the
-      nodes pull by tag. An image rebuilt under one tag is not visible to Palette, to a record, or to
-      `strata verify`. Two clusters on one profile version can run different bytes. No check before
-      the build finds it; a registry with immutable tags closes it at the source.
+      A tag names nearly each image of a pack, and a registry can give a tag another image.
+      Palette pulls no image, and it holds no digest of one unless the pack text names it. The nodes
+      pull what the chart or the manifest names. A rebuilt image is not visible to Palette, to a
+      record, or to `strata verify`. A digest in the pack text moves the root, and `strata compare`
+      shows it. This row is a note: a warning for each image would fire on nearly each pack.
     reproduce:
       - "crane digest <image>"
       - "kubectl get pods -A -o jsonpath='{range .items[*].status.containerStatuses[*]}{.image}{\"\\t\"}{.imageID}{\"\\n\"}{end}'"
     fix:
-      owner: palette
-      text: Record the digest of each image at the sync, and give it to the nodes.
+      owner: operator
+      text: Name the digest where the chart or the manifest reads it, or copy each image to a registry with immutable tags.
     evidence:
       - kind: source
         ref: strata src/snapshot/pack.rs Pack.images
-        note: the images a pack declares are a reference with a tag, and no digest
+        note: the images a pack declares are a reference; it holds a digest only when it names one as repository:tag@sha256:digest
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F3
         note: the controller installs by version and tag, not by digest

@@ -65,8 +65,9 @@ one repository across versions, and a version bump shows each image as
 retagged:
 `~ image …/csi-aws-ebs/<version>/aws-ebs-csi-driver: v1.63.1 -> v1.65.0`.
 
-The list holds a tag, and not a digest: an image pushed again under one tag
-does not show. See [The change flags](../../reference/impact.md#the-change-flags).
+The list holds the text that the pack names. An image pushed again under one
+tag does not show: see
+[A vendor rebuilds an image under one tag](../../use-cases/image-tag.md).
 
 ## A version that replaces nodes
 

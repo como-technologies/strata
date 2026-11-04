@@ -75,3 +75,11 @@ pub(super) const SHOP: &str = "64f6000000000000000000a1";
 pub(super) const SHOP_DEV: &str = "64f7000000000000000000a1";
 // the manifest pack of platform-addons
 pub(super) const ADDONS_PACK: &str = "64e2000000000000000000d1";
+// aws-stack@1.1.13 to 1.1.17: the content of 1.1.1, whose Kubernetes pack names one more image. The
+// image moves from a short tag (1.1.13) to a build tag (1.1.14) and to another registry (1.1.15).
+// Then it gets a digest that changes (1.1.16 and 1.1.17)
+pub(super) const A1113: &str = "64e000000000000000000101";
+pub(super) const A1114: &str = "64e000000000000000000102";
+pub(super) const A1115: &str = "64e000000000000000000103";
+pub(super) const A1116: &str = "64e000000000000000000104";
+pub(super) const A1117: &str = "64e000000000000000000105";

@@ -13,13 +13,23 @@ pack. See [The hashes and the root](../internals/hashes.md).
 | `IMAGES` | the image list that the values declare, `pack.content.images`, changes | An image was added, removed, or moved to another tag. It comes with `AUTHORED`: it says which part of the values moved, and a gate that reads `AUTHORED` still sees it. |
 | `CHARTS` | the chart list that the values declare, `pack.content.charts`, changes | A chart was added, removed, or moved to another version. It comes with `AUTHORED`, as `IMAGES` does. |
 
-**The image list holds a tag, and not a digest.** Each entry is a reference
-such as `registry.k8s.io/pause:3.10.2`. An image rebuilt and pushed again under
-the same tag does not change the list, so `IMAGES` does not show it, and no
-record shows it. The chart list holds a version, and no chart digest either.
-The API lists the images and the charts of a pack version, and no digest,
-signature, or bill of materials for them, so the list is what a record can
-hold.
+**The image list holds the text that the pack names, and strata reads no registry.**
+Most entries name a tag, such as `registry.k8s.io/pause:3.10.2`. An image
+rebuilt and pushed again under the same tag does not change the list. So
+`IMAGES` does not show it, and no record shows it. See
+[A vendor rebuilds an image under one tag](../use-cases/image-tag.md).
+
+An entry can name a digest, as `<repository>:<tag>@sha256:<digest>`. Strata
+keeps the whole entry. A new digest moves the root. `compare` prints the flag
+`IMAGES` and the line
+`~ image <repository>:<tag>: sha256:<old> -> sha256:<new>`. A `digest` field
+beside `image` is not part of the list. A new value of that field shows as
+`AUTHORED` and as a changed value, with no `IMAGES`.
+
+The chart list holds a version, and no chart digest. A digest in the values of a
+chart, such as `image.digest`, is a value, and `AUTHORED` covers it. The API
+lists the images and the charts of a pack version, and no digest, signature, or
+bill of materials for them. So the list is what a record can hold.
 
 Other pack lines:
 

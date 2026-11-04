@@ -293,6 +293,20 @@ wait_running() {
   die "cluster $1 is not Running after an hour: $state; see $PWD/diagnostics"
 }
 
+# kube CLUSTER_UID ARGS...: run kubectl with ARGS inside the cluster, and print its output and its
+# errors. The kubeconfig lives in a temporary file that this function deletes. It is a credential:
+# no script saves it or prints it to a log.
+kube() {
+  local k rc cluster=$1
+  shift
+  k=$(mktemp)
+  "$live/api.sh" get-kubeconfig "$cluster" > "$k" 2> /dev/null
+  KUBECONFIG=$k timeout 60 kubectl "$@" 2>&1
+  rc=$?
+  rm -f "$k"
+  return "$rc"
+}
+
 # ---- baseline ------------------------------------------------------------------------------------------
 
 # require_baseline: stop unless the live example is at its baseline

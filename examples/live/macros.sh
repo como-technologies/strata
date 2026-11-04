@@ -55,13 +55,7 @@ resolved() { "$live/api.sh" get "/v1/spectroclusters/$C/packs/resolvedValues" | 
 # profile_resolved: the value of the macro at the scope of the add-on version, with no cluster
 profile_resolved() { "$live/api.sh" get "/v1/clusterprofiles/$AD/packs/resolvedValues" | jq -r --arg k "{{.spectro.macro.$macro}}" '.resolved[$k] // "none"'; }
 # inside: the value of the ConfigMap that the manifest makes, read inside the cluster
-inside() {
-  local k
-  k=$(mktemp)
-  "$live/api.sh" get-kubeconfig "$C" > "$k" 2> /dev/null
-  KUBECONFIG=$k timeout 60 kubectl get configmap strata-live -n default -o jsonpath='{.data.edited}' 2>&1
-  rm -f "$k"
-}
+inside() { kube "$C" get configmap strata-live -n default -o jsonpath='{.data.edited}'; }
 # settled: wait up to five minutes until cluster A says no update waits
 settled() {
   for _ in $(seq 1 20); do
