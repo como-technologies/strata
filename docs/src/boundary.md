@@ -70,7 +70,7 @@ Strata adds four things beside Palette:
 
 ## Where each idea belongs
 
-The ideas around strata go to three places. The test is the rule at the top of
+The ideas around strata go to four places. The test is the rule at the top of
 this page.
 
 | Place | What goes there | Why there |
@@ -78,6 +78,7 @@ this page.
 | The pipeline of the team | The publish. The step that writes the record. The graph of the repositories, and who pins what. The approval rules. The check that a version number is new. The policy of the impact threshold, such as a second approver for a repave. | Each one is a decision of the team, and it changes when the team changes. Strata gives the facts, and the pipeline decides. |
 | Palette | A content digest in the API. A setting that locks a published version. A lifecycle of a profile version, as packs have one. A report of the clusters that differ from their release. An event when a published version changes. | Each one is a fact that only Palette has at the moment of the change. A digest calculated when the version is published costs nothing, and every tool can then use it. |
 | A tool outside both | The rules that make content canonical. The impact model. Each check that compares the content of today with the content that a reviewer approved. The comments, the issues, and the gates on the code host. | The copy lives outside the thing that it is compared with, and the code host is where the team reviews. This is what strata is. |
+| A service in one cluster | `strata-observer`. It asks the questions of the table in the introduction on a timer, for the profiles and the packs of its own cluster, and shows the answers on a page. | It runs the `strata` binary and holds no rule of its own. It compares Palette with the records of the pipeline, and it writes nothing to Palette. |
 
 A feature in the second row does not remove strata. It makes the question
 cheaper. A content digest in the API makes `verify` one request. The record

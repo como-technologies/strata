@@ -766,3 +766,112 @@ fn each_member_of_the_workspace_takes_the_repository_that_the_link_and_the_endpo
         );
     }
 }
+
+/// The observer is a Go module with no `require` line, so it builds with the standard library
+/// alone. The last line of the recipe `lint` makes sure of this. The test runs that line in a
+/// directory with a `go.mod` of each kind, so a line that no longer fails on a module fails here.
+#[test]
+fn just_lint_fails_when_a_line_of_the_go_module_of_the_observer_starts_with_require() {
+    let lint = recipe("lint");
+    let check = lint
+        .iter()
+        .find(|line| line.contains("grep") && line.contains("observer/go.mod"))
+        .unwrap_or_else(|| panic!("the recipe lint reads observer/go.mod: {lint:?}"));
+    let exit_code = |go_mod: &str| {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("observer")).unwrap();
+        std::fs::write(dir.path().join("observer/go.mod"), go_mod).unwrap();
+        Command::new("bash")
+            .args(["--noprofile", "--norc", "-c", check])
+            .current_dir(dir.path())
+            .output_locked()
+            .unwrap()
+            .status
+            .code()
+    };
+
+    let module = repo_file("observer/go.mod");
+    assert_eq!(exit_code(&module), Some(0), "the module of the repository");
+    let with_require = format!("{module}\nrequire example.com/x v1.0.0\n");
+    assert_eq!(exit_code(&with_require), Some(1), "a module with a require");
+    let with_block = format!("{module}\nrequire (\n\texample.com/x v1.0.0\n)\n");
+    assert_eq!(exit_code(&with_block), Some(1), "a module with a block");
+}
+
+/// The recipe `lint` also formats and vets the Go code, and the recipe `test` runs its tests. The
+/// job `lint and test` runs the two recipes, and has no Go step of its own for them.
+#[test]
+fn the_lint_and_test_recipes_check_the_go_code_of_the_observer() {
+    let lint = recipe("lint");
+    for line in [
+        r#"test -z "$(gofmt -l observer)""#,
+        "go -C observer vet ./...",
+    ] {
+        assert!(lint.contains(&line.to_string()), "{line}: {lint:?}");
+    }
+    let test = recipe("test");
+    assert!(
+        test.contains(&"go -C observer test ./...".to_string()),
+        "{test:?}"
+    );
+
+    let runs = runs_of("checks.yml", "lint and test");
+    assert!(runs.iter().all(|run| !run.contains("go ")), "{runs:?}");
+}
+
+/// The runner of GitHub has Go, but not the version of the module. The job `check` installs the
+/// version that `observer/go.mod` names, before the first recipe that runs Go, so the version of
+/// the module is the one place that names it. The cache is off: the module has no dependency.
+#[test]
+fn the_check_job_installs_go_from_the_module_of_the_observer_before_it_runs_the_recipes() {
+    let doc = workflow("checks.yml");
+    let job = doc["jobs"]["check"]["steps"]
+        .as_sequence()
+        .expect("the job check has steps");
+    let position = |matches: &dyn Fn(&serde_yaml::Value) -> bool| job.iter().position(matches);
+
+    let setup = position(&|step| {
+        step["uses"]
+            .as_str()
+            .is_some_and(|uses| uses.starts_with("actions/setup-go@"))
+    })
+    .expect("the job check installs Go");
+    assert_eq!(
+        job[setup]["with"]["go-version-file"].as_str(),
+        Some("observer/go.mod")
+    );
+    assert_eq!(job[setup]["with"]["cache"].as_bool(), Some(false));
+
+    for recipe in ["just lint", "just test"] {
+        let run = position(&|step| step["run"].as_str() == Some(recipe))
+            .unwrap_or_else(|| panic!("the job check runs {recipe}"));
+        assert!(
+            setup < run,
+            "the step that runs {recipe} comes before the install of Go"
+        );
+    }
+}
+
+/// The observer is one static binary at `target/observer/strata-observer`. `CGO_ENABLED=0` makes it
+/// static, and the version comes out of the first `version` line of the root `Cargo.toml`, so the
+/// binary and the crate cannot name two versions.
+#[test]
+fn the_observer_build_writes_a_static_binary_that_names_the_version_of_cargo_toml() {
+    let build = recipe("observer-build");
+    assert_eq!(build.len(), 1, "{build:?}");
+    let line = &build[0];
+    for part in [
+        "CGO_ENABLED=0 go -C observer build",
+        "-trimpath",
+        r#"-ldflags "-X main.version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)""#,
+        "-o ../target/observer/strata-observer .",
+    ] {
+        assert!(line.contains(part), "{part}: {line}");
+    }
+    assert!(
+        repo_file("Cargo.toml")
+            .lines()
+            .any(|l| l.starts_with("version = \"")),
+        "Cargo.toml has the line that the recipe reads"
+    );
+}
