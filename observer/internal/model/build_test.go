@@ -21,7 +21,7 @@ func marshal(t *testing.T, v any) string {
 }
 
 func pin(name, layer, version, newest string, subjects ...string) docs.Pin {
-	p := docs.Pin{Name: name, Layer: layer, Registry: "Public Repo", RegistryUID: "reg1", Version: version, Tag: version}
+	p := docs.Pin{Name: name, Layer: layer, Registry: "Public Repo", RegistryUID: "reg1", Version: version}
 	for _, s := range subjects {
 		p.PinnedBy = append(p.PinnedBy, docs.PinnedBy{Subject: s})
 	}
@@ -36,13 +36,13 @@ func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{Who: who()}, "csi/csi-aws-ebs"),
 		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("csi/csi-aws-ebs", "charts.a.b")}})
 	out := marshal(t, build(ptr(content(t, r)), nil))
-	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`} {
+	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"} {
 		if strings.Contains(out, banned) {
 			t.Errorf("the summary holds %s: %s", banned, out)
 		}
 	}
-	if !strings.Contains(out, `"changedPaths":["charts.a.b","charts.a.c"]`) {
-		t.Errorf("the paths are not there: %s", out)
+	if !strings.Contains(out, `"fold":{"settings":2,"followsTheVersion":0,"repeatsTheLists":0}`) {
+		t.Errorf("the count of the changed values is not there: %s", out)
 	}
 }
 
@@ -54,7 +54,7 @@ func TestAnEmptyListIsNeverNull(t *testing.T) {
 		}
 	}
 	good := marshal(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil))
-	for _, banned := range []string{":null,\"flags\"", `"flags":null`, `"changedPaths":null`, `"packs":null`, `"profiles":null`, `"findings":null`} {
+	for _, banned := range []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`} {
 		if strings.Contains(good, banned) {
 			t.Errorf("a list is null (%s): %s", banned, good)
 		}
@@ -174,7 +174,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	versions := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{
 		func() docs.Pin {
 			p := pin("kubernetes", "k8s", "1.35.3", "", "broken@1.0.0")
-			p.RegistrySync = &docs.RegistrySync{Status: "failed"}
+			p.RegistrySync = &docs.RegistrySync{LastSyncedTime: "2026-10-30T09:00:00Z"}
 			return p
 		}(),
 		func() docs.Pin {
@@ -237,7 +237,7 @@ func TestACountIsTheNumberOfRowsOfItsList(t *testing.T) {
 
 func TestTheNewerRowsJoinThePinAndTheMove(t *testing.T) {
 	floating := pin("ubuntu-aws", "os", "20.04", "24.04", "aws-stack@1.0.0")
-	floating.Floating, floating.Tag, floating.PinnedState = true, "LTS__20.4.x", "deprecated"
+	floating.Floating, floating.PinnedState = true, "deprecated"
 	floating.Newer[0].Drops = []string{"arm64"}
 	floating.Newer[0].Listed = t0.Add(-8 * 24 * time.Hour).Format(time.RFC3339)
 	fresh := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "other@1.0.0", "aws-stack@1.0.0")
@@ -296,9 +296,6 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 	if got.Registry != "Public Repo" || got.Kind != docs.PackHelm || got.Upstream != "sha256:dex" || got.UpstreamSource != "packRef.digest" || got.Images != 2 ||
 		got.Newer != "2.44.0" || got.Status != StatusDrift || !slices.Equal(got.Flags, []string{docs.FlagAuthored}) {
 		t.Errorf("pack %+v", got)
-	}
-	if want := []string{"charts.a.b", "charts.a.c", "charts.dex.image.tag", "pack.content.images[0]"}; !slices.Equal(got.ChangedPaths, want) {
-		t.Errorf("paths %v", got.ChangedPaths)
 	}
 	if got.Fold == nil || *got.Fold != (docs.Fold{Settings: 2, Follows: 1, Repeats: 1}) {
 		t.Errorf("fold %+v", got.Fold)

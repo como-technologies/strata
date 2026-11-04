@@ -135,7 +135,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 }
 
 func TestTheServerSetsEachTimeout(t *testing.T) {
-	srv := (&Server{Source: stub{}}).httpServer()
+	srv := (&Server{Source: stub{}}).httpServer(context.Background())
 	if srv.ReadHeaderTimeout <= 0 || srv.ReadTimeout <= 0 || srv.WriteTimeout <= 0 || srv.IdleTimeout <= 0 {
 		t.Errorf("timeouts %v %v %v %v", srv.ReadHeaderTimeout, srv.ReadTimeout, srv.WriteTimeout, srv.IdleTimeout)
 	}

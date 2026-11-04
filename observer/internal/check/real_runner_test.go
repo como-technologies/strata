@@ -22,8 +22,8 @@ while [ $# -gt 0 ]; do
 done
 case $cmd in
 verify) echo '{"schema":"strata-verify-summary/1","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}' ;;
-snapshot) echo '{"source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
-compare) echo '{"same":true,"sameContent":true}' ;;
+snapshot) echo '{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}' > "$out" ;;
+compare) echo '{"schema":"strata-diff/1","same":true,"sameContent":true}' ;;
 behind) echo '{"schema":"strata-behind/1","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registryUid":"reg1","version":"1.35.3","behind":true,"pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2"}]}]}' ;;
 esac
 `

@@ -155,34 +155,49 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	}
 	var drift VerifySummary
 	decodeFile(t, dir, "verify-summary-drift.json", &drift)
+	if drift.Schema != VerifySummarySchema {
+		t.Errorf("verify states %q", drift.Schema)
+	}
 	if len(drift.Records) == 0 || drift.Records[0].Status != VerifyDrifted || drift.Records[0].Diff.Verify.Who == nil {
 		t.Errorf("drift: %+v", drift.Records)
 	}
 	var behind Behind
 	decodeFile(t, dir, "behind.json", &behind)
+	if behind.Schema != BehindSchema {
+		t.Errorf("behind states %q", behind.Schema)
+	}
 	if len(behind.Pins) == 0 {
 		t.Error("behind has no pin")
 	}
 	var move Diff
 	decodeFile(t, dir, "move-cni-cilium-oss.json", &move)
+	if move.Schema != DiffSchema {
+		t.Errorf("compare states %q", move.Schema)
+	}
 	if got := FoldOf(move.Packs[0].Values); got.Settings+got.Follows+got.Repeats != len(move.Packs[0].Values.Diff) {
 		t.Errorf("fold: %+v", got)
 	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff
 		decodeFile(t, dir, name, &d)
+		if d.Schema != DiffSchema {
+			t.Errorf("%s states %q", name, d.Schema)
+		}
 		if !d.Same {
-			t.Errorf("%s: the two forms of the cluster side differ: rootA %s, rootB %s", name, d.RootA, d.RootB)
+			t.Errorf("%s: the two forms of the cluster side differ: rootB %s", name, d.RootB)
 		}
 	}
 	var c ClusterRead
 	decodeFile(t, dir, "cluster-payments.json", &c)
+	if c.Schema != SnapshotSchema {
+		t.Errorf("the snapshot of a cluster states %q", c.Schema)
+	}
 	if len(c.Source.Cluster.Profiles) != 2 {
 		t.Errorf("payments runs %d profiles", len(c.Source.Cluster.Profiles))
 	}
 	var r Record
 	decodeFile(t, dir, "record-aws-stack.json", &r)
-	if r.Root == "" || r.Source.Name != "aws-stack" {
+	if r.Source.Name != "aws-stack" {
 		t.Errorf("record: %+v", r.Source)
 	}
 }

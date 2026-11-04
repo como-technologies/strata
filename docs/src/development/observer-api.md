@@ -14,8 +14,9 @@ strata-observer health [--listen ADDR]
 
 `serve` takes the [flags of `once`](../automation/observer.md#options) and one more
 flag. It starts the first cycle of each timer at the start. It stops when it
-gets `SIGINT` or `SIGTERM`: it stops the cycle that runs, and it ends the server
-after 5 seconds at most.
+gets `SIGINT` or `SIGTERM`. It stops the cycle that runs and each detail request
+that runs, with the `strata` process of each. Then it ends the server after 5
+seconds at most.
 
 | Flag | Default | What it does |
 | --- | --- | --- |
@@ -23,7 +24,7 @@ after 5 seconds at most.
 
 | Exit of `serve` | Meaning |
 | --- | --- |
-| `0` | The process stopped on a signal. |
+| `0` | The process stopped on a signal, also when a detail request ran. |
 | `2` | A flag is wrong, the address is not a loopback address, or the server failed. |
 
 `health` makes one `GET` to `/healthz` and waits 3 seconds at most. It exits 0

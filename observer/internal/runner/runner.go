@@ -29,7 +29,9 @@ const (
 
 var allowedCommands = []string{CmdVerify, CmdCompare, CmdSnapshot, CmdBehind}
 
-// allowedEnv holds each variable that a strata process gets. It sets STRATA_REPORT to 0 below.
+// allowedEnv holds each variable that a strata process gets, when the observer has it. The runner
+// also sets STRATA_REPORT to 0, which stops the send of the report. It sets no other variable:
+// every call has -q and none writes a terminal report, so STRATA_QUIET and NO_COLOR change nothing.
 var allowedEnv = []string{"PALETTE_API", "PALETTE_API_KEY", "PALETTE_PROJECT_UID", "PALETTE_PROJECT", "HOME", "TMPDIR", "XDG_STATE_HOME", "PATH"}
 
 // Runner runs one binary with one time limit for each run.
@@ -108,7 +110,7 @@ func check(args []string) error {
 }
 
 func env() []string {
-	out := []string{"STRATA_REPORT=0", "STRATA_QUIET=1", "NO_COLOR=1"}
+	out := []string{"STRATA_REPORT=0"}
 	for _, k := range allowedEnv {
 		if v, ok := os.LookupEnv(k); ok {
 			out = append(out, k+"="+v)

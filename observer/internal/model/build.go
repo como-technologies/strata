@@ -178,7 +178,7 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	if p.Kind == "" {
 		p.Kind = rp.Type
 	}
-	p.Flags, p.ChangedPaths, p.Fold = changesOf(r, rp.Key)
+	p.Flags, p.Fold = changesOf(r, rp.Key)
 	switch {
 	case v.findingPacks[id]:
 		p.Status = StatusDrift
@@ -192,10 +192,11 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	return p
 }
 
-// changesOf joins the flags and the changed paths of a pack from the two diffs of a record. They
-// are the `verify` diff and the `compare` with the cluster. The fold counts the joined paths, so a
-// path that the two diffs share counts once.
-func changesOf(r Record, key string) ([]string, []string, *docs.Fold) {
+// changesOf joins the flags of a pack and folds its changed values, from the two diffs of a record.
+// They are the `verify` diff and the `compare` with the cluster. The fold counts the joined paths, so
+// a path that the two diffs share counts once. A path can hold the name of a list item, which is a
+// value of the cluster, so the paths stay here and only their count leaves.
+func changesOf(r Record, key string) ([]string, *docs.Fold) {
 	flags, paths := []string{}, []string{}
 	var diffs []*docs.Diff
 	if r.Row != nil {
@@ -215,11 +216,13 @@ func changesOf(r Record, key string) ([]string, []string, *docs.Fold) {
 					flags = append(flags, f)
 				}
 			}
-			paths = append(paths, p.Values.Paths()...)
+			for _, l := range p.Values.Diff {
+				paths = append(paths, l.Path)
+			}
 		}
 	}
 	if len(flags) == 0 && len(paths) == 0 {
-		return flags, paths, nil
+		return flags, nil
 	}
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
@@ -228,7 +231,7 @@ func changesOf(r Record, key string) ([]string, []string, *docs.Fold) {
 		leaves = append(leaves, docs.Leaf{Path: p})
 	}
 	fold := docs.FoldOf(docs.Values{Diff: leaves})
-	return flags, paths, &fold
+	return flags, &fold
 }
 
 // newerRows gives one row for each pin that is behind, in the order of the pins.

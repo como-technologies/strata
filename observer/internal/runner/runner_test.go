@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -86,15 +88,79 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 	}
 }
 
-func TestTheProcessGetsNoOtherVariable(t *testing.T) {
-	t.Setenv("PALETTE_API_KEY", "key")
-	t.Setenv("SOME_OTHER_SECRET", "SENTINEL")
-	r, err := fake(t, `env`).Run(context.Background(), CmdVerify, "a.json")
+// notSet lists the variables that the book says the runner does not set. Each call has -q, and none
+// writes a terminal report, so STRATA_QUIET and NO_COLOR would change nothing.
+var notSet = []string{"STRATA_QUIET", "NO_COLOR"}
+
+// variablesOf runs `env` as the runner does and gives the names of the variables that the process got.
+func variablesOf(t *testing.T) []string {
+	t.Helper()
+	r, err := fake(t, `env`).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := string(r.Stdout)
-	if strings.Contains(out, "SENTINEL") || !strings.Contains(out, "STRATA_REPORT=0") || !strings.Contains(out, "PALETTE_API_KEY=key") {
-		t.Fatalf("env: %s", out)
+	var names []string
+	for _, line := range strings.Split(string(r.Stdout), "\n") {
+		if name, _, ok := strings.Cut(line, "="); ok && !strings.HasPrefix(name, "_") {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
+}
+
+func TestTheProcessGetsTheVariablesOfTheListAndStrataReportAndNoOtherVariable(t *testing.T) {
+	// A variable of the list that the test host lacks gets a value that is a real directory, because
+	// TMPDIR and HOME must stay usable.
+	for _, name := range allowedEnv {
+		if _, ok := os.LookupEnv(name); !ok {
+			t.Setenv(name, os.TempDir())
+		}
+	}
+	t.Setenv("PALETTE_API_KEY", "key")
+	for _, name := range append([]string{"SOME_OTHER_SECRET"}, notSet...) {
+		t.Setenv(name, "SENTINEL")
+	}
+	want := append([]string{"STRATA_REPORT"}, allowedEnv...)
+	slices.Sort(want)
+	// The shell of the fake adds PWD, SHLVL, and OLDPWD to a process that it starts. They are not
+	// variables of the runner.
+	got := slices.DeleteFunc(variablesOf(t), func(name string) bool { return name == "PWD" || name == "SHLVL" || name == "OLDPWD" })
+	if !slices.Equal(got, want) {
+		t.Errorf("the process got %v, want %v", got, want)
+	}
+	r, err := fake(t, `echo "report=$STRATA_REPORT key=$PALETTE_API_KEY"`).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
+	if err != nil || string(r.Stdout) != "report=0 key=key\n" {
+		t.Errorf("output %q, error %v", r.Stdout, err)
+	}
+}
+
+// The rule of code.md names the variables of the runner in code spans, and it names the ones that
+// the runner does not set. The test holds both lists against the code, so the book cannot drift.
+func TestCodeMdNamesEachVariableThatTheRunnerSets(t *testing.T) {
+	raw, err := os.ReadFile("../../../docs/src/development/code.md")
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("the book is not in this tree")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rest, ok := strings.Cut(string(raw), "- `internal/runner` is the one place")
+	if !ok {
+		t.Fatal("code.md has no rule for internal/runner")
+	}
+	rule, _, _ := strings.Cut(rest, "\n- ")
+	var named []string
+	for _, m := range regexp.MustCompile("`([A-Z][A-Z0-9_]+)(?:=[^`]*)?`").FindAllStringSubmatch(rule, -1) {
+		named = append(named, m[1])
+	}
+	want := append(append([]string{"STRATA_REPORT"}, allowedEnv...), notSet...)
+	slices.Sort(named)
+	slices.Sort(want)
+	if !slices.Equal(named, want) {
+		t.Errorf("code.md names %v, want %v", named, want)
+	}
+	if !strings.Contains(rule, "`STRATA_REPORT=0`") {
+		t.Error("code.md does not give the value of STRATA_REPORT")
 	}
 }
