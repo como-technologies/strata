@@ -96,6 +96,12 @@ entry carries no request id.
   did not verify, so the issue of a drifted record lists the writes. See
   [Name who changed the record](../automation/drift-issues.md#name-who-changed-the-record).
 - With many records, the line of a drifted record ends with the last write.
+- When strata cannot read the audit log, the verdict stays. The status and the
+  exit code are those of a check without `--who`. The output has the line
+  `who: not read: <the error>`, and `--json` gives `verify.whoError` in place of
+  `verify.who`. The error is `HTTP <status>: <body>` when Palette answers with an
+  error, such as HTTP 403 or HTTP 500. With many records, the line of a drifted
+  record ends with `; who: not read: <the error>`.
 - Palette keeps no audit log for a pack in a registry. `--who` reads nothing
   for a pack record.
 - What the log holds for each writer:

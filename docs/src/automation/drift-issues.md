@@ -45,6 +45,10 @@ not verify has an issue. See
 [The audit log](../internals/palette/profiles.md#the-audit-log) for what Palette
 logs.
 
+When the key cannot read the audit log, the issue keeps the verdict. It has the
+line `who: not read: <the error>` in place of the writes, and the exit status is
+that of a check without `--who`.
+
 ## Exit status
 
 The script handles the issues, then exits like `verify`:

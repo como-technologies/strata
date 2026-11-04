@@ -132,6 +132,10 @@ gives it. The observer never lowers a drift.
 
 - A finding holds `who` from `verify.who[]`: `time`, `actor`, `actorType`, and
   `action`.
+- When `verify.whoError` is set, strata could not read the audit log. The row
+  stays `drifted`, and the finding stays a finding. It has `whoUnread` true and
+  an empty `who`. The record has no `read-error` row. The summary carries the flag, and
+  never the text of the error. The log of the observer holds the text.
 - When `published-changed` and `cluster-differs` hit one profile, and
   `rootLive` equals `rootB` of the compare, the observer makes one finding. It
   sets `alsoOnCluster` to true.
@@ -250,6 +254,7 @@ severity.
 | --- | --- | --- | --- |
 | `drift` | `DriftFound`, `Overwritten`, `Renamed`, `Gone`, `ClusterDiffers`, or `ImageIDChanged`, by the `kind` of the finding | A finding exists. | `firstSeen` of the finding. |
 | `info` | `ProfileUpdated` | A finding holds `who`. One event for each write. | `time` of the write. |
+| `info` | `AuditUnread` | A finding has `whoUnread` true. The message is "The audit log could not be read, so this does not say who made the change." | `lastSeen` of the finding. |
 | `newer` | `NewVersion` | A pin is behind. | `listed` of the newest version. |
 | `not-checked` | `OldCopy` | A pin has `registrySync`. One event for each registry. | `lastSyncedTime` of the registry. |
 
@@ -271,5 +276,6 @@ The observer writes the file to a temporary file and renames it. A file that it
 cannot read is a log line and an empty state. So two runs of `once` with one
 state directory reach `lost` when the cluster does not answer.
 
-A log line holds a verdict, an exit code, a duration, and an error kind. It
-never holds a value or the output of a process.
+A log line holds a verdict, an exit code, a duration, and an error kind. One
+more line names a profile and the `verify.whoError` of its record: strata could
+not read the audit log. It never holds a value or other output of a process.

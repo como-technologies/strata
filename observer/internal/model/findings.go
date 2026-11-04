@@ -98,6 +98,7 @@ func publishedFinding(subject string, row docs.VerifyRow) Finding {
 	}
 	if v != nil {
 		f.Who = append(f.Who, v.Who...)
+		f.WhoUnread = v.WhoError != ""
 	}
 	return f
 }

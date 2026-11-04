@@ -157,7 +157,19 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 		e := firstRowError(doc.Records)
 		return doc, &runner.RunError{Kind: e.Kind, Status: e.Status}
 	}
+	o.logUnreadAudits(doc.Records)
 	return doc, nil
+}
+
+// logUnreadAudits writes one line for each record whose audit log strata could not read, such as for a
+// key without the permission. The verdict of the record stays. The summary carries a flag and not
+// the text, so this line is the one place that holds the reason.
+func (o *Observer) logUnreadAudits(rows []docs.VerifyRow) {
+	for _, r := range rows {
+		if r.Diff != nil && r.Diff.Verify != nil && r.Diff.Verify.WhoError != "" {
+			o.log.Warn("the audit log could not be read", "profile", model.Subject(r.Name, r.Version), "reason", r.Diff.Verify.WhoError)
+		}
+	}
 }
 
 // readCluster takes the cluster in a snapshot, with the raw answers of Palette in raw/ for the sides.

@@ -17,7 +17,7 @@ use serde_json::Value;
 use super::{OCI_SUMMARY_TEMPLATE, PACKS, Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
-use crate::error::{Error, Result, served, unread_reason};
+use crate::error::{Error, Result, served};
 use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_state::PackState;
@@ -268,10 +268,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         match self.sync(uid, pack_type) {
             Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
             Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
-                let reason = match &e {
-                    Error::Api { status, body, .. } => unread_reason(*status, body),
-                    _ => e.to_string(),
-                };
+                let reason = e.reason();
                 progress.note(&format!(
                     "note: the sync status of registry {uid} is unavailable ({reason})"
                 ));

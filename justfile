@@ -359,7 +359,7 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
-# The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up. Undoes each edit.
+# The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up; the stage of the key with no audit permission needs STRATA_LIVE_NO_AUDIT_KEY (#664). Undoes each edit.
 live-who: build
     examples/live/who.sh
 

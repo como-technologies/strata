@@ -695,3 +695,21 @@ fn the_message_of_another_status_has_no_hint() {
     assert!(!text.contains("check "), "{text}");
     assert!(!text.contains("tenant scope"), "{text}");
 }
+
+#[test]
+fn the_reason_of_an_answer_of_palette_is_its_status_and_its_body_with_no_blank_at_the_ends() {
+    let api = Error::Api {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        status: 403,
+        body: "{\"code\":\"AccessDenied\"}\n".into(),
+        retry_after: None,
+    };
+    assert_eq!(api.reason(), r#"HTTP 403: {"code":"AccessDenied"}"#);
+    let transport = Error::Transport {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        message: "connection reset".into(),
+    };
+    assert_eq!(transport.reason(), "GET /v1/audits: connection reset");
+}

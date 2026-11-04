@@ -693,6 +693,17 @@ impl Error {
         )
     }
 
+    /// The reason that a record or a verdict keeps for a read that failed.
+    ///
+    /// An answer of Palette that is an error gives `HTTP <status>: <body>`. Each other error gives
+    /// its message.
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            Error::Api { status, body, .. } => unread_reason(*status, body),
+            e => e.to_string(),
+        }
+    }
+
     /// A stable kebab-case name for the variant, for programs that read errors. The `match` is
     /// exhaustive, so a new variant cannot be added without naming it here.
     pub fn kind(&self) -> &'static str {
