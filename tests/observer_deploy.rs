@@ -13,7 +13,7 @@ use crate::common::{
 };
 
 /// A file of `deploy/observer/`, parsed as one YAML document.
-fn manifest(file: &str) -> Value {
+fn deploy_doc(file: &str) -> Value {
     serde_yaml::from_str(&repo_file(&format!("deploy/observer/{file}")))
         .unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
 }
@@ -38,7 +38,7 @@ fn strings(value: &Value) -> Vec<&str> {
 
 /// The pod template of the Deployment.
 fn pod() -> Value {
-    manifest("deployment.yaml")["spec"]["template"]["spec"].clone()
+    deploy_doc("deployment.yaml")["spec"]["template"]["spec"].clone()
 }
 
 /// The one container of the pod.
@@ -53,7 +53,7 @@ fn container() -> Value {
 
 #[test]
 fn the_kustomization_renders_four_objects_and_leaves_the_reader_role_to_the_team() {
-    let kustomization = manifest("kustomization.yaml");
+    let kustomization = deploy_doc("kustomization.yaml");
     assert_eq!(kustomization["namespace"], "strata-observer");
     let resources = strings(&kustomization["resources"]);
     assert_eq!(resources, RENDERED.map(|(file, _)| file));
@@ -63,7 +63,7 @@ fn the_kustomization_renders_four_objects_and_leaves_the_reader_role_to_the_team
             !source.lines().any(|line| line == "---"),
             "{file} holds one object: the kustomization renders four"
         );
-        assert_eq!(manifest(file)["kind"], kind, "{file}");
+        assert_eq!(deploy_doc(file)["kind"], kind, "{file}");
     }
 
     // the role is outside the kustomization: a team binds it to its own group
@@ -123,7 +123,7 @@ fn the_recipe_observer_manifests_passes_for_four_objects_and_fails_for_any_other
 
 #[test]
 fn the_namespace_enforces_the_restricted_pod_security_standard() {
-    let namespace = manifest("namespace.yaml");
+    let namespace = deploy_doc("namespace.yaml");
     assert_eq!(namespace["metadata"]["name"], "strata-observer");
     assert_eq!(
         namespace["metadata"]["labels"]["pod-security.kubernetes.io/enforce"],
@@ -134,14 +134,14 @@ fn the_namespace_enforces_the_restricted_pod_security_standard() {
 #[test]
 fn the_service_account_and_the_pod_get_no_token_and_the_namespace_has_no_role() {
     assert_eq!(
-        manifest("serviceaccount.yaml")["automountServiceAccountToken"],
+        deploy_doc("serviceaccount.yaml")["automountServiceAccountToken"],
         false
     );
     assert_eq!(pod()["automountServiceAccountToken"], false);
     assert_eq!(pod()["serviceAccountName"], "strata-observer");
     // the observer calls no Kubernetes API, so nothing in the kustomization gives a role
     for (file, _) in RENDERED {
-        let kind = manifest(file)["kind"].as_str().unwrap().to_string();
+        let kind = deploy_doc(file)["kind"].as_str().unwrap().to_string();
         assert!(
             !kind.contains("Role") && !kind.contains("Binding"),
             "{file} is a {kind}: the observer needs no role"
@@ -167,9 +167,9 @@ fn the_pod_runs_as_non_root_with_a_read_only_root_and_no_capability_and_no_privi
     assert_eq!(security["readOnlyRootFilesystem"], true);
     assert_eq!(strings(&security["capabilities"]["drop"]), ["ALL"]);
     assert!(security.get("privileged").is_none());
-    assert_eq!(manifest("deployment.yaml")["spec"]["replicas"], 1);
+    assert_eq!(deploy_doc("deployment.yaml")["spec"]["replicas"], 1);
     assert_eq!(
-        manifest("deployment.yaml")["spec"]["strategy"]["type"],
+        deploy_doc("deployment.yaml")["spec"]["strategy"]["type"],
         "Recreate",
         "two pods would both write the state"
     );
@@ -356,7 +356,7 @@ fn the_deployment_mounts_the_four_secrets_that_the_records_script_writes() {
             )
         })
         .collect();
-    let kustomization = manifest("kustomization.yaml");
+    let kustomization = deploy_doc("kustomization.yaml");
     for ((name, _), (written_name, namespace)) in mounted.iter().zip(&written) {
         assert_eq!(name, written_name);
         assert_eq!(*namespace, kustomization["namespace"].as_str().unwrap());
@@ -366,8 +366,8 @@ fn the_deployment_mounts_the_four_secrets_that_the_records_script_writes() {
 
 #[test]
 fn the_network_policy_lets_no_pod_connect_in_and_lets_the_observer_connect_to_dns_and_https() {
-    let policy = manifest("networkpolicy.yaml");
-    let label = &manifest("deployment.yaml")["spec"]["template"]["metadata"]["labels"];
+    let policy = deploy_doc("networkpolicy.yaml");
+    let label = &deploy_doc("deployment.yaml")["spec"]["template"]["metadata"]["labels"];
     assert_eq!(&policy["spec"]["podSelector"]["matchLabels"], label);
     assert_eq!(
         strings(&policy["spec"]["policyTypes"]),
@@ -408,7 +408,7 @@ fn the_network_policy_lets_no_pod_connect_in_and_lets_the_observer_connect_to_dn
 /// resource `pods/exec` or `secrets`, would give more than a person needs to read the page.
 #[test]
 fn the_reader_role_gives_the_page_and_no_secret_and_no_exec() {
-    let role = manifest("reader-role.yaml");
+    let role = deploy_doc("reader-role.yaml");
     assert_eq!(role["kind"], "Role");
     assert_eq!(role["metadata"]["namespace"], "strata-observer");
     let rules: Vec<(Vec<&str>, Vec<&str>, Vec<&str>)> = role["rules"]
