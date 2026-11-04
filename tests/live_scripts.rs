@@ -7722,6 +7722,33 @@ fn api_sh_set_values_replaces_the_values_of_one_pack_and_keeps_the_rest() {
     );
 }
 
+#[test]
+fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(routes.join("sent")).unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles"), r#"{"uid":"prof-9"}"#).unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_prof-9_publish"), "{}").unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_prof-9"), "{}").unwrap();
+    let file = root.path().join("observer.yaml");
+    std::fs::write(&file, "kind: Namespace\n").unwrap();
+    let o = run_live(
+        "api.sh",
+        &["manifest-profile", "barney", "fred", file.to_str().unwrap()],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let sent = read_json(&routes.join("sent/POST_v1_clusterprofiles"));
+    let pack = &sent["spec"]["template"]["packs"][0];
+    assert_eq!(pack["uid"], "spectro-manifest-pack", "{pack}");
+    assert_eq!(pack["type"], "manifest", "{pack}");
+    assert_eq!(
+        pack["manifests"][0]["content"], "kind: Namespace\n",
+        "{pack}"
+    );
+}
+
 // ---- observer-kind.sh --------------------------------------------------------------------------------
 
 /// A `kubectl` for observer-kind.sh. It logs each call to `$FAKE_OBS/kubectl.log`.
