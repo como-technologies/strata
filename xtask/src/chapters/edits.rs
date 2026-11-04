@@ -34,3 +34,25 @@ pub(super) const MACRO_REGION: &[Edit] = &[Edit::Macro {
     name: "region",
 }];
 pub(super) const LATER_PROFILE_TYPE: &[Edit] = &[Edit::ProfileType("later-type")];
+// An image in the Kubernetes pack moves from a short tag to a build tag, to another registry, and
+// to a digest.
+pub(super) const PRODUCT_TAG: &[Edit] = &[Edit::Image {
+    pack: "kubernetes",
+    image: "vendor.example/product:2026.2",
+}];
+pub(super) const PRODUCT_BUILD: &[Edit] = &[Edit::Image {
+    pack: "kubernetes",
+    image: "vendor.example/product:2026.2.0-1234.1",
+}];
+pub(super) const PRODUCT_MIRROR: &[Edit] = &[Edit::Image {
+    pack: "kubernetes",
+    image: "mirror.example/product:2026.2.0-1234.1",
+}];
+pub(super) const PRODUCT_DIGEST_A: &[Edit] = &[Edit::Image {
+    pack: "kubernetes",
+    image: "vendor.example/product:2026.2@sha256:1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777000088889999",
+}];
+pub(super) const PRODUCT_DIGEST_B: &[Edit] = &[Edit::Image {
+    pack: "kubernetes",
+    image: "vendor.example/product:2026.2@sha256:9999888877776666555544443333222211110000ffffeeeeddddccccbbbbaaaa",
+}];

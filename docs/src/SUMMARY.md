@@ -66,6 +66,7 @@
 - [A version bump overwrites a version](./use-cases/overwritten.md)
 - [A macro value changes](./use-cases/macros.md)
 - [The OS pack names a new machine image](./use-cases/os-image.md)
+- [A vendor rebuilds an image under one tag](./use-cases/image-tag.md)
 - [A secret changes in a pack value](./use-cases/masked-value.md)
 - [An app profile is updated in place](./use-cases/app-profiles.md)
 - [A team pins each environment](./use-cases/fan-out.md)

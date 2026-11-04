@@ -390,6 +390,10 @@ live-edge-host: build
 live-macros: build
     examples/live/macros.sh
 
+# The image digest test: what cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). Needs live-up, kubectl, and crane; undoes each change.
+live-image-digest: build
+    examples/live/image-digest.sh
+
 # The macro repave test: a macro in a field that repaves cluster A, and what a change of its value alone does (#72). Needs live-up; ends with a repave that waits for approval, so live-down follows it.
 live-macro-repave: build
     examples/live/macro-repave.sh

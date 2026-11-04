@@ -2,10 +2,13 @@
 //! missing digests, and masked values.
 
 use super::DEV_ENV;
-use super::edits::{CERT_MANAGER_TAG_DELETED, IMAGE_1, IMAGE_2, MACRO_REGION, SECRET_VALUE};
+use super::edits::{
+    CERT_MANAGER_TAG_DELETED, IMAGE_1, IMAGE_2, MACRO_REGION, PRODUCT_BUILD, PRODUCT_DIGEST_A,
+    PRODUCT_DIGEST_B, PRODUCT_MIRROR, PRODUCT_TAG, SECRET_VALUE,
+};
 use super::ids::{
-    A111, A114, A115, A118, A119, A1110, A1110_PROD, ADDONS_DEV, ADDONS_PACK, CHART_PACK,
-    CHARTS_PROBE, DEV, DEV_GROUP, PAYMENTS, PROD,
+    A111, A114, A115, A118, A119, A1110, A1110_PROD, A1113, A1114, A1115, A1116, A1117, ADDONS_DEV,
+    ADDONS_PACK, CHART_PACK, CHARTS_PROBE, DEV, DEV_GROUP, PAYMENTS, PROD,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -14,6 +17,7 @@ use crate::tenant::Edit;
 pub(super) fn run(r: &mut Runner) {
     macros(r);
     os_image(r);
+    image_tag(r);
     invalid_pack(r);
     no_digest(r);
     masked_value(r);
@@ -180,6 +184,89 @@ fn os_image(r: &mut Runner) {
         1,
         false,
         "strata same-release releases/1.1.8/dev.json aws-stack@1.1.8",
+    );
+}
+
+/// The chapter `image-tag`: a vendor rebuilds an image under one tag, and three ways to name it show
+/// the move.
+fn image_tag(r: &mut Runner) {
+    // The vendor gives a tag another image. Palette is not told, so the record verifies. A later
+    // version of the pack names a build tag, a tag of another registry, or a digest (#630).
+    r.chapter("image-tag", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.profile(DEV, A1113, "1.1.13", "aws-stack@1.1.1", PRODUCT_TAG);
+    r.profile(DEV, A1114, "1.1.14", "aws-stack@1.1.1", PRODUCT_BUILD);
+    r.profile(DEV, A1115, "1.1.15", "aws-stack@1.1.1", PRODUCT_MIRROR);
+    r.profile(DEV, A1116, "1.1.16", "aws-stack@1.1.1", PRODUCT_DIGEST_A);
+    r.profile(DEV, A1117, "1.1.17", "aws-stack@1.1.1", PRODUCT_DIGEST_B);
+    r.step(
+        "image-tag-record",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.13 -o releases/1.1.13/dev.json",
+    );
+    r.step(
+        "image-tag-images",
+        0,
+        false,
+        r#"jq -r '.packs[].images[]? | select(contains("product"))' releases/1.1.13/dev.json"#,
+    );
+    // the vendor gives the tag another image: Palette, the pack, and the record are the same
+    r.step(
+        "image-tag-verify-full",
+        0,
+        false,
+        "strata verify releases/1.1.13/dev.json",
+    );
+    r.excerpt(
+        "image-tag-verify",
+        "image-tag-verify-full",
+        r"^(aws-stack|root |OK)",
+    );
+    r.step(
+        "image-tag-compare-same",
+        0,
+        false,
+        "strata compare releases/1.1.13/dev.json aws-stack@1.1.13",
+    );
+    r.step(
+        "image-tag-compare-build-full",
+        1,
+        false,
+        "strata compare releases/1.1.13/dev.json aws-stack@1.1.14",
+    );
+    r.excerpt(
+        "image-tag-compare-build",
+        "image-tag-compare-build-full",
+        r"^(root |~ \[|      impact|      [~+-] image)",
+    );
+    r.step(
+        "image-tag-compare-mirror-full",
+        1,
+        false,
+        "strata compare releases/1.1.13/dev.json aws-stack@1.1.15",
+    );
+    r.excerpt(
+        "image-tag-compare-mirror",
+        "image-tag-compare-mirror-full",
+        r"^(root |~ \[|      impact|      [~+-] image)",
+    );
+    r.step(
+        "image-tag-record-digest",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.16 -o releases/1.1.16/dev.json",
+    );
+    r.step(
+        "image-tag-compare-digest-full",
+        1,
+        false,
+        "strata compare releases/1.1.16/dev.json aws-stack@1.1.17",
+    );
+    r.excerpt(
+        "image-tag-compare-digest",
+        "image-tag-compare-digest-full",
+        r"^(root |~ \[|      impact|      [~+-] image)",
     );
 }
 

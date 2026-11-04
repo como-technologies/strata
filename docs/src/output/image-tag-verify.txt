@@ -1,0 +1,5 @@
+$ strata verify releases/1.1.13/dev.json
+aws-stack@1.1.13 (uid 64e000000000000000000101)  ->  aws-stack@1.1.13 (uid 64e000000000000000000101)
+root       178f41c89e6e -> 178f41c89e6e   IDENTICAL
+...
+OK: published version aws-stack@1.1.13 is unchanged since 2026-09-17T09:30:00Z

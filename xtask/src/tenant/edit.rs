@@ -72,6 +72,14 @@ pub enum Edit {
         /// The message of the event, `<display name> <tag> tag is deleted`.
         reason: &'static str,
     },
+    /// Name one more image in the list `pack.content.images` of a pack, as the team that owns the
+    /// pack does. The list is outside the root, and the values are in it.
+    Image {
+        /// The pack whose values hold the list.
+        pack: &'static str,
+        /// The reference of the image, such as `repository:tag` or `repository:tag@sha256:digest`.
+        image: &'static str,
+    },
     /// Give a pack a secret value: a line `<key>: '********'` at the end of the pack's values.
     /// The schema of the pack gives the key the format `password`, so Palette serves its mask in
     /// place of the secret, whatever the secret is.
@@ -156,6 +164,13 @@ impl Edit {
                     p["inValidReason"] = json!(reason);
                 }
             }
+            Edit::Image { pack, image } => {
+                for p in packs_named(doc, pack) {
+                    if let Some(values) = p["values"].as_str() {
+                        p["values"] = json!(with_image(values, image));
+                    }
+                }
+            }
             Edit::Masked { pack, key } => {
                 for p in packs_named(doc, pack) {
                     append_value_line(p, &format!("{key}: '********'"));
@@ -183,6 +198,12 @@ pub(super) fn with_reclaim_policy(values: &str, policy: &str) -> String {
         &format!("reclaimPolicy: {policy}"),
         1,
     )
+}
+
+/// The values with the entry `- image: <image>` at the head of the list `pack.content.images`.
+fn with_image(values: &str, image: &str) -> String {
+    let head = "    images:\n";
+    values.replacen(head, &format!("{head}      - image: {image}\n"), 1)
 }
 
 /// The values of the Kubernetes pack with the command `command` after the last command that
@@ -283,6 +304,25 @@ mod tests {
             doc["spec"]["published"]["packs"][0]["values"],
             "a: 1\nregion: \"{{.spectro.macro.region}}\"\n"
         );
+    }
+
+    #[test]
+    fn the_image_edit_adds_one_entry_to_the_image_list_of_one_pack() {
+        let values = "pack:\n  content:\n    images:\n      - image: a:1\n  other: 2\n";
+        let mut doc = json!({"spec": {"published": {"packs": [
+            {"name": "kubernetes", "values": values},
+            {"name": "cert-manager", "values": values}]}}});
+        Edit::Image {
+            pack: "kubernetes",
+            image: "vendor.example/product:2026.2@sha256:aa",
+        }
+        .apply(&mut doc);
+        let packs = doc["spec"]["published"]["packs"].as_array().unwrap();
+        assert_eq!(
+            packs[0]["values"],
+            "pack:\n  content:\n    images:\n      - image: vendor.example/product:2026.2@sha256:aa\n      - image: a:1\n  other: 2\n"
+        );
+        assert_eq!(packs[1]["values"], values);
     }
 
     #[test]

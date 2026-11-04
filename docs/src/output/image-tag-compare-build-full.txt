@@ -1,0 +1,17 @@
+$ strata compare releases/1.1.13/dev.json aws-stack@1.1.14
+aws-stack@1.1.13 (uid 64e000000000000000000101)  ->  aws-stack@1.1.14 (uid 64e000000000000000000102)
+root       178f41c89e6e -> c51cafaac630   CHANGED
+images     1 image, no charts changed in 1 pack
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+~ [k8s  ] kubernetes                 1.36.2             AUTHORED IMAGES
+      ~ image vendor.example/product: 2026.2 -> 2026.2.0-1234.1
+      values: 1 changed, 0 added, 0 removed
+        ~ pack.content.images[0].image: "vendor.example/product:2026.2" -> "vendor.example/product:2026.2.0-1234.1"
+      impact: node/control plane config change, may repave
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged

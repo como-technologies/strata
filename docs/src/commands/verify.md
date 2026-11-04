@@ -333,6 +333,33 @@ an object from Palette, so it refuses the record with `usage`. It sends no
 request, and it needs no key. A record with no uid, such as the record of a
 candidate, gets `no-uid` in the same way.
 
+## What OK does not cover
+
+`OK` says that Palette holds the content that the record holds. It says nothing
+of the image behind a tag. Strata reads no registry, so it cannot see that a
+vendor gave a tag another image.
+
+A pack names an image by a tag. A vendor can push a new image under that tag,
+and the pack text does not change. So the record, the root, and the verdict stay
+the same: `OK` and exit `0`. `compare` of the record with the version exits `0`
+too, and `behind` shows pack versions alone.
+
+Palette pulls no image, and it holds no digest of an image unless the pack text
+names one. The nodes pull what the chart or the manifest names. So a tag in the
+pack is not a pin. Two fixes close the case:
+
+- Name the digest where the chart or the manifest reads it, such as the value
+  `image.digest` of a chart. The root then covers the digest, and a move of the
+  tag cannot change what the record says.
+- Copy each image to a registry with immutable tags, and name the copy.
+
+See [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). The
+rule `image-tag-not-digest` of `strata preflight` names the case as a note. No
+run shows which image a node pulls: see
+[What no run covers](../internals/palette/limits.md). The other cases that `OK`
+does not cover are in
+[What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
+
 ## Run it on a schedule
 
 `scripts/ci/verify-report.sh` runs `verify` over each record, and keeps one GitHub

@@ -39,9 +39,9 @@ values name each changed key. Exit `1`: the versions differ.
 {{#include ../output/pack-compare-images.txt}}
 ```
 
-The image list holds a tag, and not a digest. An image pushed again under the
-same tag does not show here: see
-[The change flags](../reference/impact.md#the-change-flags).
+The image list holds the text that the pack names. An image pushed again under
+the same tag does not show here: see
+[A vendor rebuilds an image under one tag](./image-tag.md).
 
 The last line of the block is the one that decides what you do:
 `impact: node repave (Kubernetes version change)`. A change of the Kubernetes
