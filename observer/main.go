@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -98,6 +100,21 @@ func (o *options) parse(name string, args []string, stderr io.Writer, extra ...f
 	if o.ContentEvery <= 0 || o.VersionsEvery <= 0 {
 		return errors.New("a period must be more than zero")
 	}
+	return o.absoluteStrata()
+}
+
+// absoluteStrata makes a path of the strata binary absolute, from the directory of the observer. A
+// process runs in the directory of its cycle, and Go reads a relative path from there, so a relative
+// path would fail in each cycle. A name with no separator stays: the lookup on PATH makes it absolute.
+func (o *options) absoluteStrata() error {
+	if !strings.ContainsRune(o.strata, filepath.Separator) {
+		return nil
+	}
+	abs, err := filepath.Abs(o.strata)
+	if err != nil {
+		return fmt.Errorf("the flag --strata: %w", err)
+	}
+	o.strata = abs
 	return nil
 }
 

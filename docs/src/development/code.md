@@ -245,28 +245,42 @@ code, and these rules are for the Go code.
 - The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
   function that fails returns an `error`.
 - `internal/runner` is the one place that starts a process. It refuses a
-  command or a flag that is not in its lists. A process gets the variables of
-  its list and `STRATA_REPORT=0`, and no other variable.
+  command or a flag that is not in its lists. A process gets `STRATA_REPORT=0`,
+  which stops the send of the report, and each variable of its list that the
+  observer has. The list is `PALETTE_API`, `PALETTE_API_KEY`,
+  `PALETTE_PROJECT_UID`, `PALETTE_PROJECT`, `HOME`, `TMPDIR`, `XDG_STATE_HOME`,
+  and `PATH`. A process gets no other variable, and a test holds the list.
+  `STRATA_QUIET` and `NO_COLOR` are not in the list, because each call has `-q`
+  and no call writes a terminal report.
 - An error of a run holds a kind and a status. It never holds a message,
   because the message of the kind `api` can hold the body of an answer from
   Palette.
 - `internal/docs` is the allow-list of the fields that the observer reads. A
-  document never decodes into a map, and no code forwards a document.
+  document never decodes into a map, and no code forwards a document. A test
+  makes sure that code reads each field. The detail tier sends a few fields as
+  they are, such as `Leaf.Old`. The list `forwarded` of that test names them.
+- `internal/check` reads a document of strata only with the schema id that
+  `internal/docs` names for its command. Another id, or none, is a failed read
+  of the kind `schema`, and it makes no finding. A test makes sure of it for
+  `verify`, `compare`, `behind`, and the snapshot of the cluster.
 - A test of `internal/docs` writes a marker at the path of a field that is not
   in the list. It fails when the marker is in the output.
   `just observer-contract` fails when a field of the list is not in the schema
   of the binary.
-- A log line holds a verdict, an exit code, a duration, and an error kind. One
-  more line names a profile and the `verify.whoError` of its record. It never
-  holds a value or other output of a process.
+- A log line holds a verdict, an exit code, a duration, an error kind, and a
+  status. One more line names a profile and the status of its `verify.whoError`:
+  `HTTP <status>`, or `no answer`. A log line holds no output of a process. The
+  rule has no exception.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test
   gives it a fake that returns files from `testdata/`. See
   [The checks of the observer](./observer.md).
-- The summary and the state hold no old value, no new value, and no value of a
-  variable. A test plants a marker in a changed value and in a variable.
-  It fails when the marker is in the summary, the state, or the log.
+- The summary and the state hold no old value, no new value, no changed path,
+  and no value of a variable. A path can hold the name of a list item, and that
+  name is a value of the cluster. A test plants a marker in a changed value, in
+  a changed path, and in a variable. It fails when the marker is in the summary,
+  the state, or the log.
 - A cycle makes its directory under `--work` and removes it at the end, also
   after an error. A test makes sure that `--work` is empty after a good cycle
   and after a failed cycle.

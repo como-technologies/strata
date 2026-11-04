@@ -49,10 +49,12 @@ func Listen(addr string) (net.Listener, error) {
 	return net.Listen("tcp", addr)
 }
 
-// httpServer makes the server of the http package, with the limits.
-func (s *Server) httpServer() *http.Server {
+// httpServer makes the server of the http package, with the limits. Each request context ends when
+// ctx ends, so a stop cancels a detail request and the strata process that it started.
+func (s *Server) httpServer(ctx context.Context) *http.Server {
 	return &http.Server{
 		Handler:           s.Handler(),
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
@@ -62,11 +64,11 @@ func (s *Server) httpServer() *http.Server {
 	}
 }
 
-// Serve serves ln until ctx ends, and then stops with a short grace for the requests that run. It
-// returns nil after a stop that ctx asked for. The log of the http package is off, because a panic
-// there prints the value that the handler panicked with.
+// Serve serves ln until ctx ends. The end of ctx also cancels the requests that run, and the server
+// then waits a short grace for their answers. It returns nil after a stop that ctx asked for. The log
+// of the http package is off, because a panic there prints the value that the handler panicked with.
 func (s *Server) Serve(ctx context.Context, ln net.Listener, logger *slog.Logger) error {
-	srv := s.httpServer()
+	srv := s.httpServer(ctx)
 	done := make(chan error, 1)
 	go func() { done <- srv.Serve(ln) }()
 	logger.Info("listening", "addr", ln.Addr().String())

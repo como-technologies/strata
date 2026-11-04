@@ -362,9 +362,37 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 	if strings.Contains(string(raw), "AccessDenied") {
 		t.Errorf("the summary holds the text of the error: %s", raw)
 	}
-	// the log of the pod holds the reason, with the profile it belongs to
-	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, "AccessDenied") || !strings.Contains(line, "profile=aws-stack@1.1.0") {
+	// the log of the pod names the status and the profile, and never the body of the answer
+	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile=aws-stack@1.1.0") {
 		t.Errorf("log %q", line)
+	}
+}
+
+// The reason of strata is HTTP <status>: <body>, or the message of a request that did not complete.
+// The body can hold output of Palette, and the message can hold an address. So the line of the log
+// holds the status, or the words no answer, and never more of the text.
+func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) {
+	for _, c := range []struct{ name, whoError, want string }{
+		{"a refusal with a body", "HTTP 403: AUDIT-BODY-MARKER", `reason="HTTP 403"`},
+		{"a server error with a body", "HTTP 500: AUDIT-BODY-MARKER", `reason="HTTP 500"`},
+		{"a status with no body", "HTTP 502", `reason="HTTP 502"`},
+		{"a request that did not complete", "error sending request for url (https://AUDIT-BODY-MARKER.example/v1/audits)", `reason="no answer"`},
+		{"a status that has no three digits", "HTTP 4: AUDIT-BODY-MARKER", `reason="no answer"`},
+		{"a status that does not start the text", "the answer was HTTP 403: AUDIT-BODY-MARKER", `reason="no answer"`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r, w := oneRecord(t, unchanged())
+			w.rows[0] = drift(t)
+			w.rows[0].Diff.Verify.Who = nil
+			w.rows[0].Diff.Verify.WhoError = c.whoError
+			w.rows[0].Name, w.rows[0].Version = "aws-stack", "1.1.0"
+			if _, err := r.observer(w).Once(context.Background()); err != nil {
+				t.Fatalf("error %v", err)
+			}
+			if line := r.log.String(); strings.Contains(line, "AUDIT-BODY-MARKER") || !strings.Contains(line, c.want) {
+				t.Errorf("want %s, log %q", c.want, line)
+			}
+		})
 	}
 }
 
