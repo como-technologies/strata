@@ -154,3 +154,56 @@ func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
 		t.Error("a pack rule with a key covers that key only")
 	}
 }
+
+func TestAMuteBesideASendRuleAtOneLevelParsesAndTheLiveMuteWins(t *testing.T) {
+	rules, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [
+		{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
+		{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
+		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"},
+		{"level": "profile", "match": "fred-identity", "news": "drift", "send": "digest", "to": "a"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	lost := Subject{News: NewsLost}
+	drift := Subject{News: NewsDrift, Profile: "fred-identity@2.3.0"}
+	for _, c := range []struct {
+		name string
+		s    Subject
+		at   time.Time
+		want int
+	}{
+		{"lost, in the mute", lost, time.Date(2026, 12, 1, 23, 59, 59, 0, time.UTC), 1},
+		{"lost, after the mute", lost, time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC), 0},
+		{"drift of a profile, in the mute, with the send rule after it in the file", drift, now, 2},
+		{"drift of a profile, after the mute", drift, time.Date(2026, 12, 2, 0, 0, 0, 0, time.UTC), 3},
+	} {
+		if got, ok := rules.decide(c.s, c.at); !ok || got != c.want {
+			t.Errorf("%s: the rule is %d, %v; want %d", c.name, got, ok, c.want)
+		}
+	}
+}
+
+func TestTwoRulesThatSendForOneThingAreStillRefusedAndAMuteCountsInNoDuplicate(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		ok   bool
+	}{
+		{"two rules that send", `{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
+			{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`, false},
+		{"a mute after a rule that sends", `{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
+			{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"}`, true},
+		{"a mute before a rule that sends", `{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
+			{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`, true},
+		{"two mutes", `{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
+			{"level": "cluster", "news": "lost", "muteUntil": "2027-01-01"}`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [` + c.body + `]}`))
+			if (err == nil) != c.ok {
+				t.Errorf("error %v, want ok %v", err, c.ok)
+			}
+		})
+	}
+}

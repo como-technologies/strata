@@ -6,11 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -312,4 +314,143 @@ func asMap(t *testing.T, v any) map[string]any {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// breakRecord overwrites the file of a record with a file that the observer cannot read.
+func breakRecord(t *testing.T, r *rig, how string) {
+	t.Helper()
+	const file = "aws-stack@1.1.0.json.gz"
+	switch how {
+	case "a bad gzip":
+		if err := os.WriteFile(filepath.Join(r.records, file), []byte("not gzip"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	default:
+		testkit.WriteGzip(t, r.records, file, `{"schema":"strata-snapshot/2","source":{"name":"aws-stack","version":"1.1.0"}}`)
+	}
+}
+
+// restoreRecord writes the record of aws-stack again, as the pipeline does after it fixed the file.
+func restoreRecord(r *rig) {
+	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
+}
+
+func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *testing.T) {
+	for _, how := range []string{"a bad gzip", "another schema"} {
+		t.Run(how, func(t *testing.T) {
+			r, w := twoRecords(t)
+			w.rows[0] = drift(t)
+			sender := &capture{}
+			o := alerting(t, r, w, sender)
+			id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+			at(t, o, t0)
+			if len(sender.texts) != 1 {
+				t.Fatalf("the open message %q", sender.texts)
+			}
+			// The file of the drifted record is not a record any more. The row of the other record is the only one.
+			breakRecord(t, r, how)
+			w.rows = []docs.VerifyRow{unchanged()}
+			s := at(t, o, t0.Add(time.Hour))
+			if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Profiles[0].Status != model.StatusDrift {
+				t.Fatalf("an unreadable record cleared the finding: findings %+v", s.Findings)
+			}
+			if got := causeOf(s, model.ReadError); !slices.Contains(got, "aws-stack@1.1.0") || !slices.Contains(got, "aws-stack@1.1.0.json.gz") {
+				t.Errorf("the cause read-error names %v", got)
+			}
+			if got, ok := firstSeenInState(t, r, id); !ok || !got.Equal(t0) {
+				t.Errorf("the state holds the first sight %v, %v", got, ok)
+			}
+			if len(sender.texts) != 1 {
+				t.Fatalf("an unreadable record sent %q", sender.texts[1:])
+			}
+			// A later good read decides.
+			restoreRecord(r)
+			w.rows = []docs.VerifyRow{unchanged(), unchanged()}
+			s = at(t, o, t0.Add(2*time.Hour))
+			if len(s.Findings) != 0 || len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Drift cleared") {
+				t.Errorf("findings %+v, messages %q", s.Findings, sender.texts)
+			}
+			if _, ok := firstSeenInState(t, r, id); ok {
+				t.Error("the state keeps the first sight of a drift that a read cleared")
+			}
+		})
+	}
+}
+
+func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t *testing.T) {
+	r, w := twoRecords(t)
+	w.rows = []docs.VerifyRow{drift(t), drift(t)}
+	sender := &capture{}
+	at(t, alerting(t, r, w, sender), t0)
+	broken := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+	readable := model.FindingID(model.PublishedChanged, "platform-addons@1.0.0")
+	if len(sender.texts) != 2 {
+		t.Fatalf("the open messages %q", sender.texts)
+	}
+	// A new process has no last record in memory. One file is bad, and the record that is read shows no change.
+	breakRecord(t, r, "a bad gzip")
+	w.rows = []docs.VerifyRow{unchanged()}
+	o := alerting(t, r, w, sender)
+	s := at(t, o, t0.Add(time.Hour))
+	if len(s.Findings) != 0 {
+		t.Fatalf("the process invented a finding: %+v", s.Findings)
+	}
+	if got, ok := firstSeenInState(t, r, broken); !ok || !got.Equal(t0) {
+		t.Errorf("the state holds the first sight %v, %v", got, ok)
+	}
+	// The record that was read decides for its own profile, so its clear goes. The unreadable file decides for none.
+	if _, ok := firstSeenInState(t, r, readable); ok {
+		t.Error("the state keeps the first sight of a profile that a record clears")
+	}
+	if len(sender.texts) != 3 || !strings.Contains(sender.texts[2], "Drift cleared\nplatform-addons@1.0.0") {
+		t.Fatalf("messages %q", sender.texts)
+	}
+	// The record is read again and the drift is still there: the first sight is the first one, and nothing goes again.
+	restoreRecord(r)
+	w.rows = []docs.VerifyRow{drift(t), unchanged()}
+	s = at(t, o, t0.Add(2*time.Hour))
+	if len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) || len(sender.texts) != 3 {
+		t.Errorf("findings %+v, messages %q", s.Findings, sender.texts)
+	}
+	// A read of no change decides.
+	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
+	at(t, o, t0.Add(3*time.Hour))
+	if len(sender.texts) != 4 || !strings.Contains(sender.texts[3], "Drift cleared\naws-stack@1.1.0") {
+		t.Errorf("messages %q", sender.texts)
+	}
+}
+
+func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(t *testing.T) {
+	r, _, o, pods := podRig(t, runs("web-1", digest1))
+	cycle(t, o)
+	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	cycle(t, o)
+	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
+		t.Fatalf("findings %v", got)
+	}
+	// The file is gone for one cycle, as when the kubelet updates the Secret.
+	if err := os.Remove(filepath.Join(r.records, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	cycle(t, o)
+	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
+		t.Errorf("a failed read of meta.json leaves the findings %v", got)
+	}
+	st := readState(t, r)
+	if st.Images.Revision != "4e1c7a2" || st.Images.First[model.ImageKey(imageRef)] != digest1 {
+		t.Errorf("a failed read of meta.json reset the state: %+v", st.Images)
+	}
+	// The file comes back with the same revision, and the finding holds.
+	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
+	cycle(t, o)
+	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
+		t.Errorf("findings %v", got)
+	}
+	// A real new revision resets the first digests.
+	r.meta(`{"baseline":"approved","revision":"5f2d8b1"}`)
+	cycle(t, o)
+	st = readState(t, r)
+	if got := imageKindsOf(o.Summary()); len(got) != 0 || st.Images.Revision != "5f2d8b1" || st.Images.First[model.ImageKey(imageRef)] != digest2 {
+		t.Errorf("findings %v, state %+v", got, st.Images)
+	}
 }

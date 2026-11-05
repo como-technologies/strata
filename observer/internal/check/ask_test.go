@@ -8,7 +8,9 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -264,5 +266,172 @@ func TestAPackAtTheCapKeepsItsText(t *testing.T) {
 	pack, ok, err := o.PackDiff(context.Background(), "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster)
 	if err != nil || !ok || pack.TextTooLarge || pack.Values.Unified != text {
 		t.Errorf("%v %v too large %v, %d bytes", ok, err, pack.TextTooLarge, len(pack.Values.Unified))
+	}
+}
+
+// askedShape changes the pin that the world gives to the ask, after the versions cycle read it. The
+// cycle keeps the pin that it read, so the ask sees a document that differs from it.
+func askedShape(t *testing.T, w *world, change func(p *docs.Pin)) {
+	t.Helper()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
+	if i < 0 {
+		t.Fatal("the fixture has no kubernetes pin")
+	}
+	change(&w.behind.Pins[i])
+}
+
+// A pin that failed has the shape that `behind` prints: the error, no newer version, and no bump. The
+// click still gets an answer, and the answer names the newest version that the page shows.
+func TestAskForAPinThatFailsOrIsNotBehindAnyMoreGivesNoAnswerForTheNewestVersionOfThePage(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		change func(p *docs.Pin)
+		status int
+	}{
+		{"a pin with an error", func(p *docs.Pin) {
+			p.Newer, p.Behind, p.Bump, p.Error = nil, false, nil, &docs.Error{Kind: docs.KindAPI, Status: 502}
+		}, 502},
+		{"a pin that is not behind any more", func(p *docs.Pin) { p.Newer, p.Behind, p.Bump = nil, false, nil }, 0},
+		{"a registry that no longer lists the version of the page", func(p *docs.Pin) {
+			p.Newer, p.Bump = []docs.Newer{{Version: "1.35.9"}}, &docs.Bump{To: "1.35.9", PaletteValidation: &docs.Validation{Accepts: true}}
+		}, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
+			askedShape(t, w, c.change)
+			got, ok, err := o.Ask(context.Background(), moveSubject, "k8s/kubernetes")
+			if err != nil || !ok || got.Verdict != model.VerdictNoAnswer || got.Newest != "1.36.2" || got.Status != c.status {
+				t.Fatalf("%+v %v %v", got, ok, err)
+			}
+			if list := o.Answers(); len(list) != 1 || list[0].Newest != "1.36.2" {
+				t.Errorf("answers %+v", list)
+			}
+		})
+	}
+}
+
+// The registry can gain a version after the last versions cycle. The answer is for the newer version,
+// and it stays under the move of the cycle until the next cycle drops it.
+func TestAskKeepsTheAnswerForANewerVersionUnderTheMoveOfTheCycle(t *testing.T) {
+	_, w, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
+	askedShape(t, w, func(p *docs.Pin) {
+		p.Newer = append([]docs.Newer{{Version: "1.37.0"}}, p.Newer...)
+		p.Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
+	})
+	got, ok, err := o.Ask(context.Background(), moveSubject, "k8s/kubernetes")
+	if err != nil || !ok || got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" {
+		t.Fatalf("%+v %v %v", got, ok, err)
+	}
+	before := len(w.behindCalls())
+	if again, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes"); !reflect.DeepEqual(again, got) || len(w.behindCalls()) != before {
+		t.Errorf("a second ask ran again: %+v", again)
+	}
+	if list := o.Answers(); len(list) != 1 || list[0].Newest != "1.37.0" {
+		t.Errorf("answers %+v", list)
+	}
+}
+
+// pinCalls counts the questions to Palette: the runs of `behind` with --pin.
+func pinCalls(w *world) int {
+	n := 0
+	for _, c := range w.behindCalls() {
+		if slices.Contains(c, runner.FlagPin) {
+			n++
+		}
+	}
+	return n
+}
+
+// A move whose compare failed is not in the cache of the moves, but the answer of Palette about it is
+// still the answer. The next cycle must not drop it, or the next click sends a second POST.
+func TestAClickAfterAFailedCompareSendsNoSecondPost(t *testing.T) {
+	r, w := withBehind(t)
+	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
+	w.behind.Pins[i].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
+	w.moveErrs[move("kubernetes", "1.35.3", "1.36.2")] = &runner.RunError{Kind: docs.KindCrash}
+	o := r.observer(w)
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, ok, err := o.Ask(context.Background(), moveSubject, "k8s/kubernetes")
+	if err != nil || !ok || got.Verdict != model.VerdictNoError || pinCalls(w) != 1 {
+		t.Fatalf("%+v %v %v, %d questions", got, ok, err, pinCalls(w))
+	}
+	// The next cycle compares the move again, and the compare fails again.
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if list := o.Answers(); len(list) != 1 {
+		t.Fatalf("the cycle dropped the answer: %+v", list)
+	}
+	if again, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes"); !reflect.DeepEqual(again, got) || pinCalls(w) != 1 {
+		t.Errorf("a second click sent a second question: %+v, %d questions", again, pinCalls(w))
+	}
+}
+
+// gated stops the first `behind` of the world until the test lets it go. It tells the test when the call
+// has started, so that the test knows a versions cycle holds the worker.
+type gated struct {
+	*world
+	started chan struct{}
+	proceed chan struct{}
+	once    sync.Once
+}
+
+func (g *gated) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
+	if args[0] == runner.CmdBehind {
+		g.once.Do(func() {
+			close(g.started)
+			<-g.proceed
+		})
+	}
+	return g.world.Run(ctx, dir, args...)
+}
+
+// A click that waits for a versions cycle must ask about the move that the cycle read. The cycle ends with
+// the move of a newer version, and the answer belongs under that move, or the next cycle cannot drop it.
+func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing.T) {
+	r, w := withBehind(t)
+	i := slices.IndexFunc(w.behind.Pins, func(p docs.Pin) bool { return p.Name == "kubernetes" })
+	w.behind.Pins[i].Bump = &docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}}
+	o := r.observer(w)
+	if err := o.RunVersions(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// The second cycle holds the worker at its first `behind`.
+	g := &gated{world: w, started: make(chan struct{}), proceed: make(chan struct{})}
+	o.strata = g
+	cycle := make(chan error, 1)
+	go func() { cycle <- o.RunVersions(context.Background()) }()
+	<-g.started
+	clicked := make(chan model.Answer, 1)
+	go func() {
+		a, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes")
+		clicked <- a
+	}()
+	// The click reads the pin of the first cycle, and then it waits for the worker. The registry gains a
+	// version, and the second cycle reads it.
+	time.Sleep(100 * time.Millisecond)
+	w.mu.Lock()
+	w.behind.Pins[i].Newer = append([]docs.Newer{{Version: "1.37.0"}}, w.behind.Pins[i].Newer...)
+	w.behind.Pins[i].Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
+	w.moves[move("kubernetes", "1.35.3", "1.37.0")] = w.moves[move("kubernetes", "1.35.3", "1.36.2")]
+	w.mu.Unlock()
+	close(g.proceed)
+	if err := <-cycle; err != nil {
+		t.Fatal(err)
+	}
+	if got := <-clicked; got.Verdict != model.VerdictNoError || got.Newest != "1.37.0" {
+		t.Fatalf("answer %+v", got)
+	}
+	_, move, ok := o.pinOf(moveSubject, "k8s/kubernetes")
+	if _, held := o.cachedAsk(askKey{moveSubject, move}); !ok || !held || len(o.asks) != 1 {
+		t.Errorf("the answer is not under the move %q of the second cycle: %d answers", move, len(o.asks))
+	}
+	// The next cycle keeps it, because the move is the same.
+	if err := o.RunVersions(context.Background()); err != nil || len(o.Answers()) != 1 {
+		t.Errorf("error %v, answers %+v", err, o.Answers())
 	}
 }
