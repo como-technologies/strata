@@ -1373,7 +1373,9 @@ the component `deploy/observer/pods`, so the observer reads the pods. The checks
 `mirror-image-id` and `mirror-image-string` print what each pod
 reports and the row that the observer shows for it. They show whether the image
 string or the image id decides which match works. The stage removes the pods, the
-files of containerd, and the registry. A mirror at the level of the node keeps the
+files of containerd, and the registry.
+
+A mirror at the level of the node keeps the
 name of the pack in `spec.image` and in `imageID`. A rewritten image string names the
 mirror in both, so it matches no pack by name and tag. See [The pods of a
 cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).

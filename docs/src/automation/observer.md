@@ -517,7 +517,7 @@ each request names the project. [The role that a key needs](../internals/palette
 lists each permission and each refusal.
 
 - **Keep the audit log in the role, to name the writer.** Cluster Viewer alone does
-  not hold `audit.list`, and the audit log answers HTTP 403 with the code
+  not hold `audit.list`. The audit log then answers HTTP 403 with the code
   `AccessDenied`. With that role, the verdict and the finding stay, and `who`
   is empty. The page lists an event that says the audit log could not be read. A
   custom role needs `audit.list` beside `cluster.get`, `clusterProfile.get`,

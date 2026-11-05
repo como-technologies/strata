@@ -2497,7 +2497,7 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
 /// `observer-role.sh`, and stage 3 of `who.sh` in the live windows of Wave 15. Their sections state
 /// the results. The observer page states the request counts of cluster A and the answer of each
 /// role. `limits.md` no longer says that no run covers a layer taken off, a digest in the image
-/// list, or a key with Project Viewer or Cluster Viewer.
+/// list, or a role.
 #[test]
 fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     let runs = read(&docs().join("development/live-runs.md"));
