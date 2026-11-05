@@ -57,6 +57,12 @@ The release workflow then:
    binaries of the release, signs its digest, and pushes it as
    `ghcr.io/como-technologies/strata-observer:<tag>`
 
+The transparency log of Sigstore can refuse one try of step 4. So the script
+`scripts/ci/sign-blobs.sh` tries each file up to 5 times, with 30 seconds
+between two tries. It removes a partial bundle before each try. After the last
+try of a file, it stops with the last error of cosign, and it does not sign the
+next file. The step that checks each signature stays after it.
+
 The job of step 7 calls the workflow `observer-image.yml`: see [The
 image](./observer-deploy.md#the-image). A fault in the `permissions` of that job
 stops the whole run at its start, so change them with care. If the job fails after

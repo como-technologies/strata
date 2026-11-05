@@ -7,7 +7,7 @@ use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, repo_file, runs_of,
-    steps, text, workflow, workflow_files, workflow_text,
+    script, steps, text, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -240,6 +240,49 @@ fn the_release_check_installs_the_published_tag_with_a_required_signature() {
     })
     .expect("the check job installs the tag with --require-signature");
     assert!(cosign < install, "cosign comes before the installer runs");
+}
+
+/// The log of Sigstore can refuse one try of a signature: it stopped v0.30.0 three times with a
+/// 409. So the release signs through `scripts/ci/sign-blobs.sh`, which tries again, and no step
+/// calls `cosign sign-blob` by itself. The step that checks each bundle stays.
+#[test]
+fn the_release_signs_each_file_through_the_script_that_tries_again_and_still_verifies_each_bundle()
+{
+    let doc = workflow("release.yml");
+    let run_of = |name: &str| -> String {
+        steps(&doc)
+            .find(|s| s["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("the release has no step named {name}"))["run"]
+            .as_str()
+            .unwrap_or_else(|| panic!("the step {name} has no run"))
+            .to_string()
+    };
+    let signing = run_of("checksums and signatures");
+    let sums = signing
+        .find("> SHA256SUMS")
+        .expect("the step writes SHA256SUMS");
+    let sign = signing
+        .find("../scripts/ci/sign-blobs.sh \"${files[@]}\"")
+        .expect("the step signs each file through the script");
+    assert!(sums < sign, "the sums come before the signatures");
+    assert!(
+        !workflow_text("release.yml").contains("cosign sign-blob"),
+        "a step calls cosign sign-blob and does not try again"
+    );
+    assert!(run_of("verify what will be published").contains("cosign verify-blob"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(script("ci/sign-blobs.sh"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o111,
+            0o111,
+            "the workflow runs the script, so it is executable"
+        );
+    }
 }
 
 // ---- the steps of the reusable workflows ---------------------------------------------------------
