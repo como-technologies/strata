@@ -834,3 +834,16 @@ func TestTheHeaderOfAPackShowsTheDigestLikeTheOtherValuesAndNoneForABlank(t *tes
 	blank := pagesOf(t, dir, "#k-fred-identity@2.3.0/addon/reloader")[0]
 	mustHold(t, "a blank value", blank, `<div><span>Registry</span>none</div><div><span>Kind</span>none</div><div><span>Upstream</span><span class="m bright">none</span></div>`)
 }
+
+// No inline style reaches a screen of any set. The policy of the page stops it, and the color of a slab is a rule of app.css.
+func TestNoInlineStyleReachesAScreenOfAnySet(t *testing.T) {
+	for _, state := range devdata.States {
+		t.Run(string(state), func(t *testing.T) {
+			for _, s := range crawl(t, state) {
+				if inlineStyle.MatchString(s.HTML) || strings.Contains(s.HTML, "<style") {
+					t.Errorf("%s %s holds an inline style", s.Hash, s.Variant)
+				}
+			}
+		})
+	}
+}

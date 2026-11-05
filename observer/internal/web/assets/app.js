@@ -373,8 +373,8 @@ function stateSplash() {
   }
 }
 
-// screen gives the view of a screen that reads the checks. A page with nothing read shows the splash of its state, else the body.
-function screen(nav, crumb, build) {
+// withChecks gives the view of a screen that reads the checks. A page with nothing read shows the splash of its state, else the body.
+function withChecks(nav, crumb, build) {
   return {nav, crumbs: crumb, body: h`${alertBars()}${stateSplash() || build()}`};
 }
 
@@ -753,11 +753,11 @@ function profilesCard() {
 
 /* ---- The screens ---- */
 function viewOverview() {
-  return screen("overview", crumbs("Overview"), () => h`${tiles()}<div class="grid2"><div class="stack">${findingsCard()}${eventsCard()}</div>${coverageCard()}</div>${profilesCard()}`);
+  return withChecks("overview", crumbs("Overview"), () => h`${tiles()}<div class="grid2"><div class="stack">${findingsCard()}${eventsCard()}</div>${coverageCard()}</div>${profilesCard()}`);
 }
 
 function viewProfiles() {
-  return screen("profiles", crumbs("Profiles"), profilesCard);
+  return withChecks("profiles", crumbs("Profiles"), profilesCard);
 }
 
 function viewFindings() {
@@ -770,12 +770,12 @@ function viewFindings() {
       return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${r.name} ${r.version}${ARROW}${r.newest}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
     })}</tbody></table></div>`;
   };
-  return screen("findings", crumbs("Findings"), () => h`${findingsCard()}
+  return withChecks("findings", crumbs("Findings"), () => h`${findingsCard()}
     <section class="card"><div class="chead"><h2>Newer versions <span class="sub">${rows.length}. A choice, not a fault, so they stay out of Needs attention.</span></h2><a class="small" href="#newer">Open the table</a></div>${card()}</section>`);
 }
 
 function viewNewer() {
-  return screen("newer", crumbs("Newer versions"), newerCard);
+  return withChecks("newer", crumbs("Newer versions"), newerCard);
 }
 
 // newerCard draws the table of the newer versions, or the splash of an empty list.
@@ -821,7 +821,7 @@ function packsWithoutMove() {
 }
 
 function viewNotChecked() {
-  return screen("notchecked", crumbs("Not checked"), () => {
+  return withChecks("notchecked", crumbs("Not checked"), () => {
     const rows = D.notChecked;
     const body = rows.length ? h`<div class="tw"><table><thead><tr><th>What</th><th>Profile</th><th>Why</th></tr></thead><tbody>${rows.map(r => {
       const first = r.profiles[0];
@@ -895,7 +895,7 @@ function viewProfile(subject) {
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
     <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}</span></h2></div>${packs}</section>
-    ${checkCard(terminalRows(subject, x, null))}`};
+    ${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
 }
 
 // eventFrom names where an event comes from.
@@ -1233,7 +1233,7 @@ function valuesPanel(d, id, command) {
   // The long values link to the text of the values, when the page shows it.
   const textId = id + "-text", jump = rows.length ? textId : "";
   const text = rows.length ? diffBlock(`${d.key} values`, "", rows, textId) : d.textTooLarge && (total > 0 || !v.parseable) ? tooLargeNote(command) : "";
-  if (!v.parseable && total === 0) return h`<div class="body small mut">Strata cannot read the values of this pack as settings.</div>${text}`;
+  if (!v.parseable && total === 0) return h`<div class="body">${inline(TONE.OFF, text ? "Strata cannot read the values of this pack as settings. The text below shows the change." : "Strata cannot read the values of this pack as settings.")}</div>${text}`;
   const lead = total ? h`<div class="body small mut pb8">${total} changed ${plural(total, "value", "values")}: ${s.length} ${plural(s.length, "setting", "settings")}, ${f.length} follow the version, ${r.length} repeat the lists.</div>` : emptyTab(id, d, "values", "value");
   const masked = d.masked.length ? h`<div class="note small nt"><b>Masked:</b> ${d.masked.map(m => h`<span class="m">${m}</span>`)}. An equal root does not show an equal secret.</div>` : "";
   const follows = f.length ? h`<details data-open="${id}-f" ${openAttr(id + "-f")}><summary>Follows the version: ${f.length} ${plural(f.length, "value", "values")}</summary>${settingsTable(f, jump)}</details>` : "";
@@ -1403,7 +1403,7 @@ function terminalRows(subject, x, p, row) {
     const drifting = x.packs.filter(q => q.status === STATUS.DRIFT).length;
     rows.push(["Does Palette still have this version?", `strata verify ${RECORD_FILE}`, publishedBadge(pub)]);
     if (x.who && x.who.length) rows.push(["Who changed it?", `strata verify ${RECORD_FILE} --who`, `${x.who[0].actor}, ${ago(x.who[0].time)} ago`]);
-    rows.push(["What changed?", publishedCommand(subject), drifting ? `${drifting} ${plural(drifting, "pack", "packs")}` : statusBadge(STATUS.OK)]);
+    rows.push(["What changed?", publishedCommand(subject), pub.status === VERIFY.DRIFTED && drifting ? `${drifting} ${plural(drifting, "pack", "packs")}` : publishedBadge(pub)]);
   }
   if (cp) rows.push(["Does this cluster still run the record?", clusterCommand(x, false), copyBadge(cp)]);
   if (p && row) {
