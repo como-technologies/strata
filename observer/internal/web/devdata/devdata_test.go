@@ -3,14 +3,18 @@ package devdata
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -60,7 +64,7 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 			name string
 			v    any
 		}{{fileCluster, s.Cluster}, {fileFindings, s.Findings}, {fileProfiles, s.Profiles}, {fileNewer, s.Newer},
-			{fileNotChecked, s.NotChecked}, {fileEvents, s.Events}, {fileDiffs, s.Diffs}, {fileImages, s.Images}} {
+			{fileNotChecked, s.NotChecked}, {fileEvents, s.Events}, {fileDiffs, s.Diffs}, {fileImages, s.Images}, {fileAsks, s.Asks}} {
 			t.Run(string(state)+"/"+f.name, func(t *testing.T) {
 				raw, err := Read(sets(), state, f.name)
 				if err != nil {
@@ -70,6 +74,16 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
 				}
 			})
+		}
+		// The file of the replies is optional, and it has the shape of asks.json.
+		if raw, err := Read(sets(), state, fileReplies); err == nil {
+			t.Run(string(state)+"/"+fileReplies, func(t *testing.T) {
+				if got, want := encoded(t, s.Replies), normal(t, raw); !reflect.DeepEqual(got, want) {
+					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
+				}
+			})
+		} else if !errors.Is(err, fs.ErrNotExist) || len(s.Replies.Asks) != 0 {
+			t.Errorf("%s: the read of the replies gave %v and %d replies", state, err, len(s.Replies.Asks))
 		}
 	}
 }
@@ -100,7 +114,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			return rec.Code, v
 		}
 		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
-			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages} {
+			"/v1/newer": fileNewer, "/v1/notchecked": fileNotChecked, "/v1/events": fileEvents, "/v1/images": fileImages, "/v1/asks": fileAsks} {
 			raw, err := Read(sets(), state, file)
 			if err != nil {
 				t.Fatal(err)
@@ -136,7 +150,8 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 	pages := map[State]model.Page{StateOK: model.PageOK, StateQuiet: model.PageOK, StateFirstLoad: model.PageFirstLoad,
 		StateNoRecords: model.PageNoRecords, StateStale: model.PageStale, StateLost: model.PageLost, StateFirstSeen: model.PageOK,
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
-		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK}
+		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
+		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -500,5 +515,332 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 		!slices.ContainsFunc(unread.NotChecked.NotChecked, func(r model.NotChecked) bool { return reflect.DeepEqual(r, row) }) ||
 		unread.Cluster.Counts.NotChecked != ok.Cluster.Counts.NotChecked+1 || unread.Cluster.Counts.PacksInFull != ok.Cluster.Counts.PacksInFull {
 		t.Errorf("images-unread: %+v, counts %+v", unread.Images, unread.Cluster.Counts)
+	}
+}
+
+var hunkHead = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@$`)
+
+// lineCount reads the count of a hunk head. A head with no count means one line.
+func lineCount(s string) int {
+	if s == "" {
+		return 1
+	}
+	n, _ := strconv.Atoi(s)
+	return n
+}
+
+// unifiedProblem says what is wrong in a unified text, or it gives "". The text has two header lines,
+// and each hunk has as many lines on each side as its head says.
+func unifiedProblem(text string) string {
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	if len(lines) < 3 || !strings.HasPrefix(lines[0], "--- a: ") || !strings.HasPrefix(lines[1], "+++ b: ") {
+		return "the header lines are missing"
+	}
+	var old, now, wantOld, wantNow, hunks int
+	closed := func() bool { return old == wantOld && now == wantNow }
+	for _, l := range lines[2:] {
+		if m := hunkHead.FindStringSubmatch(l); m != nil {
+			if hunks > 0 && !closed() {
+				return "a hunk does not hold the lines that its head names"
+			}
+			hunks, old, now, wantOld, wantNow = hunks+1, 0, 0, lineCount(m[2]), lineCount(m[4])
+			continue
+		}
+		switch {
+		case hunks == 0:
+			return "a line comes before the first hunk"
+		case strings.HasPrefix(l, "\\ "):
+		case strings.HasPrefix(l, "-"):
+			old++
+		case strings.HasPrefix(l, "+"):
+			now++
+		case strings.HasPrefix(l, " "):
+			old, now = old+1, now+1
+		default:
+			return "a line has no sign"
+		}
+	}
+	if hunks == 0 || !closed() {
+		return "the last hunk does not hold the lines that its head names"
+	}
+	return ""
+}
+
+// Each text of each set is a unified text that agrees with its hunk heads, so the page can trust it.
+func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
+	var texts int
+	for _, state := range States {
+		for _, d := range load(t, state).Diffs {
+			all := map[string]string{"values": d.Values.Unified}
+			for _, m := range d.Manifests {
+				all["manifest "+m.Name] = m.Unified
+			}
+			for what, text := range all {
+				if text != "" {
+					texts++
+				}
+				if p := unifiedProblem(text); p != "" {
+					t.Errorf("%s: %s %s %s of %s: %s", state, d.Profile, d.Key, d.Side, what, p)
+				}
+			}
+		}
+	}
+	if texts == 0 {
+		t.Error("no set holds a text")
+	}
+	for text, want := range map[string]string{
+		"--- a: x\n+++ b: x\n@@ -1,2 +1,2 @@\n a\n-b\n": "the last hunk",
+		"--- a: x\n+++ b: x\n@@ -1 +1 @@\n-a\n+b\nc\n":  "no sign",
+		"@@ -1 +1 @@\n-a\n+b\n":                         "header lines",
+		"--- a: x\n+++ b: x\n-a\n":                      "before the first hunk",
+	} {
+		if got := unifiedProblem(text); !strings.Contains(got, want) {
+			t.Errorf("the check gave %q for %q, want %q", got, text, want)
+		}
+	}
+	if got := unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n\\ No newline at end of file\n"); got != "" {
+		t.Errorf("a good text has the problem %q", got)
+	}
+}
+
+// The set ok holds text for the values of dex, for its manifest, and for the values of kubernetes. The
+// text of the manifests covers the three operations, and one manifest has no end of line.
+func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
+	s := load(t, StateOK)
+	find := func(profile, key string, side model.Side) api.PackDiff {
+		for _, d := range s.Diffs {
+			if d.Profile == profile && d.Key == key && d.Side == side {
+				return d
+			}
+		}
+		t.Fatalf("no diff for %s %s %s", profile, key, side)
+		return api.PackDiff{}
+	}
+	dex := find("fred-identity@2.3.0", "addon/dex", model.SidePublished)
+	if !strings.HasPrefix(dex.Values.Unified, "--- a: addon/dex values\n+++ b: addon/dex values\n@@ -15,8 +15,8 @@\n") ||
+		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
+		t.Errorf("the text of dex: %+v", dex)
+	}
+	if k := find("barney-base@1.5.0", "k8s/kubernetes", model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
+		t.Errorf("the values of kubernetes hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
+	}
+	ops := map[string]bool{}
+	var noEnd bool
+	for _, m := range find("fred-identity@2.3.0", "addon/dex", model.SideNewer).Manifests {
+		ops[m.Op] = true
+		noEnd = noEnd || strings.Contains(m.Unified, "\n\\ No newline at end of file\n")
+	}
+	if !ops["added"] || !ops["removed"] || !noEnd {
+		t.Errorf("the manifests of the newer side of dex: ops %v, no end of line %v", ops, noEnd)
+	}
+}
+
+// The set text-too-large is ok with two packs that keep no text, and the flag says so.
+func TestTheSetTextTooLargeDropsTheTextOfTwoPacks(t *testing.T) {
+	ok, big := load(t, StateOK), load(t, StateTextTooLarge)
+	if len(ok.Diffs) != len(big.Diffs) {
+		t.Fatalf("%d diffs, want %d", len(big.Diffs), len(ok.Diffs))
+	}
+	var dropped int
+	for i, d := range big.Diffs {
+		if !d.TextTooLarge {
+			if !reflect.DeepEqual(d, ok.Diffs[i]) {
+				t.Errorf("the diff %s %s %s differs from ok", d.Profile, d.Key, d.Side)
+			}
+			continue
+		}
+		dropped++
+		if d.Values.Unified != "" || len(d.Manifests) != len(ok.Diffs[i].Manifests) {
+			t.Errorf("the diff %s %s %s keeps some text", d.Profile, d.Key, d.Side)
+		}
+		for _, m := range d.Manifests {
+			if m.Unified != "" {
+				t.Errorf("the manifest %s keeps its text", m.Name)
+			}
+		}
+	}
+	if dropped != 2 {
+		t.Errorf("%d diffs drop the text, want 2", dropped)
+	}
+	for _, d := range ok.Diffs {
+		if d.TextTooLarge {
+			t.Errorf("ok drops the text of %s %s %s", d.Profile, d.Key, d.Side)
+		}
+	}
+}
+
+// movesOf lists the moves of the Newer table: the profile, the key of the pack, and the newest version.
+func movesOf(s *Set) []model.Answer {
+	var out []model.Answer
+	for _, p := range s.Profiles.Profiles {
+		for _, k := range p.Packs {
+			if k.Newer != "" {
+				out = append(out, model.Answer{Profile: model.Subject(p.Name, p.Version), Key: k.Key, Newest: k.Newer})
+			}
+		}
+	}
+	return out
+}
+
+// isMove says whether an answer is about a move of the Newer table.
+func isMove(moves []model.Answer, a model.Answer) bool {
+	return slices.ContainsFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key && m.Newest == a.Newest })
+}
+
+// The set asks holds one answer of each verdict, for three different moves of the Newer table, and it
+// changes nothing else of ok. A reply of ok is about a move of the table too.
+func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
+	ok, asks := load(t, StateOK), load(t, StateAsks)
+	if len(ok.Asks.Asks) != 0 {
+		t.Errorf("ok holds %d answers", len(ok.Asks.Asks))
+	}
+	moves := movesOf(asks)
+	if len(moves) != 10 {
+		t.Fatalf("%d moves in the table", len(moves))
+	}
+	got := map[model.Verdict]model.Answer{}
+	seen := map[string]bool{}
+	for _, a := range asks.Asks.Asks {
+		got[a.Verdict] = a
+		seen[a.Profile+" "+a.Key] = true
+		if !isMove(moves, a) {
+			t.Errorf("the answer for %s %s %s is not about a move of the table", a.Profile, a.Key, a.Newest)
+		}
+	}
+	if len(got) != 3 || len(seen) != 3 {
+		t.Fatalf("the verdicts are %v on %d moves, want 3 and 3", got, len(seen))
+	}
+	refuses := got[model.VerdictRefuses]
+	if len(refuses.Refusals) != 1 || refuses.Refusals[0].Code != "DependencyPackUpgradeNotSupported" || refuses.Refusals[0].Message == "" ||
+		len(refuses.Refusals[0].Clusters) == 0 || refuses.Status != 0 {
+		t.Errorf("the refusal %+v", refuses)
+	}
+	if a := got[model.VerdictNoAnswer]; a.Status != 403 || len(a.Refusals) != 0 {
+		t.Errorf("the answer that failed %+v", a)
+	}
+	if a := got[model.VerdictNoError]; a.Status != 0 || len(a.Refusals) != 0 {
+		t.Errorf("the answer with no error %+v", a)
+	}
+	for _, r := range asks.Replies.Asks {
+		if !isMove(moves, r) {
+			t.Errorf("the reply for %s %s %s is not about a move of the table", r.Profile, r.Key, r.Newest)
+		}
+	}
+	if len(ok.Replies.Asks) == 0 || len(ok.Replies.Asks) >= len(moves) {
+		t.Errorf("ok holds %d replies for %d moves: a move with no reply must stay", len(ok.Replies.Asks), len(moves))
+	}
+	if !reflect.DeepEqual(asks.Cluster, ok.Cluster) || !reflect.DeepEqual(asks.Profiles, ok.Profiles) || !reflect.DeepEqual(asks.Newer, ok.Newer) ||
+		!reflect.DeepEqual(asks.Findings, ok.Findings) {
+		t.Error("asks changes more than the answers")
+	}
+}
+
+// A click gives the answer that the set holds. A move with no answer gets its reply, and the set keeps
+// it. A request that failed gets its reply, and a move with no reply is not found.
+func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
+	ctx := context.Background()
+	const dex, csi, longhorn = "fred-identity@2.3.0", "barney-base@1.5.0", "dino-storage@1.1.0"
+	s := load(t, StateOK)
+	a, found, err := s.Ask(ctx, dex, "addon/dex")
+	if err != nil || !found || a.Verdict != model.VerdictNoError || a.Newest != "2.44.0" {
+		t.Fatalf("the first click gave %+v, %v, %v", a, found, err)
+	}
+	if got := s.Answers(); len(got) != 1 || !reflect.DeepEqual(got[0], a) {
+		t.Errorf("the set holds %+v after the click", got)
+	}
+	if again, found, _ := s.Ask(ctx, dex, "addon/dex"); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
+		t.Errorf("the second click gave %+v and the set holds %d answers", again, len(s.Answers()))
+	}
+	// A reply that is a request that failed: the next click asks again, and the set keeps one entry.
+	failed, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs")
+	if !found || failed.Verdict != model.VerdictNoAnswer || failed.Status != 403 {
+		t.Fatalf("the click on a move with a failed reply gave %+v", failed)
+	}
+	if again, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs"); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
+		t.Errorf("the next click gave %+v and the set holds %d answers", again, len(s.Answers()))
+	}
+	if a, found, err := s.Ask(ctx, longhorn, "addon/longhorn"); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
+		t.Errorf("a move with no reply gave %+v, %v, %v", a, found, err)
+	}
+	if _, found, _ := load(t, StateReadError).Ask(ctx, dex, "addon/dex"); found {
+		t.Error("a set with no replies found a move")
+	}
+
+	// The set asks holds a request that failed for dex: a click asks again, and the reply replaces the entry.
+	held := load(t, StateAsks)
+	if got := held.Answers(); len(got) != 3 {
+		t.Fatalf("asks holds %d answers", len(got))
+	}
+	if refused, found, _ := held.Ask(ctx, "wilma-gateway@3.1.2", "addon/traefik"); !found || refused.Verdict != model.VerdictRefuses {
+		t.Errorf("a held answer gave %+v", refused)
+	}
+	again, found, _ := held.Ask(ctx, dex, "addon/dex")
+	if !found || again.Verdict != model.VerdictNoError || len(held.Answers()) != 3 {
+		t.Errorf("the click on the failed request gave %+v and the set holds %d answers", again, len(held.Answers()))
+	}
+	for _, a := range held.Answers() {
+		if a.Profile == dex && a.Verdict != model.VerdictNoError {
+			t.Errorf("the set keeps the old answer %+v", a)
+		}
+	}
+}
+
+// Clicks come together: the dev server takes each request in its own goroutine.
+func TestClicksThatComeTogetherLeaveOneAnswerForEachMove(t *testing.T) {
+	s := load(t, StateOK)
+	moves := movesOf(s)
+	var wg sync.WaitGroup
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(m model.Answer) {
+			defer wg.Done()
+			_, _, _ = s.Ask(context.Background(), m.Profile, m.Key)
+			_ = s.Answers()
+		}(moves[i%len(moves)])
+	}
+	wg.Wait()
+	if got, want := len(s.Answers()), len(s.Replies.Asks); got != want {
+		t.Errorf("the set holds %d answers, want %d", got, want)
+	}
+}
+
+// The routes: a POST with the header of the page gives the reply, and /v1/asks lists it after.
+func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
+	s := load(t, StateOK)
+	h := (&api.Server{Source: s}).Handler()
+	do := func(method, path string, same bool) (int, []byte) {
+		req := httptest.NewRequest(method, path, nil)
+		req.Host = "127.0.0.1:8080"
+		if same {
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code, rec.Body.Bytes()
+	}
+	const ask = "/v1/packs/fred-identity@2.3.0/addon/dex/ask"
+	if code, _ := do(http.MethodPost, ask, false); code != http.StatusForbidden {
+		t.Errorf("a POST with no header gave %d", code)
+	}
+	if code, body := do(http.MethodGet, "/v1/asks", true); code != http.StatusOK || string(body) != "{\"asks\":[]}\n" {
+		t.Errorf("the list before the click: %d %s", code, body)
+	}
+	code, body := do(http.MethodPost, ask, true)
+	var a model.Answer
+	if err := json.Unmarshal(body, &a); err != nil || code != http.StatusOK || a.Verdict != model.VerdictNoError {
+		t.Fatalf("the click gave %d %s", code, body)
+	}
+	var list api.AsksView
+	_, body = do(http.MethodGet, "/v1/asks", true)
+	if err := json.Unmarshal(body, &list); err != nil || len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0], a) {
+		t.Errorf("the list after the click: %s", body)
+	}
+	for _, path := range []string{"/v1/packs/dino-storage@1.1.0/addon/longhorn/ask", "/v1/packs/nobody@1.0.0/addon/dex/ask"} {
+		if code, _ := do(http.MethodPost, path, true); code != http.StatusNotFound {
+			t.Errorf("%s gave %d", path, code)
+		}
 	}
 }

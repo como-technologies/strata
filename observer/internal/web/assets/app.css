@@ -24,8 +24,11 @@
   --grn-t:light-dark(#e6f5ec,#11301f);
   --gry:light-dark(#675f80,#a79fc4);
   --gry-t:light-dark(#eeebf5,#2a2344);
+  --add:light-dark(#e6f6ec,#12301e);
   --addw:light-dark(#1a7f37,#6fd79a);
+  --del:light-dark(#feecec,#3a1a24);
   --delw:light-dark(#c62832,#ff8d96);
+  --gut:light-dark(#f1eef8,#1e1736);
   --sans:"Public Sans","Segoe UI",Roboto,system-ui,sans-serif;
   --mono:"Roboto Mono",ui-monospace,Menlo,Consolas,monospace;
 }
@@ -93,6 +96,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .stack{display:grid;gap:16px;align-content:start;min-width:0}
 .lnk{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;font-size:13px;white-space:nowrap}
 .lnk:hover{text-decoration:underline}
+.lnk:disabled{color:var(--mut);cursor:default;text-decoration:none}
+.btn{background:var(--panel);border:1px solid var(--line);border-radius:5px;padding:3px 10px;cursor:pointer;font-size:12.5px;font-weight:500}
+.btn:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{color:var(--mut);cursor:default}
+.askmsg{max-width:18em}
 tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;padding-bottom:7px}
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:1px 8px;border-radius:4px;white-space:nowrap;line-height:18px}
 .badge.r{background:#c9252f;color:#fff}
@@ -131,6 +139,23 @@ tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;
 .was{color:var(--delw);font-family:var(--mono);font-size:12.5px}
 .now{color:var(--addw);font-family:var(--mono);font-size:12.5px}
 .val{white-space:pre-wrap;overflow-wrap:anywhere;min-width:12em;max-width:60ch;max-height:14em;overflow-y:auto}
+/* The text of a diff. A table of lines scrolls sideways in its own box, so a long line never widens the page. */
+.dblock + .dblock,.tw + .dblock{border-top:1px solid var(--line)}
+.diffhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;padding:7px 15px;background:var(--panel2);border-bottom:1px solid var(--line);font:12.5px var(--mono)}
+.diffhead > span:first-child{min-width:0;overflow-wrap:anywhere}
+.diff{font:12.5px/20px var(--mono);overflow-x:auto}
+.diff table{width:100%;min-width:640px}
+.diff td{padding:0 10px;border:0;white-space:pre;vertical-align:top}
+.diff td.no{width:44px;min-width:44px;text-align:right;color:var(--mut);background:var(--gut);user-select:none;padding:0 8px}
+.diff td + td + td.no{border-left:1px solid var(--line)}
+.diff tr.a td.c{background:var(--add);color:var(--addw)}
+.diff tr.a td.no{background:var(--add)}
+.diff tr.d td.c{background:var(--del);color:var(--delw)}
+.diff tr.d td.no{background:var(--del)}
+.diff tr.h td{background:var(--violet-t);color:var(--violet)}
+.diff tr.n td{color:var(--mut)}
+.diff td.ca{background:var(--add);color:var(--addw)}
+.diff td.cd{background:var(--del);color:var(--delw)}
 .pre{font:12.5px/1.7 var(--mono);background:var(--panel2);border-top:1px solid var(--line);padding:9px 15px;overflow-x:auto;white-space:pre}
 .note{border-left:3px solid var(--gry);background:var(--gry-t);padding:9px 12px;border-radius:0 5px 5px 0;font-size:13px}
 .note.a{border-color:var(--amb);background:var(--amb-t)}

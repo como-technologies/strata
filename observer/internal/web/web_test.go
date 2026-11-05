@@ -528,6 +528,8 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
 		{devdata.StateImagesOff, []string{"Image changes", "Pods not read", "Strata compares the name and the tag."}},
 		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
+		{devdata.StateAsks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
+		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
@@ -1122,7 +1124,7 @@ func TestNoColorHasTwoCopies(t *testing.T) {
 	}
 	// A token that differs between the schemes is a light-dark() and not a plain color.
 	root := ruleOf(css, ":root")
-	for _, token := range []string{"--bg", "--panel", "--ink", "--nav", "--accent", "--red", "--amb", "--violet", "--grn"} {
+	for _, token := range []string{"--bg", "--panel", "--ink", "--nav", "--accent", "--red", "--amb", "--violet", "--grn", "--add", "--addw", "--del", "--delw", "--gut"} {
 		if !regexp.MustCompile(token + `:light-dark\(`).MatchString(root) {
 			t.Errorf("the token %s is not a light-dark()", token)
 		}

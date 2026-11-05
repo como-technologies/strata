@@ -1,0 +1,11 @@
+{"asks":[
+  {"profile":"fred-identity@2.3.0","key":"addon/dex","newest":"2.44.0","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"barney-base@1.5.0","key":"os/ubuntu-aws","newest":"24.04","verdict":"refuses","refusals":[{"pack":"ubuntu-aws","code":"DependencyPackUpgradeNotSupported","message":"The upgrade of the pack ubuntu-aws from 20.04 to 24.04 is not supported while another pack of the profile depends on it.","clusters":["quarry-1"]}],"status":0},
+  {"profile":"barney-base@1.5.0","key":"k8s/kubernetes","newest":"1.36.2","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"barney-base@1.5.0","key":"cni/cni-cilium-oss","newest":"1.20.1","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"barney-base@1.5.0","key":"csi/csi-aws-ebs","newest":"1.65.0","verdict":"no-answer","refusals":[],"status":403},
+  {"profile":"barney-base@1.5.0","key":"addon/cert-manager","newest":"1.21.1","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"wilma-gateway@3.1.2","key":"addon/traefik","newest":"38.1.0","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"betty-observability@4.2.1","key":"addon/prometheus-operator","newest":"79.1.0","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"pebbles-policy@1.4.0","key":"addon/kyverno","newest":"3.5.2","verdict":"no-error","refusals":[],"status":0}
+]}

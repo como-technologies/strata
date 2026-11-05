@@ -1,0 +1,5 @@
+{"asks":[
+  {"profile":"barney-base@1.5.0","key":"k8s/kubernetes","newest":"1.36.2","verdict":"no-error","refusals":[],"status":0},
+  {"profile":"wilma-gateway@3.1.2","key":"addon/traefik","newest":"38.1.0","verdict":"refuses","refusals":[{"pack":"traefik","code":"DependencyPackUpgradeNotSupported","message":"The upgrade of the pack traefik from 38.0.1 to 38.1.0 is not supported while another pack of the profile depends on it.","clusters":["quarry-1"]}],"status":0},
+  {"profile":"fred-identity@2.3.0","key":"addon/dex","newest":"2.44.0","verdict":"no-answer","refusals":[],"status":403}
+]}
