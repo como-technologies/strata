@@ -262,8 +262,14 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 /// `$FAKE_ROUTES/sent/<METHOD>_<route key>.all`, in the order of the requests. It keeps the query
 /// and the headers as `$FAKE_ROUTES/sent/<METHOD>_<route key>.request`. The line of the
 /// `ApiKey` header holds `(hidden)` in place of the key.
+///
+/// It logs the arguments of each call as a line of `$FAKE_ROUTES/sent/curl.args`, as `/proc/<pid>/cmdline`
+/// shows them. A config on standard input (`--config -`) holds the header `ApiKey`, as `palette_curl` sends
+/// it. The stand-in appends that config to `$FAKE_ROUTES/sent/curl.config`, and it reads the header from it.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
-out=""; write=""; url=""; method=GET; sent=""; headers=""
+out=""; write=""; url=""; method=GET; sent=""; headers=""; config=""
+mkdir -p "$FAKE_ROUTES/sent"
+echo "$*" >> "$FAKE_ROUTES/sent/curl.args"
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift 2 ;;
@@ -271,11 +277,16 @@ while [ $# -gt 0 ]; do
     -X) method=$2; shift 2 ;;
     --data-binary) sent=${2#@}; shift 2 ;;
     -H) headers="$headers$2"$'\n'; shift 2 ;;
+    --config) [ "$2" = - ] || exit 9; config=$(cat); shift 2 ;;
     -d) shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
 done
+if [ -n "$config" ]; then
+  printf '%s\n' "$config" >> "$FAKE_ROUTES/sent/curl.config"
+  headers="$(printf '%s\n' "$config" | sed -n 's/^header = "\(.*\)"$/\1/p')"$'\n'"$headers"
+fi
 path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?}; path=${path%%\?*}; key=${path//\//_}
 echo "$method /$path" >> "$FAKE_LOG"
 mkdir -p "$FAKE_ROUTES/sent"
@@ -1158,6 +1169,155 @@ fn release_route(routes: &Path) {
     )
     .unwrap();
     std::fs::write(routes.join("v1_mgmt_app_version.keyed.status"), "500").unwrap();
+}
+
+/// The key of Palette is in no argument of `curl`. A process shows its arguments in
+/// `/proc/<pid>/cmdline`, so a call that sends the key puts the header in a config on standard input.
+#[test]
+fn the_key_of_palette_is_in_no_argument_of_curl() {
+    const KEY: &str = "k-SECRET-0123456789";
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    for (route, body) in [
+        ("v1_clusterprofiles_p-1", r#"{"metadata":{"uid":"p-1"}}"#),
+        (
+            "v1_spectroclusters_c-1_assets_kubeconfig",
+            "apiVersion: v1\n",
+        ),
+        ("v1_dashboard_spectroclusters_meta", r#"{"items":[]}"#),
+        (
+            "v1_clusterprofiles_prof-2",
+            r#"{"metadata":{"uid":"prof-2"},"spec":{"published":{"packs":[
+                {"name":"kubernetes","tag":"1.36.2","type":"spectro","layer":"k8s","values":"a: 1\n"}]}}}"#,
+        ),
+        (
+            "v1_spectroclusters_c-1_validate_repave",
+            r#"{"isRepaveRequired":false,"reasons":[]}"#,
+        ),
+    ] {
+        std::fs::write(routes.join(route), body).unwrap();
+    }
+    let calls: [(&str, &[&str]); 6] = [
+        ("api.sh", &["get", "/v1/clusterprofiles/p-1"]),
+        ("api.sh", &["get-status", "/v1/clusterprofiles/p-1"]),
+        ("api.sh", &["get-kubeconfig", "c-1"]),
+        ("api.sh", &["delete", "p-1"]),
+        ("tenant.sh", &["listing"]),
+        ("tenant.sh", &["repave", "c-1", "prof-1", "prof-2"]),
+    ];
+    for (script, args) in calls {
+        let o = run_live(script, args, root.path(), &[("PALETTE_API_KEY", KEY)]);
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{script} {args:?}: {}",
+            text(&o.stderr)
+        );
+    }
+    let arguments = std::fs::read_to_string(routes.join("sent/curl.args")).unwrap();
+    // Each call runs curl once. The repave reads a profile and asks Palette, so it runs curl twice.
+    let curls = calls.len() + 1;
+    assert_eq!(
+        arguments.lines().count(),
+        curls,
+        "the calls of curl: {arguments}"
+    );
+    assert!(
+        !arguments.contains(KEY),
+        "the key is in an argument of curl: {arguments}"
+    );
+    assert!(
+        !arguments.contains("ApiKey"),
+        "the header is in an argument of curl: {arguments}"
+    );
+    for line in arguments.lines() {
+        assert!(
+            line.starts_with("--config - "),
+            "a call reads its config from standard input: {line}"
+        );
+    }
+    // The key reached each call through the config, so the stand-in saw the header.
+    let config = std::fs::read_to_string(routes.join("sent/curl.config")).unwrap();
+    let header = format!("header = \"ApiKey: {KEY}\"");
+    assert_eq!(
+        config.lines().filter(|l| *l == header).count(),
+        curls,
+        "{config}"
+    );
+    let request =
+        std::fs::read_to_string(routes.join("sent/GET_v1_dashboard_spectroclusters_meta.request"))
+            .unwrap();
+    assert!(request.contains("ApiKey: (hidden)"), "{request}");
+}
+
+/// A key with a quote or a backslash reaches curl as the config reads it.
+/// A key with a line break stops the script before any call, because it could add a line to the config.
+#[test]
+fn palette_curl_escapes_the_key_for_the_config_and_refuses_a_line_break() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    std::fs::write(routes.join("v1_clusterprofiles_p-1"), "{}").unwrap();
+    let o = run_live(
+        "api.sh",
+        &["get", "/v1/clusterprofiles/p-1"],
+        root.path(),
+        &[("PALETTE_API_KEY", "a\"b\\c")],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let config = std::fs::read_to_string(routes.join("sent/curl.config")).unwrap();
+    assert_eq!(config, "header = \"ApiKey: a\\\"b\\\\c\"\n");
+    assert!(
+        !std::fs::read_to_string(routes.join("sent/curl.args"))
+            .unwrap()
+            .contains("a\"b")
+    );
+
+    let again = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(again.path().join("routes")).unwrap();
+    let o = run_live(
+        "api.sh",
+        &["get", "/v1/clusterprofiles/p-1"],
+        again.path(),
+        &[("PALETTE_API_KEY", "ab\nheader = \"X: y\"")],
+    );
+    assert_ne!(o.status.code(), Some(0));
+    assert!(
+        text(&o.stderr).contains("the key of Palette holds a line break"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        !again.path().join("routes/sent/curl.config").exists(),
+        "no call sent the key"
+    );
+}
+
+/// Only `palette-curl.sh` names the header. A script that puts `ApiKey:` in a line of its own sends the key in
+/// an argument again.
+#[test]
+fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut named = Vec::new();
+    for dir in [
+        "examples",
+        "scripts",
+        "deploy",
+        "adapter",
+        "report-endpoint",
+    ] {
+        for path in walk(&root.join(dir)) {
+            if path.extension().is_none_or(|e| e != "sh") {
+                continue;
+            }
+            let code = std::fs::read_to_string(&path).unwrap();
+            if code_lines(&code).any(|l| l.contains("ApiKey:")) {
+                named.push(path.strip_prefix(root).unwrap().display().to_string());
+            }
+        }
+    }
+    assert_eq!(named, ["examples/live/palette-curl.sh"]);
 }
 
 #[test]

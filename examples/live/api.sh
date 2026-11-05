@@ -172,6 +172,7 @@ set -uo pipefail
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 script=api.sh
 . "$live/common.sh"
+. "$live/palette-curl.sh"
 from_env_file() {
   [ -f "$HOME/.palette.env" ] || return 0
   (set -a; . "$HOME/.palette.env" >/dev/null 2>&1; printf %s "${!1:-}")
@@ -186,12 +187,13 @@ PROJECT=${PALETTE_PROJECT_UID:-$(from_env_file PALETTE_PROJECT_UID)}
 
 # call METHOD PATH [BODYFILE] -> the response body on stdout; exit 2 unless the status is 2xx.
 # With SHOW_STATUS set, the first line is `HTTP <code>` and the exit is 0 for each status.
-# An empty KEY sends no ApiKey header, and an empty PROJECT sends no ProjectUid header.
+# An empty KEY sends no ApiKey header, and an empty PROJECT sends no ProjectUid header. The key goes to curl through
+# palette_curl, and never in an argument.
 call() {
   local method=$1 path=$2 body=${3:-} out status
   out=$(mktemp)
-  status=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
-    ${KEY:+-H "ApiKey: $KEY"} -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
+  status=$(palette_curl -sS -o "$out" -w '%{http_code}' -X "$method" \
+    -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} ${body:+--data-binary "@$body"} "$API$path")
   if [ -n "${SHOW_STATUS:-}" ]; then
     echo "HTTP $status"
@@ -451,7 +453,7 @@ delete() {
   local uid=${1:-} out status
   [ -n "$uid" ] || die "usage: api.sh delete PROFILE_UID"
   out=$(mktemp); trap 'rm -f "${out:-}"' RETURN EXIT
-  status=$(curl -sS -o "$out" -w '%{http_code}' -X DELETE -H "ApiKey: $KEY" \
+  status=$(palette_curl -sS -o "$out" -w '%{http_code}' -X DELETE \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} "$API/v1/clusterprofiles/$uid")
   case "$status" in
     2*) echo "deleted profile $uid" ;;
@@ -514,8 +516,8 @@ probe_profile() {
   jq '{name: .spec.name, tag: .spec.version, uid: .metadata.uid,
        registryUid: .spec.registryUid, type: .spec.type, layer: .spec.layer,
        values: .spec.values}' <<<"$row" | addon_body "strata-probe-$(jq -r .spec.name <<<"$row")" all >"$body"
-  status=$(curl -sS -o "$out" -w '%{http_code}' -X POST \
-    -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  status=$(palette_curl -sS -o "$out" -w '%{http_code}' -X POST \
+    -H 'Accept: application/json' -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$body" "$API/v1/clusterprofiles")
   rm -f "$body"
   if [ "${status:0:1}" = 2 ]; then
@@ -848,7 +850,7 @@ get_kubeconfig() {
   local uid=${1:-} out status
   [ -n "$uid" ] || die "usage: api.sh get-kubeconfig CLUSTER_UID"
   out=$(mktemp); trap 'rm -f "${out:-}"' RETURN
-  status=$(curl -sS -o "$out" -w '%{http_code}' -H "ApiKey: $KEY" -H 'Accept: */*' \
+  status=$(palette_curl -sS -o "$out" -w '%{http_code}' -H 'Accept: */*' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} "$API/v1/spectroclusters/$uid/assets/kubeconfig")
   [ "$status" = 200 ] && grep -q '^apiVersion:' "$out" || die "no kubeconfig for $uid: HTTP $status"
   cat "$out"
