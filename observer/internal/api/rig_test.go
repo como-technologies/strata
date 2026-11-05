@@ -219,3 +219,8 @@ func (s stub) Observed() model.Observed { return model.Observed{} }
 func (s stub) PackDiff(context.Context, string, string, model.Side) (docs.Pack, bool, error) {
 	return docs.Pack{}, false, nil
 }
+
+func (s stub) Ask(context.Context, string, string) (model.Answer, bool, error) {
+	return model.Answer{}, false, nil
+}
+func (s stub) Answers() []model.Answer { return nil }

@@ -33,7 +33,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 		return err
 	}
 	args := append([]string{runner.CmdBehind}, names...)
-	args = append(args, "--no-impact", "--json", "--compact", "-q")
+	args = append(args, runner.FlagNoImpact, "--json", "--compact", "-q")
 	res, err := o.run(ctx, dir, exitsWithDocument, args...)
 	if err != nil {
 		return err
@@ -93,9 +93,11 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 // and the changed values apart.
 func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (docs.Diff, error) {
 	ref := "pack:" + pin.RegistryUID + "/" + pin.Name + "@"
-	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, ref+pin.Version, ref+pin.Newer[0].Version, "--json", "--compact", "-q")
+	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, ref+pin.Version, ref+pin.Newer[0].Version, runner.FlagFull, "--json", "--compact", "-q")
 	if err != nil {
 		return docs.Diff{}, err
 	}
-	return decode[docs.Diff](res.Stdout, docs.DiffSchema)
+	diff, err := decode[docs.Diff](res.Stdout, docs.DiffSchema)
+	diff.CapText(maxText)
+	return diff, err
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
@@ -152,7 +151,7 @@ func (o *Observer) readContent(ctx context.Context, dir string, set baseline.Set
 
 func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs.VerifySummary, error) {
 	args := append([]string{runner.CmdVerify}, names...)
-	args = append(args, "--summary", "--who", "--json", "--compact", "-q")
+	args = append(args, "--summary", "--who", runner.FlagFull, "--json", "--compact", "-q")
 	res, err := o.run(ctx, dir, exitsWithDocument, args...)
 	if err != nil {
 		return docs.VerifySummary{}, err
@@ -160,6 +159,11 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 	doc, err := decode[docs.VerifySummary](res.Stdout, docs.VerifySummarySchema)
 	if err != nil {
 		return doc, err
+	}
+	for _, row := range doc.Records {
+		if row.Diff != nil {
+			row.Diff.CapText(maxText)
+		}
 	}
 	if allRowsFailed(doc.Records) {
 		e := firstRowError(doc.Records)
@@ -169,10 +173,6 @@ func (o *Observer) verify(ctx context.Context, dir string, names []string) (docs
 	return doc, nil
 }
 
-// unreadStatus matches the start of the reason that strata gives for an audit log that it could not
-// read: `HTTP <status>: <body>`. The other reasons are the message of a request that did not complete.
-var unreadStatus = regexp.MustCompile(`^HTTP [0-9]{3}(:|$)`)
-
 // noAnswer is what the log says when the reason of strata holds no status.
 const noAnswer = "no answer"
 
@@ -180,8 +180,8 @@ const noAnswer = "no answer"
 // `no answer`. The body of an answer of Palette and the message of a failed request are output of a
 // process, so they never leave this function.
 func unreadReason(whoError string) string {
-	if unreadStatus.MatchString(whoError) {
-		return whoError[:len("HTTP 000")]
+	if status := docs.StatusOf(whoError); status != 0 {
+		return fmt.Sprintf("HTTP %d", status)
 	}
 	return noAnswer
 }
@@ -254,7 +254,7 @@ func (o *Observer) compareSide(ctx context.Context, dir, record string, index in
 	if _, err := o.run(ctx, dir, exitsOfAWrite, runner.CmdSnapshot, "cluster:"+o.cfg.ClusterUID+"/"+profile, "--from-raw", "raw", "-o", side, "-q"); err != nil {
 		return nil, err
 	}
-	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, record, side, "--json", "--compact", "-q")
+	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, record, side, runner.FlagFull, "--json", "--compact", "-q")
 	if err != nil {
 		return nil, err
 	}
@@ -262,5 +262,6 @@ func (o *Observer) compareSide(ctx context.Context, dir, record string, index in
 	if err != nil {
 		return nil, err
 	}
+	diff.CapText(maxText)
 	return &diff, nil
 }

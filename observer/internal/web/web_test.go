@@ -44,6 +44,10 @@ func (noSource) Observed() model.Observed { return model.Observed{} }
 func (noSource) PackDiff(context.Context, string, string, model.Side) (docs.Pack, bool, error) {
 	return docs.Pack{}, false, nil
 }
+func (noSource) Ask(context.Context, string, string) (model.Answer, bool, error) {
+	return model.Answer{}, false, nil
+}
+func (noSource) Answers() []model.Answer { return nil }
 
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()

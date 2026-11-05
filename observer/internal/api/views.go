@@ -101,24 +101,27 @@ type EventsView struct {
 
 // PackDiff is the answer of the detail route. It is the only type of the API that holds docs.Leaf.
 type PackDiff struct {
-	Profile      string        `json:"profile"`
-	Key          string        `json:"key"`
-	Side         model.Side    `json:"side"`
-	Status       string        `json:"status"`
-	Impact       docs.Impact   `json:"impact"`
-	Flags        []string      `json:"flags"`
-	Values       ValueLists    `json:"values"`
-	ImageChanges []docs.Change `json:"imageChanges"`
-	ChartChanges []docs.Change `json:"chartChanges"`
-	Masked       []string      `json:"masked"`
-	Manifests    []docs.Named  `json:"manifests"`
-	ParamChanges []docs.Named  `json:"paramChanges"`
+	Profile      string          `json:"profile"`
+	Key          string          `json:"key"`
+	Side         model.Side      `json:"side"`
+	Status       string          `json:"status"`
+	Impact       docs.Impact     `json:"impact"`
+	Flags        []string        `json:"flags"`
+	Values       ValueLists      `json:"values"`
+	ImageChanges []docs.Change   `json:"imageChanges"`
+	ChartChanges []docs.Change   `json:"chartChanges"`
+	Masked       []string        `json:"masked"`
+	Manifests    []docs.Manifest `json:"manifests"`
+	ParamChanges []docs.Named    `json:"paramChanges"`
+	// TextTooLarge says that the pack has text, and the observer dropped it: the text is above the cap.
+	TextTooLarge bool `json:"textTooLarge"`
 }
 
 // ValueLists holds each changed value in the list of its group. The groups are those of the fold that
 // the summary counts.
 type ValueLists struct {
 	Parseable         bool        `json:"parseable"`
+	Unified           string      `json:"unified"`
 	Settings          []docs.Leaf `json:"settings"`
 	FollowsTheVersion []docs.Leaf `json:"followsTheVersion"`
 	RepeatsTheLists   []docs.Leaf `json:"repeatsTheLists"`
@@ -130,9 +133,9 @@ func PackDiffOf(profile, key string, side model.Side, p docs.Pack) PackDiff {
 	settings, follows, repeats := model.Split(p.Values)
 	return PackDiff{
 		Profile: profile, Key: key, Side: side, Status: p.Status, Impact: p.Impact, Flags: p.Flags(),
-		Values:       ValueLists{Parseable: p.Values.Parseable, Settings: settings, FollowsTheVersion: follows, RepeatsTheLists: repeats},
+		Values:       ValueLists{Parseable: p.Values.Parseable, Unified: p.Values.Unified, Settings: settings, FollowsTheVersion: follows, RepeatsTheLists: repeats},
 		ImageChanges: nonNil(p.ImageChanges), ChartChanges: nonNil(p.ChartChanges), Masked: nonNil(p.Masked),
-		Manifests: nonNil(p.Manifests), ParamChanges: nonNil(p.ParamChanges),
+		Manifests: nonNil(p.Manifests), ParamChanges: nonNil(p.ParamChanges), TextTooLarge: p.TextTooLarge,
 	}
 }
 
@@ -141,4 +144,10 @@ func nonNil[T any](s []T) []T {
 		return []T{}
 	}
 	return s
+}
+
+// AsksView is the answer of /v1/asks: the answer of Palette to each question that a person asked since
+// the observer started. It is a detail route, because a refusal holds the message of Palette.
+type AsksView struct {
+	Asks []model.Answer `json:"asks"`
 }

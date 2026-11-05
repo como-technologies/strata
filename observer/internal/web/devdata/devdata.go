@@ -80,11 +80,12 @@ const (
 	fileEvents     = "events.json"
 	fileDiffs      = "diffs.json"
 	fileImages     = "images.json"
+	fileAsks       = "asks.json"
 	fileBase       = "base"
 )
 
 // Files lists the files that a set holds, or takes from its base.
-var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs, fileImages}
+var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs, fileImages, fileAsks}
 
 // Set holds the answer of each route for one state. It is an api.Source.
 type Set struct {
@@ -98,6 +99,9 @@ type Set struct {
 	Images model.Observed
 	// Diffs holds the answers of the detail route that the set knows.
 	Diffs []api.PackDiff
+	// Asks holds the answers of Palette that the set has given. A click on a move that it holds gives the
+	// answer again, and a click on another move finds no move.
+	Asks api.AsksView
 }
 
 // Read gives the content of a file of a state. A file that the set does not hold comes from its base.
@@ -148,7 +152,7 @@ func Load(fsys fs.FS, state State, now time.Time) (*Set, error) {
 		name string
 		into any
 	}{{fileCluster, &s.Cluster}, {fileFindings, &s.Findings}, {fileProfiles, &s.Profiles}, {fileNewer, &s.Newer},
-		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}, {fileImages, &s.Images}} {
+		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}, {fileImages, &s.Images}, {fileAsks, &s.Asks}} {
 		raw, err := Read(fsys, state, f.name)
 		if err != nil {
 			return nil, fmt.Errorf("state %s: %w", state, err)
@@ -195,7 +199,8 @@ func packOf(d api.PackDiff) docs.Pack {
 	p := docs.Pack{Key: d.Key, Status: d.Status, Impact: d.Impact, Manifests: d.Manifests, ParamChanges: d.ParamChanges,
 		ImageChanges: d.ImageChanges, ChartChanges: d.ChartChanges, Masked: d.Masked}
 	p.Layer, p.Name, _ = strings.Cut(d.Key, "/")
-	p.Values.Parseable = d.Values.Parseable
+	p.Values.Parseable, p.Values.Unified = d.Values.Parseable, d.Values.Unified
+	p.TextTooLarge = d.TextTooLarge
 	for _, list := range [][]docs.Leaf{d.Values.Settings, d.Values.FollowsTheVersion, d.Values.RepeatsTheLists} {
 		p.Values.Diff = append(p.Values.Diff, list...)
 	}
@@ -214,4 +219,19 @@ func packOf(d api.PackDiff) docs.Pack {
 		}
 	}
 	return p
+}
+
+// Ask gives the answer that the set holds for a move. It sends no request.
+func (s *Set) Ask(_ context.Context, profile, key string) (model.Answer, bool, error) {
+	for _, a := range s.Asks.Asks {
+		if a.Profile == profile && a.Key == key {
+			return a, true, nil
+		}
+	}
+	return model.Answer{}, false, nil
+}
+
+// Answers gives the answers that the set holds.
+func (s *Set) Answers() []model.Answer {
+	return s.Asks.Asks
 }

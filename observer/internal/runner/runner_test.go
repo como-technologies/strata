@@ -30,7 +30,7 @@ func TestExitOneIsAnAnswer(t *testing.T) {
 }
 
 func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
-	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), CmdBehind, "a.json", "--json", "-q")
+	r, err := fake(t, `echo '{"pins":[]}'; exit 2`).Run(context.Background(), CmdBehind, "a.json", FlagNoImpact, "--json", "-q")
 	if err != nil || r.Exit != 2 {
 		t.Fatalf("result %+v, error %v", r, err)
 	}
@@ -73,7 +73,11 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 		{"preflight"},
 		{CmdCompare, "a", "b", "--validate"},
 		{CmdCompare, "a", "b", "--repave"},
-		{CmdCompare, "a", "b", "--full"},
+		{CmdBehind, "a.json", FlagFull},
+		{CmdSnapshot, "x", FlagFull},
+		{CmdCompare, "a", "b", FlagPin, "k8s/kubernetes"},
+		{CmdVerify, "a.json", FlagPin, "k8s/kubernetes"},
+		{CmdBehind, "a.json", "--validate"},
 		{CmdSnapshot, "x", "--validate"},
 	} {
 		if _, err := x.Run(context.Background(), args...); err == nil {
@@ -82,6 +86,31 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(x.Dir, "ran.txt")); err == nil {
 		t.Error("a refused command started a process")
+	}
+}
+
+// The flags --full and --pin go to the commands that take them, and a run of `behind` that asks Palette
+// names one pack. Each other run of `behind` must say --no-impact.
+func TestTheFlagsOfTheClickAreAllowedForTheirCommandsOnly(t *testing.T) {
+	x := fake(t, `echo '{}'; exit 0`)
+	for _, c := range []struct {
+		args []string
+		ok   bool
+	}{
+		{[]string{CmdCompare, "a", "b", FlagFull, "--json", "-q"}, true},
+		{[]string{CmdVerify, "a.json", "--summary", FlagFull, "--json", "-q"}, true},
+		{[]string{CmdBehind, "a.json", FlagNoImpact, "--json", "-q"}, true},
+		{[]string{CmdBehind, "a.json", FlagPin, "k8s/kubernetes", "--json", "-q"}, true},
+		{[]string{CmdBehind, "a.json", "--json", "-q"}, false},
+		{[]string{CmdBehind, "a.json", "b.json", "--json", "-q"}, false},
+		{[]string{CmdBehind, FlagNoImpact}, true},
+		{[]string{CmdBehind, "a.json", FlagFull, FlagNoImpact}, false},
+		{[]string{CmdSnapshot, "cluster:c1", FlagPin, "k8s/kubernetes"}, false},
+	} {
+		_, err := x.Run(context.Background(), c.args...)
+		if (err == nil) != c.ok {
+			t.Errorf("%v: error %v, want ok %v", c.args, err, c.ok)
+		}
 	}
 }
 
