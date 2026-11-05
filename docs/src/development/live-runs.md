@@ -1362,14 +1362,15 @@ up.
 
 Stage 7 (#646) shows how pods reach a mirror. It starts a registry in Docker on
 the network of kind. It points containerd on each node at that registry for the
-host `vendor.example`. A node of kind reads the folder `certs.d` only when the
-config of the cluster sets `config_path`. So stage 1 creates the cluster with
-that config. One pod names `vendor.example`, as a pack does. Another
+host `vendor.example`. One pod names `vendor.example`, as a pack does. Another
 pod names the registry itself, as a rule that rewrites the image string does.
 
+A node of kind reads the folder `certs.d` only when the config of the cluster
+sets `config_path`. So stage 1 creates the cluster with that config.
+
 Then the kustomization `examples/observer-pods` applies. It lists the base and
-the component `deploy/observer/pods`. The observer reads the
-pods. The checks `mirror-image-id` and `mirror-image-string` print what each pod
+the component `deploy/observer/pods`, so the observer reads the pods. The checks
+`mirror-image-id` and `mirror-image-string` print what each pod
 reports and the row that the observer shows for it. They show whether the image
 string or the image id decides which match works. The stage removes the pods, the
 files of containerd, and the registry. Its rows wait for the live window of the
