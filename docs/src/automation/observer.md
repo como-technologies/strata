@@ -54,6 +54,25 @@ finding, and each state of the page.
 The records are the files that your pipeline writes. The observer compares them
 with Palette, and it never writes a record. See [Install](#install).
 
+## The baseline and the check
+
+The baseline is the set of records that your team approved. The observer checks
+Palette against it. Only a merge moves the baseline.
+
+1. **Record a version.** A person runs `strata snapshot` on a profile version. Then
+   the person opens a pull request with the record.
+2. **Merge the record.** A review approves the file. The merge moves the baseline.
+3. **Write the records.** The pipeline runs `scripts/ci/observer-records.sh` with
+   `--revision`, and applies the four Secrets. See [Install](#install).
+4. **Check.** The two cycles check Palette against the records. A difference opens a
+   finding on the page.
+5. **Close the finding.** Restore the version in Palette. Or publish the new content,
+   and record it again with a new review.
+
+The observer never writes a record. An edit in Palette moves no baseline: it opens a
+finding. To try the observer with no approved record, see [First-seen
+records](#first-seen-records).
+
 ## Run it once
 
 `strata-observer once` runs one content cycle and one versions cycle, and prints
@@ -146,6 +165,9 @@ because the pod does not start without the pull Secret, the ConfigMap, and the k
 Get `deploy/observer/` and `scripts/ci/observer-records.sh` from the repository of
 strata, at the tag of your release. Copy both into the repository of your team. The
 steps below run from that repository. They need `jq`, `gzip`, and `base64`.
+
+To try the observer on a test cluster, use one command instead: see [A test
+cluster](../development/live-example.md#a-test-cluster).
 
 1. **Make the namespace.** It enforces the Pod Security standard `restricted`.
 
