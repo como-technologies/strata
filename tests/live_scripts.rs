@@ -11283,3 +11283,51 @@ fn who_sh_stage_3_records_nothing_and_says_so_without_the_key() {
         "no call to strata without the key: {calls}"
     );
 }
+
+/// A recipe of the justfile runs a script of `examples/live/` by its path, so Git must record the
+/// script with the mode 100755. With the mode 100644, the recipe stops with "Permission denied".
+/// The tests run each script with `bash`, so only this test sees the fault.
+#[test]
+fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let listing = git(
+        root,
+        &[
+            "-c",
+            "safe.directory=*",
+            "ls-files",
+            "-s",
+            "--",
+            "examples/live",
+        ],
+    )
+    .stdout;
+    let listing = text(&listing);
+    // a line of the listing: `<mode> <hash> <stage>\t<path>`
+    let modes: std::collections::BTreeMap<&str, &str> = listing
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .map(|(info, path)| (path, info.split(' ').next().unwrap_or_default()))
+        .collect();
+
+    let justfile = repo_file("justfile");
+    let run: std::collections::BTreeSet<&str> = code_lines(&justfile)
+        .flat_map(str::split_whitespace)
+        .filter(|word| word.starts_with("examples/live/") && word.ends_with(".sh"))
+        .collect();
+    assert!(
+        run.contains("examples/live/observer-up.sh"),
+        "the scan finds the scripts of the recipes: {run:?}"
+    );
+
+    let wrong: Vec<String> = run
+        .iter()
+        .filter(|path| modes.get(*path) != Some(&"100755"))
+        .map(|path| format!("{path}: {}", modes.get(*path).unwrap_or(&"not in Git")))
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "a recipe runs these scripts, and Git does not record them as 100755 \
+         (git update-index --chmod=+x <file>): {wrong:?}"
+    );
+}
