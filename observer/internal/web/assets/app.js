@@ -466,7 +466,7 @@ const verdictOf = a => a.verdict === VERDICT.NO_ERROR || a.verdict === VERDICT.R
 // askButton draws the button of a move. It is off while the question is on its way.
 function askButton(cls, subject, p, label) {
   const asking = S.asking[askId(subject, p)];
-  return h`<button class="${cls}" data-ask="${subject}" data-pack="${p.key}"${asking ? raw(" disabled") : ""}>${asking ? "Asking" : label}</button>`;
+  return h`<button class="${cls}" data-ask="${subject}" data-pack="${p.key}"${asking ? raw(" disabled") : ""}>${asking ? "Asking..." : label}</button>`;
 }
 
 // askCell is the cell "Palette" of a row of the table of newer versions.

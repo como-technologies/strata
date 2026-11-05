@@ -632,7 +632,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	for _, hash := range []string{dexHash, k8sHash, traefikHash} {
 		page := pageOf(t, screens, hash, "")
 		mustHold(t, hash, page, `<button class="btn" data-ask="`, ">Ask Palette about this move</button>")
-		mustNotHold(t, hash, page, "Palette gave", "Palette refuses", "Asking")
+		mustNotHold(t, hash, page, "Palette gave", "Palette refuses", "Asking...")
 	}
 	// A pack with no move has no button.
 	mustNotHold(t, "a pack with no move", pageOf(t, screens, "#k-fred-identity@2.3.0/addon/reloader", ""), "Ask Palette")
@@ -712,16 +712,16 @@ func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
 	}
 }
 
-// A click asks once. The button is off and reads "Asking" while the question is on its way, a second click
+// A click asks once. The button is off and reads "Asking..." while the question is on its way, a second click
 // sends nothing, and the answer shows beside the move, in the table and on the card.
 func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
 	const dex = `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`
 	r := click(t, devdata.StateOK, dexHash, "0", dex)
 	mustHold(t, "before", r.Before, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
-	mustHold(t, "during", r.During, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex" disabled>Asking</button>`)
+	mustHold(t, "during", r.During, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex" disabled>Asking...</button>`)
 	mustNotHold(t, "during", r.During, "Ask Palette about this move", "Palette gave")
 	mustHold(t, "after", textOf(r.After), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
-	mustNotHold(t, "after", r.After, "Asking", "Ask Palette about this move", "The observer could not ask now")
+	mustNotHold(t, "after", r.After, "Asking...", "Ask Palette about this move", "The observer could not ask now")
 	if len(r.Posts) != 1 || r.Posts[0].Method != "POST" || r.Posts[0].Path != "/v1/packs/fred-identity@2.3.0/addon/dex/ask" {
 		t.Fatalf("the posts: %+v", r.Posts)
 	}
@@ -736,10 +736,10 @@ func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
 		t.Errorf("the click on the button opened %s", r.Hash)
 	}
 	mustHold(t, "the table before", rowWith(t, r.Before, `data-go="`+dexHash+`"`), ">Ask Palette</button>")
-	mustHold(t, "the table during", rowWith(t, r.During, `data-go="`+dexHash+`"`), `data-pack="addon/dex" disabled>Asking</button>`)
+	mustHold(t, "the table during", rowWith(t, r.During, `data-go="`+dexHash+`"`), `data-pack="addon/dex" disabled>Asking...</button>`)
 	row := rowWith(t, r.After, `data-go="`+dexHash+`"`)
 	mustHold(t, "the table after", row, `<td class="narrow-hide"><span class="fw">No error</span></td>`)
-	mustNotHold(t, "the table after", row, "Ask Palette", "Ask again", "Asking")
+	mustNotHold(t, "the table after", row, "Ask Palette", "Ask again", "Asking...")
 	if len(r.Posts) != 1 {
 		t.Errorf("the table sent %d posts", len(r.Posts))
 	}
@@ -771,9 +771,9 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 	for _, status := range []string{"502", "503", "404", "network"} {
 		t.Run(status, func(t *testing.T) {
 			r := click(t, devdata.StateOK, dexHash, status, `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
-			mustHold(t, "during", r.During, "Asking")
+			mustHold(t, "during", r.During, "Asking...")
 			mustHold(t, "after", r.After, note, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
-			mustNotHold(t, "after", r.After, "Palette gave", "Palette refuses", "No answer", "Asking")
+			mustNotHold(t, "after", r.After, "Palette gave", "Palette refuses", "No answer", "Asking...")
 			if len(r.Posts) != 1 {
 				t.Errorf("%d posts", len(r.Posts))
 			}

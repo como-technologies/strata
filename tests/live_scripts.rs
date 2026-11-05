@@ -11215,7 +11215,7 @@ fn observer_sh_diff_text_fails_when_the_detail_route_holds_no_text_of_the_edit()
 }
 
 #[test]
-fn the_page_of_live_runs_names_each_new_check_of_observer_sh_and_of_observer_role_sh_without_a_result()
+fn the_page_of_live_runs_names_each_new_check_of_observer_sh_and_of_observer_role_sh_with_its_result()
  {
     for (script, ids) in [
         (
@@ -11242,8 +11242,8 @@ fn the_page_of_live_runs_names_each_new_check_of_observer_sh_and_of_observer_rol
                 .find(|l| l.starts_with("| `") && l.contains(&format!("`{id}`")))
                 .unwrap_or_else(|| panic!("no row for {id}"));
             assert!(
-                row.contains("(no result yet: "),
-                "the row of {id} gives no reason:\n{row}"
+                !row.to_lowercase().contains("no result yet"),
+                "the row of {id} says that it has no result:\n{row}"
             );
         }
     }

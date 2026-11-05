@@ -52,6 +52,8 @@ locals {
   # The add-on profile's one layer: a ConfigMap, so it installs anywhere and an edit to it changes
   # nothing a running cluster depends on, unlike a storage class field, which Kubernetes does not
   # let change. With edit_addon_in_place, one data value changes in place.
+  # The line purpose must not hold the default of the variable purpose. A detail route shows this
+  # text, and the check no-value-leaves of observer.sh finds that value in each route.
   addon_manifest_base = <<-EOT
     apiVersion: v1
     kind: ConfigMap
@@ -59,7 +61,7 @@ locals {
       name: strata-live
       namespace: default
     data:
-      purpose: strata live example
+      purpose: the add-on of the live example
       edited: "no"
   EOT
   addon_manifest      = var.edit_addon_in_place ? replace(local.addon_manifest_base, "edited: \"no\"", "edited: \"yes\"") : local.addon_manifest_base

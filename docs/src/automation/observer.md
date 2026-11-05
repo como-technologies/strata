@@ -861,13 +861,15 @@ lists each permission and each refusal.
 - **A read-only key can click.** The route that the click calls checks
   `clusterProfile.get` on the profile, and no write permission. Four built-in roles
   hold it: Cluster Profile Viewer, Cluster Viewer, Project Viewer, and Tenant Viewer.
-  A key without it gets "Palette gave no answer", with the status of the refusal. This
-  comes from the code of Palette, and no live run has asked with a read-only key.
+  A key without it gets "Palette gave no answer", with the status of the refusal. A
+  live run asked with Project Viewer, and Palette answered HTTP 200. The other three
+  roles and the refusal come from the code of Palette.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.
 - **A live run used both roles.** `just live-observer-role` sent each request of the
-  cycles with a second key. With Project Viewer, each request answered HTTP 200.
-  With Cluster Viewer, each request answered HTTP 200 but the audit log.
+  cycles with a second key. With Project Viewer, each request answered HTTP 200, and
+  so did the request of the click "Ask Palette". With Cluster Viewer, each request
+  answered HTTP 200 but the audit log, and no run sent the request of the click.
   [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the checks.
 
 ### The role for the read of the pods

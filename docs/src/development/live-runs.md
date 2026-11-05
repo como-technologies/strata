@@ -1410,15 +1410,15 @@ The script puts the edit back at its end, also when a check fails.
 | `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. The check records 0, so the row holds a digest. `spec.image` and `imageID` name `vendor.example`, and the digest is the one that the mirror served. `status.image` names `registry.k8s.io/pause:3.10` |
 | `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. The check records 0, so the row holds a digest. `spec.image` and `imageID` name the registry, so the image matches no pack by name and tag. `status.image` names `registry.k8s.io/pause:3.10` |
 | `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go |
-| `alert-receiver`, `alert-secret` | 0 | #648: a pod takes a `POST` at `/cgi-bin/hook` on port 443 and keeps each body. The Secret `strata-observer-alert-channels` holds the address of the receiver for each channel. No result yet: the next live window runs it. |
-| `alert-apply` | 0 | #648: the base, the component `deploy/observer/alerts`, and the file of `examples/observer-alerts` apply with `--server-side`. The Deployment becomes available, and the render holds the flag `--alerts`. No result yet: the next live window runs it. |
-| `alert-route` | 0 | #648: `/v1/alerts` says `set`, and it lists five rules with their states. It names the channels and shows no address. No result yet: the next live window runs it. |
-| `alert-edit` | 0 | #648: an edit in place of the add-on version opens the finding `published-changed`. No result yet: the next live window runs it. |
-| `alert-open` | 0 | #648: the receiver gets one message of the open. It starts with the name of the cluster and `Drift`, and it names the profile and its packs. No result yet: the next live window runs it. |
-| `alert-no-value` | 0 | #648: the detail route holds the text of the edit, so the search proves something. The receiver holds none of it, in the raw form or in the JSON form. It holds none of the text that the edit replaced. No result yet: the next live window runs it. |
-| `alert-undo`, `alert-clear` | 0 | #648: the add-on version goes back, and the observer finds no finding. The receiver then gets a message of the clear. No result yet: the next live window runs it. |
-| `alert-one-each` | 0 | #648: after one more content cycle, the receiver holds one message of the open and one of the clear. No result yet: the next live window runs it. |
-| `alert-clean` | 0 | #648: the receiver, its Service, and its ConfigMap go. No result yet: the next live window runs it. |
+| `alert-receiver`, `alert-secret` | 0 | #648: a pod takes a `POST` at `/cgi-bin/hook` on port 443 and keeps each body. The Secret `strata-observer-alert-channels` holds the address of the receiver for each channel. |
+| `alert-apply` | 0 | #648: the base, the component `deploy/observer/alerts`, and the file of `examples/observer-alerts` apply with `--server-side`. The Deployment becomes available, and the render holds the flag `--alerts`. |
+| `alert-route` | 0 | #648: `/v1/alerts` says `set`, and it lists five rules with their states. It names the channels and shows no address. |
+| `alert-edit` | 0 | #648: an edit in place of the add-on version opens the finding `published-changed`. |
+| `alert-open` | 0 | #648: the receiver gets one message of the open. It starts with the name of the cluster and `Drift`, and it names the profile and its packs. |
+| `alert-no-value` | 0 | #648: the detail route holds the text of the edit, so the search proves something. The receiver holds none of it, in the raw form or in the JSON form. It holds none of the text that the edit replaced. |
+| `alert-undo`, `alert-clear` | 0 | #648: the add-on version goes back, and the observer finds no finding. The receiver then gets a message of the clear. |
+| `alert-one-each` | 0 | #648: after one more content cycle, the receiver holds one message of the open and one of the clear. |
+| `alert-clean` | 0 | #648: the receiver, its Service, and its ConfigMap go. |
 | `kind-delete` | 0 | the kind cluster is deleted |
 
 ## observer-images.sh
@@ -1570,9 +1570,9 @@ finding, because `verify --who` then reads the audit log.
 | `drift-found`, `drift-who` | 0 | #656: within two content cycles, `/v1/findings` holds `published-changed` with the pack, and `who` names the actor |
 | `cluster-copy-unchanged` | 0 | #656: `clusterCopy` of that profile still says `same`, because the cluster did not take the update |
 | `variable-in-raw`, `no-value-leaves` | 0 | #656: the raw output of `strata compare` holds the value of a variable. No route and no line of the log holds it |
-| `ask-one-post` | 0 | #647: the cycles of the observer send no POST to Palette. One click on a move to a newer pack version sends one POST to the validate route. A second click on the same move sends none, because the observer keeps the answer. The first click must get an answer, because the observer asks again after a request that failed. The files `ask-one-post.out` and `ask.log` hold the counts and the requests (no result yet: the next live window runs it) |
-| `ask-words` | 0 | #647: the click on the pod gives an answer with one of three verdicts: `no-error`, `refuses`, or `no-answer`. The output records the verdict, and the code of a refusal or the status of a request that failed. The words on the page are "Palette gave no error", "Palette refuses: `<code>`", and "Palette gave no answer". The check does not judge which verdict Palette gives. It fails when the word "accepts" is in an answer of the API (no result yet: the next live window runs it) |
-| `diff-text` | 0 | #647: the detail route `diff?side=published` of the pack that the edit changed holds the text of the edit, in `manifests[].unified` or in `values.unified`. The seven summary routes and the route of the profile hold none of that text (no result yet: the next live window runs it) |
+| `ask-one-post` | 0 | #647: the cycles of the observer send no POST to Palette. One click on a move to a newer pack version sends one POST to the validate route. A second click on the same move sends none, because the observer keeps the answer. The first click must get an answer, because the observer asks again after a request that failed. The files `ask-one-post.out` and `ask.log` hold the counts and the requests. A live run gave no POST in the cycles, one POST for the first click, and none for the second |
+| `ask-words` | 0 | #647: the click on the pod gives an answer with one of three verdicts: `no-error`, `refuses`, or `no-answer`. The output records the verdict, and the code of a refusal or the status of a request that failed. The words on the page are "Palette gave no error", "Palette refuses: `<code>`", and "Palette gave no answer". The check does not judge which verdict Palette gives. It fails when the word "accepts" is in an answer of the API. A live run asked about a move of the Kubernetes pack, and the pod and this machine each gave `no-error` |
+| `diff-text` | 0 | #647: the detail route `diff?side=published` of the pack that the edit changed holds the text of the edit, in `manifests[].unified` or in `values.unified`. The seven summary routes and the route of the profile hold none of that text |
 | `drift-undo`, `drift-clears` | 0 | #656: the version goes back, and the next cycle clears the finding |
 | `wrong-key`, `lost-after-wrong-key` | 0 | #656: a wrong key in the Secret and a restart of the pod. The page goes to `lost` after two cycles |
 | `key-back`, `ok-after-key-back` | 0 | #656: the key back and a restart, and the page returns to `ok` |
@@ -1623,9 +1623,9 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `role-<name>` | ? | #645: the status and the error code of the same request with the key of the role under test. The output of each check holds `HTTP`, the status, and the code. With Project Viewer, each request answers HTTP 200. With Cluster Viewer, each request answers HTTP 200 but the audit log (`role-audits`), which answers HTTP 403 with the code `AccessDenied` |
 | `command-record`, `command-control-verify`, `command-control-cluster` | 0 | #645: with the key of the example, `verify --who` and two records |
 | `command-role-verify`, `command-role-cluster`, `command-control-behind`, `command-role-behind` | ? | #645: the same commands with the key of the role, and `behind` with both keys. The exit code says whether strata gets an answer. Each check records 0 with both roles, so `verify`, the record of cluster A, and `behind` get an answer with Cluster Viewer too. The record that `verify` reads is unchanged, so it needs no audit log. A record that drifted still reports `DRIFT`: see [who.sh](#whosh) |
-| `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version (no result yet: the next live window runs it) |
-| `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx (no result yet: the next live window runs it) |
-| `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it (no result yet: the next live window runs it) |
+| `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version |
+| `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
+| `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
 
 ## version-states.sh
 
