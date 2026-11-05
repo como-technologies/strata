@@ -290,7 +290,7 @@ status `200` then, and the verdict `no-answer`.
 | --- | --- | --- |
 | `profile` | text | The profile, as `name@version`. |
 | `key` | text | The pack, as `<layer>/<name>`. |
-| `newest` | text | The version that the question names: the newest version of the pack. |
+| `newest` | text | The version that the question names: the newest version of the pack. The registry can gain a version after the last versions cycle, and the version is then newer than the one of the row. A `no-answer` names the newest version of the row. |
 | `verdict` | text | `no-error`, `refuses`, or `no-answer`: see the table below. |
 | `refusals` | list | One entry for each error that Palette gave. It is empty unless the verdict is `refuses`. |
 | `status` | number | The HTTP status of the request that failed. It is 0 when the request did not fail, or when the failure has no status. |

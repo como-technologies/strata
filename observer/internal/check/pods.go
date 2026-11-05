@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -57,14 +58,16 @@ func podsError(err error) model.ErrorRef {
 }
 
 // keepFirstDigests keeps the first digest of each image that the pods run. A new revision of the
-// records drops them all, because the team approved that content. A read that failed adds none: the
-// containers of an earlier read are already in the state.
+// records drops them all, because the team approved that content. A read of meta.json that failed
+// gives the baseline unknown and no revision, and it drops none. A read of the pods that failed adds
+// none: the containers of an earlier read are already in the state.
 func (o *Observer) keepFirstDigests(content model.Content) {
 	if o.pods == nil {
 		return
 	}
 	images := &o.state.Images
-	if images.Revision != content.Meta.Revision || images.First == nil {
+	newRevision := content.Meta.Baseline != baseline.Unknown && images.Revision != content.Meta.Revision
+	if newRevision || images.First == nil {
 		*images = ImagesState{Revision: content.Meta.Revision, First: map[string]string{}}
 	}
 	if content.Pods.Err != nil {

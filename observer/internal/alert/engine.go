@@ -14,8 +14,9 @@ import (
 type Known struct {
 	// Content says that a content cycle ended well: it knows the findings and the loss of contact.
 	Content bool
-	// Image says that the same cycle also read the pods. A cycle that reads no pod finds no finding of
-	// an image, and that proves nothing.
+	// Image says that the observer reads the pods and that the cycle ended well. A cycle that reads no
+	// pod finds no finding of an image, and that proves nothing. A cycle whose read of the pods failed
+	// sets Image too, and the ids in held keep the findings of an image.
 	Image bool
 	// Newer says that a versions cycle has ended well once: it knows the newer versions.
 	Newer bool
@@ -111,12 +112,13 @@ func (e *Engine) clear(st *Store, it Item, cluster string, now time.Time) {
 
 // digest queues one message for each channel that has an open item under a digest rule, when a period
 // has passed since the last digest. A digest that did not go is made again from the items that are open
-// now, so a channel that comes back gets one digest and no old one. With nothing to list, it waits, so
-// the first item to appear goes at the next content cycle.
+// now, for its channel only, so a channel that comes back gets one digest and no old one, and a channel
+// that got its digest gets no second one. With nothing to list, it waits, so the first item to appear
+// goes at the next content cycle.
 func (e *Engine) digest(st *Store, cluster string, now time.Time) {
 	waiting := st.dropDigests()
 	due := st.DigestAt == nil || now.Sub(*st.DigestAt) >= e.every
-	if !due && !waiting {
+	if !due && len(waiting) == 0 {
 		return
 	}
 	byChannel := map[string][]Item{}
@@ -131,6 +133,9 @@ func (e *Engine) digest(st *Store, cluster string, now time.Time) {
 		return
 	}
 	for _, channel := range slices.Sorted(maps.Keys(byChannel)) {
+		if !due && !waiting[channel] {
+			continue
+		}
 		items := byChannel[channel]
 		slices.SortStableFunc(items, func(a, b Item) int {
 			return strings.Compare(a.Profile+a.Detail+a.ID, b.Profile+b.Detail+b.ID)

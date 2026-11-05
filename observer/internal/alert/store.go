@@ -67,12 +67,17 @@ func (st *Store) cancel(id string) {
 	st.Outbox = slices.DeleteFunc(st.Outbox, func(q Queued) bool { return len(q.Opens) == 1 && q.Opens[0] == id })
 }
 
-// dropDigests removes the digests that wait, and says whether it removed one. A digest that waits
-// lists items that can be gone by now.
-func (st *Store) dropDigests() bool {
-	n := len(st.Outbox)
-	st.Outbox = slices.DeleteFunc(st.Outbox, func(q Queued) bool { return q.Digest })
-	return len(st.Outbox) < n
+// dropDigests removes the digests that wait, and gives the channels that they were for. A digest that
+// waits lists items that can be gone by now.
+func (st *Store) dropDigests() map[string]bool {
+	waiting := map[string]bool{}
+	st.Outbox = slices.DeleteFunc(st.Outbox, func(q Queued) bool {
+		if q.Digest {
+			waiting[q.Channel] = true
+		}
+		return q.Digest
+	})
+	return waiting
 }
 
 // forget drops the messages for a channel that the rules do not hold now.

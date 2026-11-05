@@ -314,22 +314,25 @@ the Rust code, and these rules are for the Go code.
   `POST` is the message to a webhook of your team, and only `internal/alert/send.go`
   names the method for it. A test makes sure of each rule.
 - `internal/alert` sends a message when a finding opens and when it clears. It
-  reads the summary tier only. `alert.SubjectsOf` is the one function that takes a
-  type of `internal/model`, and the package imports no other package of the
-  observer. So a message holds a profile, its packs, a fixed sentence, and a time,
-  and no value. A test makes sure of the imports.
+  reads the summary tier only: `subject.go` is the one file that reads the types of
+  `internal/model`, from `alert.SubjectsOf`. The other files name `internal/model`
+  only for the kind of a finding and for `ShortDuration`. The package imports no
+  other package of the observer. So a message holds a profile, its packs, a fixed
+  sentence, and a time, and no value. A test makes sure of the imports.
 - A test plants a marker in a changed value, in a changed path, in a variable, and
   in the audit log. It fails when the marker is in a message, the state, the log,
   or a route.
 - The rules of the alerts are a file, and no route of the observer writes it. A
   file that does not parse stops the start, with its line. A mute needs an end
   date. The rule `newer` with `send: now` is refused, because a newer version never
-  pages a person. A lower level overrides a higher one.
+  pages a person. A lower level overrides a higher one. In one level, a live mute
+  wins over a rule that sends, and a mute can stand beside it.
 - The address of a webhook is in a file that the observer reads again at each
   send. It must use `https`, and the observer follows no redirect. The flag
   `--alerts-allow-http` is for the tests only. A failed send keeps the message in
   the state, and the next content cycle sends it again. A cycle that failed or
-  could not read a part clears no alert.
+  could not read a part clears no alert. A record file that cannot be read counts as
+  a part that was not read.
 - The click is the one question that the observer asks Palette. `internal/check`
   runs `behind` with `--pin` for one pack, and only when `internal/api` calls it for a
   click. Nothing calls it on a timer. The answer stays in memory. A request that

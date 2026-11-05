@@ -57,6 +57,9 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 // the cache knows costs no request. A compare that fails is one row of the list with no counts: it is
 // in the second result, it is not cached, and the next cycle asks again for that move only. The other
 // pins stay in the cycle. Only a stop of ctx ends the loop, and then the error is the one of ctx.
+//
+// Each move of the cycle counts as used, also when its compare fails: the answer of Palette about a
+// move lives as long as the move, and a failed compare must not drop it.
 func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[string]model.Move, map[string]bool, error) {
 	moves, unread := map[string]model.Move{}, map[string]bool{}
 	used := map[string]bool{}
@@ -66,6 +69,7 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 			continue
 		}
 		cacheKey := doc.Tool.Version + " " + key
+		used[cacheKey] = true
 		move, ok := o.cachedMove(cacheKey)
 		if !ok {
 			diff, err := o.compareMove(ctx, dir, pin)
@@ -83,7 +87,7 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 				o.storeDetail(cacheKey, pack)
 			}
 		}
-		moves[key], used[cacheKey] = move, true
+		moves[key] = move
 	}
 	o.pruneMoves(used)
 	return moves, unread, nil

@@ -256,3 +256,107 @@ func TestEachKindOfFindingComesFromOnePart(t *testing.T) {
 		}
 	}
 }
+
+// bad gives the content of a cycle that could not read the file of a record: the file is in
+// Unreadable and no record holds it.
+func bad(t *testing.T, file string, records ...Record) Content {
+	t.Helper()
+	c := content(t, records...)
+	c.Unreadable = []string{file}
+	return c
+}
+
+func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testing.T) {
+	dex := pk("addon", "dex", "2.42.0")
+	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	other := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
+	first := rec("alpha", "1.0.0", docs.VerifyUnchanged, dex)
+	last := content(t, first, drift, other)
+	now := bad(t, drift.File, first, other)
+	now.Carry(&last)
+	var files []string
+	for _, r := range now.Records {
+		files = append(files, r.File)
+	}
+	if !slices.Equal(files, []string{first.File, drift.File, other.File}) {
+		t.Fatalf("the records are %v: the carried record keeps the order of the files", files)
+	}
+	r := now.Records[1]
+	if !r.RowCarried || !r.SideCarried || !r.readError() {
+		t.Errorf("carried: row %v, side %v", r.RowCarried, r.SideCarried)
+	}
+	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != "fred-identity@2.3.0" {
+		t.Errorf("findings %+v", got)
+	}
+	if now.Blind() {
+		t.Error("a file with a last record is not blind")
+	}
+	for _, kind := range publishedKinds {
+		if !slices.Contains(HeldIDs(now), FindingID(kind, "fred-identity@2.3.0")) {
+			t.Errorf("HeldIDs lacks %s", kind)
+		}
+	}
+	s := build(&now, nil)
+	if len(s.Profiles) != 3 || s.Profiles[1].Status != StatusDrift {
+		t.Errorf("profiles %+v", s.Profiles)
+	}
+	for _, row := range s.NotChecked {
+		if row.Cause == NoRecord {
+			t.Errorf("the profile of the carried record reads no-record: %+v", row)
+		}
+	}
+}
+
+func TestCarryTakesNoRecordForAFileThatCannotBeReadWhenTheLastCycleHeldNone(t *testing.T) {
+	dex := pk("addon", "dex", "2.42.0")
+	drift := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	cases := []struct {
+		name string
+		last *Content
+	}{
+		{"no last cycle", nil},
+		{"a last cycle with no record of the file", ptr(content(t, rec("other", "1.0.0", docs.VerifyUnchanged, dex)))},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			now := bad(t, drift.File)
+			now.Carry(c.last)
+			if len(now.Records) != 0 || !now.Blind() {
+				t.Errorf("records %d, blind %v", len(now.Records), now.Blind())
+			}
+		})
+	}
+}
+
+func TestABlindContentHoldsEachKnownIDThatNoReadableRecordGives(t *testing.T) {
+	dex := pk("addon", "dex", "2.42.0")
+	readable := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
+	known := []string{FindingID(PublishedChanged, "fred-identity@2.3.0"), FindingID(ImageMoved, "fred-identity@2.3.0"),
+		FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0")}
+	now := bad(t, "fred-identity.json.gz", readable)
+	got := BlindIDs(now, known)
+	if !slices.Equal(got, known[:2]) {
+		t.Errorf("ids %v, want the ids of the profile that no record gives: %v", got, known[:2])
+	}
+	if got := BlindIDs(content(t, readable), known); len(got) != 0 {
+		t.Errorf("a content with every file read holds %v", got)
+	}
+}
+
+func TestCarryTakesNoSecondRecordForAProfileThatAnotherFileGives(t *testing.T) {
+	dex := pk("addon", "dex", "2.42.0")
+	old := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
+	again := rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)
+	again.File = "fred-identity-again.json.gz"
+	now := bad(t, old.File, again)
+	now.Carry(ptr(content(t, old)))
+	if len(now.Records) != 1 || now.Records[0].File != again.File || now.Records[0].RowCarried {
+		t.Errorf("records %+v", now.Records)
+	}
+	if len(FindingsOf(now, nil)) != 0 {
+		t.Error("the old record gave a finding beside the record of the new file")
+	}
+	if !now.Blind() {
+		t.Error("the file has no record that replaces it, so it is blind")
+	}
+}

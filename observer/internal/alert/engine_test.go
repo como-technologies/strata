@@ -456,3 +456,63 @@ func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
 		t.Errorf("packs %v", got)
 	}
 }
+
+func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) {
+	b := newBench(t, `{"channels": {"planning": {"urlFile": "f"}, "platform": {"urlFile": "g"}}, "rules": [
+		{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"},
+		{"level": "profile", "match": "barney-base", "news": "newer", "send": "digest", "to": "platform"}]}`)
+	item := func(id, profile string) Subject {
+		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
+	}
+	subjects := []Subject{item("n1", "fred-identity@2.3.0"), item("n2", "barney-base@1.5.0")}
+	known := Known{Content: true, Newer: true}
+	sentTo := func(channel string) int {
+		n := 0
+		for _, m := range b.send.sent {
+			if m.channel == channel {
+				n++
+			}
+		}
+		return n
+	}
+	b.send.fail["platform"] = errors.New("down")
+	for range 3 {
+		b.cycle(subjects, known)
+		b.later(15 * time.Minute)
+	}
+	if sentTo("planning") != 1 || sentTo("platform") != 0 || len(b.store.Outbox) != 1 || b.store.Outbox[0].Channel != "platform" {
+		t.Fatalf("while platform is down: planning got %d, platform got %d, outbox %+v", sentTo("planning"), sentTo("platform"), b.store.Outbox)
+	}
+	delete(b.send.fail, "platform")
+	for range 2 {
+		b.cycle(subjects, known)
+		b.later(15 * time.Minute)
+	}
+	if sentTo("planning") != 1 || sentTo("platform") != 1 || len(b.store.Outbox) != 0 {
+		t.Errorf("after platform came back: planning got %d, platform got %d, outbox %+v", sentTo("planning"), sentTo("platform"), b.store.Outbox)
+	}
+}
+
+func TestAMuteBesideASendRuleAtOneLevelHoldsBackTheMessageUntilItsEndAndThenTheRuleSends(t *testing.T) {
+	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
+		{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"},
+		{"level": "cluster", "news": "lost", "muteUntil": "2026-11-05"}]}`)
+	lost := Subject{ID: lostID, News: NewsLost, Detail: "The observer cannot reach Palette."}
+	b.cycle([]Subject{lost}, content)
+	if v := b.e.View(b.store, []Subject{lost}, "quarry-1", b.at); len(b.send.sent) != 0 || v.Rules[0].State != StateInactive || v.Rules[1].State != StateMuted {
+		t.Fatalf("sent %q, view %+v", b.texts(), v.Rules)
+	}
+	b.later(24 * time.Hour)
+	b.cycle([]Subject{lost}, content)
+	if len(b.send.sent) != 0 {
+		t.Fatalf("the mute let %q go on its last day", b.texts())
+	}
+	b.later(24 * time.Hour)
+	b.cycle([]Subject{lost}, content)
+	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], "strata · quarry-1 · Lost contact\n") {
+		t.Errorf("after the mute the rule sent %q", got)
+	}
+	if v := b.e.View(b.store, []Subject{lost}, "quarry-1", b.at); v.Rules[0].State != StateFiring || v.Rules[1].State != StateInactive {
+		t.Errorf("view %+v", v.Rules)
+	}
+}

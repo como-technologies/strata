@@ -522,7 +522,10 @@ copy. A finding always shows its data. [The server of the
 observer](../development/observer-api.md#the-splash) lists each place.
 
 The page never reads calmer than the check allows. A page with a finding, a failed read,
-or a cause in "Not checked" shows no calm mark.
+or a cause in "Not checked" shows no calm mark. A page that is lost, stale, or cannot
+reach the observer shows none either. The tile "Newer versions" says "All packs current"
+only after a read of the versions. The tile "Image changes" is green only when the last
+read of the pods worked.
 
 | The page says | What it means | The next step |
 | --- | --- | --- |
@@ -536,7 +539,7 @@ or a cause in "Not checked" shows no calm mark.
 | The pods stay silent | The read of the pods failed. | Ask the API server if the role can list pods, or read the log. |
 | Nobody gets paged yet | The observer sends no alert. This is a choice, and no fault. | [Turn the alerts on](#turn-them-on). |
 | Undisturbed | A side of a pack holds what the record holds. | None. |
-| Part of this layer is hidden | Strata did not check the pack in full. The line gives the cause. | Read the page "Not checked". |
+| Part of this layer is hidden | Strata did not check the pack in full, or the last read of its profile failed in part. A side with no change then keeps the last good answer, and the page does not call it unchanged. The line gives the cause. | Read the page "Not checked". |
 | One moment, a check is running | A cycle holds the one slot of the observer for a read. | Wait, or click "Try now". |
 | Too much rock to carry | The text of the pack is above 256 KiB. | Run the command that the page gives. |
 
@@ -632,16 +635,20 @@ the observer writes a rule. A mute is a line of the file, so Git shows who muted
 | `newer` | A newer version of a pack in a profile. Each profile that pins the pack makes one item. |
 
 - **A lower level overrides a higher one.** The level `pack` wins over `profile`, and
-  `profile` wins over `cluster`. If two rules of one level cover the item, the first one
-  in the file wins.
+  `profile` wins over `cluster`. If two rules of one level cover the item, a live mute
+  wins. Else the first rule in the file wins.
 - **A mute always has an end date.** A mute with no end date stops the start. A mute
   holds through the day of its end date. After that day, it counts as no mute, and
   the rule of the next level decides.
+- **A mute can stand beside a rule that sends.** Write the mute as a second rule with
+  the same level, match, and news. The mute wins until its end date. Then the rule that
+  sends decides again, and the item sends its message.
 - **A newer version never pages a person.** The rule `newer` with `send: now` stops the
   start. Use `digest`.
 - **A file that does not parse stops the start of `serve`.** The error names the line
-  of the fault. Two rules with the same level, match, and news also stop the start.
-  `once` reads the file the same way, and it sends nothing. It is a check of the file:
+  of the fault. Two rules that send, with the same level, match, and news, also stop
+  the start. A mute is not part of this check. `once` reads the file the same way, and
+  it sends nothing. It is a check of the file:
 
 ```text
 {{#include ../output/observer-alerts-fault.txt}}
@@ -669,7 +676,8 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
 - **A digest goes at most once in each period of `--digest-every`.** The period is 7
   days. A digest lists each open item of the digest rules of one channel, so an item
   that stays open is in each digest. A digest has no clear message. With no item open,
-  the digest waits for the first item.
+  the digest waits for the first item. A channel that got its digest gets no second one
+  in the period, also when the send to another channel failed.
 - **`once` sends nothing.** With no `--alerts`, nothing sends.
 
 ### What alerts do not do

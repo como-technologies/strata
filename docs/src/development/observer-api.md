@@ -111,6 +111,12 @@ the splash "Undisturbed", with three facts: the published version, the copy of t
 cluster, and the newer version. A published side that strata could not read or could
 not verify shows "This side was not read". It never shows "Undisturbed".
 
+The cause `read-error` names a profile whose last read failed in part. The summary
+keeps the last good answer of that part, and it has no flag for it. So a side with no
+change of that profile shows "Part of this layer is hidden", also when the pack has a
+newer version. The profile page and the card "Check this yourself" show "Not checked"
+in place of "OK" then.
+
 A side with a change has four tabs:
 
 - **Values.** It shows the settings as a table, and it folds "Follows the version"
@@ -220,7 +226,11 @@ The rule of a state:
 
 - The headline can have some fun. The line under it states the fact in plain words.
 - It never reads calmer than the check allows. `calmOk()` is the one gate of the
-  calm tone.
+  calm tone, and of each calm word: "Nothing changed", "All N packs current", "Every pack
+  is current", and "All quiet". It is false when the page is lost, stale, or cannot reach the observer. A word
+  that speaks of versions asks `calmOk(true)`, which also needs a read of the versions.
+  The tile "Image changes" is green only when the checks can speak and the last read of
+  the pods worked.
 - It gives the next step when one exists, and the step has a command with a button
   Copy.
 - A finding always shows its data and never a splash. A page that is lost or stale

@@ -1,10 +1,11 @@
 // Package alert sends a message to a webhook when a finding opens and when it clears.
 //
 // It is a stopgap. Palette has no event for a published version that changed, so the observer sends
-// one. The package reads the summary tier only: SubjectsOf is the one function that takes a type of
-// internal/model, and the rest of the package works on Subject, which holds names, times, and fixed
-// words. So a message holds no value. The package never imports internal/docs, and a test makes sure
-// of it.
+// one. The package reads the summary tier only. The file subject.go is the one file that reads the
+// types of internal/model, from SubjectsOf. The rest of the package works on Subject, which holds
+// names, times, and fixed words. The other files name internal/model only for the kind of a finding
+// and for ShortDuration. So a message holds no value. The package imports no other package of the
+// observer, never internal/docs, and a test makes sure of it.
 package alert
 
 import (
@@ -108,14 +109,25 @@ func (r Rule) covers(s Subject) bool {
 	return true
 }
 
-// decide finds the rule that decides what happens to a subject: the first live rule of the lowest level
-// that is about the news and covers the subject. The second result is false when no rule does.
+// decide finds the rule that decides what happens to a subject: the rule of the lowest level that is
+// about the news and covers the subject. In one level, a live mute wins over a rule that sends. Among
+// the rules that send, the first one in the file wins. The second result is false when no rule does.
 func (rs Rules) decide(s Subject, now time.Time) (int, bool) {
 	for _, level := range levels {
+		found, ok := 0, false
 		for i, r := range rs.List {
-			if r.Level == level && r.News == s.News && r.live(now) && r.covers(s) {
+			if r.Level != level || r.News != s.News || !r.live(now) || !r.covers(s) {
+				continue
+			}
+			if r.mute() {
 				return i, true
 			}
+			if !ok {
+				found, ok = i, true
+			}
+		}
+		if ok {
+			return found, true
 		}
 	}
 	return 0, false
@@ -270,12 +282,16 @@ func decodeFault(err error) string {
 	return err.Error()
 }
 
-// check makes sure that each rule is complete and that no two rules are about the same thing.
+// check makes sure that each rule is complete and that no two rules that send are about the same
+// thing. A mute is out of the key: it can stand beside a rule that sends, and it wins while it holds.
 func (rs Rules) check(lines []int) error {
 	seen := map[[3]string]bool{}
 	for i, r := range rs.List {
 		if msg := rs.fault(r); msg != "" {
 			return fail(lines[i], fmt.Sprintf("rule %d: %s", i+1, msg))
+		}
+		if r.mute() {
+			continue
 		}
 		key := [3]string{string(r.Level), r.Match, string(r.News)}
 		if seen[key] {
