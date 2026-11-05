@@ -241,7 +241,7 @@ just observer-dev stale    # the set stale
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
-`images-split`, `images-off`, and `images-unread`. The server
+`images-split`, `images-off`, `images-unread`, `asks`, and `text-too-large`. The server
 listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
 and `-data` takes another directory of sets.
 
@@ -269,6 +269,11 @@ the page are those of the data.
   `images-split` holds one tag with two digests. `images-off` has the state `off`.
   `images-unread` has the state `not-read`, after a refused read. See [The
   images](../reference/observer-api.md#the-images).
+- The set `asks` names `ok` in a file `base`. Its `asks.json` holds one answer of
+  each verdict on three moves: no error, a refusal, and a 403. The set
+  `text-too-large` names `ok` and marks the text of two packs as too large. In the
+  set `ok`, a click on a move gets its answer from `replies.json`, and a click on a
+  move with no reply gets 404.
 
 A test decodes each file of each set into the type of its route, and it refuses a
 field that the type lacks. So the test data cannot drift from the API. When `node` is on the

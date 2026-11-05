@@ -37,6 +37,8 @@ pub(super) fn run(r: &mut Runner) {
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100, ADDONS_DEV], &[]));
     r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
     r.tenant(|t| t.on_cluster_reclaim(DEV, LEDGER, "Retain"));
+    // the click "Ask Palette" asks the route of a profile version, and Palette gives no error
+    r.tenant(|t| t.profile_packs_answer(DEV, Some(A100), None));
     records(r);
     r.serve_here(); // state 1: the records are taken, and nobody has edited a version
     // a person edits aws-stack@1.0.0 through the API, after its record. payments has not taken it

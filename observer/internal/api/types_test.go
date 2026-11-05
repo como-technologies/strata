@@ -11,7 +11,8 @@ import (
 // valueTypes are the types that hold a changed value. Only PackDiff of the detail tier can use them.
 var valueTypes = []reflect.Type{
 	reflect.TypeOf(docs.Leaf{}), reflect.TypeOf(docs.Values{}), reflect.TypeOf(docs.Diff{}),
-	reflect.TypeOf(docs.Pack{}), reflect.TypeOf(docs.Change{}),
+	reflect.TypeOf(docs.Pack{}), reflect.TypeOf(docs.Change{}), reflect.TypeOf(docs.Manifest{}),
+	reflect.TypeOf(docs.Refusal{}), reflect.TypeOf(model.Answer{}),
 }
 
 // holds says which of the types a type uses in a field, at any depth. A path is the chain of fields.

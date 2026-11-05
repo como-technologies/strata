@@ -9,8 +9,8 @@ import (
 type Verdict string
 
 // The verdicts. No error is not "accepts": Palette checks the default values of the new version, and
-// it does not check your own values. No answer is a request that failed, such as a 403 for a key that
-// can only read. It is no finding, and it raises no severity.
+// it does not check your own values. No answer is a request that failed, such as a 403 for a key without
+// the right to read the profile. It is no finding, and it raises no severity.
 const (
 	VerdictNoError  Verdict = "no-error"
 	VerdictRefuses  Verdict = "refuses"
