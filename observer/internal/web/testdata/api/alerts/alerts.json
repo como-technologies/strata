@@ -1,0 +1,16 @@
+{
+  "set": true,
+  "channels": ["identity-oncall", "platform-oncall", "platform-planning", "wilma-team"],
+  "digestEvery": "168h",
+  "waiting": 0,
+  "rules": [
+    {"level":"cluster","news":"drift","send":"now","to":"platform-oncall","state":"inactive"},
+    {"level":"cluster","news":"image","send":"now","to":"platform-oncall","state":"inactive"},
+    {"level":"cluster","news":"newer","send":"digest","to":"platform-planning","state":"pending"},
+    {"level":"cluster","news":"lost","send":"now","to":"platform-oncall","state":"inactive"},
+    {"level":"profile","match":"fred-identity","news":"drift","send":"now","to":"identity-oncall","state":"firing"},
+    {"level":"profile","match":"barney-base","news":"newer","muteUntil":"2027-01-31","state":"muted"},
+    {"level":"pack","match":"traefik","news":"image","send":"now","to":"wilma-team","state":"inactive"}
+  ],
+  "sample": "strata · quarry-1 · Drift\nfred-identity@2.3.0: The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-03T06:09:00Z"
+}

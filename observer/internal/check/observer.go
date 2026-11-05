@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -40,7 +41,9 @@ type Observer struct {
 	strata Strata
 	// pods is nil when the observer does not read pods: then it makes no call to Kubernetes.
 	pods Pods
-	now  func() time.Time
+	// alerts is nil when the observer sends no alert.
+	alerts *alert.Engine
+	now    func() time.Time
 	// jitter gives a number from 0 up to, and not including, 1.
 	jitter func() float64
 	log    *slog.Logger
@@ -118,10 +121,13 @@ func (o *Observer) run(ctx context.Context, dir string, exits []int, args ...str
 	return res, err
 }
 
-// RunContent runs one content cycle, and keeps its answer or its failure.
+// RunContent runs one content cycle, and keeps its answer or its failure. Then it hands the cycle to the
+// alerts, when the observer sends them.
 func (o *Observer) RunContent(ctx context.Context) error {
 	var content model.Content
-	return o.runCycle(ctx, "content", &o.state.Content,
+	var good bool
+	var held map[string]bool
+	err := o.runCycle(ctx, "content", &o.state.Content,
 		func(ctx context.Context) (files int, err error) {
 			content, files, err = o.contentCycle(ctx)
 			return files, err
@@ -132,7 +138,18 @@ func (o *Observer) RunContent(ctx context.Context) error {
 			o.content, o.contentAt = &content, &content.At
 			o.keepFirstDigests(content)
 			o.keepFirstSeen(content)
+			good, held = true, idSet(model.HeldIDs(content))
 		})
+	o.alertStep(ctx, good, held)
+	return err
+}
+
+func idSet(ids []string) map[string]bool {
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set
 }
 
 // RunVersions runs one versions cycle, and keeps its answer or its failure.

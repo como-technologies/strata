@@ -1,5 +1,7 @@
 package model
 
+import "slices"
+
 // Kind is the cause of one finding.
 type Kind string
 
@@ -14,6 +16,11 @@ const (
 	ImageMoved       Kind = "image-moved"
 	ImageSplit       Kind = "image-split"
 )
+
+// IsImage says that the kind is a finding of the pods, and not of a record.
+func (k Kind) IsImage() bool {
+	return slices.Contains(imageKinds, k)
+}
 
 // The kinds that each part of a record gives. `verify` gives the published kinds, the compare with
 // the cluster side gives the cluster kinds, and the read of the pods gives the image kinds. A kind

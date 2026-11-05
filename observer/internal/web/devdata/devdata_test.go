@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -85,6 +86,16 @@ func TestEachFileOfEachSetMatchesTheTypeOfItsRoute(t *testing.T) {
 		} else if !errors.Is(err, fs.ErrNotExist) || len(s.Replies.Asks) != 0 {
 			t.Errorf("%s: the read of the replies gave %v and %d replies", state, err, len(s.Replies.Asks))
 		}
+		// The file of the alerts is optional too, and it has the shape of the answer of /v1/alerts.
+		if raw, err := Read(sets(), state, fileAlerts); err == nil {
+			t.Run(string(state)+"/"+fileAlerts, func(t *testing.T) {
+				if got, want := encoded(t, s.AlertRules), normal(t, raw); !reflect.DeepEqual(got, want) {
+					t.Errorf("the type gives\n%v\nthe file holds\n%v", got, want)
+				}
+			})
+		} else if !errors.Is(err, fs.ErrNotExist) || s.AlertRules.Set {
+			t.Errorf("%s: the read of the alerts gave %v and the view %+v", state, err, s.AlertRules)
+		}
 	}
 }
 
@@ -123,6 +134,9 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, route, code, got, normal(t, raw))
 			}
 		}
+		if code, got := get("/v1/alerts"); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, s.AlertRules)) {
+			t.Errorf("%s: /v1/alerts gave %d and\n%v\nthe set holds\n%v", state, code, got, encoded(t, s.AlertRules))
+		}
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
@@ -151,7 +165,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateNoRecords: model.PageNoRecords, StateStale: model.PageStale, StateLost: model.PageLost, StateFirstSeen: model.PageOK,
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
-		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK}
+		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -842,5 +856,57 @@ func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
 		if code, _ := do(http.MethodPost, path, true); code != http.StatusNotFound {
 			t.Errorf("%s gave %d", path, code)
 		}
+	}
+}
+
+// The set alerts holds rules in each state. Their states are those that the engine gives for the findings
+// and the newer versions of the set ok, when each message went at once and the digest went a moment ago.
+// So the page shows what the observer can show.
+func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
+	s := load(t, StateAlerts)
+	v := s.AlertRules
+	channels := map[string]map[string]string{}
+	for _, name := range v.Channels {
+		channels[name] = map[string]string{"urlFile": "f"}
+	}
+	list, _ := encoded(t, v.Rules).([]any)
+	for _, r := range list {
+		delete(r.(map[string]any), "state")
+	}
+	file, err := json.Marshal(map[string]any{"channels": channels, "rules": list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, err := alert.Parse(file)
+	if err != nil {
+		t.Fatalf("the rules of the set do not parse: %v", err)
+	}
+	if got := parsed.Names(); !slices.Equal(got, v.Channels) {
+		t.Errorf("the channels of the set are %v, and the rules name %v", v.Channels, got)
+	}
+	engine := alert.New(parsed, nil, 7*24*time.Hour, nil)
+	store := alert.NewStore()
+	recent := Reference
+	store.DigestAt = &recent
+	subjects := alert.SubjectsOf(s.Summary())
+	engine.Plan(&store, subjects, alert.Known{Content: true, Newer: true}, nil, s.Cluster.Cluster.Name, Reference)
+	queue := slices.Clone(store.Outbox)
+	store.Settle(queue, slices.Repeat([]bool{true}, len(queue)), Reference)
+	want := engine.View(store, subjects, s.Cluster.Cluster.Name, Reference)
+	if !reflect.DeepEqual(encoded(t, v), encoded(t, want)) {
+		t.Errorf("the set holds\n%v\nthe engine gives\n%v", encoded(t, v), encoded(t, want))
+	}
+	seen := map[alert.State]bool{}
+	for _, r := range v.Rules {
+		seen[r.State] = true
+	}
+	if len(seen) != 4 {
+		t.Errorf("the set shows %d of the four states", len(seen))
+	}
+}
+
+func TestTheSetAlertsUnsetIsAnObserverStartedWithoutAlerts(t *testing.T) {
+	if got, want := encoded(t, load(t, StateAlertsUnset).AlertRules), encoded(t, alert.Unset()); !reflect.DeepEqual(got, want) {
+		t.Errorf("the set holds\n%v\nthe observer gives\n%v", got, want)
 	}
 }

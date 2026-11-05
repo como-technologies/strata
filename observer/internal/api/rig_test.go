@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
@@ -267,3 +268,4 @@ func (s stub) Ask(context.Context, string, string) (model.Answer, bool, error) {
 	return model.Answer{}, false, nil
 }
 func (s stub) Answers() []model.Answer { return nil }
+func (s stub) Alerts() alert.View      { return alert.Unset() }

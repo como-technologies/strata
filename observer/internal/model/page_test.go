@@ -53,7 +53,7 @@ func TestADurationIsShort(t *testing.T) {
 		15 * time.Minute: "15m", 6 * time.Hour: "6h", 10 * time.Minute: "10m", 90 * time.Minute: "1h30m", 30 * time.Second: "30s", 0: "0s",
 		time.Hour + 5*time.Second: "1h0m5s",
 	} {
-		if got := shortDuration(d); got != want {
+		if got := ShortDuration(d); got != want {
 			t.Errorf("%v: %q, want %q", d, got, want)
 		}
 	}

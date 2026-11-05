@@ -97,7 +97,16 @@ func MoveKey(p docs.Pin) string {
 	if len(p.Newer) == 0 {
 		return ""
 	}
-	return p.RegistryUID + "/" + p.Name + "@" + p.Version + "->" + p.Newer[0].Version
+	return moveKey(p.RegistryUID, p.Name, p.Version, p.Newer[0].Version)
+}
+
+// Key names the move of a row in the way that MoveKey names the move of its pin.
+func (n Newer) Key() string {
+	return moveKey(n.RegistryUID, n.Name, n.Version, n.Newest)
+}
+
+func moveKey(registryUID, name, version, newest string) string {
+	return registryUID + "/" + name + "@" + version + "->" + newest
 }
 
 // MoveOf reads the counts of a move from the compare of the pinned version and the newest one. The

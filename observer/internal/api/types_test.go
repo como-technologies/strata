@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 )
@@ -58,6 +59,7 @@ func TestNoTypeOfTheSummaryTierHoldsAChangedValue(t *testing.T) {
 		"EventsView":      reflect.TypeOf(EventsView{}),
 		"model.Observed":  reflect.TypeOf(model.Observed{}),
 		"model.ImageView": reflect.TypeOf(model.ImageView{}),
+		"alert.View":      reflect.TypeOf(alert.View{}),
 	}
 	for name, typ := range summary {
 		var found []string

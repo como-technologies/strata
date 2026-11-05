@@ -30,6 +30,7 @@ var summaryRoutes = map[string]string{
 	patternEvents:     "/v1/events",
 	patternImages:     "/v1/images",
 	patternImage:      "/v1/images/a%2Fb:1",
+	patternAlerts:     "/v1/alerts",
 }
 
 var detailRoutes = map[string][]string{

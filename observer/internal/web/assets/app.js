@@ -35,6 +35,19 @@ const DIGEST = {FIRST: "first-digest", ANOTHER: "another-digest", NO_REPO: "no-r
 // The words of /v1/asks. A move that nobody asked about has no answer. A no-answer is a request that
 // failed: it is no finding, and it raises no severity.
 const VERDICT = {NO_ERROR: "no-error", REFUSES: "refuses", NO_ANSWER: "no-answer"};
+// The words of /v1/alerts. A rule has a level and a kind of news. Its state follows its subjects: a mute
+// shows Muted while it holds, and a mute that ended shows Inactive.
+const ALERT_STATE = {FIRING: "firing", PENDING: "pending", INACTIVE: "inactive", MUTED: "muted"};
+const ALERT_BADGE = {
+  [ALERT_STATE.FIRING]: ["r", "Firing"], [ALERT_STATE.PENDING]: ["a", "Pending"], [ALERT_STATE.INACTIVE]: ["g", "Inactive"], [ALERT_STATE.MUTED]: ["y", "Muted"],
+};
+const ALERT_LEVEL = {cluster: "Cluster", profile: "Profile", pack: "Pack"};
+const ALERT_NEWS = {drift: "Drift", image: "Image split or moved", newer: "Newer version", lost: "Lost contact"};
+const ALERT_SEND = {NOW: "now", DIGEST: "digest"};
+// The period of a digest that the page calls weekly. The API writes it in hours.
+const WEEK = "168h";
+// What the page shows before the first read of /v1/alerts, and when the observer sends no alert.
+const NO_ALERTS = {set: false, channels: [], digestEvery: "", waiting: 0, rules: [], sample: ""};
 // What a row of the table of newer versions says for an answer.
 const ASK_ROW = {[VERDICT.NO_ERROR]: "No error", [VERDICT.REFUSES]: "Refuses", [VERDICT.NO_ANSWER]: "No answer"};
 const ASK_FAILED = "The observer could not ask now. Try again later.";
@@ -129,18 +142,19 @@ async function getJSON(url) {
   return r.json();
 }
 
-// load reads the seven summary routes and the list of answers of Palette. The detail route of a pack is
-// read when a screen needs it. A list of answers that cannot be read keeps the last list, and it never
-// puts the page offline.
+// load reads the seven summary routes, the list of answers of Palette, and the rules of the alerts. The
+// detail route of a pack is read when a screen needs it. A list of answers or of rules that cannot be read
+// keeps the last one, and it never puts the page offline.
 async function load() {
-  const [cluster, findings, profiles, newer, notChecked, events, images, asks] = await Promise.all([
+  const [cluster, findings, profiles, newer, notChecked, events, images, asks, alerts] = await Promise.all([
     ...["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events", "/v1/images"].map(getJSON),
-    getJSON("/v1/asks").catch(() => null)]);
+    getJSON("/v1/asks").catch(() => null), getJSON("/v1/alerts").catch(() => null)]);
   if (D && (D.cluster.content.checkedAt !== cluster.content.checkedAt || D.cluster.versions.readAt !== cluster.versions.readAt)) {
     S.diffs = {};
   }
   const answers = asks && Array.isArray(asks.asks) ? asks.asks : D ? D.asks : [];
-  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers};
+  const rules = alerts && Array.isArray(alerts.rules) ? alerts : D ? D.alerts : NO_ALERTS;
+  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers, alerts: rules};
   S.loadedAt = new Date().toISOString();
 }
 
@@ -334,12 +348,20 @@ function errorWords(err, own = {}) {
 const podsErrorWords = err => errorWords(err, POD_ERROR_TEXT);
 
 /* ---- The frame: nav, top bar, alert bars ---- */
+// alertsCount is the count of the nav item Alerts: the rules that fire, or "Not set" when the observer sends no alert.
+function alertsCount() {
+  const a = D.alerts;
+  if (!a.set) return h`<span class="cnt">Not set</span>`;
+  const firing = a.rules.filter(r => r.state === ALERT_STATE.FIRING).length;
+  return h`<span class="cnt ${firing ? "r" : ""}">${firing}</span>`;
+}
+
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
   const items = [["overview", "Overview", ""], ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
     ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
     ["images", "Images", h`<span class="cnt">${imageNum(D.images.counts.images)}</span>`],
-    ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`]];
+    ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`], ["alerts", "Alerts", alertsCount()]];
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
 
@@ -1067,6 +1089,39 @@ function viewPack(subject, layer, name) {
     <div class="meta"><div><span>Registry</span>${p.registry}</div><div><span>Kind</span>${p.kind}</div><div><span>Upstream</span><span class="m">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${main}`};
 }
 
+/* ---- The alerts ----
+   The page only reads the rules. A file in Git holds them, and no route of the observer writes. */
+const ALERTS_OFF_WORDS = h`<div>The observer sends no alert. The send is opt-in.</div>
+  <div class="mt6">A message goes to a webhook that your team names. It holds no value of a record or of the cluster.</div>
+  <div class="mt6">The page "The observer" in the book says how to turn it on.</div>`;
+
+// digestWords says when a digest goes. The API gives the period in hours.
+const digestWords = every => every === WEEK ? "Weekly digest" : `Digest every ${every}`;
+
+// ruleSend says when a rule sends. A mute says until when it holds, or that it ended.
+function ruleSend(r) {
+  if (r.muteUntil) return r.state === ALERT_STATE.MUTED ? `Muted until ${r.muteUntil}` : `Mute ended ${r.muteUntil}`;
+  return r.send === ALERT_SEND.DIGEST ? digestWords(D.alerts.digestEvery) : "At once";
+}
+
+// ruleTarget names what a rule applies to: the cluster, a profile, or a pack.
+const ruleTarget = r => r.level === "cluster" ? D.cluster.cluster.name || D.cluster.cluster.uid : r.match;
+
+const ruleRow = r => h`<tr><td>${badgeOf(ALERT_BADGE, r.state)}</td><td>${ALERT_LEVEL[r.level] || r.level}</td><td class="m">${ruleTarget(r)}</td><td>${ALERT_NEWS[r.news] || r.news}</td><td>${ruleSend(r)}</td><td class="m">${r.to || DASH}</td></tr>`;
+
+function alertsBody() {
+  const a = D.alerts;
+  if (!a.set) return h`<section class="card"><div class="chead"><h2>Alert rules <span class="sub">Not set</span></h2></div><div class="body">${ALERTS_OFF_WORDS}</div></section>`;
+  const waiting = a.waiting ? h`<div class="alertbar a">${a.waiting} ${plural(a.waiting, "message waits", "messages wait")} for a retry. <span>The log names the channel and the status. It never holds the address.</span></div>` : "";
+  return h`${waiting}<section class="card"><div class="chead"><h2>Alert rules <span class="sub">${a.rules.length}</span></h2></div>
+    <div class="tw"><table><thead><tr><th>State</th><th>Level</th><th>Applies to</th><th>News</th><th>Send</th><th>Where</th></tr></thead><tbody>${a.rules.map(ruleRow)}</tbody></table></div></section>
+    <section class="card"><div class="chead"><h2>Sample message</h2></div><div class="pre mt0">${a.sample}</div></section>`;
+}
+
+function viewAlerts() {
+  return {nav: "alerts", crumbs: crumbs("Alerts"), body: h`${alertBars()}<div class="alertbar b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>${alertsBody()}`};
+}
+
 /* ---- Routes, rendering, events ---- */
 function route() {
   const hash = (location.hash || "#overview").slice(1);
@@ -1075,6 +1130,7 @@ function route() {
     if (hash === "profiles") return viewProfiles();
     if (hash === "newer") return viewNewer();
     if (hash === "notchecked") return viewNotChecked();
+    if (hash === "alerts") return viewAlerts();
     if (hash === "images") return viewImages();
     if (hash.startsWith("i-")) return viewImage(decodeURIComponent(hash.slice(2)));
     if (hash.startsWith("p-")) return viewProfile(decodeURIComponent(hash.slice(2)));
