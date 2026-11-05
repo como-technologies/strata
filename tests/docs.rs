@@ -2509,10 +2509,10 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647 wait for the next live window, so they are not in this test
+        // the rows of #647 and #648 wait for the next live window, so they are not in this test
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
-            .filter(|line| !line.contains("#647"))
+            .filter(|line| !line.contains("#647") && !line.contains("#648"))
             .collect::<Vec<_>>()
             .join("\n")
             .to_lowercase();
@@ -2649,8 +2649,8 @@ fn the_pages_for_a_reader_name_no_person_and_no_plan_of_the_project() {
     }
 }
 
-/// The book names Palette as the owner of the event that the alerts stand in for, and it states the
-/// condition that removes them: a component of Palette for a published version that changed.
+/// The book names Palette as the owner of the event that the alerts stand in for. It states the
+/// condition that removes the alerts: a component of Palette for a published version that changed.
 #[test]
 fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_removes_the_alerts() {
     let gaps = one_line(&read(&docs().join("internals/palette/profiles.md")));
@@ -2682,8 +2682,7 @@ fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_remov
 }
 
 /// The step of the records shows the names of the files and no byte of them. The first bytes of a
-/// compressed record change with any byte of a record and with the compressor, and a run of the
-/// check of the book failed once on them.
+/// compressed record change with the compressor. A run of the check of the book failed on them once.
 #[test]
 fn the_step_of_the_records_shows_the_names_of_the_files_and_no_byte_of_a_record() {
     let shown = read(&docs().join("output/observer-records.txt"));

@@ -8307,8 +8307,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
             assert!(report.contains(&line), "{check}: {line}\n{report}");
         }
     }
-    // stage 8: the receiver, the Secret of the addresses, the overlay with the component, the edit in
-    // place and its undo, and the end of the receiver
+    // stage 8: the receiver, the Secret, the overlay with the component, the edit and its undo, and the end
     let address = "http://alert-receiver.default.svc.cluster.local:443/cgi-bin/hook";
     for call in [
         "-n default create configmap alert-receiver --from-file=hook=hook.cgi".to_string(),

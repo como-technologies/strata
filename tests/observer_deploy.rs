@@ -978,7 +978,7 @@ fn the_recipe_observer_manifests_pods_passes_for_six_objects_and_the_flag_and_fa
 
 // ---- the component deploy/observer/alerts ------------------------------------------------------------
 
-/// The ConfigMap with the file of the rules, and the Secret with the address of each webhook. The
+/// The `ConfigMap` with the file of the rules, and the Secret with the address of each webhook. The
 /// volumes of the component name them, and a team makes the Secret.
 const ALERT_RULES_MAP: &str = "strata-observer-alerts";
 const ALERT_CHANNELS_SECRET: &str = "strata-observer-alert-channels";
@@ -1008,7 +1008,7 @@ fn the_base_has_no_alerts_flag_and_no_volume_for_the_rules() {
 }
 
 /// The component adds the flag and two read-only volumes, and no object. The flag is a flag of the
-/// observer, and its value is the mount of the ConfigMap and the key of the file. The component
+/// observer, and its value is the mount of the `ConfigMap` and the key of the file. The component
 /// leaves the network policy as it is: the base lets the observer connect to port 443, and the
 /// observer sends to an https address only.
 #[test]
@@ -1079,8 +1079,8 @@ fn the_alerts_component_adds_the_flag_and_two_read_only_volumes_and_no_object() 
     assert_eq!(with_alerts["automountServiceAccountToken"], false);
 }
 
-/// The example of a team lists the base and the component, and makes the ConfigMap from the file of the
-/// rules. The flag reads the file at the mount of the ConfigMap, and each channel of the file reads its
+/// The example of a team lists the base and the component, and makes the `ConfigMap` from the file of the
+/// rules. The flag reads the file at the mount of the `ConfigMap`, and each channel of the file reads its
 /// address at the mount of the Secret, from the key with the name of the channel.
 #[test]
 fn the_example_of_the_alerts_makes_the_config_map_of_the_file_that_the_flag_reads() {
@@ -1118,7 +1118,7 @@ fn the_example_of_the_alerts_makes_the_config_map_of_the_file_that_the_flag_read
 }
 
 /// A stand-in `kubectl` for `kubectl kustomize examples/observer-alerts`. It prints the four files of
-/// the base, the ConfigMap that the example makes, and the line that the patch of the component adds,
+/// the base, the `ConfigMap` that the example makes, and the line that the patch of the component adds,
 /// unless `FAKE_NO_FLAG` is set. `FAKE_EXTRA` adds one object.
 const FAKE_KUBECTL_KUSTOMIZE_ALERTS: &str = r#"#!/usr/bin/env bash
 [ "$1 $2" = "kustomize examples/observer-alerts" ] || exit 2

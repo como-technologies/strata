@@ -237,7 +237,7 @@ ASD-STE100.
 ## The Go of the observer
 
 The observer is the Go program in `observer/`. It runs the `strata` binary and
-shows the answers. It holds no rule of strata. With `--read-pods`, it also lists
+shows the answers, and it holds no rule of strata. With `--read-pods`, it also lists
 the pods of its cluster. With `--alerts`, it sends a message to a webhook. On a
 click, it asks Palette about one move, through `strata`. The rules above are for
 the Rust code, and these rules are for the Go code.
@@ -278,10 +278,9 @@ the Rust code, and these rules are for the Go code.
 - A log line holds a verdict, an exit code, a duration, an error kind, and a
   status. One more line names a profile and the status of its `verify.whoError`:
   `HTTP <status>`, or `no answer`. The line for a click holds a verdict and a
-  status, and it names no profile and no pack. A line for an alert holds the name
-  of the channel, a verdict, an error kind, and a status. It holds no address and
-  no text of a message. A log line holds no output of a process. The rule has no
-  exception.
+  status, and it names no profile and no pack. The line for an alert holds the name
+  of the channel, a verdict, an error kind, and a status, and no address and no
+  text. A log line holds no output of a process. The rule has no exception.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test
@@ -293,8 +292,9 @@ the Rust code, and these rules are for the Go code.
   plants a marker in a changed value, in a changed path, and in a variable. It
   fails when the marker is in the summary, the state, or the log. Other tests plant
   a marker in the text of a diff and in a refusal of Palette, and look in the same
-  places. The state of the alerts holds the open subjects and the messages that did
-  not go. They hold names, times, and fixed words only.
+  places.
+- The state of the alerts holds the open subjects and the messages that did not go.
+  They hold names, times, and fixed words only.
 - A cycle makes its directory under `--work` and removes it at the end, also
   after an error. A test makes sure that `--work` is empty after a good cycle
   and after a failed cycle.
@@ -317,17 +317,19 @@ the Rust code, and these rules are for the Go code.
   reads the summary tier only. `alert.SubjectsOf` is the one function that takes a
   type of `internal/model`, and the package imports no other package of the
   observer. So a message holds a profile, its packs, a fixed sentence, and a time,
-  and no value. A test makes sure of the imports, and another test plants a marker
-  in a changed value, in a changed path, in a variable, and in the audit log. It
-  fails when the marker is in a message, the state, the log, or a route.
+  and no value. A test makes sure of the imports.
+- A test plants a marker in a changed value, in a changed path, in a variable, and
+  in the audit log. It fails when the marker is in a message, the state, the log,
+  or a route.
 - The rules of the alerts are a file, and no route of the observer writes it. A
   file that does not parse stops the start, with its line. A mute needs an end
-  date, and `newer` with `send: now` is refused, because a newer version never
-  pages a person. A lower level overrides a higher one. The address of a webhook is
-  in a file that the observer reads again at each send. It must use `https`, it
-  follows no redirect, and `--alerts-allow-http` is for the tests only. A failed
-  send keeps the message in the state, and the next content cycle sends it again.
-  A cycle that failed or could not read a part clears no alert.
+  date. The rule `newer` with `send: now` is refused, because a newer version never
+  pages a person. A lower level overrides a higher one.
+- The address of a webhook is in a file that the observer reads again at each
+  send. It must use `https`, and the observer follows no redirect. The flag
+  `--alerts-allow-http` is for the tests only. A failed send keeps the message in
+  the state, and the next content cycle sends it again. A cycle that failed or
+  could not read a part clears no alert.
 - The click is the one question that the observer asks Palette. `internal/check`
   runs `behind` with `--pin` for one pack, and only when `internal/api` calls it for a
   click. Nothing calls it on a timer. The answer stays in memory. A request that

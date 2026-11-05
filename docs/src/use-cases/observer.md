@@ -10,7 +10,7 @@ the edited content. See [A published version is edited in place](./edited-in-pla
 The observer runs in the cluster and checks every 15 minutes. It also keeps a page
 that answers three more questions: who made the edit, whether this cluster took it,
 and which pins have newer versions. It does this with the `strata` commands that
-the other pages show. It adds no rule. The page shows the text of each diff, and a
+the other pages show, and it adds no rule. The page shows the text of each diff, and a
 button asks Palette about a move in step 5. An optional read of the pods adds a
 fourth question in step 6: which digest each tag runs. An optional alert in step 7
 sends a message to a webhook when a finding opens.

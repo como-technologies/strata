@@ -524,8 +524,8 @@ says what Palette offers. The observer sends nothing about health.
 
 ### What a message holds
 
-A message holds the name of the cluster, the kind of news, the profile, its packs, one
-fixed sentence, and the time of the first sight. It holds no value, no path, and no
+A message holds the cluster, the kind of news, the profile, its packs, one fixed
+sentence, and the time of the first sight. It holds no value, no path, and no
 name of a person. The observer builds it from the summary tier of the page. The
 Alerts screen shows a sample.
 
@@ -559,16 +559,16 @@ the observer writes a rule. A mute is a line of the file, so Git shows who muted
 | `lost` | The page state `lost`: the observer cannot reach Palette. It is a rule of the level `cluster`. |
 | `newer` | A newer version of a pack in a profile. Each profile that pins the pack makes one item. |
 
-- **A lower level overrides a higher one.** For one item, the rule of the level `pack`
-  wins over the rule of the level `profile`, and that rule wins over the level
-  `cluster`. If two rules of one level cover the item, the first one in the file wins.
+- **A lower level overrides a higher one.** The level `pack` wins over `profile`, and
+  `profile` wins over `cluster`. If two rules of one level cover the item, the first one
+  in the file wins.
 - **A mute always has an end date.** A mute with no end date stops the start. A mute
   holds through the day of its end date. After that day, it counts as no mute, and
   the rule of the next level decides.
 - **A newer version never pages a person.** The rule `newer` with `send: now` stops the
   start. Use `digest`.
-- **A file that does not parse stops the start of `serve`, with the line of the
-  fault.** Two rules with the same level, match, and news also stop the start.
+- **A file that does not parse stops the start of `serve`.** The error names the line
+  of the fault. Two rules with the same level, match, and news also stop the start.
   `once` reads the file the same way, and it sends nothing. It is a check of the file:
 
 ```text
@@ -588,7 +588,7 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
 
 - **One message goes when a finding opens, and one when it clears.** A clear needs a
   check that proves it. A failed read clears nothing, so a finding that the observer
-  could not check again stays open. A mute holds back the clear of a message that went.
+  could not check again stays open. A mute stops the clear of a message that went.
 - **A failed send keeps the message.** The state holds it, and the next content cycle
   sends it again. When the send works, the message goes once. The log names the
   channel, the error kind, and the status, and never the address or the text. The
@@ -606,9 +606,9 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
 - **A dead observer sends nothing.** The message comes from the pod. Alert on the
   Deployment with the monitoring of your team. The observer sends no heartbeat, and it
   never reads the health of a workload.
-- **A new pod sends the open findings again, once.** The directory `state` is an
-  `emptyDir`, so a new pod does not know what the old pod sent. One message too many
-  is better than one too few.
+- **A new pod sends the open findings again, once.** The volume `state` is an
+  `emptyDir`, so the new pod knows nothing of the old pod. One message too many is
+  better than one too few.
 
 ### Turn them on
 
@@ -700,8 +700,7 @@ and it never reads "No change" for a pack that it did not check.
    reads the cluster and the profile version of each record, and the audit log for a
    record that drifted. A versions cycle reads the registries and the packs that the
    records pin. A click sends one `POST`: see [Ask Palette about a move](#ask-palette-about-a-move).
-   With `--alerts`, the observer also sends one `POST` to your webhook for each
-   message. It sends no other `POST`.
+   With `--alerts`, each message is one `POST` to your webhook: see [Alerts](#alerts).
    [The requests of a cycle](#the-requests-of-a-cycle) gives the counts.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
    a pack, and the text of its diff. A secret typed into a value that the schema does
