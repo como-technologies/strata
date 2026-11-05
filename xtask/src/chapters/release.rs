@@ -476,6 +476,13 @@ fn manifest_pack_versions(r: &mut Runner) {
         "manifest-full",
         r"^([$]|--- |[+][+][+] |[-+] +pod-security)",
     );
+    // the JSON document holds the same text in `unified` of the manifest
+    r.step(
+        "manifest-full-json",
+        1,
+        false,
+        "strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full --json | jq -c '.packs[] | select(.manifests) | .manifests[] | {op, name, unified}'",
+    );
 }
 
 /// The part of the chapter `manifest-pack` for a manifest pack in a candidate file.

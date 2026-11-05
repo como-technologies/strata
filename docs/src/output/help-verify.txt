@@ -12,6 +12,7 @@ Options:
       --summary                      One line for each record and a summary, also for one file
       --who                          For a record that drifted, read who changed it, and when, from the audit log of Palette
       --allow-no-digest              Accept a pack with no upstream digest: exit 0 and not 1, and still name it
+      --full                         Also give the unified diffs of the values and of each manifest of a drifted record
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
       --json                         The same as --format json
       --color [<COLOR>]              Color the report: auto, always, or never [default: auto]

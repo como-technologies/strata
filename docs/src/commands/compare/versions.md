@@ -39,6 +39,26 @@ The text report cuts a long value. `--full` and the JSON document keep each full
 value. [Report formats](../../reference/formats.md#the-terminal-report) gives the
 length at which the report cuts.
 
+With `--json`, `--full` puts the same text in the field `unified`. It is one
+string. Without `--full`, the document has no `unified`. A pack with changed
+values has `values.unified`. This filter cuts the string to its first four lines:
+
+```text
+{{#include ../../output/compare-full-json.txt}}
+```
+
+Each entry of `manifests[]` has `unified` too. This output shows a whole
+string. The manifest is the one of
+[One manifest in two profiles](../../use-cases/manifest-pack.md):
+
+```text
+{{#include ../../output/manifest-full-json.txt}}
+```
+
+An added manifest or a removed manifest has its text against an empty side.
+[The field unified](../../reference/documents.md#the-field-unified) says what
+else the text holds.
+
 ## The images and the charts of a pack
 
 The values of a pack declare the images that it pulls, `pack.content.images`,

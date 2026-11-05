@@ -25,3 +25,7 @@ collapsible block for each changed pack:
 ```text
 {{#include ../../output/compare-json.txt}}
 ```
+
+`--full` adds the field `unified`, the text of the unified diff, to the values
+and to each manifest of a changed pack: see
+[See the full diff](versions.md#see-the-full-diff).

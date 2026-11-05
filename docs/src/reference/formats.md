@@ -111,6 +111,8 @@ status in the word of the verdict: `OK`, `UNVERIFIED`, or `DRIFT`.
 ## The JSON document
 
 The JSON is never colored and never cut. `--compact` writes it on one line.
+With `--full`, a changed pack also has the unified diffs in the field `unified`:
+see [The field unified](./documents.md#the-field-unified).
 [JSON documents](./documents.md) describes each document.
 
 ## The one-line reports

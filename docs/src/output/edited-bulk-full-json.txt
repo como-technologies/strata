@@ -1,0 +1,3 @@
+$ strata verify 'releases/**/*.json' 'runs/*.json' --full --json | jq -c '.records[] | {path, status, unifiedFor: [.diff.packs[]? | select(.values.unified) | .name]}'
+{"path":"releases/1.1.1/dev.json","status":"drifted","unifiedFor":["csi-aws-ebs"]}
+{"path":"runs/payments.json","status":"unchanged","unifiedFor":[]}

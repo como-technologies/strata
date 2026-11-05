@@ -1,0 +1,9 @@
+$ strata verify releases/1.1.1/dev.json --full
+...
+--- a: csi/csi-aws-ebs values
++++ b: csi/csi-aws-ebs values
+...
+-        reclaimPolicy: Delete
++        reclaimPolicy: Retain
+...
+DRIFT: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z; Palette last changed it 2026-09-18T14:02:11.482Z

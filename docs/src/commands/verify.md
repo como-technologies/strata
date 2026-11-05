@@ -26,6 +26,29 @@ content. [What Palette does](../internals/palette/profiles.md#edits-in-place) na
 can change it. See
 [A published version is edited in place](../use-cases/edited-in-place.md).
 
+## The diff of a drift
+
+`--full` adds the unified diff of the values and of each changed manifest, as
+`compare --full` does. The drift above changed one value. The excerpt keeps the
+lines that `--full` adds:
+
+```text
+{{#include ../output/edited-verify-full.txt}}
+```
+
+The verdict stays the last line. A record that did not drift has no diff to add.
+
+With `--json`, `--full` adds the field `unified` to each changed pack: see
+[See the full diff](compare/versions.md#see-the-full-diff). With many records, or
+with `--summary`, `--full` changes the JSON alone. The row of a record that
+drifted holds `unified` in its `diff`. This filter lists the packs that have it:
+
+```text
+{{#include ../output/edited-bulk-full-json.txt}}
+```
+
+The terminal summary and the markdown table do not change.
+
 ## A record of a draft
 
 `verify` of a record of `<ref>@draft` compares the draft with the published

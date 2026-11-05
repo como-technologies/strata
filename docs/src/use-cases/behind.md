@@ -112,6 +112,8 @@ not a pre-release. The pins of `aws-stack@1.1.1` are current:
   issue open for each pack that is behind.
 - Read the bump before you move a pin: `repave` needs a window, and `in-place`
   does not.
+- To report one pack, give its key to `--pin`, such as `--pin k8s/kubernetes`.
+  [One pack](../commands/behind.md#one-pack) shows the report.
 - When Palette refuses a move, pick a closer version in `newer`. `behind` asks
   about the newest version only. A candidate gets no answer about the move.
   Palette checks the limit of a move against the clusters that run a version.

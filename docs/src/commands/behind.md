@@ -60,7 +60,36 @@ under a pin name each record that pins it.
 `--no-impact` skips the comparison of each bump and the question to Palette. The
 comparison costs two pack reads for each pin that is behind.
 `--pre-release` names a pre-release as a newer version of a pin that is not a
-pre-release.
+pre-release. `--pin` reports one pack: see [One pack](#one-pack).
+
+## One pack
+
+`--pin <layer>/<name>` reports the pins of one pack. The key is the layer and the
+name, such as `k8s/kubernetes`. Strata reads the records first. It reads that pack
+and no other pack. For each pin that is behind, it compares the move and asks
+Palette about it. The summary counts the pins of the pack alone:
+
+```text
+{{#include ../output/behind-pin.txt}}
+```
+
+Exit `1`: a pin is behind. The records pin two versions of the pack, and one is
+behind. The lines under a pin are as in the report for all packs.
+
+A key that no record pins from a registry is a `usage` error. Strata checks the
+key after it reads the records and before it connects to Palette. So the error
+needs no key:
+
+```text
+{{#include ../output/behind-pin-none.txt}}
+```
+
+Exit `2`. A pack with no registry, such as a manifest pack, has no pins, so it
+gives the same error.
+
+`--pin` and `--no-impact` cannot go together. `--pin` compares the move and asks
+Palette about it, and `--no-impact` skips both. Strata refuses the pair with exit
+`2`, and it sends no request.
 
 ## A pre-release
 
@@ -277,7 +306,8 @@ A scheduled job that keeps one issue open for each pack that is behind is
   listing of the registries one time.
 - Strata reads each pack of each registry one time, in the project of the
   first record that pins it. It reads the paged listing of the versions, and the
-  tags of the pack in the registry.
+  tags of the pack in the registry. With `--pin`, it reads the one pack of the
+  key.
 - For each registry with a pin that is current, strata also reads the sync of
   the registry one time. It comes from the summary listing of its kind.
 - When strata cannot connect for a project, each pin of that project has the

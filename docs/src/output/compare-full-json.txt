@@ -1,0 +1,2 @@
+$ strata compare aws-stack@1.1.1 aws-stack@1.1.2 --full --json | jq -c '.packs[] | select(.values.unified) | {name, unified: (.values.unified | split("\n")[:4])}'
+{"name":"csi-aws-ebs","unified":["--- a: csi/csi-aws-ebs values","+++ b: csi/csi-aws-ebs values","@@ -28,7 +28,7 @@","           # defaults to WaitForFirstConsumer"]}

@@ -79,7 +79,7 @@ The markdown report writes the same line as a quotation.
 
 | Option | What it does | Page |
 | --- | --- | --- |
-| `--full` | Adds a unified diff of the raw values and of each changed manifest. | [See the full diff](compare/versions.md#see-the-full-diff) |
+| `--full` | Adds a unified diff of the raw values and of each changed manifest. With `--json`, it adds the field `unified` to the document. | [See the full diff](compare/versions.md#see-the-full-diff) |
 | `--repave` | Asks Palette if the change repaves the cluster side. One side must be a cluster. | [Ask Palette if the change repaves](compare/repave.md) |
 | `--validate` | Asks Palette if it accepts the packs of the change on the cluster side. One side must be a cluster. | [Ask Palette if it accepts the packs](compare/validate.md) |
 | `--format`, `--json`, `--compact`, `--color`, `--no-color`, `-q` (`--quiet`) | The output options that each report command takes. | [Output formats](./index.md#output-formats) |
