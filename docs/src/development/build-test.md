@@ -189,6 +189,10 @@ A script in `scripts/ci/` is a product: a page under Automation documents it, an
 `tests/ci_scripts.rs` tests it. A script beside a crate or an example is a
 harness for that one thing, and a `just` recipe runs it.
 
+`sign-blobs.sh` in `scripts/ci/` is the exception. The release workflow runs it
+from the checkout of the tag, and no release carries it. `tests/ci_scripts.rs`
+tests it with a stand-in `cosign`.
+
 Each reusable workflow in `.github/workflows/` and each job of
 `examples/ci/gitlab/strata.yml` wraps one script or one command. When that
 script or command gets a new option, `tests/ci_scripts.rs` fails until the

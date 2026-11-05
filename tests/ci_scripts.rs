@@ -5623,3 +5623,202 @@ fn observer_records_sh_leaves_no_file_of_its_work_in_the_temporary_directory() {
         assert_eq!(std::fs::read_dir(&tmp).unwrap().count(), 0);
     }
 }
+
+// ---- sign-blobs.sh ---------------------------------------------------------------------------------
+//
+// The release workflow signs each file with this script, and no release carries it. A stand-in
+// `cosign` fails the first `FAKE_FAILS` tries for each file with the answer of the transparency log
+// that stopped v0.30.0. It logs each try, and each bundle that an earlier try left. A stand-in
+// `sleep` logs the pause and returns at once, so a test runs the real 5 tries and 30 seconds.
+
+const FAKE_SIGNING_COSIGN: &str = r#"#!/usr/bin/env bash
+[ "$1 $2 $4" = "sign-blob --yes --bundle" ] || { echo "cosign: unexpected arguments: $*" >&2; exit 64; }
+file=$3
+bundle=$5
+[ ! -e "$bundle" ] || echo "left behind $bundle" >> "$FAKE_LOG"
+echo "sign $file" >> "$FAKE_LOG"
+if [ "$(grep -c "^sign $file\$" "$FAKE_LOG")" -le "${FAKE_FAILS:-0}" ]; then
+  printf partial > "$bundle"
+  echo "Error: signing $file: signing bundle: error signing bundle: [POST /api/v1/log/entries][409] createLogEntryConflict" >&2
+  exit 1
+fi
+printf 'bundle of %s' "$file" > "$bundle"
+"#;
+
+const FAKE_SLEEP: &str = "#!/usr/bin/env bash\necho \"sleep $*\" >> \"$FAKE_LOG\"\n";
+
+/// A run of `sign-blobs.sh` in a directory that holds the files `a.bin` and `b.bin`.
+struct Signing {
+    dir: tempfile::TempDir,
+}
+
+impl Signing {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        fake_bin(
+            dir.path(),
+            &[("cosign", FAKE_SIGNING_COSIGN), ("sleep", FAKE_SLEEP)],
+        );
+        for name in ["a.bin", "b.bin"] {
+            std::fs::write(dir.path().join(name), name).unwrap();
+        }
+        Self { dir }
+    }
+
+    /// Run the script with `args`. The first `fails` tries of each file fail.
+    fn run(&self, args: &[&str], fails: u32, envs: &[(&str, &str)]) -> Output {
+        let d = self.dir.path();
+        let mut c = Command::new("bash");
+        c.arg(script("ci/sign-blobs.sh"))
+            .args(args)
+            .current_dir(d)
+            .env("PATH", path_with(&d.join("bin")))
+            .env("FAKE_LOG", d.join("calls.log"))
+            .env("FAKE_FAILS", fails.to_string())
+            .env_remove("SIGN_TRIES")
+            .env_remove("SIGN_WAIT");
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        c.output_locked().unwrap()
+    }
+
+    /// The tries and the pauses of the run, in order.
+    fn calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("calls.log"))
+    }
+
+    fn bundle(&self, file: &str) -> Option<String> {
+        std::fs::read_to_string(self.dir.path().join(format!("{file}.sigstore.json"))).ok()
+    }
+}
+
+#[test]
+fn sign_blobs_signs_a_file_after_two_refusals_of_the_log_and_leaves_no_partial_bundle() {
+    let job = Signing::new();
+    let o = job.run(&["a.bin", "b.bin"], 2, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    for file in ["a.bin", "b.bin"] {
+        assert_eq!(
+            job.bundle(file).as_deref(),
+            Some(format!("bundle of {file}").as_str()),
+            "{file} has the bundle of the try that worked"
+        );
+    }
+    assert_eq!(
+        job.calls(),
+        [
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+            "sign b.bin",
+            "sleep 30",
+            "sign b.bin",
+            "sleep 30",
+            "sign b.bin",
+        ],
+        "three tries for each file, 30 seconds between two tries, and no bundle left behind"
+    );
+    assert!(
+        text(&o.stdout).contains("sign-blobs: a.bin, try 3 of 5"),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(
+        text(&o.stderr).contains("[POST /api/v1/log/entries][409]"),
+        "the error of each failed try is in the log of the job:\n{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn sign_blobs_signs_a_file_at_the_first_try_with_no_pause() {
+    let job = Signing::new();
+    let o = job.run(&["a.bin", "b.bin"], 0, &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(job.calls(), ["sign a.bin", "sign b.bin"]);
+    assert_eq!(job.bundle("b.bin").as_deref(), Some("bundle of b.bin"));
+}
+
+#[test]
+fn sign_blobs_stops_with_an_error_after_five_tries_and_does_not_sign_the_next_file() {
+    let job = Signing::new();
+    let o = job.run(&["a.bin", "b.bin"], 99, &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        job.calls(),
+        [
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+            "sleep 30",
+            "sign a.bin",
+        ],
+        "five tries of the first file, four pauses, and no try of the second file"
+    );
+    let stderr = text(&o.stderr);
+    assert!(
+        stderr.contains("[POST /api/v1/log/entries][409]"),
+        "the last error of cosign is printed:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("sign-blobs: cosign did not sign a.bin in 5 tries"),
+        "{stderr}"
+    );
+    assert_eq!(job.bundle("a.bin"), None, "no partial bundle stays");
+    assert_eq!(job.bundle("b.bin"), None);
+}
+
+#[test]
+fn sign_blobs_takes_the_number_of_tries_and_the_pause_from_the_environment() {
+    let job = Signing::new();
+    let o = job.run(&["a.bin"], 99, &[("SIGN_TRIES", "2"), ("SIGN_WAIT", "7")]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(job.calls(), ["sign a.bin", "sleep 7", "sign a.bin"]);
+}
+
+#[test]
+fn sign_blobs_exits_2_for_no_file_an_unknown_option_and_a_value_that_is_no_number() {
+    let job = Signing::new();
+    for (args, envs, message) in [
+        (vec![], vec![], "no file to sign"),
+        (vec!["--now"], vec![], "unknown option --now"),
+        (
+            vec!["a.bin"],
+            vec![("SIGN_TRIES", "0")],
+            "SIGN_TRIES must be a number above 0",
+        ),
+        (
+            vec!["a.bin"],
+            vec![("SIGN_WAIT", "soon")],
+            "SIGN_WAIT must be a number of seconds",
+        ),
+    ] {
+        let o = job.run(&args, 0, &envs);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {}", text(&o.stderr));
+        assert!(text(&o.stderr).contains(message), "{}", text(&o.stderr));
+    }
+    assert!(
+        !job.dir.path().join("calls.log").exists(),
+        "cosign did not run"
+    );
+}
+
+#[test]
+fn sign_blobs_prints_its_header_as_its_help() {
+    let o = Command::new("bash")
+        .arg(script("ci/sign-blobs.sh"))
+        .arg("--help")
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let help = text(&o.stdout);
+    assert!(help.contains("sign-blobs.sh FILE..."), "{help}");
+    assert!(help.contains("up to 5 times"), "{help}");
+}

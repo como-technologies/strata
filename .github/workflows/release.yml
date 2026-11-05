@@ -92,9 +92,8 @@ jobs:
             ../scripts/ci/observer-records.sh ../scripts/ci/install-strata.sh .
           sha256sum strata-* ./*.sh > SHA256SUMS
           files=(strata-* *.sh SHA256SUMS)
-          for f in "${files[@]}"; do
-            cosign sign-blob --yes "$f" --bundle "$f.sigstore.json"
-          done
+          # the log of Sigstore can refuse one try, as it did for v0.30.0: the script tries again
+          ../scripts/ci/sign-blobs.sh "${files[@]}"
           ls -la
       - name: verify what will be published
         working-directory: dist
