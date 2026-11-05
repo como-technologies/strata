@@ -382,18 +382,15 @@ alert_secret() {
   kc -n "$ns" create secret generic strata-observer-alert-channels \
     --from-literal=platform-oncall="$receiver_url" --from-literal=platform-planning="$receiver_url"
 }
-# alert_overlay: base/ is a copy of deploy/observer, alerts/ is a copy of the component, and
-# kustomization.yaml lists both as a team does, with the file of the example. The patch gives the pod a
-# short period and the flag that allows an http address.
+# alert_overlay: the overlay of lib.sh, with the image of this run, a short period, and the flag that allows an
+# http address. alerts/ is a copy of the component, and kustomization.yaml lists it as a team does, with a
+# ConfigMap from the file of the example. The pull Secret that the overlay names does not exist on kind, and the
+# image is in the nodes, so the pod does not pull.
 alert_overlay() {
-  mkdir -p base alerts && cp "$root"/deploy/observer/*.yaml base/ && cp "$root"/deploy/observer/alerts/*.yaml alerts/ \
-    && cp "$root/examples/observer-alerts/alerts.json" . || return 1
-  cat > kustomization.yaml << 'EOF'
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+  OBSERVER_IMAGE=$image observer_image && observer_overlay --content-every=1m --alerts-allow-http \
+    && mkdir -p alerts && cp "$root"/deploy/observer/alerts/*.yaml alerts/ && cp "$root/examples/observer-alerts/alerts.json" . \
+    && cat >> kustomization.yaml << 'YAML'
 namespace: strata-observer
-resources:
-  - base
 components:
   - alerts
 configMapGenerator:
@@ -402,22 +399,11 @@ configMapGenerator:
       - alerts.json
 generatorOptions:
   disableNameSuffixHash: true
-patches:
-  - target:
-      kind: Deployment
-      name: strata-observer
-    patch: |-
-      - op: add
-        path: /spec/template/spec/containers/0/args/-
-        value: --content-every=1m
-      - op: add
-        path: /spec/template/spec/containers/0/args/-
-        value: --alerts-allow-http
-EOF
+YAML
 }
-# alert_apply: render the overlay, make sure that the flag --alerts is in it, and apply it with the image of this run
+# alert_apply: render the overlay, make sure that the flag --alerts is in it, and apply it
 alert_apply() {
-  alert_overlay && kubectl kustomize . | sed "s#ghcr.io/como-technologies/strata-observer:VERSION#$image#" > observer.yaml \
+  alert_overlay && kubectl kustomize . > observer.yaml \
     && grep -q -e '- --alerts=/alerts/alerts.json' observer.yaml && kc apply --server-side -f observer.yaml \
     && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
 }

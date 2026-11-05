@@ -8324,8 +8324,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     }
     let rendered = std::fs::read_to_string(stage.path("out/observer.yaml")).unwrap();
     assert!(
-        rendered.contains("- --alerts=/alerts/alerts.json")
-            && rendered.contains("image: strata-observer:dev"),
+        rendered.contains("- --alerts=/alerts/alerts.json"),
         "{rendered}"
     );
     let overlay: serde_yaml::Value = serde_yaml::from_str(
@@ -8333,6 +8332,10 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     )
     .unwrap();
     assert_eq!(overlay["components"][0], "alerts");
+    assert_eq!(overlay["resources"][0], "base");
+    assert_eq!(overlay["namespace"], "strata-observer");
+    assert_eq!(overlay["images"][0]["newName"], "strata-observer");
+    assert_eq!(overlay["images"][0]["newTag"], "dev");
     let component: serde_yaml::Value = serde_yaml::from_str(
         &std::fs::read_to_string(stage.path("out/alerts/kustomization.yaml")).unwrap(),
     )

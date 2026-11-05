@@ -77,20 +77,27 @@ func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 }
 
 func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T) {
-	bad := filepath.Join(t.TempDir(), "alerts.json")
-	if err := os.WriteFile(bad, []byte("{\n\"rules\": [\n{\"level\": \"profile\", \"match\": \"barney-base\", \"news\": \"newer\"}\n]\n}"), 0o600); err != nil {
-		t.Fatal(err)
+	cases := []struct{ name, rule, want string }{
+		{"a mute with no end date", `{"level": "profile", "match": "barney-base", "news": "newer"}`, "end date"},
+		{"a newer version that pages a person", `{"level": "cluster", "news": "newer", "send": "now", "to": "oncall"}`, "never pages"},
 	}
-	for _, command := range []string{"once", "serve"} {
-		var out, errs bytes.Buffer
-		args := append(onceArgs(t, "strata"), "--alerts", bad)
-		args[0] = command
-		if code := run(args, &out, &errs); code != 2 || out.Len() != 0 {
-			t.Fatalf("%s: exit %d, stdout %q", command, code, out.String())
+	for _, c := range cases {
+		bad := filepath.Join(t.TempDir(), "alerts.json")
+		file := "{\n\"channels\": {\"oncall\": {\"urlFile\": \"f\"}},\n\"rules\": [\n" + c.rule + "\n]\n}"
+		if err := os.WriteFile(bad, []byte(file), 0o600); err != nil {
+			t.Fatal(err)
 		}
-		for _, want := range []string{"--alerts", "alerts.json", "line 3", "rule 1", "end date"} {
-			if !strings.Contains(errs.String(), want) {
-				t.Errorf("%s: stderr lacks %q: %s", command, want, errs.String())
+		for _, command := range []string{"once", "serve"} {
+			var out, errs bytes.Buffer
+			args := append(onceArgs(t, "strata"), "--alerts", bad)
+			args[0] = command
+			if code := run(args, &out, &errs); code != 2 || out.Len() != 0 {
+				t.Fatalf("%s, %s: exit %d, stdout %q", c.name, command, code, out.String())
+			}
+			for _, want := range []string{"--alerts", "alerts.json", "line 4", "rule 1", c.want} {
+				if !strings.Contains(errs.String(), want) {
+					t.Errorf("%s, %s: stderr lacks %q: %s", c.name, command, want, errs.String())
+				}
 			}
 		}
 	}
