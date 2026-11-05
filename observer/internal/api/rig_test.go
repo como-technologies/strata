@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -29,6 +31,8 @@ import (
 const (
 	sentinelValue    = "SENTINEL-VALUE"
 	sentinelVariable = "SENTINEL-VARIABLE"
+	// sentinelText stands for the text of a diff, in each unified field of testdata/.
+	sentinelText = "SENTINEL-TEXT"
 )
 
 // The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
@@ -36,6 +40,7 @@ const (
 	pathPublished = "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=published"
 	pathCluster   = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=cluster"
 	pathNewer     = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer"
+	pathAsk       = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/ask"
 )
 
 // fixtures copies testdata/ to a directory of the test. The times of the documents are relative to
@@ -66,7 +71,8 @@ func fixtures(t *testing.T) string {
 }
 
 // fakeStrata answers each command of a cycle from the fixtures, as the binary does. It counts the
-// compares of two packs, and it can fail them.
+// compares of two packs, and it can fail them. It keeps the arguments of each call. A `behind` with
+// --pin is the question of a click: it answers from askFixture, and it fails with askErr.
 type fakeStrata struct {
 	dir string
 
@@ -74,7 +80,17 @@ type fakeStrata struct {
 	moves      int
 	failMoves  bool
 	failBehind bool
+	calls      [][]string
+	askFixture string
+	askErr     error
 }
+
+// The fixtures that answer a question about one move.
+const (
+	askNoError = "ask-no-error.json"
+	askRefuses = "ask-refuses.json"
+	ask403     = "ask-403.json"
+)
 
 // answer prints a fixture and exits with the code exit.
 func (f *fakeStrata) answer(exit int, name string) (runner.Result, error) {
@@ -85,6 +101,7 @@ func (f *fakeStrata) answer(exit int, name string) (runner.Result, error) {
 func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.Result, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls = append(f.calls, args)
 	switch args[0] {
 	case runner.CmdVerify:
 		return f.answer(1, "verify.json")
@@ -108,12 +125,38 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		}
 		return f.answer(1, "move.json")
 	case runner.CmdBehind:
+		if slices.Contains(args, runner.FlagPin) {
+			if f.askErr != nil {
+				return runner.Result{}, f.askErr
+			}
+			return f.answer(1, cmp.Or(f.askFixture, askNoError))
+		}
 		if f.failBehind {
 			return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
 		}
 		return f.answer(1, "behind.json")
 	}
 	return runner.Result{}, fmt.Errorf("the fake does not know %q", args[0])
+}
+
+// questions gives the arguments of each question about a move that the fake got.
+func (f *fakeStrata) questions() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out [][]string
+	for _, c := range f.calls {
+		if c[0] == runner.CmdBehind && slices.Contains(c, runner.FlagPin) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// setAsk changes the answer to the next questions.
+func (f *fakeStrata) setAsk(fixture string, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.askFixture, f.askErr = fixture, err
 }
 
 func (f *fakeStrata) moveCompares() int {

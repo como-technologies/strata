@@ -22,6 +22,7 @@ var forwarded = []string{
 	"Leaf.Op", "Leaf.Old", "Leaf.New",
 	"Named.Op", "Named.Name",
 	"Change.Op", "Change.Name", "Change.Old", "Change.New",
+	"Refusal.Pack", "Refusal.Code", "Refusal.Message", "Refusal.Clusters",
 }
 
 // fieldAt names a field by the file, the line, and the column of its declaration. The package docs is
