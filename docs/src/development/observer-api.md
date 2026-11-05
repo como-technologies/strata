@@ -354,7 +354,7 @@ them:
 - No inline style and no inline script: no `style=`, no `<style>`, and no `<script>`
   with content. No event attribute in `index.html`, in an icon, or in a string of `app.js`.
 - One write of markup. `app.js` writes in one function, `put`, and every value
-  goes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
+  passes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
   that holds `<img src=x>` shows as text. `theme.js` writes no markup, and it sets
   only the attributes `data-theme` and `aria-pressed`.
 - No `max-width` on `.page`, `.main`, `.app`, or `body`. The content fills the window.
@@ -423,9 +423,9 @@ the page are those of the data.
 - The file `alerts.json` is the answer of `/v1/alerts`. A set can lack it: the page is then
   the page of an observer that started without `--alerts`. The set `alerts` names `ok`
   and holds seven rules, in the four states. A test gives the same rules to the real
-  engine, with the findings and the newer versions of `ok`, and makes sure that each
-  state is the one that the engine gives. The set `alerts-unset` names `ok` and holds
-  the answer of an observer with no alert.
+  engine, with the findings and the newer versions of `ok`. It checks that each state is
+  the one that the engine gives. The set `alerts-unset` names `ok` and holds the answer
+  of an observer with no alert.
 - Each tone of [the splash](#the-splash) has a set. The set `quiet` shows `calm`: it is
   the one set with a good check, with no finding, no cause, and no failed read. The set
   `first-load` shows `build`. The sets `no-records` and `images-off` show `off`. The sets
