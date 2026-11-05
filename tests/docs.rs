@@ -2542,7 +2542,7 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "Palette replaces no node when it applies the layer.",
         "With that role, the verdict and the finding stay, and `who` is empty.",
         "**A live run used both roles.**",
-        "the audit log answers HTTP 403 with the code `AccessDenied`",
+        "The audit log then answers HTTP 403 with the code `AccessDenied`.",
         "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
     ] {
         assert!(page.contains(needle), "observer.md lacks {needle:?}");
