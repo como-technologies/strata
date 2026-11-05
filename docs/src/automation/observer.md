@@ -469,6 +469,26 @@ it.
 The check `diff-text` of [What the live example verifies](../development/live-runs.md)
 tests the text of a diff on a cluster that Palette built.
 
+### A value of many lines
+
+A setting can be a file of many lines. The table of settings then shows only the lines
+that differ, on each side. Each line has its line number. A removed line is red, and an
+added line is green, as in the text below the table.
+
+- **A value of one line shows whole.** It reads as it did before.
+- **The changed part lies between the common start and the common end.** The table does
+  not match the lines in between. The text of the diff below the table is the full diff.
+- **A line with no color is equal.** The table colors no line that the other side holds
+  at the same place. This holds when both sides have the same number of lines.
+- **Context is 3 lines at most.** The table takes these lines from the common start and
+  the common end. It shows up to 2 above the changed part, and the rest below. A mark
+  `…` shows where the table omits lines.
+- **More than 40 lines that differ show as a count.** The row says `<n> lines differ`
+  and links to the text of the values. The row has no link when the observer holds no
+  text.
+- **A mask stays a mask.** A line shows the text of the record, so a secret shows the
+  mask `********`.
+
 ## Ask Palette about a move
 
 A newer version is not a fault, and the page keeps it neutral. Before a move, a team
