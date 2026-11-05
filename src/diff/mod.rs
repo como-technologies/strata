@@ -25,6 +25,7 @@ mod cluster;
 pub mod impact;
 pub(crate) mod leaf;
 pub(crate) mod pack;
+pub(crate) mod unified;
 mod variables;
 mod verify;
 

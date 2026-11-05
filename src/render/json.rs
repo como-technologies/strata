@@ -2,7 +2,7 @@
 
 use serde::Serialize;
 
-use super::{Renderer, unified};
+use super::Renderer;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
@@ -31,13 +31,13 @@ impl JsonRenderer {
 
 impl Renderer for JsonRenderer {
     /// With `full`, each changed pack carries the unified text of its values and of its manifest
-    /// changes: see [`unified::fill_unified`].
+    /// changes: see [`Diff::fill_unified`].
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
         if !full {
             return self.document(d);
         }
         let mut with_text = d.clone();
-        unified::fill_unified(&mut with_text, a, b);
+        with_text.fill_unified(a, b);
         self.document(&with_text)
     }
 

@@ -349,6 +349,9 @@ pub(crate) struct VerifyArgs {
     /// Accept a pack with no upstream digest: exit 0 and not 1, and still name it
     #[arg(long)]
     pub(crate) allow_no_digest: bool,
+    /// Also give the unified diffs of the values and of each manifest of a drifted record
+    #[arg(long)]
+    pub(crate) full: bool,
     #[command(flatten)]
     pub(crate) out: OutputArgs,
 }

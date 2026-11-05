@@ -243,3 +243,34 @@ fn the_unified_text_of_a_changed_value_keeps_the_placeholder_of_a_masked_value()
         "the mask stays: {text}"
     );
 }
+
+#[test]
+fn verify_of_many_records_with_full_gives_a_drifted_row_the_unified_text_and_without_it_none() {
+    let recorded = record();
+    let live = published_for("wilma");
+    let grafana = |s: &ops::VerifySummary| {
+        let diff = s.records[0].diff.as_ref().unwrap();
+        diff.packs
+            .iter()
+            .find(|p| p.name == "grafana")
+            .unwrap()
+            .clone()
+    };
+    let plain = common::verify_summary_with(&recorded, &live, &ops::VerifyOptions::default());
+    assert!(grafana(&plain).values.unified.is_none());
+
+    let full = common::verify_summary_with(
+        &recorded,
+        &live,
+        &ops::VerifyOptions {
+            full: true,
+            ..Default::default()
+        },
+    );
+    let text = grafana(&full).values.unified.unwrap();
+    assert!(
+        text.contains("-    adminUser: fred\n+    adminUser: wilma\n"),
+        "{text}"
+    );
+    assert!(text.contains("     adminPassword: '********'\n"), "{text}");
+}

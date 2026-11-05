@@ -53,6 +53,10 @@ pub struct VerifyOptions {
     /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
     /// report still names the pack.
     pub allow_no_digest: bool,
+    /// For `verify_many`: give the diff of each row the field `unified`, the text of `--full`: see
+    /// [`Diff::fill_unified`]. `verify_with` ignores it, and the renderer of one record takes its own
+    /// `full`.
+    pub full: bool,
 }
 
 /// Each pack that names another machine image now, when the root is the recorded root: the
@@ -695,7 +699,12 @@ where
         Err(e) => return VerifiedRecord::failed(path, Some(&recorded), e),
     };
     match verify_with(&recorded, palette, checked_at, options, progress) {
-        Ok(v) => VerifiedRecord::checked(path, &recorded, scope, v),
+        Ok(mut v) => {
+            if options.full {
+                v.diff.fill_unified(&recorded, &v.live);
+            }
+            VerifiedRecord::checked(path, &recorded, scope, v)
+        }
         Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
     }
 }
