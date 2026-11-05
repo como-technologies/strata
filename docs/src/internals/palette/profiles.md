@@ -480,7 +480,7 @@ Strata does not copy the rules that the validate route checks: see
 
 ### An event when a published version changes
 
-The rules above are rules of the create. The alerts of the observer fill a gap of
+The rules above are rules of the create. The alerts of the observer cover a gap of
 another kind: an event. Palette has alerts for a cluster. Their channels send a
 message to a webhook or to an email address, and their one component is
 `ClusterHealth`, the health of a cluster. Palette has no component for a published
@@ -488,9 +488,16 @@ version that changed, for a moved image, or for a newer version.
 
 So the observer sends such a message when you turn it on. See
 [Alerts](../../automation/observer.md#alerts). The observer sends nothing about
-health, because Palette owns that. The alerts of the observer are a stopgap, and
-Palette is the owner of the event. When Palette adds a component for a published
-version that changed, strata removes the news `drift` from the alerts.
+health, because Palette owns that. The alerts of the observer are a stopgap. Each kind
+of news has an owner and a condition that removes it:
+
+| News | Owner | What removes it |
+| --- | --- | --- |
+| `drift`, for `published-changed`, `overwritten`, `renamed`, and `gone` | Palette | Palette adds a component for a published version that changed. Strata then removes these four kinds from the news `drift`. |
+| `drift`, for `cluster-differs` and `image-id-changed` | Palette | Palette adds an event for a cluster that differs from its release. The event for a published version does not cover these two kinds, because they name the copy of a cluster. |
+| `image` | Palette | A route or an event of Palette gives the digest that a pod runs. Strata then removes the read of the pods and the news `image`. |
+| `newer` | Palette | Palette adds a component for a newer version of a pack. A newer version is a choice, so the rule `newer` sends a digest only. |
+| `lost` | The observer | Nothing removes it. Only the observer knows that its checks fail to reach Palette, and that state is no health of a cluster. |
 
 ## What the delete of a version checks
 

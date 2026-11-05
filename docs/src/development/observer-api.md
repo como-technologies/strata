@@ -81,9 +81,13 @@ and the program carries them. A person opens it through the port-forward of
 | `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
 | `LICENSES.md` | The version, the checksum, and the license of each font. |
 
-The page reads the seven summary routes at the start, and again each 30 seconds.
-It reads the detail route when a person opens a pack. The hash of the address
-names the screen:
+The page reads nine routes at the start, and again each 30 seconds: the eight
+summary routes `/v1/cluster`, `/v1/findings`, `/v1/profiles`, `/v1/newer`,
+`/v1/notchecked`, `/v1/events`, `/v1/images`, and `/v1/alerts`, and the route `/v1/asks`
+of the detail tier. A failed read of `/v1/alerts` or `/v1/asks` keeps the last answer, and it never puts
+the page offline.
+It reads the detail route of a pack when a person opens the pack. The hash of the
+address names the screen:
 
 | Hash | Screen |
 | --- | --- |
@@ -93,6 +97,7 @@ names the screen:
 | `#newer` | The newer versions, by profile. |
 | `#notchecked` | The causes of "Not checked", and what a check does not cover. |
 | `#images` | The images that the pods run, with the status of each. |
+| `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
 | `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
 | `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
@@ -167,6 +172,10 @@ rows change with the page:
 | Does this cluster still run the record? | `strata compare record.json cluster:<cluster>/<profile>` | The status of the copy. |
 | What does the move change? | `strata compare pack:<registry>/<pack>@<old> pack:<registry>/<pack>@<new> --full` | The impact. A pack with a newer version has this row. |
 | Which newer versions does Palette list? | `strata behind record.json --pin <layer>/<pack>` | The newest version. A pack with a newer version has this row. |
+
+The first row runs `kubectl` and reads Secrets. The reader role of the install gives no
+Secret, so a person with only that role cannot run it. Each other row runs `strata`, so it
+needs the binary and a key of Palette at the terminal.
 
 A name in a command comes from Palette, so it is text of a person. The page quotes it
 with one function, `shq()`. A name of safe characters stays as it is, so a normal
@@ -262,27 +271,35 @@ The rule of a state:
 - No cause is in "Not checked".
 
 On a page that fails the gate, no screen shows a calm tone. A place that a limit touches
-gets an amber mark, and any other place gets an outline.
+gets an amber mark, and any other place gets an outline. An open finding is no limit.
+A page with a finding and no other fault shows the outline `off` on a place with
+nothing to show, such as the side "Undisturbed" of a pack.
 
 These places have a splash:
 
 | Place | Tone | Size | Headline |
 | --- | --- | --- | --- |
+| The page waits for the first answers | `build` | `lg` | Asking the observer |
 | The first check runs | `build` | `lg` | Reading the layers |
 | No records | `off` | `lg` | Nothing to compare against yet |
 | Lost, and nothing was read | `lost` | `lg` | We lost the signal from Palette |
 | Checks stopped, and nothing was read | `warn` | `lg` | Checks stopped before one ended well |
 | The page cannot reach the observer | `lost` | `lg` | This page lost its line to the observer |
 | A route that does not exist | `off` | `lg` | This profile is not here, This pack is not here, or No pod runs this image |
-| No findings | `calm` or `warn` | `md` | All quiet on the cluster, or No finding |
-| No newer versions | `calm`, `warn`, or `build` | `md` | Nothing newer to dig up, No newer version is listed, or Reading the registries |
-| Nothing in "Not checked" | `calm` or `warn` | `md` | Every layer was read, or Every pack was checked in full |
+| No findings | `calm`, `warn`, or `off` | `md` | All quiet on `<cluster>`, or No finding |
+| The first read of the versions runs | `build` | `md` | Reading the registries |
+| No read of the versions ended well | `warn` | `md` | No version was read yet |
+| No newer versions | `calm`, `warn`, or `off` | `md` | Nothing newer to dig up, or No newer version is listed |
+| Nothing in "Not checked" | `calm`, `warn`, or `off` | `md` | Every layer was read, or Every pack was checked in full |
 | The pods are not read | `off` | `md` | Pods are not on the menu here |
+| The first read of the pods runs | `build` | `md` | Reading the pods |
+| The pods run no image | `off` | `md` | No image to list |
 | The read of the pods failed | `warn` | `md` | The pods stay silent |
 | Alerts are not set | `off` | `md` | Nobody gets paged yet |
 | A side with no change | `calm` or `off` | `md` | Undisturbed |
 | A pack that was not checked | `warn` | `md` | Part of this layer is hidden |
 | A side that was not read | `warn` | `md` | This side was not read |
+| The observer holds no changes for a side | `off` | `sm` | No changes held |
 | A diff that a cycle holds | `build` | `sm` | One moment, a check is running |
 | A diff that failed | `warn` | `sm` | The observer could not read these changes |
 | A text above the cap | `off` | `sm` | Too much rock to carry |
@@ -314,8 +331,9 @@ page changes.
   next render that a person or the clock causes asks again. A render that an
   answer causes does not, so two requests that fail do not ask each other again
   without end.
-- An answer of Palette has the words of its verdict: "Palette gave no error",
-  `Palette refuses: <code>`, and "Palette gave no answer". The page never reads
+- An answer of Palette has the words of its verdict. The card "Move to" says
+  "Palette gave no error", `Palette refuses: <code>`, or "Palette gave no answer". The
+  column "Palette" says "No error", "Refuses", or "No answer". The page never reads
   "accepts", because Palette checks the default values of the new version and not
   the values of the team. A "Palette gave no answer" is no finding, and it raises
   no severity.

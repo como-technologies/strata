@@ -197,6 +197,9 @@ the review of the team.
 
 - Do not repair the edited version in place: that is a second edit. Publish a
   new version with the change through review, and move the clusters to it.
+- A version that goes back to its record clears the finding. `verify` then gives
+  `OK`, and [the observer](../automation/observer.md) clears the finding at its next
+  content cycle.
 - Run `verify` over each record on a schedule. It is the check that finds an
   edit through the API.
 - The record holds the release that the reviewers approved. When the published

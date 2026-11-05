@@ -1,5 +1,6 @@
 # No pod can connect to the observer. A person reaches it with `kubectl port-forward`.
-# The observer can connect only to DNS and to HTTPS. A team can narrow the HTTPS rule to the address of Palette.
+# The observer can connect only to DNS and to HTTPS. A team that narrows the HTTPS rule must list Palette, each webhook, and,
+# with the read of the pods, the API server.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

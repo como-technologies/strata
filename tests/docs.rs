@@ -2657,15 +2657,20 @@ fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_remov
     for fact in [
         "### An event when a published version changes",
         "Palette has no component for a published version that changed, for a moved image, or for a newer version.",
-        "Palette is the owner of the event.",
-        "When Palette adds a component for a published version that changed, strata removes the news `drift` from the alerts.",
+        "| `drift`, for `published-changed`, `overwritten`, `renamed`, and `gone` | Palette | Palette adds a component for a published version that changed.",
+        "| `drift`, for `cluster-differs` and `image-id-changed` | Palette | Palette adds an event for a cluster that differs from its release.",
+        "| `image` | Palette | A route or an event of Palette gives the digest that a pod runs.",
+        "| `newer` | Palette | Palette adds a component for a newer version of a pack.",
+        "| `lost` | The observer | Nothing removes it.",
     ] {
         assert!(gaps.contains(fact), "the list of the gaps lacks {fact:?}");
     }
     let boundary = one_line(&read(&docs().join("boundary.md")));
     for fact in [
         "[An event when a published version changes](./internals/palette/profiles.md#an-event-when-a-published-version-changes)",
-        "Palette owns the event, and strata removes the alert when Palette adds it.",
+        "Palette owns the event, and strata removes the news `drift` of the published kinds when Palette adds it.",
+        "The observer sends nothing about health: Palette owns that.",
+        "When a route of Palette gives the digest that a pod runs, strata removes the read and the news `image`.",
     ] {
         assert!(
             boundary.contains(fact),
@@ -2675,7 +2680,7 @@ fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_remov
     let service = one_line(&read(&docs().join("automation/observer.md")));
     assert!(
         service.contains(
-            "Palette is the owner of that event. When Palette adds it, strata removes the news `drift` from the alerts."
+            "Palette is the owner of that event. When Palette adds it, strata removes the news `drift` of the published kinds from the alerts."
         ),
         "the page of the service names no condition"
     );
@@ -2777,7 +2782,7 @@ fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() 
         assert!(!text.contains(old), "the book still says {old:?}");
     }
     for new in [
-        "Palette deletes the Deployment. The run checks nothing else.",
+        "Palette deletes the Deployment. No run shows what happens to the namespace.",
         "Delete the namespace with `kubectl delete namespace strata-observer`, so that the key goes.",
         "the copy that Palette holds for the cluster",
         "the next content cycle clears the finding",
@@ -6027,5 +6032,41 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
              counted rule failed, and the last line then says that the cluster is gone"
         ),
         "stop-a-build.md lacks the condition of exit 0"
+    );
+}
+
+/// A reader copies the commands of a page. A key in an argument of `curl` shows in the list of
+/// processes of the machine. So no page gives the header `ApiKey` to `-H` or to `--header`. The
+/// form of `examples/live/palette-curl.sh` sends the header to `curl` as a config on standard input.
+#[test]
+fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
+    let mut shown = 0;
+    for page in walk(&docs()) {
+        if page.extension().is_none_or(|e| e != "md") || page.starts_with(docs().join("output")) {
+            continue;
+        }
+        let text = read(&page);
+        for (n, line) in text.lines().enumerate() {
+            let in_argument = ["-H", "--header"].iter().any(|flag| {
+                line.contains(&format!("{flag} \"ApiKey"))
+                    || line.contains(&format!("{flag} 'ApiKey"))
+            });
+            assert!(
+                !in_argument,
+                "{}:{}: the key of Palette is in an argument of curl: send it on standard input with `curl --config -`",
+                page.display(),
+                n + 1
+            );
+        }
+        for block in crate::common::code_blocks(&text, "bash") {
+            if block.contains("ApiKey: %s") {
+                shown += 1;
+                assert!(block.contains("--config -"), "{}: {block}", page.display());
+            }
+        }
+    }
+    assert_eq!(
+        shown, 3,
+        "stop-a-build.md shows two commands and live-example.md shows one"
     );
 }

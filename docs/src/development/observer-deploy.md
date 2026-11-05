@@ -76,7 +76,7 @@ make the Secret and name it.
 | --- | --- | --- |
 | `namespace.yaml` | `Namespace` | Sets `pod-security.kubernetes.io/enforce: restricted`. |
 | `serviceaccount.yaml` | `ServiceAccount` | Has no role. The pod gets no token, because the base calls no Kubernetes API. [The component](#the-component-that-reads-the-pods) adds both. |
-| `networkpolicy.yaml` | `NetworkPolicy` | Lets no pod connect to the observer. The observer connects to DNS and to HTTPS only. A team can narrow the HTTPS rule to the address of Palette. |
+| `networkpolicy.yaml` | `NetworkPolicy` | Lets no pod connect to the observer. The observer connects to DNS and to HTTPS only. A team that narrows the HTTPS rule must list Palette, each webhook, and, with the read of the pods, the API server: see [What you give the observer](../automation/observer.md#what-you-give-the-observer). |
 | `deployment.yaml` | `Deployment` | Runs one pod with `Recreate`, as non-root, with a read-only root and no capability. |
 
 `reader-role.yaml` is outside the kustomization, because a team binds it to its
@@ -113,6 +113,7 @@ digest of each pod image. It is optional. A team lists it under `components:` of
 its own kustomization:
 
 ```yaml
+namespace: strata-observer
 resources:
   - deploy/observer
 components:
@@ -170,6 +171,7 @@ a message to a webhook. It is optional, and a team lists it as it lists the othe
 component:
 
 ```yaml
+namespace: strata-observer
 resources:
   - deploy/observer
 components:

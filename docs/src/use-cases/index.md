@@ -170,7 +170,8 @@ maintainer cannot see your tenant.
 
 **10. A page in the cluster.** Four commands of the pages above, `verify`, `snapshot`,
 `compare`, and `behind`, on a timer, in one cluster. An optional read of the pods adds
-the digest that each tag runs.
+the digest that each tag runs. Optional alerts send a message to a webhook when a
+finding opens.
 
 - [The observer shows an edit in place](./observer.md): the nightly job finds an edit
   in place at its next run, and the team wants the answer, and who made the edit, sooner.

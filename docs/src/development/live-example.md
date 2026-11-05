@@ -778,8 +778,9 @@ These rules come from the teardowns of this kind of cluster:
 
   ```bash
   set -a; . ~/.palette.env; set +a     # when the key is in that file
-  curl -X DELETE -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" \
-    "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/$C?forceDelete=true"
+  printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY" \
+    | curl --config - -X DELETE -H "ProjectUid: $PALETTE_PROJECT_UID" \
+      "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/$C?forceDelete=true"
   ```
 
 ## The checks of verify.sh

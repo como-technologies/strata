@@ -1180,6 +1180,21 @@ pub fn fake_bin(dir: &Path, commands: &[(&str, &str)]) -> std::path::PathBuf {
     bin
 }
 
+/// The first `tool` on the `PATH` of the test, if there is one. The runner of GitHub has `kubectl` and
+/// `just`. A test that needs one fails there when it is missing. A machine without it skips the test.
+pub fn on_path(tool: &str) -> Option<std::path::PathBuf> {
+    let found = std::env::var_os("PATH").and_then(|path| {
+        std::env::split_paths(&path)
+            .map(|dir| dir.join(tool))
+            .find(|c| c.is_file())
+    });
+    assert!(
+        found.is_some() || std::env::var_os("CI").is_none(),
+        "the runner of CI must have {tool}"
+    );
+    found
+}
+
 /// `PATH` with the directory `bin` first, so that a stand-in command in it runs in place of the
 /// real one.
 pub fn path_with(bin: &Path) -> String {

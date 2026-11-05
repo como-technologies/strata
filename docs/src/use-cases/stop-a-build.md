@@ -108,10 +108,12 @@ grant the actions, or let the landing zone own the stack.
 ## 2. Build it
 
 The body that passed is the body of the create. Send it, and keep the uid of
-the answer:
+the answer. The key goes to `curl` on standard input, with `--config -`. It then never
+appears in the list of processes:
 
 ```bash
-uid=$(curl -s -X POST -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" \
+uid=$(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY" \
+  | curl -s --config - -X POST -H "ProjectUid: $PALETTE_PROJECT_UID" \
   -H 'Content-Type: application/json' --data @cluster.json \
   "https://api.spectrocloud.com/v1/spectroclusters/aws" | jq -r .uid)
 ```
@@ -173,7 +175,8 @@ says so on `cluster:UID`. Then read the inventory of the cloud, which must be 0
 on every line before any force delete:
 
 ```bash
-curl -s -X DELETE -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" \
+printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY" \
+  | curl -s --config - -X DELETE -H "ProjectUid: $PALETTE_PROJECT_UID" \
   "https://api.spectrocloud.com/v1/spectroclusters/$uid"
 examples/live/aws-inventory.sh <cluster name> <region>
 ```
