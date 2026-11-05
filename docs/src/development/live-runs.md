@@ -1363,7 +1363,7 @@ up.
 Stage 7 (#646) shows how pods reach a mirror. It starts a registry in Docker on
 the network of kind. It points containerd on each node at that registry for the
 host `vendor.example`. A node of kind reads the folder `certs.d` only when the
-config of the cluster sets `config_path`, so stage 1 creates the cluster with
+config of the cluster sets `config_path`. So stage 1 creates the cluster with
 that config. One pod names `vendor.example`, as a pack does. Another
 pod names the registry itself, as a rule that rewrites the image string does.
 
