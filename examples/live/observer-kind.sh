@@ -403,9 +403,9 @@ YAML
 }
 # alert_apply: render the overlay, make sure that the flag --alerts is in it, and apply it
 alert_apply() {
-  alert_overlay && kubectl kustomize . > observer.yaml \
+  alert_overlay && observer_render \
     && grep -q -e '- --alerts=/alerts/alerts.json' observer.yaml && kc apply --server-side -f observer.yaml \
-    && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
+    && observer_ready
 }
 # alert_set: /v1/alerts says that the observer sends alerts, with the five rules of the example. alerts-page.json keeps it.
 alert_set() { page /v1/alerts > alerts-page.json 2> /dev/null && jq -e '.set == true and (.rules | length) == 5' alerts-page.json > /dev/null; }

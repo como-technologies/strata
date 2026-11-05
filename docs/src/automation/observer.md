@@ -54,6 +54,25 @@ finding, and each state of the page.
 The records are the files that your pipeline writes. The observer compares them
 with Palette, and it never writes a record. See [Install](#install).
 
+## The baseline and the check
+
+The baseline is the set of records that your team approved. The observer checks
+Palette against it. Only a merge moves the baseline.
+
+1. **Record a version.** A person runs `strata snapshot` on a profile version. Then
+   the person opens a pull request with the record.
+2. **Merge the record.** A review approves the file. The merge moves the baseline.
+3. **Write the records.** The pipeline runs `scripts/ci/observer-records.sh` with
+   `--revision`, and applies the four Secrets. See [Install](#install).
+4. **Check.** The two cycles check Palette against the records. A difference opens a
+   finding on the page.
+5. **Close the finding.** Restore the version in Palette. Or publish the new content,
+   and record it again with a new review.
+
+The observer never writes a record. An edit in Palette moves no baseline: it opens a
+finding. To try the observer with no approved record, see [First-seen
+records](#first-seen-records).
+
 ## Run it once
 
 `strata-observer once` runs one content cycle and one versions cycle, and prints
@@ -149,6 +168,9 @@ because the pod does not start without the pull Secret, the ConfigMap, and the k
 Get `deploy/observer/` and `scripts/ci/observer-records.sh` from the repository of
 strata, at the tag of your release. Copy both into the repository of your team. The
 steps below run from that repository. They need `jq`, `gzip`, and `base64`.
+
+To try the observer on a test cluster, use one command instead: see [A test
+cluster](../development/live-example.md#a-test-cluster).
 
 1. **Make the namespace.** It enforces the Pod Security standard `restricted`.
 
@@ -471,6 +493,26 @@ it.
 
 The check `diff-text` of [What the live example verifies](../development/live-runs.md)
 tests the text of a diff on a cluster that Palette built.
+
+### A value of many lines
+
+A setting can be a file of many lines. The table of settings then shows only the lines
+that differ, on each side. Each line has its line number. A removed line is red, and an
+added line is green, as in the text below the table.
+
+- **A value of one line shows whole.** It reads as it did before.
+- **The changed part lies between the common start and the common end.** The table does
+  not match the lines in between. The text of the diff below the table is the full diff.
+- **A line with no color is equal.** The table colors no line that the other side holds
+  at the same place. This holds when both sides have the same number of lines.
+- **Context is 3 lines at most.** The table takes these lines from the common start and
+  the common end. It shows up to 2 above the changed part, and the rest below. A mark
+  `…` shows where the table omits lines.
+- **More than 40 lines that differ show as a count.** The row says `<n> lines differ`
+  and links to the text of the values. The row has no link when the observer holds no
+  text.
+- **A mask stays a mask.** A line shows the text of the record, so a secret shows the
+  mask `********`.
 
 ## Ask Palette about a move
 

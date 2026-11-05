@@ -113,7 +113,7 @@ its end.
 | `report-send.sh` | The send of the report (#397). Strata posts the report of one unknown value to the endpoint, and the script checks that one issue of the label `unknown-value` holds it. `just live-report-send` runs it. It reads no tenant. See [The endpoint of the report](./report-endpoint.md). |
 | `common.sh` | The functions `die` and `usage`. `lib.sh`, `contract.sh`, `contract-profiles.sh`, `api.sh`, `tenant.sh`, and `tofu-install.sh` source it. So do `timer.sh` and `deploy.sh` of `deploy/`. It runs nothing and checks nothing, so a script that does not run strata can source it alone. |
 | `github.sh` | What the scripts read about GitHub. `remote_repo` gives the project of the `origin` remote of a checkout. The jq function `first_line` gives the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
-| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A, the waits, the port-forward, and the page. It also holds the image with its pull Secret, the overlay, the key, the ConfigMap, and the test of a pod that cannot connect. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
+| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image with its pull Secret, the overlay, the key, the ConfigMap, and the test of a pod that cannot connect. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
@@ -122,6 +122,7 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
+| `observer-up.sh` | The observer on a test cluster, with one command (#681): `up`, `open`, and `down`. It is no check, and the recipes `observer-up`, `observer-open`, and `observer-down` run it. See [A test cluster](#a-test-cluster). |
 | `count-requests/` | A small Go program that sits between `strata` and Palette. It runs a command, sends each request on, and writes one line for each request to a file, with the method and the path. `observer.sh` uses it to count the requests of a cycle of the observer, and the POST of a click. `just lint` and `just test` check it. |
 | `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, an app profile, and an add-on profile with one manifest layer (`api.sh manifest-profile`). `api.sh post` sends a search that Palette takes as a `POST`, or a question to a validate route. `api.sh export` reads the export of a profile version. `api.sh packs-where` reads the pack listing one page at a time, and prints the first pack that a `jq` condition accepts. `api.sh get-status` prints the status of an answer and its body, and exits `0` for a refusal. |
 | `packs.sh` | The pack ref test (#55). |
@@ -642,6 +643,71 @@ reads the answer too.
 > finished deletion while the cluster still runs. A deleted cluster has the
 > state `Deleted`. `tenant.sh cluster` exits `2` on a 404 that is not the JSON
 > `ResourceNotFound` of Palette.
+
+## A test cluster
+
+The install of the observer has eight steps. That is right for a team, and it is
+too much for a test. `observer-up.sh` puts the observer on a test cluster with one
+command. A team uses the steps of [Install](../automation/observer.md#install), and
+not this script. The script needs no profile of the live example. It works on any
+cluster that Palette lists in your project.
+
+| Recipe | What it does | What it needs |
+| --- | --- | --- |
+| `just observer-up [CLUSTER] [TAG] [--read-pods]` | Installs the observer, or repairs the install, and waits for the pod. Then it prints the commands that open the page. | The key of Palette, a token file with only the scope `read:packages`, `kubectl`, `gh`, `curl`, `jq`, `gzip`, and `base64`. |
+| `just observer-open [CLUSTER]` | Opens a port-forward to the pod, and holds it until Ctrl-C. The page is at `http://127.0.0.1:18080`, because port 8080 is often in use. `PORT` gives another port. | The key of Palette and `kubectl`. The observer must run: `up` first. |
+| `just observer-down [CLUSTER]` | Deletes the namespace of the observer, the cluster role, and its binding. A cluster with no observer is no error. | The key of Palette and `kubectl`. |
+
+Give the arguments in this order: the cluster, the tag, and then the flags. To
+install the read of the pods on the only cluster of the project, write
+`just observer-up "" "" --read-pods`. Each recipe builds `strata` first, because
+the script lists the clusters with it.
+
+The key of Palette is in `PALETTE_API_KEY` or in `~/.palette.env`. `PALETTE_PROJECT_UID`
+selects the project. The token file is `~/.config/strata/ghcr-pull-token`, with the mode
+0600, or the file that `GHCR_PULL_TOKEN_FILE` names. A node of the cluster must reach the
+API of Palette.
+
+### What the script does
+
+1. **It finds the cluster.** `CLUSTER` is the name of a cluster that `strata list`
+   shows. With no name, the project must hold one cluster. With several clusters,
+   the script lists their names and stops. A name that is not in the project stops
+   it too. An empty uid for the cluster or the project stops it, so no ConfigMap
+   holds an empty value.
+2. **It writes the kubeconfig.** The script asks Palette for the kubeconfig of the
+   cluster, and writes it to `~/.kube/strata-<cluster>.yaml` with the mode 0600.
+   Each `kubectl` call uses that file, so no call reaches another cluster, whatever
+   the context of your shell is. The script leaves the file after the run.
+3. **It makes each object.** The namespace is applied from its file. The ConfigMap,
+   the Secret of the key, and the pull Secret go through `kubectl create
+   --dry-run=client -o yaml` and `kubectl apply -f -`. A second run works, and it
+   repairs an object that a person made by hand. The key and the token go through
+   standard input. They reach no argument and no file.
+4. **It writes the records.** `observer-records.sh --first-seen` writes the content
+   that each profile of the cluster holds now, and `kubectl apply --server-side
+   --force-conflicts` sends it. No person approved that content. See [First-seen
+   records](../automation/observer.md#first-seen-records).
+5. **It applies the manifests.** The script copies `deploy/observer` to a temporary
+   folder. The overlay sets the image tag, the pull Secret, `--content-every=1m`,
+   and `--versions-every=5m`. With `--read-pods`, it adds the component
+   `deploy/observer/pods`. The script deletes the folder at its end.
+6. **It restarts the pod.** `kubectl rollout restart`, and then `kubectl rollout
+   status`, so the pod reads the new settings.
+
+The tag is the tag of the image. The default is the newest release on GitHub, and
+`TAG` takes any other tag. A flag or a read that the image does not hold is a fault
+of the tag: `--read-pods` needs an image with that code. `OBSERVER_IMAGE` names the
+whole image, and then `TAG` is not allowed.
+
+`observer-down` reads the labels of the objects. The namespace has no label of the
+observer, so the script deletes it by name. The cluster role and its binding carry the
+label `app.kubernetes.io/name=strata-observer`, and the script deletes them with it.
+A delete of the namespace does not delete the role or the binding. The script leaves
+the kubeconfig in `~/.kube/`.
+
+`just test` runs the tests of the script with a stand-in `kubectl`, `strata`, and
+`gh`. They need no cluster.
 
 ## When a check fails
 

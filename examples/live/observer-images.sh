@@ -158,18 +158,15 @@ records_make() {
     && jq -e --arg p "$pack" --arg i "$moving" '[.packs[] | select(.name == $p) | .images[]?] | index($i) != null' addon.json > /dev/null \
     && "$records_script" --revision "$revision" release.json addon.json | kc apply --server-side -f -
 }
-# overlay: the overlay of lib.sh, with the component. pods/ is a copy of the component, and
-# kustomization.yaml lists it as a team does. The content cycle gets a short period.
+# overlay: the overlay of lib.sh, with the component. The content cycle gets a short period.
 overlay() {
-  observer_overlay --content-every=1m && mkdir -p pods && cp "$root"/deploy/observer/pods/*.yaml pods/ \
-    && printf 'components:\n  - pods\n' >> kustomization.yaml
+  observer_overlay --content-every=1m && observer_overlay_pods
 }
 # observer_apply: render the overlay, make sure that the component is in it, and apply it
 observer_apply() {
-  overlay && kubectl kustomize . > observer.yaml && grep -q 'name: kube-credentials' observer.yaml \
+  overlay && observer_render && grep -q 'name: kube-credentials' observer.yaml \
     && kc apply -f observer.yaml
 }
-observer_ready() { KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-observer --timeout=180s; }
 
 # ---- the read ------------------------------------------------------------------------------------------
 

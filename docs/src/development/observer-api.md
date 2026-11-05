@@ -101,7 +101,8 @@ The comparison of a pack has two tabs:
 
 - **Values.** It shows the settings as a table, and it folds "Follows the version"
   and "Repeats the lists" with their counts. Then it shows the masked note, and the
-  text of the raw values as a diff block.
+  text of the raw values as a diff block. A setting of many lines shows only the
+  lines that differ: see [A value of many lines](../automation/observer.md#a-value-of-many-lines).
 - **Manifests.** It shows the text of each changed, added, or removed manifest.
 
 A control "Unified / Split" on both tabs chooses between two layouts of the same
@@ -257,7 +258,9 @@ the page are those of the data.
 
 - The set `ok` holds made-up data. It has 12 profiles, 29 packs, 1 finding, and 10
   newer versions in 6 profiles. It also has 2 causes of "Not checked", 26 of 29 packs
-  in full, and 8 images that pods run.
+  in full, and 8 images that pods run. One text is real: the two texts of
+  `kubeadmconfig.files[2].content` in the pack `kubernetes`, from a run of
+  `strata compare`. The file has 21 lines, and three lines differ.
 - The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
   `cluster.json` only.
 - The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file

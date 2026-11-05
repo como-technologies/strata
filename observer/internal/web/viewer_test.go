@@ -435,6 +435,7 @@ func editDiffs(t *testing.T, change func([]api.PackDiff)) func([]byte) []byte {
 type clicked struct {
 	Before, During, After string
 	Hash                  string
+	Jumps                 []string
 	Posts                 []struct {
 		Method  string   `json:"method"`
 		Path    string   `json:"path"`

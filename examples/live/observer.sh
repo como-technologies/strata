@@ -138,7 +138,7 @@ prepare_settings() {
 }
 # render: observer.yaml, the plainest install that a person can run. The overlay gives the two timers short
 # periods, so that the run takes minutes.
-render() { observer_overlay --content-every=1m --versions-every=5m && kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
+render() { observer_overlay --content-every=1m --versions-every=5m && observer_render; }
 
 # ---- the checks of way 1 -----------------------------------------------------------------------------
 
@@ -560,16 +560,11 @@ diff_text() {
 restart_pod() {
   pf_stop
   kc -n "$ns" rollout restart deploy/strata-observer \
-    && KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
+    && observer_ready
 }
 # replace_key KEY: put KEY in the Secret of the key, restart the pod, and open the port-forward. The
 # Secret goes through pipes, never through a file or an argument.
-replace_key() {
-  printf %s "$1" \
-    | kj -n "$ns" create secret generic strata-observer-key --from-file=api-key=/dev/stdin --dry-run=client -o yaml \
-    | kc apply -f - \
-    && restart_pod && pf_start
-}
+replace_key() { observer_key "$1" && restart_pod && pf_start; }
 # wrong_key_set and right_key_set: the two puts of the key
 wrong_key_set() { replace_key "$wrong_key"; }
 right_key_set() { replace_key "$palette_key"; }

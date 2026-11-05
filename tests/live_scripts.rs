@@ -8171,13 +8171,17 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     ] {
         assert!(kubectl.contains(call), "{call}:\n{kubectl}");
     }
-    // Each apply is a server-side apply. A client-side apply copies each Secret to an annotation,
-    // and it fails above 256 KiB.
+    // Each apply of a namespace, a role, or a record is a server-side apply. A client-side apply copies
+    // each Secret to an annotation, and it fails above 256 KiB. The ConfigMap and the Secret of the key
+    // are small: `create_apply` sends each one with `apply -f -`.
     let applies: Vec<&str> = kubectl.lines().filter(|l| l.contains(" apply ")).collect();
-    assert_eq!(applies.len(), 10, "{applies:?}");
+    let (server, client): (Vec<&str>, Vec<&str>) =
+        applies.iter().partition(|l| l.contains("--server-side"));
+    assert_eq!(server.len(), 10, "{applies:?}");
+    assert_eq!(client.len(), 2, "{applies:?}");
     assert!(
-        applies.iter().all(|l| l.contains("--server-side")),
-        "{applies:?}"
+        client.iter().all(|l| l.ends_with(" apply -f -")),
+        "{client:?}"
     );
 
     let applied = observer_log(&stage, "applied.yaml");
@@ -9504,7 +9508,7 @@ fn the_scripts_of_the_digest_checks_are_valid_bash_and_refuse_a_stage_that_does_
 
 /// The scripts of the observer share their helpers. Each helper has one definition, in `lib.sh`. A copy
 /// in a script fails this test. `observer-kind.sh` defines `kc` and `cluster_kubeconfig` again for its
-/// kind cluster, as the comments of `lib.sh` say.
+/// kind cluster, as the comments of `lib.sh` say. `observer-up.sh` sets `KUBE_FILE` and defines none of them.
 #[test]
 fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live");
@@ -9531,8 +9535,15 @@ fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
         ("pf_stop", None),
         ("images_read", None),
         ("pods_read", None),
+        ("kube", None),
+        ("create_apply", None),
+        ("observer_config", None),
+        ("observer_key", None),
         ("observer_image", None),
         ("observer_overlay", None),
+        ("observer_overlay_pods", None),
+        ("observer_render", None),
+        ("observer_ready", None),
         ("pull_token", None),
         ("pull_secret", None),
         ("pull_secret_stop", None),
@@ -11557,5 +11568,53 @@ fn who_sh_stage_3_records_nothing_and_says_so_without_the_key() {
     assert!(
         calls.lines().all(|l| l.ends_with("--version")),
         "no call to strata without the key: {calls}"
+    );
+}
+
+/// A recipe of the justfile runs a script of `examples/live/` by its path, so Git must record the
+/// script with the mode 100755. With the mode 100644, the recipe stops with "Permission denied".
+/// The tests run each script with `bash`, so only this test sees the fault.
+#[test]
+fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let listing = git(
+        root,
+        &[
+            "-c",
+            "safe.directory=*",
+            "ls-files",
+            "-s",
+            "--",
+            "examples/live",
+        ],
+    )
+    .stdout;
+    let listing = text(&listing);
+    // a line of the listing: `<mode> <hash> <stage>\t<path>`
+    let modes: std::collections::BTreeMap<&str, &str> = listing
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .map(|(info, path)| (path, info.split(' ').next().unwrap_or_default()))
+        .collect();
+
+    let justfile = repo_file("justfile");
+    let run: std::collections::BTreeSet<&str> = code_lines(&justfile)
+        .flat_map(str::split_whitespace)
+        .filter(|word| word.starts_with("examples/live/") && word.ends_with(".sh"))
+        .collect();
+    assert!(
+        run.contains("examples/live/observer-up.sh"),
+        "the scan finds the scripts of the recipes: {run:?}"
+    );
+
+    let wrong: Vec<String> = run
+        .iter()
+        .filter(|path| modes.get(*path) != Some(&"100755"))
+        .map(|path| format!("{path}: {}", modes.get(*path).unwrap_or(&"not in Git")))
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "a recipe runs these scripts, and Git does not record them as 100755 \
+         (git update-index --chmod=+x <file>): {wrong:?}"
     );
 }

@@ -881,7 +881,70 @@ function viewImage(ref) {
 }
 
 /* ---- The comparison of a pack ---- */
-const settingsTable = rows => h`<div class="tw"><table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${rows.map(r => h`<tr><td class="m">${r.path}</td><td class="was val">${leafText(r.old)}</td><td class="now val">${leafText(r.new)}</td></tr>`)}</tbody></table></div>`;
+// settingsTable draws the changed values. jump is the id of the text of the values, or "" when the page holds none.
+const settingsTable = (rows, jump) => h`<div class="tw"><table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${rows.map(r => settingRow(r, jump))}</tbody></table></div>`;
+
+// settingRow draws one changed value. A value of one line shows whole. A value of more lines shows only the lines that differ.
+function settingRow(r, jump) {
+  const cells = lineCells(r.old, r.new, jump) || h`<td class="was val">${leafText(r.old)}</td><td class="now val">${leafText(r.new)}</td>`;
+  return h`<tr><td class="m">${r.path}</td>${cells}</tr>`;
+}
+
+// A long value shows the lines between its common start and its common end, with at most CONTEXT lines of the common
+// start and end around them: up to CONTEXT - 1 above, and the rest below. More than MAX_DIFFER lines between them show as
+// a count. It is no full diff: the text of the values holds that.
+const CONTEXT = 3;
+const MAX_DIFFER = 40;
+
+// linesOf splits a value into its lines. An absent value has none.
+function linesOf(v) {
+  if (v === undefined || v === null) return [];
+  return (typeof v === "string" ? v : JSON.stringify(v)).split("\n");
+}
+
+// sharedEnds counts the lines that two values share at their start, then at their end. The end stops where the start stops.
+function sharedEnds(a, b) {
+  let top = 0;
+  while (top < a.length && top < b.length && a[top] === b[top]) top++;
+  let tail = 0;
+  while (tail < a.length - top && tail < b.length - top && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  return [top, tail];
+}
+
+const valueLine = (cls, n, mark, text) => h`<div class="vl ${cls}"><span class="no">${n}</span><span class="mk">${mark}</span><span class="t">${text}</span></div>`;
+const GAP = valueLine("e", "", "", "…");
+
+// sideLines draws one side of a long value: the lines from win.top to the end less win.tail, with win.before lines
+// above them and win.after lines below them. When the other side has as many lines, a line that it holds at the same
+// place did not change.
+function sideLines(lines, other, win, cls, mark) {
+  const end = lines.length - win.tail, out = [];
+  const kept = i => other.length === lines.length && other[i] === lines[i];
+  if (win.top > win.before) out.push(GAP);
+  for (let i = win.top - win.before; i < end + win.after; i++) {
+    const changed = i >= win.top && i < end && !kept(i);
+    out.push(valueLine(changed ? cls : "c", i + 1, changed ? mark : "", lines[i]));
+  }
+  if (end + win.after < lines.length) out.push(GAP);
+  return h`<div class="vls">${out}</div>`;
+}
+
+// lineCells gives the two cells of a value of more than one line, or null for a value of one line.
+function lineCells(old, now, jump) {
+  const a = linesOf(old), b = linesOf(now);
+  // An end of line at the end of both values is no line.
+  if (a.length > 1 && b.length > 1 && !a[a.length - 1] && !b[b.length - 1]) { a.pop(); b.pop(); }
+  if (a.length < 2 && b.length < 2) return null;
+  const [top, tail] = sharedEnds(a, b);
+  const differ = Math.max(a.length, b.length) - top - tail;
+  if (differ > MAX_DIFFER) {
+    const count = `${differ} lines differ`;
+    return h`<td class="val" colspan="2">${jump ? h`<button class="lnk" data-jump="${jump}">${count}</button>` : count}</td>`;
+  }
+  const before = Math.min(top, CONTEXT - 1), win = {top, tail, before, after: Math.min(tail, CONTEXT - before)};
+  const cell = (cls, lines, other, mark) => h`<td class="${cls} val vm">${lines.length ? sideLines(lines, other, win, cls === "was" ? "d" : "a", mark) : DASH}</td>`;
+  return h`${cell("was", a, b, "-")}${cell("now", b, a, "+")}`;
+}
 
 // leafText shows a changed value. A string has quotes, and a value that is absent shows a dash.
 function leafText(v) {
@@ -974,10 +1037,11 @@ function splitRows(rows) {
 }
 
 // diffBlock draws the head and the lines of one diff. The control of the layout sits in the head, and it sets the one layout of the page.
-function diffBlock(title, op, rows) {
+// With an id, a link of the page can jump to the block.
+function diffBlock(title, op, rows, id) {
   const seg = h`<span class="seg" role="group" aria-label="Diff layout">${VIEWS.map(([k, l]) => h`<button data-view="${k}" aria-pressed="${S.view === k ? "true" : "false"}" class="${S.view === k ? "on" : ""}">${l}</button>`)}</span>`;
   const lines = S.view === "split" ? splitRows(rows) : unifiedRows(rows);
-  return h`<div class="dblock"><div class="diffhead"><span>${title}${op ? h` <span class="mut">${op}</span>` : ""} <span class="now">+${countOf(rows, "+")}</span> <span class="was">-${countOf(rows, "-")}</span></span>${seg}</div><div class="diff"><table><tbody>${lines}</tbody></table></div></div>`;
+  return h`<div class="dblock"${id ? h` id="${id}"` : ""}><div class="diffhead"><span>${title}${op ? h` <span class="mut">${op}</span>` : ""} <span class="now">+${countOf(rows, "+")}</span> <span class="was">-${countOf(rows, "-")}</span></span>${seg}</div><div class="diff"><table><tbody>${lines}</tbody></table></div></div>`;
 }
 
 // tooLargeNote tells that the observer kept no text, and it names the command that prints the text.
@@ -996,13 +1060,15 @@ function manifestsPanel(d, command) {
 function valuesPanel(d, id, command) {
   const v = d.values, s = v.settings, f = v.followsTheVersion, r = v.repeatsTheLists, total = s.length + f.length + r.length;
   const rows = parseUnified(v.unified || "");
-  const text = rows.length ? diffBlock(`${d.key} values`, "", rows) : d.textTooLarge && (total > 0 || !v.parseable) ? tooLargeNote(command) : "";
+  // The long values link to the text of the values, when the page shows it.
+  const textId = id + "-text", jump = rows.length ? textId : "";
+  const text = rows.length ? diffBlock(`${d.key} values`, "", rows, textId) : d.textTooLarge && (total > 0 || !v.parseable) ? tooLargeNote(command) : "";
   if (!v.parseable && total === 0) return h`<div class="body small mut">Strata cannot read the values of this pack as settings.</div>${text}`;
   const lead = total ? h`<div class="body small mut pb8">${total} changed ${plural(total, "value", "values")}: ${s.length} ${plural(s.length, "setting", "settings")}, ${f.length} follow the version, ${r.length} repeat the lists.</div>` : h`<div class="body small mut">No value changed.</div>`;
   const masked = d.masked.length ? h`<div class="note small nt"><b>Masked:</b> ${d.masked.map(m => h`<span class="m">${m}</span>`)}. An equal root does not show an equal secret.</div>` : "";
-  const follows = f.length ? h`<details data-open="${id}-f" ${openAttr(id + "-f")}><summary>Follows the version: ${f.length} ${plural(f.length, "value", "values")}</summary>${settingsTable(f)}</details>` : "";
+  const follows = f.length ? h`<details data-open="${id}-f" ${openAttr(id + "-f")}><summary>Follows the version: ${f.length} ${plural(f.length, "value", "values")}</summary>${settingsTable(f, jump)}</details>` : "";
   const repeats = r.length ? h`<details data-open="${id}-r" ${openAttr(id + "-r")}><summary>Repeats the lists: ${r.length} ${plural(r.length, "value", "values")}</summary><div class="body small mut">The Images and Charts tabs show these.</div></details>` : "";
-  return h`${lead}${s.length ? settingsTable(s) : ""}${masked}${text}${follows}${repeats}`;
+  return h`${lead}${s.length ? settingsTable(s, jump) : ""}${masked}${text}${follows}${repeats}`;
 }
 
 /* compareCard draws one comparison: the head, the flags, the tabs, and the panel of the tab. The command is the one that prints the text when the observer kept none. */
@@ -1169,6 +1235,12 @@ function render() {
   }
 }
 
+// jumpTo scrolls to an element of the page. The hash stays as it is, so the screen does not change.
+function jumpTo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView();
+}
+
 function onClick(ev) {
   const t = ev.target.closest("[data-tab]");
   if (t) { S.tabs[t.dataset.tab] = t.dataset.k; render(); return; }
@@ -1178,6 +1250,8 @@ function onClick(ev) {
   if (v) { S.view = v.dataset.view === "split" ? "split" : "unified"; render(); return; }
   const q = ev.target.closest("[data-ask]");
   if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }
+  const j = ev.target.closest("[data-jump]");
+  if (j) { jumpTo(j.dataset.jump); return; }
   const g = ev.target.closest("[data-go]");
   if (g && !ev.target.closest("a,button,select,input")) location.hash = g.dataset.go;
 }
