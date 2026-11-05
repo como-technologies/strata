@@ -588,14 +588,16 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
 
 - **One message goes when a finding opens, and one when it clears.** A clear needs a
   check that proves it. A failed read clears nothing, so a finding that the observer
-  could not check again stays open. A mute stops the clear of a message that went.
+  could not check again stays open. A cycle that read no pod clears no finding of an
+  image. A mute stops the clear of a message that went.
 - **A failed send keeps the message.** The state holds it, and the next content cycle
   sends it again. When the send works, the message goes once. The log names the
   channel, the error kind, and the status, and never the address or the text. The
   Alerts screen shows a bar while a message waits.
 - **A digest goes at most once in each period of `--digest-every`.** The period is 7
-  days. A digest lists each open item of the digest rules of one channel. It has no
-  clear message. With no item open, the digest waits for the first item.
+  days. A digest lists each open item of the digest rules of one channel, so an item
+  that stays open is in each digest. A digest has no clear message. With no item open,
+  the digest waits for the first item.
 - **`once` sends nothing.** With no `--alerts`, nothing sends.
 
 ### What alerts do not do

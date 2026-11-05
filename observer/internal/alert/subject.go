@@ -17,9 +17,9 @@ type Subject struct {
 	// Profile is name@version. It is empty for the loss of contact.
 	Profile string   `json:"profile,omitempty"`
 	Packs   []string `json:"packs,omitempty"`
-	// Detail is one sentence. Since is the first sight of a finding, and zero for the other news.
-	Detail string    `json:"detail"`
-	Since  time.Time `json:"since,omitempty"`
+	// Detail is one sentence. Since is the first sight of a finding, and nil for the other news.
+	Detail string     `json:"detail"`
+	Since  *time.Time `json:"since,omitempty"`
 }
 
 // lostID is the id of the loss of contact. A finding has an id of 16 hex digits, so the two never meet.
@@ -36,9 +36,10 @@ func SubjectsOf(sum model.Summary) []Subject {
 	for _, f := range sum.Findings {
 		out = append(out, findingSubject(f))
 	}
+	keys := packKeys(sum.Profiles)
 	for _, n := range sum.Newer {
 		for _, profile := range n.Profiles {
-			out = append(out, newerSubject(n, profile))
+			out = append(out, newerSubject(n, profile, keys))
 		}
 	}
 	if sum.Page == model.PageLost {
@@ -52,11 +53,28 @@ func findingSubject(f model.Finding) Subject {
 	if f.Kind.IsImage() {
 		news = NewsImage
 	}
-	return Subject{ID: f.ID, News: news, Kind: f.Kind, Profile: f.Profile, Packs: f.Packs, Detail: f.Kind.Sentence(), Since: f.FirstSeen}
+	since := f.FirstSeen
+	return Subject{ID: f.ID, News: news, Kind: f.Kind, Profile: f.Profile, Packs: f.Packs, Detail: f.Kind.Sentence(), Since: &since}
 }
 
-func newerSubject(n model.Newer, profile string) Subject {
-	return Subject{ID: newerPrefix + n.Key() + "|" + profile, News: NewsNewer, Profile: profile, Packs: []string{n.Name},
+// packKeys maps a pack of a profile, by the profile, the name, and the version, to its key. A row of
+// the newer versions names a pack by its name, and a rule of the level pack can name the key.
+func packKeys(profiles []model.Profile) map[string]string {
+	keys := map[string]string{}
+	for _, p := range profiles {
+		for _, k := range p.Packs {
+			keys[model.Subject(p.Name, p.Version)+"|"+k.Name+"|"+k.Version] = k.Key
+		}
+	}
+	return keys
+}
+
+func newerSubject(n model.Newer, profile string, keys map[string]string) Subject {
+	key := keys[profile+"|"+n.Name+"|"+n.Version]
+	if key == "" {
+		key = n.Name
+	}
+	return Subject{ID: newerPrefix + n.Key() + "|" + profile, News: NewsNewer, Profile: profile, Packs: []string{key},
 		Detail: fmt.Sprintf("%s %s has a newer version, %s.", n.Name, n.Version, n.Newest)}
 }
 

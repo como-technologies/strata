@@ -25,7 +25,8 @@ func (o *Observer) alertStep(ctx context.Context, good bool, held map[string]boo
 	}
 	o.mu.Lock()
 	sum := model.Build(o.input())
-	o.alerts.Plan(&o.state.Alerts, alert.SubjectsOf(sum), alert.Known{Content: good, Newer: o.versions != nil}, held, clusterName(sum), o.now())
+	known := alert.Known{Content: good, Image: good && o.pods != nil, Newer: o.versions != nil}
+	o.alerts.Plan(&o.state.Alerts, alert.SubjectsOf(sum), known, held, clusterName(sum), o.now())
 	queue := slices.Clone(o.state.Alerts.Outbox)
 	o.save()
 	o.mu.Unlock()

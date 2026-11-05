@@ -12,6 +12,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
@@ -212,5 +213,40 @@ func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testin
 	s, err := loadState(r.state)
 	if err != nil || s.Alerts.Items == nil || s.Alerts.Outbox == nil {
 		t.Errorf("state %+v, error %v", s.Alerts, err)
+	}
+}
+
+const imageRules = `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "image", "send": "now", "to": "oncall"}]}`
+
+// withRules gives the observer the alerts of the rules, as `serve` does.
+func withRules(t *testing.T, r *rig, o *Observer, sender alert.Sender, rules string) *Observer {
+	t.Helper()
+	parsed, err := alert.Parse([]byte(rules))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return o.WithAlerts(alert.New(parsed, sender, 7*24*time.Hour, slog.New(slog.NewTextHandler(r.log, nil))))
+}
+
+func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
+	r, w, o, pods := podRig(t, runs("web-1", digest1))
+	sender := &capture{}
+	o = withRules(t, r, o, sender, imageRules)
+	cycle(t, o)
+	pods.set([]kube.Container{runs("web-1", digest2)}, nil)
+	cycle(t, o)
+	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], "strata · payments · Image moved\naws-stack@1.1.0: ") {
+		t.Fatalf("messages %q", sender.texts)
+	}
+	// a restart without the read of the pods finds no image finding, and that proves nothing
+	cycle(t, withRules(t, r, r.observer(w), sender, imageRules))
+	if len(sender.texts) != 1 {
+		t.Fatalf("a cycle that read no pod sent a clear: %q", sender.texts)
+	}
+	// a restart that reads the pods and sees the first digest clears the finding
+	pods.set([]kube.Container{runs("web-1", digest1)}, nil)
+	cycle(t, withRules(t, r, r.observer(w).WithPods(pods), sender, imageRules))
+	if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Image moved cleared") {
+		t.Errorf("messages %q", sender.texts)
 	}
 }

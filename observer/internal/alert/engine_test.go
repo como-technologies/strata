@@ -76,8 +76,10 @@ const oncall = `{"channels": {"oncall": {"urlFile": "f"}, "planning": {"urlFile"
 	{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"},
 	{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"}]}`
 
+var firstSight = now.Add(-time.Hour)
+
 var drift = Subject{ID: "d1", News: NewsDrift, Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"},
-	Detail: model.PublishedChanged.Sentence(), Since: now.Add(-time.Hour)}
+	Detail: model.PublishedChanged.Sentence(), Since: &firstSight}
 
 var content = Known{Content: true}
 
@@ -337,5 +339,120 @@ func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
 func TestTheUnsetViewHasNoRuleAndNoChannel(t *testing.T) {
 	if v := Unset(); v.Set || v.Rules == nil || v.Channels == nil || len(v.Rules) != 0 {
 		t.Errorf("view %+v", v)
+	}
+}
+
+// rulesNow gives the bench other rules, as a team does when it applies a new file and the pod restarts. The
+// store stays.
+func (b *bench) rulesNow(rules string) {
+	b.t.Helper()
+	parsed, err := Parse([]byte(rules))
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	b.e = New(parsed, b.send, 7*24*time.Hour, slog.New(slog.NewTextHandler(b.log, nil)))
+}
+
+func TestAMuteOrTheLossOfARuleDropsTheMessageOfTheOpenThatWaitsForARetry(t *testing.T) {
+	muted := `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
+		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
+		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"}]}`
+	none := `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}]}`
+	for name, rules := range map[string]string{"a mute": muted, "no rule": none} {
+		t.Run(name, func(t *testing.T) {
+			b := newBench(t, oncall)
+			b.send.fail["oncall"] = errors.New("down")
+			b.cycle([]Subject{drift}, content)
+			if len(b.store.Outbox) != 1 {
+				t.Fatalf("outbox %+v", b.store.Outbox)
+			}
+			b.rulesNow(rules)
+			delete(b.send.fail, "oncall")
+			b.cycle([]Subject{drift}, content)
+			b.cycle([]Subject{drift}, content)
+			if len(b.send.sent) != 0 || len(b.store.Outbox) != 0 {
+				t.Errorf("sent %q, outbox %+v", b.texts(), b.store.Outbox)
+			}
+		})
+	}
+}
+
+func TestAMuteThatEndsLetsTheFindingQueueItsOpenAgain(t *testing.T) {
+	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
+		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
+		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-11-04"}]}`)
+	b.send.fail["oncall"] = errors.New("down")
+	b.rulesNow(`{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"}]}`)
+	b.cycle([]Subject{drift}, content)
+	delete(b.send.fail, "oncall")
+	b.cycle([]Subject{drift}, content)
+	if len(b.send.sent) != 1 {
+		t.Errorf("sent %q", b.texts())
+	}
+}
+
+func TestTheClearGoesToTheChannelOfTheOpenMessageAndToNoChannelThatTheRulesLack(t *testing.T) {
+	b := newBench(t, oncall)
+	b.cycle([]Subject{drift}, content)
+	b.rulesNow(`{"channels": {"oncall": {"urlFile": "f"}, "other": {"urlFile": "g"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "other"}]}`)
+	b.cycle(nil, content)
+	if len(b.send.sent) != 2 || b.send.sent[1].channel != "oncall" {
+		t.Fatalf("messages %+v", b.send.sent)
+	}
+	again := newBench(t, oncall)
+	again.cycle([]Subject{drift}, content)
+	again.rulesNow(`{"channels": {"other": {"urlFile": "g"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "other"}]}`)
+	again.cycle(nil, content)
+	if len(again.send.sent) != 1 || len(again.store.Outbox) != 0 {
+		t.Errorf("a channel that the rules lack got a message: %+v", again.send.sent)
+	}
+}
+
+func TestADigestThatWaitsIsMadeAgainFromTheItemsThatAreOpenAndNeverTwice(t *testing.T) {
+	b := newBench(t, oncall)
+	item := func(id, profile string) Subject {
+		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
+	}
+	known := Known{Content: true, Newer: true}
+	b.send.fail["planning"] = errors.New("down")
+	all := []Subject{item("n1", "a@1"), item("n2", "b@1"), item("n3", "c@1")}
+	b.cycle(all, known)
+	// one item clears while the channel is down, and a second period passes
+	b.later(8 * 24 * time.Hour)
+	b.cycle([]Subject{all[0], all[2]}, known)
+	if len(b.store.Outbox) != 1 || !strings.Contains(b.store.Outbox[0].Text, "2 open items:") || strings.Contains(b.store.Outbox[0].Text, "b@1") {
+		t.Fatalf("outbox %+v", b.store.Outbox)
+	}
+	delete(b.send.fail, "planning")
+	b.cycle([]Subject{all[0], all[2]}, known)
+	if len(b.send.sent) != 1 || strings.Contains(b.send.sent[0].text, "b@1") || len(b.store.Outbox) != 0 {
+		t.Errorf("sent %+v", b.send.sent)
+	}
+}
+
+func TestAnImageFindingIsNotClearedByACycleThatReadNoPod(t *testing.T) {
+	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "image", "send": "now", "to": "oncall"}]}`)
+	moved := Subject{ID: "i1", News: NewsImage, Kind: model.ImageMoved, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Detail: "x"}
+	b.cycle([]Subject{moved}, Known{Content: true, Image: true})
+	b.cycle(nil, Known{Content: true})
+	if len(b.send.sent) != 1 || len(b.store.Items) != 1 {
+		t.Fatalf("a cycle that read no pod cleared the finding: %q", b.texts())
+	}
+	b.cycle(nil, Known{Content: true, Image: true})
+	if len(b.send.sent) != 2 || len(b.store.Items) != 0 {
+		t.Errorf("a cycle that read the pods did not clear it: %q", b.texts())
+	}
+}
+
+func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
+	b := newBench(t, oncall)
+	first := drift
+	first.Packs = []string{"addon/dex"}
+	b.cycle([]Subject{first}, content)
+	second := drift
+	second.Packs = []string{"addon/dex", "addon/cert"}
+	b.cycle([]Subject{second}, content)
+	if got := b.store.Items["d1"].Packs; len(got) != 2 {
+		t.Errorf("packs %v", got)
 	}
 }

@@ -54,7 +54,7 @@ func openText(cluster string, s Subject) string {
 	if len(s.Packs) > 0 && s.News != NewsNewer {
 		lines = append(lines, "Packs: "+strings.Join(s.Packs, ", "))
 	}
-	if !s.Since.IsZero() {
+	if s.Since != nil {
 		lines = append(lines, "First seen: "+s.Since.UTC().Format(time.RFC3339))
 	}
 	return strings.Join(lines, "\n")
@@ -96,7 +96,9 @@ func plural(n int) string {
 
 // sampleSubject is the subject of the sample message on the page.
 var sampleSubject = Subject{ID: "sample", News: NewsDrift, Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"},
-	Detail: model.PublishedChanged.Sentence(), Since: time.Date(2026, 11, 3, 6, 9, 0, 0, time.UTC)}
+	Detail: model.PublishedChanged.Sentence(), Since: &sampleSince}
+
+var sampleSince = time.Date(2026, 11, 3, 6, 9, 0, 0, time.UTC)
 
 // Sample gives the message that a finding makes, for a made-up profile. The page shows it, so a team
 // sees what the channel gets.

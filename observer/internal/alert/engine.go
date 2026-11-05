@@ -14,13 +14,19 @@ import (
 type Known struct {
 	// Content says that a content cycle ended well: it knows the findings and the loss of contact.
 	Content bool
+	// Image says that the same cycle also read the pods. A cycle that reads no pod finds no finding of
+	// an image, and that proves nothing.
+	Image bool
 	// Newer says that a versions cycle has ended well once: it knows the newer versions.
 	Newer bool
 }
 
 func (k Known) has(n News) bool {
-	if n == NewsNewer {
+	switch n {
+	case NewsNewer:
 		return k.Newer
+	case NewsImage:
+		return k.Image
 	}
 	return k.Content
 }
@@ -58,35 +64,44 @@ func (e *Engine) Plan(st *Store, subjects []Subject, known Known, held map[strin
 	e.digest(st, cluster, now)
 }
 
-// route follows the rule that decides a subject. A mute keeps the item as it is. With no rule, the
-// subject has no alert, and the store forgets it.
+// route follows the rule that decides a subject. A mute keeps the item as it is, and a message of the
+// item that waits for a retry goes no more. With no rule, the subject has no alert, and the store
+// forgets it.
 func (e *Engine) route(st *Store, s Subject, cluster string, now time.Time) {
 	i, ok := e.rules.decide(s, now)
 	if !ok {
 		delete(st.Items, s.ID)
+		st.cancel(s.ID)
 		return
 	}
 	r := e.rules.List[i]
 	if r.mute() {
+		// a message that waits for a retry goes no more: the item stays, and it queues again when the mute ends
+		st.cancel(s.ID)
 		return
 	}
 	it, found := st.Items[s.ID]
 	if !found {
-		it = Item{Subject: s, To: r.To}
-		st.Items[s.ID] = it
+		it = Item{To: r.To}
 	}
+	// the item keeps what the subject says now: a digest and a clear tell the latest
+	it.Subject = s
+	st.Items[s.ID] = it
 	if r.Send == SendNow && it.Sent == nil && !st.queued(s.ID) {
 		st.queue(Queued{Channel: r.To, Text: openText(cluster, s), Opens: []string{s.ID}})
 	}
 }
 
 // clear removes an item whose subject is gone. It queues the message of the clear when the open message
-// went and the rule still sends it at once. An open message that did not go is dropped: it would
-// announce what is gone.
+// went, the channel of that message is still in the rules, and the rule still sends at once. An open
+// message that did not go is dropped: it would announce what is gone.
 func (e *Engine) clear(st *Store, it Item, cluster string, now time.Time) {
 	delete(st.Items, it.ID)
 	if it.Sent == nil {
 		st.cancel(it.ID)
+		return
+	}
+	if _, known := e.rules.Channels[it.To]; !known {
 		return
 	}
 	if i, ok := e.rules.decide(it.Subject, now); ok && e.rules.List[i].Send == SendNow {
@@ -95,10 +110,13 @@ func (e *Engine) clear(st *Store, it Item, cluster string, now time.Time) {
 }
 
 // digest queues one message for each channel that has an open item under a digest rule, when a period
-// has passed since the last digest. With nothing to list, it waits, so the first item to appear goes at
-// the next content cycle.
+// has passed since the last digest. A digest that did not go is made again from the items that are open
+// now, so a channel that comes back gets one digest and no old one. With nothing to list, it waits, so
+// the first item to appear goes at the next content cycle.
 func (e *Engine) digest(st *Store, cluster string, now time.Time) {
-	if st.DigestAt != nil && now.Sub(*st.DigestAt) < e.every {
+	waiting := st.dropDigests()
+	due := st.DigestAt == nil || now.Sub(*st.DigestAt) >= e.every
+	if !due && !waiting {
 		return
 	}
 	byChannel := map[string][]Item{}
@@ -122,10 +140,12 @@ func (e *Engine) digest(st *Store, cluster string, now time.Time) {
 		for _, it := range items {
 			subjects, ids = append(subjects, it.Subject), append(ids, it.ID)
 		}
-		st.queue(Queued{Channel: channel, Text: digestText(cluster, subjects), Opens: ids})
+		st.queue(Queued{Channel: channel, Text: digestText(cluster, subjects), Opens: ids, Digest: true})
 	}
-	at := now
-	st.DigestAt = &at
+	if due {
+		at := now
+		st.DigestAt = &at
+	}
 }
 
 // Deliver sends the messages of the queue in order and says for each one whether it went. A channel

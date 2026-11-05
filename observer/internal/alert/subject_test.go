@@ -123,3 +123,24 @@ func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAPackRuleThatNamesTheKeyCoversTheNewerVersionOfThatPack(t *testing.T) {
+	sum := model.Summary{
+		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: "addon/dex", Name: "dex", Version: "2.42.0"}}}},
+		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{"fred-identity@2.3.0"}}},
+	}
+	subjects := SubjectsOf(sum)
+	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != "addon/dex" {
+		t.Fatalf("subjects %+v", subjects)
+	}
+	for _, match := range []string{"addon/dex", "dex"} {
+		if !(Rule{Level: LevelPack, Match: match}).covers(subjects[0]) {
+			t.Errorf("the rule %q does not cover the pack", match)
+		}
+	}
+	// a row whose pack the profile does not list keeps the name
+	sum.Profiles = nil
+	if got := SubjectsOf(sum)[0].Packs; len(got) != 1 || got[0] != "dex" {
+		t.Errorf("packs %v", got)
+	}
+}

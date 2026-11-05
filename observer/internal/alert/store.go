@@ -26,11 +26,12 @@ type Item struct {
 }
 
 // Queued is a message that did not go yet. Opens holds the ids of the items that become sent when the
-// message goes.
+// message goes. A digest lists items, so the next step makes it again from the items that are open then.
 type Queued struct {
 	Channel string   `json:"channel"`
 	Text    string   `json:"text"`
 	Opens   []string `json:"opens,omitempty"`
+	Digest  bool     `json:"digest,omitempty"`
 }
 
 // NewStore makes an empty store.
@@ -64,6 +65,14 @@ func (st *Store) queue(q Queued) {
 // message would announce what is gone.
 func (st *Store) cancel(id string) {
 	st.Outbox = slices.DeleteFunc(st.Outbox, func(q Queued) bool { return len(q.Opens) == 1 && q.Opens[0] == id })
+}
+
+// dropDigests removes the digests that wait, and says whether it removed one. A digest that waits
+// lists items that can be gone by now.
+func (st *Store) dropDigests() bool {
+	n := len(st.Outbox)
+	st.Outbox = slices.DeleteFunc(st.Outbox, func(q Queued) bool { return q.Digest })
+	return len(st.Outbox) < n
 }
 
 // forget drops the messages for a channel that the rules do not hold now.

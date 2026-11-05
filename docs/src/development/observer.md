@@ -476,18 +476,20 @@ rules decide what it queues:
    function that reads the types of `internal/model`.
 2. **The rule of an item is the first live rule of the lowest level that covers it.**
    The levels run from `pack` to `cluster`. A mute that has ended is not live. An item
-   under a mute stays as it is, and queues nothing. An item with no rule leaves the
-   state.
+   under a mute stays as it is, and queues nothing. A message of the item that waits for
+   a retry goes no more. An item with no rule leaves the state.
 3. **An item that opens under a rule `now` queues one message.** An item under a rule
    `digest` queues none, and it waits for the digest.
 4. **An item that is gone queues one clear message.** It does so only when its open
-   message went and its rule still sends at once. A cycle clears an item only when it
-   read the news of the item. A failed cycle clears nothing. `HeldIDs` keeps the findings
-   of a part that the cycle could not read. A versions cycle that never ended well clears
+   message went, its channel is still in the rules, and its rule still sends at once. A
+   cycle clears an item only when it read the news of the item. A failed cycle clears
+   nothing. `HeldIDs` keeps the findings of a part that the cycle could not read. A cycle
+   that read no pod clears no image finding. A versions cycle that never ended well clears
    no newer version. A clear needs a check that proves it.
 5. **A digest queues one message for each channel.** It does so when a period has
    passed and an item is open under a digest rule. The message lists the open items.
-   A digest has no clear message.
+   A digest has no clear message. A digest that did not go is made again from the items
+   that are open at the next step, so a channel that comes back gets one digest.
 
 The step plans under the lock of the observer, and it sends after it releases the lock.
 So a slow webhook never holds a request of the page. A channel that fails keeps its later
