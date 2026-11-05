@@ -21,10 +21,17 @@ const BASELINE = {APPROVED: "approved", FIRST_SEEN: "first-seen", UNKNOWN: "unkn
 const STATUS = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", OK: "ok", NO_RECORD: "no-record"};
 const VERIFY = {UNCHANGED: "unchanged", DRIFTED: "drifted", ERROR: "error"};
 const COPY = {SAME: "same", SAME_CONTENT: "same-content", DIFFERS: "differs", NOT_ON_CLUSTER: "not-on-this-cluster", NOT_READ: "not-read"};
-const KIND = {PUBLISHED: "published-changed", OVERWRITTEN: "overwritten", RENAMED: "renamed", GONE: "gone", CLUSTER: "cluster-differs", IMAGE_ID: "image-id-changed"};
+const KIND = {PUBLISHED: "published-changed", OVERWRITTEN: "overwritten", RENAMED: "renamed", GONE: "gone", CLUSTER: "cluster-differs", IMAGE_ID: "image-id-changed", IMAGE_MOVED: "image-moved", IMAGE_SPLIT: "image-split"};
+// The findings of the pods. They set the status of no profile and no pack.
+const IMAGE_KINDS = [KIND.IMAGE_MOVED, KIND.IMAGE_SPLIT];
 const SIDE = {PUBLISHED: "published", CLUSTER: "cluster", NEWER: "newer"};
-const CAUSE = {NO_DIGEST: "no-upstream-digest", OLD_COPY: "older-registry-copy", NO_RECORD: "no-record", READ_ERROR: "read-error", PIN_ERROR: "pin-error"};
+const CAUSE = {NO_DIGEST: "no-upstream-digest", OLD_COPY: "older-registry-copy", NO_RECORD: "no-record", READ_ERROR: "read-error", PIN_ERROR: "pin-error", PODS_NOT_READ: "pods-not-read"};
 const EVENT = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", INFO: "info"};
+// The words of /v1/images: whether the observer reads pods, the status of an image, how it matched a pack, and the status of one digest.
+const PODS = {OFF: "off", NOT_READ: "not-read", READ: "read"};
+const IMAGE = {STEADY: "steady", MOVED: "moved", SPLIT: "split", NOT_CHECKED: "not-checked"};
+const MATCH = {EXACT: "exact", NAME_AND_TAG: "name-and-tag", NONE: "none"};
+const DIGEST = {FIRST: "first-digest", ANOTHER: "another-digest", NO_REPO: "no-repo-digest", NOT_STARTED: "not-started"};
 
 // The color class and the word of a status, a kind of news, and an impact level.
 const BADGE = {
@@ -43,6 +50,18 @@ const FLAGS = ["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"];
 const FILTERS = [["all", "All"], [STATUS.DRIFT, "Drift"], [STATUS.NEWER, "Newer"], [STATUS.NOT_CHECKED, "Not checked"], [STATUS.OK, "OK"]];
 const OPS = {added: "+", changed: "~", removed: "-"};
 const PINNED = {deprecated: "deprecated", disabled: "disabled", deleted: "deleted", absent: "no longer listed"};
+// The badge of an image, and of one digest of an image. A digest that is not a repo digest, and a pod
+// that never started, read Not checked and never OK.
+const IMAGE_BADGE = {
+  [IMAGE.STEADY]: ["g", "First digest"], [IMAGE.MOVED]: ["a", "Image moved"], [IMAGE.SPLIT]: ["r", "Two digests"], [IMAGE.NOT_CHECKED]: ["y", "Not checked"],
+};
+const DIGEST_BADGE = {
+  [DIGEST.FIRST]: ["g", "First digest"], [DIGEST.ANOTHER]: ["r", "Another digest"], [DIGEST.NO_REPO]: ["y", "Not checked"], [DIGEST.NOT_STARTED]: ["y", "Not checked"],
+};
+const DIGEST_WHY = {[DIGEST.NO_REPO]: "No repo digest", [DIGEST.NOT_STARTED]: "Not started"};
+// A finding of the pods has the badge of its image, and not the badge of a drift.
+const IMAGE_FINDING_BADGE = {[KIND.IMAGE_MOVED]: IMAGE_BADGE[IMAGE.MOVED], [KIND.IMAGE_SPLIT]: IMAGE_BADGE[IMAGE.SPLIT]};
+const MATCH_WORDS = {[MATCH.EXACT]: "Exact", [MATCH.NAME_AND_TAG]: "Matched by name and tag", [MATCH.NONE]: "No pack"};
 
 // What a finding says, by kind. Title is the heading, and line is the sentence for a profile.
 const FINDING = {
@@ -51,14 +70,19 @@ const FINDING = {
   [KIND.RENAMED]: {title: "The recorded version has another name", line: "The recorded version has another name now."},
   [KIND.GONE]: {title: "Palette no longer holds the recorded version", line: "Palette no longer holds the recorded version."},
   [KIND.CLUSTER]: {title: "This cluster runs other content than its record", line: "changed on this cluster."},
-  [KIND.IMAGE_ID]: {title: "A pack names another machine image", line: "name another machine image."},
+  [KIND.IMAGE_ID]: {title: "A pack names another machine image", line: "changed the machine image on this cluster."},
+  [KIND.IMAGE_MOVED]: {title: "A tag runs another digest than the first one seen", line: "ran another digest in pods than the first one seen."},
+  [KIND.IMAGE_SPLIT]: {title: "One tag runs with two digests", line: "ran with two digests in pods at one time."},
 };
+// The kinds whose line starts with the names of the packs.
+const NAMES_PACKS = [KIND.PUBLISHED, KIND.CLUSTER, KIND.IMAGE_ID, ...IMAGE_KINDS];
 const CAUSE_TEXT = {
   [CAUSE.NO_DIGEST]: "Palette gives no upstream digest for this registry kind, so a change of the archive does not show.",
   [CAUSE.OLD_COPY]: "Current against an older copy of the registry. A newer version can be missing here.",
   [CAUSE.NO_RECORD]: "No record holds this profile, so strata cannot say that anything changed.",
   [CAUSE.READ_ERROR]: "Strata could not read the record or its answer.",
   [CAUSE.PIN_ERROR]: "Strata could not look for a newer version of this pack, or could not compare it with the newest version.",
+  [CAUSE.PODS_NOT_READ]: "The observer could not read the pods, so the list of images is old or empty.",
 };
 // What a profile says in the list for a cause, with the names of its packs.
 const CAUSE_LINE = {
@@ -73,6 +97,14 @@ const ERROR_TEXT = {
   transport: () => "the link to Palette failed",
   "not-json": () => "Palette sent an answer that is not JSON",
   timeout: () => "Palette did not answer in time",
+  "kube-api": status => status === 401 || status === 403 ? `HTTP ${status}, the role of the observer was refused` : `HTTP ${status}, the API server gave an error`,
+  "kube-transport": () => "the link to the API server failed",
+  "kube-config": () => "the observer could not read its token or its CA file",
+};
+// The read of the pods says "the API server" where a call to Palette says "Palette".
+const POD_ERROR_TEXT = {
+  "not-json": () => "the API server sent an answer that is not JSON",
+  timeout: () => "the API server did not answer in time",
 };
 
 /* ---- State ---- */
@@ -86,14 +118,14 @@ async function getJSON(url) {
   return r.json();
 }
 
-// load reads the six summary routes. The detail route is read when a screen needs it.
+// load reads the seven summary routes. The detail route is read when a screen needs it.
 async function load() {
-  const [cluster, findings, profiles, newer, notChecked, events] = await Promise.all(
-    ["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events"].map(getJSON));
+  const [cluster, findings, profiles, newer, notChecked, events, images] = await Promise.all(
+    ["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events", "/v1/images"].map(getJSON));
   if (D && (D.cluster.content.checkedAt !== cluster.content.checkedAt || D.cluster.versions.readAt !== cluster.versions.readAt)) {
     S.diffs = {};
   }
-  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events};
+  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images};
   S.loadedAt = new Date().toISOString();
 }
 
@@ -149,6 +181,7 @@ const enc = s => encodeURIComponent(s).replace(/%40/g, "@");
 const subjectOf = p => `${p.name}@${p.version}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
+const imageHash = ref => `#i-${enc(ref)}`;
 const plural = (n, one, many) => n === 1 ? one : many;
 // hex12 cuts a root to the first 12 digits. digest shows an upstream digest in the form sha256:12 digits.
 const hex12 = s => s ? s.slice(0, 12) : "";
@@ -168,6 +201,9 @@ const neverChecked = () => !D.cluster.content.checkedAt;
 const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !== PAGE.NO_RECORDS && !neverChecked();
 const num = n => hasChecks() ? n : "-";
 const known = n => neverChecked() ? "-" : n;
+// podsRead says that the observer holds a read of the pods. A count of images is "-" before that, as num() is for a check.
+const podsRead = () => D.images.pods === PODS.READ;
+const imageNum = n => podsRead() ? n : "-";
 const NEEDS_RECORD = "Strata needs a record to look for newer versions. A record is the copy your team approved. Your pipeline writes records from Git.";
 const NOT_READ_YET = "No check has ended well, so this page has nothing to show yet.";
 // noChecksWords says why the page has no newer version to show.
@@ -180,8 +216,12 @@ const profileOf = subject => D.profiles.find(p => subjectOf(p) === subject);
 const impactOf = i => IMPACT[i] || ["y", i];
 
 const badge = (cls, text) => h`<span class="badge ${cls}">${text}</span>`;
-const statusBadge = st => { const [c, t] = BADGE[st] || ["y", st]; return badge(c, t); };
-const impactBadge = i => { const [c, t] = impactOf(i); return badge(c, t); };
+// badgeOf draws the badge of a word from one of the tables above. A word that the table lacks shows as it is.
+const badgeOf = (table, key) => { const [c, t] = table[key] || ["y", key]; return badge(c, t); };
+const statusBadge = st => badgeOf(BADGE, st);
+const impactBadge = i => badgeOf(IMPACT, i);
+const imageBadge = st => badgeOf(IMAGE_BADGE, st);
+const digestBadge = st => badgeOf(DIGEST_BADGE, st);
 const lab = (k, v) => h`<span class="lab"><i>${k}=</i>"${v}"</span>`;
 const hbar = x => h`<span class="hbar" role="img" aria-label="Status of each pack">${x.packs.map(p => h`<i class="${(BADGE[p.status] || ["y"])[0]}" title="${p.name}: ${(BADGE[p.status] || [0, p.status])[1]}"></i>`)}</span>`;
 const mut = text => h`<span class="mut">${text}</span>`;
@@ -199,17 +239,20 @@ const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not
 // worstOf gives the status that wins in a list of statuses.
 const worstOf = list => SEVERITY.find(s => list.includes(s)) || STATUS.OK;
 
-function errorWords(err) {
+// errorWords tells a failed run in words. own holds the words of a read that has its own, as POD_ERROR_TEXT.
+function errorWords(err, own = {}) {
   if (!err) return "";
-  const f = ERROR_TEXT[err.kind];
+  const f = own[err.kind] || ERROR_TEXT[err.kind];
   return f ? f(err.status) : "strata gave an error";
 }
+const podsErrorWords = err => errorWords(err, POD_ERROR_TEXT);
 
 /* ---- The frame: nav, top bar, alert bars ---- */
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
   const items = [["overview", "Overview", ""], ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
     ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
+    ["images", "Images", h`<span class="cnt">${imageNum(D.images.counts.images)}</span>`],
     ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`]];
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
@@ -269,6 +312,10 @@ function alertBars() {
     const from = c.records.firstSeenFrom;
     bars.push(h`<div class="alertbar a">No person approved these records. <span>They come from the first sight of ${from ? h`the cluster <span class="m">${from}</span>` : "a cluster"}.</span></div>`);
   }
+  const pods = D.images;
+  if (pods.pods === PODS.READ && pods.error) {
+    bars.push(h`<div class="alertbar a">The last read of the pods failed: ${podsErrorWords(pods.error)}. <span>The list shows the read of ${clock(pods.readAt)}.</span></div>`);
+  }
   return bars;
 }
 
@@ -287,12 +334,24 @@ function tiles() {
     newerSub = n.newer === 0 ? (none ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`;
     notCheckedSub = n.notChecked === 0 ? `${n.packsInFull} of ${n.packs} packs in full` : `${n.notChecked} ${plural(n.notChecked, "cause", "causes")} · ${n.packsInFull} of ${n.packs} packs in full`;
   }
+  const [imageCls, imageValue, imageSub] = imageTile();
   return h`<section class="tiles" aria-label="Summary">
     ${T(!checked ? "y" : n.drift ? "r" : "g", "Drift", num(n.drift), driftSub, "findings")}
+    ${T(imageCls, "Image changes", imageValue, imageSub, "images")}
     ${T("b", "Newer versions", num(n.newer), newerSub, "newer")}
     ${T("y", "Not checked", num(n.notChecked), notCheckedSub, "notchecked")}
     ${T("", "Profiles", known(n.profiles), neverChecked() ? "Not read yet" : `${n.packs} packs on this cluster`, "profiles")}
   </section>`;
+}
+
+// imageTile gives the color, the value, and the words of the tile "Image changes". Before a read of the
+// pods it claims nothing: the value is "-". The Drift tile does not count these changes.
+function imageTile() {
+  const o = D.images, n = o.counts;
+  if (o.pods === PODS.OFF) return ["y", "-", "Pods not read"];
+  if (o.pods === PODS.NOT_READ) return ["y", "-", "Not read yet"];
+  if (n.changed > 0) return ["a", n.changed, "Moved or split"];
+  return ["g", n.changed, `${n.images} ${plural(n.images, "image", "images")} in pods`];
 }
 
 // driftSubject names the profile that drifts, for the tile.
@@ -303,14 +362,29 @@ function driftSubject() {
 
 function findingTitle(f) { return (FINDING[f.kind] || {title: f.kind}).title; }
 
+// findingHref gives the screen that a finding opens: the image page for a finding of the pods, else its pack or its profile.
+function findingHref(f) {
+  if (IMAGE_KINDS.includes(f.kind) && f.images && f.images[0]) return imageHash(f.images[0]);
+  const p = profileOf(f.profile);
+  const key = f.packs[0] && p ? p.packs.find(k => k.key === f.packs[0]) : null;
+  return key ? packHash(f.profile, key) : profileHash(f.profile);
+}
+
+// findingBadge gives the badge of a finding. A finding of the pods is no drift of a record, so it has the badge of its image.
+const findingBadge = f => IMAGE_KINDS.includes(f.kind) ? badgeOf(IMAGE_FINDING_BADGE, f.kind) : statusBadge(STATUS.DRIFT);
+
+// imageLab is the label of an image reference. A reference is long, so it can wrap.
+const imageLab = ref => h`<span class="lab wrap"><i>image=</i>"${ref}"</span>`;
+
+// findingLabs names what a finding is about: the images for a finding of the pods, else the packs.
+const findingLabs = f => IMAGE_KINDS.includes(f.kind) ? (f.images || []).map(imageLab) : f.packs.map(k => lab("pack", packName(k)));
+
 function findingsCard() {
   const rows = D.findings;
   const body = rows.length ? h`<div class="tw"><table><tbody>${rows.map(f => {
-    const p = profileOf(f.profile);
-    const key = f.packs[0] && p ? p.packs.find(k => k.key === f.packs[0]) : null;
-    const href = key ? packHash(f.profile, key) : profileHash(f.profile);
-    return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.DRIFT)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}</td>
-      <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${f.packs.map(k => lab("pack", packName(k)))}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
+    const href = findingHref(f);
+    return h`<tr class="link" data-go="${href}"><td class="w90">${findingBadge(f)}${f.reBaselineNeeded ? h` <span class="badge y">re-baseline needed</span>` : ""}</td>
+      <td><div class="fw"><a href="${href}">${findingTitle(f)}</a></div><div>${lab("profile", f.profile)}${findingLabs(f)}</div><div class="mut small narrow-show">${ago(f.firstSeen)}</div></td>
       <td class="n mut small w60 nw narrow-hide">${ago(f.firstSeen)}</td></tr>`;
   })}</tbody></table></div>` : h`<div class="body mut">${neverChecked() ? "Not read yet." : "Nothing needs attention."}</div>`;
   return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${known(rows.length)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
@@ -336,8 +410,9 @@ function eventsCard() {
 function coverageCard() {
   const l = D.limits;
   const row = (title, sub, value) => h`<tr><td>${title}<div class="small mut">${sub}</div></td><td class="n">${value}</td></tr>`;
+  const behindATag = podsRead() ? h`<a href="#images">Compared with the first digest seen in pods</a>` : "Strata compares the name and the tag.";
   return h`<section class="card"><div class="chead"><h2>What a check does not cover</h2></div><div class="tw"><table><tbody>
-    ${row("Image behind a tag", "Strata compares the name and the tag.", num(l.imagesNamedByATag))}
+    ${row("Image behind a tag", behindATag, num(l.imagesNamedByATag))}
     ${row("Bytes of a chart", "The record holds the digest Palette lists", num(l.helmPacks))}
     ${row("Masked values", "An equal root does not show an equal secret", num(l.maskedPaths))}
     ${row("Edits with kubectl", "Strata compares what Palette holds", h`<span class="mut">n/a</span>`)}
@@ -348,7 +423,7 @@ function coverageCard() {
 function findingLine(f, x) {
   const w = FINDING[f.kind] || {line: f.kind};
   const names = f.packs.map(packName).join(", ");
-  let text = f.kind === KIND.PUBLISHED || f.kind === KIND.CLUSTER || f.kind === KIND.IMAGE_ID ? (names ? `${names} ${w.line}` : w.title + ".") : w.line;
+  let text = NAMES_PACKS.includes(f.kind) ? (names ? `${names} ${w.line}` : w.title + ".") : w.line;
   if (f.kind === KIND.PUBLISHED) {
     const copy = x.clusterCopy && x.clusterCopy.status;
     if (f.alsoOnCluster) text += " This cluster has the edit too.";
@@ -357,7 +432,18 @@ function findingLine(f, x) {
   return text;
 }
 
+// newsOf gives the news of a profile. A finding of the pods sets no status, so a profile that does not
+// drift adds the line of the finding to its other news, and an OK profile gives only that line.
 function newsOf(x) {
+  const news = recordNews(x);
+  if (x.status === STATUS.DRIFT) return news;
+  const subject = subjectOf(x);
+  const pods = D.findings.filter(f => f.profile === subject && IMAGE_KINDS.includes(f.kind)).map(f => findingLine(f, x));
+  if (!pods.length) return news;
+  return x.status === STATUS.OK ? pods.join(" ") : h`${news}<div>${pods.join(" ")}</div>`;
+}
+
+function recordNews(x) {
   const subject = subjectOf(x);
   const ms = x.packs.filter(p => p.newer);
   switch (x.status) {
@@ -498,7 +584,8 @@ function viewNotChecked() {
       });
       const what = [...new Set(names)].join(", ");
       const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.` : (CAUSE_TEXT[r.cause] || r.cause);
-      return h`<tr class="link" data-go="${p ? profileHash(first) : "#profiles"}"><td class="m">${what || mut("The profile")}</td><td class="m">${r.profiles.join(", ")}</td><td>${why}</td></tr>`;
+      const pods = r.cause === CAUSE.PODS_NOT_READ;
+      return h`<tr class="link" data-go="${pods ? "#images" : p ? profileHash(first) : "#profiles"}"><td class="m">${what || mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? r.profiles.join(", ") : mut("-")}</td><td>${why}</td></tr>`;
     })}</tbody></table></div>`;
   }
   const sub = hasChecks() ? h`${rows.length}. This never raises a severity, and it stops the page from saying "No change".` : h`${num(rows.length)}`;
@@ -586,6 +673,105 @@ function viewMissing(cr, nav) {
   return {nav, crumbs: cr, body: h`${alertBars()}<section class="card"><div class="body mut">This page is not in the data. It is gone, or the observer has not read it yet.</div></section>`};
 }
 
+/* ---- The images that pods run ---- */
+const podsOf = img => img.digests.reduce((sum, d) => sum + d.pods, 0);
+// realDigests lists the digests that a pod reported. A pod that never started, and a local image, report none.
+const realDigests = img => img.digests.filter(d => d.digest);
+const digestText = d => d ? h`<span title="${d}">${digest(d)}</span>` : mut("none");
+
+// packCell names the pack of an image. An image that matches a pack by name and tag says so.
+function packCell(img) {
+  if (!img.packs.length) return mut("no pack");
+  const more = img.packs.length > 1 ? h` <span class="mut small">+${img.packs.length - 1}</span>` : "";
+  const how = img.match === MATCH.NAME_AND_TAG ? h`<div class="mut small">matched by name and tag</div>` : "";
+  return h`${lab("pack", packName(img.packs[0].key))}${more}${how}`;
+}
+
+// digestCell shows the first digest that a pod reported, and +1 for each other one. An image with no digest reads Not checked.
+function digestCell(img) {
+  const real = realDigests(img);
+  if (!real.length) return mut("Not checked");
+  return h`${digestText(real[0].digest)}${real.length > 1 ? h` <span class="mut">+${real.length - 1}</span>` : ""}`;
+}
+
+function imageRow(img) {
+  const href = imageHash(img.ref);
+  return h`<tr class="link" data-go="${href}"><td class="w110">${imageBadge(img.status)}</td><td class="m wrap"><a href="${href}">${img.ref}</a><div class="narrow-show">${packCell(img)}</div></td><td class="narrow-hide">${packCell(img)}</td><td class="n narrow-hide">${podsOf(img)}</td><td class="m nw">${digestCell(img)}</td></tr>`;
+}
+
+const PODS_OFF_WORDS = h`<div>The observer does not read pods. The read is opt-in.</div>
+  <div class="mt6">A <span class="m">list</span> call on pods gives the whole spec of each pod to the holder of the token. So a team must ask for it.</div>
+  <div class="mt6">The page "The observer" in the book says how to turn it on.</div>`;
+
+// imagesBody gives the body of the card of the list, from the state of the read of the pods.
+function imagesBody() {
+  const o = D.images;
+  if (o.pods === PODS.OFF) return h`<div class="body">${PODS_OFF_WORDS}</div>`;
+  if (o.pods === PODS.NOT_READ) {
+    const why = o.error ? h`The last read failed: ${podsErrorWords(o.error)}.` : "No read has ended yet.";
+    return h`<div class="body"><div>The observer could not read the pods yet.</div><div class="mt6 mut">${why}</div></div>`;
+  }
+  if (!o.images.length) return h`<div class="body mut">No pod runs an image.</div>`;
+  return h`<div class="tw"><table><thead><tr><th>Status</th><th>Image</th><th class="narrow-hide">Pack</th><th class="n narrow-hide">Pods</th><th>Digest</th></tr></thead><tbody>${o.images.map(imageRow)}</tbody></table></div>`;
+}
+
+function viewImages() {
+  const o = D.images, n = o.counts, rest = n.images - n.matched;
+  const sub = podsRead() ? h`${n.images} ${plural(n.images, "image", "images")}. ${n.matched} ${plural(n.matched, "matches", "match")} a pack. ${rest} ${plural(rest, "does", "do")} not.` : o.pods === PODS.OFF ? "Pods not read" : "Not read yet";
+  const note = podsRead() && o.images.length ? h`<div class="note small">This page says so when what this cluster pulled differs from what it first pulled, or when two pods of one tag differ. It cannot say whether a tag moved at its source.</div>` : "";
+  return {nav: "images", crumbs: crumbs("Images"), body: h`${alertBars()}<section class="card"><div class="chead"><h2>Images <span class="sub">${sub}</span></h2></div>${imagesBody()}</section>${note}`};
+}
+
+// recordRows gives one row for each pack that names the image. The status is the one of its profile.
+function recordRows(img) {
+  return img.packs.map(p => {
+    const x = profileOf(p.profile);
+    const where = img.packs.length > 1 ? h`Record ${mut("· " + packName(p.key))}` : "Record";
+    return {where, digest: img.byDigest ? "digest" : mut("tag only"), status: x ? statusBadge(x.status) : mut("-")};
+  });
+}
+
+// podRows gives one row for each digest that pods run. A digest that is not a repo digest reads Not checked, with the reason.
+function podRows(img) {
+  return img.digests.map(d => ({
+    where: `Pods (${d.pods})`, digest: digestText(d.digest),
+    status: h`${digestBadge(d.status)}${DIGEST_WHY[d.status] ? h` ${mut(DIGEST_WHY[d.status])}` : ""}`,
+  }));
+}
+
+const IMAGE_NOTE = {
+  [IMAGE.MOVED]: ["a", "The digest that the observer saw first is not the digest that the pods run now. A pull of this tag gave other content."],
+  [IMAGE.SPLIT]: ["r", "Pods run this tag with two digests at one time. The tag moved between two pulls."],
+};
+
+function imageTable(img) {
+  const rows = [...recordRows(img), ...podRows(img)];
+  const [cls, words] = IMAGE_NOTE[img.status] || [];
+  const note = words ? h`<div class="body"><div class="note ${cls} small">${words}</div></div>` : "";
+  return h`<div class="tw"><table><thead><tr><th>Where</th><th class="narrow-hide">Reference</th><th>Digest</th><th>Status</th></tr></thead><tbody>${rows.map(r => h`<tr><td>${r.where}</td><td class="m wrap narrow-hide">${img.ref}</td><td class="m nw">${r.digest}</td><td>${r.status}</td></tr>`)}</tbody></table></div>${note}`;
+}
+
+// podsCatch says what a read of the pods catches and what it does not. It is the same for each image.
+const PODS_CATCH = h`<div class="body small"><b>When this happens</b><ul class="tight"><li>A tag pulled directly from a mutable registry, when a pod lands on a node with no cached copy.</li><li><span class="m">imagePullPolicy: Always</span> or <span class="m">:latest</span>, at any restart.</li><li>A mutable mirror, or a pipeline that copies over the same tag.</li></ul>
+  <div class="mut mt6">Needs read access to pods, and no registry and no credential. No Palette route has this digest.</div>
+  <div class="mt9"><b>What it does not catch</b></div><ul class="tight"><li>A move with no new pull.</li><li>An image that no pod runs.</li><li>A difference between clusters.</li></ul>
+  <div class="mut mt6">It stays silent when the pods pull an unchanged digest from a mirror, also when the vendor rebuilt the tag.</div></div>`;
+
+function viewImage(ref) {
+  const img = D.images.images.find(i => i.ref === ref);
+  const cr = crumbs(h`<a href="#images">Images</a>`, ref);
+  if (!img) return viewMissing(cr, "images");
+  const id = "image-" + ref, tab = S.tabs[id] || "this";
+  const profiles = [...new Set(img.packs.map(p => p.profile))];
+  const packs = img.packs.length ? img.packs.map(p => lab("pack", packName(p.key))) : mut("none");
+  const links = profiles.length ? profiles.map(s => h`<a class="m" href="${profileHash(s)}">${s}</a> `) : mut("none");
+  const fix = IMAGE_NOTE[img.status] ? h`<section class="card"><div class="chead"><h2>The fix</h2></div><div class="body">The use case "A vendor rebuilds an image under one tag" in the book shows the fix.</div></section>` : "";
+  return {nav: "images", crumbs: cr, body: h`${alertBars()}
+    <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${ref}</h1>${imageBadge(img.status)}</div>
+    <div class="meta"><div><span>${img.packs.length > 1 ? "Packs" : "Pack"}</span>${packs}</div><div><span>${profiles.length > 1 ? "Profiles" : "Profile"}</span>${links}</div><div><span>Named by</span>${img.byDigest ? "a digest" : "a tag"}</div><div><span>Match</span>${MATCH_WORDS[img.match] || img.match}</div></div></div></section>
+    <section class="card">${tabBar(id, [["this", "This image"], ["catch", "What pods do catch"]])}${tab === "catch" ? PODS_CATCH : imageTable(img)}</section>${fix}`};
+}
+
 /* ---- The comparison of a pack ---- */
 const settingsTable = rows => h`<div class="tw"><table><thead><tr><th>Setting</th><th>Before</th><th>After</th></tr></thead><tbody>${rows.map(r => h`<tr><td class="m">${r.path}</td><td class="was val">${leafText(r.old)}</td><td class="now val">${leafText(r.new)}</td></tr>`)}</tbody></table></div>`;
 
@@ -597,7 +783,7 @@ function leafText(v) {
 
 function tabBar(id, items) {
   const cur = S.tabs[id] || items[0][0];
-  return h`<div class="tabs" role="tablist">${items.map(([k, l, n]) => h`<button class="tab ${k === cur ? "on" : ""}" role="tab" aria-selected="${k === cur}" data-tab="${id}" data-k="${k}">${l}<em>${n}</em></button>`)}</div>`;
+  return h`<div class="tabs" role="tablist">${items.map(([k, l, n]) => h`<button class="tab ${k === cur ? "on" : ""}" role="tab" aria-selected="${k === cur}" data-tab="${id}" data-k="${k}">${l}${n === undefined ? "" : h`<em>${n}</em>`}</button>`)}</div>`;
 }
 
 function changesPanel(list, noun, head) {
@@ -651,7 +837,8 @@ function sidesOf(x) {
 
 function driftCard(subject, x, p) {
   const sides = sidesOf(x), id = "side-" + subject + "-" + p.key;
-  const fs = D.findings.filter(f => f.profile === subject && f.packs.includes(p.key));
+  // A finding of the pods says nothing about the sides of a record.
+  const fs = D.findings.filter(f => f.profile === subject && f.packs.includes(p.key) && !IMAGE_KINDS.includes(f.kind));
   const clusterOnly = fs.length > 0 && fs.every(f => f.kind === KIND.CLUSTER || f.kind === KIND.IMAGE_ID);
   const side = S.side[id] || (clusterOnly && sides.length > 1 ? SIDE.CLUSTER : SIDE.PUBLISHED);
   const pub = x.published, cp = x.clusterCopy;
@@ -709,6 +896,8 @@ function route() {
     if (hash === "profiles") return viewProfiles();
     if (hash === "newer") return viewNewer();
     if (hash === "notchecked") return viewNotChecked();
+    if (hash === "images") return viewImages();
+    if (hash.startsWith("i-")) return viewImage(decodeURIComponent(hash.slice(2)));
     if (hash.startsWith("p-")) return viewProfile(decodeURIComponent(hash.slice(2)));
     if (hash.startsWith("k-")) {
       const [subject, layer, name] = hash.slice(2).split("/").map(decodeURIComponent);

@@ -4,9 +4,10 @@
 just build             # target/release/strata and target/release/strata-preflight
 just observer-build    # target/observer/strata-observer, a static Go binary
 just observer-contract # the documents of this build of strata go through the allow-list of the observer
-just observer-dev      # the page of the observer, from test data: see The API of the observer
+just observer-dev      # the page of the observer, from test data: see The server of the observer
 just observer-image    # strata-observer:dev, the image, from the static binary of this tree
 just observer-manifests # kubectl kustomize deploy/observer holds four objects
+just observer-manifests-pods # examples/observer-pods, which lists the base and the component: six objects and the flag --read-pods
 just observer-playground # the observer against the stand-in, and its page at http://127.0.0.1:8080
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer and of the request counter
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
@@ -53,6 +54,10 @@ and serves its page. It takes the records from the first state of the chapter
 observer watches that one. The default is `observer-2`, with one finding and the
 newer versions. `observer-1` is the tenant before the edit, with no finding.
 `OBSERVER_CLUSTER` names another cluster, such as `ledger`.
+
+`just observer-dev` serves the page from test data, with no `strata` binary. Its sets
+`images`, `images-split`, `images-off`, and `images-unread` show the read of the pods.
+[Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
 It also holds `cluster_uid`, which gives the uid of a cluster by its name. The
@@ -129,9 +134,9 @@ that version.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
+| `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/kube`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
 | `examples/live/count-requests/` | A small Go program in a module of its own, with the standard library only. It runs a command and sends each request of the command on to Palette. It writes one line for each request, with no query and no key. `examples/live/observer.sh` uses it to count the requests of a cycle of the observer. `just lint` and `just test` check the module. |
-| `deploy/observer/`, `scripts/ci/observer-records.sh` | The manifests and the Dockerfile of the observer: see [The image and the manifests of the observer](./observer-deploy.md). The script writes the records of the observer as Secrets. `.github/workflows/observer-image.yml` builds and signs the image. `tests/observer_deploy.rs` ties the manifests to the code of the observer. |
+| `deploy/observer/`, `scripts/ci/observer-records.sh` | The manifests and the Dockerfile of the observer, with the component `pods/` for the read of the pods. See [The image and the manifests of the observer](./observer-deploy.md). The script writes the records of the observer as Secrets. `.github/workflows/observer-image.yml` builds and signs the image. `tests/observer_deploy.rs` ties the manifests to the code of the observer. |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. |
 | `preflight/src/rule/` | `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. |
 | `preflight/src/probe/` | `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. |
@@ -539,7 +544,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, and `just observer-contract` |
+| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, `just observer-contract`, `just observer-manifests`, and `just observer-manifests-pods` |
 | docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |

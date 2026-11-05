@@ -128,6 +128,7 @@ func (o *Observer) contentCycle(ctx context.Context) (content model.Content, fil
 
 func (o *Observer) readContent(ctx context.Context, dir string, set baseline.Set, content *model.Content) error {
 	content.Meta, content.Unreadable = set.Meta, set.Unreadable
+	o.readPods(ctx, content)
 	names, err := writeRecords(dir, set.Entries)
 	if err != nil {
 		return err

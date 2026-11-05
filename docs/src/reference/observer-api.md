@@ -39,11 +39,14 @@ Only `GET` is allowed. Another method gets `405` and the header `Allow: GET`.
 | Summary | `/v1/newer` | `newer`. Each row holds the counts of its move. |
 | Summary | `/v1/notchecked` | `notChecked` and `limits`. |
 | Summary | `/v1/events` | `events`: the last 7 days. |
+| Summary | `/v1/images` | The document `strata-observed/1`: the images that the pods run, with the digest of each. |
+| Summary | `/v1/images/{ref}` | One image of that document. `{ref}` is the reference, as one escaped segment. |
 | Detail | `/v1/packs/{profile}/{layer}/{name}/diff?side=` | The changes of one pack, with the old and the new value. |
 
 Each summary route serves a part of [the summary](../development/observer.md#the-summary),
-with the same field names. Each answer is JSON, except `/healthz`, which is plain text.
-The route `/` serves the page of the dashboard.
+with the same field names. The two image routes are the exception: they serve
+[`strata-observed/1`](#the-images). Each answer is JSON, except `/healthz`, which is
+plain text. The route `/` serves the page of the dashboard.
 
 - `{name}` and `{profile}` are `name@version` of a profile. A name with no version
   works when only one profile has that name.
@@ -55,11 +58,109 @@ The route `/` serves the page of the dashboard.
 | Status | When |
 | --- | --- |
 | `400` | The detail route has a `side` that is not `published`, `cluster`, or `newer`, or has no `side`. |
-| `404` | A profile, a pack, or a diff does not exist. The body has a fixed text and names no part of the request. |
+| `404` | A profile, a pack, a diff, or an image does not exist. The body has a fixed text and names no part of the request. |
 | `405` | The method is not `GET`. |
 | `421` | The `Host` header is not `localhost` or a loopback address. A person can choose the local port, so the port can be any port. |
 | `502` | The detail route asked for a compare of the `newer` side, and the compare failed. The next request asks again. |
 | `503` | The detail route waited too long for a cycle to end. |
+
+## The images
+
+`strata-observed/1` is the document of the pods. It is no tier of a record, and it
+moves no root. It holds no pod name, no namespace, and no `env`. `GET /v1/images`
+serves the whole document. `GET /v1/images/{ref}` serves `schema`, `pods`, `readAt`,
+and `error`, with one row in the field `image`. It gives `404` for a reference that
+no pod runs.
+
+A reference holds `/` and `:`, so a client escapes the whole reference as one
+segment of the path. `encodeURIComponent` does it in a browser. Without
+`--read-pods`, no reference exists, so every `/v1/images/{ref}` gives `404`.
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `schema` | text | `strata-observed/1`. |
+| `pods` | text | The state of the read: `off`, `not-read`, or `read`. |
+| `readAt` | time or `null` | The end of the last good read. It is `null` when no read ended well. |
+| `error` | object | The newest read, when it failed: its `kind`, and its `status` when the kind has one. The field is absent when the newest read worked. |
+| `counts` | object | `images`, `matched`, and `changed`. |
+| `images` | list | One row for each image reference. It is empty when `pods` is `off` or `not-read`. |
+
+| `pods` | When |
+| --- | --- |
+| `off` | The flag `--read-pods` is not set. The observer makes no Kubernetes call. `images` is empty, and each count is 0. |
+| `not-read` | The flag is set, and no read ended well. `images` is empty, and each count is 0. `error` names the failure. |
+| `read` | A read ended well. A later read that fails keeps this state. `error` names that failure, and the rows are those of the last good read. |
+
+`counts.images` is the number of rows. `counts.matched` is the number of rows whose
+`match` is not `none`. `counts.changed` is the number of rows that make a finding.
+
+A row of `images` has these fields:
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `ref` | text | The image of the spec of the pod, as the pod names it. It is never the `image` of the status, because the runtime can rewrite that one. |
+| `status` | text | The status of the image: see the table below. |
+| `match` | text | `exact`, `name-and-tag`, or `none`. The page labels `name-and-tag` "matched by name and tag", and it labels `none` "no pack". |
+| `byDigest` | boolean | True when the reference names a digest. Such an image cannot move, so it makes no finding. |
+| `packs` | list | Each pack that the image matches: `profile` as `name@version`, and `key` as `<layer>/<name>`. The list is empty when `match` is `none`. |
+| `digests` | list | One entry for each digest, and one for the pods that have none. |
+
+An entry of `digests` has these fields:
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `digest` | text | The digest, as `sha256:` and hex digits. The entry has no such field when its `status` is `no-repo-digest` or `not-started`. |
+| `status` | text | The status of the digest: see the table below. |
+| `pods` | number | The number of pods that run the digest. A pod counts once for an image, also when two of its containers run it. |
+
+| `status` of an image | Meaning |
+| --- | --- |
+| `split` | Two digests or more run at one time. |
+| `moved` | One digest runs, and it is not the first digest that the observer saw. |
+| `steady` | One digest runs, and it is the first digest. |
+| `not-checked` | No pod gave a digest. |
+
+| `status` of a digest | Meaning |
+| --- | --- |
+| `first-digest` | The first digest that the observer saw for this reference. |
+| `another-digest` | A digest other than the first one. |
+| `no-repo-digest` | The image has an id and no repository digest, as a local image does. The page reads "Not checked", never "OK". |
+| `not-started` | The container never started, so its `imageID` is empty. The page reads "Not checked", never "OK". |
+
+The rows come in the order `split`, `moved`, `steady`, and `not-checked`, then by
+`ref`. The digests come in the order `first-digest`, `another-digest`,
+`no-repo-digest`, and `not-started`, then by digest. [The images](../development/observer.md#the-images)
+gives the rule of each status.
+
+### The error of a read
+
+A read of the pods that fails is not a failed cycle. The document names the failure
+by its kind and, for `kube-api`, its HTTP status. It never holds the text of the
+answer, because that text can name an object.
+
+| `kind` | `status` | When |
+| --- | --- | --- |
+| `kube-api` | The HTTP status | The API server answered with a status other than 200, such as 401 or 403. |
+| `kube-transport` | none | A request got no answer, or the CA did not sign the certificate of the server. |
+| `kube-config` | none | The file of the token or of the CA cannot be read, is empty, or holds no certificate. |
+| `not-json` | none | An answer is not a list of pods. |
+| `timeout` | none | A request took more than 30 seconds. |
+
+A failed read also adds the cause `pods-not-read` to `/v1/notchecked`. Its row has an
+empty `profiles`, an empty `packs`, and an empty `registry`, and it changes no
+status of a profile.
+
+### The findings of the pods
+
+`/v1/findings`, `/v1/profiles`, and `/v1/events` carry two more kinds of finding:
+`image-moved` and `image-split`. A finding of these kinds holds the profile, the pack
+keys in `packs`, and the references of the images in the new field `images`. Other
+kinds omit `images`. `impact` is empty, and `reBaselineNeeded` is false. Each kind
+and profile gives one finding. The events have the reasons `ImageMoved` and
+`ImageSplit`.
+
+A finding of the pods changes no status of a profile or of a pack. `counts.drift` of
+`/v1/cluster` does not count it, and `counts.findings` does.
 
 ## The detail route
 
@@ -90,10 +191,14 @@ memory holds no values for a move that the state knows. The route then asks for 
 ## What no answer carries
 
 No tier carries `a`, `b`, `cluster.variables`, `clusterVariables`,
-`variables.diff[]`, a whole record, the raw directory, or the environment of a pod.
-The observer reads the documents of `strata` through an allow-list that has no
-field for them. The bytes can reach memory, but they reach no type of the observer.
-So no answer and no log carries them.
+`variables.diff[]`, a whole record, the raw directory, the `env` of a pod, a pod
+name, or a namespace. The observer reads the documents of `strata` through an
+allow-list that has no field for them. The bytes can reach memory, but they reach
+no type of the observer. So no answer and no log carries them.
+
+The read of the pods works in the same way. Its types have no field for `env`, so the
+bytes of `env` reach no type. The process holds the namespace and the name of a pod
+in memory, to count the pods of an image. They reach no answer, no log, and no state.
 
 The API key stays in the environment of the process. It goes to no answer and to no
 log. No route shows the environment. The server writes no request log, because a

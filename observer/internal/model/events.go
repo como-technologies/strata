@@ -17,6 +17,8 @@ var eventKinds = map[Kind]struct{ reason, message string }{
 	Gone:             {"Gone", "Palette no longer holds the recorded version."},
 	ClusterDiffers:   {"ClusterDiffers", "The cluster runs other content than the record."},
 	ImageIDChanged:   {"ImageIDChanged", "A pack names another machine image."},
+	ImageMoved:       {"ImageMoved", "A tag runs another digest than the first one that the observer saw."},
+	ImageSplit:       {"ImageSplit", "Pods run one tag with two digests."},
 }
 
 // The reasons of the events that no kind of finding names.

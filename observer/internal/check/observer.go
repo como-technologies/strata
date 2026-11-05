@@ -38,7 +38,9 @@ type Config struct {
 type Observer struct {
 	cfg    Config
 	strata Strata
-	now    func() time.Time
+	// pods is nil when the observer does not read pods: then it makes no call to Kubernetes.
+	pods Pods
+	now  func() time.Time
 	// jitter gives a number from 0 up to, and not including, 1.
 	jitter func() float64
 	log    *slog.Logger
@@ -125,6 +127,7 @@ func (o *Observer) RunContent(ctx context.Context) error {
 			// A read that failed tells nothing about the drift, so the last good answer of that part stays.
 			content.Carry(o.content)
 			o.content, o.contentAt = &content, &content.At
+			o.keepFirstDigests(content)
 			o.keepFirstSeen(content)
 		})
 }
@@ -199,7 +202,7 @@ func (o *Observer) fail(name string, clock *ClockState, start time.Time, err err
 // works clears a finding. This holds also when the process has no last answer in memory.
 func (o *Observer) keepFirstSeen(content model.Content) {
 	kept := map[string]FindingState{}
-	for _, f := range model.FindingsOf(content) {
+	for _, f := range model.FindingsOf(content, o.state.Images.First) {
 		seen, ok := o.state.Findings[f.ID]
 		if !ok {
 			seen = FindingState{FirstSeen: content.At.UTC().Truncate(time.Second)}
@@ -267,15 +270,13 @@ func (o *Observer) save() {
 	}
 }
 
-// Summary gives the summary at this time. The page state is computed here, at each call.
-func (o *Observer) Summary() model.Summary {
-	o.mu.Lock()
-	defer o.mu.Unlock()
+// input collects what Build reads. The caller holds the lock.
+func (o *Observer) input() model.Input {
 	firstSeen := make(map[string]time.Time, len(o.state.Findings))
 	for id, f := range o.state.Findings {
 		firstSeen[id] = f.FirstSeen
 	}
-	return model.Build(model.Input{
+	return model.Input{
 		Now: o.now(), ClusterUID: o.cfg.ClusterUID, StartedAt: o.state.StartedAt,
 		Files: o.files, FilesKnown: o.filesKnown,
 		Content:       o.content,
@@ -283,7 +284,24 @@ func (o *Observer) Summary() model.Summary {
 		Versions:      o.versions,
 		VersionsClock: model.Clock{Every: o.cfg.VersionsEvery, Last: o.versionsAt, FailedRuns: o.state.Versions.FailedRuns, LastError: o.state.Versions.LastError},
 		FirstSeen:     firstSeen,
-	})
+		ReadPods:      o.pods != nil,
+		FirstDigests:  o.state.Images.First,
+	}
+}
+
+// Summary gives the summary at this time. The page state is computed here, at each call.
+func (o *Observer) Summary() model.Summary {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return model.Build(o.input())
+}
+
+// Observed gives the document of the pods at this time. It lists the images of the last good read. It
+// says so when the read is off or has not ended well.
+func (o *Observer) Observed() model.Observed {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return model.ObservedOf(o.input())
 }
 
 // Once runs one content cycle and one versions cycle, and gives the summary. The error joins the

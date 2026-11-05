@@ -10,7 +10,8 @@ the edited content. See [A published version is edited in place](./edited-in-pla
 The observer runs in the cluster and checks every 15 minutes. It also keeps a page
 that answers three more questions: who made the edit, whether this cluster took it,
 and which pins have newer versions. It does this with the `strata` commands that
-the other pages show. It adds no rule.
+the other pages show. It adds no rule. An optional read of the pods adds a
+fourth question in step 5: which digest each tag runs.
 
 In this example, `dev` has `aws-stack@1.0.0` and `aws-stack@1.1.0`. The cluster
 `payments` runs `aws-stack@1.0.0` and the add-on profile `platform-addons@1.0.0`.
@@ -93,6 +94,42 @@ cover. The page of the profile shows its two sides, its events, and its packs. T
 page of the pack shows the old and the new value of the reclaim policy. [The API of the observer](../reference/observer-api.md) names
 the routes that carry each of them.
 
+## 5. Read the digest of each tag
+
+The steps above use Palette alone. A vendor can also rebuild an image under the tag
+that a pack names. Palette gets no notice, and no record changes: see [A vendor
+rebuilds an image under one tag](./image-tag.md). The pods show the rebuild
+once a node pulls the image.
+
+The read of the pods is optional. It needs a role and a token, and
+[The pods of the cluster](../automation/observer.md#the-pods-of-the-cluster) gives
+the cost. To add it, name the component in the kustomization of the observer:
+
+```yaml
+components:
+  - deploy/observer/pods
+```
+
+Apply the kustomization again. Then open the page as in step 4:
+
+```bash
+kubectl apply -k .
+```
+
+The Images screen lists each image that the pods run. A row shows the reference, the
+pack that it matches, and each digest with the number of pods that run it. An image
+that matches no pack, such as an agent of Palette, shows as "no pack". Two findings
+can follow:
+
+- **`image-split`.** Pods run one tag with two digests. A new node pulled the rebuilt
+  image, and the old nodes keep the old one.
+- **`image-moved`.** A tag runs another digest than the first one that the observer
+  saw. Each pod that started runs the rebuilt image.
+
+A finding of the pods is not a drift of the content. The pack text did not change, so
+the Drift tile does not count it, and the status of the profile stays the same. The
+list "Needs attention" shows it.
+
 ## What to do
 
 - Do not repair the edited version in place: that is a second edit. Publish a new
@@ -103,11 +140,18 @@ the routes that carry each of them.
   finding. A new record, written after a review, ends the finding too.
 - A cluster that differs needs its own decision: see
   [A cluster does not run its release](./cluster-release.md).
+- For `image-split` or `image-moved`, fix the pin, not the finding. Name the digest
+  where the chart or the manifest reads it, or copy each image, by digest, to a
+  registry with immutable tags. See [What to do](./image-tag.md#what-to-do).
+- `image-moved` clears when the digest comes back, or when you write new records.
+  `image-split` clears when each pod runs one digest.
 
 ## Limits
 
-- The observer sees what Palette holds. It does not see an image that a vendor
-  rebuilds under one tag, an edit on the cluster with `kubectl`, or what the
-  workload runs. See [What the observer does not see](../automation/observer.md#what-the-observer-does-not-see).
+- The observer sees what Palette holds. It does not see an edit on the cluster with
+  `kubectl`, or the health of a workload. See [What the observer does not see](../automation/observer.md#what-the-observer-does-not-see).
+- The read of the pods sees a rebuilt tag only after a pod pulls the image. It stays
+  silent when the pods pull an unchanged digest from a mirror, and that is right. See
+  [What the read catches and what it does not](../automation/observer.md#what-the-read-catches-and-what-it-does-not).
 - The check is as old as the last content cycle. The page shows the time of that
   cycle, and it shows `stale` when the cycle is more than two periods old.

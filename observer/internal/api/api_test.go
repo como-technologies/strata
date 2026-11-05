@@ -28,6 +28,8 @@ var summaryRoutes = map[string]string{
 	patternNewer:      "/v1/newer",
 	patternNotChecked: "/v1/notchecked",
 	patternEvents:     "/v1/events",
+	patternImages:     "/v1/images",
+	patternImage:      "/v1/images/a%2Fb:1",
 }
 
 var detailRoutes = map[string][]string{

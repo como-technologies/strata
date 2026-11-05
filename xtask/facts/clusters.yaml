@@ -1089,6 +1089,41 @@ facts:
     code:
       - examples/live/image-digest.sh
 
+  # ---- clusters.md: The pods of a cluster
+
+  - id: cluster-pod-image-ids
+    kind: behavior
+    reads:
+      fields:
+        - status.containerStatuses[].imageID
+    stand_in: []
+    live:
+      - observer-images.sh:pods-read
+      - observer-images.sh:image-first
+      - observer-images.sh:image-split
+      - observer-images.sh:image-moved
+      - observer-images.sh:image-never-started
+      - observer-images.sh:image-crash-loop
+      - observer-images.sh:image-agents-no-finding
+      - observer-images.sh:pull-policy
+    pages:
+      - internals/palette/clusters.md#the-pods-of-a-cluster
+    code:
+      - observer/internal/kube/kube.go
+
+  - id: cluster-pod-list-no-image-id
+    kind: behavior
+    reads:
+      fields:
+        - status.containers[].image
+    stand_in: []
+    live: []
+    unchecked: The model of the route has no field for the image ID. No script calls the route.
+    pages:
+      - internals/palette/clusters.md#the-pods-of-a-cluster
+    code:
+      - observer/internal/kube/kube.go
+
   # ---- clusters.md: The role that a key needs
 
   - id: key-role-requests

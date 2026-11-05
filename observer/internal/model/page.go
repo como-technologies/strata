@@ -1,7 +1,6 @@
 package model
 
 import (
-	"strings"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
@@ -73,7 +72,7 @@ func limitsOf(c *Content) Limits {
 func tagImages(images []string) int {
 	n := 0
 	for _, ref := range images {
-		if !strings.Contains(ref, "@sha256") {
+		if !namedByDigest(ref) {
 			n++
 		}
 	}

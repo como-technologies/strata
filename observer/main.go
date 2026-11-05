@@ -19,6 +19,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
+	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/web"
 )
@@ -36,7 +37,7 @@ func main() {
 	os.Exit(code)
 }
 
-const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR"
+const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]]"
 
 // runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
 // finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
@@ -62,7 +63,9 @@ func runContext(ctx context.Context, args []string, stdout, stderr io.Writer) in
 
 // options holds the flags that `serve` and `once` share.
 type options struct {
-	strata string
+	strata   string
+	readPods bool
+	kubeDir  string
 	check.Config
 }
 
@@ -74,6 +77,8 @@ func (o *options) flags(fs *flag.FlagSet) {
 	fs.StringVar(&o.State, "state", "", "a directory for state.json (required)")
 	fs.DurationVar(&o.ContentEvery, "content-every", 15*time.Minute, "the period of a content cycle")
 	fs.DurationVar(&o.VersionsEvery, "versions-every", 6*time.Hour, "the period of a versions cycle")
+	fs.BoolVar(&o.readPods, "read-pods", false, "read the pods at each content cycle, for the digest of each image; needs the role of deploy/observer/pods")
+	fs.StringVar(&o.kubeDir, "kube-dir", kube.ServiceDir, "the directory with the files token and ca.crt, for --read-pods")
 }
 
 // parse reads the flags and refuses a missing flag or a period that is not positive. A command with
@@ -114,10 +119,20 @@ func (o *options) absoluteStrata() error {
 	return nil
 }
 
-// observer makes the observer of the flags. It runs the strata binary of the flags.
-func (o *options) observer(log *slog.Logger) *check.Observer {
+// observer makes the observer of the flags. It runs the strata binary of the flags. With --read-pods it
+// reads the pods too, and it fails when the variables of the API server are not set. Without the flag, the
+// observer makes no call to Kubernetes.
+func (o *options) observer(log *slog.Logger) (*check.Observer, error) {
 	strata := check.InDir{Runner: runner.Runner{Binary: o.strata, Timeout: processTimeout}}
-	return check.New(o.Config, strata, log)
+	obs := check.New(o.Config, strata, log)
+	if !o.readPods {
+		return obs, nil
+	}
+	cfg, err := kube.InCluster(os.Getenv, o.kubeDir)
+	if err != nil {
+		return nil, errors.New("--read-pods needs the variables KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT")
+	}
+	return obs.WithPods(kube.New(cfg)), nil
 }
 
 // once runs one content cycle and one versions cycle, and prints the summary. It exits 1 when a
@@ -130,7 +145,12 @@ func once(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	summary, err := o.observer(log).Once(ctx)
+	obs, err := o.observer(log)
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer:", err)
+		return 2
+	}
+	summary, err := obs.Once(ctx)
 	enc := json.NewEncoder(stdout)
 	enc.SetIndent("", "  ")
 	enc.SetEscapeHTML(false)
@@ -172,7 +192,11 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 		return 2
 	}
 	log := slog.New(slog.NewTextHandler(stderr, nil))
-	obs := o.observer(log)
+	obs, err := o.observer(log)
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer:", err)
+		return 2
+	}
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	var worker sync.WaitGroup

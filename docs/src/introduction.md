@@ -26,7 +26,8 @@ command that shows the same thing by hand. See
 - [Where each part belongs](./boundary.md) says what Palette does, what strata
   adds, and why the record lives in your repository.
 - [The observer](./automation/observer.md) runs the checks in one cluster, on a timer, and shows
-  the answers on a page.
+  the answers on a page. A team can let it read the pods too, to see which digest
+  each tag runs.
 
 ## The model
 
@@ -95,6 +96,12 @@ reviewer approved, by its content and not by a tag or a name.
 | Does the registry have newer versions of what we pin? | [`strata behind 'releases/*.json'`](./commands/behind.md) |
 | Which clusters are production? | [`strata snapshot filter:production --dir fleet`](./use-cases/fleet.md) |
 | Can I delete this version? | [`strata consumers NAME@VERSION`](./commands/consumers.md) |
+| Which digest does each tag run as on this cluster? | [`strata-observer serve --read-pods`](./automation/observer.md#the-pods-of-the-cluster) |
+
+Only the observer answers the last question, because it reads the pods of one
+cluster. It sees a tag that moves only after a pod pulls it. [What the read catches
+and what it does not](./automation/observer.md#what-the-read-catches-and-what-it-does-not)
+gives the cases.
 
 ## Where to start
 

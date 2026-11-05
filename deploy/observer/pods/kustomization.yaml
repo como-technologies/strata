@@ -1,0 +1,58 @@
+# This component lets the observer read the digest of each pod image. The base of deploy/observer does
+# not. A team lists the component under `components:` of its own kustomization.
+# The folder example/ shows how.
+#
+# The component adds a cluster role and its binding, a token of the service account, the flag
+# --read-pods, and an egress rule. The base has none of them.
+#
+# The role gives `get` and `list` on pods in each namespace. The holder of the token reads the whole
+# spec of each pod, with its `env`. The observer decodes no `env`. Ask the owner of the cluster first.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - clusterrole.yaml
+  - clusterrolebinding.yaml
+patches:
+  # The base pod has no token. This volume gives the token and the CA to the observer, in the directory
+  # of --kube-dir. The token expires in one hour, and the kubelet renews it.
+  - target:
+      kind: Deployment
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --read-pods
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kube-dir=/var/run/secrets/kubernetes.io/serviceaccount
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: kube-credentials
+          mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: kube-credentials
+          projected:
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
+  # The service of the API server uses port 443. A CNI can apply the policy after the address of the
+  # service changes to the address of a node. That address uses port 6443. The lab cluster runs Cilium.
+  - target:
+      kind: NetworkPolicy
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          ports:
+            - { protocol: TCP, port: 6443 }

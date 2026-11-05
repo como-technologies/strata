@@ -61,15 +61,15 @@ func TestADurationIsShort(t *testing.T) {
 
 func TestTheWordsOnTheWireAreTheWordsOfThePage(t *testing.T) {
 	words := map[string][]string{
-		"kind":        {string(PublishedChanged), string(Overwritten), string(Renamed), string(Gone), string(ClusterDiffers), string(ImageIDChanged)},
-		"cause":       {string(NoUpstreamDigest), string(OlderRegistryCopy), string(NoRecord), string(ReadError), string(PinError)},
+		"kind":        {string(PublishedChanged), string(Overwritten), string(Renamed), string(Gone), string(ClusterDiffers), string(ImageIDChanged), string(ImageMoved), string(ImageSplit)},
+		"cause":       {string(NoUpstreamDigest), string(OlderRegistryCopy), string(NoRecord), string(ReadError), string(PinError), string(PodsNotRead)},
 		"status":      {string(StatusDrift), string(StatusNewer), string(StatusNotChecked), string(StatusOK), string(StatusNoRecord)},
 		"clusterCopy": {string(CopySame), string(CopySameContent), string(CopyDiffers), string(CopyNotOnThisCluster), string(CopyNotRead)},
 		"page":        {string(PageNoRecords), string(PageLost), string(PageStale), string(PageFirstLoad), string(PageOK)},
 	}
 	want := map[string][]string{
-		"kind":        {"published-changed", "overwritten", "renamed", "gone", "cluster-differs", "image-id-changed"},
-		"cause":       {"no-upstream-digest", "older-registry-copy", "no-record", "read-error", "pin-error"},
+		"kind":        {"published-changed", "overwritten", "renamed", "gone", "cluster-differs", "image-id-changed", "image-moved", "image-split"},
+		"cause":       {"no-upstream-digest", "older-registry-copy", "no-record", "read-error", "pin-error", "pods-not-read"},
 		"status":      {"drift", "newer", "not-checked", "ok", "no-record"},
 		"clusterCopy": {"same", "same-content", "differs", "not-on-this-cluster", "not-read"},
 		"page":        {"no-records", "lost", "stale", "first-load", "ok"},

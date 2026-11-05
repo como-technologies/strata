@@ -149,17 +149,19 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 	}
 }
 
-// The observer sends no POST. It asks Palette only through strata. The one HTTP client is the health
-// check, and it calls a loopback address. Only internal/api imports a package of the network.
-func TestOnlyTheHealthCheckSendsARequestAndNoCodeSendsAPost(t *testing.T) {
+// The observer sends no POST. It asks Palette only through strata. It has two HTTP clients: the health
+// check, which calls a loopback address, and the read of the pods, which sends one GET to the API server
+// of Kubernetes. Only internal/api and internal/kube import a package of the network, and so does the
+// stand-in for that server in internal/testkit, which only test files import.
+func TestOnlyTheHealthCheckAndTheReadOfThePodsSendARequestAndNoCodeSendsAPost(t *testing.T) {
 	rules := []struct {
 		banned []string
-		// allowed is the prefix of the paths that may hold the text. An empty prefix allows none.
-		allowed string
+		// allowed lists the prefixes of the paths that may hold the text. An empty list allows none.
+		allowed []string
 	}{
-		{[]string{`http.MethodPost`, `"POST"`, `http.Post(`, `.PostForm(`}, ""},
-		{[]string{`"net/http"`, `"net"`}, "internal/api/"},
-		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, "internal/api/health.go"},
+		{[]string{`http.MethodPost`, `"POST"`, `http.Post(`, `.PostForm(`}, nil},
+		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/testkit/"}},
+		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go"}},
 	}
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -170,7 +172,7 @@ func TestOnlyTheHealthCheckSendsARequestAndNoCodeSendsAPost(t *testing.T) {
 			return err
 		}
 		for _, r := range rules {
-			if r.allowed != "" && strings.HasPrefix(filepath.ToSlash(path), r.allowed) {
+			if slices.ContainsFunc(r.allowed, func(prefix string) bool { return strings.HasPrefix(filepath.ToSlash(path), prefix) }) {
 				continue
 			}
 			for _, b := range r.banned {
@@ -481,6 +483,96 @@ func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
 			}
 			if s.Page != model.PageOK || s.Content.FailedRuns != 0 {
 				t.Errorf("summary %+v", s)
+			}
+		})
+	}
+}
+
+// podsAPI starts a stand-in for the API server of Kubernetes with one pod, and points the variables
+// of the kubelet at it. The pod holds a marker in its environment.
+func podsAPI(t *testing.T) *testkit.KubeAPI {
+	t.Helper()
+	api := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@sha256:"+strings.Repeat("1", 64)))))
+	})
+	for name, value := range api.Env() {
+		t.Setenv(name, value)
+	}
+	return api
+}
+
+func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
+	api := podsAPI(t)
+	var out, errs bytes.Buffer
+	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--kube-dir", api.Dir())
+	if code := run(args, &out, &errs); code != 0 {
+		t.Fatalf("exit %d, stderr %s", code, errs.String())
+	}
+	if n := len(api.Requests()); n != 0 {
+		t.Errorf("%d requests went to the API server", n)
+	}
+	serve, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	stop, _ := startServe(t, append(serve, "--kube-dir", api.Dir()), addr)
+	resp, err := http.Get("http://" + addr + "/v1/images")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var doc model.Observed
+	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil || doc.Pods != model.PodsOff || len(doc.Images) != 0 {
+		t.Errorf("document %+v, error %v", doc, err)
+	}
+	stop()
+	if n := len(api.Requests()); n != 0 {
+		t.Errorf("%d requests went to the API server with the server running", n)
+	}
+}
+
+func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *testing.T) {
+	api := podsAPI(t)
+	var out, errs bytes.Buffer
+	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--read-pods", "--kube-dir", api.Dir())
+	if code := run(args, &out, &errs); code != 0 {
+		t.Fatalf("exit %d, stderr %s", code, errs.String())
+	}
+	seen := api.Requests()
+	if len(seen) != 1 || seen[0].Method != http.MethodGet || seen[0].Path != "/api/v1/pods" || seen[0].Auth != "Bearer token-1" {
+		t.Errorf("requests %+v", seen)
+	}
+	if strings.Contains(out.String()+errs.String(), "MARKER") {
+		t.Errorf("a value of a pod left the process: %s %s", out.String(), errs.String())
+	}
+}
+
+func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
+	api := podsAPI(t)
+	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", api.Dir()), addr)
+	var doc model.Observed
+	testkit.WaitFor(t, "the first read of the pods", func() bool {
+		resp, err := http.Get("http://" + addr + "/v1/images")
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		doc = model.Observed{}
+		return json.NewDecoder(resp.Body).Decode(&doc) == nil && doc.Pods == model.PodsRead
+	})
+	if doc.Counts.Images != 3 || doc.Images[0].Ref == "" {
+		t.Errorf("document %+v", doc)
+	}
+	stop()
+}
+
+func TestReadPodsNeedsTheVariablesOfTheKubelet(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "")
+	for _, command := range []string{"once", "serve"} {
+		t.Run(command, func(t *testing.T) {
+			var out, errs bytes.Buffer
+			args := append([]string{command}, onceArgs(t, "strata")[1:]...)
+			if code := run(append(args, "--read-pods"), &out, &errs); code != 2 || !strings.Contains(errs.String(), "KUBERNETES_SERVICE_HOST") || out.Len() != 0 {
+				t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
 			}
 		})
 	}

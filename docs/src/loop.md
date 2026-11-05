@@ -23,6 +23,7 @@ Start from the question that you have.
 | Does this cluster run the release that we approved? | `strata compare`. |
 | Do `dev` and `prod` hold one release? | `strata same-release`. |
 | Do I want these answers all day, on a page in the cluster, with the name of the person who made a change? | [The observer](./automation/observer.md). It runs `verify`, `snapshot`, `compare`, and `behind` on a timer. |
+| Which digest does each tag run as on this cluster? | [The observer](./automation/observer.md#the-pods-of-the-cluster), with the optional read of the pods. |
 | Can Palette build this cluster? | `strata preflight`. It checks the body of the create and asks Palette, before the build starts. |
 
 [Where each part belongs](./boundary.md) gives each feature of Palette, and what
@@ -209,6 +210,11 @@ scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*/dev.json \
 The script stops when two records are for one version. So the glob must not match
 the records of `prod`, which hold the same versions. It stops for a record of a
 cluster too, such as `fleet/prod/payments.json`.
+
+The observer can also read the pods of the cluster, to show the digest that each tag
+runs. This read is optional, and it needs its own role and token: see [The pods of the
+cluster](./automation/observer.md#the-pods-of-the-cluster). A team that does not add it
+keeps the observer with no role and no token.
 
 ### You move a cluster
 

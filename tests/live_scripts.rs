@@ -7806,7 +7806,8 @@ fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() 
 /// came through standard input. `get pod -o json` prints `pod.json`.
 ///
 /// The reader can open a port-forward and nothing else. `FAKE_READER_SECRETS` lets the reader read
-/// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page.
+/// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page. A pod of the mirror prints
+/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away.
 const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -7823,6 +7824,10 @@ case "$*" in
   *"get secret -l"*) printf 'secret/strata-observer-records-%s\n' 0 1 2 3 ;;
   *"get secret strata-observer-records-0"*) cat "$obs/meta.b64" ;;
   *"get pod"*"jsonpath"*) echo 10.0.0.7 ;;
+  *"get pod mirror-"*)
+    pod=$(grep -o 'mirror-[a-z]*' <<<"$*" | head -n 1)
+    [ -z "${FAKE_NO_MIRROR_POD-}" ] || exit 1
+    cat "$obs/$pod.json" ;;
   *"get pod"*) cat "$obs/pod.json" ;;
   *"auth can-i"*)
     case "$*" in
@@ -7837,7 +7842,9 @@ exit 0
 "#;
 
 /// A `curl` for observer-kind.sh: the page, the health route, and the summary of the cluster, which
-/// reads the records that the stand-in `kubectl` holds.
+/// reads the records that the stand-in `kubectl` holds. `/v1/images` says `read`, or `not-read` with
+/// `FAKE_PODS_UNREAD`. The row of an image holds a digest, or a pod that never started with
+/// `FAKE_NO_DIGEST`, or is a 404 with `FAKE_NO_ROW`.
 const FAKE_CURL_OBSERVER: &str = r#"#!/usr/bin/env bash
 args=("$@")
 url=${args[${#args[@]}-1]}
@@ -7845,6 +7852,18 @@ out=""
 for ((i = 0; i < ${#args[@]}; i++)); do [ "${args[i]}" = -o ] && out=${args[i+1]}; done
 case "$url" in
   */healthz) body=ok ;;
+  */v1/images/*)
+    [ -z "${FAKE_NO_ROW-}" ] || exit 22
+    enc=${url##*/v1/images/}
+    ref=$(printf '%b' "${enc//%/\\x}")
+    digests='[{"digest":"sha256:aaaa","status":"first-digest","pods":1}]'
+    [ -z "${FAKE_NO_DIGEST-}" ] || digests='[{"status":"not-started","pods":1}]'
+    body=$(jq -cn --arg ref "$ref" --argjson d "$digests" '{schema: "strata-observed/1", pods: "read",
+      image: {ref: $ref, status: "steady", match: "none", byDigest: false, packs: [], digests: $d}}') ;;
+  */v1/images)
+    pods=read; [ -z "${FAKE_PODS_UNREAD-}" ] || pods=not-read
+    body=$(jq -cn --arg p "$pods" '{schema: "strata-observed/1", pods: $p, readAt: "2026-11-04T10:00:00Z",
+      counts: {images: 2, matched: 0, changed: 0}, images: []}') ;;
   */v1/cluster)
     meta=$(base64 -d "$FAKE_OBS/meta.b64" 2>/dev/null || echo '{}')
     body=$(jq -cn --argjson meta "$meta" --arg uid "$FAKE_CLUSTER_UID" \
@@ -7853,6 +7872,37 @@ case "$url" in
   *) body='<!doctype html><html lang="en"></html>' ;;
 esac
 if [ -n "$out" ]; then printf '%s' "$body" > "$out"; printf 200; else printf '%s\n' "$body"; fi
+"#;
+
+/// A `kind` for observer-kind.sh. It logs each call to `$FAKE_OBS/kind.log`, except the list of the
+/// nodes, which has one node. `create cluster` copies the file of `--config` to
+/// `$FAKE_OBS/kind-config.yaml`. `get kubeconfig` prints a kubeconfig.
+const FAKE_KIND_OBSERVER: &str = r#"#!/usr/bin/env bash
+if [ "$1 $2" = "get nodes" ]; then echo strata-observer-test-control-plane; exit 0; fi
+echo "$*" >> "$FAKE_OBS/kind.log"
+if [ "$1 $2" = "create cluster" ]; then
+  for arg in "$@"; do
+    [ "$previous" != "--config" ] || cp "$arg" "$FAKE_OBS/kind-config.yaml"
+    previous=$arg
+  done
+fi
+[ "$1 $2" != "get kubeconfig" ] || echo "apiVersion: v1 # fake-kubeconfig"
+"#;
+
+/// A `docker` for observer-kind.sh. It logs each call to `$FAKE_OBS/docker.log`, and the input of
+/// `exec -i` to `hosts.log`. `FAKE_NO_IMAGE` takes the image away. `FAKE_NO_CERTS_D` gives a node
+/// whose containerd reads no folder certs.d. `FAKE_NO_PUSH` refuses the push. `FAKE_DIE_AT_NODES` ends
+/// the script with SIGTERM when it asks the first node.
+const FAKE_DOCKER_OBSERVER: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_OBS/docker.log"
+case "$*" in
+  "image inspect"*) [ -z "${FAKE_NO_IMAGE-}" ] ;;
+  "exec "*"grep -q config_path"*)
+    [ -z "${FAKE_DIE_AT_NODES-}" ] || kill -TERM "$PPID"
+    [ -z "${FAKE_NO_CERTS_D-}" ] ;;
+  "exec -i "*) { echo "-- $*"; cat; } >> "$FAKE_OBS/hosts.log" ;;
+  "push "*) [ -z "${FAKE_NO_PUSH-}" ] ;;
+esac
 "#;
 
 /// The pod that the Deployment of the repository makes: its spec, and the status of a pod that is
@@ -7887,19 +7937,28 @@ fn observer_kind_stage() -> Stage {
         serde_json::to_string(&observer_pod()).unwrap(),
     )
     .unwrap();
+    for (pod, image) in [
+        ("mirror-id", "vendor.example/product:1.0"),
+        ("mirror-string", "strata-observer-registry:5000/product:1.0"),
+    ] {
+        let repository = image.rsplit_once(':').unwrap().0;
+        std::fs::write(
+            obs.join(format!("{pod}.json")),
+            serde_json::json!({
+                "spec": {"containers": [{"image": image}]},
+                "status": {"containerStatuses": [{"image": image, "imageID": format!("{repository}@sha256:aaaa")}]},
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
     let bin = stage.path("obs-bin");
     std::fs::create_dir_all(&bin).unwrap();
     for (name, body) in [
         ("kubectl", FAKE_KUBECTL_OBSERVER),
         ("curl", FAKE_CURL_OBSERVER),
-        (
-            "kind",
-            "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_OBS/kind.log\"\n",
-        ),
-        (
-            "docker",
-            "#!/usr/bin/env bash\n[ -z \"${FAKE_NO_IMAGE-}\" ]\n",
-        ),
+        ("kind", FAKE_KIND_OBSERVER),
+        ("docker", FAKE_DOCKER_OBSERVER),
     ] {
         executable(&bin.join(name), body);
     }
@@ -7940,7 +7999,7 @@ fn observer_kind_stage() -> Stage {
 }
 
 /// Each check of observer-kind.sh, in the order that it runs.
-const OBSERVER_KIND_CHECKS: [&str; 29] = [
+const OBSERVER_KIND_CHECKS: [&str; 35] = [
     "kind-create",
     "image-load",
     "namespace",
@@ -7969,8 +8028,17 @@ const OBSERVER_KIND_CHECKS: [&str; 29] = [
     "other-pod-refused",
     "first-seen-apply",
     "first-seen-meta",
+    "mirror-registry",
+    "mirror-nodes",
+    "mirror-pods",
+    "component-apply",
+    "component-read",
+    "mirror-clean",
     "kind-delete",
 ];
+
+/// The checks of observer-kind.sh that record a result and judge none.
+const OBSERVER_KIND_SEEN: [&str; 2] = ["mirror-image-id", "mirror-image-string"];
 
 fn observer_log(stage: &Stage, file: &str) -> String {
     std::fs::read_to_string(stage.path("obs").join(file)).unwrap_or_default()
@@ -7983,13 +8051,19 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(&steps, &OBSERVER_KIND_CHECKS);
+    for id in OBSERVER_KIND_SEEN {
+        assert!(
+            has_verdict(&steps, "SEEN", id),
+            "{id} records a result and judges none:\n{steps}"
+        );
+    }
 
     let kubectl = observer_log(&stage, "kubectl.log");
     for call in [
         "create configmap strata-observer --from-literal=cluster-uid=c-a",
         "--from-literal=project-uid=p-1",
         "create secret generic strata-observer-key --from-file=api-key=/dev/stdin",
-        "--as=system:serviceaccount:strata-observer:reader port-forward deploy/strata-observer 18080:8080",
+        "--as=system:serviceaccount:strata-observer:reader -n strata-observer port-forward deploy/strata-observer 18080:8080",
         "auth can-i create pods --subresource=portforward --as=system:serviceaccount:strata-observer:reader",
         "auth can-i get secrets --as=system:serviceaccount:strata-observer:reader",
         "auth can-i create pods --subresource=exec --as=system:serviceaccount:strata-observer:reader",
@@ -8000,7 +8074,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     // Each apply is a server-side apply. A client-side apply copies each Secret to an annotation,
     // and it fails above 256 KiB.
     let applies: Vec<&str> = kubectl.lines().filter(|l| l.contains(" apply ")).collect();
-    assert_eq!(applies.len(), 5, "{applies:?}");
+    assert_eq!(applies.len(), 8, "{applies:?}");
     assert!(
         applies.iter().all(|l| l.contains("--server-side")),
         "{applies:?}"
@@ -8033,13 +8107,109 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     assert_eq!(
         kind.lines().collect::<Vec<_>>(),
         [
-            "create cluster --name strata-observer-test --wait 120s",
+            "create cluster --name strata-observer-test --wait 120s --config kind-config.yaml",
             "load docker-image strata-observer:dev --name strata-observer-test",
+            "get kubeconfig --name strata-observer-test",
             "delete cluster --name strata-observer-test",
         ]
     );
+    // containerd reads the folder certs.d only when the config of the cluster sets config_path, and
+    // the files of the mirror go to that folder
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&observer_log(&stage, "kind-config.yaml")).unwrap();
+    assert_eq!(config["kind"], "Cluster");
+    assert_eq!(config["apiVersion"], "kind.x-k8s.io/v1alpha4");
+    let patches = config["containerdConfigPatches"].as_sequence().unwrap();
+    assert_eq!(patches.len(), 1, "{patches:?}");
+    let patch = patches[0].as_str().unwrap();
+    for line in [
+        r#"[plugins."io.containerd.grpc.v1.cri".registry]"#,
+        r#"config_path = "/etc/containerd/certs.d""#,
+    ] {
+        assert!(patch.lines().any(|l| l.trim() == line), "{line}:\n{patch}");
+    }
+    // the kubeconfig of the port-forward is a credential: no file of it stays
+    assert_eq!(
+        std::fs::read_dir(stage.path("tmp")).unwrap().count(),
+        0,
+        "a temporary file stays"
+    );
+    // stage 7: the component applies as a team lists it, and the two pods wait to be Ready
+    let root = env!("CARGO_MANIFEST_DIR");
+    for call in [
+        format!("kustomize {root}/examples/observer-pods"),
+        "-n strata-observer rollout status deploy/strata-observer --timeout=180s".to_string(),
+        "-n default wait --for=condition=Ready pod/mirror-id --timeout=120s".to_string(),
+        "-n default wait --for=condition=Ready pod/mirror-string --timeout=120s".to_string(),
+        "-n default get pod mirror-id -o json".to_string(),
+        "-n default get pod mirror-string -o json".to_string(),
+        "-n default delete pod mirror-id --ignore-not-found --wait=false".to_string(),
+        "-n default delete pod mirror-string --ignore-not-found --wait=false".to_string(),
+    ] {
+        assert!(kubectl.contains(&call), "{call}:\n{kubectl}");
+    }
+    let pods = observer_log(&stage, "applied.yaml");
+    for image in [
+        "image: vendor.example/product:1.0",
+        "image: strata-observer-registry:5000/product:1.0",
+    ] {
+        assert!(pods.contains(image), "{image}:\n{pods}");
+    }
+    // the registry holds the image under the name that the node mirror serves, and goes at the end
+    let docker = observer_log(&stage, "docker.log");
+    let calls: Vec<&str> = docker
+        .lines()
+        .filter(|l| !l.starts_with("image inspect"))
+        .collect();
+    assert_eq!(
+        calls,
+        [
+            "rm -f strata-observer-registry",
+            "run -d --name strata-observer-registry --network kind -p 127.0.0.1:5001:5000 registry:2.8.3",
+            "pull registry.k8s.io/pause:3.10",
+            "tag registry.k8s.io/pause:3.10 localhost:5001/product:1.0",
+            "push localhost:5001/product:1.0",
+            "exec strata-observer-test-control-plane grep -q config_path /etc/containerd/config.toml",
+            "exec -i strata-observer-test-control-plane sh -c mkdir -p /etc/containerd/certs.d/vendor.example && cat > /etc/containerd/certs.d/vendor.example/hosts.toml",
+            "exec -i strata-observer-test-control-plane sh -c mkdir -p /etc/containerd/certs.d/strata-observer-registry:5000 && cat > /etc/containerd/certs.d/strata-observer-registry:5000/hosts.toml",
+            "exec strata-observer-test-control-plane rm -rf /etc/containerd/certs.d/vendor.example /etc/containerd/certs.d/strata-observer-registry:5000",
+            "rm -f strata-observer-registry",
+        ]
+    );
+    let hosts = observer_log(&stage, "hosts.log");
+    assert!(
+        hosts.contains("server = \"https://vendor.example\"\n\n[host.\"http://strata-observer-registry:5000\"]\n  capabilities = [\"pull\", \"resolve\"]"),
+        "vendor.example goes to the registry first:\n{hosts}"
+    );
+    assert!(
+        hosts.contains("server = \"http://strata-observer-registry:5000\""),
+        "the registry has no TLS:\n{hosts}"
+    );
+    // each report names the string of the pod, the id that the pod reports, and the row of the observer
+    for (check, image, id) in [
+        (
+            "mirror-image-id",
+            "vendor.example/product:1.0",
+            "vendor.example/product@sha256:aaaa",
+        ),
+        (
+            "mirror-image-string",
+            "strata-observer-registry:5000/product:1.0",
+            "strata-observer-registry:5000/product@sha256:aaaa",
+        ),
+    ] {
+        let report = std::fs::read_to_string(stage.path(&format!("out/{check}.out"))).unwrap();
+        for line in [
+            format!("spec.image:   {image}"),
+            format!("imageID:      {id}"),
+            format!("\"ref\": \"{image}\""),
+        ] {
+            assert!(report.contains(&line), "{check}: {line}\n{report}");
+        }
+    }
     // the last records say first-seen, with no revision
     let meta = observer_log(&stage, "meta.b64");
+
     let o = Command::new("bash")
         .arg("-c")
         .arg(format!("echo {} | base64 -d", meta.trim()))
@@ -8113,6 +8283,1057 @@ fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_t
         text(&o.stderr)
     );
     assert_eq!(observer_log(&stage, "kind.log"), "", "no cluster was made");
+}
+
+/// The line of `steps` for the check `id`.
+fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
+    steps
+        .lines()
+        .find(|l| l.split_whitespace().nth(1) == Some(id))
+        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
+}
+
+#[test]
+fn observer_kind_sh_records_what_the_mirror_checks_find_and_judges_none_of_it() {
+    // the row holds no digest: the check records 1 and the run still ends with 0
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_DIGEST", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    for id in OBSERVER_KIND_SEEN {
+        let line = step_line(&steps, id);
+        assert!(
+            line.starts_with("SEEN") && line.ends_with("expected ?, got 1"),
+            "{line}"
+        );
+    }
+    // the observer shows no row, or the pod is gone: the check records 2
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_ROW", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(step_line(&steps, "mirror-image-id").ends_with("got 2"));
+    let said = std::fs::read_to_string(stage.path("out/mirror-image-id.out")).unwrap();
+    assert!(
+        said.contains("the observer shows no row for vendor.example/product:1.0"),
+        "{said}"
+    );
+}
+
+#[test]
+fn observer_kind_sh_fails_the_read_when_the_observer_says_not_read_and_still_cleans_up() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_PODS_UNREAD", "1");
+    stage.env("CYCLE_WAIT", "2");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["component-read"]);
+    passed(&steps, &["component-apply", "mirror-clean", "kind-delete"]);
+}
+
+#[test]
+fn observer_kind_sh_fails_the_nodes_check_for_a_containerd_without_certs_d_and_still_removes_all() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_CERTS_D", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["mirror-nodes"]);
+    passed(&steps, &["mirror-registry", "mirror-clean", "kind-delete"]);
+    let said = std::fs::read_to_string(stage.path("out/mirror-nodes.out")).unwrap();
+    assert!(
+        said.contains("strata-observer-test-control-plane: containerd reads no folder certs.d"),
+        "{said}"
+    );
+    assert!(
+        !observer_log(&stage, "hosts.log").contains("hosts.toml"),
+        "no file is written to such a node"
+    );
+}
+
+#[test]
+fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in_stage_7() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_DIE_AT_NODES", "1");
+    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(steps.contains("PASS  mirror-registry"), "{steps}");
+    assert!(
+        !steps.contains("mirror-clean"),
+        "the script ended first:\n{steps}"
+    );
+    let docker = observer_log(&stage, "docker.log");
+    assert_eq!(
+        docker.lines().last(),
+        Some("rm -f strata-observer-registry"),
+        "the registry goes:\n{docker}"
+    );
+    assert!(
+        observer_log(&stage, "kind.log").contains("delete cluster"),
+        "the cluster goes"
+    );
+}
+
+// ---- observer-images.sh ------------------------------------------------------------------------------
+
+/// The `api.sh` of the tree of observer-images.sh. It logs each call to `$FAKE_OBS/api.log`. The
+/// values of the add-on pack are in `$FAKE_OBS/values.txt`. With `FAKE_DIE_AFTER_EDIT`, the first
+/// edit that sets values ends the script with SIGTERM.
+const FAKE_API_IMAGES: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/api.log"
+case "$1" in
+  get-kubeconfig) echo "apiVersion: v1 # fake-kubeconfig" ;;
+  set-values)
+    printf '%s' "$4" > "$obs/values.txt"
+    echo "set the values of $3 in $2 in place"
+    [ -z "${FAKE_DIE_AFTER_EDIT-}" ] || [ -z "$4" ] || kill -TERM "$PPID" ;;
+esac
+exit 0
+"##;
+
+/// The `strata` of observer-images.sh. A record of the add-on profile lists the images of
+/// `values.txt` in its pack. Each other call goes to the answers that the stage gave.
+const FAKE_STRATA_IMAGES: &str = r##"#!/usr/bin/env bash
+out=""; prev=""
+for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+case "$*" in
+  "snapshot ad-1 -o "*)
+    echo "$*" >> "$FAKE_STRATA/calls"
+    images=$(sed -n 's/^ *- image: //p' "$FAKE_OBS/values.txt" 2> /dev/null | jq -R . | jq -cs .)
+    jq -n --argjson i "$images" '{schema: "strata-snapshot/1",
+      source: {uid: "ad-1", name: "strata-live-addon", version: "1.0.0", type: "add-on"},
+      packs: [{key: "addon/strata-live-config", layer: "addon", name: "strata-live-config", images: $i}]}' > "$out" ;;
+  *) exec "$(dirname "$0")/fake-strata-rules" "$@" ;;
+esac
+"##;
+
+/// The `crane` of observer-images.sh. A registry is a folder `$FAKE_OBS/registry`, with a digest for
+/// each name. The digest of a copy is the sha256 of the name of its source, so two sources give two
+/// digests. With `FAKE_TAG_STAYS`, a copy to a name that holds an image changes nothing.
+const FAKE_CRANE_IMAGES: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/crane.log"
+file="$obs/registry/$(printf %s "${3:-$2}" | tr '/:' '__')"
+case "$1" in
+  copy)
+    mkdir -p "$obs/registry"
+    echo "copy $2 $3" >> "$obs/events.log"
+    [ -z "${FAKE_TAG_STAYS-}" ] || [ ! -f "$file" ] || exit 0
+    echo "sha256:$(printf %s "$2" | sha256sum | cut -d' ' -f1)" > "$file" ;;
+  digest)
+    [ -f "$file" ] || { echo "MANIFEST_UNKNOWN: manifest unknown" >&2; exit 1; }
+    cat "$file" ;;
+esac
+"##;
+
+/// The `kubectl` of observer-images.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
+/// cluster is in files of `$FAKE_OBS`. A pod made with `apply -f -` gets a file in `pods/`. Its image
+/// id is the digest that the registry holds at that time, as a pull with Always gives. The pod
+/// `absent` waits for an image it cannot pull, and the pod `crash` has restarted.
+///
+/// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
+/// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
+/// `IfNotPresent`.
+const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/kubectl.log"
+notfound() { echo "Error from server (NotFound): $1 \"$2\" not found"; exit 1; }
+if [ "$1 $2" = "auth can-i" ]; then
+  verb=$3; resource=$4
+  if [ "$resource" = pods ] && { [ "$verb" = get ] || [ "$verb" = list ] || [ -n "${FAKE_ROLE_WIDE-}" ]; }; then
+    echo yes; exit 0
+  fi
+  echo no; exit 1
+fi
+case "$*" in
+  "kustomize .")
+    [ -f kustomization.yaml ] && [ -d base ] && [ -d pods ] && grep -q '^components:' kustomization.yaml \
+      || { echo "no overlay here" >&2; exit 1; }
+    for f in namespace serviceaccount networkpolicy deployment; do cat "base/$f.yaml"; echo "---"; done
+    for f in clusterrole clusterrolebinding; do cat "pods/$f.yaml"; echo "---"; done
+    cat pods/kustomization.yaml ;;
+  *"apply -f "*"namespace.yaml"*) touch "$obs/ns.strata-observer" ;;
+  *"create namespace strata-live-images"*) touch "$obs/ns.strata-live-images" ;;
+  *"create configmap strata-observer"*) touch "$obs/config" ;;
+  *"create secret generic strata-observer-key"*) cat > "$obs/key.seen" ;;
+  *"create secret generic ghcr-pull"*) cat > "$obs/pull.seen" ;;
+  *"apply --server-side -f -"*)
+    cat > "$obs/records.yaml"
+    cp "$obs/values.txt" "$obs/records.values" 2> /dev/null || : > "$obs/records.values"
+    touch "$obs/records.applied" ;;
+  *"apply -f observer.yaml"*)
+    [ -f observer.yaml ] || exit 1
+    touch "$obs/observer.applied" "$obs/role.exists" "$obs/ns.strata-observer" ;;
+  *"apply -f -"*)
+    body=$(cat)
+    name=$(sed -n 's/^  name: //p' <<<"$body" | head -n 1)
+    image=$(sed -n 's/^      image: //p' <<<"$body")
+    asked=$(sed -n 's/^      imagePullPolicy: //p' <<<"$body")
+    digest=$(cat "$obs/registry/$(printf %s "$image" | tr '/:' '__')" 2> /dev/null)
+    [ -n "$digest" ] || digest="sha256:$(printf %s "$image" | sha256sum | cut -d' ' -f1)"
+    id="${image%:*}@$digest"; restarts=0; waiting=""
+    if [ "$name" = absent ]; then
+      id=""; waiting=ImagePullBackOff
+      [ -z "${FAKE_NEVER_HAS_ID-}" ] || id="${image%:*}@sha256:ffff"
+    fi
+    [ "$name" != crash ] || restarts=3
+    policy=Always; [ -z "${FAKE_POLICY_STAYS-}" ] || policy=$asked
+    mkdir -p "$obs/pods"
+    echo "pod $name $digest" >> "$obs/events.log"
+    jq -n --arg n "$name" --arg i "$image" --arg id "$id" --arg p "$policy" --argjson r "$restarts" --arg w "$waiting" \
+      '{name: $n, namespace: "strata-live-images", image: $i, imageID: $id, policy: $p, restarts: $r, waiting: $w}' \
+      > "$obs/pods/$name.json" ;;
+  *"get pod "*" -o json"*)
+    name=$(sed -E 's/.* get pod ([a-z0-9-]+) .*/\1/' <<<"$*")
+    [ -f "$obs/pods/$name.json" ] || notfound pods "$name"
+    jq '{spec: {containers: [{name: "c", image: .image, imagePullPolicy: .policy}]},
+         status: {containerStatuses: [{name: "c", image: .image, imageID: .imageID, restartCount: .restarts,
+           state: (if .waiting != "" then {waiting: {reason: .waiting}} else {running: {}} end)}]}}' "$obs/pods/$name.json" ;;
+  *"get pods --all-namespaces -o json"*)
+    { cat "$obs/agents.json"; cat "$obs"/pods/*.json 2> /dev/null; } \
+      | jq -s '(.[0] + .[1:]) | {items: map({metadata: {name, namespace}, spec: {containers: [{name: "c", image}]}})}' ;;
+  *"delete pod "*)
+    echo "delete $(sed -E 's/.*delete pod ([a-z0-9-]+).*/\1/' <<<"$*")" >> "$obs/events.log"
+    rm -f "$obs/pods/$(sed -E 's/.*delete pod ([a-z0-9-]+).*/\1/' <<<"$*").json" ;;
+  *"delete namespace strata-live-images"*) rm -rf "$obs/ns.strata-live-images" "$obs/pods" ;;
+  *"delete -f observer.yaml"*|*"delete namespace strata-observer"*)
+    rm -f "$obs/observer.applied" "$obs/role.exists" "$obs/ns.strata-observer" ;;
+  *"delete clusterrole"*) rm -f "$obs/role.exists" ;;
+  *"get namespace "*)
+    n=${*##*get namespace }; n=${n%% *}
+    [ -f "$obs/ns.$n" ] || notfound namespaces "$n"
+    echo "$n Active" ;;
+  *"get clusterrole"*) [ -f "$obs/role.exists" ] || notfound clusterroles strata-observer-pods; echo found ;;
+  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+esac
+exit 0
+"##;
+
+/// The `curl` of observer-images.sh: the observer, from the pods of `$FAKE_OBS`. It answers as the
+/// observer does, once the observer is applied. The first digest of an image is the first one that a
+/// call saw. A row is split with two digests, moved with one digest that is not the first, steady with
+/// the first, and not checked with none. An image matches when the records listed it. `FAKE_NOT_READ`
+/// says that the observer did not read the pods, and `FAKE_NONE_FINDING` makes a finding name an image
+/// of an agent.
+const FAKE_CURL_IMAGES: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+url=${*: -1}
+case "$url" in http://127.0.0.1:*) ;; *) echo "curl: no network" >&2; exit 7 ;; esac
+[ -f "$obs/observer.applied" ] || exit 7
+path=/${url#http://127.0.0.1:*/}
+containers=$({ cat "$obs/agents.json"; cat "$obs"/pods/*.json 2> /dev/null; } | jq -s '.[0] + .[1:]')
+values=$(sed -n 's/^ *- image: //p' "$obs/records.values" 2> /dev/null | jq -R . | jq -cs .)
+first=$(jq -c --argjson c "$containers" 'reduce ($c | group_by(.image)[]) as $g (.;
+  $g[0].image as $ref
+  | if has($ref) then . else
+      ([$g[].imageID | select(contains("@sha256:")) | split("@")[1]] | sort | first) as $d
+      | if $d then . + {($ref): $d} else . end
+    end)' "$obs/first.json" 2> /dev/null || echo '{}')
+[ -n "$first" ] || first='{}'
+echo "$first" > "$obs/first.json"
+rows=$(jq -c --argjson f "$first" --argjson v "$values" '
+  group_by(.image) | map(
+    .[0].image as $ref
+    | (map(.imageID) | group_by(.) | map({id: .[0], n: length})) as $ids
+    | ([$ids[] | select(.id | contains("@sha256:")) | {digest: (.id | split("@")[1]), pods: .n}]) as $real
+    | ($f[$ref] // null) as $want
+    | ((($v | index($ref)) != null) | if . then "exact" else "none" end) as $match
+    | {ref: $ref,
+       status: (if ($real | length) >= 2 then "split"
+                elif ($real | length) == 1 and $real[0].digest != $want then "moved"
+                elif ($real | length) == 1 then "steady" else "not-checked" end),
+       match: $match, byDigest: ($ref | contains("@sha256")),
+       packs: (if $match == "exact" then [{profile: "strata-live-addon@1.0.0", key: "addon/strata-live-config"}] else [] end),
+       digests: ([$real[] | {digest, pods, status: (if .digest == $want then "first-digest" else "another-digest" end)}]
+                 + [$ids[] | select(.id == "") | {status: "not-started", pods: .n}])})' <<<"$containers")
+case "$path" in
+  /v1/images)
+    if [ -n "${FAKE_NOT_READ-}" ]; then
+      echo '{"schema":"strata-observed/1","pods":"not-read","readAt":null,"error":{"kind":"kube-api","status":403},"counts":{"images":0,"matched":0,"changed":0},"images":[]}'
+    else
+      jq -c '{schema: "strata-observed/1", pods: "read", readAt: "2026-11-04T10:00:00Z",
+        counts: {images: length, matched: ([.[] | select(.match != "none")] | length), changed: 0}, images: .}' <<<"$rows"
+    fi ;;
+  /v1/images/*)
+    enc=${path#/v1/images/}
+    ref=$(printf '%b' "${enc//%/\\x}")
+    row=$(jq -c --arg r "$ref" '.[] | select(.ref == $r)' <<<"$rows")
+    [ -n "$row" ] || exit 22
+    jq -c '{schema: "strata-observed/1", pods: "read", image: .}' <<<"$row" ;;
+  /v1/findings)
+    jq -c --arg none "${FAKE_NONE_FINDING:+registry.k8s.io/coredns/coredns:v1.11.3}" '{findings: ([.[] | select((.status == "moved" or .status == "split") and .match == "exact" and (.byDigest | not))]
+      | group_by(.status)
+      | map({kind: ("image-" + .[0].status), profile: "strata-live-addon@1.0.0", packs: ["addon/strata-live-config"], images: map(.ref)})
+      | . + (if $none != "" then [{kind: "image-moved", profile: "strata-live-addon@1.0.0", packs: [], images: [$none]}] else [] end))}' <<<"$rows" ;;
+  *) exit 22 ;;
+esac
+"##;
+
+/// The agents of Palette in the namespace of a cluster, and one pod of the system. The observer reads
+/// them with the pods of the run.
+const AGENT_PODS: &str = r#"[
+  {"name":"crony-0","namespace":"cluster-0123456789abcdef01234567","image":"gcr.io/spectro-images-public/release/crony:4.1.0","imageID":"gcr.io/spectro-images-public/release/crony@sha256:1111111111111111111111111111111111111111111111111111111111111111"},
+  {"name":"capi-0","namespace":"capi-system","image":"registry.k8s.io/cluster-api/cluster-api-controller:v1.9.0","imageID":"registry.k8s.io/cluster-api/cluster-api-controller@sha256:2222222222222222222222222222222222222222222222222222222222222222"},
+  {"name":"coredns-0","namespace":"kube-system","image":"registry.k8s.io/coredns/coredns:v1.11.3","imageID":"registry.k8s.io/coredns/coredns@sha256:3333333333333333333333333333333333333333333333333333333333333333"}
+]"#;
+
+/// A stage for observer-images.sh. The script runs in a tree of its own, so that its `api.sh`,
+/// `tf.sh`, and `baseline.sh` are stand-ins. Every command outside the repository is a stand-in too.
+/// Cluster A is `c-a`. It runs the release profile `r-1` and the add-on profile `ad-1`.
+fn images_stage() -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    let tree = stage.path("tree");
+    let mut files = vec![
+        "examples/live/observer-images.sh".to_string(),
+        "examples/live/lib.sh".to_string(),
+        "examples/live/common.sh".to_string(),
+        "scripts/ci/observer-records.sh".to_string(),
+        "Cargo.toml".to_string(),
+    ];
+    for file in [
+        "kustomization",
+        "namespace",
+        "serviceaccount",
+        "networkpolicy",
+        "deployment",
+        "reader-role",
+        "pods/kustomization",
+        "pods/clusterrole",
+        "pods/clusterrolebinding",
+    ] {
+        files.push(format!("deploy/observer/{file}.yaml"));
+    }
+    let files: Vec<&str> = files.iter().map(String::as_str).collect();
+    copy_scripts(&tree, &files);
+    let live = tree.join("examples/live");
+    executable(&live.join("api.sh"), FAKE_API_IMAGES);
+    executable(
+        &live.join("tf.sh"),
+        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
+    );
+    executable(&live.join("baseline.sh"), "#!/usr/bin/env bash\nexit 0\n");
+    executable(&live.join("diagnose.sh"), "#!/usr/bin/env bash\nexit 0\n");
+
+    let obs = stage.path("obs");
+    std::fs::create_dir_all(&obs).unwrap();
+    std::fs::write(obs.join("agents.json"), AGENT_PODS).unwrap();
+    let bin = stage.path("obs-bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for (name, body) in [
+        ("kubectl", FAKE_KUBECTL_IMAGES),
+        ("curl", FAKE_CURL_IMAGES),
+        ("crane", FAKE_CRANE_IMAGES),
+        // the script never calls docker: the log of this stand-in stays empty
+        (
+            "docker",
+            "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_OBS/docker.log\"\nexit 1\n",
+        ),
+        (
+            "gh",
+            "#!/usr/bin/env bash\ncase \"$*\" in\n  \"api user\"*) echo tester ;;\nesac\n",
+        ),
+        (
+            "git",
+            "#!/usr/bin/env bash\necho 0123456789abcdef0123456789abcdef01234567\n",
+        ),
+    ] {
+        executable(&bin.join(name), body);
+    }
+    stage.wrap_strata(FAKE_STRATA_IMAGES);
+    stage.strata(
+        "snapshot r-1 -o *",
+        0,
+        &observer_profile_record("r-1", "strata-live-profile", "cluster"),
+    );
+    let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
+    stage.env("PATH", &path);
+    // the token file is outside the folder of the run, so that the look for it in the run is fair
+    let token_file = stage.path("ghcr-pull-token");
+    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
+    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
+    stage.env("PALETTE_API_KEY", OBSERVER_KEY);
+    stage.env("FAKE_OBS", obs.to_str().unwrap());
+    stage.env("CYCLE_TRIES", "3");
+    stage
+}
+
+/// Run observer-images.sh of the tree of `stage`.
+fn run_images(stage: &Stage) -> (Output, String) {
+    let script = stage.path("tree/examples/live/observer-images.sh");
+    stage.run(script.to_str().unwrap(), &[])
+}
+
+/// Each check of observer-images.sh, in the order that it runs on a good run.
+const IMAGES_CHECKS: [&str; 21] = [
+    "pull-secret",
+    "tag-first",
+    "values-edit",
+    "namespaces",
+    "settings",
+    "records",
+    "observer-apply",
+    "observer-ready",
+    "pods-role",
+    "pods-read",
+    "image-first",
+    "image-split",
+    "image-moved",
+    "image-never-started",
+    "image-crash-loop",
+    "image-agents-no-finding",
+    "pull-policy",
+    "undo-values",
+    "undo-namespaces",
+    "undo-role",
+    "undo-baseline",
+];
+
+/// The sha256 of `text` in hex: the digest that the stand-in `crane` gives a copy of the image `text`.
+fn sha256_of(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(text.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The suffix of the names of the images of a run.
+fn images_suffix(stage: &Stage) -> String {
+    std::fs::read_to_string(stage.path("out/ids.env"))
+        .unwrap()
+        .lines()
+        .find_map(|l| l.strip_prefix("suffix=").map(str::to_string))
+        .expect("ids.env holds the suffix")
+}
+
+#[test]
+fn observer_images_sh_runs_the_stages_in_order_and_each_check_passes() {
+    let stage = images_stage();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{steps}{}{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("FAIL"), "{steps}");
+    assert_eq!(check_ids(&steps), IMAGES_CHECKS, "{steps}");
+    let line = step_line(&steps, "pull-policy");
+    assert!(
+        line.starts_with("SEEN") && line.ends_with("expected ?, got 0"),
+        "{line}"
+    );
+}
+
+/// The tag holds the first image when the first pod starts. It moves to the second image, and a new
+/// pod pulls it. Then the first pod is replaced, and the new pod pulls the second image too. The
+/// digests are those of the registry, and the page of the observer shows them.
+#[test]
+fn observer_images_sh_moves_the_tag_between_the_pods_and_shows_the_digests_of_the_registry() {
+    let stage = images_stage();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let suffix = images_suffix(&stage);
+    let moving = format!("ttl.sh/strata-live-{suffix}:2h");
+    let (d1, d2) = (
+        format!("sha256:{}", sha256_of("registry.k8s.io/pause:3.9")),
+        format!("sha256:{}", sha256_of("registry.k8s.io/pause:3.10")),
+    );
+    assert_ne!(d1, d2);
+    let events = observer_log(&stage, "events.log");
+    let moves: Vec<&str> = events
+        .lines()
+        .filter(|l| {
+            l.starts_with("copy registry.k8s.io/pause:3")
+                || l.starts_with("pod p1 ")
+                || l.starts_with("pod p2 ")
+                || *l == "delete p1"
+        })
+        .collect();
+    assert_eq!(
+        moves,
+        [
+            format!("copy registry.k8s.io/pause:3.9 {moving}"),
+            format!("pod p1 {d1}"),
+            format!("copy registry.k8s.io/pause:3.10 {moving}"),
+            format!("pod p2 {d2}"),
+            "delete p1".to_string(),
+            format!("pod p1 {d2}"),
+        ],
+        "the tag moves between the pods"
+    );
+
+    let said =
+        |check: &str| std::fs::read_to_string(stage.path(&format!("out/{check}.out"))).unwrap();
+    let first = said("image-first");
+    assert!(
+        first.contains(&d1) && first.contains("first-digest") && first.contains("\"steady\""),
+        "{first}"
+    );
+    let split = said("image-split");
+    assert!(
+        split.contains(&d1) && split.contains(&d2) && split.contains("\"split\""),
+        "{split}"
+    );
+    assert!(
+        split.contains("another-digest") && split.contains("first-digest"),
+        "{split}"
+    );
+    let moved = said("image-moved");
+    assert!(
+        moved.contains(&d2) && moved.contains("\"moved\"") && !moved.contains(&d1),
+        "{moved}"
+    );
+    let never = said("image-never-started");
+    assert!(
+        never.contains("not-started") && never.contains("not-checked"),
+        "{never}"
+    );
+    let crash = said("image-crash-loop");
+    assert!(
+        crash.contains("\"restartCount\":3") && crash.contains("\"steady\""),
+        "{crash}"
+    );
+    let agents = said("image-agents-no-finding");
+    assert!(
+        agents.contains("3 images match no pack, and no finding names one"),
+        "{agents}"
+    );
+    assert!(
+        said("pull-policy").contains("asked IfNotPresent, the cluster set Always"),
+        "{}",
+        said("pull-policy")
+    );
+}
+
+#[test]
+fn observer_images_sh_lists_the_three_images_in_the_values_of_the_add_on_and_puts_them_back() {
+    let stage = images_stage();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let suffix = images_suffix(&stage);
+    let api = observer_log(&stage, "api.log");
+    let edits: Vec<&str> = api.split("set-values ").skip(1).collect();
+    assert_eq!(edits.len(), 2, "one edit and one undo:\n{api}");
+    for image in [
+        format!("ttl.sh/strata-live-{suffix}:2h"),
+        format!("ttl.sh/strata-live-{suffix}-absent:2h"),
+        format!("ttl.sh/strata-live-{suffix}-crash:2h"),
+    ] {
+        assert!(
+            edits[0].contains(&format!("- image: {image}")),
+            "{image}:\n{}",
+            edits[0]
+        );
+    }
+    assert!(
+        edits[0].starts_with("ad-1 strata-live-config pack:"),
+        "{}",
+        edits[0]
+    );
+    assert_eq!(
+        edits[1].lines().next().map(str::trim_end),
+        Some("ad-1 strata-live-config"),
+        "the undo gives no values"
+    );
+    assert_eq!(
+        observer_log(&stage, "values.txt"),
+        "",
+        "the values are back"
+    );
+    // the record that the observer got lists the tag, and the records apply with --server-side
+    assert!(
+        observer_log(&stage, "records.values")
+            .contains(&format!("- image: ttl.sh/strata-live-{suffix}:2h")),
+        "the add-on record lists the tag"
+    );
+    let kubectl = observer_log(&stage, "kubectl.log");
+    assert!(
+        kubectl.lines().any(|l| l == "apply --server-side -f -"),
+        "{kubectl}"
+    );
+}
+
+#[test]
+fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secret() {
+    let mut stage = images_stage();
+    stage.env(
+        "OBSERVER_IMAGE",
+        "ghcr.io/como-technologies/strata-observer:test-abc1234",
+    );
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let overlay = std::fs::read_to_string(stage.path("out/kustomization.yaml")).unwrap();
+    for line in [
+        "components:\n  - pods\n",
+        "newName: ghcr.io/como-technologies/strata-observer\n",
+        "newTag: test-abc1234\n",
+        "- name: ghcr-pull\n",
+        "value: --content-every=1m",
+    ] {
+        assert!(overlay.contains(line), "{line:?}:\n{overlay}");
+    }
+    assert!(
+        !overlay.contains("ttl.sh"),
+        "the observer does not come from ttl.sh:\n{overlay}"
+    );
+    // the folders of the overlay are copies of the base and of the component
+    for file in [
+        "base/deployment.yaml",
+        "pods/kustomization.yaml",
+        "pods/clusterrole.yaml",
+        "pods/clusterrolebinding.yaml",
+    ] {
+        assert_eq!(
+            std::fs::read_to_string(stage.path(&format!("out/{file}"))).unwrap(),
+            repo_file(&format!("deploy/observer/{}", file.replace("base/", ""))),
+            "{file}"
+        );
+    }
+    // the pull Secret holds the token of the file, through standard input, and no file shows it
+    let pull = observer_log(&stage, "pull.seen");
+    let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
+    assert_eq!(
+        auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN,
+        "{pull}"
+    );
+    let kubectl = observer_log(&stage, "kubectl.log");
+    assert!(
+        kubectl.contains("create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson"),
+        "{kubectl}"
+    );
+    // the key reaches the Secret through standard input, and no other file or call shows it
+    assert_eq!(observer_log(&stage, "key.seen"), OBSERVER_KEY);
+    let mut shown = Vec::new();
+    for dir in ["out", "obs"] {
+        for (file, content) in files_under(&stage.path(dir)) {
+            if !["key.seen", "pull.seen"].contains(&file.as_str())
+                && (content.contains(OBSERVER_KEY) || content.contains(OBSERVER_PULL_TOKEN))
+            {
+                shown.push(format!("{dir}/{file}"));
+            }
+        }
+    }
+    assert!(shown.is_empty(), "a secret is in {shown:?}");
+    // the kubeconfig is a credential: no file of it stays
+    assert_eq!(
+        std::fs::read_dir(stage.path("tmp")).unwrap().count(),
+        0,
+        "a temporary file stays"
+    );
+}
+
+/// The image of the observer is on a private package. The script never tags it, never pushes it, and
+/// never copies it: docker is not called, and `crane` copies public images to `ttl.sh` only.
+#[test]
+fn observer_images_sh_puts_the_image_of_the_observer_on_no_registry() {
+    let mut stage = images_stage();
+    stage.env(
+        "OBSERVER_IMAGE",
+        "ghcr.io/como-technologies/strata-observer:test-abc1234",
+    );
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(observer_log(&stage, "docker.log"), "", "docker runs");
+    let suffix = images_suffix(&stage);
+    let crane = observer_log(&stage, "crane.log");
+    let copies: Vec<&str> = crane.lines().filter(|l| l.starts_with("copy ")).collect();
+    assert_eq!(
+        copies,
+        [
+            format!("copy registry.k8s.io/pause:3.9 ttl.sh/strata-live-{suffix}:2h"),
+            format!("copy docker.io/library/busybox:1.37 ttl.sh/strata-live-{suffix}-crash:2h"),
+            format!("copy registry.k8s.io/pause:3.10 ttl.sh/strata-live-{suffix}:2h"),
+        ],
+        "only public images go to ttl.sh"
+    );
+    for call in crane.lines() {
+        assert!(
+            !call.contains("strata-observer"),
+            "crane touches the observer: {call}"
+        );
+    }
+    // the code of the script has no command that tags, pushes, or copies an image of its own
+    let script = repo_file("examples/live/observer-images.sh");
+    let code: Vec<&str> = script
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect();
+    for line in &code {
+        assert!(!line.contains("docker "), "docker in the code: {line}");
+        for verb in ["push", "append", "mutate", "pull", "export"] {
+            assert!(
+                !line.contains(&format!("crane {verb}")),
+                "crane {verb} in the code: {line}"
+            );
+        }
+        if line.contains("crane copy") {
+            assert!(
+                line.contains("crane copy \"$source_"),
+                "crane copies a source that is not a public image: {line}"
+            );
+        }
+    }
+}
+
+/// A token file that fails stops the run at the pull Secret, before any change. The run makes no copy to
+/// `ttl.sh`, no edit of the add-on, and no call to the cluster.
+#[test]
+fn observer_images_sh_stops_at_the_pull_secret_before_it_changes_anything() {
+    for (why, body, mode) in [
+        ("absent", None, 0o600),
+        ("empty", Some(""), 0o600),
+        ("open to others", Some(OBSERVER_PULL_TOKEN), 0o644),
+    ] {
+        let stage = images_stage();
+        let path = stage.path("ghcr-pull-token");
+        match body {
+            Some(body) => write_with_mode(&path, body, mode),
+            None => std::fs::remove_file(&path).unwrap(),
+        }
+        let (o, steps) = run_images(&stage);
+        assert_eq!(
+            o.status.code(),
+            Some(1),
+            "{why}:\n{steps}{}",
+            text(&o.stderr)
+        );
+        assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
+        failed(&steps, &["pull-secret"]);
+        let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
+        assert!(
+            said.contains(path.to_str().unwrap()) && said.contains("read:packages"),
+            "{why}: the line names the file and the scope:\n{said}"
+        );
+        for log in [
+            "kubectl.log",
+            "api.log",
+            "crane.log",
+            "docker.log",
+            "pull.seen",
+        ] {
+            assert_eq!(observer_log(&stage, log), "", "{why}: {log} is not empty");
+        }
+        assert!(
+            !text(&o.stdout).contains(OBSERVER_PULL_TOKEN)
+                && !all_text(&stage.path("out")).contains(OBSERVER_PULL_TOKEN),
+            "{why}: the token is in an output"
+        );
+    }
+}
+
+/// The page names the images that match no pack. A cluster with no such image fails the check, and
+/// so does a finding that names one.
+#[test]
+fn observer_images_sh_takes_the_images_of_the_agents_from_the_answer_of_the_page() {
+    let stage = images_stage();
+    std::fs::write(stage.path("obs/agents.json"), "[]").unwrap();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["image-agents-no-finding"]);
+    let said = std::fs::read_to_string(stage.path("out/image-agents-no-finding.out")).unwrap();
+    assert!(said.contains("no image matches no pack"), "{said}");
+
+    // the check reads the page: it names no namespace, and the script keeps no list of them
+    let script = repo_file("examples/live/observer-images.sh");
+    assert!(
+        !script.contains("AGENT_NAMESPACES") && !script.contains("agent_namespaces"),
+        "the script keeps a list of namespaces"
+    );
+    let stage = images_stage();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let list = std::fs::read_to_string(stage.path("out/agent-images.txt")).unwrap();
+    assert_eq!(
+        list.lines().collect::<Vec<_>>(),
+        [
+            "gcr.io/spectro-images-public/release/crony:4.1.0",
+            "registry.k8s.io/cluster-api/cluster-api-controller:v1.9.0",
+            "registry.k8s.io/coredns/coredns:v1.11.3",
+        ]
+    );
+}
+
+#[test]
+fn observer_images_sh_removes_what_it_made_and_checks_that_it_is_gone() {
+    let stage = images_stage();
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let kubectl = observer_log(&stage, "kubectl.log");
+    for call in [
+        "delete namespace strata-live-images --ignore-not-found",
+        "delete -f observer.yaml --ignore-not-found",
+        "delete namespace strata-observer --ignore-not-found",
+        "delete clusterrolebinding strata-observer-pods --ignore-not-found",
+        "delete clusterrole strata-observer-pods --ignore-not-found",
+    ] {
+        assert!(kubectl.contains(call), "{call}:\n{kubectl}");
+    }
+    for state in [
+        "ns.strata-observer",
+        "ns.strata-live-images",
+        "role.exists",
+        "pods",
+    ] {
+        assert!(!stage.path("obs").join(state).exists(), "{state} stays");
+    }
+}
+
+#[test]
+fn observer_images_sh_undoes_the_run_when_the_script_ends_in_stage_1() {
+    let mut stage = images_stage();
+    stage.env("FAKE_DIE_AFTER_EDIT", "1");
+    let (o, steps) = run_images(&stage);
+    assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(steps.contains("PASS  tag-first"), "{steps}");
+    assert!(
+        !steps.contains("namespaces"),
+        "the script ended first:\n{steps}"
+    );
+    assert_eq!(
+        observer_log(&stage, "values.txt"),
+        "",
+        "the values are back"
+    );
+    let kubectl = observer_log(&stage, "kubectl.log");
+    assert!(
+        kubectl.contains("delete namespace strata-live-images --ignore-not-found")
+            && kubectl.contains("delete clusterrole strata-observer-pods --ignore-not-found"),
+        "{kubectl}"
+    );
+}
+
+#[test]
+fn observer_images_sh_keeps_the_run_with_keep_1_and_refuses_an_image_with_no_tag() {
+    let mut stage = images_stage();
+    stage.env("KEEP", "1");
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.contains("KEEP=1: the observer, the pods, and the edit stay"),
+        "{steps}"
+    );
+    assert!(!steps.contains("undo-values"), "{steps}");
+    assert!(stage.path("obs/observer.applied").exists());
+    assert_ne!(observer_log(&stage, "values.txt"), "", "the edit stays");
+
+    let mut stage = images_stage();
+    stage.env(
+        "OBSERVER_IMAGE",
+        "ghcr.io/como-technologies/strata-observer",
+    );
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("OBSERVER_IMAGE needs a tag or a digest"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(steps.is_empty(), "no stage ran: {steps}");
+    assert_eq!(
+        observer_log(&stage, "kubectl.log"),
+        "",
+        "nothing changed in the cluster"
+    );
+}
+
+/// Each fault below makes one check fail, and the run still removes what it made.
+#[test]
+fn observer_images_sh_fails_the_check_that_a_fault_breaks_and_still_undoes_the_run() {
+    for (fault, check) in [
+        ("FAKE_NOT_READ", "pods-read"),
+        ("FAKE_ROLE_WIDE", "pods-role"),
+        ("FAKE_TAG_STAYS", "image-split"),
+        ("FAKE_NEVER_HAS_ID", "image-never-started"),
+        ("FAKE_NONE_FINDING", "image-agents-no-finding"),
+    ] {
+        let mut stage = images_stage();
+        stage.env(fault, "1");
+        let (o, steps) = run_images(&stage);
+        assert_eq!(
+            o.status.code(),
+            Some(1),
+            "{fault}: {steps}{}",
+            text(&o.stderr)
+        );
+        failed(&steps, &[check]);
+        passed(
+            &steps,
+            &[
+                "undo-values",
+                "undo-namespaces",
+                "undo-role",
+                "undo-baseline",
+            ],
+        );
+        assert_eq!(
+            observer_log(&stage, "values.txt"),
+            "",
+            "{fault}: the values are back"
+        );
+    }
+}
+
+#[test]
+fn observer_images_sh_records_the_pull_policy_that_the_cluster_leaves_and_judges_none_of_it() {
+    let mut stage = images_stage();
+    stage.env("FAKE_POLICY_STAYS", "1");
+    let (o, steps) = run_images(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "pull-policy");
+    assert!(
+        line.starts_with("SEEN") && line.ends_with("expected ?, got 1"),
+        "{line}"
+    );
+    let said = std::fs::read_to_string(stage.path("out/pull-policy.out")).unwrap();
+    assert!(
+        said.contains("asked IfNotPresent, the cluster set IfNotPresent"),
+        "{said}"
+    );
+}
+
+#[test]
+fn the_scripts_of_the_digest_checks_are_valid_bash_and_refuse_a_stage_that_does_not_exist() {
+    for script in ["observer-images.sh", "observer-kind.sh"] {
+        let o = Command::new("bash")
+            .arg("-n")
+            .arg(live_script(script))
+            .output_locked()
+            .unwrap();
+        assert!(o.status.success(), "{script}: {}", text(&o.stderr));
+    }
+    let stage = images_stage();
+    let script = stage.path("tree/examples/live/observer-images.sh");
+    let (o, steps) = stage.run(script.to_str().unwrap(), &["9"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("observer-images.sh [FROM_STAGE]"),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(steps.is_empty(), "no stage ran: {steps}");
+}
+
+/// The scripts of the observer share their helpers. Each helper has one definition, in `lib.sh`. A copy
+/// in a script fails this test. `observer-kind.sh` defines `kc` and `cluster_kubeconfig` again for its
+/// kind cluster, as the comments of `lib.sh` say.
+#[test]
+fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/live");
+    let mut scripts: Vec<(String, String)> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "sh"))
+        .map(|path| {
+            let name = path.file_name().unwrap().to_str().unwrap().to_string();
+            (name, std::fs::read_to_string(&path).unwrap())
+        })
+        .collect();
+    scripts.sort();
+    for (helper, other) in [
+        ("kc", Some("observer-kind.sh")),
+        ("cluster_kubeconfig", Some("observer-kind.sh")),
+        ("kj", None),
+        ("can_i", None),
+        ("not_found", None),
+        ("poll", None),
+        ("uri", None),
+        ("page", None),
+        ("pf_start", None),
+        ("pf_stop", None),
+        ("images_read", None),
+        ("pods_read", None),
+        ("observer_image", None),
+        ("observer_overlay", None),
+        ("pull_token", None),
+        ("pull_secret", None),
+        ("pull_secret_stop", None),
+    ] {
+        let definition = format!("{helper}() ");
+        let homes: Vec<&str> = scripts
+            .iter()
+            .filter(|(_, text)| text.lines().any(|l| l.starts_with(&definition)))
+            .map(|(name, _)| name.as_str())
+            .collect();
+        let mut want = vec!["lib.sh"];
+        want.extend(other);
+        want.sort_unstable();
+        assert_eq!(homes, want, "{helper} has a copy");
+    }
+}
+
+/// The ids of the checks that a script runs: the word after `check` on each line that starts with it.
+fn script_check_ids(script: &str) -> Vec<String> {
+    repo_file(&format!("examples/live/{script}"))
+        .lines()
+        .filter_map(|l| l.trim_start().strip_prefix("check "))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The ids that the rows of a section of `live-runs.md` name: each name in backticks in the first cell.
+fn page_check_ids(script: &str) -> Vec<String> {
+    page_section("docs/src/development/live-runs.md", &format!("## {script}"))
+        .lines()
+        .filter(|l| l.starts_with("| `"))
+        .flat_map(|l| {
+            let cell = l.trim_start_matches('|').split('|').next().unwrap_or("");
+            cell.split('`')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[test]
+fn the_page_of_live_runs_names_each_check_of_observer_images_sh_and_of_observer_kind_sh() {
+    for script in ["observer-images.sh", "observer-kind.sh"] {
+        let mut in_script = script_check_ids(script);
+        let mut on_page = page_check_ids(script);
+        in_script.sort();
+        on_page.sort();
+        assert_eq!(in_script, on_page, "{script}");
+    }
+    // the eight checks of the plan, by name
+    let page = script_check_ids("observer-images.sh");
+    for name in [
+        "pods-read",
+        "image-first",
+        "image-split",
+        "image-moved",
+        "image-never-started",
+        "image-crash-loop",
+        "image-agents-no-finding",
+        "pull-policy",
+    ] {
+        assert!(
+            page.iter().any(|id| id == name),
+            "observer-images.sh lacks {name}"
+        );
+    }
+    let kind = script_check_ids("observer-kind.sh");
+    for name in ["mirror-image-string", "mirror-image-id"] {
+        assert!(
+            kind.iter().any(|id| id == name),
+            "observer-kind.sh lacks {name}"
+        );
+    }
+    // a check with ? records a result and judges none: the plan marks these three
+    for (script, name) in [
+        ("observer-images.sh", "pull-policy"),
+        ("observer-kind.sh", "mirror-image-string"),
+        ("observer-kind.sh", "mirror-image-id"),
+    ] {
+        let source = repo_file(&format!("examples/live/{script}"));
+        assert!(
+            source.contains(&format!("check {name} ? ")),
+            "{script}: {name} is a check with ?"
+        );
+    }
 }
 
 // ---- observer.sh -------------------------------------------------------------------------------------
@@ -8225,6 +9446,7 @@ exit 0
 /// The `curl` of observer.sh: the routes of the observer, from the state of `$FAKE_OBS`. The page is
 /// lost with the wrong key, and first-load once after a restart. `FAKE_NO_PALETTE` keeps it in
 /// first-load with a `lastError`, and `FAKE_LEAK` puts the value of a variable in `/v1/events`.
+/// `FAKE_LEAK_IMAGES` puts it in `/v1/images`, which answers `pods: "off"` otherwise.
 /// With `FAKE_STATE_KEPT`, the first sight of a finding does not change at a restart.
 const FAKE_CURL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
@@ -8259,6 +9481,9 @@ case "$path" in
     else echo '{"notChecked":[],"limits":{}}'; fi ;;
   /v1/events) if [ -n "${FAKE_LEAK-}" ]; then echo '{"events":[{"message":"purpose is strata live example"}]}'; else echo '{"events":[]}'; fi ;;
   /v1/newer) echo '{"newer":[]}' ;;
+  /v1/images)
+    if [ -n "${FAKE_LEAK_IMAGES-}" ]; then echo '{"schema":"strata-observed/1","pods":"off","images":[{"ref":"purpose is strata live example"}]}'
+    else echo '{"schema":"strata-observed/1","pods":"off","readAt":null,"counts":{"images":0,"matched":0,"changed":0},"images":[]}'; fi ;;
   /v1/packs/*) echo '{"values":{}}' ;;
   /) echo '<!doctype html><html lang="en"></html>' ;;
   *) exit 22 ;;
@@ -8592,9 +9817,9 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "create secret generic strata-observer-key --from-file=api-key=/dev/stdin",
         "create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson",
         "create rolebinding reader --role=strata-observer-reader --user=strata-observer-reader",
-        "auth can-i get secrets --as=strata-observer-reader",
-        "auth can-i create pods --subresource=exec --as=strata-observer-reader",
-        "auth can-i create pods --subresource=portforward --as=strata-observer-nobody",
+        "auth can-i -n strata-observer get secrets --as=strata-observer-reader",
+        "auth can-i -n strata-observer create pods --subresource=exec --as=strata-observer-reader",
+        "auth can-i -n strata-observer create pods --subresource=portforward --as=strata-observer-nobody",
         "--as=strata-observer-reader -n strata-observer port-forward deploy/strata-observer 18080:8080",
         "-n strata-observer exec deploy/strata-observer -- /usr/local/bin/strata-observer health",
         "-n strata-observer wait --for=condition=Available deploy/strata-observer --timeout=180s",
@@ -8946,6 +10171,7 @@ fn observer_sh_fails_the_finding_checks_when_the_edit_changes_nothing_and_still_
 fn observer_sh_fails_when_a_route_or_the_log_shows_the_value_of_a_variable() {
     for (fault, shown) in [
         ("FAKE_LEAK", "the route /v1/events shows the value"),
+        ("FAKE_LEAK_IMAGES", "the route /v1/images shows the value"),
         ("FAKE_LOG_LEAK", "the log shows the value"),
     ] {
         let mut stage = observer_stage();

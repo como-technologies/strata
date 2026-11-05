@@ -8,6 +8,13 @@
 // then comes from the other set. The sets stale, lost, and first-seen use this, because they differ
 // from ok in cluster.json only. The sets stale-unchecked and lost-unchecked differ from first-load in
 // cluster.json only.
+//
+// The file images.json is the document of the pods, strata-observed/1. The set ok has pods that the
+// observer reads. The sets quiet, first-load, no-records, and read-error have pods that it does not read.
+// The set images has one image that moved, and images-split has one image with two digests. Each of the
+// two holds the finding of the image, its event, and its profile with the finding. The set images-off is
+// ok with the read of the pods off. The set images-unread is ok with a read of the pods that never ended
+// well, and it holds the cause pods-not-read.
 package devdata
 
 import (
@@ -46,11 +53,18 @@ const (
 	StateStaleUnchecked State = "stale-unchecked"
 	StateLostUnchecked  State = "lost-unchecked"
 	StateReadError      State = "read-error"
+
+	// The states of the pods. Images and images-split hold a finding of an image. Images-off and
+	// images-unread hold none: the observer does not read pods, or it could not read them.
+	StateImages       State = "images"
+	StateImagesSplit  State = "images-split"
+	StateImagesOff    State = "images-off"
+	StateImagesUnread State = "images-unread"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
-	StateStaleUnchecked, StateLostUnchecked, StateReadError}
+	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.
@@ -65,11 +79,12 @@ const (
 	fileNotChecked = "notchecked.json"
 	fileEvents     = "events.json"
 	fileDiffs      = "diffs.json"
+	fileImages     = "images.json"
 	fileBase       = "base"
 )
 
 // Files lists the files that a set holds, or takes from its base.
-var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs}
+var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs, fileImages}
 
 // Set holds the answer of each route for one state. It is an api.Source.
 type Set struct {
@@ -79,6 +94,8 @@ type Set struct {
 	Newer      api.NewerView
 	NotChecked api.NotCheckedView
 	Events     api.EventsView
+	// Images is the document of the pods, strata-observed/1.
+	Images model.Observed
 	// Diffs holds the answers of the detail route that the set knows.
 	Diffs []api.PackDiff
 }
@@ -131,7 +148,7 @@ func Load(fsys fs.FS, state State, now time.Time) (*Set, error) {
 		name string
 		into any
 	}{{fileCluster, &s.Cluster}, {fileFindings, &s.Findings}, {fileProfiles, &s.Profiles}, {fileNewer, &s.Newer},
-		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}} {
+		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}, {fileImages, &s.Images}} {
 		raw, err := Read(fsys, state, f.name)
 		if err != nil {
 			return nil, fmt.Errorf("state %s: %w", state, err)
@@ -155,6 +172,11 @@ func (s *Set) Summary() model.Summary {
 	return model.Summary{Cluster: s.Cluster.Cluster, Page: s.Cluster.Page, StrataVersion: s.Cluster.StrataVersion, Records: s.Cluster.Records,
 		Content: s.Cluster.Content, Versions: s.Cluster.Versions, Counts: s.Cluster.Counts, Findings: s.Findings.Findings, Profiles: profiles,
 		Newer: s.Newer.Newer, NotChecked: s.NotChecked.NotChecked, Limits: s.NotChecked.Limits, Events: s.Events.Events}
+}
+
+// Observed gives the document of the pods.
+func (s *Set) Observed() model.Observed {
+	return s.Images
 }
 
 // PackDiff gives the entry of a pack that the set holds for a side.

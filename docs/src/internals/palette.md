@@ -40,5 +40,5 @@ flowchart LR
 | --- | --- |
 | [Packs and registries](palette/packs.md) | The digest on each pack reference, the digest of each registry kind, a pack pushed again, tag names, what a registry answers, pack states, and what a cluster installs of a Helm pack. |
 | [Profiles](palette/profiles.md) | Edits in place, the audit log, version bumps, the lock of a cluster template, and macros. |
-| [Clusters](palette/clusters.md) | The copies that a cluster holds, the order of its profiles, the tiers of a cluster record, the cluster listing, and a cluster on GCP. |
+| [Clusters](palette/clusters.md) | The copies that a cluster holds, the order of its profiles, and the tiers of a cluster record. The cluster listing, the pods of a cluster, and a cluster on GCP. |
 | [What no run covers](palette/limits.md) | The behaviors that no live run shows, and where the answers come from. |

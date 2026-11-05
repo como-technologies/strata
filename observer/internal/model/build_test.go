@@ -349,11 +349,11 @@ func TestEachFindingMakesOneEventTheNewestFirst(t *testing.T) {
 		t.Errorf("events %+v", events)
 	}
 	for kind := range eventKinds {
-		if !slices.Contains([]Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged}, kind) {
+		if !slices.Contains(allKinds, kind) {
 			t.Errorf("event of an unknown kind %s", kind)
 		}
 	}
-	if len(eventKinds) != 6 {
+	if len(eventKinds) != len(allKinds) {
 		t.Errorf("%d event kinds", len(eventKinds))
 	}
 }

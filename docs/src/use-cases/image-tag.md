@@ -128,6 +128,9 @@ digest in the values of a chart, such as `image.digest`, works the same way:
 - Strata reads no registry. An image that a vendor rebuilds under a tag that the
   pack text names stays invisible until the text changes. See
   [Where each part belongs](../boundary.md).
+- The observer can read the pods of a cluster. It shows the digest that each tag runs,
+  after a pod pulls the rebuilt image. See [The pods of the
+  cluster](../automation/observer.md#the-pods-of-the-cluster).
 - `images` keeps the `image` of each entry in the list. A `digest` field beside
   it is not part of the list, so `IMAGES` does not show a new value of it.
   `AUTHORED` and the changed value show it.

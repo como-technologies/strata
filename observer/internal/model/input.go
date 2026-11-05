@@ -34,6 +34,8 @@ type Content struct {
 	Meta       baseline.Meta
 	Records    []Record
 	Unreadable []string
+	// Pods is what the read of the pods gave. It is empty when the observer does not read pods.
+	Pods PodRead
 }
 
 // Versions is what one good versions cycle read. Moves holds a Move for each pin that is behind,
@@ -69,6 +71,10 @@ type Input struct {
 	Versions      *Versions
 	VersionsClock Clock
 	FirstSeen     map[string]time.Time
+	// ReadPods says that the observer reads pods. FirstDigests holds the first digest of each image,
+	// by ImageKey.
+	ReadPods     bool
+	FirstDigests map[string]string
 }
 
 // Subject names a profile as strata does in pinnedBy: name@version.

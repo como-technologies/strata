@@ -229,6 +229,35 @@ To remove an object that the content dropped, delete it on the cluster with
 content names. The check `undo-delete` of `image-digest.sh` does this, so the
 run leaves the cluster clean.
 
+## The pods of a cluster
+
+Palette lists the pods of a cluster with `POST /v1/dashboard/spectroclusters/{uid}/workloads/pod`.
+The request reads and changes nothing. A container has an `image` in its spec and an
+`image` in its status. The answer has no field for the image ID, so it gives no digest.
+The code of Palette shows this, and no run calls the route. So no route of Palette answers
+[the question of the observer](../../automation/observer.md#the-pods-of-the-cluster):
+which digest does each tag run as on this cluster?
+
+The Kubernetes API of the cluster gives the digest, in the `imageID` of the status of
+a container. A live run read the pods of cluster A and of a kind cluster. It shows
+these facts of the cluster, which the observer uses:
+
+| What | What the cluster does |
+| --- | --- |
+| The `imageID` of a container | It is `<repository>@sha256:<digest>`. All 78 containers of cluster A have this form. |
+| An image for two architectures | The `imageID` holds the digest of the index, the same digest that `crane digest` prints. Two architectures give one digest. |
+| A tag that moves in the registry | A pod that runs keeps its digest. A pod that a second node starts pulls the tag and runs the new digest. |
+| A new pod on a node that holds the image | It runs the new digest, also with the pull policy `IfNotPresent`. The API server of cluster A runs the admission plugin `AlwaysPullImages`, which gives each pod the policy `Always`. |
+| A container that never started | Its `imageID` is empty. |
+| A container in a crash loop | Its `imageID` keeps the digest. |
+| An image that kind loads from a local file | Its `imageID` is `sha256:<id>`, with no repository and no digest. |
+| `status.image` | It differs from the image of the spec for 14 of the 78 containers of cluster A, because the runtime rewrites it. So the observer matches the image of the spec. |
+
+A cluster that Palette builds also runs the agents of Palette. On cluster A, 29
+images run in the pods. 16 of them match a pack by exact text, and 13 match none:
+these are agents of Palette, such as `cluster-api` and `crony`. No pack names them.
+[observer-images.sh](../../development/live-runs.md#observer-imagessh) shows each fact.
+
 ## The role that a key needs
 
 A key has the role of its user. Each request of strata carries the uid of the

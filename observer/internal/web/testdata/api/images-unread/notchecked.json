@@ -1,0 +1,8 @@
+{
+  "notChecked": [
+    {"cause":"no-upstream-digest","profiles":["gazoo-backup@1.2.0"],"packs":["addon/velero"],"registry":""},
+    {"cause":"older-registry-copy","profiles":["hoppy-autoscale@1.3.0","rubble-dns@1.0.3"],"packs":["addon/external-dns","addon/metrics-server"],"registry":"Bitnami"},
+    {"cause":"pods-not-read","profiles":[],"packs":[],"registry":""}
+  ],
+  "limits": {"imagesNamedByATag":88,"helmPacks":6,"maskedPaths":2}
+}

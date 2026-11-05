@@ -395,3 +395,170 @@ other_pod_refused() {
     sh -c "wget -T 5 -qO- http://$ip:8080/healthz && echo reached || echo refused" < /dev/null)
   grep -qx refused <<<"$answer"
 }
+
+# The kubectl of cluster A, and the waits and the page that the scripts of the observer share. A script
+# sets `ns`, `port`, `root`, and `C` before it calls them.
+# kc ARGS...: kubectl in cluster A. kj does the same with the errors on standard error, for JSON.
+# observer-kind.sh defines kc again for its kind cluster.
+kc() { kube "$C" "$@"; }
+kj() { KUBE_STDERR=1 kube "$C" "$@"; }
+# can_i ARGS...: yes or no, as kubectl auth can-i gives it
+can_i() { kc auth can-i "$@" | tail -n 1; }
+# not_found ARGS...: kubectl in cluster A says that ARGS name nothing
+not_found() {
+  local answer
+  answer=$(kc "$@")
+  case "$answer" in
+    *"not found"*) return 0 ;;
+  esac
+  return 1
+}
+# poll COUNT COMMAND...: run COMMAND until it succeeds, at most COUNT times, 5 seconds apart
+poll() {
+  local count=$1 _
+  shift
+  for _ in $(seq "$count"); do
+    "$@" && return 0
+    sleep 5
+  done
+  return 1
+}
+# uri TEXT: TEXT as one segment of a path
+uri() { jq -rn --arg r "$1" '$r | @uri'; }
+
+# The page of the observer, through kubectl port-forward. The kubeconfig is a credential: it lives in a
+# temporary file until the end of the run, and the script deletes it.
+kubeconfig= pf_pid= pf_user=
+# cluster_kubeconfig: the kubeconfig of the cluster that the run reads, on standard output. observer-kind.sh
+# defines it again for its kind cluster.
+cluster_kubeconfig() { "$live/api.sh" get-kubeconfig "$C"; }
+# pf_stop: end the port-forward
+pf_stop() {
+  [ -z "$pf_pid" ] || { kill "$pf_pid" 2> /dev/null; wait "$pf_pid" 2> /dev/null; }
+  pf_pid= pf_user=
+}
+# pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The log is
+# port-forward.log.
+pf_start() {
+  local _
+  pf_stop
+  if [ ! -s "$kubeconfig" ]; then
+    kubeconfig=$(mktemp) || return 1
+    if ! cluster_kubeconfig > "$kubeconfig" 2> /dev/null || [ ! -s "$kubeconfig" ]; then
+      rm -f "$kubeconfig"
+      kubeconfig=
+      return 1
+    fi
+  fi
+  kubectl --kubeconfig "$kubeconfig" ${1:+--as="$1"} -n "$ns" port-forward deploy/strata-observer "$port:8080" > port-forward.log 2>&1 < /dev/null &
+  pf_pid=$! pf_user=${1:-}
+  for _ in $(seq 30); do
+    grep -q 'Forwarding from' port-forward.log && return 0
+    # the process can end after it prints its line, so the log gets a last look
+    kill -0 "$pf_pid" 2> /dev/null || { grep -q 'Forwarding from' port-forward.log; return; }
+    sleep 1
+  done
+  return 1
+}
+# page PATH: the answer of the observer through the port-forward
+page() { curl -fsS --max-time 20 "http://127.0.0.1:$port$1"; }
+# images_read: /v1/images says that the observer read the pods and found images. images.json keeps the answer.
+images_read() {
+  page /v1/images > images.json 2> /dev/null \
+    && jq -e '.pods == "read" and .readAt != null and .error == null and .counts.images > 0' images.json > /dev/null
+}
+# pods_read: open the port-forward, and wait for the first read of the pods. $tries is the number of looks.
+# The output says what the observer reports about the read.
+pods_read() {
+  pf_start || { cat port-forward.log; return 1; }
+  poll "$tries" images_read || { jq '{pods, readAt, error, counts}' images.json; return 1; }
+  jq '{pods, readAt, error, counts}' images.json
+}
+
+# The image of the observer, and the pull Secret for it. The image is on a private package of GitHub, so
+# a run never pushes it to another registry: it pulls it with a token that has only read:packages.
+# observer_image: set $image from OBSERVER_IMAGE (default: the image of the version in Cargo.toml),
+# $image_name and $image_pin for a kustomization, and $pull_file from GHCR_PULL_TOKEN_FILE. It stops the
+# script for an image with neither a tag nor a digest.
+observer_image() {
+  local version
+  version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)
+  image=${OBSERVER_IMAGE:-ghcr.io/como-technologies/strata-observer:v$version}
+  case "$image" in
+    *@sha256:*) image_name=${image%%@*}; image_pin="digest: ${image#*@}" ;;
+    *:*) image_name=${image%:*}; image_pin="newTag: ${image##*:}" ;;
+    *) die "OBSERVER_IMAGE needs a tag or a digest" ;;
+  esac
+  case "${image##*:}" in */*) die "OBSERVER_IMAGE needs a tag or a digest" ;; esac
+  pull_file=${GHCR_PULL_TOKEN_FILE:-$HOME/.config/strata/ghcr-pull-token}
+}
+# pull_token: the pull token on standard output, from the token file. The file holds a token with only
+# the scope read:packages. When the file is absent, empty, or open to a group or to others, the
+# function prints one line on standard error and fails.
+pull_token() {
+  local token mode
+  token=$(tr -d '[:space:]' 2> /dev/null < "$pull_file")
+  if [ -z "$token" ]; then
+    echo "no token in $pull_file: it must hold a token with only the scope read:packages" >&2
+    return 1
+  fi
+  mode=$(stat -c %a "$pull_file" 2> /dev/null || stat -f %Lp "$pull_file") \
+    || { echo "cannot read the mode of $pull_file" >&2; return 1; }
+  if [ $((8#$mode & 077)) != 0 ]; then
+    echo "$pull_file has the mode $mode: run chmod 600 on it. It must hold a token with only the scope read:packages" >&2
+    return 1
+  fi
+  printf %s "$token"
+}
+# pull_secret: the Secret ghcr-pull from the token file. The token goes through standard input. The
+# function reads the file first, so a file that fails changes nothing in the cluster. The Secret
+# needs the namespace, so the function applies it.
+pull_secret() {
+  local token user
+  token=$(pull_token) || return 1
+  kc apply -f "$root/deploy/observer/namespace.yaml" || return 1
+  user=$(gh api user --jq .login 2> /dev/null)
+  printf %s "$token" \
+    | jq -Rs --arg u "${user:-strata-observer}" \
+      '. as $t | {auths: {"ghcr.io": {username: $u, password: $t, auth: ("\($u):\($t)" | @base64)}}}' \
+    | kc -n "$ns" create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
+}
+# pull_secret_stop: after a failed check pull-secret, the first check of a run that installs the observer,
+# print why and end the script with exit 1. A token file that fails changes nothing in the cluster, so
+# there is nothing to undo: the function sets $undone then.
+pull_secret_stop() {
+  pull_token > /dev/null 2>&1 || undone=1
+  { cat pull-secret.err; echo "the run stops: the pull Secret needs the token file"; } | tee -a steps.log
+  exit 1
+}
+# observer_overlay ARG...: base/ is a copy of deploy/observer. kustomization.yaml sets the image and the
+# pull Secret, and adds each ARG to the arguments of the pod, such as --content-every=1m, so that a run
+# takes minutes. observer_image sets the image first.
+observer_overlay() {
+  local arg
+  mkdir -p base && cp "$root"/deploy/observer/*.yaml base/ || return 1
+  {
+    cat << YAML
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - base
+images:
+  - name: ghcr.io/como-technologies/strata-observer
+    newName: $image_name
+    $image_pin
+patches:
+  - target:
+      kind: Deployment
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/imagePullSecrets
+        value:
+          - name: ghcr-pull
+YAML
+    for arg in "$@"; do
+      printf '      - op: add\n        path: /spec/template/spec/containers/0/args/-\n        value: %s\n' "$arg"
+    done
+  } > kustomization.yaml
+}

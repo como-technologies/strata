@@ -237,8 +237,9 @@ ASD-STE100.
 ## The Go of the observer
 
 The observer is the Go program in `observer/`. It runs the `strata` binary and
-shows the answers. It holds no rule of strata. The rules above are for the Rust
-code, and these rules are for the Go code.
+shows the answers. It holds no rule of strata. With `--read-pods`, it also lists
+the pods of its cluster. The rules above are for the Rust code, and these rules are
+for the Go code.
 
 - The observer uses the standard library only. `go.mod` has no `require` line,
   and `just lint` fails when it has one.
@@ -292,8 +293,17 @@ code, and these rules are for the Go code.
   [The server of the observer](./observer-api.md). The summary tier uses types of
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the
   detail tier has one. A test walks the types.
-- Only `internal/api` imports `net` or `net/http`, and only `health.go` makes an
-  HTTP request. No code sends a `POST`. A test makes sure of each rule.
+- `internal/api` and `internal/kube` can import `net` and `net/http`.
+  `internal/api/health.go` and `internal/kube/kube.go` can hold the client and the
+  request. No code sends a `POST`. A test makes sure of each rule.
+- `internal/kube` is the one place that calls the Kubernetes API. It sends one `GET`
+  on the list of pods, with paging, and no other request. It decodes no `env`. It reads
+  the token and the CA again at each call, because the kubelet rotates the token. Its
+  error holds a kind and a status, and never a message.
+- The observer makes no Kubernetes call without `--read-pods`. The state keeps the
+  first digest of an image under an id, and never the reference, a pod name, or a
+  namespace. A test plants a marker in the `env` of a pod. It fails when the marker
+  is in an answer, the state, or the log.
 - `internal/web` carries the files of the page with `embed`, and `internal/api`
   serves them. A test fails when a file of `assets/` has an external
   address, an inline style, an inline script, or a second write of markup. It also

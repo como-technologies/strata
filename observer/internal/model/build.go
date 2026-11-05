@@ -88,9 +88,13 @@ func newView(in Input, c *causes) *view {
 		}
 	}
 	if in.Content != nil {
-		v.findings = FindingsOf(*in.Content)
+		v.findings = FindingsOf(*in.Content, in.FirstDigests)
 		stamp(v.findings, in.FirstSeen, utc(in.Content.At))
 		for _, f := range v.findings {
+			// A finding of the pods is not a drift of the content: it changes no status of a profile or a pack.
+			if slices.Contains(imageKinds, f.Kind) {
+				continue
+			}
 			v.findingProfiles[f.Profile] = true
 			if len(f.Packs) == 0 {
 				v.packlessProfiles[f.Profile] = true

@@ -32,7 +32,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
 
@@ -46,6 +46,11 @@ observer-image: (build-target "x86_64-unknown-linux-musl")
 # Render deploy/observer and make sure it holds four objects. Needs kubectl.
 observer-manifests:
     test "$(kubectl kustomize deploy/observer | grep -c '^kind: ')" = 4
+
+# Render examples/observer-pods, which lists deploy/observer and the component deploy/observer/pods, and make sure it holds six objects and the flag --read-pods. Needs kubectl.
+observer-manifests-pods:
+    test "$(kubectl kustomize examples/observer-pods | grep -c '^kind: ')" = 6
+    kubectl kustomize examples/observer-pods | grep -q -e '- --read-pods'
 
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
@@ -323,9 +328,13 @@ live-fleet: build
 live-loop: build
     examples/live/loop.sh
 
-# The observer on kind (#644): the manifests, the records, the pod, and the page, as a user with only the reader role sees them. Needs live-up, docker, kind, and kubectl. Makes a kind cluster and deletes it; writes nothing to the tenant.
+# The observer on kind (#644): the manifests, the records, the pod, and the page, as a user with only the reader role sees them. Stage 7 (#646) adds a mirror for vendor.example and the component that reads the pods. Needs live-up, docker, kind, and kubectl. Makes a kind cluster and a registry, and deletes both; writes nothing to the tenant.
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
+
+# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and a pull Secret from a token file with only read:packages (GHCR_PULL_TOKEN_FILE) gives it to the nodes. Needs live-up (billable until live-down), kubectl, gh, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
+live-observer-images: build
+    examples/live/observer-images.sh
 
 # The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
 live-observer: build
