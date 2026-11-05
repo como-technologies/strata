@@ -1362,10 +1362,13 @@ up.
 
 Stage 7 (#646) shows how pods reach a mirror. It starts a registry in Docker on
 the network of kind. It points containerd on each node at that registry for the
-host `vendor.example`. One pod names `vendor.example`, as a pack does. Another
+host `vendor.example`. A node of kind reads the folder `certs.d` only when the
+config of the cluster sets `config_path`, so stage 1 creates the cluster with
+that config. One pod names `vendor.example`, as a pack does. Another
 pod names the registry itself, as a rule that rewrites the image string does.
 
-Then the component `deploy/observer/pods` applies, and the observer reads the
+Then the kustomization `examples/observer-pods` applies. It lists the base and
+the component `deploy/observer/pods`. The observer reads the
 pods. The checks `mirror-image-id` and `mirror-image-string` print what each pod
 reports and the row that the observer shows for it. They show whether the image
 string or the image id decides which match works. The stage removes the pods, the
@@ -1374,7 +1377,7 @@ end of Wave 15.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `kind-create`, `image-load` | 0 | #644: a kind cluster, and the image of the observer in its nodes |
+| `kind-create`, `image-load` | 0 | #644: a kind cluster, and the image of the observer in its nodes. The config of the cluster sets `config_path`, so containerd reads the folder `certs.d` |
 | `namespace`, `config`, `key` | 0 | #644: the namespace with the restricted standard, the ConfigMap, and the Secret of the key |
 | `record-release`, `record-addon` | 0 | #644: a record of each profile that cluster A runs |
 | `records-apply`, `records-four`, `records-meta` | 0 | #644: the output of `observer-records.sh --revision` applies with `--server-side`. It makes four Secrets, and `meta.json` says `approved` with the revision |
@@ -1389,7 +1392,7 @@ end of Wave 15.
 | `other-pod-refused` | 0 | #644: a pod of another namespace cannot connect to the page |
 | `first-seen-apply`, `first-seen-meta` | 0 | #644: the output of `observer-records.sh --first-seen` applies with `--server-side`, and `meta.json` says `first-seen` |
 | `mirror-registry`, `mirror-nodes`, `mirror-pods` | 0 | #646: a registry on the network of kind holds `product:1.0`. Containerd on each node asks it first for `vendor.example`. A pod that names `vendor.example` and a pod that names the registry are Ready (no result yet: the Wave 15 window runs it) |
-| `component-apply`, `component-read` | 0 | #646: `deploy/observer/pods/example` applies, and `/v1/images` says `read`. The token, the role, and the policy of the component work on kind (no result yet: the Wave 15 window runs it) |
+| `component-apply`, `component-read` | 0 | #646: `examples/observer-pods` applies, and `/v1/images` says `read`. The token, the role, and the policy of the component work on kind (no result yet: the Wave 15 window runs it) |
 | `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
 | `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
 | `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go (no result yet: the Wave 15 window runs it) |

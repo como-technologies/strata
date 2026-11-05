@@ -114,9 +114,11 @@ components:
   - deploy/observer/pods
 ```
 
-`deploy/observer/pods/example/kustomization.yaml` is such a kustomization.
+`examples/observer-pods/kustomization.yaml` is such a kustomization.
 `just observer-manifests-pods` renders it, and makes sure that it holds six
-objects and the flag `--read-pods`.
+objects and the flag `--read-pods`. CI runs that recipe. The folder is outside
+`deploy/observer/`, because kustomize stops with a cycle when a kustomization
+that lists the base sits inside the base.
 
 | File | What it adds |
 | --- | --- |
@@ -202,7 +204,7 @@ writes only the records of its profiles.
 
 ```bash
 just observer-manifests     # kubectl kustomize deploy/observer holds four objects
-just observer-manifests-pods # the same with the component: six objects and the flag --read-pods
+just observer-manifests-pods # examples/observer-pods, which lists the base and the component: six objects and the flag --read-pods
 just observer-image         # strata-observer:dev, from the static binary of this tree
 just live-observer-kind     # the observer on kind
 just live-observer          # the observer on cluster A, from a kubectl apply and from a profile

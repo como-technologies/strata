@@ -881,7 +881,10 @@ fn the_component_opens_tcp_6443_beside_443_and_changes_nothing_else_in_the_polic
 }
 
 /// The kustomization of the component lists each file of its folder, and each file holds one object.
-/// The folder `example/` is a kustomization of a team that lists the base and the component.
+/// The folder `examples/observer-pods/` is a kustomization of a team that lists the base and the
+/// component. It is outside `deploy/observer/`: kustomize stops with a cycle when a kustomization
+/// that lists the base sits inside the base. So the base holds one folder, the component, and the
+/// component holds none.
 #[test]
 fn the_component_lists_its_files_and_each_holds_one_object() {
     let component = pods_doc("kustomization.yaml");
@@ -905,20 +908,42 @@ fn the_component_lists_its_files_and_each_holds_one_object() {
         );
         assert_eq!(pods_doc(file)["kind"], kind, "{file}");
     }
-    let example: Value = serde_yaml::from_str(&repo_file(
-        "deploy/observer/pods/example/kustomization.yaml",
-    ))
-    .unwrap();
-    assert_eq!(strings(&example["resources"]), ["../.."]);
-    assert_eq!(strings(&example["components"]), [".."]);
+    let example: Value =
+        serde_yaml::from_str(&repo_file("examples/observer-pods/kustomization.yaml")).unwrap();
+    assert_eq!(strings(&example["resources"]), ["../../deploy/observer"]);
+    assert_eq!(
+        strings(&example["components"]),
+        ["../../deploy/observer/pods"]
+    );
+
+    let folders = |dir: &str| -> Vec<String> {
+        let mut names: Vec<String> =
+            std::fs::read_dir(Path::new(env!("CARGO_MANIFEST_DIR")).join(dir))
+                .unwrap()
+                .map(|e| e.unwrap())
+                .filter(|e| e.file_type().unwrap().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+        names.sort();
+        names
+    };
+    assert_eq!(
+        folders("deploy/observer"),
+        ["pods"],
+        "the base holds the component only"
+    );
+    assert!(
+        folders("deploy/observer/pods").is_empty(),
+        "no kustomization sits inside the base"
+    );
 }
 
-/// A stand-in `kubectl` for `kubectl kustomize deploy/observer/pods/example`. It prints the four files
+/// A stand-in `kubectl` for `kubectl kustomize examples/observer-pods`. It prints the four files
 /// of the base and the two of the component, with a separator. A real `kubectl` applies the patch of
 /// the component. The stand-in prints the line that the patch adds, unless `FAKE_NO_FLAG` is set.
 /// `FAKE_EXTRA` adds one object.
 const FAKE_KUBECTL_KUSTOMIZE_PODS: &str = r#"#!/usr/bin/env bash
-[ "$1 $2" = "kustomize deploy/observer/pods/example" ] || exit 2
+[ "$1 $2" = "kustomize examples/observer-pods" ] || exit 2
 for f in namespace serviceaccount networkpolicy deployment pods/clusterrole pods/clusterrolebinding; do
   cat "deploy/observer/$f.yaml"
   echo "---"

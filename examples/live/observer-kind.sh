@@ -4,7 +4,8 @@
 #
 #   examples/live/observer-kind.sh [FROM_STAGE]
 #
-#   1  a kind cluster, with the image of the observer loaded (just observer-image builds it)
+#   1  a kind cluster, whose containerd reads the folder certs.d, with the image of the observer loaded
+#      (just observer-image builds it)
 #   2  the install: the namespace, the ConfigMap, the Secret of the key, the records of the
 #      Git revision that is checked out, and the manifests with the image tag of this run. Each
 #      output of observer-records.sh goes through kubectl apply --server-side. Then the script
@@ -81,6 +82,20 @@ cluster_kubeconfig() { kind get kubeconfig --name "$cluster"; }
 export -f kc
 export cluster ns reader port revision C
 
+# kind_create: a kind cluster whose containerd reads the folder /etc/containerd/certs.d. A node of
+# kind sets config_path only when the config says so, and the mirror of stage 7 needs the folder.
+kind_create() {
+  cat > kind-config.yaml << 'EOF'
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+EOF
+  kind create cluster --name "$cluster" --wait 120s --config kind-config.yaml
+}
+
 summary() {
   write_summary "the observer on kind" ", cluster \`$C\`, image \`$image\`, revision \`$revision\`."
 }
@@ -95,7 +110,7 @@ cleanup() {
 trap cleanup EXIT
 
 if stage 1 "a kind cluster with the image of the observer"; then
-  check kind-create 0 '#644: a kind cluster' -- kind create cluster --name "$cluster" --wait 120s
+  check kind-create 0 '#644: a kind cluster, whose containerd reads the folder certs.d' -- kind_create
   check image-load 0 '#644: the image of the observer is in the nodes' -- \
     kind load docker-image "$image" --name "$cluster"
 fi
@@ -248,10 +263,11 @@ mirror_pods_ready() {
     mirror_pod "$pod" || return 1
   done
 }
-# component_apply: the component deploy/observer/pods, as a team lists it. The first cycle of the new
-# pod reads the pods, so the pods of the mirror are in the first read.
+# component_apply: examples/observer-pods, which lists the base and the component deploy/observer/pods
+# as a team does. The first cycle of the new pod reads the pods, so the pods of the mirror are in the
+# first read.
 component_apply() {
-  kubectl kustomize "$root/deploy/observer/pods/example" | sed "s#ghcr.io/como-technologies/strata-observer:VERSION#$image#" \
+  kubectl kustomize "$root/examples/observer-pods" | sed "s#ghcr.io/como-technologies/strata-observer:VERSION#$image#" \
     | kc apply --server-side -f - \
     && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
 }

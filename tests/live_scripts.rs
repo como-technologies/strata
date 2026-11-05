@@ -7875,10 +7875,17 @@ if [ -n "$out" ]; then printf '%s' "$body" > "$out"; printf 200; else printf '%s
 "#;
 
 /// A `kind` for observer-kind.sh. It logs each call to `$FAKE_OBS/kind.log`, except the list of the
-/// nodes, which has one node. `get kubeconfig` prints a kubeconfig.
+/// nodes, which has one node. `create cluster` copies the file of `--config` to
+/// `$FAKE_OBS/kind-config.yaml`. `get kubeconfig` prints a kubeconfig.
 const FAKE_KIND_OBSERVER: &str = r#"#!/usr/bin/env bash
 if [ "$1 $2" = "get nodes" ]; then echo strata-observer-test-control-plane; exit 0; fi
 echo "$*" >> "$FAKE_OBS/kind.log"
+if [ "$1 $2" = "create cluster" ]; then
+  for arg in "$@"; do
+    [ "$previous" != "--config" ] || cp "$arg" "$FAKE_OBS/kind-config.yaml"
+    previous=$arg
+  done
+fi
 [ "$1 $2" != "get kubeconfig" ] || echo "apiVersion: v1 # fake-kubeconfig"
 "#;
 
@@ -8100,12 +8107,27 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     assert_eq!(
         kind.lines().collect::<Vec<_>>(),
         [
-            "create cluster --name strata-observer-test --wait 120s",
+            "create cluster --name strata-observer-test --wait 120s --config kind-config.yaml",
             "load docker-image strata-observer:dev --name strata-observer-test",
             "get kubeconfig --name strata-observer-test",
             "delete cluster --name strata-observer-test",
         ]
     );
+    // containerd reads the folder certs.d only when the config of the cluster sets config_path, and
+    // the files of the mirror go to that folder
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&observer_log(&stage, "kind-config.yaml")).unwrap();
+    assert_eq!(config["kind"], "Cluster");
+    assert_eq!(config["apiVersion"], "kind.x-k8s.io/v1alpha4");
+    let patches = config["containerdConfigPatches"].as_sequence().unwrap();
+    assert_eq!(patches.len(), 1, "{patches:?}");
+    let patch = patches[0].as_str().unwrap();
+    for line in [
+        r#"[plugins."io.containerd.grpc.v1.cri".registry]"#,
+        r#"config_path = "/etc/containerd/certs.d""#,
+    ] {
+        assert!(patch.lines().any(|l| l.trim() == line), "{line}:\n{patch}");
+    }
     // the kubeconfig of the port-forward is a credential: no file of it stays
     assert_eq!(
         std::fs::read_dir(stage.path("tmp")).unwrap().count(),
@@ -8115,7 +8137,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     // stage 7: the component applies as a team lists it, and the two pods wait to be Ready
     let root = env!("CARGO_MANIFEST_DIR");
     for call in [
-        format!("kustomize {root}/deploy/observer/pods/example"),
+        format!("kustomize {root}/examples/observer-pods"),
         "-n strata-observer rollout status deploy/strata-observer --timeout=180s".to_string(),
         "-n default wait --for=condition=Ready pod/mirror-id --timeout=120s".to_string(),
         "-n default wait --for=condition=Ready pod/mirror-string --timeout=120s".to_string(),

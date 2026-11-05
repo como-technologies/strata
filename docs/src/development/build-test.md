@@ -7,7 +7,7 @@ just observer-contract # the documents of this build of strata go through the al
 just observer-dev      # the page of the observer, from test data: see The server of the observer
 just observer-image    # strata-observer:dev, the image, from the static binary of this tree
 just observer-manifests # kubectl kustomize deploy/observer holds four objects
-just observer-manifests-pods # the same with the component deploy/observer/pods: six objects and the flag --read-pods
+just observer-manifests-pods # examples/observer-pods, which lists the base and the component: six objects and the flag --read-pods
 just observer-playground # the observer against the stand-in, and its page at http://127.0.0.1:8080
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items, gofmt and go vet of the observer and of the request counter
 just test              # the unit, library, binary, and script tests, the tests of xtask, and the Go tests of the observer
@@ -544,7 +544,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, and `just observer-contract` |
+| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, `just observer-contract`, `just observer-manifests`, and `just observer-manifests-pods` |
 | docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |

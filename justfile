@@ -47,10 +47,10 @@ observer-image: (build-target "x86_64-unknown-linux-musl")
 observer-manifests:
     test "$(kubectl kustomize deploy/observer | grep -c '^kind: ')" = 4
 
-# Render deploy/observer with the component deploy/observer/pods, and make sure it holds six objects and the flag --read-pods. Needs kubectl.
+# Render examples/observer-pods, which lists deploy/observer and the component deploy/observer/pods, and make sure it holds six objects and the flag --read-pods. Needs kubectl.
 observer-manifests-pods:
-    test "$(kubectl kustomize deploy/observer/pods/example | grep -c '^kind: ')" = 6
-    kubectl kustomize deploy/observer/pods/example | grep -q -e '- --read-pods'
+    test "$(kubectl kustomize examples/observer-pods | grep -c '^kind: ')" = 6
+    kubectl kustomize examples/observer-pods | grep -q -e '- --read-pods'
 
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
