@@ -100,24 +100,6 @@ opens on the first side that has a change: here, "Record → Published now". It 
 old and the new value of the reclaim policy in a table, on the tab that has the change.
 A side with no change shows the splash "Undisturbed", and the page sends no request for it.
 
-The head of the card shows the five change flags. A lit flag is violet, and a flag that
-did not light is dim. A hover or a focus shows what a flag means, with the words of
-[Change flags and impact](../reference/impact.md). A lit flag that has a tab opens that
-tab. `AUTHORED` opens Values, or Manifests when only a manifest changed.
-
-The last card of the page of a profile, and of a pack, is "Check this yourself". It gives
-the commands that answer the same questions at your terminal. Each row has a question, a
-command with a button Copy, and what the page says now. The questions are:
-
-- Which record did this check use?
-- Does Palette still hold the version?
-- Who changed it?
-- What changed?
-- Does the cluster still run the record?
-
-The first command reads the record out of the Secrets of the observer into `record.json`.
-The other commands read that file.
-
 The Values tab then shows the text of the same edit as a diff block. It is the text
 that `strata verify --full` prints, and the cycle reads it with `--full`:
 
@@ -135,6 +117,24 @@ A pack with more than 256 KiB of text for a side shows no text. The page shows t
 text of a diff](../automation/observer.md#the-text-of-a-diff) gives the rules. The
 check `diff-text` of [What the live example verifies](../development/live-runs.md)
 tests the text on a cluster that Palette built.
+
+The head of the card shows the five change flags. A lit flag is violet, and a flag that
+did not light is dim. A hover or a focus shows what a flag means, with the words of
+[Change flags and impact](../reference/impact.md). A lit flag that has a tab opens that
+tab. `AUTHORED` opens Values, or Manifests when only a manifest changed.
+
+The last card of the page of a profile, and of a pack, is "Check this yourself". It gives
+the commands that answer the same questions at your terminal. Each row has a question, a
+command with a button Copy, and what the page says now. The questions are:
+
+- Which record did this check use?
+- Does Palette still hold the version?
+- Who changed it?
+- What changed?
+- Does the cluster still run the record?
+
+The first command reads the record out of the Secrets of the observer into `record.json`.
+The other commands read that file.
 
 ## 5. Ask Palette about a move
 

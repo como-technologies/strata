@@ -189,16 +189,6 @@ No screen says "Nothing changed", "Nothing needs attention", or "All 0 packs cur
 A page that holds no data and cannot reach the observer shows the splash "This page lost its
 line to the observer". The splash has the command `kubectl port-forward` and a button
 "Try now". With data on the page, the same fault stays an amber bar over that data.
-OLD
-
-rep(<<'OLD', <<'NEW');
-- A side that strata could not read says "Not read". It never reads "Identical".
-  The published side of a pack with an `error` row has no answer, and the route
-  gives 404 for it.
-OLD
-- A side that strata could not read says "Not read". It never reads "Identical" or
-  "Undisturbed". The published side of a pack with an `error` row or an `unverified`
-  status has no answer, and the page sends no request for it.
 
 The baseline of the records adds to each screen. With `first-seen`, the top bar
 has a pill, and each screen says "No person approved these records". With
@@ -288,9 +278,9 @@ page changes.
   raises a severity.
 - "Not checked" blocks the text "No change". A pack that was not checked never
   reads "current".
-- A side that strata could not read says "Not read". It never reads "Identical".
-  The published side of a pack with an `error` row has no answer, and the route
-  gives 404 for it.
+- A side that strata could not read says "Not read". It never reads "Identical" or
+  "Undisturbed". The published side of a pack with an `error` row or an `unverified`
+  status has no answer, and the page sends no request for it.
 - A move that strata could not compare has no counts. Its row shows a dash and
   "Not read", and "Not checked" names its pack.
 - A detail request that fails is not kept. A 503 is a normal answer while a
