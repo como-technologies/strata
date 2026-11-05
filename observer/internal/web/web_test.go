@@ -161,7 +161,7 @@ var (
 	styleTag        = regexp.MustCompile(`(?i)<style\b`)
 	scriptTag       = regexp.MustCompile(`(?is)<script\b[^>]*>(.*?)</script>`)
 	inlineHandler   = regexp.MustCompile(`(?i)\son[a-z]+\s*=\s*["']`)
-	jsComment       = regexp.MustCompile(`(?s:/\*.*?\*/)|(?m:^\s*//.*$)`)
+	jsComment       = regexp.MustCompile(`(?s:(?:^|\s)/\*.*?\*/)|(?m:^\s*//.*$)`)
 	cssURL          = regexp.MustCompile(`(?i)url\(\s*["']?([^)"']*)`)
 	rawCall         = regexp.MustCompile(`\braw\(([^)]*)\)`)
 	rawArgument     = regexp.MustCompile(`^"[A-Za-z0-9&;# ]*"$`)
@@ -334,6 +334,7 @@ const A = raw(" &rarr; ");`
 		{"an inline handler", "index.html", `<button onclick="go()">x</button>`, "an inline event handler"},
 		{"an inline style in a string of the script", "app.js", good + "\nconst s = `<td style=\"width:90px\">`;", "an inline style"},
 		{"an inline handler in a string of the script", "app.js", good + "\nconst s = `<a onclick=\"go()\">`;", "an inline event handler"},
+		{"an inline style after a glob in a string", "app.js", good + "\nconst g = \"releases/*/dev.json\";\nconst s = `<td style=\"width:90px\">`;\nconst z = \"*/\";", "an inline style"},
 		{"a second write of markup", "app.js", good + "\nx.innerHTML = y;", "innerHTML must appear once"},
 		{"no write through part", "app.js", strings.Replace(good, "part(markup)", "markup", 1), "innerHTML must appear once"},
 		{"eval", "app.js", good + "\neval(x)", "it uses eval("},
@@ -383,7 +384,7 @@ page as markup, and on a screen that throws. */
 // The tags and the attributes that a screen can hold.
 var (
 	anyTag     = regexp.MustCompile(`<[^>]*>`)
-	validTag   = regexp.MustCompile(`^</?(div|span|a|nav|section|table|thead|tbody|tr|th|td|h1|h2|b|i|em|button|input|select|option|label|details|summary|ul|li|noscript)(\s+[a-z][a-z0-9-]*(="[^"<>]*")?)*\s*/?>$`)
+	validTag   = regexp.MustCompile(`^</?(div|span|a|nav|section|table|thead|tbody|tr|th|td|h1|h2|h3|p|b|i|em|code|button|input|select|option|label|details|summary|ul|li|noscript|svg|path)(\s+[a-zA-Z][a-zA-Z0-9-]*(="[^"<>]*")?)*\s*/?>$`)
 	handler    = regexp.MustCompile(`(?i)\son[a-z]+=`)
 	attrValue  = regexp.MustCompile(`="[^"]*"`)
 	hrefValues = regexp.MustCompile(`href="([^"]*)"`)
@@ -418,12 +419,18 @@ func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
 // there, and it fails the test when node is not there and CI is set.
 func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
+	return runNodeAssets(t, "assets", apiDir, state, extra...)
+}
+
+// runNodeAssets does the same with the script app.js of another directory. A test uses it to run a changed copy of the script.
+func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []byte {
+	t.Helper()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		whenNodeIsMissing(os.Getenv("CI"), t.Fatal, t.Skip)
 		return nil
 	}
-	args := append([]string{"testdata/render.js", "assets", apiDir, string(state)}, extra...)
+	args := append([]string{"testdata/render.js", assets, apiDir, string(state)}, extra...)
 	out, err := exec.Command(node, args...).Output()
 	if err != nil {
 		var exit *exec.ExitError
@@ -517,14 +524,14 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		words []string
 	}{
 		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "Nothing needs attention.", "Pods not read", "Strata compares the name and the tag."}},
-		{devdata.StateFirstLoad, []string{"The first check has not ended", "Baseline unknown"}},
-		{devdata.StateNoRecords, []string{"No records yet", "A record is the copy your team approved. Your pipeline writes records from Git.", "Baseline unknown", "Needs a record"}},
+		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Pods not read", "Strata compares the name and the tag."}},
+		{devdata.StateFirstLoad, []string{"Reading the layers", "The first check is running", "Baseline unknown"}},
+		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy your team approved. Your pipeline writes the records, and the observer checks against them.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "Baseline unknown"}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
 		{devdata.StateLost, []string{"Lost contact with Palette", "HTTP 401, the API key was refused", "no finding clears until a check proves it"}},
 		{devdata.StateFirstSeen, []string{"First-seen records", "No person approved these records"}},
-		{devdata.StateLostUnchecked, []string{"Lost contact with Palette", "The last 3 checks failed: HTTP 401, the API key was refused. No check has ended well", "Not read yet"}},
-		{devdata.StateStaleUnchecked, []string{"Checks stopped", "No check has ended well", "Not read yet"}},
+		{devdata.StateLostUnchecked, []string{"We lost the signal from Palette", "The last 3 checks failed: <b>HTTP 401, the API key was refused.</b> No check has ended well", "strata-observer-key"}},
+		{devdata.StateStaleUnchecked, []string{"Checks stopped before one ended well", "No check has ended well", "kubectl -n strata-observer logs"}},
 		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
 		{devdata.StateImages, []string{"Needs attention", "Image moved", "A tag runs another digest than the first one seen", "Moved or split", "Image changes"}},
 		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
@@ -574,7 +581,7 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 			}
 			for _, s := range screens {
 				if s.Hash == "#overview" && s.Variant == "" {
-					for _, want := range []string{"Not read yet", "No check has ended well"} {
+					for _, want := range []string{"No check has ended well"} {
 						if !strings.Contains(s.HTML, want) {
 							t.Errorf("the overview has no %q", want)
 						}
@@ -585,8 +592,8 @@ func TestAnOutageBeforeTheFirstGoodCheckClaimsNothing(t *testing.T) {
 	}
 }
 
-// A published side that strata could not read has no answer. The route gives 404 for it, and the page
-// says that it was not read. It never says that the published version is identical.
+// A published side that strata could not read has no answer. The page says that it was not read, and it sends no
+// request for it. It never says that the published version is identical.
 func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T) {
 	const hash = "#k-fred-identity@2.3.0/addon/dex"
 	var published, cluster bool
@@ -597,7 +604,7 @@ func TestAPackWithAnErrorRowDoesNotSayIdenticalForThePublishedSide(t *testing.T)
 		switch s.Variant {
 		case "side published":
 			published = true
-			if strings.Contains(s.HTML, "Identical") || !strings.Contains(s.HTML, "Not read. Strata could not read the published version.") {
+			if strings.Contains(s.HTML, "Identical") || !strings.Contains(s.HTML, "This side was not read") || !strings.Contains(s.HTML, "Strata could not read the published version") {
 				t.Errorf("the published side of a row with an error: %.600s", s.HTML)
 			}
 		case "":
@@ -651,10 +658,10 @@ func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
 	if err := json.Unmarshal(runNode(t, devdata.StateOK, "retry", "#k-fred-identity@2.3.0/addon/dex"), &pages); err != nil || len(pages) != 2 {
 		t.Fatalf("the output of render.js: %v, %d renders", err, len(pages))
 	}
-	if !strings.Contains(pages[0], "Try again later") {
+	if !strings.Contains(pages[0], "One moment, a check is running") || !strings.Contains(pages[0], "Try now") {
 		t.Errorf("the first render does not say that the request failed: %.600s", pages[0])
 	}
-	if strings.Contains(pages[1], "Try again later") || !strings.Contains(pages[1], "charts.dex.config.expiry.idTokens") {
+	if strings.Contains(pages[1], "One moment, a check is running") || !strings.Contains(pages[1], "charts.dex.config.expiry.idTokens") {
 		t.Errorf("the second render did not ask again: %.600s", pages[1])
 	}
 }
@@ -769,19 +776,19 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 // chipCount reads the number of a chip of the filter: <button data-filter="drift">Drift 2</button>.
 var chipCount = regexp.MustCompile(`data-filter="[a-z-]+"[^>]*>[A-Za-z ]+ ([^<]*)</button>`)
 
-// The chips of the filter say "-" where the tiles do, because a count of 0 would claim a check that
-// did not happen. After a good check, they say a number.
-func TestTheChipsOfTheFilterSayDashWhenNothingWasRead(t *testing.T) {
+// The chips of the filter show a number after a good check. A page with nothing read shows a splash in place of the table of
+// profiles, so it shows no chip, and a count of 0 would claim a check that did not happen.
+func TestTheChipsOfTheFilterShowANumberAfterAGoodCheckAndNoChipBefore(t *testing.T) {
 	cases := []struct {
 		state devdata.State
-		dash  bool
+		chips bool
 	}{
-		{devdata.StateFirstLoad, true},
-		{devdata.StateNoRecords, true},
-		{devdata.StateLostUnchecked, true},
-		{devdata.StateStaleUnchecked, true},
-		{devdata.StateOK, false},
-		{devdata.StateQuiet, false},
+		{devdata.StateFirstLoad, false},
+		{devdata.StateNoRecords, false},
+		{devdata.StateLostUnchecked, false},
+		{devdata.StateStaleUnchecked, false},
+		{devdata.StateOK, true},
+		{devdata.StateQuiet, true},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -789,12 +796,15 @@ func TestTheChipsOfTheFilterSayDashWhenNothingWasRead(t *testing.T) {
 			for _, s := range render(t, c.state, false) {
 				for _, m := range chipCount.FindAllStringSubmatch(s.HTML, -1) {
 					chips++
-					if _, err := strconv.Atoi(m[1]); (c.dash && m[1] != "-") || (!c.dash && err != nil) {
-						t.Errorf("%s %s: a chip says %q, want dash %v", s.Hash, s.Variant, m[1], c.dash)
+					if _, err := strconv.Atoi(m[1]); err != nil {
+						t.Errorf("%s %s: a chip says %q, want a number", s.Hash, s.Variant, m[1])
 					}
 				}
+				if !c.chips && strings.Contains(s.HTML, "data-filter=") {
+					t.Errorf("%s %s shows a filter before a check ended well", s.Hash, s.Variant)
+				}
 			}
-			if chips == 0 {
+			if c.chips && chips == 0 {
 				t.Error("no screen shows the chips of the filter")
 			}
 		})
@@ -1539,21 +1549,27 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 	cases := []struct {
 		state                    devdata.State
 		cls, value, sub, counted string
+		noTile                   bool
 	}{
-		{devdata.StateOK, "g", "0", "8 images in pods", "8"},
-		{devdata.StateImages, "a", "1", "Moved or split", "8"},
-		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8"},
-		{devdata.StateQuiet, "y", "-", "Pods not read", "-"},
-		{devdata.StateNoRecords, "y", "-", "Pods not read", "-"},
-		{devdata.StateReadError, "y", "-", "Pods not read", "-"},
-		{devdata.StateImagesOff, "y", "-", "Pods not read", "-"},
-		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-"},
+		{devdata.StateOK, "g", "0", "8 images in pods", "8", false},
+		{devdata.StateImages, "a", "1", "Moved or split", "8", false},
+		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8", false},
+		{devdata.StateQuiet, "y", "-", "Pods not read", "-", false},
+		{devdata.StateNoRecords, "", "", "", "-", true},
+		{devdata.StateReadError, "y", "-", "Pods not read", "-", false},
+		{devdata.StateImagesOff, "y", "-", "Pods not read", "-", false},
+		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-", false},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
 			overview := pageOf(t, render(t, c.state, false), "#overview", "")
+			// A page with no records shows a splash in place of the tiles. The nav item still says "-".
 			m := tileOfImages.FindStringSubmatch(overview)
-			if m == nil || m[1] != c.cls || m[2] != c.value || m[3] != c.sub {
+			if c.noTile {
+				if m != nil {
+					t.Errorf("the page shows the tile %q before a check ended well", m)
+				}
+			} else if m == nil || m[1] != c.cls || m[2] != c.value || m[3] != c.sub {
 				t.Errorf("the tile is %q, want %s %q %q", m, c.cls, c.value, c.sub)
 			}
 			n := navOfImages.FindStringSubmatch(overview)
@@ -1561,7 +1577,7 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 				t.Errorf("the nav item is %q, want the count %q", n, c.counted)
 			}
 			drift, image, newer := strings.Index(overview, `href="#findings"><div class="l">Drift`), strings.Index(overview, `href="#images"><div class="l">Image changes`), strings.Index(overview, `href="#newer"><div class="l">Newer versions`)
-			if !(drift >= 0 && drift < image && image < newer) {
+			if !c.noTile && !(drift >= 0 && drift < image && image < newer) {
 				t.Errorf("the tiles are not in the order Drift, Image changes, Newer versions: %d %d %d", drift, image, newer)
 			}
 			navNewer, navImages, navNot := strings.Index(overview, `<a href="#newer" class=`), strings.Index(overview, `<a href="#images" class=`), strings.Index(overview, `<a href="#notchecked" class=`)
@@ -1572,15 +1588,16 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 	}
 }
 
-// With the read of the pods off, the screen says so in short sentences: why the read is opt-in, and where
-// the book says how to turn it on. It shows no table.
+// With the read of the pods off, the screen is an offer: it says what the read gives, what it costs, and the next
+// step, with the command. It shows no table.
 func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateImagesOff, devdata.StateQuiet} {
 		t.Run(string(state), func(t *testing.T) {
 			list := pageOf(t, render(t, state, false), "#images", "")
-			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, "The observer does not read pods. The read is opt-in.",
-				`A <span class="m">list</span> call on pods gives the whole spec of each pod to the holder of the token. So a team must ask for it.`,
-				`The page "The observer" in the book says how to turn it on.`)
+			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, "Pods are not on the menu here", "This install does not read the pods.",
+				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`,
+				`<b>Next</b> Name the component <span class="m">deploy/observer/pods</span> in the kustomization, then apply it.`,
+				`<code>kubectl apply -k .</code>`, `class="splash md tone-off"`)
 			mustNotHold(t, "the screen", list, "<table", "Compared with the first digest")
 		})
 	}
@@ -1590,9 +1607,11 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 // with the words of the error.
 func TestWithAReadThatNeverEndedWellTheScreenOfTheImagesGivesTheError(t *testing.T) {
 	list := pageOf(t, render(t, devdata.StateImagesUnread, false), "#images", "")
-	mustHold(t, "the screen", list, `<span class="sub">Not read yet</span>`, "The observer could not read the pods yet.",
-		"The last read failed: HTTP 403, the role of the observer was refused.")
-	mustNotHold(t, "the screen", list, "<table", "The observer does not read pods.")
+	mustHold(t, "the screen", list, `<span class="sub">Not read yet</span>`, "The pods stay silent",
+		"The last read of the pods failed. <b>HTTP 403, the role of the observer was refused.</b>",
+		"Ask the API server if the role of the observer can list pods.", "<code>kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer</code>",
+		`class="splash md tone-warn"`)
+	mustNotHold(t, "the screen", list, "<table", "This install does not read the pods.")
 }
 
 // The cause pods-not-read has a row with no profile and no pack. The row says "The pods", and a click goes
@@ -1733,7 +1752,7 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 				"images.json": editImages(t, func(o *model.Observed) { o.Error = &c.err }),
 			})
 			list := pagesOf(t, dir, "#images")[0]
-			mustHold(t, "the list", list, "The last read failed: "+c.want+".")
+			mustHold(t, "the list", list, "The last read of the pods failed. <b>"+c.want+".</b>")
 			mustNotHold(t, "the list", list, "Palette")
 		})
 	}
@@ -1760,7 +1779,7 @@ func TestAnImageReferenceWithAnImgTagShowsAsText(t *testing.T) {
 // An image that the data does not hold shows the page of a missing item, under the nav item Images.
 func TestAnImageThatNoPodRunsShowsAMissingPage(t *testing.T) {
 	page := pagesOf(t, writeSet(t, devdata.StateOK, nil), imageHash("nobody.example/none:0"))[0]
-	mustHold(t, "the page", page, "This page is not in the data.", `<a href="#images" class="on">`)
+	mustHold(t, "the page", page, "No pod runs this image", `<span class="m">nobody.example/none:0</span> runs in no pod now.`, `<a class="btn" href="#images">All images</a>`, `<a href="#images" class="on">`)
 }
 
 // The line of a profile for a finding reads right for one pack and for many. The line of an image id

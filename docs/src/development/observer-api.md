@@ -97,19 +97,74 @@ names the screen:
 | `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
 | `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
 
-The comparison of a pack has two tabs:
+Each pack page has one card of comparison with one dropdown "Compare". The dropdown
+holds these options:
+
+- **Record → Published now.** It is always there.
+- **Record → This cluster's copy.** It is there when strata could read the copy.
+- **Pack A → pack B.** It is there when a newer version of the pack exists.
+
+The page opens on the first option that has a change, in this order, and on
+"Published now" when none has one. The page decides this from the findings and the
+newer versions, so it sends no request for a side with no change. That side shows
+the splash "Undisturbed", with three facts: the published version, the copy of the
+cluster, and the newer version. A published side that strata could not read or could
+not verify shows "This side was not read". It never shows "Undisturbed".
+
+A side with a change has four tabs:
 
 - **Values.** It shows the settings as a table, and it folds "Follows the version"
   and "Repeats the lists" with their counts. Then it shows the masked note, and the
   text of the raw values as a diff block. A setting of many lines shows only the
   lines that differ: see [A value of many lines](../automation/observer.md#a-value-of-many-lines).
 - **Manifests.** It shows the text of each changed, added, or removed manifest.
+- **Images** and **Charts.** They show the entries that changed.
 
-A control "Unified / Split" on both tabs chooses between two layouts of the same
-text. A pack with `textTooLarge` shows that the text is too large, and it names the
-command `strata compare ... --full`. The table of the newer versions and the card
-"Move to" of a pack show the button "Ask Palette". The text and the answers come from
-the detail tier only.
+The card opens on the first tab that has a change. An empty tab says so, and it links
+to the first other tab that has a change. A control "Unified / Split" on the tabs of
+values and manifests chooses between two layouts of the same text. A pack with
+`textTooLarge` shows the splash "Too much rock to carry", and it gives the command
+`strata compare ... --full`. The table of the newer versions and the card "Move to"
+of a pack show the button "Ask Palette". The text and the answers come from the
+detail tier only.
+
+### The five flags
+
+The head of the card shows the five change flags. A flag keeps one color: lit or dim
+is the signal. A color for each flag competes with the colors of the statuses.
+
+- A hover or a focus on a flag shows what it means, lit or dim. The words come from
+  the table in [Change flags and impact](../reference/impact.md), and `FLAG_WORDS` in
+  `app.js` holds the one copy of them. A keyboard reaches the words too, because each
+  flag takes the focus.
+- A lit flag with a tab is a link to that tab. `AUTHORED` opens the first of Values and
+  Manifests that has a change. `IMAGES` opens Images, and `CHARTS` opens Charts.
+- `IDENTITY` and `UPSTREAM` have no tab, so they stay plain. A dim flag is no link.
+
+### Check this yourself
+
+The page of a profile and the page of a pack end with the card "Check this yourself".
+Each row is a question, a command with a button Copy, and what the page says now. The
+rows change with the page:
+
+| Question | Command | The page says |
+| --- | --- | --- |
+| Get the record that this check used. | A loop over the four Secrets `strata-observer-records-0` to `3` that writes `record.json`. | The revision of the records. |
+| Does Palette still have this version? | `strata verify record.json` | The status of the published version. |
+| Who changed it? | `strata verify record.json --who` | The person and the age. The row is there when a finding names a person. |
+| What changed? | `strata compare record.json <profile> --full` | The number of packs that changed. |
+| Does this cluster still run the record? | `strata compare record.json cluster:<cluster>/<profile>` | The status of the copy. |
+| What does the move change? | `strata compare pack:<registry>/<pack>@<old> pack:<registry>/<pack>@<new> --full` | The impact. A pack with a newer version has this row. |
+| Which newer versions does Palette list? | `strata behind record.json --pin <layer>/<pack>` | The newest version. A pack with a newer version has this row. |
+
+The page does not know which of the four Secrets holds a record, so the first command
+reads the key in each one. The key is the name and the version of the profile, as
+`scripts/ci/observer-records.sh` writes it. The names are real. A test of `internal/web`
+fails when the Secrets, the namespace, or the rule of the key differ from the files of
+the repository. `just observer-contract` draws the page from the routes of a real
+server, and it runs each command against the stand-in of the chapter
+`edited-in-place`. It also runs the two commands of a move against the chapter
+`behind`.
 
 ### The state of the page
 
@@ -120,19 +175,101 @@ checked".
 | `page` | The page shows |
 | --- | --- |
 | `ok` | The data. |
-| `first-load` | A violet bar. The tiles show `-`. |
-| `no-records` | A violet bar with the text about records. The tiles show `-`, and the page lists no newer version, because `behind` needs a record. |
-| `stale` | An amber bar with the time of the last content check. The counts are from then. |
-| `lost` | A red bar. The counts are from the last good check, and no finding clears until a check proves it. |
+| `first-load` | The splash "Reading the layers", with the tone `build`, on each screen that reads the checks. |
+| `no-records` | The splash "Nothing to compare against yet", with the tone `off`, the command of the records script, and the command `--first-seen`. The page lists no newer version, because `behind` needs a record. |
+| `stale` | An amber bar with the time of the last content check. The counts are from then, and the data stays under the bar. |
+| `lost` | A red bar. The counts are from the last good check, no finding clears until a check proves it, and the data stays under the bar. |
 
 A restart in an outage gives `stale` or `lost` with `checkedAt` null, because no
 check has ended well. The memory holds no answer, so each count is 0. The page
-then shows `-` and "Not read yet". No screen says "Nothing changed", "Nothing
-needs attention", or "All 0 packs current".
+then shows a splash with the error and the next step. A lost page shows "We lost the signal
+from Palette", and a stale page shows "Checks stopped before one ended well". The nav shows `-`.
+No screen says "Nothing changed", "Nothing needs attention", or "All 0 packs current".
+
+A page that holds no data and cannot reach the observer shows the splash "This page lost its
+line to the observer". The splash has the command `kubectl port-forward` and a button
+"Try now". With data on the page, the same fault stays an amber bar over that data.
 
 The baseline of the records adds to each screen. With `first-seen`, the top bar
 has a pill, and each screen says "No person approved these records". With
 `unknown`, the top bar says "Baseline unknown".
+
+### The splash
+
+One component draws each place that has nothing to show and each state that the page
+tells: `splash(tone, title, body, extra, size)` in `app.js`. It draws the mark of the
+logo, a headline, and a line that states the fact. The mark has the geometry of
+`assets/logo/`: four paths, from the top slab down. `app.css` gives each slab its
+color by class, because the policy of the page refuses an inline style. The function
+`mark()` draws it through `h`, the one template of the script.
+
+The tone sets the look of the mark and its animation:
+
+| Tone | The mark | The animation | Use |
+| --- | --- | --- | --- |
+| `calm` | The four colors of the logo. | The slabs breathe. | The check ended well and found nothing. |
+| `build` | The four colors. | The slabs stack. | A read is on its way. |
+| `off` | An outline. | The dashes march. | Off by a choice of the team, or nothing to compare with. |
+| `warn` | Amber. | The slabs pulse. | A read failed, or part of the layer is hidden. |
+| `lost` | The top slab is red. | The top slab slips off. | Palette or the observer is out of reach. |
+
+The size is the place: the whole content area (`lg`), a card (`md`), a card inside a
+card (`sm`), and a line (`inline()`).
+
+The rule of a state:
+
+- The headline can have some fun. The line under it states the fact in plain words.
+- It never reads calmer than the check allows. `calmOk()` is the one gate of the
+  calm tone.
+- It gives the next step when one exists, and the step has a command with a button
+  Copy.
+- A finding always shows its data and never a splash. A page that is lost or stale
+  after a good check stays a bar over its findings.
+- It states no time that the page does not hold. Each time comes from the data.
+- `prefers-reduced-motion` stops each animation in `app.css`. Each mark holds its
+  state.
+
+`calmOk()` is true when all of these hold:
+
+- The page holds data, and it is neither lost nor stale.
+- No finding is open.
+- No read failed.
+- No cause is in "Not checked".
+
+On a page that fails the gate, no screen shows a calm tone. A place that a limit touches
+gets an amber mark, and any other place gets an outline.
+
+These places have a splash:
+
+| Place | Tone | Size | Headline |
+| --- | --- | --- | --- |
+| The first check runs | `build` | `lg` | Reading the layers |
+| No records | `off` | `lg` | Nothing to compare against yet |
+| Lost, and nothing was read | `lost` | `lg` | We lost the signal from Palette |
+| Checks stopped, and nothing was read | `warn` | `lg` | Checks stopped before one ended well |
+| The page cannot reach the observer | `lost` | `lg` | This page lost its line to the observer |
+| A route that does not exist | `off` | `lg` | This profile is not here, This pack is not here, or No pod runs this image |
+| No findings | `calm` or `warn` | `md` | All quiet on the cluster, or No finding |
+| No newer versions | `calm`, `warn`, or `build` | `md` | Nothing newer to dig up, No newer version is listed, or Reading the registries |
+| Nothing in "Not checked" | `calm` or `warn` | `md` | Every layer was read, or Every pack was checked in full |
+| The pods are not read | `off` | `md` | Pods are not on the menu here |
+| The read of the pods failed | `warn` | `md` | The pods stay silent |
+| Alerts are not set | `off` | `md` | Nobody gets paged yet |
+| A side with no change | `calm` or `off` | `md` | Undisturbed |
+| A pack that was not checked | `warn` | `md` | Part of this layer is hidden |
+| A side that was not read | `warn` | `md` | This side was not read |
+| A diff that a cycle holds | `build` | `sm` | One moment, a check is running |
+| A diff that failed | `warn` | `sm` | The observer could not read these changes |
+| A text above the cap | `off` | `sm` | Too much rock to carry |
+| An empty tab, no event, and a filter with no match | `calm` or `off` | line | The sentence of the line |
+
+A test of `internal/web` fails for each rule. It draws each place and checks the tone,
+the headline, the fact, and the next step. It fails when a page with a finding, a failed
+read, or a cause shows a calm tone. Another test runs a copy of the script whose gate always
+says yes, and it shows that the first test then fails. A test fails when `app.css` leaves an
+animation that `prefers-reduced-motion` does not stop, and a test fails when the mark differs
+from the logo. A test also fails when an inline style reaches a screen or the policy of the
+page changes.
 
 ### What the page keeps
 
@@ -141,15 +278,17 @@ has a pill, and each screen says "No person approved these records". With
   raises a severity.
 - "Not checked" blocks the text "No change". A pack that was not checked never
   reads "current".
-- A side that strata could not read says "Not read". It never reads "Identical".
-  The published side of a pack with an `error` row has no answer, and the route
-  gives 404 for it.
+- A side that strata could not read says "Not read". It never reads "Identical" or
+  "Undisturbed". The published side of a pack with an `error` row or an `unverified`
+  status has no answer, and the page sends no request for it.
 - A move that strata could not compare has no counts. Its row shows a dash and
   "Not read", and "Not checked" names its pack.
 - A detail request that fails is not kept. A 503 is a normal answer while a
-  cycle holds the slot. The next render that a person or the clock causes asks
-  again. A render that an answer causes does not, so two requests that fail do
-  not ask each other again without end.
+  cycle holds the slot. The page then shows the splash "One moment, a check is
+  running" with a button "Try now". Another failure shows an amber splash. The
+  next render that a person or the clock causes asks again. A render that an
+  answer causes does not, so two requests that fail do not ask each other again
+  without end.
 - An answer of Palette has the words of its verdict: "Palette gave no error",
   `Palette refuses: <code>`, and "Palette gave no answer". The page never reads
   "accepts", because Palette checks the default values of the new version and not
@@ -215,7 +354,7 @@ them:
 - No inline style and no inline script: no `style=`, no `<style>`, and no `<script>`
   with content. No event attribute in `index.html`, in an icon, or in a string of `app.js`.
 - One write of markup. `app.js` writes in one function, `put`, and every value
-  goes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
+  passes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
   that holds `<img src=x>` shows as text. `theme.js` writes no markup, and it sets
   only the attributes `data-theme` and `aria-pressed`.
 - No `max-width` on `.page`, `.main`, `.app`, or `body`. The content fills the window.
@@ -284,9 +423,15 @@ the page are those of the data.
 - The file `alerts.json` is the answer of `/v1/alerts`. A set can lack it: the page is then
   the page of an observer that started without `--alerts`. The set `alerts` names `ok`
   and holds seven rules, in the four states. A test gives the same rules to the real
-  engine, with the findings and the newer versions of `ok`, and makes sure that each
-  state is the one that the engine gives. The set `alerts-unset` names `ok` and holds
-  the answer of an observer with no alert.
+  engine, with the findings and the newer versions of `ok`. It checks that each state is
+  the one that the engine gives. The set `alerts-unset` names `ok` and holds the answer
+  of an observer with no alert.
+- Each tone of [the splash](#the-splash) has a set. The set `quiet` shows `calm`: it is
+  the one set with a good check, with no finding, no cause, and no failed read. The set
+  `first-load` shows `build`. The sets `no-records` and `images-off` show `off`. The sets
+  `stale-unchecked` and `images-unread` show `warn`, and `lost-unchecked` shows `lost`.
+- The page shows "This page lost its line to the observer" only when the first read of the
+  routes fails, so no set shows it. A test of `internal/web` makes the routes fail.
 
 A test decodes each file of each set into the type of its route, and it refuses a
 field that the type lacks. So the test data cannot drift from the API. When `node` is on the

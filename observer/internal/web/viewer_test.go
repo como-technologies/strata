@@ -250,17 +250,22 @@ const (
 	layoutSplit   = "split"
 )
 
-// variantOf gives the variant of the crawl that sets a layout, with a tab or without.
-func variantOf(layout, tab, k string) string {
+// variantOf gives the variant of the crawl that sets a side of the dropdown, a layout, and a tab or none. The side is ""
+// for the side that the pack opens on.
+func variantOf(side, layout, tab, k string) string {
+	prefix := ""
+	if side != "" {
+		prefix = "side " + side + " "
+	}
 	switch {
 	case tab == "" && layout == layoutSplit:
-		return "split"
+		return prefix + "split"
 	case tab == "":
-		return ""
+		return strings.TrimSuffix(prefix, " ")
 	case layout == layoutSplit:
-		return "split tab " + tab + " " + k
+		return prefix + "split tab " + tab + " " + k
 	}
-	return "tab " + tab + " " + k
+	return prefix + "tab " + tab + " " + k
 }
 
 // The Values tab shows the raw text of the values, after the table of the settings and the masked note, and
@@ -269,14 +274,17 @@ func variantOf(layout, tab, k string) string {
 func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
+	// The dropdown of a pack opens on the first side with a change. Dex has a change on the published side and a newer
+	// version, so the newer side shows when the person chooses it. The other two packs open on the newer side.
 	for _, c := range []struct {
 		hash, tab, profile, key string
 		side                    model.Side
+		open                    string
 	}{
-		{dexHash, dexPublished, dexSubject, "addon/dex", model.SidePublished},
-		{dexHash, dexMove, dexSubject, "addon/dex", model.SideNewer},
-		{k8sHash, k8sMove, k8sSubject, "k8s/kubernetes", model.SideNewer},
-		{traefikHash, traefikMove, traefikSubj, "addon/traefik", model.SideNewer},
+		{dexHash, dexPublished, dexSubject, "addon/dex", model.SidePublished, ""},
+		{dexHash, dexMove, dexSubject, "addon/dex", model.SideNewer, "newer"},
+		{k8sHash, k8sMove, k8sSubject, "k8s/kubernetes", model.SideNewer, ""},
+		{traefikHash, traefikMove, traefikSubj, "addon/traefik", model.SideNewer, ""},
 	} {
 		text := diffOf(t, set, c.profile, c.key, c.side).Values.Unified
 		if text == "" {
@@ -284,7 +292,7 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 		}
 		for _, layout := range []string{layoutUnified, layoutSplit} {
 			where := c.tab + " " + layout
-			card := cardOf(t, pageOf(t, screens, c.hash, variantOf(layout, "", "")), `data-tab="`+c.tab+`"`)
+			card := cardOf(t, pageOf(t, screens, c.hash, variantOf(c.open, layout, "", "")), `data-tab="`+c.tab+`"`)
 			sameRows(t, where, diffRowsOf(card), layoutRows(layout, text))
 			added, removed := headCounts(text)
 			mustHold(t, where, card, fmt.Sprintf(`<div class="diffhead"><span>%s values <span class="now">+%d</span> <span class="was">-%d</span></span>`, c.key, added, removed),
@@ -318,9 +326,10 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		tab, profile string
 		side         model.Side
 		table        []string
+		open         string
 	}{
-		{dexPublished, dexSubject, model.SidePublished, nil},
-		{dexMove, dexSubject, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}},
+		{dexPublished, dexSubject, model.SidePublished, nil, ""},
+		{dexMove, dexSubject, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, "newer"},
 	} {
 		d := diffOf(t, set, c.profile, "addon/dex", c.side)
 		var want, wantSplit []string
@@ -336,7 +345,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		}
 		for _, layout := range []string{layoutUnified, layoutSplit} {
 			where := c.tab + " " + layout
-			page := pageOf(t, screens, dexHash, variantOf(layout, c.tab, "manifests"))
+			page := pageOf(t, screens, dexHash, variantOf(c.open, layout, c.tab, "manifests"))
 			card := cardOf(t, page, `data-tab="`+c.tab+`" data-k="manifests"`)
 			rows := want
 			if layout == layoutSplit {
@@ -436,6 +445,7 @@ type clicked struct {
 	Before, During, After string
 	Hash                  string
 	Jumps                 []string
+	Copies                []string
 	Posts                 []struct {
 		Method  string   `json:"method"`
 		Path    string   `json:"path"`
@@ -465,7 +475,7 @@ func clickIn(t *testing.T, dir string, state devdata.State, hash, status string,
 func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *testing.T) {
 	const seg = `<span class="seg" role="group" aria-label="Diff layout">`
 	screens := render(t, devdata.StateOK, false)
-	for _, c := range []struct{ variant, where string }{{"", "values"}, {"tab " + dexPublished + " manifests", "manifests"}, {"tab " + dexMove + " manifests", "manifests of the move"}} {
+	for _, c := range []struct{ variant, where string }{{"", "values"}, {"tab " + dexPublished + " manifests", "manifests"}, {"side newer tab " + dexMove + " manifests", "manifests of the move"}} {
 		page := pageOf(t, screens, dexHash, c.variant)
 		heads := strings.Count(page, `<div class="diffhead">`)
 		if heads == 0 || strings.Count(page, seg) != heads {
@@ -484,7 +494,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 	mustNotHold(t, "before the click", r.Before, `class="cd"`)
 	mustHold(t, "after the click", r.After, `class="cd"`, `class="ca"`)
 	mustNotHold(t, "after the click", r.After, `<td class="c">`)
-	if got, want := strings.Count(r.After, `data-view="split" aria-pressed="true"`), strings.Count(r.After, `<div class="diffhead">`); got != want || got < 2 {
+	if got, want := strings.Count(r.After, `data-view="split" aria-pressed="true"`), strings.Count(r.After, `<div class="diffhead">`); got != want || got < 1 {
 		t.Errorf("%d controls show Split for %d diffs", got, want)
 	}
 	if len(r.Posts) != 0 {
@@ -530,37 +540,38 @@ func registryUidOf(t *testing.T, set *devdata.Set, name string) string {
 	return ""
 }
 
-// A pack whose text is above the cap shows a note and the command for the side, in place of the diff. The
+// A pack whose text is above the cap shows a splash and the command for the side, in place of the diff. The
 // command is the one that prints the text: the published side compares the record, the cluster side
 // compares the record with the copy of the cluster, and the newer side compares two versions of the pack.
-func TestATextAboveTheCapShowsTheNoteAndTheCommandOfItsSide(t *testing.T) {
+func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	set := loadSet(t, devdata.StateTextTooLarge)
 	screens := render(t, devdata.StateTextTooLarge, false)
-	const note, ask = "The text of this pack is above 256 KiB, so the observer keeps none.", "To read it, run this at a terminal:"
+	const title, body = "Too much rock to carry", "This text is too large to keep here. The observer keeps at most 256 KiB for each side. A terminal shows all of it."
+	const tone = `class="splash sm tone-off"`
 	uid := registryUidOf(t, set, "kubernetes")
 	published := cardOf(t, pageOf(t, screens, dexHash, ""), `data-tab="`+dexPublished+`"`)
-	mustHold(t, "the values of dex", published, note, ask, `<div class="pre mt0">strata compare RECORD fred-identity@2.3.0 --full</div>`)
+	mustHold(t, "the values of dex", published, title, body, tone, "<code>strata compare record.json fred-identity@2.3.0 --full</code>")
 	mustNotHold(t, "the values of dex", published, `class="diffhead"`, `class="diff"`, `data-view=`)
-	// The manifest keeps its row in the small table, because it has no text, and the note comes with the command.
+	// The manifest keeps its row in the small table, because it has no text, and the splash comes with the command.
 	manifests := cardOf(t, pageOf(t, screens, dexHash, "tab "+dexPublished+" manifests"), `data-tab="`+dexPublished+`" data-k="manifests"`)
-	mustHold(t, "the manifests of dex", manifests, note, ask, `<div class="pre mt0">strata compare RECORD fred-identity@2.3.0 --full</div>`,
+	mustHold(t, "the manifests of dex", manifests, title, body, "<code>strata compare record.json fred-identity@2.3.0 --full</code>",
 		`<tr><td class="m">changed</td><td>Manifest</td><td class="m">fred-realm-config</td></tr>`)
 	mustNotHold(t, "the manifests of dex", manifests, `class="diffhead"`, `class="diff"`)
 	// The newer side of the same pack keeps its text.
-	move := cardOf(t, pageOf(t, screens, dexHash, ""), `data-tab="`+dexMove+`"`)
+	move := cardOf(t, pageOf(t, screens, dexHash, "side newer"), `data-tab="`+dexMove+`"`)
 	mustHold(t, "the move of dex", move, `class="diffhead"`)
-	mustNotHold(t, "the move of dex", move, note)
+	mustNotHold(t, "the move of dex", move, title)
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), `data-tab="`+k8sMove+`"`)
-	mustHold(t, "the values of kubernetes", k8s, note, ask, `<div class="pre mt0">strata compare pack:`+uid+`/kubernetes@1.35.3 pack:`+uid+`/kubernetes@1.36.2 --full</div>`)
+	mustHold(t, "the values of kubernetes", k8s, title, body, "<code>strata compare pack:"+uid+"/kubernetes@1.35.3 pack:"+uid+"/kubernetes@1.36.2 --full</code>")
 	mustNotHold(t, "the values of kubernetes", k8s, `class="diffhead"`)
-	// The pack has no manifest, so the Manifests tab says so and shows no note.
+	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
 	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), `data-tab="`+k8sMove+`" data-k="manifests"`)
-	mustHold(t, "the manifests of kubernetes", none, "No manifest changed.")
-	mustNotHold(t, "the manifests of kubernetes", none, note)
+	mustHold(t, "the manifests of kubernetes", none, "No manifest changed here.", `data-tab="`+k8sMove+`" data-k="values">The change is on Values →</button>`)
+	mustNotHold(t, "the manifests of kubernetes", none, title)
 	// The set ok has the text for the same packs.
 	for _, s := range render(t, devdata.StateOK, false) {
-		mustNotHold(t, s.Hash+" "+s.Variant, s.HTML, note)
+		mustNotHold(t, s.Hash+" "+s.Variant, s.HTML, title)
 	}
 }
 
@@ -572,14 +583,14 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 		d := entryOf(t, ds, dexSubject, "addon/dex", model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
-	command := "strata compare RECORD cluster:" + set.Cluster.Cluster.Name + "/fred-identity --full"
+	command := "strata compare record.json cluster:" + set.Cluster.Cluster.Name + "/fred-identity"
 	r := clickIn(t, dir, "scratch", dexHash, "0")
 	card := cardOf(t, r.After, `data-tab="side-fred-identity@2.3.0-addon/dex-cluster"`)
-	mustHold(t, "the cluster side", card, "The text of this pack is above 256 KiB, so the observer keeps none.", `<div class="pre mt0">`+command+`</div>`)
+	mustHold(t, "the cluster side", card, "This text is too large to keep here.", "<code>"+command+" --full</code>")
 	mustNotHold(t, "the cluster side", card, `class="diffhead"`)
-	// The profile page shows the same command, with the pack name left out.
+	// The profile page shows the same command, with the pack name left out and no flag.
 	profile := pagesOf(t, dir, "#p-"+dexSubject)[0]
-	mustHold(t, "the profile", profile, "strata compare RECORD cluster:"+set.Cluster.Cluster.Name+"/fred-identity</div>")
+	mustHold(t, "the profile", profile, "<code>"+command+"</code>")
 }
 
 // A command with a name that holds markup shows as text.

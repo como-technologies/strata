@@ -45,6 +45,16 @@
 // With "asksdown", the route /v1/asks fails. It reads the routes two times, and it shows the screen HASH
 // after the second read. With "first", the route fails from the first read on. The list of answers must
 // stay as it was, and the page must not go offline.
+//
+//   node render.js ASSETS_DIR API_DIR STATE with HASH CODE
+//
+// With "with", it runs CODE in the page, for example S.side["id"] = "newer", and it shows the screen HASH. It prints the markup as one
+// JSON string.
+//
+//   node render.js ASSETS_DIR API_DIR STATE offline HASH
+//
+// With "offline", every request fails when the page starts. It prints {before, after}: the screen HASH while the observer cannot be
+// reached, and the screen after the requests work again and a click on "Try now" asked again.
 const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
@@ -146,6 +156,9 @@ const jumps = [];
 // waits for the gate, so that a test can look at the page while a question is on its way.
 let failDiffs = 0;
 let failAsks = false;
+// fetchFails makes each request throw, as a page does when its port-forward has ended. copies holds each text that a click on Copy sent to the clipboard.
+let fetchFails = false;
+const copies = [];
 let postStatus = 0;
 let gate = Promise.resolve();
 const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events", "/v1/images": "images", "/v1/asks": "asks", "/v1/alerts": "alerts"};
@@ -160,6 +173,7 @@ function replyTo(profile, key) {
 }
 
 async function fakeFetch(url, opts = {}) {
+  if (fetchFails) throw new TypeError("the network failed");
   const u = new URL(url, "http://127.0.0.1");
   const method = opts.method || "GET";
   requests.push({method, path: u.pathname + u.search, headers: Object.keys(opts.headers || {})});
@@ -195,7 +209,8 @@ const elements = {};
 const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}, scrollIntoView() { jumps.push(id); }});
 const sandbox = vm.createContext({
   document: {getElementById: element, addEventListener(type, f) { (listeners[type] = listeners[type] || []).push(f); }, activeElement: null},
-  location: {hash: ""}, addEventListener() {}, scrollTo() {}, setInterval() {}, fetch: fakeFetch, console,
+  location: {hash: ""}, addEventListener() {}, scrollTo() {}, setInterval() {}, setTimeout() {}, fetch: fakeFetch, console,
+  navigator: {clipboard: {writeText: async text => { copies.push(text); }}},
 });
 
 const unescape = s => s.replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
@@ -229,18 +244,33 @@ async function crawl() {
   await run("refresh()");
   const screens = [];
   const seen = new Set();
+  const shown = new Map();
   const queue = ["#overview"];
   const add = async (hash, variant, set) => {
+    // A control can appear twice on a screen, as a tab and as a flag that opens the tab. The crawl shows it once.
+    const once = `${hash}\n${variant}`;
+    if (shown.has(once)) return shown.get(once);
     try {
       if (set) run(set);
       const html = await show(hash);
       screens.push({hash, variant, html});
+      shown.set(once, html);
       return html;
     } catch (err) {
       screens.push({hash, variant, error: String(err && err.stack || err)});
+      shown.set(once, "");
       return "";
     } finally {
       run("S.tabs = {}; S.filter = \"all\"; S.q = \"\"; S.open = {}; S.side = {}; S.view = \"unified\"; S.asking = {}; S.askFailed = {};");
+    }
+  };
+  // tabsOf shows each tab of a screen, and each tab in the layout split. prefix names the variant, and base is the code that sets the
+  // side of the screen before the tab.
+  const tabsOf = async (hash, prefix, base, html) => {
+    for (const m of html.matchAll(/data-tab="([^"]*)" data-k="([^"]*)"/g)) {
+      const set = `${base ? base + "; " : ""}S.tabs[${JSON.stringify(unescape(m[1]))}] = ${JSON.stringify(unescape(m[2]))}`;
+      const tab = await add(hash, `${prefix}tab ${m[1]} ${m[2]}`, set);
+      if (tab.includes("data-view=\"split\"")) await add(hash, `${prefix}split tab ${m[1]} ${m[2]}`, `${set}; S.view = "split"`);
     }
   };
   while (queue.length) {
@@ -249,11 +279,7 @@ async function crawl() {
     seen.add(hash);
     const html = await add(hash, "", "");
     for (const m of html.matchAll(/(?:href|data-go)="(#[^"]*)"/g)) queue.push(unescape(m[1]));
-    for (const m of html.matchAll(/data-tab="([^"]*)" data-k="([^"]*)"/g)) {
-      const set = `S.tabs[${JSON.stringify(unescape(m[1]))}] = ${JSON.stringify(unescape(m[2]))}`;
-      const tab = await add(hash, `tab ${m[1]} ${m[2]}`, set);
-      if (tab.includes("data-view=\"split\"")) await add(hash, `split tab ${m[1]} ${m[2]}`, `${set}; S.view = "split"`);
-    }
+    await tabsOf(hash, "", "", html);
     if (html.includes("data-view=\"split\"")) await add(hash, "split", "S.view = \"split\"");
     const asks = [...html.matchAll(/data-ask="([^"]*)" data-pack="([^"]*)"/g)].map(m => `${unescape(m[1])}|${unescape(m[2])}`);
     if (asks.length) {
@@ -265,9 +291,15 @@ async function crawl() {
     await add(hash, "search none", "S.q = \"no profile has this name\"");
     const keys = [...html.matchAll(/data-open="([^"]*)"/g)].map(m => unescape(m[1]));
     if (keys.length) await add(hash, "open", `${JSON.stringify(keys)}.forEach(k => { S.open[k] = true; })`);
+    // A pack has one dropdown with up to three sides. Each side shows with its own tabs.
+    const sides = [...html.matchAll(/<option value="([a-z]+)"/g)].map(m => m[1]);
     for (const m of html.matchAll(/data-id="([^"]*)"/g)) {
-      await add(hash, "side", `S.side[${JSON.stringify(unescape(m[1]))}] = "cluster"`);
-      await add(hash, "side published", `S.side[${JSON.stringify(unescape(m[1]))}] = "published"`);
+      for (const side of sides) {
+        const set = `S.side[${JSON.stringify(unescape(m[1]))}] = ${JSON.stringify(side)}`;
+        const sideHtml = await add(hash, `side ${side}`, set);
+        await tabsOf(hash, `side ${side} `, set, sideHtml);
+        if (sideHtml.includes("data-view=\"split\"")) await add(hash, `side ${side} split`, `${set}; S.view = "split"`);
+      }
     }
   }
   return screens;
@@ -276,6 +308,7 @@ async function crawl() {
 async function main() {
   // The page reads the routes when it starts, so a route that fails from the first read on fails before the script runs.
   failAsks = mode === "asksdown" && args[1] === "first";
+  fetchFails = mode === "offline";
   run(fs.readFileSync(path.join(assetsDir, "app.js"), "utf8"));
   if (mode === "ago") {
     // The clock stops, so that each age is the number of seconds that the caller names.
@@ -319,7 +352,24 @@ async function main() {
     const during = snapshot();
     open();
     await settle();
-    process.stdout.write(JSON.stringify({before, during, after: snapshot(), hash: sandbox.location.hash, posts: requests.filter(r => r.method === "POST"), jumps}));
+    process.stdout.write(JSON.stringify({before, during, after: snapshot(), hash: sandbox.location.hash, posts: requests.filter(r => r.method === "POST"), jumps, copies}));
+    return;
+  }
+  if (mode === "with") {
+    await run("refresh()");
+    run(args[1]);
+    process.stdout.write(JSON.stringify(await show(args[0])));
+    return;
+  }
+  if (mode === "offline") {
+    // The page starts while the observer cannot be reached. A click on Try now, after the observer is back, must show the data.
+    fetchFails = true;
+    await run("refresh()");
+    const before = await show(args[0]);
+    fetchFails = false;
+    clickOn({retry: "page"});
+    await settle();
+    process.stdout.write(JSON.stringify({before, after: await show(args[0])}));
     return;
   }
   if (mode === "asksdown") {

@@ -488,8 +488,8 @@ it.
 - **A pack keeps 256 KiB of text at most for each side of a diff.** The limit counts
   the values and the manifests together. The pod has a memory limit of 512 Mi, and the
   limit keeps the text inside it. Above 256 KiB, the observer keeps none of the text of
-  that pack. The page then says that the text is too large, and it gives the command
-  `strata compare ... --full`. The table of settings stays.
+  that pack. The page then shows the splash "Too much rock to carry", and it gives the
+  command `strata compare record.json <profile> --full`. The table of settings stays.
 
 The check `diff-text` of [What the live example verifies](../development/live-runs.md)
 tests the text of a diff on a cluster that Palette built.
@@ -513,6 +513,36 @@ added line is green, as in the text below the table.
   text.
 - **A mask stays a mask.** A line shows the text of the record, so a secret shows the
   mask `********`.
+
+## The states of the page
+
+A place that has nothing to show draws the mark of the logo, a headline, and one line that
+states the fact. The line gives the next step when one exists, with a command that you
+copy. A finding always shows its data. [The server of the
+observer](../development/observer-api.md#the-splash) lists each place.
+
+The page never reads calmer than the check allows. A page with a finding, a failed read,
+or a cause in "Not checked" shows no calm mark.
+
+| The page says | What it means | The next step |
+| --- | --- | --- |
+| Reading the layers | The first check runs. | Wait. The page fills in when the check ends. |
+| Nothing to compare against yet | No record exists. | Write the records with `observer-records.sh`. On a test cluster, `--first-seen` records what each profile holds now. |
+| We lost the signal from Palette | No check ended well, and the last ones failed. The line names the error. | Check the key in the Secret `strata-observer-key`, then read the log. |
+| Checks stopped before one ended well | The content check did not end well since the start. | Read the log. |
+| This page lost its line to the observer | The port-forward ended, or the pod restarted. | Run the port-forward again, or click "Try now". |
+| All quiet on the cluster | The last check ended well and found nothing. The line gives the number of packs checked in full and the age of the check. | None. |
+| Pods are not on the menu here | The read of the pods is off. This is a choice, and no fault. | [Add the read](#add-the-read). |
+| The pods stay silent | The read of the pods failed. | Ask the API server if the role can list pods, or read the log. |
+| Nobody gets paged yet | The observer sends no alert. This is a choice, and no fault. | [Turn the alerts on](#turn-them-on). |
+| Undisturbed | A side of a pack holds what the record holds. | None. |
+| Part of this layer is hidden | Strata did not check the pack in full. The line gives the cause. | Read the page "Not checked". |
+| One moment, a check is running | A cycle holds the one slot of the observer for a read. | Wait, or click "Try now". |
+| Too much rock to carry | The text of the pack is above 256 KiB. | Run the command that the page gives. |
+
+The marks move. The calm mark breathes, and the mark of a read in progress stacks its
+slabs. The mark of a choice marches in outline. The amber mark pulses. The top slab of a
+lost mark slips off. A person who asks the system for less motion sees each mark at rest.
 
 ## Ask Palette about a move
 
