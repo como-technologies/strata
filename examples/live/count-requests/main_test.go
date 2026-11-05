@@ -2,11 +2,13 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -70,5 +72,45 @@ func TestRunExitsWithTheCodeOfTheCommandAndRefusesBadArguments(t *testing.T) {
 		if got := run(c.args, strings.NewReader(""), &out, &errs); got != c.want {
 			t.Errorf("%s: exit %d, want %d (%s)", c.name, got, c.want, errs.String())
 		}
+	}
+}
+
+// The check of a click counts the lines that start with POST, so the log must hold the method of a
+// POST and the path of the validate route, and nothing of its body, its query, or its key.
+func TestRunLogsAPostWithItsMethodAndPathAndSendsItsBodyOn(t *testing.T) {
+	var mu sync.Mutex
+	var seen []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		seen = append(seen, r.Method+" "+r.URL.Path+" "+string(body))
+		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	logPath := filepath.Join(t.TempDir(), "requests.log")
+	var out, errs bytes.Buffer
+	// The command sends one POST with a body, a query, and a key, and then one GET.
+	script := `curl -s -o /dev/null -X POST -H 'ApiKey: secret-key' -d '{"packs":[]}' "$PALETTE_API/v1/clusterprofiles/0123456789abcdef01234567/validate/packs?x=secret-name"; curl -s -o /dev/null "$PALETTE_API/v1/spectroclusters/c-a"`
+	code := run([]string{"-target", srv.URL, "-log", logPath, "--", "bash", "-c", script}, strings.NewReader(""), &out, &errs)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs.String())
+	}
+	got, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs\nGET /v1/spectroclusters/c-a\n"; string(got) != want {
+		t.Errorf("log %q, want %q", got, want)
+	}
+	for _, secret := range []string{"secret-key", "secret-name", `"packs"`} {
+		if strings.Contains(string(got), secret) {
+			t.Errorf("the log holds %q", secret)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(seen) != 2 || seen[0] != `POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs {"packs":[]}` {
+		t.Errorf("Palette got %q", seen)
 	}
 }

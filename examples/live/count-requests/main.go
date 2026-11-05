@@ -1,7 +1,8 @@
 // Command count-requests runs a command with PALETTE_API set to a local address. It sends each
 // request of the command on to Palette, and it writes one line for each request to a file: the
-// method and the path. The line has no query and no header, so the key is not in it. The live
-// example uses it to count the requests that a cycle of the observer makes.
+// method and the path. The line has no query, no header, and no body, so the key is not in it. The
+// live example uses it to count the requests that a cycle of the observer makes, and the POST
+// requests that the click "Ask Palette" makes.
 //
 //	count-requests -log FILE [-target URL] -- COMMAND [ARG...]
 //

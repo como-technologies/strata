@@ -9448,21 +9448,72 @@ exit 0
 /// first-load with a `lastError`, and `FAKE_LEAK` puts the value of a variable in `/v1/events`.
 /// `FAKE_LEAK_IMAGES` puts it in `/v1/images`, which answers `pods: "off"` otherwise.
 /// With `FAKE_STATE_KEPT`, the first sight of a finding does not change at a restart.
+///
+/// The pod is the port 18080. Any other port is the observer that the script runs on its machine. That
+/// observer answers when its stand-in is up.
+///
+/// A click is `POST .../ask` with the header `Sec-Fetch-Site: same-origin`. Without the header, curl
+/// exits 22, as it does for a 403. A click on the observer of the machine adds POST lines to the log of
+/// the counter. `$FAKE_ASK_POSTS` gives the number for each click (default "1 0"). A click on the pod
+/// adds none, because the counter does not see the pod.
+///
+/// `FAKE_ASK_POD` and `FAKE_ASK_LOCAL` give the verdict of each answer: no-error (default), refuses,
+/// refuses-accepts-message, refuses-no-code, no-answer, accepts-field, or unknown. `FAKE_ACCEPTS_IN`
+/// names a route whose answer holds the word accepts. `FAKE_NO_MOVE` takes the newer version from the
+/// page. `FAKE_STALE_MOVE` adds a first move that a click answers with a 404.
+///
+/// `FAKE_NO_DIFF_TEXT` empties the text of the detail route. `FAKE_TEXT_LEAK` puts the text of the
+/// edit in `/v1/events`.
 const FAKE_CURL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 url=${*: -1}
 case "$url" in http://127.0.0.1:*) ;; *) echo "curl: no network" >&2; exit 7 ;; esac
+method=GET fetch_site="" prev=""
+for a in "$@"; do
+  case "$prev" in
+    -X) method=$a ;;
+    -H) case "$a" in Sec-Fetch-Site:*) fetch_site=${a#*: } ;; esac ;;
+  esac
+  prev=$a
+done
+port=${url#http://127.0.0.1:}; port=${port%%/*}
+who=POD
+if [ "$port" != 18080 ]; then
+  who=LOCAL
+  for _ in $(seq 100); do
+    [ -f "$obs/observer.up" ] && break
+    [ ! -f "$obs/observer.dead" ] || exit 7
+    command -p sleep 0.05
+  done
+  [ -f "$obs/observer.up" ] || exit 7
+fi
 path=${url#http://127.0.0.1:*/}
 path=/${path}
+answer() {
+  local base='"profile":"strata-live-profile@1.0.0","key":"addon/cilium","newest":"1.1.0"'
+  case "$1" in
+    no-error) echo "{$base,\"verdict\":\"no-error\",\"refusals\":[],\"status\":0}" ;;
+    refuses) echo "{$base,\"verdict\":\"refuses\",\"refusals\":[{\"pack\":\"cilium\",\"code\":\"DependencyPackUpgradeNotSupported\",\"message\":\"Pack cilium cannot move\",\"clusters\":[]}],\"status\":0}" ;;
+    refuses-accepts-message) echo "{$base,\"verdict\":\"refuses\",\"refusals\":[{\"pack\":\"cilium\",\"code\":\"InvalidValues\",\"message\":\"Palette accepts only a list\",\"clusters\":[]}],\"status\":0}" ;;
+    refuses-no-code) echo "{$base,\"verdict\":\"refuses\",\"refusals\":[{\"pack\":\"cilium\",\"code\":\"\",\"message\":\"no code\",\"clusters\":[]}],\"status\":0}" ;;
+    no-answer) echo "{$base,\"verdict\":\"no-answer\",\"refusals\":[],\"status\":403}" ;;
+    accepts-field) echo "{$base,\"verdict\":\"no-error\",\"refusals\":[],\"status\":0,\"accepts\":true}" ;;
+    *) echo "{$base,\"verdict\":\"maybe\",\"refusals\":[],\"status\":0}" ;;
+  esac
+}
+verdict_var=FAKE_ASK_$who; verdict=${!verdict_var:-no-error}
+clicks=$(cat "$obs/$who.clicks" 2>/dev/null || echo 0)
 restarts=$(cat "$obs/restarts" 2>/dev/null || echo 0)
 page=ok
 if [ -f "$obs/first-load-pending" ]; then page=first-load; rm -f "$obs/first-load-pending"; fi
 grep -q wrong "$obs/key.current" 2>/dev/null && page=lost
 checked='"2026-11-04T10:01:00Z"'; last=null; failed=0
 if [ -n "${FAKE_NO_PALETTE-}" ]; then page=first-load; checked=null; last='{"kind":"transport"}'; failed=3; fi
+newer=',"newer":"1.1.0"'; [ -z "${FAKE_NO_MOVE-}" ] || newer=
+stale=; [ -z "${FAKE_STALE_MOVE-}" ] || stale='{"key":"addon/stale","name":"stale","layer":"addon","version":"1.0.0","newer":"2.0.0"},'
 profiles='{"profiles":[
-  {"name":"strata-live-profile","version":"1.0.0","status":"ok","published":{"status":"unchanged"},"clusterCopy":{"status":"same"}},
-  {"name":"strata-live-addon","version":"1.0.0","status":"ok","published":{"status":"unchanged"},"clusterCopy":{"status":"same"}}]}'
+  {"name":"strata-live-profile","version":"1.0.0","status":"ok","published":{"status":"unchanged"},"clusterCopy":{"status":"same"},"packs":['"$stale"'{"key":"addon/cilium","name":"cilium","layer":"addon","version":"1.0.0"'"$newer"'}]},
+  {"name":"strata-live-addon","version":"1.0.0","status":"ok","published":{"status":"unchanged"},"clusterCopy":{"status":"same"},"packs":[]}]}'
 [ -f "$obs/drifted" ] && profiles=$(jq '(.profiles[] | select(.name == "strata-live-addon") | .published.status) = "drifted"' <<<"$profiles")
 [ -f "$obs/attached" ] && profiles=$(jq '.profiles += [{"name":"strata-observer-live","version":"1.0.0","status":"no-record"}]' <<<"$profiles")
 seen=$restarts; [ -z "${FAKE_STATE_KEPT-}" ] || seen=0
@@ -9471,32 +9522,75 @@ findings='{"findings":[]}'
 case "$path" in
   /healthz) echo ok ;;
   /v1/cluster)
-    printf '{"cluster":{"uid":"c-a"},"page":"%s","records":{"count":2,"baseline":"approved","startedAt":"2026-11-04T10:%02d:00.5Z"},"content":{"checkedAt":%s,"every":"1m","failedRuns":%s,"lastError":%s}}\n' \
-      "$page" "$restarts" "$checked" "$failed" "$last" ;;
+    printf '{"cluster":{"uid":"c-a"},"page":"%s","records":{"count":2,"baseline":"approved","startedAt":"2026-11-04T10:%02d:00.5Z"},"content":{"checkedAt":%s,"every":"1m","failedRuns":%s,"lastError":%s},"versions":{"readAt":%s,"every":"5m","failedRuns":0,"lastError":null}}\n' \
+      "$page" "$restarts" "$checked" "$failed" "$last" "$checked" ;;
   /v1/findings) echo "$findings" ;;
   /v1/profiles) echo "$profiles" ;;
   /v1/profiles/*) jq --arg n "${path#/v1/profiles/}" '.profiles[] | select(.name + "@" + .version == $n)' <<<"$profiles" ;;
   /v1/notchecked)
     if [ -f "$obs/attached" ]; then echo '{"notChecked":[{"cause":"no-record","profiles":["strata-observer-live@1.0.0"],"packs":[]}],"limits":{}}'
     else echo '{"notChecked":[],"limits":{}}'; fi ;;
-  /v1/events) if [ -n "${FAKE_LEAK-}" ]; then echo '{"events":[{"message":"purpose is strata live example"}]}'; else echo '{"events":[]}'; fi ;;
+  /v1/events)
+    if [ -n "${FAKE_LEAK-}" ]; then echo '{"events":[{"message":"purpose is strata live example"}]}'
+    elif [ -n "${FAKE_TEXT_LEAK-}" ]; then echo '{"events":[{"message":"+edited: \"yes\""}]}'
+    else echo '{"events":[]}'; fi ;;
   /v1/newer) echo '{"newer":[]}' ;;
+  /v1/asks)
+    if [ "$clicks" -gt 0 ]; then echo "{\"asks\":[$(answer "$verdict")]}"; else echo '{"asks":[]}'; fi ;;
   /v1/images)
     if [ -n "${FAKE_LEAK_IMAGES-}" ]; then echo '{"schema":"strata-observed/1","pods":"off","images":[{"ref":"purpose is strata live example"}]}'
     else echo '{"schema":"strata-observed/1","pods":"off","readAt":null,"counts":{"images":0,"matched":0,"changed":0},"images":[]}'; fi ;;
+  /v1/packs/*/addon/stale/ask) exit 22 ;;
+  /v1/packs/*/ask)
+    [ "$method" = POST ] && [ "$fetch_site" = same-origin ] || exit 22
+    clicks=$((clicks + 1)); echo "$clicks" > "$obs/$who.clicks"
+    if [ "$who" = LOCAL ]; then
+      read -ra counts <<<"${FAKE_ASK_POSTS:-1 0}"
+      for _ in $(seq "${counts[clicks - 1]:-0}"); do
+        echo "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs" >> "$(cat "$obs/counter.last")"
+      done
+    fi
+    answer "$verdict" ;;
+  /v1/packs/*/diff?side=published)
+    unified=$'--- a: addon/strata-live-config manifest config\n+++ b: addon/strata-live-config manifest config\n@@ -1 +1 @@\n-edited: "no"\n+edited: "yes"\n'
+    [ -z "${FAKE_NO_DIFF_TEXT-}" ] || unified=
+    jq -n --arg u "$unified" '{values: {parseable: true, unified: ""}, manifests: [{op: "changed", name: "config", unified: $u}], textTooLarge: false}' ;;
   /v1/packs/*) echo '{"values":{}}' ;;
   /) echo '<!doctype html><html lang="en"></html>' ;;
   *) exit 22 ;;
 esac
+if [ "$path" = "${FAKE_ACCEPTS_IN-}" ]; then echo '{"note":"Palette accepts the move"}'; fi
 "##;
 
-/// The `go` of observer.sh: `go -C DIR build -o FILE .` writes a counter into FILE. The counter writes
-/// `$FAKE_REQUESTS` lines (default 3) to its log, logs its target, and runs the command.
+/// The `go` of observer.sh: `go -C DIR build -o FILE .` writes a stand-in into FILE. The counter
+/// writes `$FAKE_REQUESTS` lines (default 3) to its log, logs its target and the name of its log, and
+/// runs the command. The observer logs its arguments, the key that it got, and the files of its
+/// records. It marks itself up, and it waits for a signal.
+///
+/// `FAKE_ASK_POSTS_BEFORE` makes the counter write that many POST lines before it runs the command.
+/// A cycle that sends a POST does the same. `FAKE_OBSERVER_DIES` makes the observer stop at once.
 const FAKE_GO_FRED: &str = r##"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_OBS/go.log"
 [ -z "${FAKE_NO_GO-}" ] || { echo "go: cannot build" >&2; exit 1; }
 out=""; prev=""
 for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+case "$out" in
+*/strata-observer)
+cat > "$out" <<'OBSERVER'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE_OBS/observer.args"
+echo "PALETTE_API_KEY=${PALETTE_API_KEY-}" >> "$FAKE_OBS/observer.env"
+if [ -n "${FAKE_OBSERVER_DIES-}" ]; then touch "$FAKE_OBS/observer.dead"; echo "strata-observer: the flags are wrong" >&2; exit 2; fi
+records=""; prev=""
+for a in "$@"; do [ "$prev" = --records ] && records=$a; prev=$a; done
+cp "$records/meta.json" "$FAKE_OBS/observer.meta"
+ls "$records" > "$FAKE_OBS/observer.records"
+for f in "$records"/*.json.gz; do gzip -dc "$f" > "$FAKE_OBS/observer.record.$(basename "$f" .json.gz)"; done
+touch "$FAKE_OBS/observer.up"
+exec tail -f /dev/null
+OBSERVER
+;;
+*)
 cat > "$out" <<'COUNTER'
 #!/usr/bin/env bash
 target=""; log=""
@@ -9509,10 +9603,14 @@ while [ $# -gt 0 ]; do
   esac
 done
 echo "$target" >> "$FAKE_OBS/counter.targets"
+echo "$PWD/$log" > "$FAKE_OBS/counter.last"
 : > "$log"
 for _ in $(seq "${FAKE_REQUESTS:-3}"); do echo "GET /v1/spectroclusters/0123456789abcdef01234567" >> "$log"; done
+for _ in $(seq "${FAKE_ASK_POSTS_BEFORE:-0}"); do echo "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs" >> "$log"; done
 exec "$@"
 COUNTER
+;;
+esac
 chmod +x "$out"
 "##;
 
@@ -9678,7 +9776,7 @@ fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
 }
 
 /// Each check of observer.sh, in the order that it runs on a good run.
-const OBSERVER_CHECKS: [&str; 58] = [
+const OBSERVER_CHECKS: [&str; 61] = [
     "pull-secret",
     "cluster-record",
     "profile-records",
@@ -9708,6 +9806,9 @@ const OBSERVER_CHECKS: [&str; 58] = [
     "variable-in-raw",
     "no-value-leaves",
     "requests-counted-drift",
+    "ask-one-post",
+    "ask-words",
+    "diff-text",
     "drift-undo",
     "drift-clears",
     "page-admin-again",
@@ -9863,7 +9964,11 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
 
     // the requests are counted behind the counter, which gets the address of Palette
     let targets = observer_log(&stage, "counter.targets");
-    assert_eq!(targets.lines().count(), 6, "{targets}");
+    assert_eq!(
+        targets.lines().count(),
+        7,
+        "two counts of three commands, and the observer of the click: {targets}"
+    );
     assert!(targets.lines().all(|l| l == "https://api.spectrocloud.com"));
     let counted = std::fs::read_to_string(stage.path("out/requests-counted.out")).unwrap();
     for line in [
@@ -9878,7 +9983,13 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "{counted}"
     );
     let go = observer_log(&stage, "go.log");
-    assert_eq!(go.lines().count(), 1, "the counter is built once: {go}");
+    assert_eq!(
+        go.lines().count(),
+        2,
+        "the counter and the observer are built once each: {go}"
+    );
+    assert!(go.lines().any(|l| l.contains("count-requests build -o")));
+    assert!(go.lines().any(|l| l.contains("observer build -o")));
 
     // the script deletes no cluster
     assert!(!api.contains("delete-cluster"), "{api}");
@@ -10222,18 +10333,471 @@ fn observer_sh_records_what_palette_did_to_the_machines_without_judging_it() {
 }
 
 #[test]
-fn observer_sh_records_a_counter_that_does_not_build_and_goes_on() {
+fn observer_sh_records_a_counter_that_does_not_build_fails_the_count_of_the_click_and_goes_on() {
     let mut stage = observer_stage();
     stage.env("FAKE_NO_GO", "1");
     let (o, steps) = run_observer(&stage, &[]);
-    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    // the count of a cycle only records a result, but the count of a click judges one
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     assert!(
         steps.lines().any(|l| l.starts_with("SEEN")
             && l.contains("requests-counted ")
             && l.contains("got 1")),
         "{steps}"
     );
-    passed(&steps, &["drift-found", "profile-removal"]);
+    failed(&steps, &["ask-one-post"]);
+    passed(
+        &steps,
+        &["drift-found", "ask-words", "diff-text", "profile-removal"],
+    );
+    assert!(
+        !stage.path("obs/observer.args").exists(),
+        "no observer runs on this machine"
+    );
+}
+
+// ---- the click and the text of a diff (#647) -------------------------------------------------------
+
+/// The output of the check `id` in the run of `stage`.
+fn check_out(stage: &Stage, id: &str) -> String {
+    std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap()
+}
+
+/// The POST lines in the log of the counter in front of the observer that the script runs.
+fn ask_posts(stage: &Stage) -> Vec<String> {
+    std::fs::read_to_string(stage.path("out/ask.log"))
+        .unwrap()
+        .lines()
+        .filter(|l| l.starts_with("POST "))
+        .map(str::to_string)
+        .collect()
+}
+
+/// A run of observer.sh with the variables `vars` set. Gives the exit code, the log of the steps,
+/// and the stage.
+fn observer_with(vars: &[(&str, &str)]) -> (Option<i32>, String, Stage) {
+    let mut stage = observer_stage();
+    for (key, value) in vars {
+        stage.env(key, value);
+    }
+    let (o, steps) = run_observer(&stage, &[]);
+    (o.status.code(), steps, stage)
+}
+
+/// The POST line of a validate request to the add-on version, as the stand-in counter writes it.
+const ASK_VALIDATE_POST: &str = "POST /v1/clusterprofiles/0123456789abcdef01234567/validate/packs";
+
+#[test]
+fn observer_sh_ask_one_post_passes_when_one_click_makes_one_post_to_the_validate_route_and_a_second_click_makes_none()
+ {
+    let (code, steps, stage) = observer_with(&[]);
+    assert_eq!(code, Some(0), "{steps}");
+    passed(&steps, &["ask-one-post"]);
+    let said = check_out(&stage, "ask-one-post");
+    for line in [
+        "the move: addon/cilium in strata-live-profile@1.0.0",
+        "the cycles, before the click: 3 requests, 0 POST",
+        "the first click: 1 POST, 1 of them to the validate route",
+        "the second click: 0 POST",
+    ] {
+        assert!(said.contains(line), "{line}:\n{said}");
+    }
+    // the log of the counter holds the cycles and the one POST
+    assert_eq!(ask_posts(&stage), [ASK_VALIDATE_POST], "{said}");
+    let log = std::fs::read_to_string(stage.path("out/ask.log")).unwrap();
+    assert_eq!(log.lines().count(), 4, "{log}");
+    // the observer of the machine got both clicks, and the pod got the one click of ask-words
+    assert_eq!(observer_log(&stage, "LOCAL.clicks").trim(), "2");
+    assert_eq!(observer_log(&stage, "POD.clicks").trim(), "1");
+}
+
+#[test]
+fn observer_sh_ask_one_post_runs_the_observer_of_this_checkout_behind_the_counter_with_the_records_and_the_key()
+ {
+    let (code, steps, stage) = observer_with(&[]);
+    assert_eq!(code, Some(0), "{steps}");
+    // the observer is built from the directory observer/ of the checkout, once
+    let go = observer_log(&stage, "go.log");
+    let build: Vec<&str> = go
+        .lines()
+        .filter(|l| l.contains("observer build"))
+        .collect();
+    assert_eq!(build.len(), 1, "{go}");
+    assert!(
+        build[0].starts_with("-C ") && build[0].contains("/tree/observer build -o "),
+        "{build:?}"
+    );
+    // the flags: the cluster, the records, the short periods, and the port of the script plus 1
+    let args = observer_log(&stage, "observer.args");
+    let out = stage.path("out");
+    for part in [
+        "serve --strata ",
+        "--cluster-uid c-a",
+        "--content-every=1m --versions-every=5m",
+        "--listen 127.0.0.1:18081",
+    ] {
+        assert!(args.contains(part), "{part}:\n{args}");
+    }
+    assert_eq!(args.lines().count(), 1, "{args}");
+    assert!(
+        !args.contains(OBSERVER_KEY),
+        "the key is no argument: {args}"
+    );
+    // the state and the records are outside the directory of the run, and they are gone
+    assert!(!args.contains(out.to_str().unwrap()), "{args}");
+    let gone: Vec<_> = files_under(&stage.path("tmp"))
+        .into_iter()
+        .filter(|(path, _)| path.contains("records") || path.contains("state"))
+        .collect();
+    assert!(gone.is_empty(), "the files of the observer stay: {gone:?}");
+    // the key is in the environment of the observer, and in no file of the run
+    assert_eq!(
+        observer_log(&stage, "observer.env").trim(),
+        format!("PALETTE_API_KEY={OBSERVER_KEY}")
+    );
+    assert!(!all_text(&out).contains(OBSERVER_KEY));
+    // the records are the ones of the run, in the files that the observer reads
+    let meta: serde_json::Value =
+        serde_json::from_str(&observer_log(&stage, "observer.meta")).unwrap();
+    assert_eq!(meta["baseline"], "approved");
+    assert_eq!(meta["revision"], "0123456789abcdef0123456789abcdef01234567");
+    let mut names: Vec<String> = observer_log(&stage, "observer.records")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "meta.json",
+            "strata-live-addon_1.0.0.json.gz",
+            "strata-live-profile_1.0.0.json.gz"
+        ]
+    );
+    for (name, record) in [
+        ("strata-live-addon_1.0.0", "record-2.json"),
+        ("strata-live-profile_1.0.0", "record-1.json"),
+    ] {
+        assert_eq!(
+            observer_log(&stage, &format!("observer.record.{name}")),
+            std::fs::read_to_string(stage.path("out").join(record)).unwrap(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn observer_sh_ask_one_post_fails_when_the_clicks_make_another_count_of_posts_than_one_and_none() {
+    for (posts, first, second) in [("2 0", 2, 0), ("0 0", 0, 0), ("1 1", 1, 1), ("1 3", 1, 3)] {
+        let (code, steps, stage) = observer_with(&[("FAKE_ASK_POSTS", posts)]);
+        assert_eq!(code, Some(1), "{posts}:\n{steps}");
+        failed(&steps, &["ask-one-post"]);
+        passed(&steps, &["drift-found", "diff-text", "profile-removal"]);
+        let said = check_out(&stage, "ask-one-post");
+        assert!(
+            said.contains(&format!("the first click: {first} POST")),
+            "{posts}:\n{said}"
+        );
+        // the check shows the POST lines that it counted
+        if first + second > 0 {
+            assert!(said.contains(ASK_VALIDATE_POST), "{posts}:\n{said}");
+        }
+        if first == 1 {
+            assert!(
+                said.contains(&format!("the second click: {second} POST")),
+                "{posts}:\n{said}"
+            );
+        } else {
+            assert!(
+                !said.contains("the second click"),
+                "{posts}: the run stops at the first click:\n{said}"
+            );
+        }
+    }
+}
+
+#[test]
+fn observer_sh_ask_one_post_fails_when_a_cycle_sends_a_post_before_the_click_and_makes_no_click() {
+    let (code, steps, stage) = observer_with(&[("FAKE_ASK_POSTS_BEFORE", "1")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["ask-one-post"]);
+    let said = check_out(&stage, "ask-one-post");
+    assert!(
+        said.contains("the cycles, before the click: 4 requests, 1 POST"),
+        "{said}"
+    );
+    assert!(said.contains(ASK_VALIDATE_POST), "{said}");
+    assert_eq!(
+        observer_log(&stage, "LOCAL.clicks"),
+        "",
+        "no click on the observer of the machine"
+    );
+}
+
+#[test]
+fn observer_sh_ask_one_post_fails_when_the_first_click_gets_no_answer_because_the_second_click_asks_again()
+ {
+    let (code, steps, stage) = observer_with(&[("FAKE_ASK_LOCAL", "no-answer")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["ask-one-post"]);
+    let said = check_out(&stage, "ask-one-post");
+    assert!(
+        said.contains("the first click: 1 POST") && said.contains("the first click got no answer"),
+        "{said}"
+    );
+    assert!(said.contains("asks again"), "{said}");
+    assert_eq!(observer_log(&stage, "LOCAL.clicks").trim(), "1");
+    // ask-words records the answers and does not fail for a verdict
+    passed(&steps, &["ask-words"]);
+}
+
+#[test]
+fn observer_sh_ask_one_post_tries_the_next_move_when_the_click_on_the_first_gets_a_404() {
+    let (code, steps, stage) = observer_with(&[("FAKE_STALE_MOVE", "1")]);
+    assert_eq!(code, Some(0), "{steps}");
+    passed(&steps, &["ask-one-post", "ask-words"]);
+    let said = check_out(&stage, "ask-one-post");
+    assert!(
+        said.contains("the move: addon/cilium in strata-live-profile@1.0.0"),
+        "{said}"
+    );
+    // the click on the stale move sent nothing to Palette: the log holds the one POST
+    assert_eq!(ask_posts(&stage), [ASK_VALIDATE_POST], "{said}");
+    assert_eq!(observer_log(&stage, "LOCAL.clicks").trim(), "2");
+}
+
+#[test]
+fn observer_sh_ask_one_post_fails_when_the_observer_of_the_machine_stops_or_lists_no_move() {
+    let (code, steps, stage) = observer_with(&[("FAKE_OBSERVER_DIES", "1")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["ask-one-post"]);
+    assert!(
+        check_out(&stage, "ask-one-post").contains("the observer on this machine"),
+        "{}",
+        check_out(&stage, "ask-one-post")
+    );
+    assert_eq!(observer_log(&stage, "LOCAL.clicks"), "");
+
+    let (code, steps, stage) = observer_with(&[("FAKE_NO_MOVE", "1")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["ask-one-post", "ask-words"]);
+    let said = check_out(&stage, "ask-one-post");
+    assert!(
+        said.contains("lists no move to a newer pack version"),
+        "{said}"
+    );
+    // the observer of the machine stops at the end of the check, also after a failure
+    assert!(
+        !stage.path("obs/LOCAL.clicks").exists() && stage.path("obs/observer.up").exists(),
+        "the observer ran and got no click"
+    );
+}
+
+#[test]
+fn observer_sh_ask_words_records_each_verdict_with_the_code_or_the_status_and_judges_none() {
+    for (verdict, words) in [
+        ("no-error", "no-error: Palette gave no error"),
+        (
+            "refuses",
+            "refuses DependencyPackUpgradeNotSupported: Palette refuses: DependencyPackUpgradeNotSupported",
+        ),
+        ("no-answer", "no-answer, status 403: Palette gave no answer"),
+    ] {
+        let (code, steps, stage) = observer_with(&[("FAKE_ASK_POD", verdict)]);
+        assert_eq!(code, Some(0), "{verdict}:\n{steps}");
+        passed(&steps, &["ask-words"]);
+        let said = check_out(&stage, "ask-words");
+        assert!(
+            said.contains(&format!("the pod: {words}")),
+            "{verdict}:\n{said}"
+        );
+        // the observer of the machine answers with no error: both answers are in the record
+        assert!(
+            said.contains("the observer on this machine: no-error: Palette gave no error"),
+            "{verdict}:\n{said}"
+        );
+        // the click on the pod uses the port-forward, and it carries the header of the page
+        assert_eq!(observer_log(&stage, "POD.clicks").trim(), "1", "{verdict}");
+        let pod: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(stage.path("out/ask-pod.json")).unwrap())
+                .unwrap();
+        assert_eq!(pod["verdict"], verdict);
+        let asks: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(stage.path("out/asks-pod.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(asks["asks"], serde_json::json!([pod]), "/v1/asks lists it");
+    }
+}
+
+#[test]
+fn observer_sh_ask_words_keeps_a_refusal_whose_message_holds_the_word_accepts() {
+    // the message is the text of Palette, and the word of the API is the word of the answer
+    let (code, steps, stage) = observer_with(&[("FAKE_ASK_POD", "refuses-accepts-message")]);
+    assert_eq!(code, Some(0), "{steps}");
+    passed(&steps, &["ask-words"]);
+    let said = check_out(&stage, "ask-words");
+    assert!(
+        said.contains("the pod: refuses InvalidValues: Palette refuses: InvalidValues"),
+        "{said}"
+    );
+}
+
+#[test]
+fn observer_sh_ask_words_fails_on_the_word_accepts_in_an_answer_or_in_a_route() {
+    for (name, vars, holder) in [
+        (
+            "the pod",
+            vec![("FAKE_ASK_POD", "accepts-field")],
+            "ask-pod.json",
+        ),
+        (
+            "the observer of the machine",
+            vec![("FAKE_ASK_LOCAL", "accepts-field")],
+            "ask-first.json",
+        ),
+        (
+            "a summary route",
+            vec![("FAKE_ACCEPTS_IN", "/v1/newer")],
+            "/v1/newer",
+        ),
+        (
+            "the list of answers",
+            vec![("FAKE_ASK_POD", "accepts-field")],
+            "asks-pod.json",
+        ),
+    ] {
+        let (code, steps, stage) = observer_with(&vars);
+        assert_eq!(code, Some(1), "{name}:\n{steps}");
+        failed(&steps, &["ask-words"]);
+        let said = check_out(&stage, "ask-words");
+        assert!(
+            said.contains(&format!("{holder} holds the word accepts")),
+            "{name}:\n{said}"
+        );
+        // the checks around it still run and pass
+        passed(&steps, &["diff-text", "profile-removal"]);
+    }
+}
+
+#[test]
+fn observer_sh_ask_words_fails_on_an_answer_without_a_verdict_or_a_code() {
+    for (verdict, said_part) in [
+        ("unknown", "the pod: unknown verdict maybe"),
+        (
+            "refuses-no-code",
+            "the pod: the answer has no verdict, no code, or no status",
+        ),
+    ] {
+        let (code, steps, stage) = observer_with(&[("FAKE_ASK_POD", verdict)]);
+        assert_eq!(code, Some(1), "{verdict}:\n{steps}");
+        failed(&steps, &["ask-words"]);
+        let said = check_out(&stage, "ask-words");
+        assert!(said.contains(said_part), "{verdict}:\n{said}");
+    }
+}
+
+#[test]
+fn observer_sh_diff_text_passes_when_the_detail_route_holds_the_text_of_the_edit_and_no_summary_route_does()
+ {
+    let (code, steps, stage) = observer_with(&[]);
+    assert_eq!(code, Some(0), "{steps}");
+    passed(&steps, &["diff-text"]);
+    let said = check_out(&stage, "diff-text");
+    assert!(
+        said.contains("the detail route holds the text of the edit for addon/strata-live-config"),
+        "{said}"
+    );
+    assert!(
+        said.contains("8 summary routes hold no text of the edit"),
+        "{said}"
+    );
+    // the answer of the detail route is the one of the pack that the finding names
+    let diff: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(stage.path("out/diff-1.json")).unwrap())
+            .unwrap();
+    assert!(
+        diff["manifests"][0]["unified"]
+            .as_str()
+            .unwrap()
+            .contains("+edited: \"yes\""),
+        "{diff}"
+    );
+}
+
+#[test]
+fn observer_sh_diff_text_fails_when_a_summary_route_holds_the_text_of_the_edit() {
+    let (code, steps, stage) = observer_with(&[("FAKE_TEXT_LEAK", "1")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["diff-text"]);
+    let said = check_out(&stage, "diff-text");
+    assert!(
+        said.contains("the route /v1/events holds the text of the edit"),
+        "{said}"
+    );
+    // the detail route did hold it, so the search of the summary routes had a text to find
+    assert!(
+        said.contains("the detail route holds the text of the edit for addon/strata-live-config"),
+        "{said}"
+    );
+    passed(&steps, &["no-value-leaves", "ask-words"]);
+}
+
+#[test]
+fn observer_sh_diff_text_fails_when_the_detail_route_holds_no_text_of_the_edit() {
+    let (code, steps, stage) = observer_with(&[("FAKE_NO_DIFF_TEXT", "1")]);
+    assert_eq!(code, Some(1), "{steps}");
+    failed(&steps, &["diff-text"]);
+    let said = check_out(&stage, "diff-text");
+    assert!(
+        said.contains("the detail route holds no text of the edit for addon/strata-live-config"),
+        "{said}"
+    );
+    assert!(!said.contains("summary routes hold no text"), "{said}");
+}
+
+#[test]
+fn the_page_of_live_runs_names_each_new_check_of_observer_sh_and_of_observer_role_sh_without_a_result()
+ {
+    for (script, ids) in [
+        (
+            "observer.sh",
+            vec!["ask-one-post", "ask-words", "diff-text"],
+        ),
+        (
+            "observer-role.sh",
+            vec![
+                "validate-body",
+                "control-validate-packs",
+                "role-validate-packs",
+            ],
+        ),
+    ] {
+        let in_script = script_check_ids(script);
+        let page = page_section("docs/src/development/live-runs.md", &format!("## {script}"));
+        let on_page = page_check_ids(script);
+        for id in ids {
+            assert!(in_script.iter().any(|i| i == id), "{script} lacks {id}");
+            assert!(on_page.iter().any(|i| i == id), "the page lacks {id}");
+            let row = page
+                .lines()
+                .find(|l| l.starts_with("| `") && l.contains(&format!("`{id}`")))
+                .unwrap_or_else(|| panic!("no row for {id}"));
+            assert!(
+                row.contains("(no result yet: "),
+                "the row of {id} gives no reason:\n{row}"
+            );
+        }
+    }
+    // the two checks that the lead named with `?` or 0
+    let source = repo_file("examples/live/observer.sh");
+    for id in ["ask-one-post", "ask-words", "diff-text"] {
+        assert!(source.contains(&format!("check {id} 0 ")), "{id} expects 0");
+    }
+    assert!(
+        repo_file("examples/live/observer-role.sh").contains("check role-validate-packs ? "),
+        "the request of the role is a check with ?"
+    );
 }
 
 #[test]
@@ -10350,14 +10914,49 @@ const OBSERVER_ROLE_ROUTES: [(&str, &str); 16] = [
     ("pack-tags", "/v1/packs/cert-manager/registries/reg-1"),
 ];
 
+/// The path of the validate request that `observer-role.sh` sends, for the add-on version `ad-1`.
+const OBSERVER_ROLE_VALIDATE: &str = "/v1/clusterprofiles/ad-1/validate/packs";
+
+/// The record of the add-on version, as strata writes it: one pack with values and one manifest. The
+/// record holds more than the validate body takes, such as the hashes.
+fn observer_role_record() -> serde_json::Value {
+    serde_json::json!({
+        "schema": "strata-snapshot/1",
+        "source": {"uid": "ad-1", "name": "strata-live-addon", "version": "1.0.0", "type": "add-on",
+                   "cloudType": "all"},
+        "packs": [{
+            "key": "addon/cert-manager", "layer": "addon", "name": "cert-manager", "type": "spectro",
+            "tag": "1.21.1", "version": "1.21.1", "packUid": "pk-1", "registryUid": "reg-1",
+            "values": "installCRDs: true\n", "valuesHash": "h-1",
+            "manifests": [{"name": "config", "uid": "m-1", "digest": "d-1",
+                           "content": "edited: \"no\"\n", "contentHash": "c-1"}],
+        }],
+    })
+}
+
+/// The body that the validate request must carry for `observer_role_record`: the shape that the
+/// click of the observer sends.
+fn observer_role_validate_body() -> serde_json::Value {
+    serde_json::json!({
+        "cloudType": "all", "type": "add-on",
+        "packs": [{
+            "name": "cert-manager", "tag": "1.21.1", "uid": "pk-1", "registryUid": "reg-1",
+            "type": "spectro", "layer": "addon", "values": "installCRDs: true\n",
+            "manifests": [{"name": "config", "content": "edited: \"no\"\n"}],
+        }],
+    })
+}
+
 /// A stage of `observer-role.sh`: Palette answers each request to the key of the example. The
-/// registry listing names `Public Repo`.
+/// registry listing names `Public Repo`, and the validate route takes the add-on version.
 fn observer_role_stage() -> Stage {
     let mut stage = baseline_stage();
     stage.wrap_strata(FAKE_STRATA_ROLE);
     for (_, path) in OBSERVER_ROLE_ROUTES {
         stage.route(path, "{}");
     }
+    stage.route(OBSERVER_ROLE_VALIDATE, r#"{"packs":{"results":[]}}"#);
+    stage.strata("snapshot ad-1 -o *", 0, &observer_role_record().to_string());
     stage.route(
         "/v1/registries/metadata",
         r#"{"items":[{"name":"Public Repo","uid":"reg-1"}]}"#,
@@ -10457,6 +11056,93 @@ fn observer_role_sh_stops_before_any_request_when_it_has_no_key_or_no_role_name(
         assert!(steps.is_empty(), "no stage ran: {steps}");
         assert!(!stage.path("routes/sent").exists(), "no request to Palette");
     }
+}
+
+#[test]
+fn observer_role_sh_sends_the_validate_request_with_the_body_of_the_record_with_both_keys() {
+    let stage = observer_role_stage();
+    let (o, steps) = stage.run("observer-role.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["validate-body", "control-validate-packs"]);
+    assert!(
+        has_verdict(&steps, "SEEN", "role-validate-packs"),
+        "{steps}"
+    );
+    // one POST for each key, and each carries the body that a record gives
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let posts: Vec<&str> = curl.lines().filter(|l| l.starts_with("POST ")).collect();
+    let want_post = format!("POST {OBSERVER_ROLE_VALIDATE}");
+    assert_eq!(posts, [want_post.as_str(), want_post.as_str()], "{curl}");
+    let sent = stage.sent("POST", OBSERVER_ROLE_VALIDATE);
+    let want_body = observer_role_validate_body();
+    assert_eq!(sent, [want_body.clone(), want_body], "{sent:?}");
+    // the record is the one of the add-on version, taken with the key of the example
+    let keys = std::fs::read_to_string(stage.path("strata/keys")).unwrap();
+    assert!(
+        keys.lines().any(|l| l == "lab snapshot ad-1 -o addon.json"),
+        "{keys}"
+    );
+    let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
+    assert_eq!(said("control-validate-packs").trim(), "HTTP 200");
+    assert_eq!(said("role-validate-packs").trim(), "HTTP 200");
+}
+
+#[test]
+fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_judges_none_of_it()
+{
+    for (status, code) in [(403, "AccessDenied"), (500, "InternalError"), (422, "")] {
+        let stage = observer_role_stage();
+        let body = if code.is_empty() {
+            "{}".to_string()
+        } else {
+            format!(r#"{{"code":"{code}","message":"no validate"}}"#)
+        };
+        stage.route_as(OBSERVER_ROLE_VALIDATE, "role-k", status, &body);
+        let (o, steps) = stage.run("observer-role.sh", &[]);
+        assert_eq!(o.status.code(), Some(0), "{status}:\n{steps}");
+        passed(&steps, &["control-validate-packs"]);
+        assert!(
+            steps.lines().any(|l| l.starts_with("SEEN")
+                && l.contains("role-validate-packs")
+                && l.ends_with("got 1")),
+            "a refusal is recorded as a failed request:\n{steps}"
+        );
+        let said = std::fs::read_to_string(stage.path("out/role-validate-packs.out")).unwrap();
+        assert_eq!(said.trim(), format!("HTTP {status} {code}").trim());
+    }
+}
+
+#[test]
+fn observer_role_sh_fails_the_validate_request_of_the_example_key_when_palette_refuses_it() {
+    let stage = observer_role_stage();
+    stage.route_as(
+        OBSERVER_ROLE_VALIDATE,
+        "k",
+        400,
+        r#"{"code":"ShouldNotBeEmpty"}"#,
+    );
+    let (o, steps) = stage.run("observer-role.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}\n{}", text(&o.stderr));
+    failed(&steps, &["control-validate-packs"]);
+    passed(&steps, &["validate-body", "control-cluster"]);
+    let said = std::fs::read_to_string(stage.path("out/control-validate-packs.out")).unwrap();
+    assert_eq!(said.trim(), "HTTP 400 ShouldNotBeEmpty");
+}
+
+#[test]
+fn observer_role_sh_fails_the_body_check_and_sends_no_post_when_strata_gives_no_record() {
+    let stage = observer_role_stage();
+    // the only rule of the stage fails, and it writes no record for the add-on version
+    std::fs::write(
+        stage.path("strata/rules"),
+        "snapshot ad-1 -o *\t3\tanswer-1\terr\n",
+    )
+    .unwrap();
+    let (o, steps) = stage.run("observer-role.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}\n{}", text(&o.stderr));
+    failed(&steps, &["validate-body", "control-validate-packs"]);
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!curl.contains("POST "), "no POST without a body:\n{curl}");
 }
 
 /// A `strata` for who.sh stage 3. It knows the key `noaudit-k`, which cannot read the audit log:

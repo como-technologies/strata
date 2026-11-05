@@ -6,7 +6,8 @@
 #   OBSERVER_ROLE=NAME OBSERVER_ROLE_KEY=KEY examples/live/observer-role.sh [FROM_STAGE]
 #
 #   1  the requests: the content cycle reads cluster A, its profile, and the audit log. The versions
-#      cycle reads the registries and the packs. A request with the key of the example must answer
+#      cycle reads the registries and the packs. The click "Ask Palette" sends one more request: POST
+#      validate/packs for the add-on version (#647). A request with the key of the example must answer
 #      2xx. With the second key, the check records the answer and does not judge it
 #   2  the commands of the cycles: verify, snapshot of the cluster, and behind, with both keys
 #
@@ -22,8 +23,9 @@
 # time, and no file of the run holds it. With no key, the script says "could not check" and exits 2.
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# and jq. The script only reads. Results go under runs/<UTC time>/observer-role/, or OUT; FROM_STAGE
-# resumes a run in OUT. Exit 0 only when no check fails.
+# and jq. The script changes nothing. Its one POST goes to a validate route, which only checks.
+# Results go under runs/<UTC time>/observer-role/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0
+# only when no check fails.
 set -uo pipefail
 script=observer-role
 from=${1:-1}
@@ -50,12 +52,13 @@ export PALETTE_PROJECT_UID=$P
 registry=$(registry_uid "$public_repo")
 [ -n "$registry" ] || die "the key of the example cannot see the registry $public_repo"
 
-# route_status KEY PATH: print the HTTP status and the error code of the answer to GET PATH. An empty
-# KEY is the key of the example. It succeeds when the status is 2xx. The key goes through the
-# environment of one call to api.sh.
+# route_status KEY PATH [BODY_FILE]: print the HTTP status and the error code of the answer to GET PATH.
+# With BODY_FILE, the request is a POST of that body. An empty KEY is the key of the example. It
+# succeeds when the status is 2xx. The key reaches api.sh in the environment of one call.
 route_status() {
-  local answer status
-  answer=$( { [ -z "$1" ] || export PALETTE_API_KEY=$1; "$live/api.sh" get-status "$2"; } ) || return 2
+  local answer status call=(get-status "$2")
+  [ -z "${3:-}" ] || call=(post-status "$2" "$3")
+  answer=$( { [ -z "$1" ] || export PALETTE_API_KEY=$1; "$live/api.sh" "${call[@]}"; } ) || return 2
   status=$(head -n 1 <<<"$answer")
   printf '%s %s\n' "$status" "$(sed 1d <<<"$answer" | jq -r '.code // empty' 2> /dev/null)"
   [ "${status:5:1}" = 2 ]
@@ -83,11 +86,26 @@ pack-tags /v1/packs/$addon_pack/registries/$registry
 EOF
 }
 
+# validate_body: the body of POST validate/packs for the add-on version, made from its record. It has
+# the cloud type, the type, and each pack with the tag, the uids, the type, the layer, the values,
+# and the manifests. The click of the observer sends a body of this shape.
+validate_body() {
+  "$strata" snapshot "$AD" -o addon.json || return 1
+  jq -c '{cloudType: .source.cloudType, type: .source.type, packs: [.packs[] | {name, tag, uid: .packUid,
+    registryUid, type, layer, values, manifests: [(.manifests // [])[] | {name, content}]}]}' addon.json > validate-body.json
+}
+
 if stage 1 "the requests of the cycles"; then
   while read -r name path; do
     check "control-$name" 0 "#645: the key of the example reads $path" -- route_status "" "$path"
     check "role-$name" ? "#645: the answer to GET $path with the key of the role $OBSERVER_ROLE" -- route_status "$OBSERVER_ROLE_KEY" "$path"
   done < <(routes)
+  validate_path=/v1/clusterprofiles/$AD/validate/packs
+  check validate-body 0 '#647: the body of the validate request, made from the record of the add-on version' -- validate_body
+  check control-validate-packs 0 "#647: the key of the example sends POST $validate_path, and Palette answers 2xx" -- \
+    route_status "" "$validate_path" validate-body.json
+  check role-validate-packs ? "#647: the answer to POST $validate_path with the key of the role $OBSERVER_ROLE" -- \
+    route_status "$OBSERVER_ROLE_KEY" "$validate_path" validate-body.json
 fi
 
 # with_role COMMAND...: run COMMAND with the key of the role

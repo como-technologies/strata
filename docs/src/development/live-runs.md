@@ -1497,6 +1497,17 @@ program that sits between `strata` and Palette. It writes one line for each
 request, with no query and no key. It counts the content cycle, the first command
 of the versions cycle, and its moves.
 
+Stage 4 also tests the click "Ask Palette" and the text of a diff. The pod runs in
+the cluster, so the counter on the machine of the script cannot see the requests
+that the pod sends to Palette. So `ask-one-post` runs the program of the
+observer on that machine, built from the same checkout. It runs behind the
+counter, with the records of the run and the key.
+
+`ask-words` clicks on the pod too, through the port-forward, and records its
+answer. The stage needs `gzip` for the records of the observer on the machine of
+the script. `ASK_PORT` sets the local port of that observer. The default is
+`PORT` plus 1.
+
 The undo runs at the end, also after a failed check or an error. The edit in
 place goes back, the profile of way 2 leaves the cluster and goes, and the
 namespace goes. The script deletes no cluster. `KEEP=1` skips the undo, so that
@@ -1541,6 +1552,9 @@ finding, because `verify --who` then reads the audit log.
 | `drift-found`, `drift-who` | 0 | #656: within two content cycles, `/v1/findings` holds `published-changed` with the pack, and `who` names the actor |
 | `cluster-copy-unchanged` | 0 | #656: `clusterCopy` of that profile still says `same`, because the cluster did not take the update |
 | `variable-in-raw`, `no-value-leaves` | 0 | #656: the raw output of `strata compare` holds the value of a variable. No route and no line of the log holds it |
+| `ask-one-post` | 0 | #647: the cycles of the observer send no POST to Palette. One click on a move to a newer pack version sends one POST to the validate route. A second click on the same move sends none, because the observer keeps the answer. The first click must get an answer, because the observer asks again after a request that failed. The files `ask-one-post.out` and `ask.log` hold the counts and the requests (no result yet: the next live window runs it) |
+| `ask-words` | 0 | #647: the click on the pod gives an answer with one of three verdicts: `no-error`, `refuses`, or `no-answer`. The output records the verdict, and the code of a refusal or the status of a request that failed. The words on the page are "Palette gave no error", "Palette refuses: `<code>`", and "Palette gave no answer". The check does not judge which verdict Palette gives. It fails when the word "accepts" is in an answer of the API (no result yet: the next live window runs it) |
+| `diff-text` | 0 | #647: the detail route `diff?side=published` of the pack that the edit changed holds the text of the edit, in `manifests[].unified` or in `values.unified`. The seven summary routes and the route of the profile hold none of that text (no result yet: the next live window runs it) |
 | `drift-undo`, `drift-clears` | 0 | #656: the version goes back, and the next cycle clears the finding |
 | `wrong-key`, `lost-after-wrong-key` | 0 | #656: a wrong key in the Secret and a restart of the pod. The page goes to `lost` after two cycles |
 | `key-back`, `ok-after-key-back` | 0 | #656: the key back and a restart, and the page returns to `ok` |
@@ -1564,9 +1578,13 @@ finding, because `verify --who` then reads the audit log.
 
 ## observer-role.sh
 
-Read-only. It sends each request of the two cycles of [the observer](./observer-deploy.md)
+It sends each request of the two cycles of [the observer](./observer-deploy.md)
 twice. The first key is the key of the example. The second key belongs to a user with
 the role under test. The script records the status and the error code of each answer.
+
+It also sends the request of the click "Ask Palette" of the observer:
+`POST /v1/clusterprofiles/{uid}/validate/packs` for the add-on version. That route
+changes nothing.
 
 The script then runs `verify --who`, a record of cluster A, and `behind` with both keys. It needs the example at its baseline with cluster A,
 `OBSERVER_ROLE_KEY`, and `OBSERVER_ROLE`, the name of the role. With no key, it says
@@ -1587,6 +1605,9 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `role-<name>` | ? | #645: the status and the error code of the same request with the key of the role under test. The output of each check holds `HTTP`, the status, and the code. With Project Viewer, each request answers HTTP 200. With Cluster Viewer, each request answers HTTP 200 but the audit log (`role-audits`), which answers HTTP 403 with the code `AccessDenied` |
 | `command-record`, `command-control-verify`, `command-control-cluster` | 0 | #645: with the key of the example, `verify --who` and two records |
 | `command-role-verify`, `command-role-cluster`, `command-control-behind`, `command-role-behind` | ? | #645: the same commands with the key of the role, and `behind` with both keys. The exit code says whether strata gets an answer. Each check records 0 with both roles, so `verify`, the record of cluster A, and `behind` get an answer with Cluster Viewer too. The record that `verify` reads is unchanged, so it needs no audit log. A record that drifted still reports `DRIFT`: see [who.sh](#whosh) |
+| `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version (no result yet: the next live window runs it) |
+| `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx (no result yet: the next live window runs it) |
+| `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it (no result yet: the next live window runs it) |
 
 ## version-states.sh
 
