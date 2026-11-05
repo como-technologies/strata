@@ -121,7 +121,7 @@ pair is the diagnosis. Run both before you act:
 
 | `verify` of the release | `verify` of the cluster | What happened | What to do |
 | --- | --- | --- | --- |
-| `DRIFT` | `OK` | the published version changed, and the cluster has not taken the change | Restore the version first. The cluster keeps its copy until something updates it, and a new cluster gets the edit at once, as step 4 shows. |
+| `DRIFT` | `OK` | the published version changed, and the cluster has not taken the change | Do not repair the version in place: that is a second edit. Publish a new version through review, and move the clusters to it. The cluster keeps its copy until something updates it, and a new cluster gets the edit at once, as step 4 shows. |
 | `DRIFT` | `DRIFT` | the change reached the cluster too | The cluster runs content from outside the review of the team. Step 6 shows this. |
 | `OK` | `DRIFT` | the cluster differs from its record, and the published version does not | Somebody changed the cluster. See [A cluster does not run its release](./cluster-release.md). |
 

@@ -352,6 +352,10 @@ the Rust code, and these rules are for the Go code.
   fails on a `max-width` on `.page`. Other tests of the package fail on a copy of the
   logo that differs from `assets/logo/`. They also fail on a `prefers-color-scheme`
   rule in `app.css`, and on a drift that is not white on `#c9252f`. See [The page](./observer-api.md#the-page).
+- A value from the data reaches a copied command only through `shq()` in `app.js`.
+  A test of `internal/web` gives the page names that a shell reads as code. It runs
+  each command with `bash` and a stand-in for `strata`. It fails when a name splits
+  or writes a file. Another test fails when a builder of a command has no `shq()`.
 - `internal/web/devdata` and `internal/web/devserver` serve test data for the page,
   with no `strata` binary. A test decodes each file of each set into the type of
   its route, so the data cannot drift from the API.

