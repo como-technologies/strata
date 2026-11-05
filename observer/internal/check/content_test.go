@@ -57,7 +57,10 @@ func twoRecords(t *testing.T) (*rig, *world) {
 }
 
 func changedPack(key string) docs.Pack {
-	return docs.Pack{Key: key, Status: docs.PackChanged, Authored: true, Values: docs.Values{Diff: []docs.Leaf{{Op: "changed", Path: "charts.a.b", Old: sentinel, New: "y"}}}}
+	// The pack holds the marker in a changed value, and in the unified text of the values and of a manifest.
+	return docs.Pack{Key: key, Status: docs.PackChanged, Authored: true,
+		Values:    docs.Values{Diff: []docs.Leaf{{Op: "changed", Path: "charts.a.b", Old: sentinel, New: "y"}}, Unified: "--- a: " + key + " values\n-a: " + sentinel + "\n+a: y\n"},
+		Manifests: []docs.Manifest{{Op: "added", Name: "m", Unified: "+" + sentinel + "\n"}}}
 }
 
 func TestContentCases(t *testing.T) {

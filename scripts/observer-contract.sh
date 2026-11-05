@@ -88,7 +88,7 @@ start edited-in-place-1
 "$strata" snapshot aws-stack@1.1.1 -o drift-record.json -q
 stop
 start edited-in-place-2
-run verify drift-record.json --summary --who >"$docs/verify-summary-drift.json"
+run verify drift-record.json --summary --who --full >"$docs/verify-summary-drift.json"
 
 # The record of the first seed against the second seed: the published version changed, with who.
 records_dir edited drift-record.json

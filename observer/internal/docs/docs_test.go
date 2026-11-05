@@ -167,3 +167,56 @@ func TestAVerdictWithAnUnreadAuditLogDecodesTheReason(t *testing.T) {
 		t.Fatalf("row %+v, verify %+v", r, r.Diff.Verify)
 	}
 }
+
+func TestCapTextDropsAllTheTextOfAPackAboveTheLimitAndKeepsTheOthers(t *testing.T) {
+	d := Diff{Packs: []Pack{
+		{Key: "k8s/big", Values: Values{Unified: strings.Repeat("v", 60)}, Manifests: []Manifest{{Op: "added", Name: "m", Unified: strings.Repeat("m", 41)}}},
+		{Key: "k8s/exact", Values: Values{Unified: strings.Repeat("v", 60)}, Manifests: []Manifest{{Op: "added", Name: "m", Unified: strings.Repeat("m", 40)}}},
+		{Key: "k8s/none"},
+	}}
+	d.CapText(100)
+	big, exact, none := d.Packs[0], d.Packs[1], d.Packs[2]
+	if !big.TextTooLarge || big.Values.Unified != "" || big.Manifests[0].Unified != "" || big.Manifests[0].Op != "added" || big.Manifests[0].Name != "m" {
+		t.Errorf("a pack above the cap: %+v", big)
+	}
+	if exact.TextTooLarge || exact.Values.Unified == "" || exact.Manifests[0].Unified == "" {
+		t.Errorf("a pack at the cap keeps its text: %+v", exact)
+	}
+	if none.TextTooLarge {
+		t.Errorf("a pack with no text: %+v", none)
+	}
+}
+
+func TestTextTooLargeIsNeverReadFromADocumentOrWrittenToOne(t *testing.T) {
+	var p Pack
+	if err := json.Unmarshal([]byte(`{"key":"k8s/x","TextTooLarge":true,"textTooLarge":true}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.TextTooLarge {
+		t.Error("a document set a field that only the observer sets")
+	}
+	p.TextTooLarge = true
+	out, err := json.Marshal(p)
+	if err != nil || strings.Contains(strings.ToLower(string(out)), "texttoolarge") {
+		t.Errorf("%s %v", out, err)
+	}
+}
+
+func TestStatusOfReadsTheStatusAtTheStartOfAReasonOnly(t *testing.T) {
+	for _, c := range []struct {
+		reason string
+		want   int
+	}{
+		{"HTTP 403: SENTINEL body", 403},
+		{"HTTP 500", 500},
+		{"HTTP 4031", 0},
+		{"HTTP 40", 0},
+		{"the link failed: HTTP 403", 0},
+		{"1 record of project p2 was not asked", 0},
+		{"", 0},
+	} {
+		if got := StatusOf(c.reason); got != c.want {
+			t.Errorf("StatusOf(%q) = %d, want %d", c.reason, got, c.want)
+		}
+	}
+}

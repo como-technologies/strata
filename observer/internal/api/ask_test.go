@@ -9,11 +9,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // click sends the POST that the page sends: a fetch from the page itself.
@@ -312,5 +314,70 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 	}
 	if strings.Contains(string(raw), sentinelText) || strings.Contains(r.log.String(), sentinelText) {
 		t.Errorf("the state or the log holds the text:\n%s\n%s", raw, r.log.String())
+	}
+}
+
+// recorded makes the strata of a test from a script that keeps the command line of each call in calls.log.
+// The real runner runs it, so a call that the runner refuses does not reach the log.
+func recorded(t *testing.T, r *rig) (check.Strata, string) {
+	t.Helper()
+	log := filepath.Join(r.fixtures, "calls.log")
+	bin := testkit.Strata(t, `echo "$cmd $*" >> '`+log+`'
+case $cmd in
+verify) cat '`+r.fixtures+`/verify.json'; exit 1 ;;
+snapshot) cp '`+r.fixtures+`/cluster.json' "$out"; exit 0 ;;
+compare)
+  case $ref in
+  pack:*) cat '`+r.fixtures+`/move.json'; exit 1 ;;
+  *) cat '`+r.fixtures+`/compare-cluster.json'; exit 1 ;;
+  esac ;;
+behind)
+  case "$*" in
+  *--pin*) cat '`+r.fixtures+`/`+askRefuses+`'; exit 1 ;;
+  *) cat '`+r.fixtures+`/behind.json'; exit 1 ;;
+  esac ;;
+esac
+exit 3`)
+	return check.InDir{Runner: runner.Runner{Binary: bin, Timeout: time.Minute}}, log
+}
+
+func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.T) {
+	r := newRig(t)
+	strata, log := recorded(t, r)
+	o := r.cycled(strata)
+	lines := func() []string {
+		raw, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Split(strings.TrimSpace(string(raw)), "\n")
+	}
+	cycles := lines()
+	if len(cycles) < 5 {
+		t.Fatalf("the cycles ran %d commands: %v", len(cycles), cycles)
+	}
+	var behind int
+	for _, line := range cycles {
+		switch {
+		case strings.HasPrefix(line, "behind "):
+			behind++
+			if !strings.Contains(line, " --no-impact ") || strings.Contains(line, "--pin") {
+				t.Errorf("a cycle ran %q, which asks Palette", line)
+			}
+		case strings.HasPrefix(line, "compare "), strings.HasPrefix(line, "verify "):
+			if !strings.Contains(line, " --full ") || strings.Contains(line, "--validate") || strings.Contains(line, "--repave") {
+				t.Errorf("a cycle ran %q", line)
+			}
+		}
+	}
+	if behind != 1 {
+		t.Errorf("the versions cycle ran %d behind", behind)
+	}
+	if rec := click(handlerOf(o), pathAsk); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"verdict":"refuses"`) {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	after := lines()[len(cycles):]
+	if len(after) != 1 || after[0] != "behind record-0.json --pin k8s/kubernetes --json --compact -q" {
+		t.Errorf("the click ran %v", after)
 	}
 }
