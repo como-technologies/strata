@@ -1,6 +1,11 @@
 package model
 
-import "github.com/como-technologies/strata/observer/internal/docs"
+import (
+	"slices"
+	"strings"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
+)
 
 // hasRow says that the record has a `verify` row that strata could read.
 func (r Record) hasRow() bool {
@@ -37,6 +42,10 @@ func (r Record) readError() bool {
 //
 // A part gets no answer in three cases. The last cycle held no good answer for it. The last cycle did
 // not hold the record. The record changed since then.
+//
+// A file that the observer cannot read gives no record in this cycle. When the last cycle read a
+// record from that file, this record replaces it, with both parts carried. A file with no last record
+// is blind: see Content.Blind.
 func (c *Content) Carry(last *Content) {
 	if last == nil {
 		return
@@ -57,6 +66,38 @@ func (c *Content) Carry(last *Content) {
 			r.Cluster.Diff, r.SideCarried = prev.Cluster.Diff, true
 		}
 	}
+	c.carryUnreadable(last)
+}
+
+// carryUnreadable puts the last record of each file in Unreadable in place of the file. A profile
+// that another file gives in this cycle is not carried a second time. The records keep the order of
+// the files, as the directory lists them.
+func (c *Content) carryUnreadable(last *Content) {
+	carried := false
+	for _, file := range c.Unreadable {
+		prev, ok := last.recordOfFile(file)
+		if !ok {
+			continue
+		}
+		if _, given := c.recordOf(prev.subject()); given {
+			continue
+		}
+		prev.RowCarried, prev.SideCarried = true, true
+		c.Records = append(c.Records, prev)
+		carried = true
+	}
+	if carried {
+		slices.SortStableFunc(c.Records, func(a, b Record) int { return strings.Compare(a.File, b.File) })
+	}
+}
+
+// Blind says that a file cannot be read and that no record replaces it. The file can hold the profile
+// of any finding that the other records do not give, so the content cannot clear those: see BlindIDs.
+func (c Content) Blind() bool {
+	return slices.ContainsFunc(c.Unreadable, func(file string) bool {
+		_, ok := c.recordOfFile(file)
+		return !ok
+	})
 }
 
 // recordOf finds the record of a profile.
@@ -69,6 +110,27 @@ func (c Content) recordOf(subject string) (Record, bool) {
 	return Record{}, false
 }
 
+// recordOfFile finds the record that a file gave.
+func (c Content) recordOfFile(file string) (Record, bool) {
+	for _, r := range c.Records {
+		if r.File == file {
+			return r, true
+		}
+	}
+	return Record{}, false
+}
+
+// idsOf gives the ids of the findings that a profile can have, for the kinds of the lists.
+func idsOf(subject string, lists ...[]Kind) []string {
+	var ids []string
+	for _, kinds := range lists {
+		for _, kind := range kinds {
+			ids = append(ids, FindingID(kind, subject))
+		}
+	}
+	return ids
+}
+
 // HeldIDs gives the ids of the findings that this content cannot clear. These are the findings that
 // each part of a record could give when the cycle could not read that part. A failed read of the pods
 // holds the image findings of each record in the same way. The caller keeps the first sight of each, also
@@ -78,19 +140,36 @@ func HeldIDs(c Content) []string {
 	for _, r := range c.Records {
 		subject := r.subject()
 		if r.rowUnread() {
-			for _, kind := range publishedKinds {
-				ids = append(ids, FindingID(kind, subject))
-			}
+			ids = append(ids, idsOf(subject, publishedKinds)...)
 		}
 		if r.sideUnread() {
-			for _, kind := range clusterKinds {
-				ids = append(ids, FindingID(kind, subject))
-			}
+			ids = append(ids, idsOf(subject, clusterKinds)...)
 		}
 		if c.Pods.Err != nil {
-			for _, kind := range imageKinds {
-				ids = append(ids, FindingID(kind, subject))
-			}
+			ids = append(ids, idsOf(subject, imageKinds)...)
+		}
+	}
+	return ids
+}
+
+// BlindIDs gives the ids in known that a blind content cannot clear. known holds the ids of the
+// findings that earlier cycles saw. A record that the content holds gives an answer for each kind of
+// its profile, so its ids are not here. Any other id can belong to the file that cannot be read. A
+// content that is not blind holds none.
+func BlindIDs(c Content, known []string) []string {
+	if !c.Blind() {
+		return nil
+	}
+	decided := map[string]bool{}
+	for _, r := range c.Records {
+		for _, id := range idsOf(r.subject(), publishedKinds, clusterKinds, imageKinds) {
+			decided[id] = true
+		}
+	}
+	var ids []string
+	for _, id := range known {
+		if !decided[id] {
+			ids = append(ids, id)
 		}
 	}
 	return ids

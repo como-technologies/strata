@@ -253,7 +253,9 @@ of the first sight. It holds no value, so a channel of your team can show it.
 - `image-moved` clears when the digest comes back, or when you write new records.
   `image-split` clears when each pod runs one digest.
 - Give each mute an end date, and keep the file in Git. The file shows who muted what.
-  A mute that has ended counts as no mute.
+  A mute that has ended counts as no mute. Write a mute beside the rule that sends,
+  with the same level, match, and news. The rule that sends works again when the mute
+  ends.
 - Read "Palette gave no error" as one fact, not as a promise. Palette did not check
   your own values. When Palette refuses a move, pick a closer version: see [What to
   do](./behind.md#what-to-do).

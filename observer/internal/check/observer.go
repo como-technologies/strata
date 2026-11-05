@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
@@ -137,19 +138,26 @@ func (o *Observer) RunContent(ctx context.Context) error {
 			content.Carry(o.content)
 			o.content, o.contentAt = &content, &content.At
 			o.keepFirstDigests(content)
-			o.keepFirstSeen(content)
-			good, held = true, idSet(model.HeldIDs(content))
+			held = o.heldIDs(content)
+			o.keepFirstSeen(content, held)
+			good = true
 		})
 	o.alertStep(ctx, good, held)
 	return err
 }
 
-func idSet(ids []string) map[string]bool {
-	set := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		set[id] = true
+// heldIDs gives the ids of the findings that this content cannot clear: the ones of a part that the
+// cycle could not read, and the ones that a file with no last record can hold. The caller reads it
+// before keepFirstSeen changes the first sights.
+func (o *Observer) heldIDs(content model.Content) map[string]bool {
+	held := map[string]bool{}
+	for _, id := range model.HeldIDs(content) {
+		held[id] = true
 	}
-	return set
+	for _, id := range model.BlindIDs(content, slices.Collect(maps.Keys(o.state.Findings))) {
+		held[id] = true
+	}
+	return held
 }
 
 // RunVersions runs one versions cycle, and keeps its answer or its failure.
@@ -217,10 +225,10 @@ func (o *Observer) fail(name string, clock *ClockState, start time.Time, err err
 	o.save()
 }
 
-// keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others. A part
-// of a record that the cycle could not read keeps its first sights too, because only a read that
-// works clears a finding. This holds also when the process has no last answer in memory.
-func (o *Observer) keepFirstSeen(content model.Content) {
+// keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others. The ids in
+// held keep their first sights too, because only a read that works clears a finding. This holds also
+// when the process has no last answer in memory.
+func (o *Observer) keepFirstSeen(content model.Content, held map[string]bool) {
 	kept := map[string]FindingState{}
 	for _, f := range model.FindingsOf(content, o.state.Images.First) {
 		seen, ok := o.state.Findings[f.ID]
@@ -229,7 +237,7 @@ func (o *Observer) keepFirstSeen(content model.Content) {
 		}
 		kept[f.ID] = seen
 	}
-	for _, id := range model.HeldIDs(content) {
+	for id := range held {
 		if seen, ok := o.state.Findings[id]; ok {
 			if _, found := kept[id]; !found {
 				kept[id] = seen

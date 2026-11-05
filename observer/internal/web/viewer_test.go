@@ -802,13 +802,36 @@ func TestAnotherClickOnANoAnswerReplacesIt(t *testing.T) {
 	mustHold(t, "after", textOf(r.After), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
 	mustNotHold(t, "after", textOf(r.After), "Palette gave no answer", "HTTP 403")
 	mustNotHold(t, "after", r.After, "Ask again")
-	// The answer of the observer is for the move to the newest version. An answer for another version is not an answer.
+}
+
+// The observer holds one answer for a pack of a profile, and it drops the answer when the move changes. The
+// registry can gain a version after the last versions cycle. The answer is then for a newer version than the
+// row, and the card and the table show it.
+func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 	dir := writeSet(t, devdata.StateAsks, map[string]func([]byte) []byte{"asks.json": func(raw []byte) []byte {
-		return []byte(strings.ReplaceAll(string(raw), `"newest":"1.36.2"`, `"newest":"1.35.9"`))
+		return []byte(strings.ReplaceAll(string(raw), `"newest":"1.36.2"`, `"newest":"1.37.0"`))
 	}})
-	page := pagesOf(t, dir, k8sHash)[0]
-	mustHold(t, "another version", page, ">Ask Palette about this move</button>")
-	mustNotHold(t, "another version", page, "Palette gave no error")
+	pages := pagesOf(t, dir, k8sHash, "#newer")
+	mustHold(t, "the card", textOf(pages[0]), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
+	mustNotHold(t, "the card", pages[0], ">Ask Palette about this move</button>")
+	mustHold(t, "the table", rowWith(t, pages[1], `data-go="`+k8sHash+`"`), `<td class="narrow-hide"><span class="fw">No error</span></td>`)
+}
+
+// A click always ends with a word. The observer names the newest version of the row also for a pin that failed
+// or is not behind any more. An older observer sent no version, and the page still says no answer.
+func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing.T) {
+	for _, newest := range []string{"2.44.0", ""} {
+		t.Run("newest "+newest, func(t *testing.T) {
+			reply := `{"asks":[{"profile":"fred-identity@2.3.0","key":"addon/dex","newest":"` + newest + `","verdict":"no-answer","refusals":[],"status":502}]}`
+			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
+			r := clickIn(t, dir, "scratch", dexHash, "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
+			mustHold(t, "after", textOf(r.After), "Palette gave no answer: HTTP 502.")
+			mustHold(t, "after", r.After, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask again</button>`)
+			mustNotHold(t, "after", r.After, "Ask Palette about this move", "The observer could not ask now")
+			table := clickIn(t, dir, "scratch", "#newer", "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
+			mustHold(t, "the table", rowWith(t, table.After, `data-go="`+dexHash+`"`), `<span class="mut">No answer</span>`, "Ask again")
+		})
+	}
 }
 
 // The route /v1/asks can fail. The page stays online, and it keeps the last list of answers. With no list

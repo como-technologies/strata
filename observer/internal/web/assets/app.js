@@ -304,9 +304,16 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
 // packOfRow finds the pack of a profile that a row of /v1/newer moves. A profile that is not known gives null.
 const packOfRow = (profile, r) => profile ? profile.packs.find(q => q.name === r.name && q.version === r.version) : null;
+// causeNames says that a row of Not checked with the cause names the profile, and the pack too when a key is given.
+const causeNames = (cause, subject, key) => D.notChecked.some(r => r.cause === cause && r.profiles.includes(subject) && (key === undefined || r.packs.includes(key)));
 // moveUnread says that strata could not compare the two versions of a pack. The row has no counts, and Not checked names the pack.
-const moveUnread = (subject, p) => !!p && D.notChecked.some(r => r.cause === CAUSE.PIN_ERROR && r.profiles.includes(subject) && r.packs.includes(p.key));
+const moveUnread = (subject, p) => !!p && causeNames(CAUSE.PIN_ERROR, subject, p.key);
 const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not read") : impactBadge(row.impact);
+// readErrorOf says that the last read of a profile failed in part. The summary then holds the last good answer of that part, with no flag
+// for it, and the cause read-error names the profile. So a side with no change reads as not checked, and never as unchanged or the same.
+const readErrorOf = subject => causeNames(CAUSE.READ_ERROR, subject);
+// CARRIED_WORDS tells why a side with no change reads as not checked.
+const CARRIED_WORDS = "The last read failed, so strata cannot say that nothing changed.";
 // worstOf gives the status that wins in a list of statuses.
 const worstOf = list => SEVERITY.find(s => list.includes(s)) || STATUS.OK;
 // orNone shows a blank value as the word none.
@@ -350,9 +357,12 @@ function limits() {
   return out;
 }
 
-// calmOk says that a calm tone is true. A calm tone needs a good check: the page holds data, it is not lost or stale, no
-// finding is open, no read failed, and no cause is in Not checked. Each calm splash asks this, and no other test.
-const calmOk = () => hasChecks() && D.cluster.page === PAGE.OK && D.cluster.counts.findings === 0 && D.findings.length === 0 && limits().length === 0;
+// trusted says that the checks can speak: the page holds data, it is not lost or stale, and it reaches the observer.
+const trusted = () => hasChecks() && D.cluster.page === PAGE.OK && !S.offline;
+// calmOk says that a calm tone is true. A calm tone needs a good check: the page holds data, it is not lost, stale, or offline, no
+// finding is open, no read failed, and no cause is in Not checked. Words that speak of versions need a read of the versions too:
+// calmOk(true). Each calm word asks this, and no other test.
+const calmOk = (aboutVersions = false) => trusted() && D.cluster.counts.findings === 0 && D.findings.length === 0 && limits().length === 0 && (!aboutVersions || !!D.cluster.versions.readAt);
 // settledTone gives the tone of a place that has nothing to show: calm when the check allows it, amber for a limit, else the outline.
 const settledTone = () => calmOk() ? TONE.CALM : limits().length ? TONE.WARN : TONE.OFF;
 
@@ -417,9 +427,9 @@ function noNewer(size) {
     return splash(TONE.BUILD, "Reading the registries", "The first read of the versions has not ended. This page lists a newer version when it does.", "", size);
   }
   const read = `Read ${ago(v.readAt)} ago, every ${v.every}.`;
-  if (calmOk()) return splash(TONE.CALM, "Nothing newer to dig up", `Every pack is current. The registries list nothing newer than what you pin. ${read}`, "", size);
+  if (calmOk(true)) return splash(TONE.CALM, "Nothing newer to dig up", `Every pack is current. The registries list nothing newer than what you pin. ${read}`, "", size);
   const lim = limits();
-  return splash(settledTone(), "No newer version is listed", `${lim.length ? "No newer version is listed for what was read." : "Every pack is current."} ${read} ${lim.join(" ")}`, "", size);
+  return splash(settledTone(), "No newer version is listed", `${trusted() && !lim.length ? "Every pack is current." : "No newer version is listed for what was read."} ${read} ${lim.join(" ")}`, "", size);
 }
 
 // noCauses is the splash of an empty list of causes in Not checked.
@@ -444,8 +454,10 @@ const missingSplash = w => splash(TONE.OFF, w.title, h`<span class="m">${w.name}
    Only a click on a button sends a question: nothing asks on a timer, and no render asks. One answer is for
    one move: the move of a pack of a profile to the newest version. */
 const askId = (subject, p) => `${subject}|${p.key}`;
-// answerOf finds the answer of Palette for a move. A move that nobody asked about has none.
-const answerOf = (subject, p, row) => D.asks.find(a => a.profile === subject && a.key === p.key && a.newest === row.newest);
+// answerOf finds the answer of Palette for the move of a pack. A move that nobody asked about has none. The observer holds one
+// answer for a pack of a profile, and it drops the answer when the move changes. The registry can gain a version after the last
+// cycle. The answer is then for a newer version than the row, and it shows.
+const answerOf = (subject, p) => D.asks.find(a => a.profile === subject && a.key === p.key);
 const isAnswer = a => !!a && ["profile", "key", "newest", "verdict"].every(k => typeof a[k] === "string");
 // verdictOf reads the verdict of an answer. A word that the page does not know reads as no answer, and the page claims nothing.
 const verdictOf = a => a.verdict === VERDICT.NO_ERROR || a.verdict === VERDICT.REFUSES ? a.verdict : VERDICT.NO_ANSWER;
@@ -457,8 +469,8 @@ function askButton(cls, subject, p, label) {
 }
 
 // askCell is the cell "Palette" of a row of the table of newer versions.
-function askCell(subject, p, row) {
-  const a = answerOf(subject, p, row);
+function askCell(subject, p) {
+  const a = answerOf(subject, p);
   const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut askmsg">${ASK_FAILED}</div>` : "";
   if (!a) return h`${askButton("lnk", subject, p, "Ask Palette")}${failed}`;
   const verdict = verdictOf(a);
@@ -470,8 +482,8 @@ function askCell(subject, p, row) {
 const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class="m">${r.code}</span></div>${r.message ? h`<div>${r.message}</div>` : ""}${r.clusters && r.clusters.length ? h`<div class="mut">on ${r.clusters.join(", ")}</div>` : ""}`;
 
 // askBlock is the part of the card "Move to" that asks Palette, or that shows its answer.
-function askBlock(subject, p, row) {
-  const a = answerOf(subject, p, row);
+function askBlock(subject, p) {
+  const a = answerOf(subject, p);
   const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut mt6">${ASK_FAILED}</div>` : "";
   if (!a) return h`<div class="mt10">${askButton("btn", subject, p, "Ask Palette about this move")}${failed}</div>`;
   switch (verdictOf(a)) {
@@ -504,7 +516,7 @@ async function askPalette(subject, key) {
   }
   delete S.asking[id];
   if (isAnswer(answer)) {
-    D.asks = [...D.asks.filter(a => !(a.profile === answer.profile && a.key === answer.key && a.newest === answer.newest)), answer];
+    D.asks = [...D.asks.filter(a => !(a.profile === answer.profile && a.key === answer.key)), answer];
   } else {
     S.askFailed[id] = true;
   }
@@ -605,10 +617,9 @@ function alertBars() {
 function tiles() {
   const c = D.cluster, n = c.counts;
   const T = (cls, label, value, sub, href) => h`<a class="tile ${cls}" href="#${href}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></a>`;
-  const none = n.notChecked === 0;
-  const driftSub = n.drift === 0 ? (none ? "Nothing changed" : "None in what was checked") : n.drift === 1 ? driftSubject() : `${n.drift} profiles`;
+  const driftSub = n.drift === 0 ? (calmOk() ? "Nothing changed" : "None in what was checked") : n.drift === 1 ? driftSubject() : `${n.drift} profiles`;
   const fresh = D.newer.filter(r => r.new).length;
-  const newerSub = n.newer === 0 ? (none ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`;
+  const newerSub = n.newer === 0 ? (calmOk(true) ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`;
   const notCheckedSub = n.notChecked === 0 ? `${n.packsInFull} of ${n.packs} packs in full` : `${n.notChecked} ${plural(n.notChecked, "cause", "causes")} · ${n.packsInFull} of ${n.packs} packs in full`;
   // The tile "Image changes" is there only when the observer reads the pods. The other four fill the row.
   const images = () => { const [cls, value, sub] = imageTile(); return T(cls, "Image changes", value, sub, "images"); };
@@ -622,12 +633,13 @@ function tiles() {
 }
 
 // imageTile gives the color, the value, and the words of the tile "Image changes", for an observer that reads the pods. Before a
-// read that ended, it claims nothing: the value is "-". The Drift tile does not count these changes.
+// read that ended, it claims nothing: the value is "-". The Drift tile does not count these changes. The tile is green only when the
+// checks can speak and the last read of the pods worked.
 function imageTile() {
   const o = D.images, n = o.counts;
   if (o.pods === PODS.NOT_READ) return ["y", "-", "Not read yet"];
   if (n.changed > 0) return ["a", n.changed, "Moved or split"];
-  return ["g", n.changed, `${n.images} ${plural(n.images, "image", "images")} in pods`];
+  return [trusted() && !o.error ? "g" : "y", n.changed, `${n.images} ${plural(n.images, "image", "images")} in pods`];
 }
 
 // driftSubject names the profile that drifts, for the tile.
@@ -824,7 +836,7 @@ function newerCard() {
             const k = packOfRow(p, r);
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
             const count = v => moveUnread(g.subject, k) ? DASH : v;
-            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k, r) : ""}</td></tr>`;
+            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
           })];
       })}</tbody></table></div>`;
   }
@@ -864,12 +876,14 @@ function viewNotChecked() {
 
 /* The two sides of a profile: the published version, and the copy of this cluster in Palette. */
 function verdict(x) {
-  const pub = x.published, cp = x.clusterCopy;
+  const pub = x.published, cp = x.clusterCopy, carried = readErrorOf(subjectOf(x));
   let pubCard;
   if (!pub) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
   } else if (pub.status === VERIFY.DRIFTED) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root <span class="was">${root(pub.rootRecorded)}</span>${ARROW}<span class="now">${root(pub.rootLive)}</span></div></div>`;
+  } else if (pub.status === VERIFY.UNCHANGED && carried) {
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub, carried)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div>`;
   } else if (pub.status === VERIFY.UNCHANGED) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Unchanged since the record</div></div>`;
   } else {
@@ -880,7 +894,10 @@ function verdict(x) {
     copyCard = h`<div class="vcard"><div class="h">This cluster's copy in Palette ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
     return h`<div class="vs">${pubCard}${copyCard}</div>`;
   }
-  const head = h`<div class="h">This cluster's copy in Palette ${copyBadge(cp)}</div>`;
+  const head = h`<div class="h">This cluster's copy in Palette ${copyBadge(cp, carried)}</div>`;
+  if (carried && COPY_KEPT.includes(cp.status)) {
+    return h`<div class="vs">${pubCard}<div class="vcard">${head}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div></div>`;
+  }
   switch (cp.status) {
     case COPY.SAME:
       copyCard = h`<div class="vcard">${head}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">Unchanged since the record</div></div>`; break;
@@ -1384,8 +1401,11 @@ function comparePack(subject, x, p, row) {
   const command = side === SIDE.CLUSTER ? clusterCommand(x, true) : side === SIDE.NEWER ? moveCommand(row) : publishedCommand(subject);
   // Only a side with a change sends a request. The route says "unchanged" for a side that the findings did not name.
   const d = unread || !changed[side] ? null : diffOf(subject, p, side);
+  // A side with no change reads as hidden when the pack was not checked, or when the last read of the profile failed in part and the side
+  // itself was not the one that failed.
+  const hidden = !changed[side] && (p.status === STATUS.NOT_CHECKED || (readErrorOf(subject) && !unread));
   let state = "", flags = "", inner;
-  if (!changed[side] && p.status === STATUS.NOT_CHECKED) {
+  if (hidden) {
     state = statusBadge(STATUS.NOT_CHECKED);
     inner = notCheckedSplash(x);
   } else if (unread) {
@@ -1409,26 +1429,26 @@ function moveCard(subject, p, row) {
   const pinned = PINNED[row.pinnedState];
   return h`<section class="card"><div class="chead"><h2>Move to ${row.newest} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
     <div class="meta mt0"><div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
-    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p, row)}</div></section>`;
+    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p)}</div></section>`;
 }
 
 /* ---- The card "Check this yourself" ----
    Each row is a question, the command that answers it, and what the page says now. The names are real, and the rows change with
    the page: a pack with a newer version adds the move and the question about the newer versions. */
-const copyBadge = cp => badgeOf(COPY_BADGE, COPY_BADGE[cp.status] ? cp.status : COPY.NOT_READ);
-const publishedBadge = pub => pub.status === VERIFY.DRIFTED ? statusBadge(STATUS.DRIFT) : pub.status === VERIFY.UNCHANGED ? statusBadge(STATUS.OK) : statusBadge(STATUS.NOT_CHECKED);
+const copyBadge = (cp, carried) => carried && COPY_KEPT.includes(cp.status) ? statusBadge(STATUS.NOT_CHECKED) : badgeOf(COPY_BADGE, COPY_BADGE[cp.status] ? cp.status : COPY.NOT_READ);
+const publishedBadge = (pub, carried) => pub.status === VERIFY.DRIFTED ? statusBadge(STATUS.DRIFT) : pub.status === VERIFY.UNCHANGED && !carried ? statusBadge(STATUS.OK) : statusBadge(STATUS.NOT_CHECKED);
 
 // terminalRows gives the rows for a profile, and for a pack of it when p is not null. row is the move of the pack, or null.
 function terminalRows(subject, x, p, row) {
-  const pub = x.published, cp = x.clusterCopy, rec = D.cluster.records;
+  const pub = x.published, cp = x.clusterCopy, rec = D.cluster.records, carried = readErrorOf(subject);
   const rows = [["Get the record that this check used", recordCommand(x), rec.revision ? h`<span class="m">rev ${rec.revision}</span>` : mut(rec.baseline)]];
   if (pub) {
     const drifting = x.packs.filter(q => q.status === STATUS.DRIFT).length;
-    rows.push(["Does Palette still have this version?", `strata verify ${RECORD_FILE}`, publishedBadge(pub)]);
+    rows.push(["Does Palette still have this version?", `strata verify ${RECORD_FILE}`, publishedBadge(pub, carried)]);
     if (x.who && x.who.length) rows.push(["Who changed it?", `strata verify ${RECORD_FILE} --who`, `${x.who[0].actor}, ${ago(x.who[0].time)} ago`]);
-    rows.push(["What changed?", publishedCommand(subject), pub.status === VERIFY.DRIFTED && drifting ? `${drifting} ${plural(drifting, "pack", "packs")}` : publishedBadge(pub)]);
+    rows.push(["What changed?", publishedCommand(subject), pub.status === VERIFY.DRIFTED && drifting ? `${drifting} ${plural(drifting, "pack", "packs")}` : publishedBadge(pub, carried)]);
   }
-  if (cp) rows.push(["Does this cluster still run the record?", clusterCommand(x, false), copyBadge(cp)]);
+  if (cp) rows.push(["Does this cluster still run the record?", clusterCommand(x, false), copyBadge(cp, carried)]);
   if (p && row) {
     rows.push(["What does the move change?", moveCommand(row), impactCell(subject, p, row)]);
     rows.push(["Which newer versions does Palette list?", pinCommand(p), mut(`Newest ${row.newest}`)]);

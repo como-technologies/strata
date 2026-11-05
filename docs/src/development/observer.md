@@ -141,6 +141,18 @@ One failed read of one part of one record is not a failed cycle. It is a
   the date.
 - A record that changed since the last good answer gets no old answer.
 
+A record file that the observer cannot read is a failed read too. The file is a
+bad gzip, or it holds another `schema`. The file gives no record in this cycle.
+
+- When the last cycle read a record from that file, this record replaces the file,
+  with both parts carried. Its findings stay with their first sights, and no clear
+  goes for them. The cause `read-error` names the profile and the file.
+- A file with no last record is blind. A new process has no last record, and a file
+  can be bad from the first cycle. The observer then holds each first sight of the
+  state that no readable record can give, and it sends no clear for it. A readable
+  record still decides for its own profile.
+- A later read of the file decides: the finding clears, or it keeps its date.
+
 ## The read of the pods
 
 `--read-pods` adds a read to the start of each content cycle. `internal/kube` lists
@@ -348,7 +360,8 @@ and the state never holds them.
 A compare that fails is not cached, and it does not fail the cycle. The row of
 the pin stays in the list with no counts and no impact, and the cause
 `pin-error` names its pack. The other pins keep their compare. The next cycle
-asks again for that move only.
+asks again for that move only. The move still counts as used in that cycle, so the
+answer of Palette about it stays: see [The answers of Palette](#the-answers-of-palette).
 
 ## The answers of Palette
 
@@ -358,13 +371,22 @@ move must be one that the last good versions cycle found for the profile.
 
 The click runs `behind` on the record of the profile with `--pin`, and reads the
 `bump` of the pin in the document. An answer holds the `profile`, the `key`, the
-`newest` version, the `verdict`, the `refusals`, and the `status`.
+`newest` version, the `verdict`, the `refusals`, and the `status`. The click waits for
+the slot of the worker. A versions cycle can run during the wait, so the click reads the
+move again when it has the slot.
 
 | `verdict` | When |
 | --- | --- |
 | `no-error` | `bump.paletteValidation` is there, and its `accepts` is true. |
 | `refuses` | `accepts` is false. `refusals` holds each error: `pack`, `code`, `message`, and `clusters`. |
-| `no-answer` | The pin has an `error`, `bump.paletteValidationError` is set, the document has no such pin, or the run failed. `status` is the HTTP status of the failure, or 0. |
+| `no-answer` | The pin has an `error`, `bump.paletteValidationError` is set, the document has no such pin, the document does not list the newest version of the page, or the run failed. `status` is the HTTP status of the failure, or 0. |
+
+- A pin that failed, or that is not behind any more, has no newer version in the
+  document. The answer then names the newest version of the last versions cycle, the
+  version that the page shows. A `no-answer` never has an empty `newest`.
+- The registry can gain a version after the last versions cycle. The document then lists
+  the version of the page and a newer one. The answer is for the newer version, and the
+  page shows it beside the move. The observer holds one answer for a pack of a profile.
 
 - Palette checks the default values of the new version. It does not check the values
   of the team, so `no-error` is not "Palette takes the move". The page never reads
@@ -373,7 +395,9 @@ The click runs `behind` on the record of the profile with `--pin`, and reads the
   count and no status. The summary does not change.
 - The memory holds `no-error` and `refuses` until the move changes or the process
   restarts. The move changes when the pin, its newest version, or the `strata` binary
-  changes. A second click sends nothing.
+  changes. A second click sends nothing. A versions cycle drops the answer of a move
+  that is not in its list. A move whose `compare` failed is in the list, so its answer
+  stays.
 - A `no-answer` stays in memory until the next click, which asks again.
 - A refusal holds the message of Palette and the names of clusters. Only the detail
   tier serves it.
@@ -472,12 +496,14 @@ rules decide what it queues:
 
 1. **An item is a finding, a newer version, or the loss of contact.** A finding is one
    item, with the id of the finding. A newer version is one item for each profile that
-   pins the pack. The page state `lost` is the item `lost`. `alert.SubjectsOf` is the one
-   function that reads the types of `internal/model`.
-2. **The rule of an item is the first live rule of the lowest level that covers it.**
-   The levels run from `pack` to `cluster`. A mute that has ended is not live. An item
-   under a mute stays as it is, and queues nothing. A message of the item that waits for
-   a retry goes no more. An item with no rule leaves the state.
+   pins the pack. The page state `lost` is the item `lost`. `subject.go` is the one file
+   of `internal/alert` that reads the types of `internal/model`, from `alert.SubjectsOf`.
+2. **The rule of an item is the rule of the lowest level that covers it.**
+   The levels run from `pack` to `cluster`. In one level, a live mute wins over a rule
+   that sends. Among the rules that send, the first one in the file wins. A mute
+   that has ended is not live. An item under a mute stays as it is, and queues nothing.
+   A message of the item that waits for a retry goes no more. An item with no rule leaves
+   the state.
 3. **An item that opens under a rule `now` queues one message.** An item under a rule
    `digest` queues none, and it waits for the digest.
 4. **An item that is gone queues one clear message.** It does so only when its open
@@ -489,7 +515,8 @@ rules decide what it queues:
 5. **A digest queues one message for each channel.** It does so when a period has
    passed and an item is open under a digest rule. The message lists the open items.
    A digest has no clear message. A digest that did not go is made again from the items
-   that are open at the next step, so a channel that comes back gets one digest.
+   that are open at the next step, for its channel only. So a channel that comes back
+   gets one digest, and a channel that got its digest gets no second one in the period.
 
 The step plans under the lock of the observer, and it sends after it releases the lock.
 So a slow webhook never holds a request of the page. A channel that fails keeps its later
@@ -510,8 +537,10 @@ message the queue dropped queues it again at the next step.
 - `images`: the `revision` of the records, and `first`, which maps the id of an image
   to its first digest. The id is the first 16 hex digits of the SHA-256 of `image`,
   a newline, and the reference. The file holds no reference, no pod name, and no
-  namespace. A new revision of the records empties `first`. `first` holds 2048 images
-  at most: above that, the observer drops the images that the last read did not show.
+  namespace. A new revision of the records empties `first`. A read of `meta.json` that
+  failed gives the baseline `unknown` and no revision, and it empties nothing. `first`
+  holds 2048 images at most: above that, the observer drops the images that the last
+  read did not show.
 - `alerts`: the open alerts, `items`, by id, and the messages that did not go,
   `outbox`. It also holds `digestAt`, the time of the last digest. An item holds
   the news, the kind, the profile, the packs, one fixed sentence, the channel, and

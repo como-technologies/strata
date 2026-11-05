@@ -29,8 +29,8 @@ const lostID = "lost"
 const newerPrefix = "newer:"
 
 // SubjectsOf lists what is open in a summary: each finding, each newer version in each profile, and the
-// loss of contact when the page says lost. It is the one function of the package that reads the types
-// of internal/model.
+// loss of contact when the page says lost. It is the entry point of this file, which is the one file of
+// the package that reads the types of the summary in internal/model.
 func SubjectsOf(sum model.Summary) []Subject {
 	out := []Subject{}
 	for _, f := range sum.Findings {

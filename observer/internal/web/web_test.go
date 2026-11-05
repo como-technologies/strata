@@ -1703,10 +1703,11 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 	if err := os.MkdirAll(path.Join(dir, "scratch"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The file alerts.json is optional: a set without it is the page of an observer with no alerts.
-	for _, name := range append(slices.Clone(devdata.Files), "alerts.json") {
+	// The files alerts.json and replies.json are optional. A set without alerts.json is the page of an observer
+	// with no alerts, and a set without replies.json gives no answer to a click on a move that asks.json lacks.
+	for _, name := range append(slices.Clone(devdata.Files), "alerts.json", "replies.json") {
 		raw, err := devdata.Read(os.DirFS("testdata/api"), from, name)
-		if name == "alerts.json" && errors.Is(err, fs.ErrNotExist) {
+		if (name == "alerts.json" || name == "replies.json") && errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
