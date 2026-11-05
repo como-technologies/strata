@@ -376,6 +376,10 @@ pub(crate) struct BehindArgs {
     /// Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
     #[arg(long)]
     pub(crate) no_impact: bool,
+    /// Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask
+    /// Palette about it, and read no other pack
+    #[arg(long, value_name = "LAYER/NAME", conflicts_with = "no_impact")]
+    pub(crate) pin: Option<String>,
     /// Name a pre-release as a newer version of a pin that is not a pre-release
     #[arg(long)]
     pub(crate) pre_release: bool,

@@ -5962,6 +5962,41 @@ fn two_clusters_on_one_release_with_different_values_compare_identical_and_show_
 }
 
 #[test]
+fn the_unified_text_of_two_clusters_holds_no_value_of_a_cluster_variable() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the two clusters run two releases, so their packs have text to compare. The value `staging`
+    // of the variable `cluster_env` is in clear on side A
+    let a = cluster_snapshot(dir.path(), "cluster-a-staging");
+    let b = cluster_snapshot(dir.path(), "cluster-b");
+    let d = ops::compare(&a, &b, "t1");
+    let json = render::renderer(Format::Json, Paint::off(), true)
+        .render(&d, &a, &b, true)
+        .unwrap();
+    let doc: Value = serde_json::from_str(&json).unwrap();
+    assert!(
+        doc["a"]["cluster"]["variables"]
+            .to_string()
+            .contains("staging"),
+        "side A holds the clear value, so this test proves something"
+    );
+    let mut texts = Vec::new();
+    for pack in doc["packs"].as_array().unwrap() {
+        texts.extend(pack["values"]["unified"].as_str());
+        for m in pack["manifests"].as_array().unwrap() {
+            texts.extend(m["unified"].as_str());
+        }
+    }
+    assert!(
+        texts.len() >= 3,
+        "the values and the manifests have text: {texts:?}"
+    );
+    for text in texts {
+        assert!(!text.contains("staging"), "{text}");
+    }
+}
+
+#[test]
 fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drift() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -13351,6 +13386,7 @@ fn serve_behind() -> MemoryApi {
 const WITH_IMPACT: ops::BehindOptions = ops::BehindOptions {
     impact: true,
     since: None,
+    pin: None,
     pre_release: false,
 };
 
@@ -14264,6 +14300,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         &ops::BehindOptions {
             impact: false,
             since: Some(previous),
+            pin: None,
             pre_release: false,
         },
     );
@@ -14467,6 +14504,101 @@ fn behind_with_no_impact_makes_no_validate_request() {
     assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(!text.contains("palette "), "{text}");
+}
+
+/// `serve_behind`, and a second pack in the Public Repo: `csi-extra` at 1.0.0 and 1.1.0.
+fn serve_behind_two_packs() -> MemoryApi {
+    let summary = |version: &str| {
+        let mut s = pack_summary(
+            &format!("pk-extra-{version}"),
+            version,
+            "reg-public",
+            "sha256:eee",
+            "a: 1\n",
+        );
+        s["spec"]["name"] = Value::from("csi-extra");
+        s
+    };
+    let entity = serde_json::json!({"layer": "csi", "tags": [
+        {"tag": "1.0.0", "packUid": "pk-extra-1.0.0"},
+        {"tag": "1.1.0", "packUid": "pk-extra-1.1.0"}]});
+    common::serve_registry_pack(
+        serve_behind(),
+        "csi-extra",
+        serde_json::json!([summary("1.0.0"), summary("1.1.0")]),
+        entity,
+        "reg-public",
+    )
+}
+
+#[test]
+fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind_two_packs();
+    // the record of a profile version that pins two packs, and both are behind
+    let mut record = profile_pinning(&base);
+    let extra = snapshot_of(&base, "pack:csi-extra@1.0.0")
+        .unwrap()
+        .packs
+        .remove(0);
+    let key = extra.key.clone();
+    record.packs.push(extra);
+    let path = dir.path().join("csi.json");
+    common::write_snapshot(&path, &record, false);
+    let api = base
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            upgrade_refusal(UPGRADE_REFUSAL),
+        )
+        .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
+
+    let every = api.clone();
+    let r = behind_of(&every, std::slice::from_ref(&path), &WITH_IMPACT);
+    assert_eq!(r.pins.len(), 2);
+    assert_eq!(every.posted().len(), 2, "one request for each pin");
+
+    let one = api.clone();
+    let options = ops::BehindOptions {
+        pin: Some(key),
+        ..WITH_IMPACT
+    };
+    let r = behind_of(&one, &[path], &options);
+    assert_eq!(r.pins.len(), 1);
+    assert_eq!(r.pins[0].name, "csi-extra");
+    assert_eq!(r.pins[0].bump.as_ref().unwrap().to, "1.1.0");
+    assert_eq!(one.posted().len(), 1, "{:?}", one.posted());
+    assert_eq!(
+        (r.summary.pins, r.summary.behind, r.summary.errors),
+        (1, 1, 0)
+    );
+}
+
+#[test]
+fn behind_refuses_a_pin_that_no_record_holds_before_any_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let path = dir.path().join("csi.json");
+    common::write_snapshot(&path, &profile_pinning(&base), false);
+    let connects = std::cell::Cell::new(0);
+    for pin in ["csi/nothing", "addon/csi-aws-ebs", "csi-aws-ebs"] {
+        let err = ops::behind(
+            std::slice::from_ref(&path),
+            &ops::BehindOptions {
+                pin: Some(pin.to_string()),
+                ..WITH_IMPACT
+            },
+            |_| {
+                connects.set(connects.get() + 1);
+                Ok(Palette::new(&base))
+            },
+            "2026-09-26T00:00:00Z",
+            &Progress::silent(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Usage { .. }), "{pin}: {err}");
+        assert!(err.to_string().contains(&format!("--pin {pin}")), "{err}");
+    }
+    assert_eq!(connects.get(), 0, "strata reads the records first");
 }
 
 #[test]
@@ -14972,6 +15104,7 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
         &ops::BehindOptions {
             impact: false,
             since: None,
+            pin: None,
             pre_release: false,
         },
     );

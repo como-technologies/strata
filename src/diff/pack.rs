@@ -452,6 +452,10 @@ pub struct ValuesDiff {
     pub removed_count: usize,
     /// The leaves, sorted by path.
     pub diff: Vec<Leaf>,
+    /// With `compare --json --full`, when the values changed: the unified diff of the raw text of
+    /// the values, as `--full` prints it. The text holds the mask that Palette writes over a secret.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unified: Option<String>,
 }
 
 /// One manifest across the two sides.
@@ -468,6 +472,10 @@ pub struct ManifestChange {
     /// Content hash in B.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hash_b: Option<String>,
+    /// With `compare --json --full`: the unified diff of the manifest, as `--full` prints it. A
+    /// manifest that one side added or removed has its text against an empty side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unified: Option<String>,
 }
 
 /// The masked paths of the two sides of one pack, sorted, each one time.
@@ -527,6 +535,7 @@ pub(super) fn values_diff(x: &Pack, y: &Pack) -> ValuesDiff {
         added_count: count(Op::Added),
         removed_count: count(Op::Removed),
         diff,
+        unified: None,
     }
 }
 
@@ -546,6 +555,7 @@ pub(super) fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
                         name: n.to_string(),
                         hash_a: Some(a.to_string()),
                         hash_b: Some(b.to_string()),
+                        unified: None,
                     });
                 }
             }
@@ -554,12 +564,14 @@ pub(super) fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
                 name: n.to_string(),
                 hash_a: Some(a.to_string()),
                 hash_b: None,
+                unified: None,
             }),
             (None, Some(b)) => out.push(ManifestChange {
                 op: Op::Added,
                 name: n.to_string(),
                 hash_a: None,
                 hash_b: Some(b.to_string()),
+                unified: None,
             }),
             (None, None) => {}
         }
