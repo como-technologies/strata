@@ -72,8 +72,9 @@ const SLABS = [
 ];
 // The commands that the page gives for a next step. The namespace is the one of deploy/observer.
 const LOG_COMMAND = "kubectl -n strata-observer logs deploy/strata-observer --tail=20";
-const PORT_FORWARD_COMMAND = "kubectl -n strata-observer port-forward deploy/strata-observer 8080";
-const RECORDS_COMMAND = "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*/dev.json | kubectl apply --server-side -f -";
+// The page was reached on a local port of a port-forward, often not 8080 because that port is in use. The command keeps that port.
+const portForwardCommand = () => `kubectl -n strata-observer port-forward deploy/strata-observer ${location.port || "80"}:8080`;
+const RECORDS_COMMAND = "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*.json | kubectl apply --server-side -f -";
 const APPLY_COMMAND = "kubectl apply -k .";
 const CAN_LIST_PODS_COMMAND = "kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer";
 // The records are in four Secrets, and the page does not know which one holds a record. A key is the name and the version
@@ -413,7 +414,7 @@ function noFindings() {
   if (calmOk()) {
     return splash(TONE.CALM, `All quiet on ${clusterName()}`, h`Nothing needs attention. <b>${n.packsInFull} of ${n.packs} packs</b> were checked in full, ${when}.`,
       facts([[n.profiles, plural(n.profiles, "profile matches its record", "profiles match their records")], [n.notChecked, "not checked"],
-        [c.versions.readAt ? n.newer : "-", "newer versions, a choice and not a fault"]]), SIZE.CARD);
+        [c.versions.readAt ? n.newer : "-", plural(c.versions.readAt ? n.newer : 0, "newer version", "newer versions")]]), SIZE.CARD);
   }
   const more = n.notChecked > 0 ? next(h`<a href="#notchecked">Read the causes in Not checked.</a>`) : "";
   return splash(settledTone(), "No finding", `${n.packsInFull} of ${n.packs} packs were checked in full, ${when}. ${lim.join(" ")}`, more, SIZE.CARD);
@@ -445,7 +446,7 @@ function noCauses() {
 // data on the page, the same fault is a bar over that data.
 const offlineSplash = () => splash(TONE.LOST, "This page lost its line to the observer",
   `The port-forward may have ended, or the pod may have restarted. This page asks again ${REFRESH_WORDS}.`,
-  h`${cmd(PORT_FORWARD_COMMAND)}${tryButton("page")}`);
+  h`${cmd(portForwardCommand())}${tryButton("page")}`);
 
 // missingSplash is the screen of a page that the data does not hold. w gives the title, the name, the reason, and the way back.
 const missingSplash = w => splash(TONE.OFF, w.title, h`<span class="m">${w.name}</span> ${w.why}`, h`<div class="actions"><a class="btn" href="${w.home[0]}">${w.home[1]}</a></div>`);

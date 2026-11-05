@@ -115,8 +115,8 @@ placeholder.
 A pack with more than 256 KiB of text for a side shows no text. The page shows the splash
 "Too much rock to carry", and it gives the command `strata compare record.json ... --full`. [The
 text of a diff](../automation/observer.md#the-text-of-a-diff) gives the rules. The
-check `diff-text` of [What the live example verifies](../development/live-runs.md)
-tests the text on a cluster that Palette built.
+check `diff-text` of [What the live example verifies](../development/live-runs.md#observersh)
+reads the text from the pod on a cluster that Palette built, through the port-forward.
 
 The head of the card shows the five change flags. A lit flag is violet, and a flag that
 did not light is dim. A hover or a focus shows what a flag means, with the words of
@@ -127,14 +127,23 @@ The last card of the page of a profile, and of a pack, is "Check this yourself".
 the commands that answer the same questions at your terminal. Each row has a question, a
 command with a button Copy, and what the page says now. The questions are:
 
-- Which record did this check use?
-- Does Palette still hold the version?
+- Get the record that this check used
+- Does Palette still have this version?
 - Who changed it?
 - What changed?
-- Does the cluster still run the record?
+- Does this cluster still run the record?
+
+A pack with a newer version adds two more: "What does the move change?" and "Which newer
+versions does Palette list?".
 
 The first command reads the record out of the Secrets of the observer into `record.json`.
-The other commands read that file.
+The other commands read that file. The two kinds of row need different access:
+
+- **The first row needs `kubectl` and a role that reads Secrets.** The reader role of
+  [Install](../automation/observer.md#install) gives no Secret. A person with only that
+  role cannot run this row.
+- **Each other row runs `strata`.** It needs the `strata` binary and a key of Palette at
+  your terminal: see [Configure](../configure.md).
 
 ## 5. Ask Palette about a move
 
@@ -158,9 +167,13 @@ one of three ways:
   is no finding, and it raises no severity.
 
 A second click on an answered move sends nothing. The observer asks again after
-"Palette gave no answer". Nothing asks on a timer. The checks `ask-one-post` and
-`ask-words` of [What the live example verifies](../development/live-runs.md) test
-the click on a cluster that Palette built.
+"Palette gave no answer". Nothing asks on a timer. The column "Palette" of the table
+shows the short words "No error", "Refuses", and "No answer".
+
+The checks `ask-one-post` and `ask-words` of [What the live example verifies](../development/live-runs.md#observersh)
+test the click. `ask-one-post` runs the observer on the machine of the script, behind a
+request counter. `ask-words` clicks on the pod on a cluster that Palette built, through the
+port-forward.
 
 ## 6. Read the digest of each tag
 
@@ -190,7 +203,9 @@ that matches no pack, such as an agent of Palette, shows as "no pack". Two findi
 can follow:
 
 - **`image-split`.** Pods run one tag with two digests. A new node pulled the rebuilt
-  image, and the old nodes keep the old one.
+  image, and the old nodes keep the old one. On cluster A, each new pod gets the policy
+  `Always`. It runs the new digest, also on an old node: see [The pods of a
+  cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 - **`image-moved`.** A tag runs another digest than the first one that the observer
   saw. Each pod that started runs the rebuilt image.
 
@@ -214,7 +229,9 @@ call, and it sends the newer versions in a weekly digest. A mute has an end date
 
 Make the Secret with the address of each webhook, as in
 [Turn them on](../automation/observer.md#turn-them-on). Then name the component and
-the ConfigMap in the kustomization of the observer, and apply it again:
+the ConfigMap in the kustomization of the observer, and apply it again. Keep the line
+`namespace: strata-observer` of that file, because the ConfigMap needs the namespace of
+the pod:
 
 ```yaml
 components:
@@ -270,9 +287,10 @@ of the first sight. It holds no value, so a channel of your team can show it.
 - The read of the pods sees a rebuilt tag only after a pod pulls the image. It stays
   silent when the pods pull an unchanged digest from a mirror, and that is right. See
   [What the read catches and what it does not](../automation/observer.md#what-the-read-catches-and-what-it-does-not).
-- An alert fires on a finding. The vendor case of step 6 makes no finding, so it fires
-  no alert. A dead observer sends nothing: alert on the Deployment with the monitoring
-  of your team.
+- A rebuilt tag makes no finding until a pod pulls the image. With `--read-pods`, the pull
+  opens a finding, and the news `image` sends it. A mirror that serves the old digest stays
+  `steady`. A dead observer sends nothing: alert on the Deployment with the monitoring of
+  your team.
 - A new pod sends the open findings again, once, because it starts with an empty state.
   One message too many is better than one too few.
 - The check is as old as the last content cycle. The page shows the time of that

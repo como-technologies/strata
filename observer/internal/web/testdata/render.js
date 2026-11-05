@@ -209,7 +209,7 @@ const elements = {};
 const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}, scrollIntoView() { jumps.push(id); }});
 const sandbox = vm.createContext({
   document: {getElementById: element, addEventListener(type, f) { (listeners[type] = listeners[type] || []).push(f); }, activeElement: null},
-  location: {hash: ""}, addEventListener() {}, scrollTo() {}, setInterval() {}, setTimeout() {}, fetch: fakeFetch, console,
+  location: {hash: "", port: "18080"}, addEventListener() {}, scrollTo() {}, setInterval() {}, setTimeout() {}, fetch: fakeFetch, console,
   navigator: {clipboard: {writeText: async text => { copies.push(text); }}},
 });
 

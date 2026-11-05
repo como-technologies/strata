@@ -8,8 +8,9 @@ use std::process::Command;
 use serde_yaml::Value;
 
 use crate::common::{
-    CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, page_section, path_with, recipe,
-    repo_file, run_with_kubectl, script, steps, text, workflow, workflow_text,
+    CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, on_path, page_section,
+    path_with, recipe, repo_file, run_with_kubectl, script, steps, text, walk, workflow,
+    workflow_text,
 };
 
 /// A file of `deploy/observer/`, parsed as one YAML document.
@@ -1143,6 +1144,132 @@ fn the_recipe_observer_manifests_alerts_passes_for_five_objects_and_the_flag_and
     assert_eq!(run(&[]), Some(0), "the five objects and the flag");
     assert_eq!(run(&[("FAKE_EXTRA", "1")]), Some(1), "six objects");
     assert_eq!(run(&[("FAKE_NO_FLAG", "1")]), Some(1), "no flag --alerts");
+}
+
+// ---- the kustomization that the book gives for the alerts --------------------------------------------
+
+const BOOK_ALERT_KEYS: [&str; 3] = ["components", "configMapGenerator", "generatorOptions"];
+
+/// The kustomization that the book gives for the alerts: the file of step 6 of "Install", with the
+/// lines of step 3 of "Turn them on" added to it, as that step says.
+fn book_alerts_kustomization() -> Value {
+    let mut file: Value =
+        serde_yaml::from_str(&block_with(&install_steps(), "yaml", "kind: Kustomization")).unwrap();
+    let added: Value = serde_yaml::from_str(&block_with(
+        &page_section("docs/src/automation/observer.md", "### Turn them on"),
+        "yaml",
+        "configMapGenerator",
+    ))
+    .unwrap();
+    for (key, value) in added.as_mapping().unwrap() {
+        file.as_mapping_mut()
+            .unwrap()
+            .insert(key.clone(), value.clone());
+    }
+    file["images"][0]["newTag"] = "v0.29.0".into();
+    file
+}
+
+/// Render `kustomization` in a tree like the repository of a team: the folder `deploy/observer`, the
+/// file `alerts.json`, and the kustomization at the root. Gives the objects of the render.
+fn render_in_team_tree(kubectl: &Path, kustomization: &Value) -> Vec<Value> {
+    let dir = tempfile::tempdir().unwrap();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let deploy = root.join("deploy/observer");
+    for file in walk(&deploy) {
+        let to = dir
+            .path()
+            .join("deploy/observer")
+            .join(file.strip_prefix(&deploy).unwrap());
+        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+        std::fs::copy(&file, &to).unwrap();
+    }
+    std::fs::copy(
+        root.join("examples/observer-alerts/alerts.json"),
+        dir.path().join("alerts.json"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("kustomization.yaml"),
+        serde_yaml::to_string(kustomization).unwrap(),
+    )
+    .unwrap();
+    let o = Command::new(kubectl)
+        .arg("kustomize")
+        .arg(dir.path())
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    text(&o.stdout)
+        .split("\n---\n")
+        .map(|doc| serde_yaml::from_str(doc).unwrap())
+        .collect()
+}
+
+/// The `ConfigMap` with the rules of the alerts, in the objects of a render.
+fn rules_map(objects: &[Value]) -> &Value {
+    objects
+        .iter()
+        .find(|o| o["kind"] == "ConfigMap" && o["metadata"]["name"] == ALERT_RULES_MAP)
+        .expect("the render holds the ConfigMap of the rules")
+}
+
+/// The volume `alert-rules` is not optional, so the pod does not start when its `ConfigMap` is in
+/// another namespace. The file that the book gives names the namespace of the pod, and the other pages
+/// that give a kustomization for the alerts name it too, or add the same lines to that file.
+#[test]
+fn the_kustomization_that_the_book_gives_for_the_alerts_names_the_namespace_of_the_pod() {
+    let book = book_alerts_kustomization();
+    let namespace = &deploy_doc("kustomization.yaml")["namespace"];
+    assert_eq!(&book["namespace"], namespace, "step 6 of the install");
+
+    let use_case: Value = serde_yaml::from_str(&block_with(
+        &repo_file("docs/src/use-cases/observer.md"),
+        "yaml",
+        "configMapGenerator",
+    ))
+    .unwrap();
+    let development: Value = serde_yaml::from_str(&block_with(
+        &repo_file("docs/src/development/observer-deploy.md"),
+        "yaml",
+        "configMapGenerator",
+    ))
+    .unwrap();
+    assert_eq!(&development["namespace"], namespace, "observer-deploy.md");
+    for key in BOOK_ALERT_KEYS {
+        assert_eq!(use_case[key], book[key], "{key} in the use case");
+        assert_eq!(development[key], book[key], "{key} in observer-deploy.md");
+    }
+}
+
+/// A real render, as the runner of CI does it with `kubectl`: the `ConfigMap` that the book makes has
+/// the namespace of the pod. The control takes the line `namespace` out of the same file, and the
+/// `ConfigMap` then has none, which is the fault that the book had.
+#[test]
+fn kubectl_kustomize_renders_the_book_kustomization_with_the_config_map_in_the_namespace_of_the_pod()
+ {
+    let Some(kubectl) = on_path("kubectl") else {
+        eprintln!("skipped: this machine has no kubectl; CI renders the file of the book");
+        return;
+    };
+    let book = book_alerts_kustomization();
+    let objects = render_in_team_tree(&kubectl, &book);
+    assert_eq!(
+        rules_map(&objects)["metadata"]["namespace"],
+        deploy_doc("kustomization.yaml")["namespace"]
+    );
+    assert_eq!(
+        objects.iter().filter(|o| o["kind"] == "Deployment").count(),
+        1
+    );
+
+    let mut without = book;
+    without.as_mapping_mut().unwrap().remove("namespace");
+    let objects = render_in_team_tree(&kubectl, &without);
+    assert!(
+        rules_map(&objects)["metadata"].get("namespace").is_none(),
+        "without the line, the ConfigMap has no namespace"
+    );
 }
 
 // ---- the steps of the page "The observer" ------------------------------------------------------------

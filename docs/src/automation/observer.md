@@ -212,19 +212,28 @@ cluster](../development/live-example.md#a-test-cluster).
    version that the cluster runs. The records script writes four Secrets on standard
    output. It refuses a record of a cluster and two records of one profile version.
    Use `--server-side`: a client-side apply copies each Secret to an annotation that
-   has a limit of 256 KiB.
+   has a limit of 256 KiB. The glob `releases/*.json` fits a folder with the records of
+   one project.
 
    ```bash
    scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
      | kubectl apply --server-side -f -
    ```
 
-6. **Apply the manifests.** Write a `kustomization.yaml` that names the folder, the
-   tag of the image, and the pull Secret. The tag is the tag of the release of strata.
+   [The everyday loop](../loop.md#the-pipeline-publishes) keeps a folder for each version,
+   with the records of `dev` and of `prod` in it. Its glob is `releases/*/dev.json`, so it
+   differs from the glob above.
+
+6. **Apply the manifests.** Write a `kustomization.yaml` that names the namespace, the
+   folder, the tag of the image, and the pull Secret. The tag is the tag of the release
+   of strata. The line `namespace` is part of the step. An object that your file makes,
+   such as the ConfigMap of the alerts, gets no namespace without it. `kubectl apply -k .`
+   then puts that object in the namespace of your context, and the pod does not start.
 
    ```yaml
    apiVersion: kustomize.config.k8s.io/v1beta1
    kind: Kustomization
+   namespace: strata-observer
    resources:
      - deploy/observer
    images:
@@ -262,6 +271,10 @@ cluster](../development/live-example.md#a-test-cluster).
    ```bash
    kubectl -n strata-observer port-forward deploy/strata-observer 8080
    ```
+
+   When port 8080 is in use on your machine, give another local port, such as
+   `18080:8080`, and open that port. The command that the page gives to open it again
+   keeps the port of the address that you opened.
 
 [The image and the manifests of the observer](../development/observer-deploy.md)
 gives each file and the signature check of the image.
@@ -304,10 +317,9 @@ A live run shows what Palette does with the layer:
   its record.
 - **The profile of the observer has no record.** The page lists it under "Not
   checked", and it shows no finding for it.
-- **A removal leaves the namespace.** When you remove the profile from the cluster,
-  Palette deletes the Deployment. The run checks nothing else. Delete the namespace
-  with `kubectl delete namespace strata-observer`, so that the key goes. The
-  ConfigMap, the key, and the records stay until then.
+- **A removal deletes the Deployment.** When you remove the profile from the cluster,
+  Palette deletes the Deployment. No run shows what happens to the namespace. Delete
+  the namespace with `kubectl delete namespace strata-observer`, so that the key goes.
 
 An edit of the profile that drops an object from the manifest leaves the object on
 the cluster. To remove it, delete it with `kubectl`. See [An object that an edit
@@ -351,7 +363,7 @@ cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 With `--read-pods`, each content cycle starts with a `list` of the pods of every
 namespace. The observer takes the image of each container from the spec of its pod,
 and the digest from the `imageID` that the node reports. It shows no other fact of a
-pod. Then it counts the pods of each digest for each image reference. The Images
+pod: the page holds no pod name and no namespace. Then it counts the pods of each digest for each image reference. The Images
 screen shows the result. [The API of the observer](../reference/observer-api.md#the-images)
 lists the routes and the fields.
 
@@ -374,7 +386,10 @@ reaches a pod only when a node pulls the tag again. So the read catches these ca
 
 - **A tag that a new node pulls from a mutable registry.** The new node runs the
   new digest. The old nodes keep the old one. The tag then has two digests, and the
-  finding is `image-split`.
+  finding is `image-split`. On cluster A, the API server runs the admission plugin
+  `AlwaysPullImages`. Each new pod there gets the policy `Always`, and it runs the new
+  digest, also on an old node. See [The pods of a
+  cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 - **A pull at a restart.** A pod with the pull policy `Always`, or with the tag
   `:latest`, pulls the tag again when it starts. When each pod runs the new digest,
   the finding is `image-moved`.
@@ -497,8 +512,8 @@ it.
   that pack. The page then shows the splash "Too much rock to carry", and it gives the
   command `strata compare record.json <profile> --full`. The table of settings stays.
 
-The check `diff-text` of [What the live example verifies](../development/live-runs.md)
-tests the text of a diff on a cluster that Palette built.
+The check `diff-text` of [What the live example verifies](../development/live-runs.md#observersh)
+tests the text of a diff. It reads the text from the pod on a cluster that Palette built.
 
 ### A value of many lines
 
@@ -525,33 +540,30 @@ added line is green, as in the text below the table.
 A place that has nothing to show draws the mark of the logo, a headline, and one line that
 states the fact. The line gives the next step when one exists, with a command that you
 copy. A finding always shows its data. [The server of the
-observer](../development/observer-api.md#the-splash) lists each place.
+observer](../development/observer-api.md#the-splash) lists each place, and the motion of
+each mark.
 
 The page never reads calmer than the check allows. A page with a finding, a failed read,
 or a cause in "Not checked" shows no calm mark. A page that is lost, stale, or cannot
-reach the observer shows none either. The tile "Newer versions" says "All packs current"
-only after a read of the versions. The tile "Image changes" is green only when the last
+reach the observer shows none either. The tile "Newer versions" says `All <n> packs
+current` only after a read of the versions. The tile "Image changes" is green only when the last
 read of the pods worked.
 
 | The page says | What it means | The next step |
 | --- | --- | --- |
 | Reading the layers | The first check runs. | Wait. The page fills in when the check ends. |
 | Nothing to compare against yet | No record exists. | Write the records with `observer-records.sh`. On a test cluster, `--first-seen` records what each profile holds now. |
-| We lost the signal from Palette | No check ended well, and the last ones failed. The line names the error. | Check the key in the Secret `strata-observer-key`, then read the log. |
+| We lost the signal from Palette | No check ended well, and the last ones failed. The line names the error. | For HTTP 401 and 403, check the key in the Secret `strata-observer-key`, then read the log. For another error, check that the observer reaches Palette, then read the log. |
 | Checks stopped before one ended well | The content check did not end well since the start. | Read the log. |
-| This page lost its line to the observer | The port-forward ended, or the pod restarted. | Run the port-forward again, or click "Try now". |
-| All quiet on the cluster | The last check ended well and found nothing. The line gives the number of packs checked in full and the age of the check. | None. |
+| This page lost its line to the observer | The port-forward ended, or the pod restarted. | Run the port-forward command that the page gives. It keeps the local port of this page. Or click "Try now". |
+| All quiet on `<cluster>` | The last check ended well and found nothing. The line gives the number of packs checked in full and the age of the check. Three facts follow: the profiles that match their records, the causes not checked, and the newer versions. | None. |
 | Pods are not on the menu here | The read of the pods is off. This is a choice, and no fault. | [Add the read](#add-the-read). |
-| The pods stay silent | The read of the pods failed. | Ask the API server if the role can list pods, or read the log. |
+| The pods stay silent | The read of the pods failed. | For HTTP 401 and 403, ask the API server if the role of the observer can list pods. For another error, read the log. |
 | Nobody gets paged yet | The observer sends no alert. This is a choice, and no fault. | [Turn the alerts on](#turn-them-on). |
 | Undisturbed | A side of a pack holds what the record holds. | None. |
 | Part of this layer is hidden | Strata did not check the pack in full, or the last read of its profile failed in part. A side with no change then keeps the last good answer, and the page does not call it unchanged. The line gives the cause. | Read the page "Not checked". |
 | One moment, a check is running | A cycle holds the one slot of the observer for a read. | Wait, or click "Try now". |
 | Too much rock to carry | The text of the pack is above 256 KiB. | Run the command that the page gives. |
-
-The marks move. The calm mark breathes, and the mark of a read in progress stacks its
-slabs. The mark of a choice marches in outline. The amber mark pulses. The top slab of a
-lost mark slips off. A person who asks the system for less motion sees each mark at rest.
 
 ## Ask Palette about a move
 
@@ -566,14 +578,19 @@ for each record that pins the pack. A record of a profile version gives one `POS
 request asks a question and changes nothing. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
 says what the answer covers.
 
-| The page reads | Meaning |
-| --- | --- |
-| Palette gave no error | Palette checked the default values of the new version and gave no error. It did not check your own values. |
-| `Palette refuses: <code>` | Palette gave the error `<code>`. The page shows the message of Palette and the clusters that the message names. |
-| Palette gave no answer | A request failed. The page shows the HTTP status, when the failure has one. |
+The column "Palette" of the table shows the short word of the answer. The card "Move to"
+shows the long one:
+
+| The column "Palette" | The card "Move to" | Meaning |
+| --- | --- | --- |
+| Ask Palette | Ask Palette about this move | No click yet. |
+| No error | Palette gave no error. | Palette checked the default values of the new version and gave no error. It did not check your own values. The note says that the page "behind" in the book tells what the answer covers. |
+| Refuses | `Palette refuses: <code>` | Palette gave the error `<code>`. The card shows the message of Palette and the clusters that the message names. |
+| No answer | Palette gave no answer. | A request failed. The card adds the HTTP status, when the failure has one. A button "Ask again" follows. |
 
 - **A failed request is no finding.** A request that Palette refuses for the role of
-  the key is one. The answer is "Palette gave no answer", and it raises no severity.
+  the key is a failed request. The answer is "Palette gave no answer", and it raises no
+  severity.
 - **The observer keeps an answer in memory.** It keeps "Palette gave no error" and
   "Palette refuses" until the pin moves or the pod restarts. A second click on that move
   sends nothing.
@@ -589,7 +606,10 @@ says what the answer covers.
 [The API of the observer](../reference/observer-api.md#ask-palette-about-a-move) gives
 the route and the header that the server needs for the click. The checks
 `ask-one-post` and `ask-words` of [What the live example
-verifies](../development/live-runs.md) test the click on a cluster that Palette built.
+verifies](../development/live-runs.md#observersh) test the click. `ask-one-post` runs the
+observer on the machine of the script, behind a request counter, because the counter
+cannot see the requests of a pod. `ask-words` clicks on the pod on a cluster that Palette
+built, through the port-forward.
 
 ## Alerts
 
@@ -599,9 +619,10 @@ opens, and one when the finding clears. The send is off by default. With no
 
 Alerts are a stopgap. Palette has alerts for the health of a cluster, and no event for
 a published version that changed. Palette is the owner of that event. When Palette
-adds it, strata removes the news `drift` from the alerts. [An event when a published
-version changes](../internals/palette/profiles.md#an-event-when-a-published-version-changes)
-says what Palette offers. The observer sends nothing about health.
+adds it, strata removes the news `drift` of the published kinds from the alerts. [An event
+when a published version changes](../internals/palette/profiles.md#an-event-when-a-published-version-changes)
+gives the owner of each kind of news and what removes it. The observer sends nothing about
+health.
 
 ### What a message holds
 
@@ -681,16 +702,18 @@ The Alerts screen shows one state for each rule, with the words of Prometheus:
   Alerts screen shows a bar while a message waits.
 - **A digest goes at most once in each period of `--digest-every`.** The period is 7
   days. A digest lists each open item of the digest rules of one channel, so an item
-  that stays open is in each digest. A digest has no clear message. With no item open,
+  that stays open is in each digest. A digest lists 30 items, and then the line
+  `and <n> more.` A digest has no clear message. With no item open,
   the digest waits for the first item. A channel that got its digest gets no second one
   in the period, also when the send to another channel failed.
 - **`once` sends nothing.** With no `--alerts`, nothing sends.
 
 ### What alerts do not do
 
-- **The vendor case fires no alert.** An alert fires on a finding. A vendor that
-  rebuilds an image under one tag makes no finding: see [A vendor rebuilds an image
-  under one tag](../use-cases/image-tag.md).
+- **A rebuild makes no finding until a pod pulls it.** An alert fires on a finding. With
+  `--read-pods`, the pull opens a finding, and the news `image` sends it. A mirror that
+  serves the old digest stays `steady`, and it sends nothing. See [A vendor rebuilds an
+  image under one tag](../use-cases/image-tag.md).
 - **A dead observer sends nothing.** The message comes from the pod. Alert on the
   Deployment with the monitoring of your team. The observer sends no heartbeat, and it
   never reads the health of a workload.
@@ -717,7 +740,9 @@ object. These steps run from the repository of your team, after [Install](#insta
 
 3. **Add the component and the ConfigMap.** Add these lines to the `kustomization.yaml`
    of step 6 of [Install](#install). Copy `deploy/observer/alerts` with the other
-   manifests.
+   manifests. Keep the line `namespace: strata-observer` of that file: it puts the
+   generated ConfigMap in the namespace of the pod. The volume `alert-rules` is not
+   optional, so the pod does not start without the ConfigMap in its namespace.
 
    ```yaml
    components:
@@ -740,9 +765,9 @@ object. These steps run from the repository of your team, after [Install](#insta
 
 The address must use `https`. The observer follows no redirect, and it reads the
 address again at each send, because the kubelet renews a Secret. The network policy
-of the base lets the observer connect to port 443. A team can narrow that rule to the
-address of its webhook. The flag `--alerts-allow-http` allows an `http` address for
-the tests of the observer. Do not use it on a cluster.
+of the base lets the observer connect to port 443. To narrow that rule, see [What you give
+the observer](#what-you-give-the-observer). The flag `--alerts-allow-http` allows an
+`http` address for the tests of the observer. Do not use it on a cluster.
 
 ## What the observer does not see
 
@@ -754,8 +779,8 @@ and it never reads "No change" for a pack that it did not check.
    `--read-pods`, the observer sees the move after a pull only: see [What the read
    catches](#what-the-read-catches-and-what-it-does-not). A pin in the pack, or the
    copy step of your pipeline, closes this. See [What OK does not cover](../commands/verify.md#what-ok-does-not-cover)
-   and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). This case
-   makes no finding, so it fires no alert.
+   and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). A rebuild
+   makes no finding until a pod pulls it, so it sends no alert before then.
 2. **A change on the cluster with `kubectl edit`.** The service compares what
    Palette holds. Without `--read-pods`, it reads no object in the cluster. With the
    flag, it reads the pods and names no edit. So it does not see such an edit.
@@ -764,8 +789,8 @@ and it never reads "No change" for a pack that it did not check.
 3. **What the workload runs.** "This cluster's copy in Palette" is the copy that
    Palette holds for this cluster. It is not the objects that run in the cluster.
    The page does not show the health of a workload: `OK` means that the content
-   matches. A live run showed that a crash loop left each count and each status the
-   same. See the check `image-crash-loop` of
+   matches. A container in a crash loop keeps its digest and makes no finding. See the
+   check `image-crash-loop` of
    [observer-images.sh](../development/live-runs.md#observer-imagessh).
 4. **The value of a cluster variable.** It is outside the root, so a change of one
    does not show. The service also never shows the value: see
@@ -781,7 +806,9 @@ and it never reads "No change" for a pack that it did not check.
 2. **Never a profile variable for the key.** A profile variable is in clear in the
    copy of the cluster. So the key stays there in clear. Make the Secret with `kubectl`.
 3. **Egress to Palette** from the cluster. The network policy of the observer allows
-   DNS and HTTPS only. A team can narrow the HTTPS rule to the address of Palette.
+   DNS and HTTPS only. A team that narrows the HTTPS rule must list Palette, each
+   webhook of the alerts, and, with the read of the pods, the API server. A rule that
+   names Palette alone stops the alerts and the read of the pods.
    A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
    The read of the pods adds TCP 6443: see [Add the read](#add-the-read).
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle

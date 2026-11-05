@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{
-    CommandExt, copy_scripts, executable, fake_bin, path_with, repo_file, text, walk,
+    CommandExt, copy_scripts, executable, fake_bin, on_path, path_with, repo_file, text, walk,
 };
 
 /// The key of Palette and the pull token of a run. A run must show neither in an argument of
@@ -505,21 +505,6 @@ fn the_overlay_of_read_pods_adds_the_component_as_a_team_lists_it() {
         assert!(up.path("fake/overlay/pods").join(file).is_file(), "{file}");
     }
     assert!(up.path("fake/clusterrole").exists() && up.path("fake/clusterrolebinding").exists());
-}
-
-/// The first `tool` on the `PATH` of the test, if there is one. The runner of GitHub has `kubectl` and
-/// `just`, so a test that needs one fails there when it is missing, and a machine without it skips.
-fn on_path(tool: &str) -> Option<PathBuf> {
-    let found = std::env::var_os("PATH").and_then(|path| {
-        std::env::split_paths(&path)
-            .map(|dir| dir.join(tool))
-            .find(|c| c.is_file())
-    });
-    assert!(
-        found.is_some() || std::env::var_os("CI").is_none(),
-        "the runner of CI must have {tool}"
-    );
-    found
 }
 
 #[test]
