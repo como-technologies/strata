@@ -5,8 +5,9 @@
 #   scripts/observer-contract.sh [--write]
 #
 # --write also copies the documents to observer/internal/docs/testdata/, for the tests with no binary.
-# It also builds strata-observer and runs `once` against the seeds, with the real binary of strata.
-# Needs just, go, jq, curl, and target/release/strata.
+# It also builds strata-observer and runs `once` against the seeds, with the real binary of strata. It runs each command of the
+# card "Check this yourself" of the page against the stand-in, so it needs node too, as the render tests do.
+# Needs just, go, node, jq, curl, and target/release/strata.
 set -euo pipefail
 root=${STRATA_ROOT:-$(git rev-parse --show-toplevel)}
 observer=${STRATA_OBSERVER:-$root/observer}
@@ -94,6 +95,22 @@ run verify drift-record.json --summary --who --full >"$docs/verify-summary-drift
 records_dir edited drift-record.json
 once edited "$(cluster_uid payments)" edited
 expect edited '(.findings | length) == 1 and .findings[0].kind == "published-changed" and (.findings[0].who | length) >= 1'
+
+# The card "Check this yourself" gives commands with the names of this cluster. The test draws the page from the routes of a real
+# server, and it runs each command against this stand-in. The server stops before the later seeds, and it leaves no state.
+api=$work/api/edited
+mkdir -p "$api"
+port=$((20000 + RANDOM % 20000))
+serve_up "$(cluster_uid payments)" edited "$port"
+for route in cluster findings profiles newer notchecked events images asks alerts; do
+  curl -s "http://127.0.0.1:$port/v1/$route" >"$api/$route.json"
+  jq -e . "$api/$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
+done
+echo '[]' >"$api/diffs.json"
+serve_down
+rm -rf "$work/serve-state" "$work/serve-work"
+STRATA_BIN=$strata STRATA_CHECK_API=$api STRATA_CHECK_RECORD=$work/drift-record.json \
+  go -C "$observer" test ./internal/web/ -count=1 -run 'RunsAgainstTheStandIn'
 stop
 
 start behind-2
@@ -106,6 +123,9 @@ run compare "pack:$registry/cert-manager@1.20.3" "pack:$registry/cert-manager@1.
 run compare "pack:$registry/cni-cilium-oss@1.19.6" "pack:$registry/cni-cilium-oss@1.20.1" --full >"$docs/move-cni-cilium-oss.json"
 # The click "Ask Palette" runs behind with --pin for one pack. This is the one run of the observer that asks Palette.
 "$strata" behind behind-record.json --pin k8s/kubernetes --json --compact -q >"$docs/ask-behind.json" || [ "$?" -eq 1 ]
+# The rows of the card "Check this yourself" for a move give these two commands, with the registry of this stand-in.
+STRATA_BIN=$strata STRATA_CHECK_REGISTRY=$registry STRATA_CHECK_RECORD=$work/behind-record.json \
+  go -C "$observer" test ./internal/web/ -count=1 -run 'RunsAgainstTheStandIn'
 stop
 
 start cluster-release

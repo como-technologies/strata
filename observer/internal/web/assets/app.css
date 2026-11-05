@@ -230,3 +230,83 @@ details summary:hover{background:var(--panel2)}
 .theme button[aria-pressed="true"]{background:#35256a;color:#fff;font-weight:600}
 .theme button:focus-visible{outline:2px solid #a259f0;outline-offset:-2px}
 @media (max-width:1024px){.navfoot{grid-column:1/-1;margin-top:0;padding:4px 12px 9px;grid-template-columns:auto minmax(0,220px);align-items:center;gap:8px}}
+/* The splash: the mark of the logo with a state, a headline, and a line that states the fact. It has three sizes: the
+   page (lg), a card (md), and a line (.inl). The tone sets the look of the mark and its animation. The policy of the page
+   refuses an inline style, so the color of each slab is a rule here and not an attribute. */
+.slabs{display:block;flex:none}
+.slabs .s{transform-box:fill-box;transform-origin:center}
+.slabs .s0{fill:#7c4ddb}.slabs .s1{fill:#a259f0}.slabs .s2{fill:#f5618f}.slabs .s3{fill:#ffd08a}
+.slabs.tone-off .s{fill:none;stroke:var(--mut);stroke-width:1.4;stroke-dasharray:4 3}
+.slabs.tone-warn .s{fill:color-mix(in srgb,var(--amb) 22%,transparent);stroke:var(--amb);stroke-width:1}
+.slabs.tone-warn .s0{fill:none;stroke-dasharray:4 3}
+.slabs.tone-lost .s{fill:color-mix(in srgb,var(--mut) 30%,transparent)}
+.slabs.tone-lost .s0{fill:var(--red)}
+.slabs.tone-calm .s{animation:breathe 4.6s ease-in-out infinite}
+.slabs.tone-calm .s1{animation-delay:.28s}.slabs.tone-calm .s2{animation-delay:.56s}.slabs.tone-calm .s3{animation-delay:.84s}
+.slabs.tone-build .s{animation:rise 2.2s ease-in-out infinite both}
+.slabs.tone-build .s0{animation-delay:.9s}.slabs.tone-build .s1{animation-delay:.6s}.slabs.tone-build .s2{animation-delay:.3s}
+.slabs.tone-off .s{animation:march 9s linear infinite}
+.slabs.tone-warn .s1,.slabs.tone-warn .s2,.slabs.tone-warn .s3{animation:pulse 2.8s ease-in-out infinite}
+.slabs.tone-warn .s2{animation-delay:.4s}.slabs.tone-warn .s3{animation-delay:.8s}
+.slabs.tone-lost .s0{animation:slip 5.5s cubic-bezier(.5,0,.75,0) infinite}
+@keyframes breathe{0%,100%{transform:none}50%{transform:translateY(-2.2px)}}
+@keyframes rise{0%{opacity:.12;transform:translateY(7px)}35%,75%{opacity:1;transform:none}100%{opacity:.12;transform:translateY(7px)}}
+@keyframes march{to{stroke-dashoffset:-70}}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes slip{0%,52%{transform:none;opacity:1}58%{transform:translate(1.5px,-.8px) rotate(1deg);opacity:1}62%{transform:translate(-1px,.4px);opacity:1}86%{transform:translate(24px,12px) rotate(11deg);opacity:0}87%{transform:translate(-10px,-12px);opacity:0}100%{transform:none;opacity:1}}
+/* A person who asks for less motion gets no animation. Each mark holds its state: the slabs that build stay in place, and the top slab of a lost mark stays off its place. */
+@media (prefers-reduced-motion:reduce){
+  .slabs .s{animation:none!important}
+  .slabs.tone-build .s{opacity:.7}
+  .slabs.tone-lost .s0{transform:translate(9px,-8px) rotate(4deg)}
+}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:5px;padding:34px 22px;background:radial-gradient(60% 50% at 50% 30%,color-mix(in srgb,var(--violet) 8%,transparent),transparent 75%)}
+.splash.lg{min-height:min(70vh,640px)}
+.splash.md{padding:26px 20px}
+.splash.sm{padding:20px}
+.splash.tone-lost{background:radial-gradient(60% 50% at 50% 30%,color-mix(in srgb,var(--red) 9%,transparent),transparent 75%)}
+.splash.tone-warn{background:radial-gradient(60% 50% at 50% 30%,color-mix(in srgb,var(--amb) 9%,transparent),transparent 75%)}
+.splash.tone-off{background:none}
+.splash>.slabs{filter:drop-shadow(0 10px 18px color-mix(in srgb,var(--violet) 22%,transparent))}
+.splash.tone-lost>.slabs{filter:drop-shadow(0 10px 18px color-mix(in srgb,var(--red) 22%,transparent))}
+.splash.tone-off>.slabs,.splash.tone-warn>.slabs{filter:none}
+.splash h3{margin:10px 0 0;font-size:19px}
+.splash.md h3,.splash.sm h3{font-size:16px}
+.splash p{margin:2px 0 0;max-width:56ch;color:var(--mut)}
+.splash p b{color:var(--ink)}
+.splash .sub{font-size:12.5px;margin-top:8px;color:var(--mut)}
+.splash .actions{margin-top:12px}
+.splash .next{margin-top:10px;font-size:13px;color:var(--mut)}
+.splash .next b{color:var(--ink);margin-right:4px}
+.inl{display:flex;align-items:center;gap:9px;color:var(--mut);font-size:13px}
+.inl .slabs{flex:none}
+/* The facts under a calm splash: each one is a value and a label. */
+.facts{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;justify-content:center}
+.facts div{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 14px;min-width:120px;max-width:190px}
+.facts b{display:block;font-size:17px}
+.facts b.ok{color:var(--grn);font-size:15px}
+.facts span{font-size:12px;color:var(--mut)}
+/* A command with its Copy button. */
+.cmd{display:flex;align-items:center;gap:8px;margin-top:10px;background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:6px 6px 6px 11px;max-width:100%;text-align:left}
+.cmd code{font:12.5px var(--mono);overflow-wrap:anywhere;flex:1;min-width:0;color:var(--ink)}
+.copy{flex:none;background:var(--panel);color:var(--accent);border:1px solid var(--line);border-radius:5px;font-size:11.5px;padding:2px 8px;cursor:pointer}
+a.btn{display:inline-block}
+/* The card "Check this yourself": a question, a command, and what the page says now. */
+.term{width:100%;border-collapse:collapse;font-size:13px}
+.term td.q{width:26%;font-weight:500}
+.term td.a{width:16%;white-space:nowrap}
+.term .cmd{margin:0}
+/* The flags of a comparison. A flag is lit or dim, and it keeps one color. A hover or a focus shows what it means. */
+.flags{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px}
+.flagw{position:relative;display:inline-flex}
+.flagw .badge:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+a.badge:hover{text-decoration:none;filter:brightness(.95)}
+.tip{display:none;position:absolute;top:100%;right:0;z-index:6;margin-top:4px;width:max-content;max-width:min(300px,80vw);padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 2px 8px rgba(20,30,50,.18);font-size:12.5px;font-weight:400;line-height:1.4;white-space:normal;text-align:left;color:var(--ink)}
+.flagw:hover .tip,.flagw:focus-within .tip{display:block}
+.tip b{display:block;font-weight:600}
+.meta div span.bright{display:inline;color:var(--ink);font-size:12.5px}
+@media (max-width:760px){
+  .term,.term tbody,.term tr,.term td{display:block}
+  .term thead{display:none}
+  .term td.q,.term td.a{width:auto;white-space:normal}
+}

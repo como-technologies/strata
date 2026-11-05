@@ -78,14 +78,16 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	mustHold(t, "the sample message", screen, `<div class="pre mt0">strata · quarry-1 · Drift`)
 }
 
-// The screen of an observer that started without --alerts says that the send is opt-in, and it shows no
-// table and no sample.
+// The screen of an observer that started without --alerts is an offer: it says that no rule is set, what a message
+// is, and the next step with its command. It shows no table and no sample.
 func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAlertsUnset} {
 		t.Run(string(state), func(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
-			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">Not set</span></h2>`, "The observer sends no alert. The send is opt-in.",
-				"It holds no value of a record or of the cluster.", `The page "The observer" in the book says how to turn it on.`)
+			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">Not set</span></h2>`, "Nobody gets paged yet", "This install has no alert rules.",
+				"The rules are a file in Git, so a mute always has a name and an end date.",
+				`<b>Next</b> Write the rules in <span class="m">alerts.json</span>, name the component <span class="m">deploy/observer/alerts</span> in the kustomization, then apply it.`,
+				"<code>kubectl apply -k .</code>", `class="splash md tone-off"`)
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
 		})
 	}

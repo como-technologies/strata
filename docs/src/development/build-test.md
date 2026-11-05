@@ -35,6 +35,10 @@ the documents. One test fails when a field of the allow-list is not in the schem
 the binary. One test fails when the clear value of a cluster variable passes the
 allow-list.
 
+The script also checks the card "Check this yourself" of the page. It draws the page from
+the routes of a real server. It runs each command of the card against the stand-in. This
+step needs `node`, as the render tests of `internal/web` do.
+
 The script runs `compare` and `verify` with `--full`, as the cycles do, so the
 documents hold the field `unified`. It also runs `behind --pin` once, as the click
 does, and decodes the answer. One test fails when the compare of a move holds no
