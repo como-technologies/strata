@@ -1106,6 +1106,8 @@ facts:
       - observer-images.sh:image-crash-loop
       - observer-images.sh:image-agents-no-finding
       - observer-images.sh:pull-policy
+      - observer-kind.sh:mirror-image-id
+      - observer-kind.sh:mirror-image-string
     pages:
       - internals/palette/clusters.md#the-pods-of-a-cluster
     code:

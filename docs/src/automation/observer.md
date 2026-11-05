@@ -368,9 +368,11 @@ Or the node can fetch from the mirror and keep the string of the pod. A string o
 the mirror matches a pack only when the pack names the same string. Otherwise the
 image shows as `no pack` and makes no finding.
 
-No run shows yet which way a mirror works for the match. The checks
+A live run on kind used both ways. A mirror at the level of the node keeps the name
+of the pack in `spec.image` and in `imageID`, so the match by text works. A
+rewritten image string names the mirror in both, so it matches no pack. The checks
 `mirror-image-string` and `mirror-image-id` of
-[observer-kind.sh](../development/live-runs.md#observer-kindsh) test both ways.
+[observer-kind.sh](../development/live-runs.md#observer-kindsh) show both ways.
 
 ### The findings
 
@@ -509,20 +511,22 @@ for each 500 pods. The request lists the pods, and it never reads one pod alone.
 ### The least role of the key
 
 The key reads the cluster, its profiles, the registries, and the audit log.
-**Project Viewer** in the project of the cluster holds each permission that these
-requests need. The role is read-only, and the observer needs no tenant role, because
+**Project Viewer** in the project of the cluster is the least role that gives each
+answer. The role is read-only, and the observer needs no tenant role, because
 each request names the project. [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs)
 lists each permission and each refusal.
 
 - **Keep the audit log in the role, to name the writer.** Cluster Viewer alone does
-  not hold `audit.list`. With that role, the verdict and the finding stay, and `who`
+  not hold `audit.list`, and the audit log answers HTTP 403 with the code
+  `AccessDenied`. With that role, the verdict and the finding stay, and `who`
   is empty. The page lists an event that says the audit log could not be read. A
   custom role needs `audit.list` beside `cluster.get`, `clusterProfile.get`,
   `packRegistry.get`, and `packRegistry.list`.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.
-- **No live run has used this role yet.** `just live-observer-role` tests it. It
-  sends each request of the cycles with a second key, and
+- **A live run used both roles.** `just live-observer-role` sent each request of the
+  cycles with a second key. With Project Viewer, each request answered HTTP 200.
+  With Cluster Viewer, each request answered HTTP 200 but the audit log.
   [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the checks.
 
 ### The role for the read of the pods
