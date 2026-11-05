@@ -31,7 +31,7 @@ impl JsonRenderer {
 
 impl Renderer for JsonRenderer {
     /// With `full`, each changed pack carries the unified text of its values and of its manifest
-    /// changes: see [`Diff::fill_unified`].
+    /// changes.
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
         if !full {
             return self.document(d);

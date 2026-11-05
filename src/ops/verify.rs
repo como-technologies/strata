@@ -53,9 +53,8 @@ pub struct VerifyOptions {
     /// Accept a pack with no upstream digest: the record is `unchanged` and not `unverified`. The
     /// report still names the pack.
     pub allow_no_digest: bool,
-    /// For `verify_many`: give the diff of each row the field `unified`, the text of `--full`: see
-    /// [`Diff::fill_unified`]. `verify_with` ignores it, and the renderer of one record takes its own
-    /// `full`.
+    /// For `verify_many`: give the diff of each row the field `unified`, the text of `--full`.
+    /// `verify_with` ignores it, and the renderer of one record takes its own `full`.
     pub full: bool,
 }
 
