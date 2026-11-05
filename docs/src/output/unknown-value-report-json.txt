@@ -1,2 +1,2 @@
 $ strata report --json | jq -c '.unknown[]'
-{"strata":"0.29.0","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}
+{"strata":"0.30.0","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}
