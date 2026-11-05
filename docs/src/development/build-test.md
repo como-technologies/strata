@@ -29,10 +29,16 @@ standard library only.
 `just observer-contract` gives the documents of the strata binary of this commit
 to the allow-list of the observer. It builds `strata` and the stand-in. It
 serves four chapters of the book one at a time, and runs the commands of the
-observer against each one. Then it runs the contract tests of `internal/docs`
-on the documents. One test fails when a field of the allow-list is not in the
-schema of the binary. One test fails when the clear value of a cluster variable
-passes the allow-list.
+observer against each one. Then it runs the contract tests of `internal/docs` on
+the documents. One test fails when a field of the allow-list is not in the schema of
+the binary. One test fails when the clear value of a cluster variable passes the
+allow-list.
+
+The script runs `compare` and `verify` with `--full`, as the cycles do, so the
+documents hold the field `unified`. It also runs `behind --pin` once, as the click
+does, and decodes the answer. One test fails when the compare of a move holds no
+unified text. One test fails when the answer of `behind --pin` has no pin with a
+`bump`.
 
 The script also builds `strata-observer` and runs `once` with the real binary of
 `strata`. It needs `jq` for these checks. It makes sure of four facts:
@@ -42,11 +48,20 @@ The script also builds `strata-observer` and runs `once` with the real binary of
 - On the second chapter of `edited-in-place`, a record of the first chapter
   gives one `published-changed` finding with `who`.
 - On the chapter `cluster-values`, the value `team-payments` is in the output of
-  `strata compare` and not in the output of `once`.
+  `strata compare` and not in the output of `once`. It is not in the field
+  `unified` of `strata compare --full` either.
 - With the stand-in stopped, two runs of `once` with one state directory give
   `page` `lost` and the error kind `transport`.
 
 After each run, the script makes sure that the work directory is empty.
+
+The script then starts `serve` on a free port, and checks the status of some
+requests. A `POST` to a summary route gets 405. A `Host` that is not loopback gets
+421, and an unknown profile gets 404.
+
+Three checks are for the click. A `POST` to `ask` without the header
+`Sec-Fetch-Site` gets 403. A `POST` for an unknown move gets 404. `GET /v1/asks`
+gets 200.
 
 `just observer-playground` runs the observer on your machine against the stand-in,
 and serves its page. It takes the records from the first state of the chapter
@@ -67,7 +82,7 @@ contract script and the playground script both source it.
 step of the chapter `observer` runs it. The runner puts it on the `PATH` of a step.
 The job `docs` of CI installs Go for this step.
 
-`just observer-contract --write` also copies five documents to
+`just observer-contract --write` also copies six documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
 not edit them by hand. `go test` reads them, so it needs neither the binary nor
 the network, and the contract tests skip. The job `check` of CI runs

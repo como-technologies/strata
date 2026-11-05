@@ -3,7 +3,8 @@
 `strata-observer` is a service that runs in one cluster. It runs the `strata`
 binary on two timers, keeps the last answer of each, and shows the answers on a
 page. It reads the records of your team, and it asks Palette what it holds now.
-It writes nothing to Palette.
+It writes nothing to Palette. A click on the page sends one question to Palette:
+see [Ask Palette about a move](#ask-palette-about-a-move).
 
 Your pipeline runs strata when a change happens: a pull request, a merge, a
 night. The observer asks the same questions all day. A person who opens the page
@@ -31,8 +32,8 @@ alone, so that you can run the commands below.
 | Does Palette still have the version that I recorded? | A finding of the kind `published-changed`, `overwritten`, `renamed`, or `gone`. | `strata verify` |
 | Does this cluster run its release? | A finding `cluster-differs` or `image-id-changed`. The cluster copy of each profile. | `strata snapshot` and `strata compare` |
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
-| Does the registry have newer versions of what we pin? | The list of newer versions. | `strata behind` |
-| What changed between two pack versions? | The detail of a newer version. | `strata compare pack:...` |
+| Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. | `strata behind`. The button runs `strata behind --pin`. |
+| What changed between two pack versions? | The detail of a newer version, with the text of the diff. | `strata compare pack:...` |
 | Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
 
 [The checks of the observer](../development/observer.md) gives each command, each
@@ -45,6 +46,7 @@ finding, and each state of the page.
   holds for the cluster. With `--read-pods`, it lists the pods first.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
   in the registry, and compares each pin with its newest version.
+- **A click** on "Ask Palette" runs `strata behind` for one pack. No timer starts it.
 - Each cycle starts when the process starts. One `strata` process runs at a time.
 - A cycle writes its files to a volume in memory, and removes them at its end.
 - A cycle that fails keeps the last good answer, and the page says how old it is.
@@ -440,6 +442,71 @@ content. The cause `pods-not-read` appears under "Not checked", and no status of
 profile changes. The answer keeps the images of the last good read. [A failed read
 of the pods](../development/observer.md#a-failed-read-of-the-pods) gives the rules.
 
+## The text of a diff
+
+The page of a pack shows the text of its diff, beside the table of settings. The
+Values tab shows the raw values as a diff block. The Manifests tab shows the text of
+each changed, added, or removed manifest. A control "Unified / Split" on both tabs
+chooses between two layouts of the same text.
+
+Each cycle passes `--full` to `strata compare` and to `strata verify`. The documents
+then carry the text in the field `unified`: see [See the full
+diff](../commands/compare/versions.md#see-the-full-diff). Only the detail tier shows
+it.
+
+- **The text is the text of the records.** Palette writes the mask `********` over a
+  secret, and the text keeps that mask as a placeholder. The text holds no value of a
+  cluster variable.
+- **The text stays in memory.** It goes in no state file, no summary route, and no
+  log. A restart drops it. The next cycle, or the next request for a move, reads it
+  again.
+- **A pack keeps 256 KiB of text at most for each side of a diff.** The limit counts
+  the values and the manifests together. The pod has a memory limit of 512 Mi, and the
+  limit keeps the text inside it. Above 256 KiB, the observer keeps none of the text of
+  that pack. The page then says that the text is too large, and it gives the command
+  `strata compare ... --full`. The table of settings stays.
+
+The check `diff-text` of [What the live example verifies](../development/live-runs.md)
+tests the text of a diff on a cluster that Palette built.
+
+## Ask Palette about a move
+
+A newer version is not a fault, and the page keeps it neutral. Before a move, a team
+wants one more fact: does Palette give an error for it? The button "Ask Palette"
+answers that. It sits in the table of the newer versions. It also sits on the card
+"Move to" of a pack, where it reads "Ask Palette about this move".
+
+A click runs `strata behind` for the record of the profile, with
+`--pin <layer>/<name>`. Strata sends one `POST /v1/clusterprofiles/{uid}/validate/packs`
+for each record that pins the pack. A record of a profile version gives one `POST`. The
+request asks a question and changes nothing. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+says what the answer covers.
+
+| The page reads | Meaning |
+| --- | --- |
+| Palette gave no error | Palette checked the default values of the new version and gave no error. It did not check your own values. |
+| `Palette refuses: <code>` | Palette gave the error `<code>`. The page shows the message of Palette and the clusters that the message names. |
+| Palette gave no answer | A request failed. The page shows the HTTP status, when the failure has one. |
+
+- **A failed request is no finding.** A request that Palette refuses for the role of
+  the key is one. The answer is "Palette gave no answer", and it raises no severity.
+- **The observer keeps an answer in memory.** It keeps "Palette gave no error" and
+  "Palette refuses" until the pin moves or the pod restarts. A second click on that move
+  sends nothing.
+- **The observer asks again after "Palette gave no answer".** The next click sends a
+  new question, because the role or the network can change.
+- **Nothing asks on a timer.** A cycle sends no `POST`, because the observer refuses
+  each option of `strata` that asks Palette in a cycle. A click costs one question for
+  one move.
+- **Only the detail tier holds the answer.** A refusal holds the message of Palette
+  and the names of clusters. The summary and the state hold none, and the log has one
+  line for a click, with a verdict and a status.
+
+[The API of the observer](../reference/observer-api.md#ask-palette-about-a-move) gives
+the route and the header that the server needs for the click. The checks
+`ask-one-post` and `ask-words` of [What the live example
+verifies](../development/live-runs.md) test the click on a cluster that Palette built.
+
 ## What the observer does not see
 
 Each limit below is a fact of this release. The page shows the numbers of `limits`,
@@ -480,14 +547,14 @@ and it never reads "No change" for a pack that it did not check.
    A pod on a cluster that Palette built reaches the API, and it ends its first cycle.
    The read of the pods adds TCP 6443: see [Add the read](#add-the-read).
 4. **Requests.** A cycle sends `GET` requests and no other method. A content cycle
-   reads the cluster, and it reads the profile version of each record. For a record
-   that drifted, it reads the audit log too. A versions cycle reads the registries
-   and the packs that the records pin. [The requests of a cycle](#the-requests-of-a-cycle)
-   gives the counts of both cycles.
+   reads the cluster and the profile version of each record, and the audit log for a
+   record that drifted. A versions cycle reads the registries and the packs that the
+   records pin. A click sends one `POST`: see [Ask Palette about a move](#ask-palette-about-a-move).
+   [The requests of a cycle](#the-requests-of-a-cycle) gives the counts.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
-   a pack. A secret typed into a value that the schema does not mark passes through.
-   `create` on `pods/portforward` is the gate: whoever has that verb opens the page.
-   The reader role gives no Secret and no `exec`.
+   a pack, and the text of its diff. A secret typed into a value that the schema does
+   not mark passes through. `create` on `pods/portforward` is the gate: whoever has
+   that verb opens the page. The reader role gives no Secret and no `exec`.
 
 ### The requests of a cycle
 
@@ -508,6 +575,9 @@ verifies](../development/live-runs.md#observersh) holds the counts.
 With `--read-pods`, a content cycle also sends one request to the Kubernetes API
 for each 500 pods. The request lists the pods, and it never reads one pod alone.
 
+A click sends the reads of `strata behind` for one pack, and one `POST` to Palette.
+[One pack](../commands/behind.md#one-pack) says what `behind` reads for a pack.
+
 ### The least role of the key
 
 The key reads the cluster, its profiles, the registries, and the audit log.
@@ -522,6 +592,11 @@ lists each permission and each refusal.
   is empty. The page lists an event that says the audit log could not be read. A
   custom role needs `audit.list` beside `cluster.get`, `clusterProfile.get`,
   `packRegistry.get`, and `packRegistry.list`.
+- **A read-only key can click.** The route that the click calls checks
+  `clusterProfile.get` on the profile, and no write permission. Four built-in roles
+  hold it: Cluster Profile Viewer, Cluster Viewer, Project Viewer, and Tenant Viewer.
+  A key without it gets "Palette gave no answer", with the status of the refusal. This
+  comes from the code of Palette, and no live run has asked with a read-only key.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.
 - **A live run used both roles.** `just live-observer-role` sent each request of the

@@ -89,7 +89,7 @@ fn summary(r: &mut Runner, name: &str, uid: &str, state: &str, filter: &str) {
 }
 
 /// The answers of the observer after the edit: the finding of `payments`, the newer versions, the
-/// limits, the log, and the finding of `ledger`.
+/// limits, the log, the text of the edit, and the finding of `ledger`.
 fn answers(r: &mut Runner) {
     summary(
         r,
@@ -120,6 +120,18 @@ fn answers(r: &mut Runner) {
             "{} 2>&1 >/dev/null | sed -E 's/^time=[^ ]+ //; s/ duration=[0-9.]+m?s//' | grep 'msg=cycle'",
             once(PAYMENTS, "state")
         ),
+    );
+    // the Values tab of the page shows this text of the edit, which the cycle reads with --full
+    r.step(
+        "observer-text-all",
+        1,
+        false,
+        "strata verify releases/aws-stack_1.0.0.json --full",
+    );
+    r.excerpt(
+        "observer-text",
+        "observer-text-all",
+        r"^([$]|--- |[+][+][+] |[-+] +reclaimPolicy)",
     );
     // ledger runs aws-stack@1.1.0, and its own copy differs from the record
     summary(

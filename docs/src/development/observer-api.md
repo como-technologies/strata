@@ -3,7 +3,8 @@
 `strata-observer serve` runs the two timers of [the checks of the
 observer](./observer.md) and serves the answers on a loopback address. The API
 has two tiers. The summary tier shows no value. The detail tier shows the old
-and the new value of one pack.
+and the new value of one pack and the text of its diff. It also shows the answers
+of Palette to a click. The server takes one `POST`: see [The click](#the-click).
 
 ## Run it
 
@@ -92,9 +93,18 @@ names the screen:
 | `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
 | `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
 
-The comparison of a pack shows the settings as a table. It folds "Follows the
-version" and "Repeats the lists" with their counts. It lists the operation and
-the name of each manifest, and does not show the text of a manifest.
+The comparison of a pack has two tabs:
+
+- **Values.** It shows the settings as a table, and it folds "Follows the version"
+  and "Repeats the lists" with their counts. Then it shows the masked note, and the
+  text of the raw values as a diff block.
+- **Manifests.** It shows the text of each changed, added, or removed manifest.
+
+A control "Unified / Split" on both tabs chooses between two layouts of the same
+text. A pack with `textTooLarge` shows that the text is too large, and it names the
+command `strata compare ... --full`. The table of the newer versions and the card
+"Move to" of a pack show the button "Ask Palette". The text and the answers come from
+the detail tier only.
 
 ### The state of the page
 
@@ -135,6 +145,11 @@ has a pill, and each screen says "No person approved these records". With
   cycle holds the slot. The next render that a person or the clock causes asks
   again. A render that an answer causes does not, so two requests that fail do
   not ask each other again without end.
+- An answer of Palette has the words of its verdict: "Palette gave no error",
+  `Palette refuses: <code>`, and "Palette gave no answer". The page never reads
+  "accepts", because Palette checks the default values of the new version and not
+  the values of the team. A "Palette gave no answer" is no finding, and it raises
+  no severity.
 - A pod that never started and a local image with no repository digest read "Not
   checked". They never read "OK".
 - `re-baseline needed` sits beside a drift and does not replace it.
@@ -262,6 +277,69 @@ a screen that throws, and on a value that reaches the page as markup. It skips
 these tests when `node` is not there. It cannot see the layout, so a person looks
 at the render.
 
+## The click
+
+The server takes one `POST`: the click "Ask Palette" on one move. The code of the
+observer sends no HTTP `POST`. Palette gets its question from `strata`, which
+`internal/runner` starts.
+
+- **A method for each route.** A `Route` holds a pattern, a method, and a tier. The
+  table of routes in `internal/api/api.go` gives each route one method. It is `GET`,
+  except for the click. A path with no route takes `GET`. A test sends the other method
+  to the click and to `/v1/asks`.
+- **The guard.** It checks the `Host` first (`421`), then the method (`405` with
+  `Allow`), and then, for a `POST`, the header `Sec-Fetch-Site` (`403`). The body of
+  each refusal has a fixed text. The header stops a page of another origin in the
+  browser of a person: such a page sends another value, or none. It stops no other
+  client, so the gate stays `create` on `pods/portforward`.
+- **The slot.** `Observer.Ask` takes the slot of the worker with `acquire`, as the
+  detail route does. One `strata` process runs at a time, so the click waits for a
+  cycle. The limit is `detailTimeout`, 50 seconds. A stop or the limit gives `503`, and
+  another error gives `502`. A click that waited looks at the answers again, so two
+  clicks on one move send one question.
+- **The question.** `Ask` finds the pin of the move in the last good versions cycle.
+  Without one, the move is not known, and the answer is `404`. Then `askPalette` writes
+  the record of the profile to the directory of a cycle. It runs `behind <record>
+  --pin <layer>/<name> --json --compact -q` once, with no `--no-impact`.
+- **The runner.** It allows `--pin` for `behind` only, and `--full` for `compare` and
+  `verify` only. It refuses a `behind` run with neither `--no-impact` nor `--pin`. So
+  a cycle cannot ask Palette.
+- **The answer.** `model.AnswerOf` reads the pin of the document.
+  `bump.paletteValidation` gives `no-error` when its field `accepts` is true, and
+  `refuses` with its `errors` otherwise. A pin with an `error`, a
+  `paletteValidationError`, a document without the pin, or a run that failed gives
+  `no-answer`. Only the status of the failure leaves:
+  `docs.StatusOf` reads `HTTP <status>` at the start of the reason and nothing else.
+  The reason can hold the body of an answer of Palette.
+- **The memory.** `Observer.asks` maps a profile and a move to its `Answer`. The key of
+  the move holds the version of the `strata` binary, as the cache of moves does.
+  `Answered` is true for `no-error` and `refuses` only, and `Ask` returns such an answer
+  with no question. A `no-answer` is stored too, so that `/v1/asks` shows its status,
+  and the next click replaces it.
+- **The prune.** `pruneMoves` drops each answer whose move the versions cycle no longer
+  reports, so a pin that moves drops its answer. The state holds no answer, and a
+  restart forgets all of them.
+- **The log.** One line `ask` holds the verdict and the status. It holds no profile, no
+  pack, and no message.
+
+## The text of a diff
+
+- **The cycles ask for it.** The content cycle passes `--full` to `verify`, and to the
+  `compare` of each cluster side. The versions cycle passes it to the `compare` of a
+  move.
+- **It stays in memory.** `docs.Values.Unified` and `docs.Manifest.Unified` hold the
+  text. No type of the summary tier has a field for it, so the summary, the state, and
+  the log hold none. A test plants a marker in the text. It looks for the marker in
+  each summary route, in `/v1/asks`, in the state, and in the log.
+- **The cap.** `maxText` in `internal/check` is 256 KiB. The pod has a memory limit of
+  512 Mi, and the cap keeps the text inside it. After each read of a diff,
+  `Diff.CapText` adds up, for each pack, the bytes of `values.unified` and of each
+  `manifests[].unified`. A pack above the cap loses all of its text, and
+  `Pack.TextTooLarge` is true. A pack at the cap keeps its text.
+- **`TextTooLarge` is a field of the observer.** It has the tag `json:"-"`. A document
+  of `strata` never sets it, and the observer never writes it to a document. The view
+  of the API copies it to `textTooLarge`.
+
 ## What no answer carries
 
 [The API of the observer](../reference/observer-api.md#what-no-answer-carries) lists the fields that no
@@ -284,7 +362,7 @@ log is not written, because a path can hold the name of a profile.
   `localhost` or a loopback address, with any port. It answers `421`. A person
   can choose the local port of a port-forward, so the port can be any port. The
   rule stops DNS rebinding from a page in the browser of the person.
-- **Four headers on each answer,** also on `404`, `405`, and `421`:
+- **Four headers on each answer,** also on `403`, `404`, `405`, and `421`:
 
   ```text
   Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
@@ -297,5 +375,8 @@ log is not written, because a path can hold the name of a profile.
   `WriteTimeout`, and `IdleTimeout`.
 - **Two HTTP clients.** The `health` check in `internal/api` calls a loopback
   address. The read of the pods in `internal/kube` calls the API server. The code
-  sends no `POST`. Only `internal/api` and `internal/kube` import `net` or
+  sends no HTTP `POST`. Only `internal/api` and `internal/kube` import `net` or
   `net/http`. A test makes sure of each rule.
+- **One file names the method `POST`.** The server takes one `POST`, and
+  `internal/api/api.go` names the method for that route. No other file of the
+  observer holds the method. A test makes sure of it.
