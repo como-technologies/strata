@@ -113,16 +113,16 @@ permissions:
   pull-requests: write
 jobs:
   preflight:
-    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.30.0
+    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.30.1
     with:
       source: clusters/payments.json
-      strata-version: v0.30.0
+      strata-version: v0.30.1
   preflight-comment:
     needs: preflight
     if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-    uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.30.0
+    uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.30.1
     with:
-      strata-version: v0.30.0
+      strata-version: v0.30.1
 ```
 
 The second job takes `report.md` from the artifact `preflight` of the first
