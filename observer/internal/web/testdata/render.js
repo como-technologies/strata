@@ -36,7 +36,8 @@
 // a click on an element with data-view="split"). It clicks twice on each element, in order. A question to
 // Palette gets its answer before the next click, and the question of the last click waits until the end. It
 // prints one JSON object: the screen before the clicks, the screen while the last question is on its way,
-// the screen after the answer, the hash at the end, and each POST.
+// the screen after the answer, the hash at the end, each POST, and each element that the page scrolled to
+// (jumps, by id).
 // STATUS is 0 for the answer that the set gives, an HTTP status for a failed POST, or "network".
 //
 //   node render.js ASSETS_DIR API_DIR STATE asksdown HASH [first]
@@ -131,8 +132,9 @@ function poison(d) {
 const served = mode === "poison" ? poison(data) : data;
 
 
-// requests lists each request that the page sent, in order.
+// requests lists each request that the page sent, in order. jumps lists the id of each element that the page scrolled to.
 const requests = [];
+const jumps = [];
 // failDiffs counts the next requests for a diff that fail with 503. failAsks makes the route /v1/asks fail. postStatus is the answer of a POST that
 // fails: an HTTP status, "network" for a request that throws, or 0 for the answer that the set gives. A POST
 // waits for the gate, so that a test can look at the page while a question is on its way.
@@ -184,7 +186,7 @@ async function fakeFetch(url, opts = {}) {
 // listeners holds the handlers that app.js adds to the document, by event type.
 const listeners = {};
 const elements = {};
-const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}});
+const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}, scrollIntoView() { jumps.push(id); }});
 const sandbox = vm.createContext({
   document: {getElementById: element, addEventListener(type, f) { (listeners[type] = listeners[type] || []).push(f); }, activeElement: null},
   location: {hash: ""}, addEventListener() {}, scrollTo() {}, setInterval() {}, fetch: fakeFetch, console,
@@ -311,7 +313,7 @@ async function main() {
     const during = snapshot();
     open();
     await settle();
-    process.stdout.write(JSON.stringify({before, during, after: snapshot(), hash: sandbox.location.hash, posts: requests.filter(r => r.method === "POST")}));
+    process.stdout.write(JSON.stringify({before, during, after: snapshot(), hash: sandbox.location.hash, posts: requests.filter(r => r.method === "POST"), jumps}));
     return;
   }
   if (mode === "asksdown") {

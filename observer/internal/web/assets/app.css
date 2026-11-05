@@ -139,8 +139,21 @@ tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;
 .was{color:var(--delw);font-family:var(--mono);font-size:12.5px}
 .now{color:var(--addw);font-family:var(--mono);font-size:12.5px}
 .val{white-space:pre-wrap;overflow-wrap:anywhere;min-width:12em;max-width:60ch;max-height:14em;overflow-y:auto}
+/* A long value in the table of changes: the lines that differ, each with its number, in the colors of the diff.
+   A line is 16px high, so the row of a value with 6 changed lines stays under 200px. */
+td.vm{vertical-align:top}
+.vls{font:12.5px/16px var(--mono)}
+.vl{display:flex;min-height:16px;color:var(--mut)}
+.vl .no{flex:none;width:40px;padding:0 6px;text-align:right;background:var(--gut);user-select:none}
+.vl .mk{flex:none;width:18px;text-align:center}
+.vl .t{flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.vl.d{background:var(--del);color:var(--delw)}
+.vl.a{background:var(--add);color:var(--addw)}
+.vl.d .no{background:var(--del)}
+.vl.a .no{background:var(--add)}
 /* The text of a diff. A table of lines scrolls sideways in its own box, so a long line never widens the page. */
 .dblock + .dblock,.tw + .dblock{border-top:1px solid var(--line)}
+.dblock{scroll-margin-top:64px}
 .diffhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;padding:7px 15px;background:var(--panel2);border-bottom:1px solid var(--line);font:12.5px var(--mono)}
 .diffhead > span:first-child{min-width:0;overflow-wrap:anywhere}
 .diff{font:12.5px/20px var(--mono);overflow-x:auto}
