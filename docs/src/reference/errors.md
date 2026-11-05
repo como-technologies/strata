@@ -78,6 +78,7 @@ A `usage` error comes before any request in these cases:
 - `snapshot --raw-dir` of a ref that is not a profile or a cluster.
 - `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref.
 - `behind --since` with a file that is not a `strata-behind/1` document.
+- `behind --pin` with a key that no record pins from a registry.
 - `compare --repave` or `compare --validate` with a pair that the refs show to
   be wrong. One side is an edge host, a cluster group, or a set of clusters.
   Or the pair is not a cluster and a profile version. `compare --repave` also

@@ -26,7 +26,13 @@ const NOTE: &str = "pack addon/grafana has a masked value at charts.grafana.admi
 /// Palette with one published version: `grafana`, whose values hold a secret that Palette masks,
 /// and `cert-manager`, whose values hold none.
 fn published() -> MemoryApi {
-    let grafana = "charts:\n  grafana:\n    adminUser: fred\n    adminPassword: '********'\n";
+    published_for("fred")
+}
+
+/// [`published`], with `user` as the admin user of grafana.
+fn published_for(user: &str) -> MemoryApi {
+    let grafana =
+        format!("charts:\n  grafana:\n    adminUser: {user}\n    adminPassword: '********'\n");
     let certs = "charts:\n  cert-manager:\n    replicas: 2\n";
     let packs = json!([
         {"name": "grafana", "layer": "addon", "type": "spectro", "tag": "1.0.0",
@@ -206,4 +212,65 @@ fn verify_names_the_pack_with_a_masked_value_beside_its_line() {
     );
     assert!(text.contains(&format!("note       {NOTE}\n")), "{text}");
     assert!(!text.contains("masked: charts.cert-manager"), "{text}");
+}
+
+#[test]
+fn the_unified_text_of_a_changed_value_keeps_the_placeholder_of_a_masked_value() {
+    let a = record();
+    let b = snapshot_of(&published_for("wilma"), PROFILE).unwrap();
+    let d = diff::compute(&a, &b, "t1", None);
+    let json = strata::render::renderer(
+        strata::render::Format::Json,
+        strata::term::color::Paint::off(),
+        true,
+    )
+    .render(&d, &a, &b, true)
+    .unwrap();
+    let doc: Value = serde_json::from_str(&json).unwrap();
+    let grafana = doc["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "grafana")
+        .unwrap();
+    let text = grafana["values"]["unified"].as_str().unwrap();
+    assert!(
+        text.contains("-    adminUser: fred\n+    adminUser: wilma\n"),
+        "{text}"
+    );
+    assert!(
+        text.contains("     adminPassword: '********'\n"),
+        "the mask stays: {text}"
+    );
+}
+
+#[test]
+fn verify_of_many_records_with_full_gives_a_drifted_row_the_unified_text_and_without_it_none() {
+    let recorded = record();
+    let live = published_for("wilma");
+    let grafana = |s: &ops::VerifySummary| {
+        let diff = s.records[0].diff.as_ref().unwrap();
+        diff.packs
+            .iter()
+            .find(|p| p.name == "grafana")
+            .unwrap()
+            .clone()
+    };
+    let plain = common::verify_summary_with(&recorded, &live, &ops::VerifyOptions::default());
+    assert!(grafana(&plain).values.unified.is_none());
+
+    let full = common::verify_summary_with(
+        &recorded,
+        &live,
+        &ops::VerifyOptions {
+            full: true,
+            ..Default::default()
+        },
+    );
+    let text = grafana(&full).values.unified.unwrap();
+    assert!(
+        text.contains("-    adminUser: fred\n+    adminUser: wilma\n"),
+        "{text}"
+    );
+    assert!(text.contains("     adminPassword: '********'\n"), "{text}");
 }

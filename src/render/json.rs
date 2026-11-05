@@ -1,4 +1,4 @@
-//! The `strata-diff/1` document, serialized as is.
+//! The `strata-diff/1` document, serialized as is. With `--full`, it also carries the unified text.
 
 use serde::Serialize;
 
@@ -30,8 +30,15 @@ impl JsonRenderer {
 }
 
 impl Renderer for JsonRenderer {
-    fn render(&self, d: &Diff, _a: &Snapshot, _b: &Snapshot, _full: bool) -> Result<String> {
-        self.document(d)
+    /// With `full`, each changed pack carries the unified text of its values and of its manifest
+    /// changes.
+    fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
+        if !full {
+            return self.document(d);
+        }
+        let mut with_text = d.clone();
+        with_text.fill_unified(a, b);
+        self.document(&with_text)
     }
 
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {

@@ -49,6 +49,18 @@ fn edited_in_place(r: &mut Runner) {
     );
     // the verdict alone: it ends with the time of the last change of the document (#140)
     r.excerpt("edited-verify-verdict", "edited-verify", r"^DRIFT");
+    // the same drift, with the unified diff of the edit: the page teaches the lines that --full adds
+    r.step(
+        "edited-verify-full-all",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json --full",
+    );
+    r.excerpt(
+        "edited-verify-full",
+        "edited-verify-full-all",
+        r"^([$]|DRIFT|--- |[+][+][+] |[-+] +reclaimPolicy)",
+    );
     // the same drift, and who made it: the page teaches the lines that --who adds
     r.step(
         "edited-verify-who-full",
@@ -151,6 +163,13 @@ fn edited_in_place_clusters(r: &mut Runner) {
         1,
         false,
         "strata verify 'releases/**/*.json' 'runs/*.json' --json | jq '.summary'",
+    );
+    // with --full, the row of a record that drifted carries the unified text of each changed pack
+    r.step(
+        "edited-bulk-full-json",
+        1,
+        false,
+        "strata verify 'releases/**/*.json' 'runs/*.json' --full --json | jq -c '.records[] | {path, status, unifiedFor: [.diff.packs[]? | select(.values.unified) | .name]}'",
     );
     r.step(
         "edited-report",

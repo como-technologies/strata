@@ -16,8 +16,9 @@
 #      another namespace
 #   4  a real change: the requests of the cycles at the baseline, an edit in place of the add-on
 #      version, the finding with its actor, the copy of the cluster that stays the same, the value
-#      of a variable that no route and no log shows, the requests with the finding, and the undo of
-#      the edit
+#      of a variable that no route and no log shows, the requests with the finding, the click "Ask
+#      Palette" on a move to a newer pack version (#647), the text of the edit in the detail tier
+#      alone (#647), and the undo of the edit
 #   5  failure and restart: a wrong key, the key back, a restart of the pod, and the removal of the
 #      manifests
 #   6  way 2, a profile in Palette: an add-on profile with the rendered manifests as one manifest
@@ -40,26 +41,35 @@
 # 2, the namespace, and the probe pod go. The script deletes no cluster. KEEP=1 skips the undo, so
 # that FROM_STAGE can resume the run.
 #
+# The click in stage 4 sends one POST to Palette: the validate route, which only checks. The pod runs
+# in the cluster, so the counter on this machine cannot see its requests to Palette. So ask-one-post
+# runs the program of the observer on this machine, built from this checkout. It runs behind the
+# counter, with the records of the run and the key of the example. The key goes to that program in the
+# environment of one command. ask-words clicks on the pod too, through the port-forward, and records
+# its answer.
+#
 # Needs the live example at its baseline with cluster A Running (just live-up) and the strata release
-# binary. It also needs kubectl, curl, jq, gh, git, go, the key of verify.sh, and the token file.
+# binary. It also needs kubectl, curl, jq, gh, git, go, gzip, the key of verify.sh, and the token file.
 # GHCR_PULL_TOKEN_FILE names the token file (default: ~/.config/strata/ghcr-pull-token, mode 0600).
 # OBSERVER_IMAGE names the image (default: the image of the version in Cargo.toml). PORT is the local
-# port of the port-forward (default 18080). CYCLE_TRIES is the number of looks, 5 seconds apart, in a wait for the page
-# (default 60). Results go under runs/<UTC time>/observer/, or OUT; FROM_STAGE resumes a run in OUT.
-# Exit 0 only when no check fails.
+# port of the port-forward (default 18080). ASK_PORT is the local port of the observer that
+# ask-one-post runs (default: PORT plus 1). CYCLE_TRIES is the number of looks, 5 seconds apart, in a
+# wait for the page (default 60). Results go under runs/<UTC time>/observer/, or OUT; FROM_STAGE
+# resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=observer
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$from" in 1|2|3|4|5|6|7) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
-for tool in kubectl curl jq gh git go timeout; do
+for tool in kubectl curl jq gh git go gzip timeout; do
   command -v "$tool" > /dev/null || die "$tool is needed"
 done
 
 root=$(cd "$live/../.." && pwd)
 observer_image
 port=${PORT:-18080}
+local_port=${ASK_PORT:-$((port + 1))}
 tries=${CYCLE_TRIES:-60}
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/observer}
@@ -92,7 +102,7 @@ target=${target%/}
 OP= edited= attached=
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-no_palette= undone=
+no_palette= undone= ask_pid= ask_work=
 
 # ---- the page ------------------------------------------------------------------------------------------
 
@@ -244,11 +254,13 @@ export -f content_cycle versions_behind versions_moves
 # requests_of NAME FUNCTION: run FUNCTION behind the counter. NAME.log holds one line for each request
 # that Palette got, with the method and the path, and no query and no key.
 requests_of() { ./count-requests -target "$target" -log "$1.log" -- bash -c "$2" > "$1.run" 2>&1; }
+# counter_built: the counter, built once in the directory of the run
+counter_built() { [ -x ./count-requests ] || go -C "$live/count-requests" build -o "$PWD/count-requests" .; }
 # count_requests: the requests of a content cycle, of the first command of a versions cycle, and of
 # its moves. The routes that took most follow the count of each.
 count_requests() {
   local name
-  [ -x ./count-requests ] || go -C "$live/count-requests" build -o "$PWD/count-requests" . || return 1
+  counter_built || return 1
   requests_of content content_cycle && requests_of behind versions_behind && requests_of moves versions_moves \
     || return 1
   for name in content behind moves; do
@@ -323,6 +335,224 @@ no_value_leaves() {
 }
 # drift_clears: after the undo, the finding goes in the next cycle
 drift_clears() { poll "$tries" no_findings; }
+
+# ---- the checks of the click and of the text (#647) --------------------------------------------------
+
+# The click "Ask Palette" on a move makes the observer run `strata behind <record> --pin <layer/name>`. That
+# command sends one POST to the validate route of Palette for each record that pins the pack. The pod runs in
+# the cluster, so the counter on this machine cannot see its requests. So ask-one-post runs the program of the
+# observer here, behind the counter, with the records of the run and the key. That program is the code of the pod.
+
+# observer_built: the observer of this checkout, built once in the directory of the run
+observer_built() { [ -x ./strata-observer ] || go -C "$root/observer" build -o "$PWD/strata-observer" .; }
+# ask_records DIR: the records of the run in the files that the observer reads. They are meta.json and one
+# gzip file for each record, named as observer-records.sh names them.
+ask_records() {
+  local rec file
+  jq -cn --arg r "$revision" '{baseline: "approved", revision: $r}' > "$1/meta.json" || return 1
+  for rec in record-*.json; do
+    file=$(jq -r '"\(.source.name)_\(.source.version).json.gz"' "$rec" | tr -c 'A-Za-z0-9._\n-' _) || return 1
+    gzip -9nc "$rec" > "$1/$file" || return 1
+  done
+}
+# local_page PATH: the answer of the observer that runs on this machine
+local_page() { curl -fsS --max-time 20 "http://127.0.0.1:$local_port$1"; }
+# local_cycles_ended: that observer ended a content cycle and a versions cycle. ask-page.json keeps /v1/cluster.
+local_cycles_ended() {
+  local_page /v1/cluster > ask-page.json 2> /dev/null \
+    && jq -e '.content.checkedAt != null and .versions.readAt != null' ask-page.json > /dev/null
+}
+# ask_start: run the observer on this machine behind the counter, which writes ask.log. Then wait for the first
+# content cycle and the first versions cycle. The key reaches the observer in the environment of this one
+# command. The records, the state, and the files of the cycles are in a directory outside the run, because
+# the cycles write raw answers. ask_stop removes it. The command writes its process number first, so that
+# ask_stop ends the observer and not only the counter.
+ask_start() {
+  local _
+  counter_built && observer_built || return 1
+  rm -f ask-observer.pid && ask_work=$(mktemp -d) && mkdir "$ask_work/records" "$ask_work/state" "$ask_work/work" \
+    && ask_records "$ask_work/records" || return 1
+  PALETTE_API_KEY=$palette_key ./count-requests -target "$target" -log ask.log -- \
+    bash -c 'echo $$ > "$1"; shift; exec "$@"' ask-observer "$PWD/ask-observer.pid" \
+    ./strata-observer serve --strata "$strata" --cluster-uid "$C" --records "$ask_work/records" \
+    --work "$ask_work/work" --state "$ask_work/state" --content-every=1m --versions-every=5m \
+    --listen "127.0.0.1:$local_port" > ask-observer.out 2>&1 &
+  ask_pid=$!
+  for _ in $(seq "$tries"); do
+    local_cycles_ended && return 0
+    kill -0 "$ask_pid" 2> /dev/null || { echo "the observer on this machine stopped"; tail -n 5 ask-observer.out; return 1; }
+    sleep 5
+  done
+  return 1
+}
+# ask_stop: end the observer on this machine, and the counter with it
+ask_stop() {
+  if [ -n "$ask_pid" ]; then
+    if [ -s ask-observer.pid ]; then kill "$(cat ask-observer.pid)" 2> /dev/null; else kill "$ask_pid" 2> /dev/null; fi
+    wait "$ask_pid" 2> /dev/null
+    ask_pid=
+  fi
+  [ -z "$ask_work" ] || rm -rf "$ask_work"
+  ask_work=
+}
+# click PORT PROFILE KEY: the click "Ask Palette" on a move. It is a POST with the header that a browser sets on a
+# request of the page itself. The answer goes to standard output.
+click() {
+  curl -fsS --max-time 90 -X POST -H 'Sec-Fetch-Site: same-origin' \
+    "http://127.0.0.1:$1/v1/packs/$(uri "$2")/$(uri "${3%%/*}")/$(uri "${3#*/}")/ask"
+}
+# click_first PAGE PORT FILE: click on each move to a newer pack version in turn, until one click gets an answer. The
+# answer goes to FILE, and the move goes to standard output as "profile layer/name". PAGE is the function that reads
+# the page: `page` for the pod, and `local_page` for the observer on this machine. A page can list a move that the
+# observer does not know, such as a pin with an error. Its click gets a 404 and sends nothing to Palette.
+click_first() {
+  local profile key
+  while read -r profile key; do
+    if click "$2" "$profile" "$key" > "$3" 2> /dev/null; then
+      echo "$profile $key"
+      return 0
+    fi
+  done < <("$1" /v1/profiles | jq -r '.profiles[] | .name + "@" + .version as $p | .packs[]? | select((.newer // "") != "") | "\($p) \(.key)"')
+  return 1
+}
+# lines_in LOG, posts_in LOG, and validate_posts_in LOG: the requests, the POST requests, and the POST requests
+# to the validate route of a profile version, in a log of the counter
+lines_in() { wc -l < "$1" | tr -d ' '; }
+posts_in() { grep -c '^POST ' "$1" || true; }
+validate_posts_in() { grep -Ec '^POST /v1/clusterprofiles/[^/]+/validate/packs$' "$1" || true; }
+# ask_counts: the cycles send no POST before the click. One click sends one POST to the validate route. A
+# second click on the same move sends none, because the observer keeps the answer.
+ask_counts() {
+  local move profile key before posts one two
+  ask_start || { echo "the observer on this machine did not end its first cycles (ask-observer.out)"; return 1; }
+  before=$(lines_in ask.log) posts=$(posts_in ask.log)
+  echo "the cycles, before the click: $before requests, $posts POST"
+  [ "$before" -gt 0 ] && [ "$posts" = 0 ] || { grep '^POST ' ask.log; return 1; }
+  move=$(click_first local_page "$local_port" ask-first.json) \
+    || { echo "that observer lists no move to a newer pack version, or no click on a move got an answer"; return 1; }
+  read -r profile key <<<"$move"
+  echo "the move: $key in $profile"
+  one=$(posts_in ask.log)
+  echo "the first click: $one POST, $(validate_posts_in ask.log) of them to the validate route"
+  [ "$one" = 1 ] && [ "$(validate_posts_in ask.log)" = 1 ] || { grep '^POST ' ask.log; return 1; }
+  # A request that failed is no answer, so the observer asks again at the next click.
+  jq -e '.verdict != "no-answer"' ask-first.json > /dev/null || {
+    echo "the first click got no answer: $(jq -c '{verdict, status}' ask-first.json)"
+    echo "the observer asks again after a request that failed, so this run cannot show that a second click sends none"
+    return 1
+  }
+  click "$local_port" "$profile" "$key" > ask-second.json || { echo "the second click failed"; return 1; }
+  two=$(posts_in ask.log)
+  echo "the second click: $((two - one)) POST"
+  [ "$two" = "$one" ] || { grep '^POST ' ask.log; return 1; }
+  [ "$(jq -cS . ask-first.json)" = "$(jq -cS . ask-second.json)" ] || { echo "the second answer is not the first"; return 1; }
+  local_page /v1/asks > ask-list.json \
+    && jq -e --arg p "$profile" --arg k "$key" '.asks | length == 1 and .[0].profile == $p and .[0].key == $k' ask-list.json > /dev/null \
+    || { echo "/v1/asks does not list that one answer"; return 1; }
+  echo "-- the POST requests of the run"
+  sed -E 's#/[0-9a-f]{24}#/{uid}#g' ask.log | grep '^POST ' | sort | uniq -c
+}
+# ask_one_post: ask_counts, and then the end of the observer on this machine, also after a failure. The answers
+# of an earlier run in this directory go first, so that ask-words never reads them.
+ask_one_post() {
+  local rc=0
+  rm -f ask-first.json ask-second.json ask-list.json
+  ask_counts || rc=$?
+  ask_stop
+  return "$rc"
+}
+# ask_pod: the click on a move of the pod, through the port-forward. ask-pod.json keeps the answer, and
+# asks-pod.json keeps /v1/asks. The POST of this click goes from the pod to Palette, so the counter does not see it.
+ask_pod() {
+  local move
+  pf_ensure || return 1
+  move=$(click_first page "$port" ask-pod.json) \
+    || { echo "the page of the pod lists no move to a newer pack version, or no click on a move got an answer"; return 1; }
+  echo "the move: ${move#* } in ${move% *}"
+  page /v1/asks > asks-pod.json
+}
+# ask_say FILE: the verdict of an answer, with the code of a refusal or the status of a failure, and the words
+# that the page shows for it
+ask_say() {
+  jq -r 'def codes: [.refusals[]?.code] | join(", ");
+    if .verdict == "no-error" then "no-error: Palette gave no error"
+    elif .verdict == "refuses" then "refuses \(codes): Palette refuses: \(codes)"
+    elif .verdict == "no-answer" then "no-answer, status \(.status): Palette gave no answer"
+    else "unknown verdict \(.verdict)" end' "$1"
+}
+# ask_formed FILE: the answer has one of the three verdicts. A refusal names a code, and a failure has a status.
+ask_formed() {
+  jq -e '.verdict == "no-error"
+    or (.verdict == "refuses" and (.refusals | length) > 0 and all(.refusals[]; (.code | length) > 0))
+    or (.verdict == "no-answer" and (.status | type) == "number")' "$1" > /dev/null
+}
+# summary_routes: the seven routes of the summary tier, and the route of the profile that the edit changed. None of
+# them holds text.
+summary_routes() {
+  printf '%s\n' /v1/cluster /v1/findings /v1/profiles /v1/newer /v1/notchecked /v1/events /v1/images "/v1/profiles/$addon@1.0.0"
+}
+# no_accepts FILE...: the word accepts is in no answer of the API. That covers each FILE, which holds the
+# answer of a click or the list of answers, and each summary route and /v1/asks of the pod. A refusal holds the
+# message of Palette. It is the text of Palette, so the search skips it.
+no_accepts() {
+  local file path body found=0 skip='del(.refusals[]?.message, .asks[]?.refusals[]?.message)'
+  for file in "$@"; do
+    body=$(jq -c "$skip" "$file") || { echo "$file is no JSON"; found=1; continue; }
+    ! grep -qi accepts <<<"$body" || { echo "$file holds the word accepts"; found=1; }
+  done
+  while IFS= read -r path; do
+    body=$(page "$path" | jq -c "$skip") || { echo "$path gave no answer"; found=1; continue; }
+    ! grep -qi accepts <<<"$body" || { echo "$path holds the word accepts"; found=1; }
+  done < <(summary_routes; echo /v1/asks)
+  return "$found"
+}
+# ask_words: the click on the pod gives an answer with one of the three verdicts. The output records the verdict,
+# and the code or the status, for the pod and for the observer on this machine. It judges no verdict.
+ask_words() {
+  local file label bad=0 answers=()
+  ask_pod || return 1
+  for file in ask-pod.json ask-first.json; do
+    [ -f "$file" ] || continue
+    case $file in ask-pod.json) label="the pod" ;; *) label="the observer on this machine" ;; esac
+    printf '%s: %s\n' "$label" "$(ask_say "$file")"
+    ask_formed "$file" || { echo "$label: the answer has no verdict, no code, or no status"; bad=1; }
+    answers+=("$file")
+  done
+  jq -e --slurpfile a ask-pod.json '.asks | any(. == $a[0])' asks-pod.json > /dev/null \
+    || { echo "/v1/asks of the pod does not list the answer of the click"; bad=1; }
+  no_accepts "${answers[@]}" asks-pod.json || bad=1
+  return "$bad"
+}
+# detail_page PATH: the answer of a route of the detail tier, through the port-forward. A request of that tier can
+# wait for a cycle and then run one compare, so the limit is 60 seconds.
+detail_page() { curl -fsS --max-time 60 "http://127.0.0.1:$port$1"; }
+# diff_text: the detail route holds the text of the edit, and no summary route holds it. The marker is the line
+# that the edit wrote. It is in the raw text of the answer and in its JSON form, with the quotes escaped.
+diff_text() {
+  local marker=$addon_to encoded profile=$addon@1.0.0 pack path body n=0 found=0 seen=0
+  encoded=$(jq -rn --arg m "$marker" '$m | tojson | .[1:-1]') || return 1
+  page /v1/findings > findings.json || return 1
+  while IFS= read -r pack; do
+    n=$((n + 1))
+    detail_page "/v1/packs/$profile/$pack/diff?side=published" > "diff-$n.json" || { echo "no answer for $pack"; return 1; }
+    if jq -e --arg m "$marker" '[.values.unified, (.manifests[]? | .unified)] | map(select(type == "string")) | any(contains($m))' "diff-$n.json" > /dev/null; then
+      seen=1
+      echo "the detail route holds the text of the edit for $pack"
+    else
+      echo "the detail route holds no text of the edit for $pack: $(jq -c '{textTooLarge, values: (.values.unified | length), manifests: [.manifests[]? | (.unified | length)]}' "diff-$n.json")"
+    fi
+  done < <(jq -r --arg p "$profile" '.findings[] | select(.kind == "published-changed" and .profile == $p) | .packs[]' findings.json)
+  [ "$n" -gt 0 ] || { echo "the finding published-changed of $profile names no pack"; return 1; }
+  [ "$seen" = 1 ] || return 1
+  while IFS= read -r path; do
+    body=$(page "$path") || { echo "$path gave no answer"; return 1; }
+    case "$body" in
+      *"$marker"* | *"$encoded"*) echo "the route $path holds the text of the edit"; found=1 ;;
+    esac
+  done < <(summary_routes)
+  [ "$found" = 0 ] || return 1
+  echo "$(summary_routes | wc -l | tr -d ' ') summary routes hold no text of the edit"
+}
 
 # ---- the checks of failure and restart ---------------------------------------------------------------
 
@@ -514,6 +744,7 @@ summary() {
 # the script
 finish() {
   summary
+  ask_stop
   pf_stop
   [ -n "$undone" ] || [ "${KEEP:-}" = 1 ] || undo
   [ -z "$kubeconfig" ] || rm -f "$kubeconfig"
@@ -577,6 +808,12 @@ if stage 4 "a real change" && skip_without_page; then
   check no-value-leaves 0 '#656: no route and no line of the log holds that value' -- no_value_leaves
   check requests-counted-drift ? '#656: the same count with the drift, where verify --who reads the audit log (requests-counted-drift.out)' -- \
     count_requests
+  check ask-one-post 0 '#647: the cycles send no POST. One click on a move sends one POST to the validate route of Palette, and a second click sends none (ask-one-post.out, ask.log)' -- \
+    ask_one_post
+  check ask-words 0 '#647: the click on the pod gives a verdict of no-error, refuses, or no-answer, with the code or the status. The word accepts is in no answer of the API (ask-words.out)' -- \
+    ask_words
+  check diff-text 0 '#647: the detail route holds the text of the edit. No summary route holds it (diff-text.out)' -- \
+    diff_text
   check drift-undo 0 "#656: restore $addon" -- drift_undo
   check drift-clears 0 '#656: the finding goes in the next cycle' -- drift_clears
 fi

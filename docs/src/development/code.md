@@ -238,8 +238,9 @@ ASD-STE100.
 
 The observer is the Go program in `observer/`. It runs the `strata` binary and
 shows the answers. It holds no rule of strata. With `--read-pods`, it also lists
-the pods of its cluster. The rules above are for the Rust code, and these rules are
-for the Go code.
+the pods of its cluster. On a click, it asks Palette about one move, through
+`strata`. The rules above are for the Rust code, and these rules are for the Go
+code.
 
 - The observer uses the standard library only. `go.mod` has no `require` line,
   and `just lint` fails when it has one.
@@ -254,13 +255,18 @@ for the Go code.
   and `PATH`. A process gets no other variable, and a test holds the list.
   `STRATA_QUIET` and `NO_COLOR` are not in the list, because each call has `-q`
   and no call writes a terminal report.
+- Some flags have a command of their own in `internal/runner`. `--full` is for
+  `compare` and `verify`, and `--pin` is for `behind`. The runner refuses a
+  `behind` run that has neither `--no-impact` nor `--pin`. It refuses `--validate`
+  and `--repave` of `compare`. So no cycle can send a `POST` to Palette.
 - An error of a run holds a kind and a status. It never holds a message,
   because the message of the kind `api` can hold the body of an answer from
   Palette.
 - `internal/docs` is the allow-list of the fields that the observer reads. A
   document never decodes into a map, and no code forwards a document. A test
   makes sure that code reads each field. The detail tier sends a few fields as
-  they are, such as `Leaf.Old`. The list `forwarded` of that test names them.
+  they are, such as `Leaf.Old` and the fields of `Refusal`. The list `forwarded`
+  of that test names them.
 - `internal/check` reads a document of strata only with the schema id that
   `internal/docs` names for its command. Another id, or none, is a failed read
   of the kind `schema`, and it makes no finding. A test makes sure of it for
@@ -271,18 +277,21 @@ for the Go code.
   of the binary.
 - A log line holds a verdict, an exit code, a duration, an error kind, and a
   status. One more line names a profile and the status of its `verify.whoError`:
-  `HTTP <status>`, or `no answer`. A log line holds no output of a process. The
-  rule has no exception.
+  `HTTP <status>`, or `no answer`. The line for a click holds a verdict and a
+  status, and it names no profile and no pack. A log line holds no output of a
+  process. The rule has no exception.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test
   gives it a fake that returns files from `testdata/`. See
   [The checks of the observer](./observer.md).
-- The summary and the state hold no old value, no new value, no changed path,
-  and no value of a variable. A path can hold the name of a list item, and that
-  name is a value of the cluster. A test plants a marker in a changed value, in
-  a changed path, and in a variable. It fails when the marker is in the summary,
-  the state, or the log.
+- The summary and the state hold no old value, no new value, and no changed path.
+  They hold no value of a variable, no text of a diff, and no answer of Palette. A
+  path can hold the name of a list item, and that name is a value of the cluster. A test
+  plants a marker in a changed value, in a changed path, and in a variable. It
+  fails when the marker is in the summary, the state, or the log. Other tests plant
+  a marker in the text of a diff and in a refusal of Palette, and look in the same
+  places.
 - A cycle makes its directory under `--work` and removes it at the end, also
   after an error. A test makes sure that `--work` is empty after a good cycle
   and after a failed cycle.
@@ -292,10 +301,21 @@ for the Go code.
 - `internal/api` serves the summary and the detail tiers: see
   [The server of the observer](./observer-api.md). The summary tier uses types of
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the
-  detail tier has one. A test walks the types.
+  detail tier has one. A test walks the types. The detail tier also carries the
+  text of a diff in `PackDiff`, and the answers of Palette in `AsksView`.
 - `internal/api` and `internal/kube` can import `net` and `net/http`.
   `internal/api/health.go` and `internal/kube/kube.go` can hold the client and the
-  request. No code sends a `POST`. A test makes sure of each rule.
+  request. The code of the observer sends no HTTP `POST`. The server takes one
+  `POST`, the click "Ask Palette", and only `internal/api/api.go` names the method.
+  A test makes sure of each rule.
+- The click is the one question that the observer asks Palette. `internal/check`
+  runs `behind` with `--pin` for one pack, and only when `internal/api` calls it for a
+  click. Nothing calls it on a timer. The answer stays in memory. A request that
+  failed is the verdict `no-answer`, and the next click asks again.
+- A pack keeps 256 KiB of text at most for each side of a diff. `maxText` in
+  `internal/check` holds the limit, and `Diff.CapText` drops all the text of a pack
+  above it. The pod has a memory limit, and the cap keeps the text inside it. A test
+  makes sure that a pack at the limit keeps its text.
 - `internal/kube` is the one place that calls the Kubernetes API. It sends one `GET`
   on the list of pods, with paging, and no other request. It decodes no `env`. It reads
   the token and the CA again at each call, because the kubelet rotates the token. Its
@@ -314,9 +334,10 @@ for the Go code.
   with no `strata` binary. A test decodes each file of each set into the type of
   its route, so the data cannot drift from the API.
 - A server answers on a loopback address only. It sets the four headers on each
-  answer, it refuses a `Host` that is not loopback, and it logs no request.
-- One worker holds the one slot for a `strata` process. A cycle and a request of
-  the detail tier take the slot in turn, so two processes never run together.
+  answer, it refuses a `Host` that is not loopback, and it logs no request. It
+  refuses a `POST` that has no header `Sec-Fetch-Site: same-origin`.
+- One worker holds the one slot for a `strata` process. A cycle, a request of the
+  detail tier, and a click take the slot in turn, so two processes never run together.
 - A test of a route has a line in the table of the sentinel test. The test fails
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the

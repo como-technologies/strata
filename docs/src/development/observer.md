@@ -13,8 +13,11 @@ answer of each. It answers six questions:
 The observer holds no rule about a profile. It reads the answers of `strata`
 through the allow-list of `internal/docs`, and it writes nothing to Palette. The
 sixth question needs `--read-pods`. It comes from the Kubernetes API, not from
-`strata`: see [The read of the pods](#the-read-of-the-pods). The observer sends
-`GET` requests only. For the rules of the code, see [The Go of the
+`strata`: see [The read of the pods](#the-read-of-the-pods). A cycle sends `GET`
+requests only. One click on the page sends one `POST` to Palette, through `strata`:
+see [The answers of Palette](#the-answers-of-palette).
+
+For the rules of the code, see [The Go of the
 observer](./code.md#the-go-of-the-observer).
 
 `once` prints the summary one time. `serve` keeps the answers and shows them on
@@ -37,19 +40,26 @@ also when a cycle failed.
 The observer starts these commands, and no other. `internal/runner` refuses
 any other command and any other flag.
 
-| Cycle | Step | Command | Exit that is an answer |
+| Run | Step | Command | Exit that is an answer |
 | --- | --- | --- | --- |
-| Content | 1 | `verify <record>... --summary --who --json --compact -q` | 0, 1, or 2 with a document |
+| Content | 1 | `verify <record>... --summary --who --full --json --compact -q` | 0, 1, or 2 with a document |
 | Content | 2 | `snapshot cluster:<uid> --raw-dir raw -o cluster.json -q` | 0 |
 | Content | 3 | `snapshot cluster:<uid>/<profile> --from-raw raw -o side-<n>.json -q` | 0 |
-| Content | 4 | `compare <record> side-<n>.json --json --compact -q` | 0 or 1 |
+| Content | 4 | `compare <record> side-<n>.json --full --json --compact -q` | 0 or 1 |
 | Versions | 1 | `behind <record>... --no-impact --json --compact -q` | 0, 1, or 2 with a document |
-| Versions | 2 | `compare pack:<registryUid>/<name>@<version> pack:<registryUid>/<name>@<newest> --json --compact -q` | 0 or 1 |
+| Versions | 2 | `compare pack:<registryUid>/<name>@<version> pack:<registryUid>/<name>@<newest> --full --json --compact -q` | 0 or 1 |
+| Click | 1 | `behind <record> --pin <layer>/<name> --json --compact -q` | 0, 1, or 2 with a document |
 
 Steps 3 and 4 run for each record that the cluster runs. The side comes from
 the raw answers of step 2, so these two steps make no request.
 Step 2 of the versions cycle runs for each pin that is behind and has no cached
 move.
+
+`--full` adds the unified text of the changes to the document of `verify` and of
+`compare`. The text stays in memory: see [The text of a
+diff](./observer-api.md#the-text-of-a-diff). The click is the one row that asks
+Palette. It runs for one pack, when a person clicks "Ask Palette", and never on a
+timer. See [The answers of Palette](#the-answers-of-palette).
 
 With `--read-pods`, the content cycle lists the pods before step 1: see [The read of
 the pods](#the-read-of-the-pods).
@@ -331,14 +341,42 @@ counts of images and charts, and the three counts of `fold`. `new` is true when
 `listed` is in the last 7 days.
 
 The cache of a move has the key `<registryUid>/<name>@<version>-><newest>` and
-the version of the binary. A new binary asks again. The cache holds counts. The
-changed values go out of scope after the compare, and the state never holds
-them.
+the version of the binary. A new binary asks again. The cache in the state holds
+counts. The memory holds the changed values and the text of the diff of each move,
+and the state never holds them.
 
 A compare that fails is not cached, and it does not fail the cycle. The row of
 the pin stays in the list with no counts and no impact, and the cause
 `pin-error` names its pack. The other pins keep their compare. The next cycle
 asks again for that move only.
+
+## The answers of Palette
+
+A click on "Ask Palette" asks Palette about the move of one pack to its newest
+version. [The click](./observer-api.md#the-click) tells how the server takes it. The
+move must be one that the last good versions cycle found for the profile.
+
+The click runs `behind` on the record of the profile with `--pin`, and reads the
+`bump` of the pin in the document. An answer holds the `profile`, the `key`, the
+`newest` version, the `verdict`, the `refusals`, and the `status`.
+
+| `verdict` | When |
+| --- | --- |
+| `no-error` | `bump.paletteValidation` is there, and its `accepts` is true. |
+| `refuses` | `accepts` is false. `refusals` holds each error: `pack`, `code`, `message`, and `clusters`. |
+| `no-answer` | The pin has an `error`, `bump.paletteValidationError` is set, the document has no such pin, or the run failed. `status` is the HTTP status of the failure, or 0. |
+
+- Palette checks the default values of the new version. It does not check the values
+  of the team, so `no-error` is not "Palette takes the move". The page never reads
+  "accepts".
+- `no-answer` is no finding, no event, and no cause of "Not checked". It changes no
+  count and no status. The summary does not change.
+- The memory holds `no-error` and `refuses` until the move changes or the process
+  restarts. The move changes when the pin, its newest version, or the `strata` binary
+  changes. A second click sends nothing.
+- A `no-answer` stays in memory until the next click, which asks again.
+- A refusal holds the message of Palette and the names of clusters. Only the detail
+  tier serves it.
 
 ## The page state
 
@@ -359,8 +397,8 @@ A wrong key with records goes to `lost`. A wrong `--cluster-uid` gives good
 
 ## The summary
 
-The summary is one JSON document. It holds no old value, no new value, and no
-value of a variable.
+The summary is one JSON document. It holds no old value, no new value, no value
+of a variable, no text of a diff, and no answer of Palette.
 
 | Field | Content |
 | --- | --- |
@@ -441,7 +479,8 @@ The two messages of the pods are:
 
 The observer writes the file to a temporary file and renames it. A file that it
 cannot read is a log line and an empty state. So two runs of `once` with one
-state directory reach `lost` when the cluster does not answer.
+state directory reach `lost` when the cluster does not answer. The file holds no
+text of a diff and no answer of Palette. A restart drops both.
 
 The manifests make `state` an `emptyDir`. A new pod of the observer then starts with
 an empty state. It loses the first sight of each finding. It takes the first digests
@@ -450,5 +489,6 @@ again from the pods that it sees.
 A log line holds a verdict, an exit code, a duration, an error kind, and a
 status. One more line says that strata could not read the audit log. It names
 the profile and the status of `verify.whoError`: `HTTP <status>`, or
-`no answer` when the text has no status. A log line holds no output of a
-process. The body of the answer of Palette stays out of it.
+`no answer` when the text has no status. The line for a click holds the verdict and
+the status, and no profile and no pack. A log line holds no output of a
+process. It holds no body of an answer of Palette.

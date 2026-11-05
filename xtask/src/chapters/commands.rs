@@ -570,6 +570,13 @@ fn compare(r: &mut Runner) {
         false,
         "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --full",
     );
+    // the JSON document holds the text of --full in `unified`: the page shows the first lines
+    r.step(
+        "compare-full-json",
+        1,
+        false,
+        "strata compare aws-stack@1.1.1 aws-stack@1.1.2 --full --json | jq -c '.packs[] | select(.values.unified) | {name, unified: (.values.unified | split(\"\\n\")[:4])}'",
+    );
     r.step(
         "compare-markdown",
         1,

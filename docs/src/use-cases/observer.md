@@ -10,8 +10,9 @@ the edited content. See [A published version is edited in place](./edited-in-pla
 The observer runs in the cluster and checks every 15 minutes. It also keeps a page
 that answers three more questions: who made the edit, whether this cluster took it,
 and which pins have newer versions. It does this with the `strata` commands that
-the other pages show. It adds no rule. An optional read of the pods adds a
-fourth question in step 5: which digest each tag runs.
+the other pages show. It adds no rule. The page shows the text of each diff, and a
+button asks Palette about a move in step 5. An optional read of the pods adds a
+fourth question in step 6: which digest each tag runs.
 
 In this example, `dev` has `aws-stack@1.0.0` and `aws-stack@1.1.0`. The cluster
 `payments` runs `aws-stack@1.0.0` and the add-on profile `platform-addons@1.0.0`.
@@ -91,10 +92,54 @@ kubectl -n strata-observer port-forward deploy/strata-observer 8080
 
 The overview shows the finding, the newer versions, and what the check did not
 cover. The page of the profile shows its two sides, its events, and its packs. The
-page of the pack shows the old and the new value of the reclaim policy. [The API of the observer](../reference/observer-api.md) names
-the routes that carry each of them.
+page of the pack shows the old and the new value of the reclaim policy in a table.
+[The API of the observer](../reference/observer-api.md) names the routes that carry each of them.
 
-## 5. Read the digest of each tag
+The Values tab then shows the text of the same edit as a diff block. It is the text
+that `strata verify --full` prints, and the cycle reads it with `--full`:
+
+```text
+{{#include ../output/observer-text.txt}}
+```
+
+The Manifests tab shows the text of each changed, added, or removed manifest. A
+control "Unified / Split" on both tabs chooses between two layouts of the same text.
+Palette writes the mask `********` over a secret, and the text keeps it as a
+placeholder.
+
+A pack with more than 256 KiB of text for a side shows no text. The page says that
+the text is too large, and it gives the command `strata compare ... --full`. [The
+text of a diff](../automation/observer.md#the-text-of-a-diff) gives the rules. The
+check `diff-text` of [What the live example verifies](../development/live-runs.md)
+tests the text on a cluster that Palette built.
+
+## 5. Ask Palette about a move
+
+The newer versions of step 2 are not a fault. Before a person moves a pin, one more
+fact helps: does Palette give an error for the move? The button "Ask Palette" answers
+it. It sits in the table of the newer versions. It also sits on the card "Move to" of
+a pack, where it reads "Ask Palette about this move".
+
+A click sends one `POST` to Palette. The observer runs `strata behind` with `--pin`,
+on the record of the profile, so the question is about one pack. The answer reads in
+one of three ways:
+
+- **Palette gave no error.** Palette checked the default values of the new version.
+  It did not check the values of your team: see [Palette accepts the move, or refuses
+  it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+- **`Palette refuses: <code>`.** Palette gave an error, such as
+  `DependencyPackUpgradeNotSupported`. The page shows the message of Palette and the
+  clusters that it names. See [The upgrade
+  dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
+- **Palette gave no answer.** A request failed. The page shows the HTTP status. This
+  is no finding, and it raises no severity.
+
+A second click on an answered move sends nothing. The observer asks again after
+"Palette gave no answer". Nothing asks on a timer. The checks `ask-one-post` and
+`ask-words` of [What the live example verifies](../development/live-runs.md) test
+the click on a cluster that Palette built.
+
+## 6. Read the digest of each tag
 
 The steps above use Palette alone. A vendor can also rebuild an image under the tag
 that a pack names. Palette gets no notice, and no record changes: see [A vendor
@@ -145,6 +190,12 @@ list "Needs attention" shows it.
   registry with immutable tags. See [What to do](./image-tag.md#what-to-do).
 - `image-moved` clears when the digest comes back, or when you write new records.
   `image-split` clears when each pod runs one digest.
+- Read "Palette gave no error" as one fact, not as a promise. Palette did not check
+  your own values. When Palette refuses a move, pick a closer version: see [What to
+  do](./behind.md#what-to-do).
+- After "Palette gave no answer", make sure that the key can read the profile, then
+  click again. The role of the key does not need more than the read role: see [The
+  least role of the key](../automation/observer.md#the-least-role-of-the-key).
 
 ## Limits
 
@@ -155,3 +206,5 @@ list "Needs attention" shows it.
   [What the read catches and what it does not](../automation/observer.md#what-the-read-catches-and-what-it-does-not).
 - The check is as old as the last content cycle. The page shows the time of that
   cycle, and it shows `stale` when the cycle is more than two periods old.
+- The click asks about the newest version of a pin only. The observer keeps the
+  answers in memory, so a restart of the pod forgets them.

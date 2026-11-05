@@ -673,6 +673,11 @@ const FORMATS: Left = Left {
     why: "the script asks for the format that it reads",
 };
 
+const FULL: Left = Left {
+    flags: &["--full"],
+    why: "the report names the drift, and the text of the diff is for a person at a terminal",
+};
+
 /// The options of `strata preflight` that a pipeline sets. `preflight.sh` reads the variable of
 /// each one and passes the option. The reusable workflow sets the variable from the input, and the
 /// GitLab drop-in gives the variable a default. An empty input or variable means that the script
@@ -717,7 +722,7 @@ const PASSES: [Passes; 4] = [
             reach("--format", "", ""),
             reach("--quiet", "", ""),
         ],
-        left: &[PROJECT, FORMATS],
+        left: &[PROJECT, FORMATS, FULL],
     },
     Passes {
         script: "merge-gate.sh",
@@ -730,6 +735,7 @@ const PASSES: [Passes; 4] = [
         ],
         left: &[
             PROJECT,
+            FULL,
             Left {
                 flags: &["--who"],
                 why: "the gate stops the merge, and the drift issue names who",
@@ -751,6 +757,10 @@ const PASSES: [Passes; 4] = [
         ],
         left: &[
             FORMATS,
+            Left {
+                flags: &["--pin"],
+                why: "the report covers each pin, and this option limits the run to one pack",
+            },
             Left {
                 flags: &["--pre-release"],
                 why: "an issue opens for a final version, and a pipeline would open one for each build",

@@ -250,6 +250,10 @@ pub struct BehindOptions {
     pub impact: bool,
     /// The report of the previous run: each pin names the versions that arrived since.
     pub since: Option<BehindReport>,
+    /// Report only the pins of the pack with this key, `<layer>/<name>`. Then strata reads no other
+    /// pack, and compares and asks Palette about the move of these pins only. Strata reads the
+    /// records first, and refuses a key that none of them pins from a registry.
+    pub pin: Option<String>,
     /// Also name a pre-release as a newer version of a pin that is not a pre-release. Without it,
     /// a pre-release is a newer version only for a pin that is one itself.
     pub pre_release: bool,
@@ -388,7 +392,7 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let Records { loaded, pins } = read_records(records)?;
+    let Records { loaded, pins } = read_records(records, options.pin.as_deref())?;
     let check = Check {
         loaded: &loaded,
         impact: options.impact,
@@ -420,14 +424,20 @@ where
 }
 
 /// Read each record of `records`, and collect the pins in them. A pin is in the project of the
-/// first record that pins it.
-fn read_records(records: &[PathBuf]) -> Result<Records> {
+/// first record that pins it. With `only`, the key of a pack, the records give the pins of that pack alone.
+///
+/// # Errors
+///
+/// [`Error::Usage`] when `only` is a key that no record pins from a registry. The error comes
+/// before any request.
+fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
     let mut loaded: Vec<Snapshot> = Vec::with_capacity(records.len());
     let mut pins: BTreeMap<PinKey, Pinned> = BTreeMap::new();
     for path in records {
         let snap = Snapshot::load(path)?;
         let subject = snap.source.title();
-        for p in snap.packs.iter().filter(|p| !p.registry_uid.is_empty()) {
+        let from_registry = snap.packs.iter().filter(|p| !p.registry_uid.is_empty());
+        for p in from_registry.filter(|p| only.is_none_or(|key| p.key == key)) {
             let pinned = pins.entry(PinKey::of(p)).or_insert_with(|| Pinned {
                 pin: Pin::of(p),
                 project: snap.source.project_uid.clone(),
@@ -445,6 +455,13 @@ fn read_records(records: &[PathBuf]) -> Result<Records> {
             }
         }
         loaded.push(snap);
+    }
+    if let Some(key) = only
+        && pins.is_empty()
+    {
+        return Err(Error::Usage {
+            message: format!("--pin {key}: no record pins this pack from a registry"),
+        });
     }
     Ok(Records { loaded, pins })
 }

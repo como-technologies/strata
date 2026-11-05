@@ -37,6 +37,8 @@ pub(super) fn run(r: &mut Runner) {
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100, ADDONS_DEV], &[]));
     r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
     r.tenant(|t| t.on_cluster_reclaim(DEV, LEDGER, "Retain"));
+    // the click "Ask Palette" asks the route of a profile version, and Palette gives no error
+    r.tenant(|t| t.profile_packs_answer(DEV, Some(A100), None));
     records(r);
     r.serve_here(); // state 1: the records are taken, and nobody has edited a version
     // a person edits aws-stack@1.0.0 through the API, after its record. payments has not taken it
@@ -89,7 +91,7 @@ fn summary(r: &mut Runner, name: &str, uid: &str, state: &str, filter: &str) {
 }
 
 /// The answers of the observer after the edit: the finding of `payments`, the newer versions, the
-/// limits, the log, and the finding of `ledger`.
+/// limits, the log, the text of the edit, and the finding of `ledger`.
 fn answers(r: &mut Runner) {
     summary(
         r,
@@ -120,6 +122,18 @@ fn answers(r: &mut Runner) {
             "{} 2>&1 >/dev/null | sed -E 's/^time=[^ ]+ //; s/ duration=[0-9.]+m?s//' | grep 'msg=cycle'",
             once(PAYMENTS, "state")
         ),
+    );
+    // the Values tab of the page shows this text of the edit, which the cycle reads with --full
+    r.step(
+        "observer-text-all",
+        1,
+        false,
+        "strata verify releases/aws-stack_1.0.0.json --full",
+    );
+    r.excerpt(
+        "observer-text",
+        "observer-text-all",
+        r"^([$]|--- |[+][+][+] |[-+] +reclaimPolicy)",
     );
     // ledger runs aws-stack@1.1.0, and its own copy differs from the record
     summary(

@@ -15,6 +15,14 @@
 // two holds the finding of the image, its event, and its profile with the finding. The set images-off is
 // ok with the read of the pods off. The set images-unread is ok with a read of the pods that never ended
 // well, and it holds the cause pods-not-read.
+//
+// The file diffs.json holds the answers of the detail route, with the unified text of the values and of
+// the manifests. The set text-too-large is ok with two packs whose text the observer dropped.
+//
+// The file asks.json holds the answers of Palette that the observer holds. The set asks is ok with one
+// answer of each verdict. The file replies.json is optional: it holds the answer that a click on a move
+// gives when the set holds none for it. A move with no reply gives "not found", as a move that the
+// observer does not know. The set ok holds a reply for each move of its Newer table but one.
 package devdata
 
 import (
@@ -27,7 +35,9 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/api"
@@ -60,11 +70,17 @@ const (
 	StateImagesSplit  State = "images-split"
 	StateImagesOff    State = "images-off"
 	StateImagesUnread State = "images-unread"
+
+	// The states of the viewer. Asks holds one answer of Palette of each verdict. Text-too-large holds
+	// two packs whose text the observer dropped, so the page names the command for it.
+	StateAsks         State = "asks"
+	StateTextTooLarge State = "text-too-large"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
-	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread}
+	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
+	StateAsks, StateTextTooLarge}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.
@@ -80,13 +96,17 @@ const (
 	fileEvents     = "events.json"
 	fileDiffs      = "diffs.json"
 	fileImages     = "images.json"
+	fileAsks       = "asks.json"
+	fileReplies    = "replies.json"
 	fileBase       = "base"
 )
 
-// Files lists the files that a set holds, or takes from its base.
-var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs, fileImages}
+// Files lists the files that a set holds, or takes from its base. The file replies.json is not in the
+// list, because a set can lack it.
+var Files = []string{fileCluster, fileFindings, fileProfiles, fileNewer, fileNotChecked, fileEvents, fileDiffs, fileImages, fileAsks}
 
-// Set holds the answer of each route for one state. It is an api.Source.
+// Set holds the answer of each route for one state. It is an api.Source. A click on a move changes
+// the answers that the set holds, so the methods that read or change them take the lock.
 type Set struct {
 	Cluster    api.ClusterView
 	Findings   api.FindingsView
@@ -98,6 +118,13 @@ type Set struct {
 	Images model.Observed
 	// Diffs holds the answers of the detail route that the set knows.
 	Diffs []api.PackDiff
+	// Asks holds the answers of Palette that the set has given. A click on a move that it holds gives the
+	// answer again.
+	Asks api.AsksView
+	// Replies holds the answer that a click gives for a move that Asks does not hold.
+	Replies api.AsksView
+
+	mu sync.Mutex
 }
 
 // Read gives the content of a file of a state. A file that the set does not hold comes from its base.
@@ -148,7 +175,7 @@ func Load(fsys fs.FS, state State, now time.Time) (*Set, error) {
 		name string
 		into any
 	}{{fileCluster, &s.Cluster}, {fileFindings, &s.Findings}, {fileProfiles, &s.Profiles}, {fileNewer, &s.Newer},
-		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}, {fileImages, &s.Images}} {
+		{fileNotChecked, &s.NotChecked}, {fileEvents, &s.Events}, {fileDiffs, &s.Diffs}, {fileImages, &s.Images}, {fileAsks, &s.Asks}} {
 		raw, err := Read(fsys, state, f.name)
 		if err != nil {
 			return nil, fmt.Errorf("state %s: %w", state, err)
@@ -158,6 +185,16 @@ func Load(fsys fs.FS, state State, now time.Time) (*Set, error) {
 		}
 		if err := Decode(raw, f.into); err != nil {
 			return nil, fmt.Errorf("state %s, %s: %w", state, f.name, err)
+		}
+	}
+	raw, err := Read(fsys, state, fileReplies)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return nil, fmt.Errorf("state %s: %w", state, err)
+	default:
+		if err := Decode(raw, &s.Replies); err != nil {
+			return nil, fmt.Errorf("state %s, %s: %w", state, fileReplies, err)
 		}
 	}
 	return &s, nil
@@ -195,7 +232,8 @@ func packOf(d api.PackDiff) docs.Pack {
 	p := docs.Pack{Key: d.Key, Status: d.Status, Impact: d.Impact, Manifests: d.Manifests, ParamChanges: d.ParamChanges,
 		ImageChanges: d.ImageChanges, ChartChanges: d.ChartChanges, Masked: d.Masked}
 	p.Layer, p.Name, _ = strings.Cut(d.Key, "/")
-	p.Values.Parseable = d.Values.Parseable
+	p.Values.Parseable, p.Values.Unified = d.Values.Parseable, d.Values.Unified
+	p.TextTooLarge = d.TextTooLarge
 	for _, list := range [][]docs.Leaf{d.Values.Settings, d.Values.FollowsTheVersion, d.Values.RepeatsTheLists} {
 		p.Values.Diff = append(p.Values.Diff, list...)
 	}
@@ -214,4 +252,37 @@ func packOf(d api.PackDiff) docs.Pack {
 		}
 	}
 	return p
+}
+
+// Ask gives the answer for a move, as the observer does when a person clicks. It sends no request. A
+// move with an answer of Palette gets that answer again. A move with no answer, or with a request that
+// failed, gets its reply, and the set keeps the reply as the answer of the move. A move with no reply
+// is not found, and the second result is false.
+func (s *Set) Ask(_ context.Context, profile, key string) (model.Answer, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	is := func(a model.Answer) bool { return a.Profile == profile && a.Key == key }
+	held := slices.IndexFunc(s.Asks.Asks, is)
+	if held >= 0 && s.Asks.Asks[held].Answered() {
+		return s.Asks.Asks[held], true, nil
+	}
+	i := slices.IndexFunc(s.Replies.Asks, is)
+	switch {
+	case i >= 0 && held >= 0:
+		s.Asks.Asks[held] = s.Replies.Asks[i]
+	case i >= 0:
+		s.Asks.Asks = append(s.Asks.Asks, s.Replies.Asks[i])
+	case held >= 0:
+		return s.Asks.Asks[held], true, nil
+	default:
+		return model.Answer{}, false, nil
+	}
+	return s.Replies.Asks[i], true, nil
+}
+
+// Answers gives the answers that the set holds.
+func (s *Set) Answers() []model.Answer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.Asks.Asks)
 }

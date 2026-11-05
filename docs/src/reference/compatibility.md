@@ -268,6 +268,23 @@ release line of a version: its first numbers, joined by dots, such as `4.10` for
 `probe::FixtureBackend::outputs` in `strata-preflight` gives the output of each command that a
 fixture holds under `_exec`, as `exec` answers them.
 
+After 0.29.0, four types of the library of `strata` have a new field. A struct literal must set
+each new field, and a pattern with no `..` must name it:
+
+- `ops::BehindOptions` has the field `pin: Option<String>`, the key `<layer>/<name>` of the one
+  pack to report. Give `None` to get the result of 0.29.0, or use `..Default::default()`.
+- `ops::VerifyOptions` has the field `full: bool`. `ops::verify_many` reads it. Give `false` to
+  get the result of 0.29.0, or use `..Default::default()`.
+- `diff::ValuesDiff` has the field `unified: Option<String>`. Give `None`, or use
+  `..Default::default()`.
+- `diff::ManifestChange` has the field `unified: Option<String>`. The type has no `Default`, so a
+  struct literal must set the field to `None`.
+
+After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
+`true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
+It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
+registry. It gives the error before any request.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -295,6 +312,12 @@ that the listing gives no type has the `type` `spectro`, where 0.21.0 wrote
 empty text. The schema now gives the field the pack types. A record of a
 cluster omits a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
+
+After 0.29.0, `strata-diff/1` has the new field `unified`. It is in `packs[].values` and in each
+entry of `packs[].manifests[]`, and only with `--full`. The id stays. A document without `--full`
+is as before. With `verify --summary --full --json`, the `diff` of each drifted row of
+`strata-verify-summary/1` has the field. [The field unified](./documents.md#the-field-unified)
+says what the text holds.
 
 Four values change after 0.27.0 with no new id. A new id breaks each reader of the document
 for a case that is rare. [Release 0.28.0](#release-0280-changes-that-need-action) gives the
@@ -879,6 +902,21 @@ rule failed, as it is for the state `Deleted`. The verdict says that the cluster
 The terminal form of `strata consumers` and `strata list` colors a cluster state as
 `strata-preflight --verbose` does. Green is `Running`, yellow is a build, and red is `Error`,
 `Deleting`, or `Deleted`.
+
+After 0.29.0, `compare --json --full` writes the field `unified`. `--json` ignored `--full`
+before, so the document was the same with and without it. The text is the text that `--full`
+prints. A secret that Palette masks stays `********` in it, and no value of a cluster variable is
+in it. See [The field unified](./documents.md#the-field-unified).
+
+After 0.29.0, two options are new, and both only add:
+
+- `verify --full` gives the unified diffs of a record that drifted, as `compare --full` does. For
+  one record, the report prints them, and `--json` writes `unified` in `packs[]`. With many
+  records or `--summary`, it changes the JSON alone.
+- `behind --pin <layer>/<name>` reports the pins of one pack, such as `addon/cert-manager`. It
+  compares the move and asks Palette about it, and it reads no other pack. A key that no record
+  pins from a registry gives the error `usage` and exit `2`, before any request. `--pin` with
+  `--no-impact` gives a usage error of the command line and exit `2`.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

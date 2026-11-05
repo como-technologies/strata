@@ -60,7 +60,7 @@ func TestTheVersionsCycleComparesEachMoveAndFillsTheRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := o.Summary()
-	if len(s.Newer) != 4 || w.countMoves() != 4 || s.Counts.Newer != 4 || s.Counts.NewerProfiles != 1 || s.StrataVersion != "0.28.0" {
+	if len(s.Newer) != 4 || w.countMoves() != 4 || s.Counts.Newer != 4 || s.Counts.NewerProfiles != 1 || s.StrataVersion != w.behind.Tool.Version {
 		t.Fatalf("rows %d, moves %d, counts %+v, strata %q", len(s.Newer), w.countMoves(), s.Counts, s.StrataVersion)
 	}
 	byName := map[string]model.Newer{}
@@ -117,7 +117,7 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 			t.Errorf("the state holds %q", banned)
 		}
 	}
-	if !strings.Contains(string(raw), "0.28.0 "+registryUID+"/kubernetes@1.35.3->1.36.2") {
+	if !strings.Contains(string(raw), w.behind.Tool.Version+" "+registryUID+"/kubernetes@1.35.3->1.36.2") {
 		t.Errorf("the key holds no version of the binary: %s", raw)
 	}
 }
@@ -127,7 +127,7 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 	if err := r.observer(w).RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	w.behind.Tool.Version = "0.29.0"
+	w.behind.Tool.Version = "99.0.0"
 	o := r.restart(w)
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 		t.Fatal(err)
 	}
 	for key := range state.Moves {
-		if !strings.HasPrefix(key, "0.29.0 ") {
+		if !strings.HasPrefix(key, "99.0.0 ") {
 			t.Errorf("the key %q stays", key)
 		}
 	}

@@ -32,6 +32,15 @@ const PODS = {OFF: "off", NOT_READ: "not-read", READ: "read"};
 const IMAGE = {STEADY: "steady", MOVED: "moved", SPLIT: "split", NOT_CHECKED: "not-checked"};
 const MATCH = {EXACT: "exact", NAME_AND_TAG: "name-and-tag", NONE: "none"};
 const DIGEST = {FIRST: "first-digest", ANOTHER: "another-digest", NO_REPO: "no-repo-digest", NOT_STARTED: "not-started"};
+// The words of /v1/asks. A move that nobody asked about has no answer. A no-answer is a request that
+// failed: it is no finding, and it raises no severity.
+const VERDICT = {NO_ERROR: "no-error", REFUSES: "refuses", NO_ANSWER: "no-answer"};
+// What a row of the table of newer versions says for an answer.
+const ASK_ROW = {[VERDICT.NO_ERROR]: "No error", [VERDICT.REFUSES]: "Refuses", [VERDICT.NO_ANSWER]: "No answer"};
+const ASK_FAILED = "The observer could not ask now. Try again later.";
+// The two layouts of a diff, and the note of a last line that has no end of line.
+const VIEWS = [["unified", "Unified"], ["split", "Split"]];
+const NO_EOL = "\\ No newline at end of file";
 
 // The color class and the word of a status, a kind of news, and an impact level.
 const BADGE = {
@@ -108,9 +117,11 @@ const POD_ERROR_TEXT = {
 };
 
 /* ---- State ---- */
-// D holds the last answers of the routes. S holds what the person did on the page.
+// D holds the last answers of the routes. S holds what the person did on the page: view is the layout of
+// each diff, asking holds the moves with a question to Palette on its way, and askFailed holds the moves
+// for which the observer could not ask.
 let D = null;
-const S = {filter: "all", q: "", tabs: {}, side: {}, open: {}, diffs: {}, offline: false, loadedAt: null};
+const S = {filter: "all", q: "", tabs: {}, side: {}, open: {}, diffs: {}, view: "unified", asking: {}, askFailed: {}, offline: false, loadedAt: null};
 
 async function getJSON(url) {
   const r = await fetch(url, {cache: "no-store"});
@@ -118,14 +129,18 @@ async function getJSON(url) {
   return r.json();
 }
 
-// load reads the seven summary routes. The detail route is read when a screen needs it.
+// load reads the seven summary routes and the list of answers of Palette. The detail route of a pack is
+// read when a screen needs it. A list of answers that cannot be read keeps the last list, and it never
+// puts the page offline.
 async function load() {
-  const [cluster, findings, profiles, newer, notChecked, events, images] = await Promise.all(
-    ["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events", "/v1/images"].map(getJSON));
+  const [cluster, findings, profiles, newer, notChecked, events, images, asks] = await Promise.all([
+    ...["/v1/cluster", "/v1/findings", "/v1/profiles", "/v1/newer", "/v1/notchecked", "/v1/events", "/v1/images"].map(getJSON),
+    getJSON("/v1/asks").catch(() => null)]);
   if (D && (D.cluster.content.checkedAt !== cluster.content.checkedAt || D.cluster.versions.readAt !== cluster.versions.readAt)) {
     S.diffs = {};
   }
-  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images};
+  const answers = asks && Array.isArray(asks.asks) ? asks.asks : D ? D.asks : [];
+  D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers};
   S.loadedAt = new Date().toISOString();
 }
 
@@ -238,6 +253,77 @@ const moveUnread = (subject, p) => !!p && D.notChecked.some(r => r.cause === CAU
 const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not read") : impactBadge(row.impact);
 // worstOf gives the status that wins in a list of statuses.
 const worstOf = list => SEVERITY.find(s => list.includes(s)) || STATUS.OK;
+
+/* ---- The question to Palette ----
+   Only a click on a button sends a question: nothing asks on a timer, and no render asks. One answer is for
+   one move: the move of a pack of a profile to the newest version. */
+const askId = (subject, p) => `${subject}|${p.key}`;
+// answerOf finds the answer of Palette for a move. A move that nobody asked about has none.
+const answerOf = (subject, p, row) => D.asks.find(a => a.profile === subject && a.key === p.key && a.newest === row.newest);
+const isAnswer = a => !!a && ["profile", "key", "newest", "verdict"].every(k => typeof a[k] === "string");
+// verdictOf reads the verdict of an answer. A word that the page does not know reads as no answer, and the page claims nothing.
+const verdictOf = a => a.verdict === VERDICT.NO_ERROR || a.verdict === VERDICT.REFUSES ? a.verdict : VERDICT.NO_ANSWER;
+
+// askButton draws the button of a move. It is off while the question is on its way.
+function askButton(cls, subject, p, label) {
+  const asking = S.asking[askId(subject, p)];
+  return h`<button class="${cls}" data-ask="${subject}" data-pack="${p.key}"${asking ? raw(" disabled") : ""}>${asking ? "Asking" : label}</button>`;
+}
+
+// askCell is the cell "Palette" of a row of the table of newer versions.
+function askCell(subject, p, row) {
+  const a = answerOf(subject, p, row);
+  const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut askmsg">${ASK_FAILED}</div>` : "";
+  if (!a) return h`${askButton("lnk", subject, p, "Ask Palette")}${failed}`;
+  const verdict = verdictOf(a);
+  if (verdict === VERDICT.NO_ANSWER) return h`<span class="mut">${ASK_ROW[verdict]}</span> ${askButton("lnk", subject, p, "Ask again")}${failed}`;
+  return h`<span class="fw">${ASK_ROW[verdict]}</span>`;
+}
+
+// refusalLines draws one error that Palette gives: the code, the message, and the clusters.
+const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class="m">${r.code}</span></div>${r.message ? h`<div>${r.message}</div>` : ""}${r.clusters && r.clusters.length ? h`<div class="mut">on ${r.clusters.join(", ")}</div>` : ""}`;
+
+// askBlock is the part of the card "Move to" that asks Palette, or that shows its answer.
+function askBlock(subject, p, row) {
+  const a = answerOf(subject, p, row);
+  const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut mt6">${ASK_FAILED}</div>` : "";
+  if (!a) return h`<div class="mt10">${askButton("btn", subject, p, "Ask Palette about this move")}${failed}</div>`;
+  switch (verdictOf(a)) {
+    case VERDICT.NO_ERROR:
+      return h`<div class="note small mt10"><b>Palette gave no error.</b> The page "behind" in the book says what this answer covers.</div>`;
+    case VERDICT.REFUSES: {
+      const list = a.refusals || [];
+      return h`<div class="note a small mt10">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Nothing on this cluster changed.</div></div>`;
+    }
+    default:
+      return h`<div class="note small mt10"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div><div class="mt6">${askButton("btn", subject, p, "Ask again")}${failed}</div>`;
+  }
+}
+
+// askPalette sends the question about one move. A click calls it, and it sends one request. A good
+// answer goes into the list. A request that fails leaves a short note, and the page keeps no answer.
+async function askPalette(subject, key) {
+  const x = profileOf(subject), p = x ? x.packs.find(q => q.key === key) : null;
+  const id = p ? askId(subject, p) : "";
+  if (!p || S.asking[id]) return;
+  S.asking[id] = true;
+  delete S.askFailed[id];
+  render();
+  let answer = null;
+  try {
+    const r = await fetch(`/v1/packs/${enc(subject)}/${enc(p.layer)}/${enc(p.name)}/ask`, {method: "POST", cache: "no-store"});
+    if (r.ok) answer = await r.json();
+  } catch (err) {
+    answer = null;
+  }
+  delete S.asking[id];
+  if (isAnswer(answer)) {
+    D.asks = [...D.asks.filter(a => !(a.profile === answer.profile && a.key === answer.key && a.newest === answer.newest)), answer];
+  } else {
+    S.askFailed[id] = true;
+  }
+  render();
+}
 
 // errorWords tells a failed run in words. own holds the words of a read that has its own, as POD_ERROR_TEXT.
 function errorWords(err, own = {}) {
@@ -538,15 +624,15 @@ function viewNewer() {
     }));
     groups.sort((a, b) => a.subject.localeCompare(b.subject));
     body = h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>
-      <div class="tw"><table><thead><tr><th>Pack</th><th>Move</th><th>Impact</th><th class="n">Settings</th><th class="n narrow-hide">Images</th><th class="n narrow-hide">Charts</th><th class="narrow-hide">Listed</th></tr></thead><tbody>${groups.map(g => {
+      <div class="tw"><table><thead><tr><th>Pack</th><th>Move</th><th>Impact</th><th class="n">Settings</th><th class="n narrow-hide">Images</th><th class="n narrow-hide">Charts</th><th class="narrow-hide">Listed</th><th class="narrow-hide">Palette</th></tr></thead><tbody>${groups.map(g => {
         const p = profileOf(g.subject);
         const total = p ? p.packs.length : "";
-        return [h`<tr class="g"><td colspan="7"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
+        return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
           g.rows.map(r => {
             const k = packOfRow(p, r);
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
             const count = v => moveUnread(g.subject, k) ? DASH : v;
-            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td></tr>`;
+            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k, r) : ""}</td></tr>`;
           })];
       })}</tbody></table></div>`;
   }
@@ -791,24 +877,114 @@ function changesPanel(list, noun, head) {
   return h`<div class="tw"><table><thead><tr><th></th><th>${head}</th><th>Before</th><th>After</th></tr></thead><tbody>${list.map(c => h`<tr><td class="m">${OPS[c.op] || c.op}</td><td class="m">${c.name}</td><td class="was">${c.old || DASH}</td><td class="now">${c.new || DASH}</td></tr>`)}</tbody></table></div>`;
 }
 
-function manifestsPanel(d) {
-  const list = [...d.manifests.map(m => ["Manifest", m]), ...d.paramChanges.map(m => ["Parameter", m])];
-  if (!list.length) return h`<div class="body small mut">No manifest changed.</div>`;
-  return h`<div class="tw"><table><thead><tr><th>Change</th><th>Kind</th><th>Name</th></tr></thead><tbody>${list.map(([kind, m]) => h`<tr><td class="m">${m.op}</td><td>${kind}</td><td class="m">${m.name}</td></tr>`)}</tbody></table></div>`;
+/* The text of a diff, as `strata compare --full` prints it. A line is a value of the cluster, so each line goes through h``. */
+const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
+
+// parseUnified reads a unified diff into rows. A row is one line of a hunk with its number on each side: t is
+// " " for a line on both sides, "-" for a removed line, and "+" for an added line. A row with t "@" is the head
+// of a hunk that follows another hunk, and it shows the gap. noEol says that the line has no end of line. The
+// two header lines come before the first hunk and give no row. In a hunk, a line "--- x" is a removed line.
+function parseUnified(text) {
+  const rows = [];
+  let a = 0, b = 0, hunks = 0;
+  const lines = String(text).split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  for (const line of lines) {
+    const head = line.startsWith("@@") ? HUNK.exec(line) : null;
+    if (head) {
+      if (hunks++) rows.push({t: "@", x: line});
+      a = Number(head[1]);
+      b = Number(head[2]);
+    } else if (!hunks) {
+      continue;
+    } else if (line[0] === "\\") {
+      if (rows.length && rows[rows.length - 1].t !== "@") rows[rows.length - 1].noEol = true;
+    } else if (line[0] === "-") {
+      rows.push({t: "-", x: line.slice(1), na: a++, nb: ""});
+    } else if (line[0] === "+") {
+      rows.push({t: "+", x: line.slice(1), na: "", nb: b++});
+    } else {
+      rows.push({t: " ", x: line[0] === " " ? line.slice(1) : line, na: a++, nb: b++});
+    }
+  }
+  return rows;
 }
 
-function valuesPanel(d, id) {
+const countOf = (rows, t) => rows.filter(r => r.t === t).length;
+const noEolRow = (left, right) => h`<tr class="n"><td class="no"></td><td>${left ? NO_EOL : ""}</td><td class="no"></td><td>${right ? NO_EOL : ""}</td></tr>`;
+
+// unifiedRows lays out a diff in one column, with the number of each side.
+function unifiedRows(rows) {
+  return rows.flatMap(r => {
+    if (r.t === "@") return [h`<tr class="h"><td class="no"></td><td class="no"></td><td class="c">${r.x}</td></tr>`];
+    const line = h`<tr class="${r.t === "+" ? "a" : r.t === "-" ? "d" : ""}"><td class="no">${r.na}</td><td class="no">${r.nb}</td><td class="c">${r.t} ${r.x}</td></tr>`;
+    return r.noEol ? [line, h`<tr class="n"><td class="no"></td><td class="no"></td><td class="c">${NO_EOL}</td></tr>`] : [line];
+  });
+}
+
+// splitRows lays out a diff in two columns. In a run of changes, the removed lines on the left meet the added lines on the right.
+function splitRows(rows) {
+  const out = [];
+  let dels = [], adds = [];
+  const flush = () => {
+    for (let i = 0; i < Math.max(dels.length, adds.length); i++) {
+      const d = dels[i], a = adds[i];
+      out.push(h`<tr><td class="no">${d ? d.na : ""}</td><td class="${d ? "cd" : ""}">${d ? d.x : ""}</td><td class="no">${a ? a.nb : ""}</td><td class="${a ? "ca" : ""}">${a ? a.x : ""}</td></tr>`);
+    }
+    const left = dels.some(d => d.noEol), right = adds.some(a => a.noEol);
+    if (left || right) out.push(noEolRow(left, right));
+    dels = [];
+    adds = [];
+  };
+  for (const r of rows) {
+    if (r.t === "-") { dels.push(r); continue; }
+    if (r.t === "+") { adds.push(r); continue; }
+    flush();
+    if (r.t === "@") {
+      out.push(h`<tr class="h"><td colspan="4">${r.x}</td></tr>`);
+    } else {
+      out.push(h`<tr><td class="no">${r.na}</td><td>${r.x}</td><td class="no">${r.nb}</td><td>${r.x}</td></tr>`);
+      if (r.noEol) out.push(noEolRow(true, true));
+    }
+  }
+  flush();
+  return out;
+}
+
+// diffBlock draws the head and the lines of one diff. The control of the layout sits in the head, and it sets the one layout of the page.
+function diffBlock(title, op, rows) {
+  const seg = h`<span class="seg" role="group" aria-label="Diff layout">${VIEWS.map(([k, l]) => h`<button data-view="${k}" aria-pressed="${S.view === k ? "true" : "false"}" class="${S.view === k ? "on" : ""}">${l}</button>`)}</span>`;
+  const lines = S.view === "split" ? splitRows(rows) : unifiedRows(rows);
+  return h`<div class="dblock"><div class="diffhead"><span>${title}${op ? h` <span class="mut">${op}</span>` : ""} <span class="now">+${countOf(rows, "+")}</span> <span class="was">-${countOf(rows, "-")}</span></span>${seg}</div><div class="diff"><table><tbody>${lines}</tbody></table></div></div>`;
+}
+
+// tooLargeNote tells that the observer kept no text, and it names the command that prints the text.
+const tooLargeNote = command => h`<div class="note small nt">The text of this pack is above 256 KiB, so the observer keeps none.</div><div class="body small mut pb8">To read it, run this at a terminal:</div><div class="pre mt0">${command}</div>`;
+
+// manifestsPanel shows the text of each manifest that has text. A manifest with no text, and each parameter, show in a small table.
+function manifestsPanel(d, command) {
+  if (!d.manifests.length && !d.paramChanges.length) return h`<div class="body small mut">No manifest changed.</div>`;
+  const texts = d.manifests.map(m => [m, parseUnified(m.unified || "")]);
+  const plain = [...texts.filter(([, rows]) => !rows.length).map(([m]) => ["Manifest", m]), ...d.paramChanges.map(m => ["Parameter", m])];
+  const table = plain.length ? h`<div class="tw"><table><thead><tr><th>Change</th><th>Kind</th><th>Name</th></tr></thead><tbody>${plain.map(([kind, m]) => h`<tr><td class="m">${m.op}</td><td>${kind}</td><td class="m">${m.name}</td></tr>`)}</tbody></table></div>` : "";
+  const blocks = texts.filter(([, rows]) => rows.length).map(([m, rows]) => diffBlock(`manifest ${m.name}`, m.op, rows));
+  return h`${table}${blocks}${d.textTooLarge && d.manifests.length ? tooLargeNote(command) : ""}`;
+}
+
+function valuesPanel(d, id, command) {
   const v = d.values, s = v.settings, f = v.followsTheVersion, r = v.repeatsTheLists, total = s.length + f.length + r.length;
-  if (!v.parseable && total === 0) return h`<div class="body small mut">Strata cannot read the values of this pack as settings.</div>`;
+  const rows = parseUnified(v.unified || "");
+  const text = rows.length ? diffBlock(`${d.key} values`, "", rows) : d.textTooLarge && (total > 0 || !v.parseable) ? tooLargeNote(command) : "";
+  if (!v.parseable && total === 0) return h`<div class="body small mut">Strata cannot read the values of this pack as settings.</div>${text}`;
   const lead = total ? h`<div class="body small mut pb8">${total} changed ${plural(total, "value", "values")}: ${s.length} ${plural(s.length, "setting", "settings")}, ${f.length} follow the version, ${r.length} repeat the lists.</div>` : h`<div class="body small mut">No value changed.</div>`;
   const masked = d.masked.length ? h`<div class="note small nt"><b>Masked:</b> ${d.masked.map(m => h`<span class="m">${m}</span>`)}. An equal root does not show an equal secret.</div>` : "";
   const follows = f.length ? h`<details data-open="${id}-f" ${openAttr(id + "-f")}><summary>Follows the version: ${f.length} ${plural(f.length, "value", "values")}</summary>${settingsTable(f)}</details>` : "";
   const repeats = r.length ? h`<details data-open="${id}-r" ${openAttr(id + "-r")}><summary>Repeats the lists: ${r.length} ${plural(r.length, "value", "values")}</summary><div class="body small mut">The Images and Charts tabs show these.</div></details>` : "";
-  return h`${lead}${s.length ? settingsTable(s) : ""}${masked}${follows}${repeats}`;
+  return h`${lead}${s.length ? settingsTable(s) : ""}${masked}${text}${follows}${repeats}`;
 }
 
-/* compareCard draws one comparison: the head, the flags, the tabs, and the panel of the tab. */
-function compareCard(id, headLeft, d, whenNone) {
+/* compareCard draws one comparison: the head, the flags, the tabs, and the panel of the tab. The command is the one that prints the text when the observer kept none. */
+function compareCard(id, headLeft, d, whenNone, command) {
   let inner;
   let flags = "";
   switch (d.state) {
@@ -818,7 +994,7 @@ function compareCard(id, headLeft, d, whenNone) {
       const data = d.data, tab = S.tabs[id] || "values";
       flags = flagRow(data.flags);
       const nv = data.values.settings.length + data.values.followsTheVersion.length + data.values.repeatsTheLists.length;
-      const panel = tab === "manifests" ? manifestsPanel(data) : tab === "images" ? changesPanel(data.imageChanges, "image", "Repository") : tab === "charts" ? changesPanel(data.chartChanges, "chart", "Chart") : valuesPanel(data, id);
+      const panel = tab === "manifests" ? manifestsPanel(data, command) : tab === "images" ? changesPanel(data.imageChanges, "image", "Repository") : tab === "charts" ? changesPanel(data.chartChanges, "chart", "Chart") : valuesPanel(data, id, command);
       inner = h`${tabBar(id, [["values", "Values", nv], ["manifests", "Manifests", data.manifests.length + data.paramChanges.length], ["images", "Images", data.imageChanges.length], ["charts", "Charts", data.chartChanges.length]])}${panel}`;
       break;
     }
@@ -854,7 +1030,8 @@ function driftCard(subject, x, p) {
   let none = "Identical. The published version still holds what the record holds.";
   if (side === SIDE.CLUSTER) none = "Identical. This cluster's copy still holds what the record holds.";
   else if (unread) none = "Not read. Strata could not read the published version.";
-  return compareCard(tabId, head, d, none);
+  const command = side === SIDE.CLUSTER ? `strata compare RECORD cluster:${D.cluster.cluster.name || D.cluster.cluster.uid}/${x.name} --full` : `strata compare RECORD ${subject} --full`;
+  return compareCard(tabId, head, d, none, command);
 }
 
 function moveCards(subject, p) {
@@ -867,8 +1044,10 @@ function moveCards(subject, p) {
   const head = h`<span class="small mut">Compare</span><span>Pack ${row.version}${ARROW}pack ${row.newest}</span>`;
   const summary = h`<section class="card"><div class="chead"><h2>Move to ${row.newest} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
     <div class="meta mt0"><div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
-    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div></div></section>`;
-  return h`${summary}${compareCard("move-" + subject + "-" + p.key, head, d, "The observer holds no changes for this move.")}`;
+    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p, row)}</div></section>`;
+  const pack = version => `pack:${row.registryUid}/${row.name}@${version}`;
+  const command = `strata compare ${pack(row.version)} ${pack(row.newest)} --full`;
+  return h`${summary}${compareCard("move-" + subject + "-" + p.key, head, d, "The observer holds no changes for this move.", command)}`;
 }
 
 function viewPack(subject, layer, name) {
@@ -939,6 +1118,10 @@ function onClick(ev) {
   if (t) { S.tabs[t.dataset.tab] = t.dataset.k; render(); return; }
   const f = ev.target.closest("[data-filter]");
   if (f) { S.filter = f.dataset.filter; render(); return; }
+  const v = ev.target.closest("[data-view]");
+  if (v) { S.view = v.dataset.view === "split" ? "split" : "unified"; render(); return; }
+  const q = ev.target.closest("[data-ask]");
+  if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }
   const g = ev.target.closest("[data-go]");
   if (g && !ev.target.closest("a,button,select,input")) location.hash = g.dataset.go;
 }

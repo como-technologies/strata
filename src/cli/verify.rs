@@ -17,6 +17,7 @@ pub(crate) fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let options = ops::VerifyOptions {
         who: a.who,
         allow_no_digest: a.allow_no_digest,
+        full: a.full,
     };
     if bulk {
         let s = ops::verify_many(
@@ -38,7 +39,7 @@ pub(crate) fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let palette = connect(progress, scope)?;
     let v = ops::verify_with(&recorded, &palette, &now_utc(), &options, &progress)?;
     let renderer = a.out.renderer();
-    print!("{}", renderer.render(&v.diff, &recorded, &v.live, false)?);
+    print!("{}", renderer.render(&v.diff, &recorded, &v.live, a.full)?);
     if let Some(line) = renderer.verdict(&v.diff) {
         println!("{line}");
     }

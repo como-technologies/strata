@@ -1,0 +1,2 @@
+$ strata behind 'releases/*/dev.json' --pin addon/nothing
+strata: --pin addon/nothing: no record pins this pack from a registry

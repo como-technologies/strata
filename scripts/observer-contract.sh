@@ -88,7 +88,7 @@ start edited-in-place-1
 "$strata" snapshot aws-stack@1.1.1 -o drift-record.json -q
 stop
 start edited-in-place-2
-run verify drift-record.json --summary --who >"$docs/verify-summary-drift.json"
+run verify drift-record.json --summary --who --full >"$docs/verify-summary-drift.json"
 
 # The record of the first seed against the second seed: the published version changed, with who.
 records_dir edited drift-record.json
@@ -100,9 +100,12 @@ start behind-2
 "$strata" snapshot aws-stack@1.0.0 -o behind-record.json -q
 "$strata" behind behind-record.json --no-impact --json --compact -q >"$docs/behind.json" || [ "$?" -eq 1 ]
 registry=5eecc89d0b150045ae661cef
-run compare "pack:$registry/kubernetes@1.35.3" "pack:$registry/kubernetes@1.36.2" >"$docs/move-kubernetes.json"
-run compare "pack:$registry/cert-manager@1.20.3" "pack:$registry/cert-manager@1.21.1" >"$docs/move-cert-manager.json"
-run compare "pack:$registry/cni-cilium-oss@1.19.6" "pack:$registry/cni-cilium-oss@1.20.1" >"$docs/move-cni-cilium-oss.json"
+# The observer runs the compare of a move with --full, so these documents hold the unified text.
+run compare "pack:$registry/kubernetes@1.35.3" "pack:$registry/kubernetes@1.36.2" --full >"$docs/move-kubernetes.json"
+run compare "pack:$registry/cert-manager@1.20.3" "pack:$registry/cert-manager@1.21.1" --full >"$docs/move-cert-manager.json"
+run compare "pack:$registry/cni-cilium-oss@1.19.6" "pack:$registry/cni-cilium-oss@1.20.1" --full >"$docs/move-cni-cilium-oss.json"
+# The click "Ask Palette" runs behind with --pin for one pack. This is the one run of the observer that asks Palette.
+"$strata" behind behind-record.json --pin k8s/kubernetes --json --compact -q >"$docs/ask-behind.json" || [ "$?" -eq 1 ]
 stop
 
 start cluster-release
@@ -134,10 +137,12 @@ PALETTE_API=http://127.0.0.1:9 STRATA_RETRIES=0 "$strata" verify "$docs/record-a
 start cluster-values
 uid=$(cluster_uid payments)
 "$strata" snapshot aws-stack@1.1.1 -o values-record.json -q
-run compare values-record.json "cluster:$uid/aws-stack" >"$docs/compare-values.json"
+run compare values-record.json "cluster:$uid/aws-stack" --full >"$docs/compare-values.json"
 
 # The raw output of strata holds the value, so the grep of the output of once proves something.
 grep -q team-payments "$docs/compare-values.json" || { echo "the compare holds no clear value" >&2; exit 2; }
+# The unified text is the text of the record, so it holds no value of a cluster variable.
+! jq -r '[.. | .unified? // empty] | .[]' "$docs/compare-values.json" | grep -q team-payments || { echo "a clear value is in the unified text" >&2; exit 2; }
 records_dir values values-record.json
 once values "$uid" values
 expect values '.content.failedRuns == 0'
@@ -160,6 +165,10 @@ done
 status "POST" 405 -X POST "$base/v1/cluster"
 status "Host: evil.example" 421 -H 'Host: evil.example' "$base/v1/cluster"
 status "unknown profile" 404 "$base/v1/profiles/nope"
+# The click is the one POST. A request that the page did not send gets 403, and a move that is not known gets 404.
+status "ask without the header" 403 -X POST "$base/v1/packs/aws-stack@1.1.1/k8s/kubernetes/ask"
+status "ask for an unknown move" 404 -X POST -H "Sec-Fetch-Site: same-origin" "$base/v1/packs/aws-stack@1.1.1/k8s/kubernetes/ask"
+status "asks" 200 "$base/v1/asks"
 status "health" 200 "$base/healthz"
 "$observer_bin" health --listen "127.0.0.1:$port" || { echo "health failed with the server up" >&2; exit 2; }
 serve_down
@@ -184,5 +193,5 @@ expect stopped '.page == "lost" and .content.failedRuns == 2 and .content.lastEr
 STRATA_BIN=$strata STRATA_DOCS=$docs go -C "$observer" test ./internal/docs/ -count=1 -run 'Schema|DocumentsOfTheBinary|ClearValue|KindOfAFailedCheck'
 if [ "${1:-}" = --write ]; then
   mkdir -p "$observer/internal/docs/testdata"
-  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs"/move-*.json "$observer/internal/docs/testdata/"
+  cp "$docs/verify-summary-drift.json" "$docs/behind.json" "$docs/ask-behind.json" "$docs"/move-*.json "$observer/internal/docs/testdata/"
 fi

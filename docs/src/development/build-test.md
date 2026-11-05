@@ -29,10 +29,16 @@ standard library only.
 `just observer-contract` gives the documents of the strata binary of this commit
 to the allow-list of the observer. It builds `strata` and the stand-in. It
 serves four chapters of the book one at a time, and runs the commands of the
-observer against each one. Then it runs the contract tests of `internal/docs`
-on the documents. One test fails when a field of the allow-list is not in the
-schema of the binary. One test fails when the clear value of a cluster variable
-passes the allow-list.
+observer against each one. Then it runs the contract tests of `internal/docs` on
+the documents. One test fails when a field of the allow-list is not in the schema of
+the binary. One test fails when the clear value of a cluster variable passes the
+allow-list.
+
+The script runs `compare` and `verify` with `--full`, as the cycles do, so the
+documents hold the field `unified`. It also runs `behind --pin` once, as the click
+does, and decodes the answer. One test fails when the compare of a move holds no
+unified text. One test fails when the answer of `behind --pin` has no pin with a
+`bump`.
 
 The script also builds `strata-observer` and runs `once` with the real binary of
 `strata`. It needs `jq` for these checks. It makes sure of four facts:
@@ -42,11 +48,20 @@ The script also builds `strata-observer` and runs `once` with the real binary of
 - On the second chapter of `edited-in-place`, a record of the first chapter
   gives one `published-changed` finding with `who`.
 - On the chapter `cluster-values`, the value `team-payments` is in the output of
-  `strata compare` and not in the output of `once`.
+  `strata compare` and not in the output of `once`. It is not in the field
+  `unified` of `strata compare --full` either.
 - With the stand-in stopped, two runs of `once` with one state directory give
   `page` `lost` and the error kind `transport`.
 
 After each run, the script makes sure that the work directory is empty.
+
+The script then starts `serve` on a free port, and checks the status of some
+requests. A `POST` to a summary route gets 405. A `Host` that is not loopback gets
+421, and an unknown profile gets 404.
+
+Three checks are for the click. A `POST` to `ask` without the header
+`Sec-Fetch-Site` gets 403. A `POST` for an unknown move gets 404. `GET /v1/asks`
+gets 200.
 
 `just observer-playground` runs the observer on your machine against the stand-in,
 and serves its page. It takes the records from the first state of the chapter
@@ -57,6 +72,7 @@ newer versions. `observer-1` is the tenant before the edit, with no finding.
 
 `just observer-dev` serves the page from test data, with no `strata` binary. Its sets
 `images`, `images-split`, `images-off`, and `images-unread` show the read of the pods.
+Its sets `asks` and `text-too-large` show the answers of Palette and the cap of the text.
 [Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
@@ -67,7 +83,7 @@ contract script and the playground script both source it.
 step of the chapter `observer` runs it. The runner puts it on the `PATH` of a step.
 The job `docs` of CI installs Go for this step.
 
-`just observer-contract --write` also copies five documents to
+`just observer-contract --write` also copies six documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
 not edit them by hand. `go test` reads them, so it needs neither the binary nor
 the network, and the contract tests skip. The job `check` of CI runs
@@ -115,8 +131,8 @@ that version.
 | `src/model/cluster_template.rs` | The cluster templates of Palette, which link profile versions to clusters. |
 | `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its public macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. `strata-preflight` uses the macro and the legend for its own sets. |
 | `src/closed_set/unknown.rs`, `src/closed_set/unknown/` | `unknown.rs` holds what strata does with a value that a set does not name: the watch, the note, and the line of the log. `unknown/sighting.rs` holds the facts that a line and an entry both state, and the checks of them. `unknown/log.rs` holds the line and the read of the log. `unknown/report.rs` holds the report and its check, `unknown/hint.rs` the hint, and `unknown/send.rs` the send. |
-| `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
-| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` holds the unified diffs of `--full`. |
+| `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `unified.rs` holds the unified text of the values and of the manifests, which `--full` prints and the field `unified` carries. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
+| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` prints the unified diffs of `--full` in the terminal and in markdown. |
 | `src/candidate/` | The candidate file. `mod.rs` holds the format, `rules.rs` the check of the file, and `resolve.rs` the resolve of each layer. `pack.rs` finds the versions of a pack in the registries, and `presets.rs` holds the options of a pack template. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, flags, values, the items of a listing, and the first text that is not empty. Each module reads a document with them. The helpers that `preflight/` and `adapter/` use are public, so that those packages write no read of their own. |
 | `src/file.rs` | The read and the write of a file, with the path in each error. Each layer reads and writes its files with them. |
@@ -469,7 +485,7 @@ one to read.
 | `benches/record.rs` | `canon_root/content_digest/200_packs` | The content digest of a record of 200 packs. |
 | `benches/record.rs` | `snapshot/from_raw/200_packs_200_manifests` | The record of the largest profile that Palette takes, from the responses of Palette. |
 | `benches/compare.rs` | `compare/identical`, `compare/one_change`, `compare/every_pack` | The comparison of two records of 200 packs and 200 manifests. The records are the same, or one pack moves to the next version, or each pack moves and each manifest changes. |
-| `benches/render.rs` | `render/terminal/summary`, `render/terminal/full`, and the same for `markdown` and `json` | Each renderer on the comparison with a change in each pack, without `--full` and with it. The JSON renderer writes the same document in both cases. |
+| `benches/render.rs` | `render/terminal/summary`, `render/terminal/full`, and the same for `markdown` and `json` | Each renderer on the comparison with a change in each pack, without `--full` and with it. The JSON renderer adds the field `unified` to the document with `--full`. |
 | `benches/fleet.rs` | `verify/1_clusters`, `100_clusters`, `1000_clusters` | `strata verify` of one record for each cluster, against an in-memory Palette. The time includes the read of each record file. |
 | `benches/fleet.rs` | `consumers/1_clusters`, `100_clusters`, `1000_clusters` | `strata consumers` of a profile version that each cluster of the fleet runs. |
 | `benches/resolve.rs` | `resolve/load/200_layers` | The read and the check of a candidate file of 200 layers. |

@@ -1,5 +1,10 @@
 package docs
 
+import (
+	"regexp"
+	"strconv"
+)
+
 // The schema ids of the documents that the observer reads. A document with another id is not the
 // document that the command promises: `--strata` can name another binary. SnapshotSchema is the id of a
 // record, and of the snapshot of a cluster.
@@ -92,3 +97,21 @@ func (d Behind) SchemaID() string { return d.Schema }
 
 // SchemaID gives the id that the document states.
 func (d ClusterRead) SchemaID() string { return d.Schema }
+
+// statusPrefix matches the start of a reason that strata gives for a request that failed:
+// `HTTP <status>: <body>`. The other reasons are the message of a request that did not complete.
+var statusPrefix = regexp.MustCompile(`^HTTP ([0-9]{3})(:|$)`)
+
+// StatusOf gives the HTTP status that a reason of strata starts with, or 0 when it holds none. The
+// body of an answer of Palette follows the status in the reason, and it never leaves this function.
+func StatusOf(reason string) int {
+	m := statusPrefix.FindStringSubmatch(reason)
+	if m == nil {
+		return 0
+	}
+	status, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0
+	}
+	return status
+}

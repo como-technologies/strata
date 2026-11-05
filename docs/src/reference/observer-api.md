@@ -2,8 +2,9 @@
 
 `strata-observer serve` serves its answers on a loopback address. The API has two
 tiers. The summary tier shows no value. The detail tier shows the old and the new
-value of one pack. [The observer](../automation/observer.md) tells what the service
-does and how to install it.
+value of one pack and the text of its diff. It also shows the answers of Palette to
+a click. [The observer](../automation/observer.md) tells what the service does and
+how to install it.
 
 **The API has no promise yet.** A release can change a route, a field, or a status.
 The Rust API of strata has no promise at version 0.x either: see
@@ -25,9 +26,20 @@ connect to the address of the pod. A person without that verb cannot open the pa
 [The server of the observer](../development/observer-api.md#the-gate) shows how to test
 the verb.
 
+The page and `curl` both work. A `GET` needs nothing more than the port-forward. The
+click "Ask Palette" is a `POST`, and it needs the header `Sec-Fetch-Site: same-origin`.
+A browser sets that header by itself for a request that the page sends. A `curl` call
+must send it:
+
+```bash
+curl -s -X POST -H 'Sec-Fetch-Site: same-origin' \
+  http://127.0.0.1:8080/v1/packs/aws-stack@1.1.0/k8s/kubernetes/ask
+```
+
 ## The routes
 
-Only `GET` is allowed. Another method gets `405` and the header `Allow: GET`.
+Each route takes `GET`, except the click "Ask Palette", which takes `POST`. Another
+method gets `405` and the header `Allow` with the method of the route.
 
 | Tier | Route | What it carries |
 | --- | --- | --- |
@@ -41,7 +53,9 @@ Only `GET` is allowed. Another method gets `405` and the header `Allow: GET`.
 | Summary | `/v1/events` | `events`: the last 7 days. |
 | Summary | `/v1/images` | The document `strata-observed/1`: the images that the pods run, with the digest of each. |
 | Summary | `/v1/images/{ref}` | One image of that document. `{ref}` is the reference, as one escaped segment. |
-| Detail | `/v1/packs/{profile}/{layer}/{name}/diff?side=` | The changes of one pack, with the old and the new value. |
+| Detail | `/v1/packs/{profile}/{layer}/{name}/diff?side=` | The changes of one pack, with the old and the new value and the text of the diff. |
+| Detail | `/v1/asks` | `asks`: the answers of Palette that the observer holds in memory. |
+| Detail | `POST /v1/packs/{profile}/{layer}/{name}/ask` | The click "Ask Palette": the answer of Palette about the move of one pack. |
 
 Each summary route serves a part of [the summary](../development/observer.md#the-summary),
 with the same field names. The two image routes are the exception: they serve
@@ -58,11 +72,12 @@ plain text. The route `/` serves the page of the dashboard.
 | Status | When |
 | --- | --- |
 | `400` | The detail route has a `side` that is not `published`, `cluster`, or `newer`, or has no `side`. |
-| `404` | A profile, a pack, a diff, or an image does not exist. The body has a fixed text and names no part of the request. |
-| `405` | The method is not `GET`. |
+| `403` | The click has no header `Sec-Fetch-Site: same-origin`, or the header has another value. The body has a fixed text. |
+| `404` | A profile, a pack, a diff, a move, or an image does not exist. The body has a fixed text and names no part of the request. |
+| `405` | The method is not the method of the route. The header `Allow` names it. |
 | `421` | The `Host` header is not `localhost` or a loopback address. A person can choose the local port, so the port can be any port. |
-| `502` | The detail route asked for a compare of the `newer` side, and the compare failed. The next request asks again. |
-| `503` | The detail route waited too long for a cycle to end. |
+| `502` | The detail route asked for a compare of the `newer` side, and the compare failed. Or the click failed in the observer. The next request asks again. |
+| `503` | The detail route or the click did not end in 50 seconds. The usual cause is a cycle that holds the slot of the worker. |
 
 ## The images
 
@@ -178,15 +193,107 @@ and the `flags` of the pack. It also holds these lists:
 | Field | Content |
 | --- | --- |
 | `values.settings`, `values.followsTheVersion`, `values.repeatsTheLists` | Each changed value with its `op`, `path`, `old`, and `new`, in the group of the fold that the summary counts. |
+| `values.unified` | The text of the raw values, as a unified diff. One string, empty when the pack has no text. |
 | `imageChanges`, `chartChanges` | The `op` and the `name` of each change, and the old and the new tag or version. |
 | `masked` | The paths that Palette masks. They have no value. |
-| `manifests`, `paramChanges` | The `op` and the `name` of each change. |
+| `manifests` | The `op`, the `name`, and the `unified` text of each changed, added, or removed manifest. `unified` is empty when the pack has no text. |
+| `paramChanges` | The `op` and the `name` of each change. |
+| `textTooLarge` | True when the pack had text and the observer dropped all of it. |
 
 A pack with no diff on a side gets `404`.
 
+### The text of a diff
+
+`values.unified` and `manifests[].unified` hold the text that `strata compare --full`
+prints, and the cycles read it with `--full`: see [See the full
+diff](../commands/compare/versions.md#see-the-full-diff). It is the text of the
+records. The mask `********` that Palette writes over a secret stays a placeholder.
+The text holds no value of a cluster variable.
+
+A pack keeps 256 KiB of text at most for each side of a diff. The limit counts the
+values and the manifests of the pack together. Above it, the observer drops all the
+text of the pack: `values.unified` and each `manifests[].unified` are empty, and
+`textTooLarge` is true. The settings, the `op` of each manifest, and its `name` stay.
+Half a diff misleads, so a pack keeps all of its text or none.
+
+When `textTooLarge` is true, the page says that the text is too large. It gives the
+command `strata compare ... --full`, which prints the whole diff.
+
+The text stays in the memory of the detail tier. It goes in no state file, no summary
+route, and no log.
+
 The state keeps the counts of a move and never its values. After a restart, the
 memory holds no values for a move that the state knows. The route then asks for one
-`compare pack:... pack:...`, and keeps the answer in memory. It sends no `POST`.
+`compare pack:... pack:...`, and keeps the answer in memory. This route sends no
+`POST`: only [the click](#ask-palette-about-a-move) does.
+
+## Ask Palette about a move
+
+`POST /v1/packs/{profile}/{layer}/{name}/ask` asks Palette whether it gives an error
+for the move of one pack to its newest version. `{profile}` is `name@version`, and
+the key is `{layer}/{name}`, as in the detail route. It is the one `POST` that the
+server takes. It reads no body.
+
+The request needs these two things:
+
+- A loopback `Host`, as for every route. Another `Host` gets `421`.
+- The header `Sec-Fetch-Site: same-origin`. A browser sets it by itself for a request
+  that the page sends. A page of another origin sends another value, or none, so it
+  cannot send the `POST`. Another value, or no header, gets `403`.
+
+The server checks the `Host` first, then the method, then the header. A `GET` on the
+route gets `405` with `Allow: POST`. A profile, a pack, or a move that the observer
+does not know gets `404`, and the observer sends nothing to Palette. The move must
+be one that the last good versions cycle found for that profile.
+
+The click runs `strata behind <record> --pin <layer>/<name>` once, on the record of
+the profile. That sends one `POST /v1/clusterprofiles/{uid}/validate/packs` to
+Palette for each record that pins the pack. A record of a profile version gives one.
+It sends no other write. The click waits for the slot of the worker, so it waits for
+a cycle that runs. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+says what the answer of Palette covers.
+
+The reply is one answer, also when the request to Palette failed. The reply has the
+status `200` then, and the verdict `no-answer`.
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `profile` | text | The profile, as `name@version`. |
+| `key` | text | The pack, as `<layer>/<name>`. |
+| `newest` | text | The version that the question names: the newest version of the pack. |
+| `verdict` | text | `no-error`, `refuses`, or `no-answer`: see the table below. |
+| `refusals` | list | One entry for each error that Palette gave. It is empty unless the verdict is `refuses`. |
+| `status` | number | The HTTP status of the request that failed. It is 0 when the request did not fail, or when the failure has no status. |
+
+An entry of `refusals` has these fields:
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `pack` | text | The pack that the error names. |
+| `code` | text | The code of Palette, such as `DependencyPackUpgradeNotSupported`. |
+| `message` | text | The message of Palette. |
+| `clusters` | list | The clusters that the message names. It is empty when the message names none. |
+
+| `verdict` | Meaning | The page reads |
+| --- | --- | --- |
+| `no-error` | Palette gave no error. It checked the default values of the new version, and it did not check your own values. | Palette gave no error |
+| `refuses` | Palette gave one error or more. | `Palette refuses: <code>` |
+| `no-answer` | A request failed, so Palette gave no answer. `status` holds its HTTP status, or 0. | Palette gave no answer |
+
+A request that failed, such as a refusal for the role of the key, is no finding and
+raises no severity. The observer holds an answered move, with the verdict `no-error` or
+`refuses`, in memory. It holds the answer until the pin moves or the pod restarts. A
+second click on that move sends nothing, and the reply is the first answer. The
+observer asks again at the next click after a `no-answer`. Nothing asks on a timer.
+
+`GET /v1/asks` lists the answers that the observer holds, sorted by profile and key.
+The page reads it to show the answers again after a reload. The answer is `{"asks": [...]}`
+with the fields above, and it is an empty list when nobody asked. The list holds a
+`no-answer` until the next click replaces it, or the move goes.
+
+A refusal holds the message of Palette and the names of clusters. So only the detail
+tier carries an answer. No summary route, no state file, and no log line holds it. The
+log has one line for a click, with the verdict and the status.
 
 ## What no answer carries
 
@@ -205,6 +312,6 @@ log. No route shows the environment. The server writes no request log, because a
 path can hold the name of a profile.
 
 The detail tier is the one place where a value leaves the process. It shows the old
-and the new value of a pack. A secret in a value that the schema does not mark as
-masked passes through. See [What you give the
-observer](../automation/observer.md#what-you-give-the-observer).
+and the new value of a pack, the text of its diff, and the answers of Palette. A
+secret in a value that the schema does not mark as masked passes through. See [What
+you give the observer](../automation/observer.md#what-you-give-the-observer).

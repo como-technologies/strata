@@ -53,6 +53,20 @@ fn behind(r: &mut Runner) {
     // a pin that is current against the copy of a registry whose sync stopped before its end
     r.quiet("strata snapshot 'pack:Palette Registry/csi-aws-ebs@1.65.0' -o csi-oci.json");
     r.step("behind-stale", 0, false, "strata behind csi-oci.json");
+    // one pack: the pins of the Kubernetes pack, and the question to Palette about its move
+    r.step(
+        "behind-pin",
+        1,
+        false,
+        "strata behind 'releases/*/dev.json' --pin k8s/kubernetes",
+    );
+    // a key that no record pins from a registry is a usage error, before any request
+    r.step(
+        "behind-pin-none",
+        2,
+        true,
+        "strata behind 'releases/*/dev.json' --pin addon/nothing",
+    );
     r.step(
         "behind-since",
         1,

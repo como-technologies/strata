@@ -1,5 +1,6 @@
 //! Unified diffs of raw values and changed manifests, for `--full`.
 
+use crate::diff::unified::{manifest_text, sides, values_text};
 use crate::diff::{Diff, Op, Status};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -36,13 +37,7 @@ pub(crate) fn full_diffs(
     markdown: bool,
 ) -> String {
     let mut o = String::new();
-    let mut emit = |title_a: String, title_b: String, old: &str, new: &str| {
-        let diff = similar::TextDiff::from_lines(old, new);
-        let text = diff
-            .unified_diff()
-            .context_radius(3)
-            .header(&title_a, &title_b)
-            .to_string();
+    let mut emit = |text: String| {
         if markdown {
             o.push_str(&format!("```diff\n{text}```\n\n"));
         } else {
@@ -51,33 +46,14 @@ pub(crate) fn full_diffs(
         }
     };
     for pd in d.packs.iter().filter(|p| p.status == Status::Changed) {
-        let (Some(x), Some(y)) = (
-            sa.packs.iter().find(|q| q.key == pd.key),
-            sb.packs.iter().find(|q| q.key == pd.key),
-        ) else {
+        let Some((x, y)) = sides(sa, sb, pd) else {
             continue;
         };
         if pd.values.changed {
-            emit(
-                format!("a: {} values", pd.key),
-                format!("b: {} values", pd.key),
-                &x.values,
-                &y.values,
-            );
+            emit(values_text(&pd.key, x, y));
         }
         for m in pd.manifests.iter().filter(|m| m.op == Op::Changed) {
-            let (Some(ma), Some(mb)) = (
-                x.manifests.iter().find(|q| q.name == m.name),
-                y.manifests.iter().find(|q| q.name == m.name),
-            ) else {
-                continue;
-            };
-            emit(
-                format!("a: {} manifest {}", pd.key, m.name),
-                format!("b: {} manifest {}", pd.key, m.name),
-                &ma.content,
-                &mb.content,
-            );
+            emit(manifest_text(&pd.key, &m.name, x, y));
         }
     }
     o

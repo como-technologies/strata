@@ -300,8 +300,10 @@ A comparison of two sides, `a` and `b`.
     `upstreamSource`, `valuesHash`, and `node`. `invalid` and `invalidReason`,
     only when Palette marks the pack of that side invalid.
   - `values`: `changed`, `parseable`, `changedCount`, `addedCount`,
-    `removedCount`, and `diff[]`.
-  - `manifests[]`: `op`, `name`, `hashA`, and `hashB`.
+    `removedCount`, and `diff[]`. `unified`, only with `--full` and when
+    `changed` is `true`: see [The field unified](#the-field-unified).
+  - `manifests[]`: `op`, `name`, `hashA`, and `hashB`. `unified`, only with
+    `--full`.
   - `images` and `charts`, only when true: the `IMAGES` and `CHARTS` flags.
     `imageChanges[]` and `chartChanges[]`, only when not empty: `op`, `name`
     (the image repository, or the chart name), `old`, and `new` (the tag or the
@@ -422,6 +424,28 @@ item is `[name=<value>]`, so an inserted item shows as one addition.
 and a named item is an object `{"name": ...}`. The schema gives each segment an
 `anyOf` of these three types.
 
+### The field unified
+
+`unified` is a string: the unified diff of the raw text, as `--full` prints it.
+It has no color and three lines of context. It starts with the two lines
+`--- a: <key> values` and `+++ b: <key> values`. For a manifest, the lines end
+with `manifest <name>` in place of `values`.
+
+`compare --json --full` writes the field. So does `verify --json --full`, for one
+record. Without `--full`, the document has no `unified`.
+
+- A pack with the `status` `changed` has `values.unified` when its values
+  changed.
+- Each entry of `manifests[]` of that pack has `unified`. An added manifest or
+  a removed manifest has its text against an empty side.
+- A pack with another `status` has no `unified`. `--full` prints no diff for it
+  either.
+
+The text is the text of the records. No value of a cluster variable is in it.
+Palette masks a secret as `********`, and the mask stays in the text. A change
+of the secret does not show, because the two sides hold the mask: see
+[A secret changes in a pack value](../use-cases/masked-value.md).
+
 ## strata-verify-summary/1
 
 - `legend.status`: `unchanged`, `drifted`, `unverified`, and `error`.
@@ -433,7 +457,9 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   `rootRecorded`, and `rootLive`. `rootLive` is there when strata read the live
   profile. `recordedAt` is empty when strata could not read the file.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
-    unverified record adds the `diff`, which names the packs.
+    unverified record adds the `diff`, which names the packs. With `--full`, the
+    `diff` of each such record holds `unified`: see
+    [The field unified](#the-field-unified).
   - A cluster record with changed variable values adds `clusterVariables`,
     whatever its status.
   - A record of a cluster, an edge host, or a cluster group adds `state`, as
@@ -622,7 +648,8 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
 - `records[]`: the record files read, in the order given. `since`: with
   `--since`, when the previous report was written.
 - `pins[]`: one entry for each pack, registry, pinned version, and tag, in the
-  order of the pack name:
+  order of the pack name. With `--pin`, the list holds the entries of that pack
+  only. Each entry has:
   - `name`, `layer`, `registry`, `registryUid`, `version`, and `tag`.
   - `floating`, only when true: the tag is a floating tag. `resolved`: the
     version that the tag names now. When it is above `version`, it is in

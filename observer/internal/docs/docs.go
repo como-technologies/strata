@@ -55,25 +55,27 @@ type DiffSummary struct {
 	MaxImpact     string `json:"maxImpact"`
 }
 
-// Pack is one entry of packs[] in strata-diff/1.
+// Pack is one entry of packs[] in strata-diff/1. TextTooLarge is not a field of strata: the observer
+// sets it when it drops the unified text of the pack because the text is above the cap.
 type Pack struct {
-	Key             string   `json:"key"`
-	Name            string   `json:"name"`
-	Layer           string   `json:"layer"`
-	Status          string   `json:"status"`
-	Identity        bool     `json:"identity"`
-	Upstream        bool     `json:"upstream"`
-	Authored        bool     `json:"authored"`
-	Images          bool     `json:"images"`
-	Charts          bool     `json:"charts"`
-	UpstreamUnknown bool     `json:"upstreamUnknown"`
-	Impact          Impact   `json:"impact"`
-	Values          Values   `json:"values"`
-	Manifests       []Named  `json:"manifests"`
-	ParamChanges    []Named  `json:"paramChanges"`
-	ImageChanges    []Change `json:"imageChanges"`
-	ChartChanges    []Change `json:"chartChanges"`
-	Masked          []string `json:"masked"`
+	Key             string     `json:"key"`
+	Name            string     `json:"name"`
+	Layer           string     `json:"layer"`
+	Status          string     `json:"status"`
+	Identity        bool       `json:"identity"`
+	Upstream        bool       `json:"upstream"`
+	Authored        bool       `json:"authored"`
+	Images          bool       `json:"images"`
+	Charts          bool       `json:"charts"`
+	UpstreamUnknown bool       `json:"upstreamUnknown"`
+	Impact          Impact     `json:"impact"`
+	Values          Values     `json:"values"`
+	Manifests       []Manifest `json:"manifests"`
+	ParamChanges    []Named    `json:"paramChanges"`
+	ImageChanges    []Change   `json:"imageChanges"`
+	ChartChanges    []Change   `json:"chartChanges"`
+	Masked          []string   `json:"masked"`
+	TextTooLarge    bool       `json:"-"`
 }
 
 // Impact is the level of a pack change, in the words of strata.
@@ -82,10 +84,12 @@ type Impact struct {
 	Text  string `json:"text"`
 }
 
-// Values holds the changes of the pack values. Only the detail tier sends Diff.
+// Values holds the changes of the pack values. Only the detail tier sends Diff and Unified. Unified is
+// the text of the values as `--full` prints it, in the unified form.
 type Values struct {
 	Parseable bool   `json:"parseable"`
 	Diff      []Leaf `json:"diff"`
+	Unified   string `json:"unified"`
 }
 
 // Leaf is one changed value. Old and New are a scalar or an empty container.
@@ -109,6 +113,14 @@ func (v Values) Paths() []string {
 type Named struct {
 	Op   string `json:"op"`
 	Name string `json:"name"`
+}
+
+// Manifest is a change of a manifest: the operation, the name, and the text of the change in the unified
+// form. Only the detail tier sends Unified.
+type Manifest struct {
+	Op      string `json:"op"`
+	Name    string `json:"name"`
+	Unified string `json:"unified"`
 }
 
 // Change is a change of an image or a chart: a repository or a chart name, and a tag or a version.
@@ -156,8 +168,32 @@ type Pin struct {
 	PinnedBy     []PinnedBy    `json:"pinnedBy"`
 	Newer        []Newer       `json:"newer"`
 	Behind       bool          `json:"behind"`
+	Bump         *Bump         `json:"bump"`
 	Error        *Error        `json:"error"`
 	RegistrySync *RegistrySync `json:"registrySync"`
+}
+
+// Bump is what a move to the newest version does, as `behind` reads it with a question to Palette.
+// PaletteValidationError holds the words of a request that failed. They can hold the body of an answer
+// of Palette, so only the status leaves the observer: see StatusOf.
+type Bump struct {
+	To                     string      `json:"to"`
+	PaletteValidation      *Validation `json:"paletteValidation"`
+	PaletteValidationError string      `json:"paletteValidationError"`
+}
+
+// Validation is the answer of Palette to the question about a move: it accepts when it gives no error.
+type Validation struct {
+	Accepts bool      `json:"accepts"`
+	Errors  []Refusal `json:"errors"`
+}
+
+// Refusal is one error that Palette gives for a pack. Only the detail tier sends it.
+type Refusal struct {
+	Pack     string   `json:"pack"`
+	Code     string   `json:"code"`
+	Message  string   `json:"message"`
+	Clusters []string `json:"clusters"`
 }
 
 // PinnedBy names a record that pins a pack. Subject is name@version of the profile.
@@ -240,4 +276,26 @@ type ClusterProfile struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
 	Type    string `json:"type"`
+}
+
+// CapText drops the unified text of each pack whose text is above limit bytes, and marks the pack with
+// TextTooLarge. A pack keeps all of its text or none: half of a diff would mislead.
+func (d *Diff) CapText(limit int) {
+	for i := range d.Packs {
+		p := &d.Packs[i]
+		size := len(p.Values.Unified)
+		for _, m := range p.Manifests {
+			size += len(m.Unified)
+		}
+		if size <= limit {
+			continue
+		}
+		p.Values.Unified = ""
+		manifests := make([]Manifest, len(p.Manifests))
+		for j, m := range p.Manifests {
+			manifests[j] = Manifest{Op: m.Op, Name: m.Name}
+		}
+		p.Manifests = manifests
+		p.TextTooLarge = true
+	}
 }

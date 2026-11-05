@@ -54,6 +54,10 @@ func missing(root, node map[string]any, t reflect.Type, path string, seen map[re
 		f := t.Field(i)
 		name, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 		child, ok := props[name]
+		// A field that the observer sets itself is not a field of the document.
+		if name == "-" {
+			continue
+		}
 		// The fields of an error other than kind and message belong to the kind, so the schema does
 		// not name them. See docs/src/reference/errors.md.
 		if !ok && name == "status" && strings.HasSuffix(path, ".error") {
@@ -176,6 +180,15 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	}
 	if len(move.Packs) != 1 || len(move.Packs[0].Values.Diff) == 0 {
 		t.Errorf("the compare of a move holds %d packs, and the first holds no changed value", len(move.Packs))
+	}
+	// The observer runs the compare of a move with --full: the text of the values comes with it.
+	if text := move.Packs[0].Values.Unified; !strings.HasPrefix(text, "--- a: ") || !strings.Contains(text, "\n@@ ") {
+		t.Errorf("the compare of a move holds no unified text of the values: %q", text)
+	}
+	var ask Behind
+	decodeFile(t, dir, "ask-behind.json", &ask)
+	if len(ask.Pins) != 1 || ask.Pins[0].Bump == nil || ask.Pins[0].Bump.To == "" {
+		t.Errorf("the question about one move gives %d pins, and the first has no bump: %+v", len(ask.Pins), ask.Pins)
 	}
 	for _, name := range []string{"compare-payments-aws-stack.json", "compare-payments-platform-addons.json"} {
 		var d Diff

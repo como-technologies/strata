@@ -36,6 +36,12 @@ var detailRoutes = map[string][]string{
 	patternPackDiff: {pathPublished, pathCluster, pathNewer},
 }
 
+// askRoutes are the routes of the click "Ask Palette". ask_test.go holds the tests of their answers.
+var askRoutes = map[string]string{
+	patternAsks: "/v1/asks",
+	patternAsk:  pathAsk,
+}
+
 func TestEachRouteHasALineInTheSentinelTable(t *testing.T) {
 	for _, r := range (&Server{}).Routes() {
 		var listed bool
@@ -44,6 +50,9 @@ func TestEachRouteHasALineInTheSentinelTable(t *testing.T) {
 			_, listed = summaryRoutes[r.Pattern]
 		case TierDetail:
 			_, listed = detailRoutes[r.Pattern]
+			if _, asked := askRoutes[r.Pattern]; asked {
+				listed = true
+			}
 		case TierHealth:
 			listed = r.Pattern == patternHealth
 		}
@@ -454,4 +463,9 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	if line := r.log.String(); strings.Contains(line, "AUDIT-REASON-SENTINEL") || !strings.Contains(line, `reason="HTTP 403"`) {
 		t.Errorf("log %q", line)
 	}
+}
+
+// Ask is the click of the stub's Source: it waits until the time limit ends.
+func (s slow) Ask(context.Context, string, string) (model.Answer, bool, error) {
+	return model.Answer{}, false, s.err
 }

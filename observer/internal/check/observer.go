@@ -60,6 +60,9 @@ type Observer struct {
 	// details holds the pack of each move that the observer compared, by the key of the cache. It holds
 	// changed values, so it stays in memory: the state never holds it.
 	details map[string]docs.Pack
+	// asks holds the answer of Palette to each question about a move, by profile and move. It stays in
+	// memory: a restart forgets it, and a pin that moves drops it.
+	asks map[askKey]model.Answer
 }
 
 // New makes an observer. It reads the state, and starts with an empty state when the file cannot be
@@ -70,7 +73,7 @@ func New(cfg Config, strata Strata, log *slog.Logger) *Observer {
 
 func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Time) *Observer {
 	o := &Observer{cfg: cfg, strata: strata, now: now, jitter: rand.Float64, log: log,
-		worker: make(chan struct{}, 1), details: map[string]docs.Pack{}}
+		worker: make(chan struct{}, 1), details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{}}
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -259,6 +262,11 @@ func (o *Observer) pruneMoves(used map[string]bool) {
 	for k := range o.details {
 		if !used[k] {
 			delete(o.details, k)
+		}
+	}
+	for k := range o.asks {
+		if !used[k.move] {
+			delete(o.asks, k)
 		}
 	}
 }

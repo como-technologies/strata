@@ -485,6 +485,107 @@ fn markdown_report_has_table_and_details() {
     );
 }
 
+/// The changes of the pack `name` in the JSON document of a comparison.
+fn pack_of<'a>(doc: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
+    doc["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == name)
+        .unwrap_or_else(|| panic!("no pack {name}"))
+}
+
+/// The unified text of the manifest `name` of a pack, in the JSON document of a comparison.
+fn manifest_text<'a>(pack: &'a serde_json::Value, name: &str) -> (&'a str, &'a str) {
+    let m = pack["manifests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["name"] == name)
+        .unwrap_or_else(|| panic!("no manifest {name}"));
+    (m["op"].as_str().unwrap(), m["unified"].as_str().unwrap())
+}
+
+#[test]
+fn compare_json_with_full_carries_the_unified_text_and_without_it_carries_none() {
+    let fx = fixtures();
+    let plain = run(&["compare", "--json", &fx.a, &fx.b]);
+    assert!(!plain.out.contains("\"unified\""), "{}", plain.out);
+    let full: serde_json::Value =
+        serde_json::from_str(&run(&["compare", "--json", "--full", &fx.a, &fx.b]).out).unwrap();
+    assert_eq!(
+        full["schema"], DIFF_SCHEMA,
+        "a new field keeps the id of the document"
+    );
+
+    let values = pack_of(&full, "kubernetes")["values"]["unified"]
+        .as_str()
+        .unwrap();
+    assert!(
+        values.starts_with("--- a: k8s/kubernetes values\n+++ b: k8s/kubernetes values\n@@"),
+        "{values}"
+    );
+    assert!(values.contains("+      profiling: \"false\"\n"), "{values}");
+    let unchanged = pack_of(&full, "ubuntu-aws");
+    assert!(unchanged["values"].get("unified").is_none(), "{unchanged}");
+}
+
+#[test]
+fn compare_json_with_full_gives_a_manifest_that_one_side_added_or_removed_its_text() {
+    let fx = fixtures();
+    let forward: serde_json::Value =
+        serde_json::from_str(&run(&["compare", "--json", "--full", &fx.a, &fx.b]).out).unwrap();
+    let back: serde_json::Value =
+        serde_json::from_str(&run(&["compare", "--json", "--full", &fx.b, &fx.a]).out).unwrap();
+    let (forward, back) = (
+        pack_of(&forward, "prometheus-operator"),
+        pack_of(&back, "prometheus-operator"),
+    );
+
+    let (op, text) = manifest_text(forward, "extra-rules");
+    assert_eq!(op, "changed");
+    assert!(text.starts_with("--- a: addon/prometheus-operator manifest extra-rules\n+++ b: addon/prometheus-operator manifest extra-rules\n"), "{text}");
+    assert!(
+        text.contains("-          for: 5m\n\\ No newline at end of file\n+          for: 10m\n"),
+        "{text}"
+    );
+
+    let (op, added) = manifest_text(forward, "dashboards");
+    assert_eq!(op, "added");
+    assert!(
+        added.starts_with("--- a: addon/prometheus-operator manifest dashboards\n+++ b: "),
+        "{added}"
+    );
+    assert!(added.contains("\n+kind: ConfigMap\n"), "{added}");
+    assert!(
+        !added.contains("\n-"),
+        "an added manifest has no removed line: {added}"
+    );
+
+    let (op, removed) = manifest_text(back, "dashboards");
+    assert_eq!(op, "removed");
+    assert!(removed.contains("\n-kind: ConfigMap\n"), "{removed}");
+    assert!(
+        !removed.contains("\n+kind"),
+        "a removed manifest has no added line: {removed}"
+    );
+}
+
+#[test]
+fn behind_refuses_a_pin_with_no_impact_and_a_pin_that_no_record_holds() {
+    let fx = fixtures();
+    let r = run(&["behind", &fx.a, "--pin", "k8s/kubernetes", "--no-impact"]);
+    assert_eq!(r.code, 2);
+    assert!(r.err.contains("cannot be used with"), "{}", r.err);
+    assert_eq!(r.out, "");
+
+    // the records give the answer, so the command needs no connection
+    let r = run(&["behind", &fx.a, "--pin", "addon/nothing"]);
+    assert_eq!(r.code, 2);
+    assert!(r.err.contains("--pin addon/nothing"), "{}", r.err);
+    assert_eq!(r.out, "");
+}
+
 #[test]
 fn color_policy() {
     let fx = fixtures();

@@ -1,0 +1,2 @@
+$ strata compare addons/1.0.0/dev.json addons/1.0.1/prod.json --full --json | jq -c '.packs[] | select(.manifests) | .manifests[] | {op, name, unified}'
+{"op":"changed","name":"namespace-policy","unified":"--- a: addon/namespace-policy manifest namespace-policy\n+++ b: addon/namespace-policy manifest namespace-policy\n@@ -3,4 +3,4 @@\n metadata:\n   name: payments\n   labels:\n-    pod-security.kubernetes.io/enforce: restricted\n\\ No newline at end of file\n+    pod-security.kubernetes.io/enforce: baseline\n\\ No newline at end of file\n"}
