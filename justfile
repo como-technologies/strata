@@ -32,7 +32,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
 
@@ -51,6 +51,11 @@ observer-manifests:
 observer-manifests-pods:
     test "$(kubectl kustomize examples/observer-pods | grep -c '^kind: ')" = 6
     kubectl kustomize examples/observer-pods | grep -q -e '- --read-pods'
+
+# Render examples/observer-alerts, which lists deploy/observer and the component deploy/observer/alerts, and make sure it holds five objects and the flag --alerts. Needs kubectl.
+observer-manifests-alerts:
+    test "$(kubectl kustomize examples/observer-alerts | grep -c '^kind: ')" = 5
+    kubectl kustomize examples/observer-alerts | grep -q -e '- --alerts=/alerts/alerts.json'
 
 # Linux targets are static musl builds in the containers of cross. The other targets build
 # natively with cargo.
@@ -340,7 +345,7 @@ live-observer-images: build
 live-observer: build
     examples/live/observer.sh
 
-# The least role of the key of the observer (#645): each request of its cycles, with the key of the example and with a second key. Needs live-up, OBSERVER_ROLE, and OBSERVER_ROLE_KEY; only reads. A user in the tenant with the role under test is for brett.
+# The least role of the key of the observer (#645): each request of its cycles, with the key of the example and with a second key. Needs live-up, OBSERVER_ROLE, and OBSERVER_ROLE_KEY; only reads. A user in the tenant with the role under test is for a maintainer.
 live-observer-role: build
     examples/live/observer-role.sh
 

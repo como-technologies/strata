@@ -1346,7 +1346,8 @@ needs the example at its baseline with cluster A.
 
 ## observer-kind.sh
 
-Read-only for the tenant. It makes a kind cluster, installs [the
+Read-only for the tenant, except stage 8, which edits the add-on version in place
+and puts it back. It makes a kind cluster, installs [the
 observer](./observer-deploy.md) in it, and deletes the cluster. It needs the
 example at its baseline with cluster A, `docker`, `kind`, `kubectl`, and the image
 of `just observer-image`. The observer watches cluster A, and its records are the
@@ -1380,6 +1381,14 @@ name of the pack in `spec.image` and in `imageID`. A rewritten image string name
 mirror in both, so it matches no pack by name and tag. See [The pods of a
 cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 
+Stage 8 (#648) shows the alerts. It starts a receiver in the cluster: a pod of
+`busybox` that takes a `POST` on port 443 and keeps the body of each message. The
+network policy of the observer lets it connect to port 443, so a message reaches the
+receiver. The component `deploy/observer/alerts` and the file of
+`examples/observer-alerts` apply, with `--alerts-allow-http` and a content cycle of
+one minute. An edit in place of the add-on version opens a finding. The undo clears it.
+The script puts the edit back at its end, also when a check fails.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `kind-create`, `image-load` | 0 | #644: a kind cluster, and the image of the observer in its nodes. The config of the cluster sets `config_path`, so containerd reads the folder `certs.d` |
@@ -1401,6 +1410,15 @@ cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 | `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. The check records 0, so the row holds a digest. `spec.image` and `imageID` name `vendor.example`, and the digest is the one that the mirror served. `status.image` names `registry.k8s.io/pause:3.10` |
 | `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. The check records 0, so the row holds a digest. `spec.image` and `imageID` name the registry, so the image matches no pack by name and tag. `status.image` names `registry.k8s.io/pause:3.10` |
 | `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go |
+| `alert-receiver`, `alert-secret` | 0 | #648: a pod takes a `POST` at `/cgi-bin/hook` on port 443 and keeps the body of each message. The Secret `strata-observer-alert-channels` holds the address of the receiver for each channel of the example (no result yet: the next live window runs it) |
+| `alert-apply` | 0 | #648: the base with the component `deploy/observer/alerts` and the file of `examples/observer-alerts` applies with `--server-side`, and the Deployment becomes available. The render holds the flag `--alerts` (no result yet: the next live window runs it) |
+| `alert-route` | 0 | #648: `/v1/alerts` says `set`, lists the five rules of the example with their states and the names of the channels, and shows no address (no result yet: the next live window runs it) |
+| `alert-edit` | 0 | #648: an edit in place of the add-on version opens the finding `published-changed` (no result yet: the next live window runs it) |
+| `alert-open` | 0 | #648: the receiver gets one message of the open. It starts with the name of the cluster and `Drift`, and it names the profile and its packs (no result yet: the next live window runs it) |
+| `alert-no-value` | 0 | #648: the detail route holds the text of the edit, so the search proves something. The receiver holds none of it, in the raw form or in the JSON form with the quotes escaped, and none of the text it replaced (no result yet: the next live window runs it) |
+| `alert-undo`, `alert-clear` | 0 | #648: the add-on version goes back, and the observer finds no finding. The receiver then gets a message of the clear (no result yet: the next live window runs it) |
+| `alert-one-each` | 0 | #648: after one more content cycle, the receiver holds one message of the open and one of the clear for the profile (no result yet: the next live window runs it) |
+| `alert-clean` | 0 | #648: the receiver, its Service, and its ConfigMap go (no result yet: the next live window runs it) |
 | `kind-delete` | 0 | the kind cluster is deleted |
 
 ## observer-images.sh

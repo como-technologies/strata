@@ -29,7 +29,7 @@ that strata adds beside it. Strata does not answer the first question again.
 | [Scans](https://docs.spectrocloud.com/clusters/cluster-management/compliance-scan/) | Is the running cluster compliant, secure, and conformant, and what software does it hold? | Is the cluster the release that the team approved? That is a different question: a cluster can pass each scan and run content from outside the review of the team. |
 | [Export and import](https://docs.spectrocloud.com/profiles/cluster-profiles/export-import-cluster-profile/) | A copy of a profile as a file, by hand. "During profile export, Palette masks fields that are marked as sensitive." | A copy that a job compares with Palette on a schedule. `snapshot --from-candidate` reads the export as a candidate, so an export in the repository has a root. |
 | [The Terraform provider](https://registry.terraform.io/providers/spectrocloud/spectrocloud/latest/docs) | The publish of a version from code. | Whether Palette still holds what the code published. An edit through the API or the console is outside the plan. |
-| [Health alerts](https://docs.spectrocloud.com/clusters/cluster-management/health-alerts/) | Is a cluster unhealthy? The alert resource of the provider takes `ClusterHealth` as its only component ([alert](https://registry.terraform.io/providers/spectrocloud/spectrocloud/latest/docs/resources/alert)). | Did a published version change? The alerts cover the health of a cluster. |
+| [Health alerts](https://docs.spectrocloud.com/clusters/cluster-management/health-alerts/) | Is a cluster unhealthy? The alert resource of the provider takes `ClusterHealth` as its only component ([alert](https://registry.terraform.io/providers/spectrocloud/spectrocloud/latest/docs/resources/alert)). | Did a published version change? The alerts cover the health of a cluster. Until Palette has an event for it, the observer can send one: see [Alerts](./automation/observer.md#alerts). |
 
 Palette has an [Argo CD pack](https://docs.spectrocloud.com/integrations/packs/?pack=argo-cd),
 which runs the applications of a cluster from Git. The profile itself is what
@@ -78,7 +78,7 @@ this page.
 | The pipeline of the team | The publish. The step that writes the record. The graph of the repositories, and who pins what. The approval rules. The check that a version number is new. The policy of the impact threshold, such as a second approver for a repave. | Each one is a decision of the team, and it changes when the team changes. Strata gives the facts, and the pipeline decides. |
 | Palette | A content digest in the API. A setting that locks a published version. A lifecycle of a profile version, as packs have one. A report of the clusters that differ from their release. An event when a published version changes. | Each one is a fact that only Palette has at the moment of the change. A digest calculated when the version is published costs nothing, and every tool can then use it. |
 | A tool outside both | The rules that make content canonical. The impact model. Each check that compares the content of today with the content that a reviewer approved. The comments, the issues, and the gates on the code host. | The copy lives outside the thing that it is compared with, and the code host is where the team reviews. This is what strata is. |
-| A service in one cluster | [`strata-observer`](./automation/observer.md). It asks the questions of the table in the introduction on a timer. It asks them for each record of your team and for its cluster. It shows the answers on a page. With the opt-in `--read-pods`, it also reads the pods, to answer which digest each tag runs. | It runs the `strata` binary and holds no rule about a profile. It compares Palette with the records of the pipeline, and it writes nothing to Palette. The pod read is its own code, because no route of Palette gives a digest. |
+| A service in one cluster | [`strata-observer`](./automation/observer.md). It asks the questions of the table in the introduction on a timer. It asks them for each record of your team and for its cluster. It shows the answers on a page. With the opt-in `--read-pods`, it also reads the pods, to answer which digest each tag runs. With the opt-in `--alerts`, it sends a message to a webhook. | It runs the `strata` binary and holds no rule about a profile. It compares Palette with the records of the pipeline, and it writes nothing to Palette. The pod read is its own code, because no route of Palette gives a digest. |
 
 A feature in the second row does not remove strata. It makes the question
 cheaper. A content digest in the API makes `verify` one request. The record
@@ -115,6 +115,10 @@ and of each wave, checks them.
    - Strata also keeps a check that the root needs: a change that Palette
      makes to the content at the create with no error. See
      [What the create of a version checks](./internals/palette/profiles.md#what-the-create-of-a-version-checks).
+   - The alerts of the observer are a stopgap for an event that Palette lacks: a
+     published version that changed. Palette owns the event, and strata removes
+     the alert when Palette adds it. See
+     [An event when a published version changes](./internals/palette/profiles.md#an-event-when-a-published-version-changes).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds
    one of them only when `compare`, `verify`, or `same-release` needs it to

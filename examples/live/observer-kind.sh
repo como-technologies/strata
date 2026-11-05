@@ -21,7 +21,12 @@
 #      each node. One pod names vendor.example, and one names the registry itself. The component
 #      deploy/observer/pods applies, and the observer reads the pods. The checks mirror-image-id
 #      and mirror-image-string record what each pod reports and what the observer shows for it
-#   8  the end: the kind cluster is deleted, also when a check fails; KEEP_CLUSTER=1 keeps it
+#   8  the alerts (#648): a receiver pod in the cluster, which takes a POST on port 443 and keeps each
+#      body. The component deploy/observer/alerts and the file of examples/observer-alerts apply, with
+#      --alerts-allow-http. An edit in place of the add-on version opens a finding, and the undo
+#      clears it. The receiver gets one message of the open and one of the clear, and none of them holds
+#      the text of the edit. The script puts the edit back at its end, also when a check fails
+#   9  the end: the kind cluster is deleted, also when a check fails; KEEP_CLUSTER=1 keeps it
 #
 # The image is distroless: it has no shell, so the checks of stage 3 read the spec of the pod, and
 # the kubelet enforces it. The cluster that the observer watches is cluster A of the live example.
@@ -41,7 +46,7 @@ set -uo pipefail
 script=observer-kind
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2|3|4|5|6|7|8) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7|8|9) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 for tool in docker kind kubectl curl jq git; do
   command -v "$tool" > /dev/null || die "$tool is needed"
@@ -75,6 +80,7 @@ ns=strata-observer
 reader=system:serviceaccount:$ns:reader
 deleted=
 mirror_made=
+edited=
 # kc ARGS...: kubectl in the kind cluster of this run. Exported, so that a check in bash -c has it.
 kc() { kubectl --context "kind-$cluster" "$@"; }
 # cluster_kubeconfig: pf_start of lib.sh opens its port-forward in the kind cluster of this run.
@@ -104,6 +110,8 @@ cleanup() {
   pf_stop
   [ -z "$kubeconfig" ] || rm -f "$kubeconfig"
   [ -z "$mirror_made" ] || mirror_remove >> steps.log 2>&1
+  # an edit in place goes back also when a check of stage 8 fails
+  [ -z "$edited" ] || "$live/api.sh" edit "$AD" "$addon_to" "$addon_from" >> steps.log 2>&1
   [ -n "$deleted" ] || [ "${KEEP_CLUSTER:-}" = 1 ] || kind delete cluster --name "$cluster" >> steps.log 2>&1
   summary
 }
@@ -312,7 +320,212 @@ if stage 7 "the pods and a mirror"; then
   check mirror-clean 0 '#646: the pods, the files of containerd, and the registry go' -- mirror_remove
 fi
 
-if stage 8 "the end: the kind cluster goes"; then
+# ---- the alerts (stage 8) ---------------------------------------------------------------------------
+
+# The receiver is a pod of the namespace default. busybox httpd runs a CGI script for a POST to
+# /cgi-bin/hook, and the script appends the body to /data/bodies.log. The pod listens on port 443, so
+# the network policy of the observer, which lets it connect to DNS and to port 443, lets a message
+# through. The address uses http, so the observer runs with --alerts-allow-http. The rules are the file
+# of examples/observer-alerts, and the content cycle gets a short period.
+receiver=alert-receiver
+receiver_url=http://$receiver.default.svc.cluster.local:443/cgi-bin/hook
+
+# alert_profile: the add-on profile, as name@version. Its record is addon.json.
+alert_profile() { jq -r '.source.name + "@" + .source.version' addon.json; }
+# alert_receiver: the CGI script in a ConfigMap, the pod, and a Service on port 443. The script reads the
+# bytes of the body, as many as CONTENT_LENGTH says, and writes one line for each message.
+alert_receiver() {
+  cat > hook.cgi << 'EOF'
+#!/bin/sh
+head -c "$CONTENT_LENGTH" >> /data/bodies.log
+echo >> /data/bodies.log
+printf 'Status: 200 OK\r\nContent-Type: text/plain\r\n\r\nok\r\n'
+EOF
+  kc -n default create configmap "$receiver" --from-file=hook=hook.cgi || return 1
+  kc apply --server-side -f - << EOF || return 1
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $receiver
+  namespace: default
+  labels:
+    app: $receiver
+spec:
+  containers:
+    - name: httpd
+      image: busybox:1.37
+      command: [httpd, -f, -p, "443", -h, /www]
+      volumeMounts:
+        - { name: cgi, mountPath: /www/cgi-bin }
+        - { name: data, mountPath: /data }
+  volumes:
+    - name: cgi
+      configMap: { name: $receiver, defaultMode: 0755 }
+    - name: data
+      emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: $receiver
+  namespace: default
+spec:
+  selector:
+    app: $receiver
+  ports:
+    - { port: 443, targetPort: 443 }
+EOF
+  kc -n default wait --for=condition=Ready "pod/$receiver" --timeout=120s
+}
+# alert_secret: the Secret of the addresses. The two channels of the example name the receiver.
+alert_secret() {
+  kc -n "$ns" create secret generic strata-observer-alert-channels \
+    --from-literal=platform-oncall="$receiver_url" --from-literal=platform-planning="$receiver_url"
+}
+# alert_overlay: base/ is a copy of deploy/observer, alerts/ is a copy of the component, and
+# kustomization.yaml lists both as a team does, with the file of the example. The patch gives the pod a
+# short period and the flag that allows an http address.
+alert_overlay() {
+  mkdir -p base alerts && cp "$root"/deploy/observer/*.yaml base/ && cp "$root"/deploy/observer/alerts/*.yaml alerts/ \
+    && cp "$root/examples/observer-alerts/alerts.json" . || return 1
+  cat > kustomization.yaml << 'EOF'
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: strata-observer
+resources:
+  - base
+components:
+  - alerts
+configMapGenerator:
+  - name: strata-observer-alerts
+    files:
+      - alerts.json
+generatorOptions:
+  disableNameSuffixHash: true
+patches:
+  - target:
+      kind: Deployment
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --content-every=1m
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --alerts-allow-http
+EOF
+}
+# alert_apply: render the overlay, make sure that the flag --alerts is in it, and apply it with the image of this run
+alert_apply() {
+  alert_overlay && kubectl kustomize . | sed "s#ghcr.io/como-technologies/strata-observer:VERSION#$image#" > observer.yaml \
+    && grep -q -e '- --alerts=/alerts/alerts.json' observer.yaml && kc apply --server-side -f observer.yaml \
+    && kc -n "$ns" rollout status deploy/strata-observer --timeout=180s
+}
+# alert_set: /v1/alerts says that the observer sends alerts, with the five rules of the example. alerts-page.json keeps it.
+alert_set() { page /v1/alerts > alerts-page.json 2> /dev/null && jq -e '.set == true and (.rules | length) == 5' alerts-page.json > /dev/null; }
+# alert_route: open the port-forward, wait for the route, and show it. The route names the channels, and it shows no address.
+alert_route() {
+  pf_start || { cat port-forward.log; return 1; }
+  poll "$tries" alert_set || { cat alerts-page.json 2> /dev/null; return 1; }
+  jq '{set, channels, digestEvery, waiting, rules: [.rules[] | {level, match, news, send, to, state}]}' alerts-page.json
+  case "$(cat alerts-page.json)" in
+    *"$receiver"*) echo "the route shows the address"; return 1 ;;
+  esac
+}
+# alert_finding: the finding published-changed names the add-on profile and a pack. findings.json keeps it.
+alert_finding() {
+  page /v1/findings > findings.json 2> /dev/null \
+    && jq -e --arg p "$(alert_profile)" '.findings[] | select(.kind == "published-changed" and .profile == $p and (.packs | length) > 0)' findings.json > /dev/null
+}
+# alert_no_finding: /v1/findings is empty
+alert_no_finding() { page /v1/findings > findings.json 2> /dev/null && jq -e '.findings | length == 0' findings.json > /dev/null; }
+# alert_edit: an edit in place of the add-on version. The flag comes first, so that the undo at the end knows
+# of the edit also when the call fails.
+alert_edit() {
+  edited=1
+  "$live/api.sh" edit "$AD" "$addon_from" "$addon_to" && poll "$tries" alert_finding
+}
+# alert_texts: the body of each message that the receiver got, one JSON object on each line
+alert_texts() { kc -n default exec "$receiver" -- cat /data/bodies.log; }
+# count_messages REGEX: the messages whose text matches REGEX
+count_messages() { alert_texts | jq -s --arg re "$1" '[.[] | select(.text | test($re))] | length'; }
+# open_regex and clear_regex: the lines that a message of the open and a message of the clear start with after the cluster
+open_regex() { printf '· Drift\n%s: ' "$(alert_profile)"; }
+clear_regex() { printf '· Drift cleared\n%s\n' "$(alert_profile)"; }
+alert_opened() { [ "$(count_messages "$(open_regex)")" -ge 1 ] 2> /dev/null; }
+alert_cleared() { [ "$(count_messages "$(clear_regex)")" -ge 1 ] 2> /dev/null; }
+# alert_open: the receiver gets one message of the open, with the name of the cluster. The output shows it.
+alert_open() {
+  local name
+  poll "$tries" alert_opened || { alert_texts | jq -c .; return 1; }
+  name=$(page /v1/cluster | jq -r '.cluster.name') && [ -n "$name" ] || return 1
+  alert_texts | jq -e --arg c "$name" --arg re "$(open_regex)" 'select(.text | test($re)) | .text | startswith("strata · " + $c + " · Drift\n")' > /dev/null \
+    || { echo "no message starts with the name of the cluster, $name"; return 1; }
+  alert_texts | jq -r --arg re "$(open_regex)" 'select(.text | test($re)) | .text'
+  # one finding is one message
+  [ "$(count_messages "$(open_regex)")" = 1 ]
+}
+# alert_no_value: the detail route holds the text of the edit, so the search proves something. The receiver
+# holds none of it, in the raw form or in the JSON form with the quotes escaped, and none of the text it replaced.
+alert_no_value() {
+  local profile pack body marker encoded
+  profile=$(alert_profile)
+  pack=$(jq -r --arg p "$profile" '[.findings[] | select(.kind == "published-changed" and .profile == $p) | .packs[]] | first // empty' findings.json)
+  [ -n "$pack" ] || { echo "the finding names no pack"; return 1; }
+  curl -fsS --max-time 60 "http://127.0.0.1:$port/v1/packs/$profile/$pack/diff?side=published" > diff.json \
+    || { echo "no answer of the detail route for $pack"; return 1; }
+  jq -e --arg m "$addon_to" '[.values.unified, (.manifests[]? | .unified)] | map(select(type == "string")) | any(contains($m))' diff.json > /dev/null \
+    || { echo "the detail route holds no text of the edit for $pack, so the search proves nothing"; return 1; }
+  echo "the detail route holds the text of the edit for $pack"
+  body=$(alert_texts) || return 1
+  for marker in "$addon_to" "$addon_from"; do
+    encoded=$(jq -rn --arg m "$marker" '$m | tojson | .[1:-1]') || return 1
+    case "$body" in
+      *"$marker"* | *"$encoded"*) echo "a message holds: $marker"; return 1 ;;
+    esac
+  done
+  echo "$(printf '%s\n' "$body" | grep -c .) message(s) hold no text of the edit"
+}
+# alert_undo: restore the add-on version, and wait for the cycle that finds no finding
+alert_undo() {
+  "$live/api.sh" edit "$AD" "$addon_to" "$addon_from" && edited= && poll "$tries" alert_no_finding
+}
+# alert_clear: the receiver gets a message of the clear, after a check that proves it. The output shows it.
+alert_clear() {
+  poll "$tries" alert_cleared || { alert_texts | jq -c .; return 1; }
+  alert_texts | jq -r --arg re "$(clear_regex)" 'select(.text | test($re)) | .text'
+}
+# checked_at: the end of the last content cycle
+checked_at() { page /v1/cluster | jq -r '.content.checkedAt'; }
+alert_next_cycle() { [ "$(checked_at)" != "$1" ]; }
+# alert_one_each: after one more content cycle, the receiver holds one message of the open and one of the clear
+alert_one_each() {
+  local before opens clears
+  before=$(checked_at) || return 1
+  poll "$tries" alert_next_cycle "$before" || { echo "no content cycle ended after the clear"; return 1; }
+  opens=$(count_messages "$(open_regex)") && clears=$(count_messages "$(clear_regex)") || return 1
+  echo "$(alert_profile): $opens message of the open, $clears message of the clear"
+  [ "$opens" = 1 ] && [ "$clears" = 1 ]
+}
+# alert_clean: the receiver goes. The kind cluster goes in stage 9.
+alert_clean() { kc -n default delete pod,service,configmap "$receiver" --ignore-not-found; }
+
+if stage 8 "the alerts"; then
+  check alert-receiver 0 '#648: a pod takes a POST at /cgi-bin/hook on port 443 and keeps the body of each message' -- alert_receiver
+  check alert-secret 0 '#648: the Secret strata-observer-alert-channels holds the address of the receiver for each channel of the example' -- alert_secret
+  check alert-apply 0 '#648: the base with the component deploy/observer/alerts and the file of examples/observer-alerts applies, and the Deployment becomes available' -- alert_apply
+  check alert-route 0 '#648: /v1/alerts says set, lists the five rules with their states and the names of the channels, and shows no address' -- alert_route
+  check alert-edit 0 '#648: an edit in place of the add-on version opens a finding published-changed' -- alert_edit
+  check alert-open 0 '#648: the receiver gets a message of the open: the cluster, Drift, the profile, and its packs' -- alert_open
+  check alert-no-value 0 '#648: the detail route holds the text of the edit, and the receiver holds none of it' -- alert_no_value
+  check alert-undo 0 '#648: the add-on version goes back, and the observer finds no finding' -- alert_undo
+  check alert-clear 0 '#648: the receiver gets a message of the clear' -- alert_clear
+  check alert-one-each 0 '#648: after one more content cycle, the receiver holds one message of the open and one of the clear' -- alert_one_each
+  pf_stop
+  check alert-clean 0 '#648: the receiver, its Service, and its ConfigMap go' -- alert_clean
+fi
+
+if stage 9 "the end: the kind cluster goes"; then
   if [ "${KEEP_CLUSTER:-}" = 1 ]; then
     echo "KEEP_CLUSTER=1: the kind cluster $cluster stays" | tee -a steps.log
   else

@@ -12,7 +12,7 @@
 #   2  the commands of the cycles: verify, snapshot of the cluster, and behind, with both keys
 #
 # The role of the second key is the question, so a person makes the user once. Making a user in the
-# tenant is for brett. The steps:
+# tenant is for a maintainer. The steps:
 #   1. As an admin of the tenant, make a user with no tenant role.
 #   2. Give the user the role under test in the project of the example, such as Project Viewer or
 #      Cluster Viewer.

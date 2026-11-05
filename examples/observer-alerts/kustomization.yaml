@@ -1,0 +1,16 @@
+# This kustomization lists the component as a team does. `just observer-manifests-alerts` renders it.
+# The ConfigMap comes from the file alerts.json. The Secret with the address of each webhook is not here:
+# it holds a token, so your team makes it with kubectl, and the page "The observer" in the book shows how.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: strata-observer
+resources:
+  - ../../deploy/observer
+components:
+  - ../../deploy/observer/alerts
+configMapGenerator:
+  - name: strata-observer-alerts
+    files:
+      - alerts.json
+generatorOptions:
+  disableNameSuffixHash: true

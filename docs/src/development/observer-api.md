@@ -13,6 +13,10 @@ strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--
 strata-observer health [--listen ADDR]
 ```
 
+The flags `--alerts`, `--digest-every`, and `--alerts-allow-http` belong to
+[Alerts](../automation/observer.md#alerts). `serve` reads the address of each channel
+at the start, and it exits 2 when one cannot be used.
+
 `serve` takes the [flags of `once`](../automation/observer.md#options) and one more
 flag. It starts the first cycle of each timer at the start. It stops when it
 gets `SIGINT` or `SIGTERM`. It stops the cycle that runs and each detail request
@@ -241,7 +245,7 @@ just observer-dev stale    # the set stale
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
-`images-split`, `images-off`, `images-unread`, `asks`, and `text-too-large`. The server
+`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`, and `alerts-unset`. The server
 listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
 and `-data` takes another directory of sets.
 
@@ -274,6 +278,12 @@ the page are those of the data.
   `text-too-large` names `ok` and marks the text of two packs as too large. In the
   set `ok`, a click on a move gets its answer from `replies.json`, and a click on a
   move with no reply gets 404.
+- The file `alerts.json` is the answer of `/v1/alerts`. A set can lack it: the page is then
+  the page of an observer that started without `--alerts`. The set `alerts` names `ok`
+  and holds seven rules, in the four states. A test gives the same rules to the real
+  engine, with the findings and the newer versions of `ok`, and makes sure that each
+  state is the one that the engine gives. The set `alerts-unset` names `ok` and holds
+  the answer of an observer with no alert.
 
 A test decodes each file of each set into the type of its route, and it refuses a
 field that the type lacks. So the test data cannot drift from the API. When `node` is on the
@@ -285,8 +295,8 @@ at the render.
 ## The click
 
 The server takes one `POST`: the click "Ask Palette" on one move. The code of the
-observer sends no HTTP `POST`. Palette gets its question from `strata`, which
-`internal/runner` starts.
+observer sends no HTTP `POST` to Palette. Palette gets its question from `strata`,
+which `internal/runner` starts.
 
 - **A method for each route.** A `Route` holds a pattern, a method, and a tier. The
   table of routes in `internal/api/api.go` gives each route one method. It is `GET`,
@@ -378,10 +388,12 @@ log is not written, because a path can hold the name of a profile.
 
 - **Four timeouts.** The server sets `ReadHeaderTimeout`, `ReadTimeout`,
   `WriteTimeout`, and `IdleTimeout`.
-- **Two HTTP clients.** The `health` check in `internal/api` calls a loopback
-  address. The read of the pods in `internal/kube` calls the API server. The code
-  sends no HTTP `POST`. Only `internal/api` and `internal/kube` import `net` or
-  `net/http`. A test makes sure of each rule.
-- **One file names the method `POST`.** The server takes one `POST`, and
-  `internal/api/api.go` names the method for that route. No other file of the
-  observer holds the method. A test makes sure of it.
+- **Three HTTP clients.** The `health` check in `internal/api` calls a loopback
+  address. The read of the pods in `internal/kube` calls the API server. The alerts
+  in `internal/alert` send a message to a webhook. The code sends no HTTP `POST` to
+  Palette. Only `internal/api`, `internal/kube`, and `internal/alert/send.go` import
+  `net` or `net/http`. A test makes sure of each rule.
+- **Two files name the method `POST`.** The server takes one `POST`, and
+  `internal/api/api.go` names the method for that route. `internal/alert/send.go`
+  names it for the message to a webhook. No other file of the observer holds the
+  method. A test makes sure of it.

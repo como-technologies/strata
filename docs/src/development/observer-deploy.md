@@ -34,6 +34,11 @@ A manual run starts only when the workflow is on the default branch, so it
 cannot test a branch. Use it after a merge to build a test tag of `main`. A
 test tag stays in the registry. Delete it when the check ends.
 
+A test tag holds the `strata` binary of the last release, and never the binary of the
+commit. So a test tag cannot run a change that adds a flag of `strata` in the same
+pull request: the observer then calls a flag that its binary does not have. A
+maintainer runs such a check on the image of the release.
+
 The workflow does these steps in order:
 
 1. Install `cosign`, and install the binaries of both platforms with
@@ -158,6 +163,49 @@ findings `image-moved` and `image-split`. With no component, `/v1/images` says
 that the observer does not read pods, and the observer makes no call to
 Kubernetes.
 
+## The component that sends the alerts
+
+The base sends no alert. The component `deploy/observer/alerts/` lets the observer send
+a message to a webhook. It is optional, and a team lists it as it lists the other
+component:
+
+```yaml
+resources:
+  - deploy/observer
+components:
+  - deploy/observer/alerts
+configMapGenerator:
+  - name: strata-observer-alerts
+    files:
+      - alerts.json
+generatorOptions:
+  disableNameSuffixHash: true
+```
+
+`examples/observer-alerts/kustomization.yaml` is such a kustomization, with the file
+`alerts.json` beside it. `just observer-manifests-alerts` renders it, and makes sure
+that it holds five objects and the flag `--alerts`. CI runs that recipe. The component
+holds one file, `kustomization.yaml`, and it adds no object.
+
+The patch of the Deployment adds the flag `--alerts=/alerts/alerts.json` and two
+read-only volumes:
+
+| Volume | Mount | Source |
+| --- | --- | --- |
+| `alert-rules` | `/alerts` | The ConfigMap `strata-observer-alerts`, which holds the file `alerts.json`. |
+| `alert-channels` | `/alert-channels` | The Secret `strata-observer-alert-channels`, with one key for each channel. |
+
+A team makes the Secret with `kubectl`, because the address of a webhook holds a token.
+The key of a channel has the name of the channel, so `urlFile` in the rules is
+`/alert-channels/<channel>`. The pod does not start while the ConfigMap or the Secret is
+absent. The network policy of the base already lets the observer connect to port 443,
+and the observer sends to an `https` address only. The component changes no other
+object.
+
+The observer reads the address of each channel when it starts, and it exits 2 when a
+file is absent or does not hold an `https` address. It reads the files again at each
+send, because the kubelet renews a Secret.
+
 ## The records
 
 `observer-records.sh` writes the records as Secrets on standard output. It
@@ -205,6 +253,7 @@ writes only the records of its profiles.
 ```bash
 just observer-manifests     # kubectl kustomize deploy/observer holds four objects
 just observer-manifests-pods # examples/observer-pods, which lists the base and the component: six objects and the flag --read-pods
+just observer-manifests-alerts # examples/observer-alerts, which lists the base and the component: five objects and the flag --alerts
 just observer-image         # strata-observer:dev, from the static binary of this tree
 just live-observer-kind     # the observer on kind
 just live-observer          # the observer on cluster A, from a kubectl apply and from a profile

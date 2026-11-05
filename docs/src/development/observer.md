@@ -461,6 +461,40 @@ The two messages of the pods are:
 - `ImageMoved`: "A tag runs another digest than the first one that the observer saw."
 - `ImageSplit`: "Pods run one tag with two digests."
 
+## The alerts
+
+[Alerts](../automation/observer.md#alerts) tells a team what the observer sends. This
+section tells how the code decides. It runs only with `--alerts`. Without the flag, the
+observer has no engine, and the step does nothing.
+
+The step runs at the end of each content cycle, also after a cycle that failed. Five
+rules decide what it queues:
+
+1. **An item is a finding, a newer version, or the loss of contact.** A finding is one
+   item, with the id of the finding. A newer version is one item for each profile that
+   pins the pack. The page state `lost` is the item `lost`. `alert.SubjectsOf` is the one
+   function that reads the types of `internal/model`.
+2. **The rule of an item is the first live rule of the lowest level that covers it.**
+   The levels run from `pack` to `cluster`. A mute that has ended is not live. An item
+   under a mute stays as it is, and queues nothing. An item with no rule leaves the
+   state.
+3. **An item that opens under a rule `now` queues one message.** An item under a rule
+   `digest` queues none, and it waits for the digest.
+4. **An item that is gone queues one clear message.** It does so only when its open
+   message went and its rule still sends at once. A cycle clears an item only when it
+   read the news of the item. A failed cycle clears nothing. `HeldIDs` keeps the findings
+   of a part that the cycle could not read. A versions cycle that never ended well clears
+   no newer version. A clear needs a check that proves it.
+5. **A digest queues one message for each channel.** It does so when a period has
+   passed and an item is open under a digest rule. The message lists the open items.
+   A digest has no clear message.
+
+The step plans under the lock of the observer, and it sends after it releases the lock.
+So a slow webhook never holds a request of the page. A channel that fails keeps its later
+messages, so the order of a channel holds. The step removes the messages that went, and it
+marks their items as sent. The queue keeps 100 messages at most. An item whose open
+message the queue dropped queues it again at the next step.
+
 ## The state
 
 `--state/state.json` holds these facts, and no value:
@@ -476,6 +510,12 @@ The two messages of the pods are:
   a newline, and the reference. The file holds no reference, no pod name, and no
   namespace. A new revision of the records empties `first`. `first` holds 2048 images
   at most: above that, the observer drops the images that the last read did not show.
+- `alerts`: the open alerts, `items`, by id, and the messages that did not go,
+  `outbox`. It also holds `digestAt`, the time of the last digest. An item holds
+  the news, the kind, the profile, the packs, one fixed sentence, the channel, and
+  the time that its message went. A message of the outbox holds the channel and the
+  text. The text names a profile and its packs, and no value. Without `--alerts`, the
+  lists are empty.
 
 The observer writes the file to a temporary file and renames it. A file that it
 cannot read is a log line and an empty state. So two runs of `once` with one
@@ -490,5 +530,7 @@ A log line holds a verdict, an exit code, a duration, an error kind, and a
 status. One more line says that strata could not read the audit log. It names
 the profile and the status of `verify.whoError`: `HTTP <status>`, or
 `no answer` when the text has no status. The line for a click holds the verdict and
-the status, and no profile and no pack. A log line holds no output of a
-process. It holds no body of an answer of Palette.
+the status, and no profile and no pack. The line for an alert holds the name of the
+channel, a verdict, and, for a send that failed, the error kind and the status. A log
+line holds no output of a process. It holds no body of an answer of Palette, no
+address of a webhook, and no text of a message.

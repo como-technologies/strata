@@ -1,0 +1,45 @@
+# This component lets the observer send alerts to a webhook. The base of deploy/observer does not.
+# A team lists the component under `components:` of its own kustomization. The folder
+# examples/observer-alerts/ shows how.
+#
+# The component adds the flag --alerts and two volumes. It adds no object. The ConfigMap
+# strata-observer-alerts holds the file alerts.json, which holds the rules. The Secret
+# strata-observer-alert-channels holds the address of each webhook, in a key with the name of its
+# channel. The address holds a token, so it is in a Secret and never in the file of the rules. The
+# network policy of the base already lets the observer connect to port 443, and the observer sends
+# to an https address only.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+patches:
+  - target:
+      kind: Deployment
+      name: strata-observer
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --alerts=/alerts/alerts.json
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: alert-rules
+          mountPath: /alerts
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/containers/0/volumeMounts/-
+        value:
+          name: alert-channels
+          mountPath: /alert-channels
+          readOnly: true
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: alert-rules
+          configMap:
+            name: strata-observer-alerts
+      - op: add
+        path: /spec/template/spec/volumes/-
+        value:
+          name: alert-channels
+          secret:
+            secretName: strata-observer-alert-channels
+            defaultMode: 0440

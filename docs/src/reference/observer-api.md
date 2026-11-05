@@ -53,13 +53,15 @@ method gets `405` and the header `Allow` with the method of the route.
 | Summary | `/v1/events` | `events`: the last 7 days. |
 | Summary | `/v1/images` | The document `strata-observed/1`: the images that the pods run, with the digest of each. |
 | Summary | `/v1/images/{ref}` | One image of that document. `{ref}` is the reference, as one escaped segment. |
+| Summary | `/v1/alerts` | The rules of the alerts with their states, the names of the channels, and a sample message. It holds no address. |
 | Detail | `/v1/packs/{profile}/{layer}/{name}/diff?side=` | The changes of one pack, with the old and the new value and the text of the diff. |
 | Detail | `/v1/asks` | `asks`: the answers of Palette that the observer holds in memory. |
 | Detail | `POST /v1/packs/{profile}/{layer}/{name}/ask` | The click "Ask Palette": the answer of Palette about the move of one pack. |
 
 Each summary route serves a part of [the summary](../development/observer.md#the-summary),
 with the same field names. The two image routes are the exception: they serve
-[`strata-observed/1`](#the-images). Each answer is JSON, except `/healthz`, which is
+[`strata-observed/1`](#the-images). The route `/v1/alerts` is the other exception: it
+serves [the alerts](#the-alerts). Each answer is JSON, except `/healthz`, which is
 plain text. The route `/` serves the page of the dashboard.
 
 - `{name}` and `{profile}` are `name@version` of a profile. A name with no version
@@ -176,6 +178,34 @@ and profile gives one finding. The events have the reasons `ImageMoved` and
 
 A finding of the pods changes no status of a profile or of a pack. `counts.drift` of
 `/v1/cluster` does not count it, and `counts.findings` does.
+
+## The alerts
+
+`GET /v1/alerts` shows the rules of the alerts. It is a summary route: it names the
+channels and holds no address and no value. The rules are a file that no route
+writes. [Alerts](../automation/observer.md#alerts) tells what the observer sends.
+
+| Field | Type | Content |
+| --- | --- | --- |
+| `set` | flag | `true` when the observer started with `--alerts`. When it is `false`, the other fields are empty. |
+| `channels` | list of text | The names of the channels, in order. Never an address. |
+| `digestEvery` | text | The period of a digest, as the other periods are: `168h` for 7 days. |
+| `waiting` | number | The messages that did not go. The next content cycle sends them again. |
+| `rules` | list | The rules, in the order of the file. |
+| `sample` | text | The message of a finding for a made-up profile. It shows what a channel gets. |
+
+A rule has these fields. `match`, `send`, `to`, and `muteUntil` are absent when the
+rule has none.
+
+| Field | Content |
+| --- | --- |
+| `level` | `cluster`, `profile`, or `pack`. |
+| `match` | The profile or the pack that the rule is about. A `cluster` rule has none. |
+| `news` | `drift`, `image`, `lost`, or `newer`. |
+| `send` | `now` or `digest`. A mute has none. |
+| `to` | The name of the channel. A mute has none. |
+| `muteUntil` | The last day of a mute, as `YYYY-MM-DD`. Only a mute has it. |
+| `state` | `firing`, `pending`, `inactive`, or `muted`. A mute that has ended is `inactive`. |
 
 ## The detail route
 
@@ -310,6 +340,9 @@ in memory, to count the pods of an image. They reach no answer, no log, and no s
 The API key stays in the environment of the process. It goes to no answer and to no
 log. No route shows the environment. The server writes no request log, because a
 path can hold the name of a profile.
+
+The address of a webhook stays in a file that the observer reads at each send. It goes
+to no answer, no log, and no state. `/v1/alerts` names the channels only.
 
 The detail tier is the one place where a value leaves the process. It shows the old
 and the new value of a pack, the text of its diff, and the answers of Palette. A

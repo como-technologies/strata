@@ -7812,7 +7812,19 @@ const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
 case "$*" in
+  "kustomize ."*)
+    cat "$FAKE_REPO/deploy/observer/deployment.yaml"
+    [ -n "${FAKE_NO_ALERTS_FLAG-}" ] || echo "        - --alerts=/alerts/alerts.json" ;;
   "kustomize "*) cat "$FAKE_REPO/deploy/observer/deployment.yaml" ;;
+  *"exec alert-receiver"*"/data/bodies.log"*)
+    [ -f "$obs/edited" ] || [ -f "$obs/cleared" ] || exit 1
+    profile=strata-live-addon@1.0.0
+    open=$(printf 'strata · payments · Drift\n%s: The published version differs from its record.\nPacks: addon/strata-live-config\nFirst seen: 2026-11-04T10:00:00Z' "$profile")
+    [ -z "${FAKE_VALUE_LEAKS-}" ] || open="$open"$'\n''edited: "yes"'
+    clear=$(printf 'strata · payments · Drift cleared\n%s\nA check proved that this is gone, at 2026-11-04T10:30:00Z.' "$profile")
+    [ -n "${FAKE_NO_OPEN-}" ] || jq -cn --arg t "$open" '{text: $t}'
+    [ -z "${FAKE_TWO_OPENS-}" ] || jq -cn --arg t "$open" '{text: $t}'
+    [ ! -f "$obs/cleared" ] || [ -n "${FAKE_NO_CLEAR-}" ] || jq -cn --arg t "$clear" '{text: $t}' ;;
   *"apply --server-side -f -"*)
     body=$(cat)
     printf '%s\n' "$body" >> "$obs/applied.yaml"
@@ -7866,9 +7878,27 @@ case "$url" in
       counts: {images: 2, matched: 0, changed: 0}, images: []}') ;;
   */v1/cluster)
     meta=$(base64 -d "$FAKE_OBS/meta.b64" 2>/dev/null || echo '{}')
+    cycle=$(( $(cat "$FAKE_OBS/cycle" 2>/dev/null || echo 0) + 1 ))
+    echo "$cycle" > "$FAKE_OBS/cycle"
     body=$(jq -cn --argjson meta "$meta" --arg uid "$FAKE_CLUSTER_UID" \
-      --argjson n "$(cat "$FAKE_OBS/count" 2>/dev/null || echo 0)" \
-      '{cluster: {uid: $uid}, records: {count: $n, baseline: $meta.baseline, revision: $meta.revision}}') ;;
+      --argjson n "$(cat "$FAKE_OBS/count" 2>/dev/null || echo 0)" --arg at "2026-11-04T10:$(printf %02d "$cycle"):00Z" \
+      '{cluster: {uid: $uid, name: "payments"}, content: {checkedAt: $at}, records: {count: $n, baseline: $meta.baseline, revision: $meta.revision}}') ;;
+  */v1/alerts)
+    set=true; [ -z "${FAKE_ALERTS_UNSET-}" ] || set=false
+    body=$(jq -cn --argjson set "$set" '{set: $set, channels: ["platform-oncall", "platform-planning"], digestEvery: "168h", waiting: 0, sample: "x",
+      rules: [{level: "cluster", news: "drift", send: "now", to: "platform-oncall", state: "inactive"},
+              {level: "cluster", news: "image", send: "now", to: "platform-oncall", state: "inactive"},
+              {level: "cluster", news: "lost", send: "now", to: "platform-oncall", state: "inactive"},
+              {level: "cluster", news: "newer", send: "digest", to: "platform-planning", state: "inactive"},
+              {level: "profile", match: "barney-base", news: "newer", muteUntil: "2027-06-30", state: "muted"}]}') ;;
+  */v1/findings)
+    body='{"findings":[]}'
+    [ ! -f "$FAKE_OBS/edited" ] || body='{"findings":[{"id":"f1","kind":"published-changed","profile":"strata-live-addon@1.0.0","packs":["addon/strata-live-config"]}]}' ;;
+  */v1/packs/*/diff*)
+    unified=""
+    [ ! -f "$FAKE_OBS/edited" ] || [ -n "${FAKE_NO_DIFF_TEXT-}" ] || unified='-edited: "no"
++edited: "yes"'
+    body=$(jq -cn --arg u "$unified" '{values: {unified: $u}, manifests: []}') ;;
   *) body='<!doctype html><html lang="en"></html>' ;;
 esac
 if [ -n "$out" ]; then printf '%s' "$body" > "$out"; printf 200; else printf '%s\n' "$body"; fi
@@ -7923,13 +7953,62 @@ fn observer_record(name: &str) -> String {
         .to_string()
 }
 
-/// A stage for observer-kind.sh with the stand-ins of the tools of the script. The key of the
-/// tenant is `key-that-no-log-shows`.
+/// The `api.sh` of the tree of observer-kind.sh. It logs each call to `$FAKE_OBS/api.log`. The edit
+/// of the add-on version makes the file `edited`, and the edit back makes the file `cleared`. The
+/// stand-ins of `kubectl` and `curl` read the two files. With `FAKE_DIE_AFTER_EDIT`, the edit ends the
+/// script with SIGTERM.
+const FAKE_API_KIND: &str = r##"#!/usr/bin/env bash
+obs=$FAKE_OBS
+echo "$*" >> "$obs/api.log"
+case "$1" in
+  get-kubeconfig) echo "apiVersion: v1 # fake-kubeconfig" ;;
+  edit)
+    if [ "$3" = 'edited: "no"' ]; then
+      touch "$obs/edited"; rm -f "$obs/cleared"
+      [ -z "${FAKE_DIE_AFTER_EDIT-}" ] || kill -TERM "$PPID"
+    else
+      rm -f "$obs/edited"; touch "$obs/cleared"
+    fi ;;
+esac
+exit 0
+"##;
+
+/// A stage for observer-kind.sh with the stand-ins of the tools of the script. The script runs in a
+/// tree of its own, so that its `api.sh`, `tf.sh`, and `git` are stand-ins. The key of the tenant is
+/// `key-that-no-log-shows`.
 fn observer_kind_stage() -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "cluster_uid": "c-a",
         "release_profile_uid": "r-1", "addon_profile_uid": "ad-1",
     }));
+    let tree = stage.path("tree");
+    let mut files = vec![
+        "examples/live/observer-kind.sh".to_string(),
+        "examples/live/lib.sh".to_string(),
+        "examples/live/common.sh".to_string(),
+        "examples/observer-alerts/alerts.json".to_string(),
+        "scripts/ci/observer-records.sh".to_string(),
+        "Cargo.toml".to_string(),
+    ];
+    for file in [
+        "kustomization",
+        "namespace",
+        "serviceaccount",
+        "networkpolicy",
+        "deployment",
+        "reader-role",
+        "alerts/kustomization",
+    ] {
+        files.push(format!("deploy/observer/{file}.yaml"));
+    }
+    let files: Vec<&str> = files.iter().map(String::as_str).collect();
+    copy_scripts(&tree, &files);
+    let live = tree.join("examples/live");
+    executable(&live.join("api.sh"), FAKE_API_KIND);
+    executable(
+        &live.join("tf.sh"),
+        "#!/usr/bin/env bash\ncat \"$FAKE_OUTPUTS\"\n",
+    );
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
     std::fs::write(
@@ -7959,6 +8038,10 @@ fn observer_kind_stage() -> Stage {
         ("curl", FAKE_CURL_OBSERVER),
         ("kind", FAKE_KIND_OBSERVER),
         ("docker", FAKE_DOCKER_OBSERVER),
+        (
+            "git",
+            "#!/usr/bin/env bash\necho 0123456789abcdef0123456789abcdef01234567\n",
+        ),
     ] {
         executable(&bin.join(name), body);
     }
@@ -7998,8 +8081,14 @@ fn observer_kind_stage() -> Stage {
     stage
 }
 
+/// Run observer-kind.sh of the tree of `stage`.
+fn run_kind(stage: &Stage) -> (Output, String) {
+    let script = stage.path("tree/examples/live/observer-kind.sh");
+    stage.run(script.to_str().unwrap(), &[])
+}
+
 /// Each check of observer-kind.sh, in the order that it runs.
-const OBSERVER_KIND_CHECKS: [&str; 35] = [
+const OBSERVER_KIND_CHECKS: [&str; 46] = [
     "kind-create",
     "image-load",
     "namespace",
@@ -8034,6 +8123,17 @@ const OBSERVER_KIND_CHECKS: [&str; 35] = [
     "component-apply",
     "component-read",
     "mirror-clean",
+    "alert-receiver",
+    "alert-secret",
+    "alert-apply",
+    "alert-route",
+    "alert-edit",
+    "alert-open",
+    "alert-no-value",
+    "alert-undo",
+    "alert-clear",
+    "alert-one-each",
+    "alert-clean",
     "kind-delete",
 ];
 
@@ -8047,7 +8147,7 @@ fn observer_log(stage: &Stage, file: &str) -> String {
 #[test]
 fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_and_the_refusal() {
     let stage = observer_kind_stage();
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(&steps, &OBSERVER_KIND_CHECKS);
@@ -8074,7 +8174,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
     // Each apply is a server-side apply. A client-side apply copies each Secret to an annotation,
     // and it fails above 256 KiB.
     let applies: Vec<&str> = kubectl.lines().filter(|l| l.contains(" apply ")).collect();
-    assert_eq!(applies.len(), 8, "{applies:?}");
+    assert_eq!(applies.len(), 10, "{applies:?}");
     assert!(
         applies.iter().all(|l| l.contains("--server-side")),
         "{applies:?}"
@@ -8135,7 +8235,7 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
         "a temporary file stays"
     );
     // stage 7: the component applies as a team lists it, and the two pods wait to be Ready
-    let root = env!("CARGO_MANIFEST_DIR");
+    let root = stage.path("tree").display().to_string();
     for call in [
         format!("kustomize {root}/examples/observer-pods"),
         "-n strata-observer rollout status deploy/strata-observer --timeout=180s".to_string(),
@@ -8207,6 +8307,75 @@ fn observer_kind_sh_installs_the_observer_on_kind_and_checks_the_pod_the_page_an
             assert!(report.contains(&line), "{check}: {line}\n{report}");
         }
     }
+    // stage 8: the receiver, the Secret of the addresses, the overlay with the component, the edit in
+    // place and its undo, and the end of the receiver
+    let address = "http://alert-receiver.default.svc.cluster.local:443/cgi-bin/hook";
+    for call in [
+        "-n default create configmap alert-receiver --from-file=hook=hook.cgi".to_string(),
+        "-n default wait --for=condition=Ready pod/alert-receiver --timeout=120s".to_string(),
+        format!(
+            "-n strata-observer create secret generic strata-observer-alert-channels --from-literal=platform-oncall={address} --from-literal=platform-planning={address}"
+        ),
+        "kustomize .".to_string(),
+        "apply --server-side -f observer.yaml".to_string(),
+        "-n default exec alert-receiver -- cat /data/bodies.log".to_string(),
+        "-n default delete pod,service,configmap alert-receiver --ignore-not-found".to_string(),
+    ] {
+        assert!(kubectl.contains(&call), "{call}:\n{kubectl}");
+    }
+    let rendered = std::fs::read_to_string(stage.path("out/observer.yaml")).unwrap();
+    assert!(
+        rendered.contains("- --alerts=/alerts/alerts.json")
+            && rendered.contains("image: strata-observer:dev"),
+        "{rendered}"
+    );
+    let overlay: serde_yaml::Value = serde_yaml::from_str(
+        &std::fs::read_to_string(stage.path("out/kustomization.yaml")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(overlay["components"][0], "alerts");
+    let component: serde_yaml::Value = serde_yaml::from_str(
+        &std::fs::read_to_string(stage.path("out/alerts/kustomization.yaml")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(component["kind"], "Component");
+    let patch = overlay["patches"][0]["patch"].as_str().unwrap();
+    for flag in ["--content-every=1m", "--alerts-allow-http"] {
+        assert!(patch.contains(flag), "{flag}:\n{patch}");
+    }
+    assert_eq!(
+        std::fs::read_to_string(stage.path("out/alerts.json")).unwrap(),
+        repo_file("examples/observer-alerts/alerts.json"),
+        "the overlay carries the file of the example"
+    );
+    assert_eq!(
+        observer_log(&stage, "api.log").lines().collect::<Vec<_>>(),
+        [
+            "edit ad-1 edited: \"no\" edited: \"yes\"",
+            "edit ad-1 edited: \"yes\" edited: \"no\""
+        ],
+        "the edit goes in once and comes back once"
+    );
+    let out =
+        |check: &str| std::fs::read_to_string(stage.path(&format!("out/{check}.out"))).unwrap();
+    assert!(
+        out("alert-open").starts_with("strata · payments · Drift\nstrata-live-addon@1.0.0: "),
+        "{}",
+        out("alert-open")
+    );
+    assert!(out("alert-clear").contains("Drift cleared\nstrata-live-addon@1.0.0\n"));
+    assert!(
+        out("alert-no-value")
+            .contains("the detail route holds the text of the edit for addon/strata-live-config")
+    );
+    assert!(
+        out("alert-one-each")
+            .contains("strata-live-addon@1.0.0: 1 message of the open, 1 message of the clear")
+    );
+    assert!(
+        !out("alert-route").contains("alert-receiver"),
+        "the route shows the address"
+    );
     // the last records say first-seen, with no revision
     let meta = observer_log(&stage, "meta.b64");
 
@@ -8226,7 +8395,7 @@ fn observer_kind_sh_fails_a_check_when_the_reader_can_read_a_secret_and_still_de
 {
     let mut stage = observer_kind_stage();
     stage.env("FAKE_READER_SECRETS", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(&steps, &["reader-no-secret"]);
     passed(&steps, &["reader-no-exec", "reader-page", "kind-delete"]);
@@ -8246,7 +8415,7 @@ fn observer_kind_sh_fails_the_checks_of_a_pod_that_runs_as_root_with_a_token_and
         .unwrap()
         .push(serde_json::json!({"name": "kube-api-access-x7k2p", "projected": {}}));
     std::fs::write(stage.path("obs/pod.json"), pod.to_string()).unwrap();
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(
         &steps,
@@ -8259,7 +8428,7 @@ fn observer_kind_sh_fails_the_checks_of_a_pod_that_runs_as_root_with_a_token_and
 fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_the_page() {
     let mut stage = observer_kind_stage();
     stage.env("FAKE_REACHED", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(&steps, &["other-pod-refused"]);
 }
@@ -8268,14 +8437,14 @@ fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_th
 fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_the_image() {
     let mut stage = observer_kind_stage();
     stage.env("KEEP_CLUSTER", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!observer_log(&stage, "kind.log").contains("delete"));
     assert!(steps.contains("KEEP_CLUSTER=1: the kind cluster strata-observer-test stays"));
 
     let mut stage = observer_kind_stage();
     stage.env("FAKE_NO_IMAGE", "1");
-    let (o, _) = stage.run("observer-kind.sh", &[]);
+    let (o, _) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stderr).contains("no image strata-observer:dev; run just observer-image"),
@@ -8298,7 +8467,7 @@ fn observer_kind_sh_records_what_the_mirror_checks_find_and_judges_none_of_it() 
     // the row holds no digest: the check records 1 and the run still ends with 0
     let mut stage = observer_kind_stage();
     stage.env("FAKE_NO_DIGEST", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     for id in OBSERVER_KIND_SEEN {
         let line = step_line(&steps, id);
@@ -8310,7 +8479,7 @@ fn observer_kind_sh_records_what_the_mirror_checks_find_and_judges_none_of_it() 
     // the observer shows no row, or the pod is gone: the check records 2
     let mut stage = observer_kind_stage();
     stage.env("FAKE_NO_ROW", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(step_line(&steps, "mirror-image-id").ends_with("got 2"));
     let said = std::fs::read_to_string(stage.path("out/mirror-image-id.out")).unwrap();
@@ -8325,7 +8494,7 @@ fn observer_kind_sh_fails_the_read_when_the_observer_says_not_read_and_still_cle
     let mut stage = observer_kind_stage();
     stage.env("FAKE_PODS_UNREAD", "1");
     stage.env("CYCLE_WAIT", "2");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(&steps, &["component-read"]);
     passed(&steps, &["component-apply", "mirror-clean", "kind-delete"]);
@@ -8335,7 +8504,7 @@ fn observer_kind_sh_fails_the_read_when_the_observer_says_not_read_and_still_cle
 fn observer_kind_sh_fails_the_nodes_check_for_a_containerd_without_certs_d_and_still_removes_all() {
     let mut stage = observer_kind_stage();
     stage.env("FAKE_NO_CERTS_D", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(&steps, &["mirror-nodes"]);
     passed(&steps, &["mirror-registry", "mirror-clean", "kind-delete"]);
@@ -8354,7 +8523,7 @@ fn observer_kind_sh_fails_the_nodes_check_for_a_containerd_without_certs_d_and_s
 fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in_stage_7() {
     let mut stage = observer_kind_stage();
     stage.env("FAKE_DIE_AT_NODES", "1");
-    let (o, steps) = stage.run("observer-kind.sh", &[]);
+    let (o, steps) = run_kind(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(steps.contains("PASS  mirror-registry"), "{steps}");
     assert!(
@@ -8371,6 +8540,122 @@ fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in
         observer_log(&stage, "kind.log").contains("delete cluster"),
         "the cluster goes"
     );
+}
+
+/// The edits that the stand-in `api.sh` of observer-kind.sh got, one line each.
+fn kind_edits(stage: &Stage) -> Vec<String> {
+    observer_log(stage, "api.log")
+        .lines()
+        .filter(|l| l.starts_with("edit "))
+        .map(String::from)
+        .collect()
+}
+
+const KIND_EDIT: &str = "edit ad-1 edited: \"no\" edited: \"yes\"";
+const KIND_UNDO: &str = "edit ad-1 edited: \"yes\" edited: \"no\"";
+
+#[test]
+fn observer_kind_sh_fails_alert_no_value_when_a_message_holds_the_text_of_the_edit_and_puts_the_edit_back()
+ {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_VALUE_LEAKS", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-no-value"]);
+    passed(
+        &steps,
+        &["alert-open", "alert-clear", "alert-clean", "kind-delete"],
+    );
+    let said = std::fs::read_to_string(stage.path("out/alert-no-value.out")).unwrap();
+    assert!(said.contains("a message holds: edited: \"yes\""), "{said}");
+    assert_eq!(kind_edits(&stage), [KIND_EDIT, KIND_UNDO]);
+}
+
+#[test]
+fn observer_kind_sh_fails_alert_no_value_when_the_detail_route_holds_no_text_because_the_search_proves_nothing()
+ {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_DIFF_TEXT", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-no-value"]);
+    let said = std::fs::read_to_string(stage.path("out/alert-no-value.out")).unwrap();
+    assert!(said.contains("so the search proves nothing"), "{said}");
+}
+
+#[test]
+fn observer_kind_sh_fails_alert_open_and_alert_one_each_for_two_messages_of_one_finding() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_TWO_OPENS", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-open", "alert-one-each"]);
+    passed(&steps, &["alert-clear"]);
+}
+
+#[test]
+fn observer_kind_sh_fails_alert_open_and_alert_one_each_when_the_receiver_gets_no_message() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_OPEN", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-open", "alert-one-each"]);
+    assert_eq!(kind_edits(&stage), [KIND_EDIT, KIND_UNDO]);
+}
+
+#[test]
+fn observer_kind_sh_fails_alert_clear_when_the_receiver_gets_no_message_of_the_clear() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_CLEAR", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-clear", "alert-one-each"]);
+    passed(&steps, &["alert-open", "alert-no-value", "alert-undo"]);
+}
+
+#[test]
+fn observer_kind_sh_fails_alert_apply_for_a_render_without_the_flag_and_alert_route_for_a_page_that_is_not_set()
+ {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_NO_ALERTS_FLAG", "1");
+    stage.env("FAKE_ALERTS_UNSET", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["alert-apply", "alert-route"]);
+}
+
+#[test]
+fn observer_kind_sh_puts_the_edit_back_when_the_script_ends_with_the_edit_open() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_DIE_AFTER_EDIT", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        !steps.contains("alert-open"),
+        "the script ended first:\n{steps}"
+    );
+    assert_eq!(
+        kind_edits(&stage),
+        [KIND_EDIT, KIND_UNDO],
+        "the edit goes back"
+    );
+    assert!(
+        observer_log(&stage, "kind.log").contains("delete cluster"),
+        "the cluster goes"
+    );
+}
+
+#[test]
+fn observer_kind_sh_runs_from_stage_8_and_names_the_nine_stages() {
+    let script = repo_file("examples/live/observer-kind.sh");
+    for stage in 1..=9 {
+        assert!(
+            script.contains(&format!("\n#   {stage}  "))
+                && script.contains(&format!("if stage {stage} \"")),
+            "stage {stage}"
+        );
+    }
+    assert!(script.contains("case \"$from\" in 1|2|3|4|5|6|7|8|9) ;;"));
 }
 
 // ---- observer-images.sh ------------------------------------------------------------------------------

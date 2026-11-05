@@ -44,6 +44,7 @@ pub(super) fn run(r: &mut Runner) {
     // a person edits aws-stack@1.0.0 through the API, after its record. payments has not taken it
     r.tenant(|t| t.edit(DEV, A100, RETAIN));
     answers(r);
+    alerts(r);
 }
 
 /// The records of the pipeline of the team: one for each profile that its clusters run. The records
@@ -63,7 +64,7 @@ fn records(r: &mut Runner) {
         "observer-records",
         0,
         false,
-        "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*.json \\\n  | grep -E '^(kind|  name|  [a-z]+[-_.0-9a-z]*[.]json(.gz)?):' | cut -c1-60",
+        "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*.json \\\n  | grep -E '^(kind|  name|  [a-z]+[-_.0-9a-z]*[.]json(.gz)?):' | sed -E 's/^(  [^ :]+[.]json(.gz)?):.*/\\1/'",
     );
     // the pod reads the same files from its volume. This folder stands for the four Secrets
     r.quiet(&format!(
@@ -142,5 +143,19 @@ fn answers(r: &mut Runner) {
         LEDGER,
         "state-ledger",
         "-c '.findings[] | {kind, profile, packs}'",
+    );
+}
+
+/// The file of the alert rules. A rule that mutes a profile has no end date, so the observer refuses the
+/// file at the start and names the line of the rule. `once` only checks the file, and it sends nothing.
+fn alerts(r: &mut Runner) {
+    r.quiet(
+        r#"printf '{\n  "channels": {"oncall": {"urlFile": "/alert-channels/oncall"}},\n  "rules": [\n    {"level": "profile", "match": "aws-stack", "news": "drift"}\n  ]\n}\n' > alerts.json"#,
+    );
+    r.step(
+        "observer-alerts-fault",
+        2,
+        true,
+        &format!("{} --alerts alerts.json", once(PAYMENTS, "state-alerts")),
     );
 }
