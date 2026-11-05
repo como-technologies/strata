@@ -866,10 +866,9 @@ lists each permission and each refusal.
 - **Make the user for the observer alone.** Give it no other role, and make the key
   in the name of that user.
 - **A live run used both roles.** `just live-observer-role` sent each request of the
-  cycles with a second key. With Project Viewer, each request answered HTTP 200.
-  With Cluster Viewer, each request answered HTTP 200 but the audit log.
-  The click "Ask Palette" sends one more request. With Project Viewer, it answered
-  HTTP 200. That request has a result for Project Viewer only.
+  cycles with a second key. With Project Viewer, each request answered HTTP 200, and
+  so did the request of the click "Ask Palette". With Cluster Viewer, each request
+  answered HTTP 200 but the audit log, and no run sent the request of the click.
   [observer-role.sh](../development/live-runs.md#observer-rolesh) lists the checks.
 
 ### The role for the read of the pods
