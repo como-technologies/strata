@@ -66,3 +66,6 @@ docs/book/
 /runs/
 /candidate.json
 /comment.md
+
+# the binary that `go build` writes in observer/: `just observer-build` writes target/observer/ instead
+/observer/observer

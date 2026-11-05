@@ -344,6 +344,22 @@ live-observer: build
 live-observer-role: build
     examples/live/observer-role.sh
 
+# The three recipes below put the observer on a test cluster of the project. A team installs it with the steps of
+# automation/observer.md. CLUSTER is a cluster name. With no name, the project must hold one cluster. See
+# docs/src/development/live-example.md.
+
+# Install the observer on a test cluster, or repair the install (#681). TAG is the image tag (default: the newest release). Flags follow the tag, such as --read-pods. Needs the key of Palette, a token file with only read:packages, kubectl, and gh.
+observer-up cluster="" tag="" *flags: build
+    examples/live/observer-up.sh up {{ if cluster == "" { "" } else { "--cluster " + quote(cluster) } }} {{ if tag == "" { "" } else { "--tag " + quote(tag) } }} {{flags}}
+
+# Open the page of the observer on a test cluster at http://127.0.0.1:18080, and hold the port-forward until Ctrl-C (#681). Needs the key of Palette and kubectl.
+observer-open cluster="": build
+    examples/live/observer-up.sh open {{ if cluster == "" { "" } else { "--cluster " + quote(cluster) } }}
+
+# Delete the namespace of the observer, its cluster role, and the binding of the role, on a test cluster (#681). A cluster with no observer is no error. Needs the key of Palette and kubectl.
+observer-down cluster="": build
+    examples/live/observer-up.sh down {{ if cluster == "" { "" } else { "--cluster " + quote(cluster) } }}
+
 # The managed engine test on EKS: the release, the shape tier, and the repave answers of Palette, and a change of the node group (#89). Needs cloud = "eks" in terraform.tfvars and live-up.
 live-eks: build
     examples/live/eks.sh

@@ -22,6 +22,7 @@ mod fuzz;
 mod live_scripts;
 mod masked;
 mod observer_deploy;
+mod observer_up;
 mod presets;
 mod report;
 mod report_deploy;

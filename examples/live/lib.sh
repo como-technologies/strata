@@ -297,19 +297,24 @@ wait_running() {
 # errors, with a limit of 60 seconds. KUBE_TIMEOUT gives another limit in seconds. KUBE_STDERR=1
 # keeps the errors on standard error, so that a caller can read JSON. The kubeconfig lives in a
 # temporary file that this function deletes. It is a credential: no script saves it or prints it to a
-# log.
+# log. KUBE_FILE names a kubeconfig that the caller keeps: the function reads it, and does not
+# fetch or delete a kubeconfig.
 kube() {
   local k rc cluster=$1
   shift
-  k=$(mktemp)
-  "$live/api.sh" get-kubeconfig "$cluster" > "$k" 2> /dev/null
+  if [ -n "${KUBE_FILE:-}" ]; then
+    k=$KUBE_FILE
+  else
+    k=$(mktemp)
+    "$live/api.sh" get-kubeconfig "$cluster" > "$k" 2> /dev/null
+  fi
   if [ -n "${KUBE_STDERR:-}" ]; then
     KUBECONFIG=$k timeout "${KUBE_TIMEOUT:-60}" kubectl "$@"
   else
     KUBECONFIG=$k timeout "${KUBE_TIMEOUT:-60}" kubectl "$@" 2>&1
   fi
   rc=$?
-  rm -f "$k"
+  [ -n "${KUBE_FILE:-}" ] || rm -f "$k"
   return "$rc"
 }
 
@@ -376,14 +381,18 @@ palette_settings() {
 # The two objects that the observer needs and that deploy/observer does not hold. Each function runs
 # `kc`, the kubectl of the cluster, and reads $ns, $C, $API, and $PALETTE_PROJECT_UID. The script
 # defines them.
+# create_apply ARG...: make the object that `kubectl create ARG...` describes in the namespace $ns, or
+# repair it when it exists. The create only writes the object as YAML, and apply sends it, so a second
+# run works. Standard input goes to the create, so a key or a token reaches no argument and no file.
+create_apply() { KUBE_STDERR=1 kc -n "$ns" create "$@" --dry-run=client -o yaml | kc apply -f -; }
 # observer_config: the ConfigMap with the cluster, the address of Palette, and the project
 observer_config() {
-  kc -n "$ns" create configmap strata-observer --from-literal=cluster-uid="$C" \
+  create_apply configmap strata-observer --from-literal=cluster-uid="$C" \
     --from-literal=palette-api="$API" --from-literal=project-uid="$PALETTE_PROJECT_UID"
 }
 # observer_key KEY: the Secret of the key. The key goes through standard input, and it is in no log.
 observer_key() {
-  printf %s "$1" | kc -n "$ns" create secret generic strata-observer-key --from-file=api-key=/dev/stdin
+  printf %s "$1" | create_apply secret generic strata-observer-key --from-file=api-key=/dev/stdin
 }
 # other_pod_refused: a pod of the namespace default cannot connect to the pod of the observer on its
 # port. The test pod prints "refused" when wget fails, so a pod that did not start is no refusal.
@@ -477,13 +486,13 @@ pods_read() {
 
 # The image of the observer, and the pull Secret for it. The image is on a private package of GitHub, so
 # a run never pushes it to another registry: it pulls it with a token that has only read:packages.
-# observer_image: set $image from OBSERVER_IMAGE (default: the image of the version in Cargo.toml),
-# $image_name and $image_pin for a kustomization, and $pull_file from GHCR_PULL_TOKEN_FILE. It stops the
-# script for an image with neither a tag nor a digest.
+# observer_image [TAG]: set $image from OBSERVER_IMAGE (default: the image with the tag TAG, or with the
+# tag of the version in Cargo.toml), $image_name and $image_pin for a kustomization, and $pull_file from
+# GHCR_PULL_TOKEN_FILE. It stops the script for an image with neither a tag nor a digest.
 observer_image() {
   local version
   version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)
-  image=${OBSERVER_IMAGE:-ghcr.io/como-technologies/strata-observer:v$version}
+  image=${OBSERVER_IMAGE:-ghcr.io/como-technologies/strata-observer:${1:-v$version}}
   case "$image" in
     *@sha256:*) image_name=${image%%@*}; image_pin="digest: ${image#*@}" ;;
     *:*) image_name=${image%:*}; image_pin="newTag: ${image##*:}" ;;
@@ -521,7 +530,7 @@ pull_secret() {
   printf %s "$token" \
     | jq -Rs --arg u "${user:-strata-observer}" \
       '. as $t | {auths: {"ghcr.io": {username: $u, password: $t, auth: ("\($u):\($t)" | @base64)}}}' \
-    | kc -n "$ns" create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
+    | create_apply secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
 }
 # pull_secret_stop: after a failed check pull-secret, the first check of a run that installs the observer,
 # print why and end the script with exit 1. A token file that fails changes nothing in the cluster, so
@@ -562,3 +571,12 @@ YAML
     done
   } > kustomization.yaml
 }
+# observer_overlay_pods: add the component deploy/observer/pods to the overlay that observer_overlay
+# wrote. pods/ is a copy of the component, and kustomization.yaml lists it as a team does.
+observer_overlay_pods() {
+  mkdir -p pods && cp "$root"/deploy/observer/pods/*.yaml pods/ && printf 'components:\n  - pods\n' >> kustomization.yaml
+}
+# observer_render: render the overlay in the current folder to observer.yaml. The render needs no cluster.
+observer_render() { kubectl kustomize . > observer.yaml && [ -s observer.yaml ]; }
+# observer_ready: the Deployment of the observer is Available in 3 minutes
+observer_ready() { KUBE_TIMEOUT=200 kc -n "$ns" rollout status deploy/strata-observer --timeout=180s; }
