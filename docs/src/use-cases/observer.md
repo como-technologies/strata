@@ -10,9 +10,10 @@ the edited content. See [A published version is edited in place](./edited-in-pla
 The observer runs in the cluster and checks every 15 minutes. It also keeps a page
 that answers three more questions: who made the edit, whether this cluster took it,
 and which pins have newer versions. It does this with the `strata` commands that
-the other pages show. It adds no rule. The page shows the text of each diff, and a
+the other pages show, and it adds no rule. The page shows the text of each diff, and a
 button asks Palette about a move in step 5. An optional read of the pods adds a
-fourth question in step 6: which digest each tag runs.
+fourth question in step 6: which digest each tag runs. An optional alert in step 7
+sends a message to a webhook when a finding opens.
 
 In this example, `dev` has `aws-stack@1.0.0` and `aws-stack@1.1.0`. The cluster
 `payments` runs `aws-stack@1.0.0` and the add-on profile `platform-addons@1.0.0`.
@@ -175,6 +176,45 @@ A finding of the pods is not a drift of the content. The pack text did not chang
 the Drift tile does not count it, and the status of the profile stays the same. The
 list "Needs attention" shows it.
 
+## 7. Send an alert when a finding opens
+
+A page shows a finding to a person who opens it. An alert tells your team without
+that visit. Palette has no event for a published version that changed, so the observer
+sends one as a stopgap: see [Alerts](../automation/observer.md#alerts). The send is
+off until you turn it on.
+
+Write the rules in a file in Git. This file sends a finding at once to the team on
+call, and it sends the newer versions in a weekly digest. A mute has an end date:
+
+```json
+{{#include ../../../examples/observer-alerts/alerts.json}}
+```
+
+Make the Secret with the address of each webhook, as in
+[Turn them on](../automation/observer.md#turn-them-on). Then name the component and
+the ConfigMap in the kustomization of the observer, and apply it again:
+
+```yaml
+components:
+  - deploy/observer/alerts
+configMapGenerator:
+  - name: strata-observer-alerts
+    files:
+      - alerts.json
+generatorOptions:
+  disableNameSuffixHash: true
+```
+
+The nav item "Alerts" lists each rule with its state: Firing, Pending, Inactive, or
+Muted. In this example, the edit of `aws-stack@1.0.0` opens a finding, and the rule
+`drift` sends one message to the channel `platform-oncall`. The next cycle sends
+nothing, because the finding stays open. When the version goes back to its record, a
+check proves it, and one message tells that the finding cleared. A cycle that failed
+clears nothing.
+
+A message holds the cluster, the profile, its packs, one fixed sentence, and the time
+of the first sight. It holds no value, so a channel of your team can show it.
+
 ## What to do
 
 - Do not repair the edited version in place: that is a second edit. Publish a new
@@ -190,6 +230,8 @@ list "Needs attention" shows it.
   registry with immutable tags. See [What to do](./image-tag.md#what-to-do).
 - `image-moved` clears when the digest comes back, or when you write new records.
   `image-split` clears when each pod runs one digest.
+- Give each mute an end date, and keep the file in Git. The file shows who muted what.
+  A mute that has ended counts as no mute.
 - Read "Palette gave no error" as one fact, not as a promise. Palette did not check
   your own values. When Palette refuses a move, pick a closer version: see [What to
   do](./behind.md#what-to-do).
@@ -204,6 +246,11 @@ list "Needs attention" shows it.
 - The read of the pods sees a rebuilt tag only after a pod pulls the image. It stays
   silent when the pods pull an unchanged digest from a mirror, and that is right. See
   [What the read catches and what it does not](../automation/observer.md#what-the-read-catches-and-what-it-does-not).
+- An alert fires on a finding. The vendor case of step 6 makes no finding, so it fires
+  no alert. A dead observer sends nothing: alert on the Deployment with the monitoring
+  of your team.
+- A new pod sends the open findings again, once, because it starts with an empty state.
+  One message too many is better than one too few.
 - The check is as old as the last content cycle. The page shows the time of that
   cycle, and it shows `stale` when the cycle is more than two periods old.
 - The click asks about the newest version of a pin only. The observer keeps the

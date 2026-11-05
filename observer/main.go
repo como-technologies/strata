@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/kube"
@@ -37,7 +38,7 @@ func main() {
 	os.Exit(code)
 }
 
-const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]]"
+const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]]"
 
 // runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
 // finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
@@ -63,9 +64,14 @@ func runContext(ctx context.Context, args []string, stdout, stderr io.Writer) in
 
 // options holds the flags that `serve` and `once` share.
 type options struct {
-	strata   string
-	readPods bool
-	kubeDir  string
+	strata      string
+	readPods    bool
+	kubeDir     string
+	alerts      string
+	allowHTTP   bool
+	digestEvery time.Duration
+	// rules is the file of the alert rules, after the checks. It is nil when the flag --alerts is not set.
+	rules *alert.Rules
 	check.Config
 }
 
@@ -79,6 +85,9 @@ func (o *options) flags(fs *flag.FlagSet) {
 	fs.DurationVar(&o.VersionsEvery, "versions-every", 6*time.Hour, "the period of a versions cycle")
 	fs.BoolVar(&o.readPods, "read-pods", false, "read the pods at each content cycle, for the digest of each image; needs the role of deploy/observer/pods")
 	fs.StringVar(&o.kubeDir, "kube-dir", kube.ServiceDir, "the directory with the files token and ca.crt, for --read-pods")
+	fs.StringVar(&o.alerts, "alerts", "", "the file of the alert rules, in JSON; serve sends them, once only checks the file; with no file, nothing sends")
+	fs.BoolVar(&o.allowHTTP, "alerts-allow-http", false, "allow an http address for a webhook; for tests only")
+	fs.DurationVar(&o.digestEvery, "digest-every", 7*24*time.Hour, "the period of a digest of the alerts")
 }
 
 // parse reads the flags and refuses a missing flag or a period that is not positive. A command with
@@ -98,10 +107,26 @@ func (o *options) parse(name string, args []string, stderr io.Writer, extra ...f
 			return fmt.Errorf("the flag --%s is required", f.name)
 		}
 	}
-	if o.ContentEvery <= 0 || o.VersionsEvery <= 0 {
+	if o.ContentEvery <= 0 || o.VersionsEvery <= 0 || o.digestEvery <= 0 {
 		return errors.New("a period must be more than zero")
 	}
+	if err := o.loadRules(); err != nil {
+		return err
+	}
 	return o.absoluteStrata()
+}
+
+// loadRules reads the file of the alert rules, when the flag names one. A fault stops the start, with the line of the fault.
+func (o *options) loadRules() error {
+	if o.alerts == "" {
+		return nil
+	}
+	rules, err := alert.Load(o.alerts)
+	if err != nil {
+		return fmt.Errorf("the flag --alerts: %w", err)
+	}
+	o.rules = &rules
+	return nil
 }
 
 // absoluteStrata makes a path of the strata binary absolute, from the directory of the observer. A
@@ -133,6 +158,20 @@ func (o *options) observer(log *slog.Logger) (*check.Observer, error) {
 		return nil, errors.New("--read-pods needs the variables KUBERNETES_SERVICE_HOST and KUBERNETES_SERVICE_PORT")
 	}
 	return obs.WithPods(kube.New(cfg)), nil
+}
+
+// alerting lets the observer send the alerts of the file, when the flag names one. It reads the address of
+// each channel first, so that a wrong Secret stops the start and not the first alert.
+func (o *options) alerting(obs *check.Observer, log *slog.Logger) error {
+	if o.rules == nil {
+		return nil
+	}
+	hook := alert.NewWebhook(o.rules.Channels, o.allowHTTP)
+	if err := hook.Check(); err != nil {
+		return err
+	}
+	obs.WithAlerts(alert.New(*o.rules, hook, o.digestEvery, log))
+	return nil
 }
 
 // once runs one content cycle and one versions cycle, and prints the summary. It exits 1 when a
@@ -195,6 +234,10 @@ func serve(ctx context.Context, args []string, stderr io.Writer) int {
 	obs, err := o.observer(log)
 	if err != nil {
 		fmt.Fprintln(stderr, "strata-observer:", err)
+		return 2
+	}
+	if err := o.alerting(obs, log); err != nil {
+		fmt.Fprintln(stderr, "strata-observer: --alerts:", err)
 		return 2
 	}
 	ctx, stop := context.WithCancel(ctx)

@@ -135,8 +135,8 @@ shows the edit of `aws-stack@1.0.0`:
 ### Options
 
 ```bash
-strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]]
-strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--listen ADDR]
+strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE]
+strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]] [--listen ADDR]
 ```
 
 `serve` takes the flags of `once` and the flag `--listen`. It keeps the answers, and it
@@ -155,6 +155,9 @@ lists the routes.
 | `--versions-every` | `6h` | The period of the versions cycle. |
 | `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when `KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. |
 | `--kube-dir` | `/var/run/secrets/kubernetes.io/serviceaccount` | Names the directory with the files `token` and `ca.crt` of the projected volume. It has an effect only with `--read-pods`. |
+| `--alerts` | off | Names the file of the alert rules. `serve` sends the alerts. `once` only checks the file and sends nothing. With no flag, nothing sends: see [Alerts](#alerts). |
+| `--digest-every` | `168h` | The period of a digest of the alerts. It has an effect only with `--alerts`. |
+| `--alerts-allow-http` | off | Allows an `http` address for a webhook. The tests of the observer use it. Do not use it on a cluster. |
 
 ## Install
 
@@ -549,6 +552,154 @@ the route and the header that the server needs for the click. The checks
 `ask-one-post` and `ask-words` of [What the live example
 verifies](../development/live-runs.md) test the click on a cluster that Palette built.
 
+## Alerts
+
+The observer can send a message to a webhook. It sends one message when a finding
+opens, and one when the finding clears. The send is off by default. With no
+`--alerts` flag, the observer sends nothing, and the nav item "Alerts" says "Not set".
+
+Alerts are a stopgap. Palette has alerts for the health of a cluster, and no event for
+a published version that changed. Palette is the owner of that event. When Palette
+adds it, strata removes the news `drift` from the alerts. [An event when a published
+version changes](../internals/palette/profiles.md#an-event-when-a-published-version-changes)
+says what Palette offers. The observer sends nothing about health.
+
+### What a message holds
+
+A message holds the cluster, the kind of news, the profile, its packs, one fixed
+sentence, and the time of the first sight. It holds no value, no path, and no
+name of a person. The observer builds it from the summary tier of the page. The
+Alerts screen shows a sample.
+
+The body of the request is `{"text": "<message>"}`, which Slack and Teams both read.
+The observer sends it with `POST` to the address of the channel.
+
+### The rules
+
+A file of rules says which news goes where. The file is JSON. Your team keeps it in
+Git, and a ConfigMap carries it to the pod. The page only reads it, and no route of
+the observer writes a rule. A mute is a line of the file, so Git shows who muted what.
+
+```json
+{{#include ../../../examples/observer-alerts/alerts.json}}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `channels` | A name for each webhook. `urlFile` is the path of the file that holds its address. |
+| `level` | `cluster`, `profile`, or `pack`. |
+| `match` | A profile name or `name@version`, for `profile`. A pack name or `layer/name`, for `pack`. A `cluster` rule has none. |
+| `news` | The kind of news: `drift`, `image`, `lost`, or `newer`. |
+| `send` | `now` sends at once. `digest` waits for the next digest. A rule with no `send` is a mute. |
+| `to` | The name of a channel. |
+| `muteUntil` | The last day of a mute, as `YYYY-MM-DD`, in UTC. |
+
+| News | What it follows |
+| --- | --- |
+| `drift` | A finding of the kinds `published-changed`, `overwritten`, `renamed`, `gone`, `cluster-differs`, and `image-id-changed`. |
+| `image` | A finding `image-moved` or `image-split`. These need `--read-pods`. |
+| `lost` | The page state `lost`: the observer cannot reach Palette. It is a rule of the level `cluster`. |
+| `newer` | A newer version of a pack in a profile. Each profile that pins the pack makes one item. |
+
+- **A lower level overrides a higher one.** The level `pack` wins over `profile`, and
+  `profile` wins over `cluster`. If two rules of one level cover the item, the first one
+  in the file wins.
+- **A mute always has an end date.** A mute with no end date stops the start. A mute
+  holds through the day of its end date. After that day, it counts as no mute, and
+  the rule of the next level decides.
+- **A newer version never pages a person.** The rule `newer` with `send: now` stops the
+  start. Use `digest`.
+- **A file that does not parse stops the start of `serve`.** The error names the line
+  of the fault. Two rules with the same level, match, and news also stop the start.
+  `once` reads the file the same way, and it sends nothing. It is a check of the file:
+
+```text
+{{#include ../output/observer-alerts-fault.txt}}
+```
+
+### The states
+
+The Alerts screen shows one state for each rule, with the words of Prometheus:
+
+| State | Meaning |
+| --- | --- |
+| Firing | An item is open, and its message went. |
+| Pending | An item is open. It waits for its digest or for a retry. |
+| Inactive | No item is open for this rule. |
+| Muted | A mute holds. |
+
+- **One message goes when a finding opens, and one when it clears.** A clear needs a
+  check that proves it. A failed read clears nothing, so a finding that the observer
+  could not check again stays open. A cycle that read no pod clears no finding of an
+  image. A mute stops the clear of a message that went.
+- **A failed send keeps the message.** The state holds it, and the next content cycle
+  sends it again. When the send works, the message goes once. The log names the
+  channel, the error kind, and the status, and never the address or the text. The
+  Alerts screen shows a bar while a message waits.
+- **A digest goes at most once in each period of `--digest-every`.** The period is 7
+  days. A digest lists each open item of the digest rules of one channel, so an item
+  that stays open is in each digest. A digest has no clear message. With no item open,
+  the digest waits for the first item.
+- **`once` sends nothing.** With no `--alerts`, nothing sends.
+
+### What alerts do not do
+
+- **The vendor case fires no alert.** An alert fires on a finding. A vendor that
+  rebuilds an image under one tag makes no finding: see [A vendor rebuilds an image
+  under one tag](../use-cases/image-tag.md).
+- **A dead observer sends nothing.** The message comes from the pod. Alert on the
+  Deployment with the monitoring of your team. The observer sends no heartbeat, and it
+  never reads the health of a workload.
+- **A new pod sends the open findings again, once.** The volume `state` is an
+  `emptyDir`, so the new pod knows nothing of the old pod. One message too many is
+  better than one too few.
+
+### Turn them on
+
+The component `deploy/observer/alerts` adds the flag and two volumes. It adds no
+object. These steps run from the repository of your team, after [Install](#install).
+
+1. **Write the rules.** `examples/observer-alerts/alerts.json` is a start. Each
+   `urlFile` is `/alert-channels/` and the name of the channel.
+2. **Make the Secret of the addresses.** The address of a webhook holds a token, so
+   it is a Secret. Use one key for each channel, named as the channel. The process
+   substitution keeps each address out of an argument and out of a file.
+
+   ```bash
+   kubectl -n strata-observer create secret generic strata-observer-alert-channels \
+     --from-file=platform-oncall=<(printf %s "$ONCALL_WEBHOOK") \
+     --from-file=platform-planning=<(printf %s "$PLANNING_WEBHOOK")
+   ```
+
+3. **Add the component and the ConfigMap.** Add these lines to the `kustomization.yaml`
+   of step 6 of [Install](#install). Copy `deploy/observer/alerts` with the other
+   manifests.
+
+   ```yaml
+   components:
+     - deploy/observer/alerts
+   configMapGenerator:
+     - name: strata-observer-alerts
+       files:
+         - alerts.json
+   generatorOptions:
+     disableNameSuffixHash: true
+   ```
+
+   ```bash
+   kubectl apply -k .
+   ```
+
+4. **Look at the Alerts screen.** It lists each rule with its state. A rule that
+   names a channel without an address stops the start, and the log says which
+   channel.
+
+The address must use `https`. The observer follows no redirect, and it reads the
+address again at each send, because the kubelet renews a Secret. The network policy
+of the base lets the observer connect to port 443. A team can narrow that rule to the
+address of its webhook. The flag `--alerts-allow-http` allows an `http` address for
+the tests of the observer. Do not use it on a cluster.
+
 ## What the observer does not see
 
 Each limit below is a fact of this release. The page shows the numbers of `limits`,
@@ -559,7 +710,8 @@ and it never reads "No change" for a pack that it did not check.
    `--read-pods`, the observer sees the move after a pull only: see [What the read
    catches](#what-the-read-catches-and-what-it-does-not). A pin in the pack, or the
    copy step of your pipeline, closes this. See [What OK does not cover](../commands/verify.md#what-ok-does-not-cover)
-   and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md).
+   and [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). This case
+   makes no finding, so it fires no alert.
 2. **A change on the cluster with `kubectl edit`.** The service compares what
    Palette holds. Without `--read-pods`, it reads no object in the cluster. With the
    flag, it reads the pods and names no edit. So it does not see such an edit.
@@ -592,6 +744,7 @@ and it never reads "No change" for a pack that it did not check.
    reads the cluster and the profile version of each record, and the audit log for a
    record that drifted. A versions cycle reads the registries and the packs that the
    records pin. A click sends one `POST`: see [Ask Palette about a move](#ask-palette-about-a-move).
+   With `--alerts`, each message is one `POST` to your webhook: see [Alerts](#alerts).
    [The requests of a cycle](#the-requests-of-a-cycle) gives the counts.
 5. **The page holds pack values.** The detail tier shows the old and the new value of
    a pack, and the text of its diff. A secret typed into a value that the schema does
@@ -662,6 +815,18 @@ neither. [Add the read](#add-the-read) tells how to ask for them.
 - **The egress rule adds TCP 6443 beside 443.** The pod can then reach the API server
   of the cluster.
 
+### The Secret for the alerts
+
+The alerts add a Secret and a webhook to the cluster. [Turn them on](#turn-them-on) tells
+how to ask for them.
+
+- **The address of a webhook holds a token.** Whoever can read the Secret
+  `strata-observer-alert-channels` can post to your channel. The observer shows the name
+  of a channel on the page and in the log, and never its address.
+- **The observer sends only to an `https` address.** It follows no redirect. It sends
+  the message, and it reads nothing of the answer but its status.
+- **The component adds no role.** The alerts need no Kubernetes call.
+
 ## `re-baseline needed`
 
 A new minor version of strata can move a root with no change of content. The
@@ -678,3 +843,4 @@ compatibility](../reference/compatibility.md) for each change that moves a root.
   commands, and the fix.
 - [The checks of the observer](../development/observer.md): the command of each
   step, each finding, and each state of the page.
+- [Alerts](#alerts): the rules, the states, and the limits of the message.

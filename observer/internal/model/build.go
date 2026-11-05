@@ -50,7 +50,7 @@ func Build(in Input) Summary {
 }
 
 func (c Clock) health() Health {
-	return Health{Every: shortDuration(c.Every), FailedRuns: c.FailedRuns, LastError: c.LastError}
+	return Health{Every: ShortDuration(c.Every), FailedRuns: c.FailedRuns, LastError: c.LastError}
 }
 
 // view holds what the rows need from the two cycles, so that a row does not search for it.
@@ -92,7 +92,7 @@ func newView(in Input, c *causes) *view {
 		stamp(v.findings, in.FirstSeen, utc(in.Content.At))
 		for _, f := range v.findings {
 			// A finding of the pods is not a drift of the content: it changes no status of a profile or a pack.
-			if slices.Contains(imageKinds, f.Kind) {
+			if f.Kind.IsImage() {
 				continue
 			}
 			v.findingProfiles[f.Profile] = true
@@ -315,8 +315,8 @@ func utcPtr(t *time.Time) *time.Time {
 	return &u
 }
 
-// shortDuration writes 15m0s as 15m and 6h0m0s as 6h.
-func shortDuration(d time.Duration) string {
+// ShortDuration writes 15m0s as 15m and 6h0m0s as 6h.
+func ShortDuration(d time.Duration) string {
 	s := d.String()
 	if strings.HasSuffix(s, "m0s") {
 		s = strings.TrimSuffix(s, "0s")

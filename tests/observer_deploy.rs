@@ -99,13 +99,16 @@ fn the_kustomization_renders_four_objects_and_leaves_the_reader_role_to_the_team
     );
     assert!(!resources.contains(&"reader-role.yaml"));
 
-    // the component is a folder that a team lists under `components:`, so the base lists none of it
-    assert!(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("deploy/observer/pods")
-            .is_dir()
-    );
-    assert!(resources.iter().all(|r| !r.starts_with("pods")));
+    // a component is a folder that a team lists under `components:`, so the base lists none of it
+    for component in ["alerts", "pods"] {
+        assert!(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("deploy/observer")
+                .join(component)
+                .is_dir()
+        );
+        assert!(resources.iter().all(|r| !r.starts_with(component)));
+    }
 }
 
 /// A stand-in `kubectl` for `kubectl kustomize deploy/observer`. It prints the four files with a
@@ -593,16 +596,21 @@ const COMPONENT: [(&str, &str); 2] = [
 /// The name of the volume of the token and of the CA in the pod that the component makes.
 const KUBE_VOLUME: &str = "kube-credentials";
 
-/// A file of `deploy/observer/pods/`, parsed as one YAML document.
-fn pods_doc(file: &str) -> Value {
-    serde_yaml::from_str(&repo_file(&format!("deploy/observer/pods/{file}")))
-        .unwrap_or_else(|e| panic!("pods/{file}: not YAML: {e}"))
+/// A file of a component, `deploy/observer/<folder>/`, parsed as one YAML document.
+fn component_doc(folder: &str, file: &str) -> Value {
+    serde_yaml::from_str(&repo_file(&format!("deploy/observer/{folder}/{file}")))
+        .unwrap_or_else(|e| panic!("{folder}/{file}: not YAML: {e}"))
 }
 
-/// The operations of the one patch that the component makes for the base object of `kind`. The patch
-/// names the object of the base by its kind and its name.
-fn component_ops(kind: &str) -> Vec<Value> {
-    let component = pods_doc("kustomization.yaml");
+/// A file of `deploy/observer/pods/`, parsed as one YAML document.
+fn pods_doc(file: &str) -> Value {
+    component_doc("pods", file)
+}
+
+/// The operations of the one patch that the component in `folder` makes for the base object of `kind`.
+/// The patch names the object of the base by its kind and its name.
+fn component_ops(folder: &str, kind: &str) -> Vec<Value> {
+    let component = component_doc(folder, "kustomization.yaml");
     let patches: Vec<&Value> = component["patches"]
         .as_sequence()
         .unwrap()
@@ -641,20 +649,20 @@ fn add_at(doc: &mut Value, path: &str, value: Value) {
     }
 }
 
-/// The object of `base` after the patch of the component: what a team renders with the component.
-/// The component only adds.
-fn with_component(kind: &str, base: &str) -> Value {
+/// The object of `base` after the patch of the component in `folder`: what a team renders with the
+/// component. The component only adds.
+fn with_component(folder: &str, kind: &str, base: &str) -> Value {
     let mut doc = deploy_doc(base);
-    for op in component_ops(kind) {
+    for op in component_ops(folder, kind) {
         assert_eq!(op["op"], "add", "the component only adds");
         add_at(&mut doc, op["path"].as_str().unwrap(), op["value"].clone());
     }
     doc
 }
 
-/// The pod spec of the Deployment with the component.
-fn pod_with_component() -> Value {
-    with_component("Deployment", "deployment.yaml")["spec"]["template"]["spec"].clone()
+/// The pod spec of the Deployment with the component in `folder`.
+fn pod_with(folder: &str) -> Value {
+    with_component(folder, "Deployment", "deployment.yaml")["spec"]["template"]["spec"].clone()
 }
 
 /// The string that the Go constant `name` holds in `source`, as in `tokenFile = "token"`.
@@ -779,7 +787,7 @@ fn the_component_adds_the_flags_read_pods_and_kube_dir_and_mounts_the_volume_whe
 {
     let base_container = container();
     let base = strings(&base_container["args"]);
-    let pod = pod_with_component();
+    let pod = pod_with("pods");
     let container = &pod["containers"][0];
     let args = strings(&container["args"]);
     assert_eq!(
@@ -825,7 +833,7 @@ fn the_component_adds_the_flags_read_pods_and_kube_dir_and_mounts_the_volume_whe
 /// prefix of the volume that the cluster adds, so that a check of the base still means something.
 #[test]
 fn the_projected_volume_gives_a_token_that_expires_in_one_hour_and_the_ca_of_the_cluster() {
-    let pod = pod_with_component();
+    let pod = pod_with("pods");
     assert_eq!(pod["automountServiceAccountToken"], false);
     let volume = pod["volumes"]
         .as_sequence()
@@ -859,7 +867,7 @@ fn the_projected_volume_gives_a_token_that_expires_in_one_hour_and_the_ca_of_the
 #[test]
 fn the_component_opens_tcp_6443_beside_443_and_changes_nothing_else_in_the_policy() {
     let base = deploy_doc("networkpolicy.yaml");
-    let policy = with_component("NetworkPolicy", "networkpolicy.yaml");
+    let policy = with_component("pods", "NetworkPolicy", "networkpolicy.yaml");
     let mut expected = egress_ports(&base);
     assert!(
         expected.contains(&("TCP".into(), 443)),
@@ -929,13 +937,15 @@ fn the_component_lists_its_files_and_each_holds_one_object() {
     };
     assert_eq!(
         folders("deploy/observer"),
-        ["pods"],
-        "the base holds the component only"
+        ["alerts", "pods"],
+        "the base holds the two components only"
     );
-    assert!(
-        folders("deploy/observer/pods").is_empty(),
-        "no kustomization sits inside the base"
-    );
+    for component in ["alerts", "pods"] {
+        assert!(
+            folders(&format!("deploy/observer/{component}")).is_empty(),
+            "no kustomization sits inside the base"
+        );
+    }
 }
 
 /// A stand-in `kubectl` for `kubectl kustomize examples/observer-pods`. It prints the four files
@@ -964,6 +974,175 @@ fn the_recipe_observer_manifests_pods_passes_for_six_objects_and_the_flag_and_fa
         Some(1),
         "no flag --read-pods"
     );
+}
+
+// ---- the component deploy/observer/alerts ------------------------------------------------------------
+
+/// The `ConfigMap` with the file of the rules, and the Secret with the address of each webhook. The
+/// volumes of the component name them, and a team makes the Secret.
+const ALERT_RULES_MAP: &str = "strata-observer-alerts";
+const ALERT_CHANNELS_SECRET: &str = "strata-observer-alert-channels";
+
+/// The base sends no alert: it has no flag of the alerts and no volume for them. The component is the
+/// only source of both.
+#[test]
+fn the_base_has_no_alerts_flag_and_no_volume_for_the_rules() {
+    for arg in &strings(&container()["args"])[1..] {
+        let (flag, _) = flag_of(arg);
+        assert!(
+            !["alerts", "alerts-allow-http", "digest-every"].contains(&flag),
+            "the base has {arg}"
+        );
+    }
+    for volume in pod()["volumes"].as_sequence().unwrap() {
+        assert!(
+            volume.get("configMap").is_none(),
+            "the base has a ConfigMap volume: {volume:?}"
+        );
+    }
+    let main = repo_file("observer/main.go");
+    assert!(
+        main.contains(r#""alerts", """#),
+        "the observer sends no alert unless the flag names a file"
+    );
+}
+
+/// The component adds the flag and two read-only volumes, and no object. The flag is a flag of the
+/// observer, and its value is the mount of the `ConfigMap` and the key of the file. The component
+/// leaves the network policy as it is: the base lets the observer connect to port 443, and the
+/// observer sends to an https address only.
+#[test]
+fn the_alerts_component_adds_the_flag_and_two_read_only_volumes_and_no_object() {
+    let component = component_doc("alerts", "kustomization.yaml");
+    assert_eq!(component["apiVersion"], "kustomize.config.k8s.io/v1alpha1");
+    assert_eq!(component["kind"], "Component");
+    assert!(
+        component.get("resources").is_none(),
+        "the component adds no object"
+    );
+    let patched: Vec<&Value> = component["patches"].as_sequence().unwrap().iter().collect();
+    assert_eq!(patched.len(), 1, "one patch, for the Deployment");
+    assert_eq!(patched[0]["target"]["kind"], "Deployment");
+
+    let base_container = container();
+    let base = strings(&base_container["args"]);
+    let with_alerts = pod_with("alerts");
+    let container = &with_alerts["containers"][0];
+    let args = strings(&container["args"]);
+    assert_eq!(
+        args[..base.len()],
+        base[..],
+        "the base arguments stay first"
+    );
+    assert_eq!(args[base.len()..], ["--alerts=/alerts/alerts.json"]);
+    assert!(
+        repo_file("observer/main.go").contains(r#""alerts", """#),
+        "the observer has no flag --alerts"
+    );
+
+    let mounts = container["volumeMounts"].as_sequence().unwrap();
+    let base_mounts = base_container["volumeMounts"].as_sequence().unwrap().len();
+    let added: Vec<(&str, &str, bool)> = mounts[base_mounts..]
+        .iter()
+        .map(|m| {
+            (
+                m["name"].as_str().unwrap(),
+                m["mountPath"].as_str().unwrap(),
+                m["readOnly"] == true,
+            )
+        })
+        .collect();
+    assert_eq!(
+        added,
+        [
+            ("alert-rules", "/alerts", true),
+            ("alert-channels", "/alert-channels", true)
+        ]
+    );
+    let volumes = with_alerts["volumes"].as_sequence().unwrap();
+    let volume = |name: &str| {
+        volumes
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap_or_else(|| panic!("no volume {name}"))
+    };
+    assert_eq!(volume("alert-rules")["configMap"]["name"], ALERT_RULES_MAP);
+    assert_eq!(
+        volume("alert-channels")["secret"]["secretName"],
+        ALERT_CHANNELS_SECRET
+    );
+    assert_eq!(
+        volumes.len(),
+        pod()["volumes"].as_sequence().unwrap().len() + 2,
+        "the component adds two volumes"
+    );
+    assert_eq!(with_alerts["automountServiceAccountToken"], false);
+}
+
+/// The example of a team lists the base and the component, and makes the `ConfigMap` from the file of the
+/// rules. The flag reads the file at the mount of the `ConfigMap`, and each channel of the file reads its
+/// address at the mount of the Secret, from the key with the name of the channel.
+#[test]
+fn the_example_of_the_alerts_makes_the_config_map_of_the_file_that_the_flag_reads() {
+    let example: Value =
+        serde_yaml::from_str(&repo_file("examples/observer-alerts/kustomization.yaml")).unwrap();
+    assert_eq!(strings(&example["resources"]), ["../../deploy/observer"]);
+    assert_eq!(
+        strings(&example["components"]),
+        ["../../deploy/observer/alerts"]
+    );
+    assert_eq!(
+        example["namespace"],
+        deploy_doc("kustomization.yaml")["namespace"]
+    );
+    let generator = &example["configMapGenerator"][0];
+    assert_eq!(generator["name"], ALERT_RULES_MAP);
+    assert_eq!(strings(&generator["files"]), ["alerts.json"]);
+    assert_eq!(example["generatorOptions"]["disableNameSuffixHash"], true);
+    assert_eq!(
+        example["configMapGenerator"].as_sequence().unwrap().len(),
+        1
+    );
+
+    let rules: serde_json::Value =
+        serde_json::from_str(&repo_file("examples/observer-alerts/alerts.json")).unwrap();
+    let channels = rules["channels"].as_object().unwrap();
+    assert!(!channels.is_empty());
+    for (name, channel) in channels {
+        assert_eq!(
+            channel["urlFile"],
+            format!("/alert-channels/{name}").as_str(),
+            "the address of a channel is the key of the Secret"
+        );
+    }
+}
+
+/// A stand-in `kubectl` for `kubectl kustomize examples/observer-alerts`. It prints the four files of
+/// the base, the `ConfigMap` that the example makes, and the line that the patch of the component adds,
+/// unless `FAKE_NO_FLAG` is set. `FAKE_EXTRA` adds one object.
+const FAKE_KUBECTL_KUSTOMIZE_ALERTS: &str = r#"#!/usr/bin/env bash
+[ "$1 $2" = "kustomize examples/observer-alerts" ] || exit 2
+for f in namespace serviceaccount networkpolicy deployment; do
+  cat "deploy/observer/$f.yaml"
+  echo "---"
+done
+printf 'apiVersion: v1\nkind: ConfigMap\n---\n'
+[ -n "${FAKE_NO_FLAG-}" ] || echo "        - --alerts=/alerts/alerts.json"
+[ -z "${FAKE_EXTRA-}" ] || printf 'apiVersion: v1\nkind: Secret\n---\n'
+"#;
+
+#[test]
+fn the_recipe_observer_manifests_alerts_passes_for_five_objects_and_the_flag_and_fails_otherwise() {
+    let run = |env: &[(&str, &str)]| {
+        run_recipe(
+            "observer-manifests-alerts",
+            FAKE_KUBECTL_KUSTOMIZE_ALERTS,
+            env,
+        )
+    };
+    assert_eq!(run(&[]), Some(0), "the five objects and the flag");
+    assert_eq!(run(&[("FAKE_EXTRA", "1")]), Some(1), "six objects");
+    assert_eq!(run(&[("FAKE_NO_FLAG", "1")]), Some(1), "no flag --alerts");
 }
 
 // ---- the steps of the page "The observer" ------------------------------------------------------------

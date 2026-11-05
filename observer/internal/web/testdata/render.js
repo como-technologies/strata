@@ -67,6 +67,8 @@ const data = {
   cluster: read("cluster.json"), findings: read("findings.json"), profiles: read("profiles.json"), newer: read("newer.json"),
   notchecked: read("notchecked.json"), events: read("events.json"), diffs: read("diffs.json"), images: read("images.json"),
   asks: read("asks.json"), replies: read("replies.json", {asks: []}),
+  // A set with no alerts.json is a page of an observer that started without --alerts.
+  alerts: read("alerts.json", {set: false, channels: [], digestEvery: "", waiting: 0, rules: [], sample: ""}),
 };
 
 // poison puts the injection after each name that the page shows, in each file. A name that appears in
@@ -113,9 +115,13 @@ function poison(d) {
     a.refusals.forEach(x => { x.pack = tag(x.pack); x.code = tag(x.code); x.message = tag(x.message); x.clusters = x.clusters.map(tag); });
   });
   out.events.events.forEach(e => { e.reason = tag(e.reason); });
+  out.alerts.channels = out.alerts.channels.map(tag);
+  out.alerts.digestEvery = tag(out.alerts.digestEvery);
+  out.alerts.rules.forEach(r => { r.to = tag(r.to); r.muteUntil = tag(r.muteUntil); });
   out.images.images.forEach(i => i.digests.forEach(d => { d.digest = tag(d.digest); }));
   // Each line of a text gets the injection at its end. The text keeps its form, so the page can read it.
   const lines = s => typeof s === "string" ? s.replace(/\n/g, EVIL + "\n") : s;
+  out.alerts.sample = lines(out.alerts.sample);
   out.diffs.forEach(df => {
     df.profile = follow(df.profile);
     df.values.unified = lines(df.values.unified);
@@ -142,7 +148,7 @@ let failDiffs = 0;
 let failAsks = false;
 let postStatus = 0;
 let gate = Promise.resolve();
-const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events", "/v1/images": "images", "/v1/asks": "asks"};
+const ROUTES = {"/v1/cluster": "cluster", "/v1/findings": "findings", "/v1/profiles": "profiles", "/v1/newer": "newer", "/v1/notchecked": "notchecked", "/v1/events": "events", "/v1/images": "images", "/v1/asks": "asks", "/v1/alerts": "alerts"};
 const fail = status => ({ok: false, status, json: async () => ({error: "failed"})});
 
 // replyTo gives the answer of the dev server to a question: the answer that the set holds, else its reply.

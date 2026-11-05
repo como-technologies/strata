@@ -24,6 +24,7 @@ Start from the question that you have.
 | Do `dev` and `prod` hold one release? | `strata same-release`. |
 | Do I want these answers all day, on a page in the cluster, with the name of the person who made a change? | [The observer](./automation/observer.md). It runs `verify`, `snapshot`, `compare`, and `behind` on a timer. |
 | Which digest does each tag run as on this cluster? | [The observer](./automation/observer.md#the-pods-of-the-cluster), with the optional read of the pods. |
+| Do I want a message in a channel of my team when a finding opens? | [The observer](./automation/observer.md#alerts), with the optional alerts. They stand in for an event that Palette lacks. |
 | Can Palette build this cluster? | `strata preflight`. It checks the body of the create and asks Palette, before the build starts. |
 
 [Where each part belongs](./boundary.md) gives each feature of Palette, and what
@@ -215,6 +216,11 @@ The observer can also read the pods of the cluster, to show the digest that each
 runs. This read is optional, and it needs its own role and token: see [The pods of the
 cluster](./automation/observer.md#the-pods-of-the-cluster). A team that does not add it
 keeps the observer with no role and no token.
+
+The observer can also send a message to a webhook when a finding opens, and one when it
+clears. This send is optional too. It needs a Secret with the address of each webhook:
+see [Alerts](./automation/observer.md#alerts). Palette has no event for a published
+version that changed, so the alerts stand in for it.
 
 ### You move a cluster
 

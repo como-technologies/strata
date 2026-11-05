@@ -2509,10 +2509,10 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647 wait for the next live window, so they are not in this test
+        // the rows of #647 and #648 wait for the next live window, so they are not in this test
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
-            .filter(|line| !line.contains("#647"))
+            .filter(|line| !line.contains("#647") && !line.contains("#648"))
             .collect::<Vec<_>>()
             .join("\n")
             .to_lowercase();
@@ -2647,6 +2647,87 @@ fn the_pages_for_a_reader_name_no_person_and_no_plan_of_the_project() {
             "{page} names a maintainer"
         );
     }
+}
+
+/// The book names Palette as the owner of the event that the alerts stand in for. It states the
+/// condition that removes the alerts: a component of Palette for a published version that changed.
+#[test]
+fn the_book_names_palette_as_the_owner_of_the_event_and_the_condition_that_removes_the_alerts() {
+    let gaps = one_line(&read(&docs().join("internals/palette/profiles.md")));
+    for fact in [
+        "### An event when a published version changes",
+        "Palette has no component for a published version that changed, for a moved image, or for a newer version.",
+        "Palette is the owner of the event.",
+        "When Palette adds a component for a published version that changed, strata removes the news `drift` from the alerts.",
+    ] {
+        assert!(gaps.contains(fact), "the list of the gaps lacks {fact:?}");
+    }
+    let boundary = one_line(&read(&docs().join("boundary.md")));
+    for fact in [
+        "[An event when a published version changes](./internals/palette/profiles.md#an-event-when-a-published-version-changes)",
+        "Palette owns the event, and strata removes the alert when Palette adds it.",
+    ] {
+        assert!(
+            boundary.contains(fact),
+            "the page of the scope lacks {fact:?}"
+        );
+    }
+    let service = one_line(&read(&docs().join("automation/observer.md")));
+    assert!(
+        service.contains(
+            "Palette is the owner of that event. When Palette adds it, strata removes the news `drift` from the alerts."
+        ),
+        "the page of the service names no condition"
+    );
+}
+
+/// The step of the records shows the names of the files and no byte of them. The first bytes of a
+/// compressed record change with the compressor. A run of the check of the book failed on them once.
+#[test]
+fn the_step_of_the_records_shows_the_names_of_the_files_and_no_byte_of_a_record() {
+    let shown = read(&docs().join("output/observer-records.txt"));
+    // "H4sI" is the start of a gzip file in base64, and "eyJ" is the start of a JSON object.
+    for bytes in ["H4sI", "eyJ"] {
+        assert!(!shown.contains(bytes), "the output shows bytes: {shown}");
+    }
+    for name in [
+        "  meta.json",
+        "  aws-stack_1.0.0.json.gz",
+        "  platform-addons_1.0.0.json.gz",
+    ] {
+        assert!(
+            shown.lines().any(|line| line == name),
+            "no line {name:?} in {shown}"
+        );
+    }
+}
+
+/// A test tag of the image holds the binary of the last release, and the page of the image says so.
+#[test]
+fn the_page_of_the_image_says_that_a_test_tag_cannot_run_a_new_flag_of_strata() {
+    let page = one_line(&read(&docs().join("development/observer-deploy.md")));
+    for fact in [
+        "A test tag holds the `strata` binary of the last release, and never the binary of the commit.",
+        "So a test tag cannot run a change that adds a flag of `strata` in the same pull request",
+        "A maintainer runs such a check on the image of the release.",
+    ] {
+        assert!(page.contains(fact), "the page of the image lacks {fact:?}");
+    }
+}
+
+/// The recipe and the script of the role name no person, and the page for a maintainer says "a
+/// maintainer".
+#[test]
+fn the_recipe_and_the_script_of_the_role_name_no_person() {
+    for file in ["justfile", "examples/live/observer-role.sh"] {
+        let text = repo_file(file);
+        assert!(
+            !text.to_lowercase().contains("brett"),
+            "{file} names a person"
+        );
+    }
+    assert!(repo_file("justfile").contains("with the role under test is for a maintainer."));
+    assert!(repo_file("examples/live/observer-role.sh").contains("tenant is for a maintainer."));
 }
 
 /// The review of slice 1 named statements that the code or a live run does not back. The

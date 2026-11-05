@@ -478,6 +478,20 @@ twice. So strata does not check them, and `--validate` asks Palette. With no
 Strata does not copy the rules that the validate route checks: see
 [Checks before any request](../../reference/candidate-file.md#checks-before-any-request).
 
+### An event when a published version changes
+
+The rules above are rules of the create. The alerts of the observer fill a gap of
+another kind: an event. Palette has alerts for a cluster. Their channels send a
+message to a webhook or to an email address, and their one component is
+`ClusterHealth`, the health of a cluster. Palette has no component for a published
+version that changed, for a moved image, or for a newer version.
+
+So the observer sends such a message when you turn it on. See
+[Alerts](../../automation/observer.md#alerts). The observer sends nothing about
+health, because Palette owns that. The alerts of the observer are a stopgap, and
+Palette is the owner of the event. When Palette adds a component for a published
+version that changed, strata removes the news `drift` from the alerts.
+
 ## What the delete of a version checks
 
 Palette refuses the delete of a profile version while one of these uses it, in

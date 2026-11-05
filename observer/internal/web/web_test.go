@@ -21,6 +21,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -48,6 +49,7 @@ func (noSource) Ask(context.Context, string, string) (model.Answer, bool, error)
 	return model.Answer{}, false, nil
 }
 func (noSource) Answers() []model.Answer { return nil }
+func (noSource) Alerts() alert.View      { return alert.Unset() }
 
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -530,6 +532,8 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
 		{devdata.StateAsks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
 		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
+		{devdata.StateAlerts, []string{"Needs attention", "Alerts"}},
+		{devdata.StateAlertsUnset, []string{"Needs attention", "Not set"}},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
@@ -1632,8 +1636,12 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 	if err := os.MkdirAll(path.Join(dir, "scratch"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range devdata.Files {
+	// The file alerts.json is optional: a set without it is the page of an observer with no alerts.
+	for _, name := range append(slices.Clone(devdata.Files), "alerts.json") {
 		raw, err := devdata.Read(os.DirFS("testdata/api"), from, name)
+		if name == "alerts.json" && errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
 		if err != nil {
 			t.Fatal(err)
 		}

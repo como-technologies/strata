@@ -35,9 +35,10 @@ jobs:
       - run: just examples
       # the documents of the strata binary of this commit go through the allow-list of the observer
       - run: just observer-contract
-      # the runner has kubectl: the base renders four objects, and the base with the component six
+      # the runner has kubectl: the base renders four objects, the base with the pods component six, and the base with the alerts component five
       - run: just observer-manifests
       - run: just observer-manifests-pods
+      - run: just observer-manifests-alerts
 
   msrv:
     name: the lowest Rust version

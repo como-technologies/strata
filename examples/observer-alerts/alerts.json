@@ -1,0 +1,13 @@
+{
+  "channels": {
+    "platform-oncall": {"urlFile": "/alert-channels/platform-oncall"},
+    "platform-planning": {"urlFile": "/alert-channels/platform-planning"}
+  },
+  "rules": [
+    {"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall"},
+    {"level": "cluster", "news": "image", "send": "now", "to": "platform-oncall"},
+    {"level": "cluster", "news": "lost", "send": "now", "to": "platform-oncall"},
+    {"level": "cluster", "news": "newer", "send": "digest", "to": "platform-planning"},
+    {"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2027-06-30"}
+  ]
+}

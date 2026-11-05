@@ -937,12 +937,16 @@ fn the_check_job_runs_the_contract_of_the_observer_after_the_examples() {
 }
 
 /// The runner of GitHub has `kubectl`, so the job `check` renders the manifests of the observer: the
-/// base, and the base with the component. A layout that kustomize refuses, such as a kustomization
+/// base, and the base with each component. A layout that kustomize refuses, such as a kustomization
 /// inside its own base, then fails CI and not a live run.
 #[test]
-fn the_check_job_renders_the_manifests_of_the_observer_with_and_without_the_component() {
+fn the_check_job_renders_the_manifests_of_the_observer_with_and_without_each_component() {
     let runs = runs_of("checks.yml", "lint and test");
-    for recipe in ["just observer-manifests", "just observer-manifests-pods"] {
+    for recipe in [
+        "just observer-manifests",
+        "just observer-manifests-pods",
+        "just observer-manifests-alerts",
+    ] {
         assert!(runs.contains(&recipe.to_string()), "{recipe}: {runs:?}");
     }
 }

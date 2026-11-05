@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/model"
 )
 
@@ -15,7 +16,8 @@ import (
 const stateFile = "state.json"
 
 // State is what the observer keeps between two runs. It holds the first sight of each finding, the
-// counts of each move, and the failed runs of each timer. It also holds the first digest of each image.
+// counts of each move, and the failed runs of each timer. It also holds the first digest of each image, and
+// the open alerts with the messages that did not go.
 // It holds no value of a variable, no old value, and no new value, so a copy of the file shows
 // nothing of the cluster.
 type State struct {
@@ -25,6 +27,7 @@ type State struct {
 	Content   ClockState              `json:"content"`
 	Versions  ClockState              `json:"versions"`
 	Images    ImagesState             `json:"images"`
+	Alerts    alert.Store             `json:"alerts"`
 }
 
 // ImagesState is what the observer keeps of the pods. First maps the id of an image, ImageKey, to the
@@ -47,7 +50,7 @@ type ClockState struct {
 }
 
 func emptyState() State {
-	return State{Findings: map[string]FindingState{}, Moves: map[string]model.Move{}, Images: ImagesState{First: map[string]string{}}}
+	return State{Findings: map[string]FindingState{}, Moves: map[string]model.Move{}, Images: ImagesState{First: map[string]string{}}, Alerts: alert.NewStore()}
 }
 
 // loadState reads the state. A file that is absent gives an empty state. A file that cannot be read
@@ -73,6 +76,7 @@ func loadState(dir string) (State, error) {
 	if s.Images.First == nil {
 		s.Images.First = map[string]string{}
 	}
+	s.Alerts.Fill()
 	return s, nil
 }
 

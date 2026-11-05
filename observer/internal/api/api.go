@@ -6,7 +6,9 @@
 // its manifests, and the answers of Palette to the questions of a person. The gate of the detail tier
 // is Kubernetes: the address is loopback, so a person reaches it with `kubectl port-forward`, and the
 // RBAC verb `create pods/portforward` decides who can. The server holds no key and makes no call to
-// Kubernetes. It takes one POST, the click "Ask Palette" on one move, and no cycle sends a POST.
+// Kubernetes. It takes one POST, the click "Ask Palette" on one move, and no cycle sends a POST to Palette.
+// The route /v1/alerts shows the rules of the alerts with their states, and it names the channels and holds
+// no address.
 //
 // No answer carries a variable of a cluster, a whole record, a raw directory, or the environment of
 // a process: the types of internal/docs have no field for them.
@@ -21,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 )
@@ -44,6 +47,8 @@ type Source interface {
 	Ask(ctx context.Context, profile, key string) (model.Answer, bool, error)
 	// Answers gives the answer to each question that was asked since the start.
 	Answers() []model.Answer
+	// Alerts gives the rules of the alerts with their states. It says so when the observer sends no alert.
+	Alerts() alert.View
 }
 
 // Tier says what the answer of a route carries.
@@ -76,6 +81,7 @@ const (
 	patternEvents     = "/v1/events"
 	patternImages     = "/v1/images"
 	patternImage      = "/v1/images/{ref}"
+	patternAlerts     = "/v1/alerts"
 	patternPackDiff   = "/v1/packs/{profile}/{layer}/{name}/diff"
 	patternAsks       = "/v1/asks"
 	patternAsk        = "/v1/packs/{profile}/{layer}/{name}/ask"
@@ -114,6 +120,7 @@ func (s *Server) table() []entry {
 		{Route{patternEvents, http.MethodGet, TierSummary}, s.events},
 		{Route{patternImages, http.MethodGet, TierSummary}, s.images},
 		{Route{patternImage, http.MethodGet, TierSummary}, s.image},
+		{Route{patternAlerts, http.MethodGet, TierSummary}, s.alerts},
 		{Route{patternPackDiff, http.MethodGet, TierDetail}, s.packDiff},
 		{Route{patternAsks, http.MethodGet, TierDetail}, s.asks},
 		{Route{patternAsk, http.MethodPost, TierDetail}, s.ask},
@@ -268,6 +275,12 @@ func (s *Server) events(w http.ResponseWriter, _ *http.Request) {
 // images serves strata-observed/1. With the read of the pods off, it says so and lists no image.
 func (s *Server) images(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, s.Source.Observed())
+}
+
+// alerts serves the rules of the alerts with their states. With no --alerts, it says so and lists no rule.
+// It names the channels and holds no address.
+func (s *Server) alerts(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.Source.Alerts())
 }
 
 // image serves one row of the document. The reference of the image is one escaped segment of the path.

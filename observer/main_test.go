@@ -149,22 +149,23 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 	}
 }
 
-// The code of the observer sends no HTTP POST. It asks Palette only through strata, and a POST to Palette
-// comes from the click "Ask Palette" alone: see runner.FlagPin. The server takes that one POST, so the
-// file of its routes names the method. The observer has two HTTP clients: the health check, which calls a
-// loopback address, and the read of the pods, which sends one GET to the API server of Kubernetes. Only
-// internal/api and internal/kube import a package of the network, and so does the stand-in for that
-// server in internal/testkit, which only test files import.
-func TestOnlyTheHealthCheckAndTheReadOfThePodsSendARequestAndNoCodeSendsAPost(t *testing.T) {
+// The code of the observer sends no HTTP POST to Palette. It asks Palette only through strata, and a POST to
+// Palette comes from the click "Ask Palette" alone: see runner.FlagPin. The server takes that one POST, so the
+// file of its routes names the method. The observer has three HTTP clients: the health check, which calls a
+// loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, and the alerts,
+// which send one POST of a message to the webhook of a team. Only internal/api, internal/kube, and
+// internal/alert import a package of the network, and so does the stand-in for the API server in
+// internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
+func TestOnlyTheHealthCheckTheReadOfThePodsAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string
 		// allowed lists the prefixes of the paths that may hold the text. An empty list allows none.
 		allowed []string
 	}{
 		{[]string{`"POST"`, `http.Post(`, `.PostForm(`}, nil},
-		{[]string{`http.MethodPost`}, []string{"internal/api/api.go"}},
-		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/testkit/"}},
-		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go"}},
+		{[]string{`http.MethodPost`}, []string{"internal/api/api.go", "internal/alert/send.go"}},
+		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/alert/send.go", "internal/testkit/"}},
+		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/alert/send.go"}},
 	}
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {

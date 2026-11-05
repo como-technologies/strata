@@ -21,6 +21,11 @@ var eventKinds = map[Kind]struct{ reason, message string }{
 	ImageSplit:       {"ImageSplit", "Pods run one tag with two digests."},
 }
 
+// Sentence tells what a finding of this kind says, as the event of its first sight does.
+func (k Kind) Sentence() string {
+	return eventKinds[k].message
+}
+
 // The reasons of the events that no kind of finding names.
 const (
 	reasonProfileUpdated = "ProfileUpdated"

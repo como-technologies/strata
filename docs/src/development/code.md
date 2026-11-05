@@ -237,10 +237,10 @@ ASD-STE100.
 ## The Go of the observer
 
 The observer is the Go program in `observer/`. It runs the `strata` binary and
-shows the answers. It holds no rule of strata. With `--read-pods`, it also lists
-the pods of its cluster. On a click, it asks Palette about one move, through
-`strata`. The rules above are for the Rust code, and these rules are for the Go
-code.
+shows the answers, and it holds no rule of strata. With `--read-pods`, it also lists
+the pods of its cluster. With `--alerts`, it sends a message to a webhook. On a
+click, it asks Palette about one move, through `strata`. The rules above are for
+the Rust code, and these rules are for the Go code.
 
 - The observer uses the standard library only. `go.mod` has no `require` line,
   and `just lint` fails when it has one.
@@ -278,8 +278,9 @@ code.
 - A log line holds a verdict, an exit code, a duration, an error kind, and a
   status. One more line names a profile and the status of its `verify.whoError`:
   `HTTP <status>`, or `no answer`. The line for a click holds a verdict and a
-  status, and it names no profile and no pack. A log line holds no output of a
-  process. The rule has no exception.
+  status, and it names no profile and no pack. The line for an alert holds the name
+  of the channel, a verdict, an error kind, and a status, and no address and no
+  text. A log line holds no output of a process. The rule has no exception.
 - `internal/baseline` reads the records, and decodes each one only into
   `docs.Record`. `internal/model` holds the summary and the rules that build it.
   `internal/check` runs the cycles through its `Strata` interface, so a test
@@ -292,6 +293,8 @@ code.
   fails when the marker is in the summary, the state, or the log. Other tests plant
   a marker in the text of a diff and in a refusal of Palette, and look in the same
   places.
+- The state of the alerts holds the open subjects and the messages that did not go.
+  They hold names, times, and fixed words only.
 - A cycle makes its directory under `--work` and removes it at the end, also
   after an error. A test makes sure that `--work` is empty after a good cycle
   and after a failed cycle.
@@ -303,11 +306,30 @@ code.
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the
   detail tier has one. A test walks the types. The detail tier also carries the
   text of a diff in `PackDiff`, and the answers of Palette in `AsksView`.
-- `internal/api` and `internal/kube` can import `net` and `net/http`.
-  `internal/api/health.go` and `internal/kube/kube.go` can hold the client and the
-  request. The code of the observer sends no HTTP `POST`. The server takes one
-  `POST`, the click "Ask Palette", and only `internal/api/api.go` names the method.
-  A test makes sure of each rule.
+- `internal/api`, `internal/kube`, and `internal/alert` can import `net` and
+  `net/http`. `internal/api/health.go`, `internal/kube/kube.go`, and
+  `internal/alert/send.go` can hold the client and the request. The code of the
+  observer sends no HTTP `POST` to Palette. The server takes one `POST`, the click
+  "Ask Palette", and only `internal/api/api.go` names the method. The one other
+  `POST` is the message to a webhook of your team, and only `internal/alert/send.go`
+  names the method for it. A test makes sure of each rule.
+- `internal/alert` sends a message when a finding opens and when it clears. It
+  reads the summary tier only. `alert.SubjectsOf` is the one function that takes a
+  type of `internal/model`, and the package imports no other package of the
+  observer. So a message holds a profile, its packs, a fixed sentence, and a time,
+  and no value. A test makes sure of the imports.
+- A test plants a marker in a changed value, in a changed path, in a variable, and
+  in the audit log. It fails when the marker is in a message, the state, the log,
+  or a route.
+- The rules of the alerts are a file, and no route of the observer writes it. A
+  file that does not parse stops the start, with its line. A mute needs an end
+  date. The rule `newer` with `send: now` is refused, because a newer version never
+  pages a person. A lower level overrides a higher one.
+- The address of a webhook is in a file that the observer reads again at each
+  send. It must use `https`, and the observer follows no redirect. The flag
+  `--alerts-allow-http` is for the tests only. A failed send keeps the message in
+  the state, and the next content cycle sends it again. A cycle that failed or
+  could not read a part clears no alert.
 - The click is the one question that the observer asks Palette. `internal/check`
   runs `behind` with `--pin` for one pack, and only when `internal/api` calls it for a
   click. Nothing calls it on a timer. The answer stays in memory. A request that
