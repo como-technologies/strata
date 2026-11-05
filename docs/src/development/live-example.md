@@ -112,6 +112,7 @@ its end.
 | `contract-report.sh` | The issues of a contract run (#390): one for each fact that differs, one for each unknown value, and one for each new release. `just contract-report` runs it. It needs a `gh` login, and `--dry-run` calls no host. See [The issues](./facts.md#the-issues). |
 | `report-send.sh` | The send of the report (#397). Strata posts the report of one unknown value to the endpoint, and the script checks that one issue of the label `unknown-value` holds it. `just live-report-send` runs it. It reads no tenant. See [The endpoint of the report](./report-endpoint.md). |
 | `common.sh` | The functions `die` and `usage`. `lib.sh`, `contract.sh`, `contract-profiles.sh`, `api.sh`, `tenant.sh`, and `tofu-install.sh` source it. So do `timer.sh` and `deploy.sh` of `deploy/`. It runs nothing and checks nothing, so a script that does not run strata can source it alone. |
+| `palette-curl.sh` | The function `palette_curl`, which runs `curl` with the header `ApiKey` from `KEY`. The header goes to `curl` as a config on standard input (`--config -`). So the key reaches no argument, and `/proc/<pid>/cmdline` does not show it. `api.sh`, `tenant.sh`, and `examples/fetch-examples.sh` source it. A test makes sure that no other script names the header. |
 | `github.sh` | What the scripts read about GitHub. `remote_repo` gives the project of the `origin` remote of a checkout. The jq function `first_line` gives the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
 | `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image with its pull Secret, the overlay, the key, the ConfigMap, and the test of a pod that cannot connect. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
@@ -678,7 +679,8 @@ API of Palette.
 2. **It writes the kubeconfig.** The script asks Palette for the kubeconfig of the
    cluster, and writes it to `~/.kube/strata-<cluster>.yaml` with the mode 0600.
    Each `kubectl` call uses that file, so no call reaches another cluster, whatever
-   the context of your shell is. The script leaves the file after the run.
+   the context of your shell is. The script leaves the file after the run. The
+   request for the kubeconfig sends the key through standard input too.
 3. **It makes each object.** The namespace is applied from its file. The ConfigMap,
    the Secret of the key, and the pull Secret go through `kubectl create
    --dry-run=client -o yaml` and `kubectl apply -f -`. A second run works, and it

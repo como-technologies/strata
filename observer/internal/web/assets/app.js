@@ -16,11 +16,16 @@ const DASH = raw("&ndash;");
 
 /* ---- The words of the API ---- */
 const REFRESH_MS = 30000;
+// The period of the refresh, as the page says it to a person.
+const REFRESH_WORDS = `each ${REFRESH_MS / 1000} seconds`;
 const PAGE = {OK: "ok", FIRST_LOAD: "first-load", NO_RECORDS: "no-records", STALE: "stale", LOST: "lost"};
 const BASELINE = {APPROVED: "approved", FIRST_SEEN: "first-seen", UNKNOWN: "unknown"};
 const STATUS = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", OK: "ok", NO_RECORD: "no-record"};
 const VERIFY = {UNCHANGED: "unchanged", DRIFTED: "drifted", UNVERIFIED: "unverified", ERROR: "error"};
 const COPY = {SAME: "same", SAME_CONTENT: "same-content", DIFFERS: "differs", NOT_ON_CLUSTER: "not-on-this-cluster", NOT_READ: "not-read"};
+// A copy that strata read matches the record, also by content, or it differs.
+const COPY_KEPT = [COPY.SAME, COPY.SAME_CONTENT];
+const COPY_READ = [...COPY_KEPT, COPY.DIFFERS];
 const KIND = {PUBLISHED: "published-changed", OVERWRITTEN: "overwritten", RENAMED: "renamed", GONE: "gone", CLUSTER: "cluster-differs", IMAGE_ID: "image-id-changed", IMAGE_MOVED: "image-moved", IMAGE_SPLIT: "image-split"};
 // The findings of the pods. They set the status of no profile and no pack.
 const IMAGE_KINDS = [KIND.IMAGE_MOVED, KIND.IMAGE_SPLIT];
@@ -84,6 +89,11 @@ const BADGE = {
 const EVENT_BADGE = {
   [EVENT.DRIFT]: ["r", "Drift"], [EVENT.NEWER]: ["b", "Newer"], [EVENT.NOT_CHECKED]: ["y", "Not checked"], [EVENT.INFO]: ["y", "Info"],
 };
+// The badge of the copy of this cluster. The row of the card and the head of the version card both read this table.
+const COPY_BADGE = {
+  [COPY.SAME]: BADGE[STATUS.OK], [COPY.SAME_CONTENT]: ["g", "Same content"], [COPY.DIFFERS]: BADGE[STATUS.DRIFT],
+  [COPY.NOT_ON_CLUSTER]: ["y", "Not on this cluster"], [COPY.NOT_READ]: ["y", "Not read"],
+};
 const IMPACT = {
   "repave": ["a", "Repave"], "may-repave": ["a", "May repave"], "cluster-wide": ["b", "Cluster-wide"],
   "in-place": ["y", "In place"], "sync": ["y", "Sync"], "none": ["y", "None"],
@@ -144,12 +154,14 @@ const CAUSE_LINE = {
   [CAUSE.READ_ERROR]: () => "Strata could not read the record.",
   [CAUSE.PIN_ERROR]: (names) => `Strata could not check ${names} for newer versions.`,
 };
+// wasRefused says that a server refused the key or the role: HTTP 401 or 403.
+const wasRefused = status => status === 401 || status === 403;
 const ERROR_TEXT = {
-  api: status => status === 401 || status === 403 ? `HTTP ${status}, the API key was refused` : `HTTP ${status}, Palette gave an error`,
+  api: status => wasRefused(status) ? `HTTP ${status}, the API key was refused` : `HTTP ${status}, Palette gave an error`,
   transport: () => "the link to Palette failed",
   "not-json": () => "Palette sent an answer that is not JSON",
   timeout: () => "Palette did not answer in time",
-  "kube-api": status => status === 401 || status === 403 ? `HTTP ${status}, the role of the observer was refused` : `HTTP ${status}, the API server gave an error`,
+  "kube-api": status => wasRefused(status) ? `HTTP ${status}, the role of the observer was refused` : `HTTP ${status}, the API server gave an error`,
   "kube-transport": () => "the link to the API server failed",
   "kube-config": () => "the observer could not read its token or its CA file",
 };
@@ -237,6 +249,11 @@ async function fetchDiff(subject, p, side) {
 
 /* ---- Small helpers ---- */
 const enc = s => encodeURIComponent(s).replace(/%40/g, "@");
+// shq quotes a value for a shell, because a name from Palette is text of a person. A value of safe characters stays as it is, so
+// that a normal command reads easily. Any other value goes in single quotes, and each ' in it becomes '\''. Each builder of a
+// command quotes the values it places in the command, and no other code puts a value in a command.
+const SAFE_ARGUMENT = /^[A-Za-z0-9_@%+:,./-]+$/;
+const shq = s => SAFE_ARGUMENT.test(s) ? String(s) : `'${String(s).replace(/'/g, `'\\''`)}'`;
 const subjectOf = p => `${p.name}@${p.version}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
@@ -261,6 +278,8 @@ const hasChecks = () => D.cluster.page !== PAGE.FIRST_LOAD && D.cluster.page !==
 const num = n => hasChecks() ? n : "-";
 const known = n => neverChecked() ? "-" : n;
 // podsRead says that the observer holds a read of the pods. A count of images is "-" before that, as num() is for a check.
+// podsOff says that the observer does not read the pods, because the install has no --read-pods.
+const podsOff = () => D.images.pods === PODS.OFF;
 const podsRead = () => D.images.pods === PODS.READ;
 const imageNum = n => podsRead() ? n : "-";
 const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
@@ -356,12 +375,12 @@ function failedChecks() {
 
 // lostNext gives the next step for the error that lost the page.
 function lostNext(err) {
-  if (err && err.kind === "api" && (err.status === 401 || err.status === 403)) return h`Check the key in the Secret <span class="m">strata-observer-key</span>, then read the log.`;
+  if (err && err.kind === "api" && wasRefused(err.status)) return h`Check the key in the Secret <span class="m">strata-observer-key</span>, then read the log.`;
   return "Check that the observer can reach Palette, then read the log.";
 }
 
-// firstSeenCommand gives the command that records what the profiles of this cluster hold now.
-const firstSeenCommand = () => `scripts/ci/observer-records.sh --first-seen ${D.cluster.cluster.uid || "<cluster uid>"} | kubectl apply --server-side -f -`;
+// firstSeenCommand gives the command that records what the profiles of this cluster hold now. A cluster with no uid gets a placeholder.
+const firstSeenCommand = () => `scripts/ci/observer-records.sh --first-seen ${D.cluster.cluster.uid ? shq(D.cluster.cluster.uid) : "<cluster uid>"} | kubectl apply --server-side -f -`;
 
 // stateSplash gives the splash for a page that holds nothing to show yet, or null when the page holds data. A page that is
 // lost or stale after a good check is not here: it keeps its data under a bar.
@@ -425,7 +444,7 @@ function noCauses() {
 // offlineSplash is the screen of a page that cannot reach the observer and holds no data yet, as after a port-forward that ended. With
 // data on the page, the same fault is a bar over that data.
 const offlineSplash = () => splash(TONE.LOST, "This page lost its line to the observer",
-  `The port-forward may have ended, or the pod may have restarted. This page asks again each ${REFRESH_MS / 1000} seconds.`,
+  `The port-forward may have ended, or the pod may have restarted. This page asks again ${REFRESH_WORDS}.`,
   h`${cmd(PORT_FORWARD_COMMAND)}${tryButton("page")}`);
 
 // missingSplash is the screen of a page that the data does not hold. w gives the title, the name, the reason, and the way back.
@@ -521,11 +540,16 @@ function alertsCount() {
   return h`<span class="cnt ${firing ? "r" : ""}">${firing}</span>`;
 }
 
+// imagesCount is the count of the nav item Images: "Off" when the observer does not read the pods, and "-" before the first read.
+function imagesCount() {
+  return h`<span class="cnt">${podsOff() ? "Off" : imageNum(D.images.counts.images)}</span>`;
+}
+
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
   const items = [["overview", "Overview", ""], ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
     ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
-    ["images", "Images", h`<span class="cnt">${imageNum(D.images.counts.images)}</span>`],
+    ["images", "Images", imagesCount()],
     ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`], ["alerts", "Alerts", alertsCount()]];
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
@@ -563,7 +587,7 @@ function alertBars() {
   const c = D.cluster, bars = [];
   const content = c.content;
   if (S.offline) {
-    bars.push(h`<div class="alertbar a">The page cannot reach the observer. <span>It shows the data of ${clock(S.loadedAt)}. It tries again each 30 seconds.</span></div>`);
+    bars.push(h`<div class="alertbar a">The page cannot reach the observer. <span>It shows the data of ${clock(S.loadedAt)}. It tries again ${REFRESH_WORDS}.</span></div>`);
   }
   const counts = content.checkedAt ? h`Counts below are from ${clock(content.checkedAt)}` : h`No check has ended well`;
   const failed = content.failedRuns > 0 ? h`The last ${content.failedRuns} ${plural(content.failedRuns, "check", "checks")} failed${content.lastError ? h`: ${errorWords(content.lastError)}` : ""}. ` : "";
@@ -597,22 +621,22 @@ function tiles() {
   const fresh = D.newer.filter(r => r.new).length;
   const newerSub = n.newer === 0 ? (calmOk(true) ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`;
   const notCheckedSub = n.notChecked === 0 ? `${n.packsInFull} of ${n.packs} packs in full` : `${n.notChecked} ${plural(n.notChecked, "cause", "causes")} · ${n.packsInFull} of ${n.packs} packs in full`;
-  const [imageCls, imageValue, imageSub] = imageTile();
+  // The tile "Image changes" is there only when the observer reads the pods. The other four fill the row.
+  const images = () => { const [cls, value, sub] = imageTile(); return T(cls, "Image changes", value, sub, "images"); };
   return h`<section class="tiles" aria-label="Summary">
     ${T(n.drift ? "r" : "g", "Drift", n.drift, driftSub, "findings")}
-    ${T(imageCls, "Image changes", imageValue, imageSub, "images")}
+    ${podsOff() ? "" : images()}
     ${T("b", "Newer versions", n.newer, newerSub, "newer")}
     ${T("y", "Not checked", n.notChecked, notCheckedSub, "notchecked")}
     ${T("", "Profiles", n.profiles, `${n.packs} packs on this cluster`, "profiles")}
   </section>`;
 }
 
-// imageTile gives the color, the value, and the words of the tile "Image changes". Before a read of the
-// pods it claims nothing: the value is "-". The Drift tile does not count these changes. The tile is green only when the
+// imageTile gives the color, the value, and the words of the tile "Image changes", for an observer that reads the pods. Before a
+// read that ended, it claims nothing: the value is "-". The Drift tile does not count these changes. The tile is green only when the
 // checks can speak and the last read of the pods worked.
 function imageTile() {
   const o = D.images, n = o.counts;
-  if (o.pods === PODS.OFF) return ["y", "-", "Pods not read"];
   if (o.pods === PODS.NOT_READ) return ["y", "-", "Not read yet"];
   if (n.changed > 0) return ["a", n.changed, "Moved or split"];
   return [trusted() && !o.error ? "g" : "y", n.changed, `${n.images} ${plural(n.images, "image", "images")} in pods`];
@@ -656,8 +680,7 @@ function findingsCard() {
 
 function eventRows(list) {
   return list.map(x => {
-    const [c, t] = EVENT_BADGE[x.type] || ["y", x.type];
-    return h`<tr><td>${badge(c, t)}</td><td class="m narrow-hide">${x.reason}</td><td class="mut nw">${ago(x.time)}</td><td class="m narrow-hide">${x.object}</td><td>${x.message}<div class="m mut narrow-show">${x.object}</div></td></tr>`;
+    return h`<tr><td>${badgeOf(EVENT_BADGE, x.type)}</td><td class="m narrow-hide">${x.reason}</td><td class="mut nw">${ago(x.time)}</td><td class="m narrow-hide">${x.object}</td><td>${x.message}<div class="m mut narrow-show">${x.object}</div></td></tr>`;
   });
 }
 
@@ -691,7 +714,7 @@ function findingLine(f, x) {
   if (f.kind === KIND.PUBLISHED) {
     const copy = x.clusterCopy && x.clusterCopy.status;
     if (f.alsoOnCluster) text += " This cluster has the edit too.";
-    else if (copy === COPY.SAME || copy === COPY.SAME_CONTENT) text += " This cluster keeps its copy.";
+    else if (COPY_KEPT.includes(copy)) text += " This cluster keeps its copy.";
   }
   return text;
 }
@@ -858,34 +881,34 @@ function verdict(x) {
   if (!pub) {
     pubCard = h`<div class="vcard"><div class="h">Published version ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
   } else if (pub.status === VERIFY.DRIFTED) {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.DRIFT)}</div><div class="m mt6">root <span class="was">${root(pub.rootRecorded)}</span>${ARROW}<span class="now">${root(pub.rootLive)}</span></div></div>`;
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root <span class="was">${root(pub.rootRecorded)}</span>${ARROW}<span class="now">${root(pub.rootLive)}</span></div></div>`;
   } else if (pub.status === VERIFY.UNCHANGED && carried) {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.NOT_CHECKED)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div>`;
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub, carried)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div>`;
   } else if (pub.status === VERIFY.UNCHANGED) {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.OK)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Unchanged since the record</div></div>`;
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Unchanged since the record</div></div>`;
   } else {
-    pubCard = h`<div class="vcard"><div class="h">Published version ${statusBadge(STATUS.NOT_CHECKED)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Strata could not read this version.</div></div>`;
+    pubCard = h`<div class="vcard"><div class="h">Published version ${publishedBadge(pub)}</div><div class="m mt6">root ${root(pub.rootRecorded)}</div><div class="small mut mt3">Strata could not read this version.</div></div>`;
   }
   let copyCard;
   if (!cp) {
     copyCard = h`<div class="vcard"><div class="h">This cluster's copy in Palette ${badge("y", "No record")}</div><div class="small mut mt6">Nothing to compare with.</div></div>`;
     return h`<div class="vs">${pubCard}${copyCard}</div>`;
   }
-  const head = b => h`<div class="h">This cluster's copy in Palette ${b}</div>`;
-  if (carried && (cp.status === COPY.SAME || cp.status === COPY.SAME_CONTENT)) {
-    return h`<div class="vs">${pubCard}<div class="vcard">${head(statusBadge(STATUS.NOT_CHECKED))}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div></div>`;
+  const head = h`<div class="h">This cluster's copy in Palette ${copyBadge(cp, carried)}</div>`;
+  if (carried && COPY_KEPT.includes(cp.status)) {
+    return h`<div class="vs">${pubCard}<div class="vcard">${head}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">${CARRIED_WORDS}</div></div></div>`;
   }
   switch (cp.status) {
     case COPY.SAME:
-      copyCard = h`<div class="vcard">${head(statusBadge(STATUS.OK))}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">Unchanged since the record</div></div>`; break;
+      copyCard = h`<div class="vcard">${head}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">Unchanged since the record</div></div>`; break;
     case COPY.SAME_CONTENT:
-      copyCard = h`<div class="vcard">${head(badge("g", "Same content"))}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">The roots differ and the content does not. This is not a drift.</div></div>`; break;
+      copyCard = h`<div class="vcard">${head}<div class="m mt6">root ${root(cp.rootB)}</div><div class="small mut mt3">The roots differ and the content does not. This is not a drift.</div></div>`; break;
     case COPY.DIFFERS:
-      copyCard = h`<div class="vcard">${head(statusBadge(STATUS.DRIFT))}<div class="m mt6">root ${root(pub && pub.rootRecorded)}${ARROW}<span class="now">${root(cp.rootB)}</span></div></div>`; break;
+      copyCard = h`<div class="vcard">${head}<div class="m mt6">root ${root(pub && pub.rootRecorded)}${ARROW}<span class="now">${root(cp.rootB)}</span></div></div>`; break;
     case COPY.NOT_ON_CLUSTER:
-      copyCard = h`<div class="vcard">${head(badge("y", "Not on this cluster"))}<div class="small mut mt6">This cluster does not run this version.</div></div>`; break;
+      copyCard = h`<div class="vcard">${head}<div class="small mut mt6">This cluster does not run this version.</div></div>`; break;
     default:
-      copyCard = h`<div class="vcard">${head(badge("y", "Not read"))}<div class="small mut mt6">Strata could not read this copy.</div></div>`;
+      copyCard = h`<div class="vcard">${head}<div class="small mut mt6">Strata could not read this copy.</div></div>`;
   }
   return h`<div class="vs">${pubCard}${copyCard}</div>`;
 }
@@ -898,10 +921,9 @@ function viewProfile(subject) {
   const fs = D.findings.filter(f => f.profile === subject);
   const ev = D.events.filter(q => q.object.split(", ").includes(subject));
   const events = ev.length ? h`<section class="card"><div class="chead"><h2>Events</h2></div><div class="tw"><table><thead><tr><th>Type</th><th class="narrow-hide">Reason</th><th>Age</th><th class="narrow-hide">From</th><th>Message</th></tr></thead><tbody>${ev.map(q => {
-    const [c, t] = EVENT_BADGE[q.type] || ["y", q.type];
-    return h`<tr><td>${badge(c, t)}</td><td class="m narrow-hide">${q.reason}</td><td class="mut nw">${ago(q.time)}</td><td class="mut narrow-hide">${eventFrom(q)}</td><td>${q.message}</td></tr>`;
+    return h`<tr><td>${badgeOf(EVENT_BADGE, q.type)}</td><td class="m narrow-hide">${q.reason}</td><td class="mut nw">${ago(q.time)}</td><td class="mut narrow-hide">${eventFrom(q)}</td><td>${q.message}</td></tr>`;
   })}</tbody></table></div></section>` : "";
-  const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Restore the version first. To change a release, publish a new version and record it. A new cluster gets this edit at once.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
+  const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
   const rows = x.packs.map(p => {
     const href = packHash(subject, p);
     return h`<tr class="link" data-go="${href}"><td class="w110">${statusBadge(p.status)}</td><td class="m"><a href="${href}">${p.name}</a></td><td class="mut narrow-hide">${p.layer}</td><td class="m">${p.version}</td><td class="m">${newerCell(p)}</td><td class="n narrow-hide">${p.images}</td></tr>`;
@@ -970,7 +992,7 @@ const podsOffSplash = () => splash(TONE.OFF, "Pods are not on the menu here",
 
 // podsFailedSplash tells that the first reads of the pods failed. A refused role gets the command that asks the API server.
 function podsFailedSplash(err) {
-  const refused = err.kind === "kube-api" && (err.status === 401 || err.status === 403);
+  const refused = err.kind === "kube-api" && wasRefused(err.status);
   return splash(TONE.WARN, "The pods stay silent", h`The last read of the pods failed. <b>${podsErrorWords(err)}.</b> The findings of the content check are not affected.`,
     refused ? next("Ask the API server if the role of the observer can list pods.", cmd(CAN_LIST_PODS_COMMAND)) : next("Read the log.", cmd(LOG_COMMAND)), SIZE.CARD);
 }
@@ -978,7 +1000,7 @@ function podsFailedSplash(err) {
 // imagesBody gives the body of the card of the list, from the state of the read of the pods.
 function imagesBody() {
   const o = D.images;
-  if (o.pods === PODS.OFF) return podsOffSplash();
+  if (podsOff()) return podsOffSplash();
   if (o.pods === PODS.NOT_READ) {
     return o.error ? podsFailedSplash(o.error) : splash(TONE.BUILD, "Reading the pods", "No read of the pods has ended yet. This page fills in when one does.", "", SIZE.CARD);
   }
@@ -988,7 +1010,7 @@ function imagesBody() {
 
 function viewImages() {
   const o = D.images, n = o.counts, rest = n.images - n.matched;
-  const sub = podsRead() ? h`${n.images} ${plural(n.images, "image", "images")}. ${n.matched} ${plural(n.matched, "matches", "match")} a pack. ${rest} ${plural(rest, "does", "do")} not.` : o.pods === PODS.OFF ? "Pods not read" : "Not read yet";
+  const sub = podsRead() ? h`${n.images} ${plural(n.images, "image", "images")}. ${n.matched} ${plural(n.matched, "matches", "match")} a pack. ${rest} ${plural(rest, "does", "do")} not.` : podsOff() ? "Pods not read" : "Not read yet";
   const note = podsRead() && o.images.length ? h`<div class="note small">This page says so when what this cluster pulled differs from what it first pulled, or when two pods of one tag differ. It cannot say whether a tag moved at its source.</div>` : "";
   return {nav: "images", crumbs: crumbs("Images"), body: h`${alertBars()}<section class="card"><div class="chead"><h2>Images <span class="sub">${sub}</span></h2></div>${imagesBody()}</section>${note}`};
 }
@@ -1263,12 +1285,13 @@ function valuesPanel(d, id, command) {
    holds a change. A side with no change sends no request, and it shows the facts of the three sides. */
 
 // The commands of the card "Check this yourself" and of the splash for a text above the cap. record.json is the file that
-// the first row of the card writes.
-const publishedCommand = subject => `strata compare ${RECORD_FILE} ${subject} --full`;
-const clusterCommand = (x, full) => `strata compare ${RECORD_FILE} cluster:${D.cluster.cluster.name || D.cluster.cluster.uid}/${x.name}${full ? " --full" : ""}`;
-const packRef = (row, version) => `pack:${row.registryUid}/${row.name}@${version}`;
+// the first row of the card writes. Each value from the data goes through shq(), so a command pastes as the arguments it means.
+const publishedCommand = subject => `strata compare ${RECORD_FILE} ${shq(subject)} --full`;
+const clusterCommand = (x, full) => `strata compare ${RECORD_FILE} ${shq(`cluster:${clusterName()}/${x.name}`)}${full ? " --full" : ""}`;
+// packRef gives a pack of a registry as one word of a shell.
+const packRef = (row, version) => shq(`pack:${row.registryUid}/${row.name}@${version}`);
 const moveCommand = row => `strata compare ${packRef(row, row.version)} ${packRef(row, row.newest)} --full`;
-const pinCommand = p => `strata behind ${RECORD_FILE} --pin ${p.key}`;
+const pinCommand = p => `strata behind ${RECORD_FILE} --pin ${shq(p.key)}`;
 // recordKey gives the key of a record in the Secrets, as scripts/ci/observer-records.sh writes it. recordCommand reads the key in
 // each of the four Secrets, because the page does not know which one holds it.
 const recordKey = x => `${x.name}_${x.version}.json.gz`.replace(/[^A-Za-z0-9._-]/g, "_");
@@ -1299,7 +1322,7 @@ function flagRow(d, id, href) {
 
 // retrySplash tells that the detail route gave no answer. A 503 is the normal answer while a check holds the slot of the observer.
 function retrySplash(d) {
-  const again = `This page asks again each ${REFRESH_MS / 1000} seconds.`;
+  const again = `This page asks again ${REFRESH_WORDS}.`;
   if (d.status === 503) return splash(TONE.BUILD, "One moment, a check is running", `The observer answers one read at a time. ${again}`, tryButton("diff"), SIZE.LINE);
   return splash(TONE.WARN, "The observer could not read these changes", `The request failed${d.status ? ` with HTTP ${d.status}` : ""}. ${again}`, tryButton("diff"), SIZE.LINE);
 }
@@ -1324,7 +1347,7 @@ function comparePanel(id, d, href, command) {
 function sidesOf(x, row) {
   const out = [[SIDE.PUBLISHED, "Record → Published now"]];
   const cp = x.clusterCopy && x.clusterCopy.status;
-  if (cp === COPY.SAME || cp === COPY.SAME_CONTENT || cp === COPY.DIFFERS) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
+  if (COPY_READ.includes(cp)) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
   if (row) out.push([SIDE.NEWER, `Pack ${row.version} → pack ${row.newest}`]);
   return out;
 }
@@ -1349,7 +1372,7 @@ const quietTone = () => calmOk() ? TONE.CALM : TONE.OFF;
 // sideFacts gives the three facts of a pack: the published version, the copy of this cluster, and the newer version.
 function sideFacts(x, p, row, changed) {
   const copy = x.clusterCopy && x.clusterCopy.status;
-  const readCopy = copy === COPY.SAME || copy === COPY.SAME_CONTENT || copy === COPY.DIFFERS;
+  const readCopy = COPY_READ.includes(copy);
   const published = publishedUnread(x) ? ["Not read", "Published now"] : changed[SIDE.PUBLISHED] ? ["Changed", "Published now"] : ["Same", "Published now", "ok"];
   const cluster = readCopy ? (changed[SIDE.CLUSTER] ? ["Changed", "This cluster's copy"] : ["Same", "This cluster's copy", "ok"]) : copy === COPY.NOT_ON_CLUSTER ? ["Not here", "This cluster's copy"] : ["Not read", "This cluster's copy"];
   const newer = row ? [row.newest, "Newer version"] : p.status === STATUS.NOT_CHECKED ? ["Not checked", "Newer version"] : D.cluster.versions.readAt ? ["Current", "No newer version", "ok"] : ["Not read", "Newer version"];
@@ -1412,7 +1435,7 @@ function moveCard(subject, p, row) {
 /* ---- The card "Check this yourself" ----
    Each row is a question, the command that answers it, and what the page says now. The names are real, and the rows change with
    the page: a pack with a newer version adds the move and the question about the newer versions. */
-const copyBadge = (cp, carried) => cp.status === COPY.SAME || cp.status === COPY.SAME_CONTENT ? statusBadge(carried ? STATUS.NOT_CHECKED : STATUS.OK) : cp.status === COPY.DIFFERS ? statusBadge(STATUS.DRIFT) : cp.status === COPY.NOT_ON_CLUSTER ? badge("y", "Not on this cluster") : badge("y", "Not read");
+const copyBadge = (cp, carried) => carried && COPY_KEPT.includes(cp.status) ? statusBadge(STATUS.NOT_CHECKED) : badgeOf(COPY_BADGE, COPY_BADGE[cp.status] ? cp.status : COPY.NOT_READ);
 const publishedBadge = (pub, carried) => pub.status === VERIFY.DRIFTED ? statusBadge(STATUS.DRIFT) : pub.status === VERIFY.UNCHANGED && !carried ? statusBadge(STATUS.OK) : statusBadge(STATUS.NOT_CHECKED);
 
 // terminalRows gives the rows for a profile, and for a pack of it when p is not null. row is the move of the pack, or null.
@@ -1467,7 +1490,7 @@ function ruleSend(r) {
 }
 
 // ruleTarget names what a rule applies to: the cluster, a profile, or a pack.
-const ruleTarget = r => r.level === "cluster" ? D.cluster.cluster.name || D.cluster.cluster.uid : r.match;
+const ruleTarget = r => r.level === "cluster" ? clusterName() : r.match;
 
 const ruleRow = r => h`<tr><td>${badgeOf(ALERT_BADGE, r.state)}</td><td>${ALERT_LEVEL[r.level] || r.level}</td><td class="m">${ruleTarget(r)}</td><td>${ALERT_NEWS[r.news] || r.news}</td><td>${ruleSend(r)}</td><td class="m">${r.to || DASH}</td></tr>`;
 

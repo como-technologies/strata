@@ -19,7 +19,7 @@ import (
 )
 
 /* The tests below hold the splash on each screen. They run app.js with node, as the tests of web_test.go do. Each place that
-had one grey line has a state with a tone, a title, a fact, and the next step when one exists. */
+had one gray line has a state with a tone, a title, a fact, and the next step when one exists. */
 
 // crawls holds the crawl of each set, so that the tests of the states run node once for each set.
 var crawls = map[devdata.State][]screen{}
@@ -59,7 +59,7 @@ func packPage(subject, layer, name string) string {
 	return "#k-" + encodeURIComponent(subject) + "/" + encodeURIComponent(layer) + "/" + encodeURIComponent(name)
 }
 
-// place is one place of the page that had a grey line, with the words that its state must show. The size is lg for the
+// place is one place of the page that had a gray line, with the words that its state must show. The size is lg for the
 // screen, md for a card, sm for a card inside a card, and inl for a line.
 type place struct {
 	name        string

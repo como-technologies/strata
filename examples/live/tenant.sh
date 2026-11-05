@@ -40,6 +40,7 @@ set -uo pipefail
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 script=tenant.sh
 . "$live/common.sh"
+. "$live/palette-curl.sh"
 from_env_file() {
   [ -f "$HOME/.palette.env" ] || return 0
   (set -a; . "$HOME/.palette.env" >/dev/null 2>&1; printf %s "${!1:-}")
@@ -55,8 +56,8 @@ PROJECT=${PALETTE_PROJECT_UID:-$(from_env_file PALETTE_PROJECT_UID)}
 # get PATH [BODYFILE [ACCEPT]] -> writes the body, prints the HTTP status
 get() {
   local body=${2:-/dev/stdout} accept=${3:-application/json}
-  curl -sS -o "$body" -w '%{http_code}' \
-    -H "ApiKey: $KEY" -H "Accept: $accept" ${PROJECT:+-H "ProjectUid: $PROJECT"} \
+  palette_curl -sS -o "$body" -w '%{http_code}' \
+    -H "Accept: $accept" ${PROJECT:+-H "ProjectUid: $PROJECT"} \
     "$API$1"
 }
 
@@ -145,8 +146,8 @@ repave() {
       packValues: [.spec.published.packs[] | {name, tag, type, values: (.values // ""), manifests: []}
         | if $p != "" and .name == $p then .values |= (split($from) | join($to)) else . end]}]}' \
     "$tmp/profile" > "$tmp/body"
-  status=$(curl -sS -o "$tmp/answer" -w '%{http_code}' -X POST \
-    -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  status=$(palette_curl -sS -o "$tmp/answer" -w '%{http_code}' -X POST \
+    -H 'Accept: application/json' -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$tmp/body" \
     "$API/v1/spectroclusters/$cluster/validate/repave")
   [ "$status" = 200 ] || die "validating the repave of $cluster answered HTTP $status: $(head -c 300 "$tmp/answer")"

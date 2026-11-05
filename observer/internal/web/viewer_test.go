@@ -593,7 +593,8 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	mustHold(t, "the profile", profile, "<code>"+command+"</code>")
 }
 
-// A command with a name that holds markup shows as text.
+// A command with a name that holds markup shows as text. The name has spaces and a "<", so the command puts it in single quotes,
+// and the page escapes each quote.
 func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 	const evil = "<img src=x onerror=alert(1)>"
 	swap := func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), "quarry-1", evil)) }
@@ -602,7 +603,7 @@ func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	page := clickIn(t, dir, "scratch", dexHash, "0").After
-	mustHold(t, "the command", page, `cluster:`+injection+`/fred-identity --full`)
+	mustHold(t, "the command", page, `&#39;cluster:`+injection+`/fred-identity&#39; --full`)
 	mustNotHold(t, "the command", page, "<img")
 }
 

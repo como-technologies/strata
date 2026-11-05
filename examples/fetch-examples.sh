@@ -42,6 +42,8 @@ oldest_first() {
 
 die() { echo "fetch-examples: $*" >&2; exit 2; }
 log() { echo "fetch-examples: $*" >&2; }
+# palette_curl sends the key from KEY in a config on standard input, so the key reaches no argument of curl.
+. "$here/live/palette-curl.sh"
 [ -n "$tool" ] && [ -x "$tool" ] || die "no strata binary found; run cargo build --release or set STRATA_BIN=<path>"
 log "using $tool"
 
@@ -53,9 +55,9 @@ if [ -z "${OFFLINE:-}" ]; then
 fi
 
 api_get() {
-  local -a hdr=(-H "ApiKey: ${PALETTE_API_KEY}" -H 'Accept: application/json')
+  local -a hdr=(-H 'Accept: application/json')
   [ -n "${PALETTE_PROJECT_UID:-}" ] && hdr+=(-H "ProjectUid: ${PALETTE_PROJECT_UID}")
-  curl -sS --fail-with-body "${hdr[@]}" "${API}$1"
+  KEY=$PALETTE_API_KEY palette_curl -sS --fail-with-body "${hdr[@]}" "${API}$1"
 }
 
 mkdir -p "$out/packs" "$out/profiles/raw" "$out/clusters/raw" "$out/reports"

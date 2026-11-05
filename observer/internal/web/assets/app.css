@@ -123,6 +123,15 @@ tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;
 .seg button.on{background:var(--violet-t);color:var(--violet);font-weight:600}
 .search{border:1px solid var(--line);border-radius:5px;background:var(--panel);padding:4px 9px;font-size:13px;width:210px}
 .search.auto{width:auto}
+/* The list of the dropdown "Compare" takes the theme. A browser that knows base-select draws the list with these rules. Any other
+   browser skips the block and keeps its own list, which works the same. */
+@supports (appearance:base-select){
+  select.search,select.search::picker(select){appearance:base-select}
+  select.search::picker(select){background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px}
+  select.search option{padding:5px 9px;border-radius:4px}
+  select.search option:hover,select.search option:focus-visible{background:var(--violet-t);color:var(--violet)}
+  select.search option:checked{font-weight:600}
+}
 .title{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
 .title h1{overflow-wrap:anywhere;min-width:0}
 .meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:9px;font-size:13px}

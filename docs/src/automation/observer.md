@@ -66,8 +66,9 @@ Palette against it. Only a merge moves the baseline.
    `--revision`, and applies the four Secrets. See [Install](#install).
 4. **Check.** The two cycles check Palette against the records. A difference opens a
    finding on the page.
-5. **Close the finding.** Restore the version in Palette. Or publish the new content,
-   and record it again with a new review.
+5. **Close the finding.** Publish a new version with the change through review, and
+   record it. Do not repair the edited version in place: that is a second edit. The
+   finding also clears when the published version goes back to its record.
 
 The observer never writes a record. An edit in Palette moves no baseline: it opens a
 finding. To try the observer with no approved record, see [First-seen
@@ -353,6 +354,11 @@ and the digest from the `imageID` that the node reports. It shows no other fact 
 pod. Then it counts the pods of each digest for each image reference. The Images
 screen shows the result. [The API of the observer](../reference/observer-api.md#the-images)
 lists the routes and the fields.
+
+With no `--read-pods`, the overview shows four tiles, and the tile "Image changes"
+is absent. The nav item Images stays and says "Off", as the nav item Alerts says "Not
+set". It opens the offer of the read. With the read on, the tile shows, also after a
+read that failed.
 
 The observer matches a reference with the images that the packs of the records
 name. The exact text wins. If it finds none, the observer compares the name and the

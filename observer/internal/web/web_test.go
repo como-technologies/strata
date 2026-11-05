@@ -524,7 +524,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		words []string
 	}{
 		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Pods not read", "Strata compares the name and the tag."}},
+		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Strata compares the name and the tag."}},
 		{devdata.StateFirstLoad, []string{"Reading the layers", "The first check is running", "Baseline unknown"}},
 		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy your team approved. Your pipeline writes the records, and the observer checks against them.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "Baseline unknown"}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
@@ -535,7 +535,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
 		{devdata.StateImages, []string{"Needs attention", "Image moved", "A tag runs another digest than the first one seen", "Moved or split", "Image changes"}},
 		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
-		{devdata.StateImagesOff, []string{"Image changes", "Pods not read", "Strata compares the name and the tag."}},
+		{devdata.StateImagesOff, []string{"Needs attention", "Strata compares the name and the tag."}},
 		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
 		{devdata.StateAsks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
 		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
@@ -1544,7 +1544,8 @@ var (
 )
 
 // The tile "Image changes" sits between Drift and Newer versions. The nav item Images sits between Newer
-// versions and Not checked. Before a read of the pods, each says "-" and claims nothing.
+// versions and Not checked. An observer that reads the pods shows the tile, and before its first read each says "-" and
+// claims nothing. An observer that reads no pods shows no tile, and the nav item says "Off".
 func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 	cases := []struct {
 		state                    devdata.State
@@ -1554,20 +1555,20 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 		{devdata.StateOK, "g", "0", "8 images in pods", "8", false},
 		{devdata.StateImages, "a", "1", "Moved or split", "8", false},
 		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8", false},
-		{devdata.StateQuiet, "y", "-", "Pods not read", "-", false},
-		{devdata.StateNoRecords, "", "", "", "-", true},
-		{devdata.StateReadError, "y", "-", "Pods not read", "-", false},
-		{devdata.StateImagesOff, "y", "-", "Pods not read", "-", false},
+		{devdata.StateQuiet, "", "", "", "Off", true},
+		{devdata.StateNoRecords, "", "", "", "Off", true},
+		{devdata.StateReadError, "", "", "", "Off", true},
+		{devdata.StateImagesOff, "", "", "", "Off", true},
 		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-", false},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
 			overview := pageOf(t, render(t, c.state, false), "#overview", "")
-			// A page with no records shows a splash in place of the tiles. The nav item still says "-".
+			// A page with no records shows a splash in place of the tiles.
 			m := tileOfImages.FindStringSubmatch(overview)
 			if c.noTile {
 				if m != nil {
-					t.Errorf("the page shows the tile %q before a check ended well", m)
+					t.Errorf("the page shows the tile %q with no read of the pods", m)
 				}
 			} else if m == nil || m[1] != c.cls || m[2] != c.value || m[3] != c.sub {
 				t.Errorf("the tile is %q, want %s %q %q", m, c.cls, c.value, c.sub)
@@ -1583,6 +1584,53 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 			navNewer, navImages, navNot := strings.Index(overview, `<a href="#newer" class=`), strings.Index(overview, `<a href="#images" class=`), strings.Index(overview, `<a href="#notchecked" class=`)
 			if !(navNewer >= 0 && navNewer < navImages && navImages < navNot) {
 				t.Errorf("the nav is not in the order Newer versions, Images, Not checked: %d %d %d", navNewer, navImages, navNot)
+			}
+		})
+	}
+}
+
+var tileSection = regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)
+
+// With no read of the pods, the tile "Image changes" is not there, and the other four tiles fill the row. The nav item stays and
+// says "Off", as the nav item Alerts says "Not set". It opens the offer of the read.
+func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
+	for _, state := range []devdata.State{devdata.StateQuiet, devdata.StateImagesOff, devdata.StateReadError} {
+		t.Run(string(state), func(t *testing.T) {
+			screens := render(t, state, false)
+			overview := pageOf(t, screens, "#overview", "")
+			tiles := tileSection.FindString(overview)
+			if got := strings.Count(tiles, `<a class="tile `); got != 4 {
+				t.Errorf("the overview has %d tiles, want 4", got)
+			}
+			mustHold(t, "the tiles", tiles, `<div class="l">Drift</div>`, `<div class="l">Newer versions</div>`, `<div class="l">Not checked</div>`, `<div class="l">Profiles</div>`)
+			mustNotHold(t, "the overview", overview, "Image changes", `href="#images"><div class="l">`)
+			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
+				t.Errorf("the nav item is %q, want the count Off", n)
+			}
+			mustHold(t, "the images", pageOf(t, screens, "#images", ""), "Pods are not on the menu here", `<a href="#images" class="on"><span>Images</span><span class="cnt">Off</span></a>`)
+		})
+	}
+}
+
+// With the read of the pods on, the tile is there, also when the last read failed: after a good read, and before the first one.
+func TestWithTheReadOfThePodsOnTheTileShowsAlsoAfterAFailedRead(t *testing.T) {
+	failed := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
+		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+	})
+	for name, overview := range map[string]string{
+		"a good read":                         pagesOf(t, writeSet(t, devdata.StateOK, nil), "#overview")[0],
+		"a read that failed after a good one": pagesOf(t, failed, "#overview")[0],
+		"a read that never ended well":        pageOf(t, render(t, devdata.StateImagesUnread, false), "#overview", ""),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := strings.Count(tileSection.FindString(overview), `<a class="tile `); got != 5 {
+				t.Errorf("the overview has %d tiles, want 5", got)
+			}
+			if tileOfImages.FindStringSubmatch(overview) == nil {
+				t.Error("the overview has no tile Image changes")
+			}
+			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] == "Off" {
+				t.Errorf("the nav item is %q, and it must not say Off", n)
 			}
 		})
 	}
