@@ -46,9 +46,9 @@ These are open:
 - A change that a person makes with `kubectl` to an object that a manifest layer
   applied, and a delete of such an object. No run shows what Palette does. See
   [What the source of Palette says](#what-the-source-of-palette-says).
-- A key with a role smaller than the role of the example. No run has used a key
-  with Project Viewer, Cluster Viewer, or a custom role. See
-  [The role that a key needs](clusters.md#the-role-that-a-key-needs).
+- A key with a custom role. No run has used one, so the permissions of a custom
+  role come from the code of Palette. A run used Project Viewer and Cluster Viewer.
+  See [The role that a key needs](clusters.md#the-role-that-a-key-needs).
 - A change of the endpoint or the values of a cluster group: the run of
   [cluster-group.sh](../../development/live-runs.md#cluster-groupsh) changes
   the CPU limit alone. See

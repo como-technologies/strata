@@ -251,21 +251,26 @@ these facts of the cluster, which the observer uses:
 | A container that never started | Its `imageID` is empty. |
 | A container in a crash loop | Its `imageID` keeps the digest. |
 | An image that kind loads from a local file | Its `imageID` is `sha256:<id>`, with no repository and no digest. |
-| `status.image` | It differs from the image of the spec for 14 of the 78 containers of cluster A, because the runtime rewrites it. So the observer matches the image of the spec. |
+| `status.image` | It differs from the image of the spec for 14 of the 78 containers of cluster A, because the runtime rewrites it. On kind, it named one image for two pods that the spec named differently, because the node held one image under several names. So the observer matches the image of the spec. |
+| An image that a mirror at the level of the node serves | Containerd on the node asks the mirror first for the host of the image. `spec.image` and `imageID` keep the name of that host. The digest is the one that the mirror served. |
+| An image string that a rule rewrites to the name of the mirror | `spec.image` and `imageID` name the mirror. So the image matches no pack by name and tag. |
 
 A cluster that Palette builds also runs the agents of Palette. On cluster A, 29
 images run in the pods. 16 of them match a pack by exact text, and 13 match none:
 these are agents of Palette, such as `cluster-api` and `crony`. No pack names them.
-[observer-images.sh](../../development/live-runs.md#observer-imagessh) shows each fact.
+[observer-images.sh](../../development/live-runs.md#observer-imagessh) shows each fact
+about cluster A. The mirror rows come from the stage of
+[observer-kind.sh](../../development/live-runs.md#observer-kindsh) that runs a mirror
+on kind.
 
 ## The role that a key needs
 
 A key has the role of its user. Each request of strata carries the uid of the
 project. So a role in that project is enough for the requests of
 [the observer](../../automation/observer.md), and it needs no tenant role. The
-table gives the permission of each request. No run has used a key with a smaller
-role yet, and [What no run covers](limits.md) lists it.
-[observer-role.sh](../../development/live-runs.md#observer-rolesh) tests it.
+table gives the permission of each request.
+[observer-role.sh](../../development/live-runs.md#observer-rolesh) shows the live run
+of two roles.
 
 | Requests | Permission | Built-in roles that hold it |
 | --- | --- | --- |
@@ -277,13 +282,20 @@ role yet, and [What no run covers](limits.md) lists it.
 | The tags of a pack in one registry | `packRegistry.get` | The same roles. Any member of the project reads a registry of the system or the tenant. |
 | The notifications of a cluster, and the list of packs | None | Any role in the project |
 
-**Project Viewer is the smallest built-in role that gives every answer,
-`verify --who` included.** Cluster Viewer alone gives every answer except the
-audit log. Then `verify --who` keeps its verdict and cannot name the writer: see
-[Who changed it](../../commands/verify.md#who-changed-it). A custom role at
-project scope needs `cluster.get`, `clusterProfile.get`, `packRegistry.get`,
-`packRegistry.list`, and `audit.list`. A virtual cluster needs `virtualCluster.get`
-too.
+**Project Viewer is the least built-in role that gives every answer,
+`verify --who` included.** A live run used a user with that role in the project and
+no tenant role. Each request of the cycles answered HTTP 200. `verify`, the record of a
+cluster, and `behind` each exited 0.
+
+Cluster Viewer alone gives every answer except the audit log. The audit log answers
+HTTP 403 with the code `AccessDenied`, and the message names `audit.list`. Then
+`verify --who` keeps its verdict and cannot name the writer: see
+[Who changed it](../../commands/verify.md#who-changed-it).
+
+The live run used these two roles only. The column of the built-in roles comes from
+the code of Palette. A custom role at project scope needs `cluster.get`,
+`clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
+virtual cluster needs `virtualCluster.get` too.
 
 A request without its permission gets one of these answers:
 

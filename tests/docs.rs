@@ -2493,22 +2493,28 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
     );
 }
 
-/// The lead ran `image-digest.sh`, `observer-kind.sh`, and `observer.sh` in the live window of Wave
-/// 15 (#645). Their sections state the results. The observer page states the request counts of
-/// cluster A. `limits.md` no longer says that no run covers a layer taken off or a digest in the
-/// image list.
+/// The lead ran `image-digest.sh`, `observer-kind.sh`, `observer.sh`, `observer-images.sh`,
+/// `observer-role.sh`, and stage 3 of `who.sh` in the live windows of Wave 15. Their sections state
+/// the results. The observer page states the request counts of cluster A and the answer of each
+/// role. `limits.md` no longer says that no run covers a layer taken off, a digest in the image
+/// list, or a role.
 #[test]
 fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     let runs = read(&docs().join("development/live-runs.md"));
-    for script in ["image-digest.sh", "observer-kind.sh", "observer.sh"] {
-        // the rows of #646 wait for the live window at the end of Wave 15, so they are not in this test
-        let part = section(&runs, &format!("## {script}"), Some("\n## "))
-            .lines()
-            .filter(|line| !line.contains("#646"))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .to_lowercase();
-        for pending in ["no result yet", "has a result yet"] {
+    for script in [
+        "image-digest.sh",
+        "observer-kind.sh",
+        "observer.sh",
+        "observer-images.sh",
+        "observer-role.sh",
+        "who.sh",
+    ] {
+        let part = section(&runs, &format!("## {script}"), Some("\n## ")).to_lowercase();
+        for pending in [
+            "no result yet",
+            "has a result yet",
+            "wait for the live window",
+        ] {
             assert!(
                 !part.contains(pending),
                 "the section of {script} says {pending:?}"
@@ -2535,14 +2541,29 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "## Install with a profile in Palette",
         "Palette replaces no node when it applies the layer.",
         "With that role, the verdict and the finding stay, and `who` is empty.",
+        "**A live run used both roles.**",
+        "The audit log then answers HTTP 403 with the code `AccessDenied`.",
+        "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
     ] {
         assert!(page.contains(needle), "observer.md lacks {needle:?}");
     }
+    for old in [
+        "No live run has used this role yet",
+        "No run shows yet which way a mirror works",
+    ] {
+        assert!(!page.contains(old), "observer.md still says {old:?}");
+    }
+    let role = section(&runs, "## observer-role.sh", Some("\n## "));
+    assert!(
+        role.contains("`role-audits`") && role.contains("HTTP 403 with the code `AccessDenied`")
+    );
 
     let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
     for old in [
         "and no run uses it",
         "No run shows what a node pulls in this case",
+        "A key with a role smaller than the role of the example",
+        "No run has used a key with Project Viewer, Cluster Viewer, or a custom role",
     ] {
         assert!(!limits.contains(old), "limits.md still says {old:?}");
     }
@@ -2551,6 +2572,13 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         clusters.contains("A live run did this, and Palette deleted the Deployment of the layer."),
         "clusters.md lacks the result of the removal of a layer"
     );
+    for needle in [
+        "A live run used a user with that role in the project and no tenant role.",
+        "| An image string that a rule rewrites to the name of the mirror | `spec.image` and `imageID` name the mirror. So the image matches no pack by name and tag. |",
+    ] {
+        assert!(clusters.contains(needle), "clusters.md lacks {needle:?}");
+    }
+    assert!(!clusters.contains("No run has used a key with a smaller"));
 }
 
 /// The five pages of the observer, in the book: the pages of `OBSERVER_PAGES` for a reader, and two

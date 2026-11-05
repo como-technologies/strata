@@ -484,9 +484,9 @@ without it. Each stage makes one edit in place through the API, reads what
 | `cluster-who`, `cluster-who-says`, `cluster-who-person`, `cluster-who-json` | 1, 0, 0, 0 | #69: the cluster record reports `DRIFT`, and `--who` reads the audit log of the cluster: an `update` by the user who accepted it |
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 | `noaudit-record`, `noaudit-edit` | 0 | #664: record the add-on version, and edit it in place through the API |
-| `noaudit-who`, `noaudit-who-verdict` | 1, 0 | #664: with a key that cannot read the audit log, the record still reports `DRIFT` and the exit is `1`. The output starts with the verdict (no result yet: the Wave 15 window runs it) |
-| `noaudit-who-says` | 0 | #664: the line `who: not read: HTTP 403: <body>` has the code `AccessDenied` (no result yet: the Wave 15 window runs it) |
-| `noaudit-who-json` | 0 | #664: `--json` gives `verify.whoError` that starts with `HTTP 403`, no `verify.who`, and the status `drifted` (no result yet: the Wave 15 window runs it) |
+| `noaudit-who`, `noaudit-who-verdict` | 1, 0 | #664: with a key that cannot read the audit log, the record still reports `DRIFT` and the exit is `1`. The output starts with the verdict. The key belongs to a user with Cluster Viewer, which holds no `audit.list` |
+| `noaudit-who-says` | 0 | #664: the line `who: not read: HTTP 403: <body>` has the code `AccessDenied`. The message names the permission `audit.list` |
+| `noaudit-who-json` | 0 | #664: `--json` gives `verify.whoError` that starts with `HTTP 403`, no `verify.who`, and the status `drifted` |
 | `noaudit-undo`, `noaudit-restored` | 0 | the edit is put back, and the record verifies again |
 
 ## draft.sh
@@ -1373,8 +1373,12 @@ the component `deploy/observer/pods`, so the observer reads the pods. The checks
 `mirror-image-id` and `mirror-image-string` print what each pod
 reports and the row that the observer shows for it. They show whether the image
 string or the image id decides which match works. The stage removes the pods, the
-files of containerd, and the registry. Its rows wait for the live window of the
-end of Wave 15.
+files of containerd, and the registry.
+
+A mirror at the level of the node keeps the
+name of the pack in `spec.image` and in `imageID`. A rewritten image string names the
+mirror in both, so it matches no pack by name and tag. See [The pods of a
+cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1392,11 +1396,11 @@ end of Wave 15.
 | `reader-cluster` | 0 | #644: after the first cycle, the summary names cluster A and its two approved records |
 | `other-pod-refused` | 0 | #644: a pod of another namespace cannot connect to the page |
 | `first-seen-apply`, `first-seen-meta` | 0 | #644: the output of `observer-records.sh --first-seen` applies with `--server-side`, and `meta.json` says `first-seen` |
-| `mirror-registry`, `mirror-nodes`, `mirror-pods` | 0 | #646: a registry on the network of kind holds `product:1.0`. Containerd on each node asks it first for `vendor.example`. A pod that names `vendor.example` and a pod that names the registry are Ready (no result yet: the Wave 15 window runs it) |
-| `component-apply`, `component-read` | 0 | #646: `examples/observer-pods` applies, and `/v1/images` says `read`. The token, the role, and the policy of the component work on kind (no result yet: the Wave 15 window runs it) |
-| `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
-| `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. Exit 0 says that the row holds a digest (no result yet: the Wave 15 window runs it) |
-| `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go (no result yet: the Wave 15 window runs it) |
+| `mirror-registry`, `mirror-nodes`, `mirror-pods` | 0 | #646: a registry on the network of kind holds `product:1.0`. Containerd on each node asks it first for `vendor.example`. A pod that names `vendor.example` and a pod that names the registry are Ready |
+| `component-apply`, `component-read` | 0 | #646: `examples/observer-pods` applies, and `/v1/images` says `read`. The token, the role, and the policy of the component work on kind |
+| `mirror-image-id` | ? | #646: the pod that names `vendor.example`. The output has `spec.image`, `status.image`, `imageID`, and the row of the observer. The check records 0, so the row holds a digest. `spec.image` and `imageID` name `vendor.example`, and the digest is the one that the mirror served. `status.image` names `registry.k8s.io/pause:3.10` |
+| `mirror-image-string` | ? | #646: the pod that names the registry. The output has the same four items. The check records 0, so the row holds a digest. `spec.image` and `imageID` name the registry, so the image matches no pack by name and tag. `status.image` names `registry.k8s.io/pause:3.10` |
+| `mirror-clean` | 0 | #646: the pods, the files of containerd, and the registry go |
 | `kind-delete` | 0 | the kind cluster is deleted |
 
 ## observer-images.sh
@@ -1438,20 +1442,20 @@ such image, or when a finding names one. It uses no list of namespaces.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `pull-secret` | 0 | #646: the Secret `ghcr-pull` holds the token of the file. The token comes through standard input (no result yet: the Wave 15 window runs it) |
-| `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place (no result yet: the Wave 15 window runs it) |
-| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag (no result yet: the Wave 15 window runs it) |
-| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component, the image of `OBSERVER_IMAGE`, and the pull Secret. The Deployment becomes available (no result yet: the Wave 15 window runs it) |
-| `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node (no result yet: the Wave 15 window runs it) |
-| `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A (no result yet: the Wave 15 window runs it) |
-| `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag (no result yet: the Wave 15 window runs it) |
-| `image-split` | 0 | #646: the tag moves, and a new pod pulls it. The row says `split`, with the first digest and another digest. The finding `image-split` names the tag (no result yet: the Wave 15 window runs it) |
-| `image-moved` | 0 | #646: the first pod is replaced, so each pod runs the second digest. The row says `moved`, and the finding `image-moved` replaces the split (no result yet: the Wave 15 window runs it) |
-| `image-never-started` | 0 | #646: a pull that fails leaves the image id empty. The row reads Not checked, with the digest status `not-started`, and it makes no finding (no result yet: the Wave 15 window runs it) |
-| `image-crash-loop` | 0 | #646: a container that restarted keeps its digest. The row shows that digest as the first digest, and it makes no finding (no result yet: the Wave 15 window runs it) |
-| `image-agents-no-finding` | 0 | #646: the images that match no pack, such as those of the agents of Palette, make no finding. The answer of the page names them (no result yet: the Wave 15 window runs it) |
-| `pull-policy` | ? | #646: a pod made with `IfNotPresent`. An admission plugin such as `AlwaysPullImages` can set `Always`. Exit 0 says that the cluster set `Always`, and 1 says that the policy stayed (no result yet: the Wave 15 window runs it) |
-| `undo-values`, `undo-namespaces`, `undo-role` | 0 | #646: the pack names none of the images of the run. Both namespaces, the role, and the binding are gone (no result yet: the Wave 15 window runs it) |
+| `pull-secret` | 0 | #646: the Secret `ghcr-pull` holds the token of the file. The token comes through standard input |
+| `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place |
+| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag |
+| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component, the image of `OBSERVER_IMAGE`, and the pull Secret. The Deployment becomes available |
+| `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node |
+| `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A |
+| `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag |
+| `image-split` | 0 | #646: the tag moves, and a new pod pulls it. The row says `split`, with the first digest and another digest. The finding `image-split` names the tag |
+| `image-moved` | 0 | #646: the first pod is replaced, so each pod runs the second digest. The row says `moved`, and the finding `image-moved` replaces the split |
+| `image-never-started` | 0 | #646: a pull that fails leaves the image id empty. The row reads Not checked, with the digest status `not-started`, and it makes no finding |
+| `image-crash-loop` | 0 | #646: a container that restarted keeps its digest. The row shows that digest as the first digest, and it makes no finding |
+| `image-agents-no-finding` | 0 | #646: the images that match no pack, such as those of the agents of Palette, make no finding. The answer of the page names them |
+| `pull-policy` | ? | #646: a pod made with `IfNotPresent`. An admission plugin such as `AlwaysPullImages` can set `Always`. The check records 0: cluster A set `Always`, and the policy did not stay |
+| `undo-values`, `undo-namespaces`, `undo-role` | 0 | #646: the pack names none of the images of the run. Both namespaces, the role, and the binding are gone |
 | `undo-baseline` | 0 | the example is at its baseline |
 
 ## observer.sh
@@ -1571,17 +1575,18 @@ The script then runs `verify --who`, a record of cluster A, and `behind` with bo
 A maintainer makes the user. The steps are in the header of the script and in [The
 live example](./live-example.md). Run the script once for each role under test, such
 as Project Viewer and Cluster Viewer. The checks with `?` record the answer and do not
-judge it, because the run finds the answer. The code of Palette says that Project
-Viewer gives every answer: see [The role that a key
-needs](../internals/palette/clusters.md#the-role-that-a-key-needs). No row has a result
-yet: the lead runs the script in the live window of Wave 15 when the user exists.
+judge it, because the run finds the answer.
+
+A live run used both roles. Project Viewer gives every answer. Cluster Viewer gives
+every answer but the audit log: see [The role that a key
+needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `control-<name>` | 0 | #645: the key of the example reads each request of the cycles (no result yet: the Wave 15 window runs it) |
-| `role-<name>` | ? | #645: the status and the error code of the same request with the key of the role under test. The output of each check holds `HTTP`, the status, and the code (no result yet: the Wave 15 window runs it) |
-| `command-record`, `command-control-verify`, `command-control-cluster` | 0 | #645: with the key of the example, `verify --who` and two records (no result yet: the Wave 15 window runs it) |
-| `command-role-verify`, `command-role-cluster`, `command-control-behind`, `command-role-behind` | ? | #645: the same commands with the key of the role, and `behind` with both keys. The exit code says whether strata gets an answer (no result yet: the Wave 15 window runs it) |
+| `control-<name>` | 0 | #645: the key of the example reads each request of the cycles |
+| `role-<name>` | ? | #645: the status and the error code of the same request with the key of the role under test. The output of each check holds `HTTP`, the status, and the code. With Project Viewer, each request answers HTTP 200. With Cluster Viewer, each request answers HTTP 200 but the audit log (`role-audits`), which answers HTTP 403 with the code `AccessDenied` |
+| `command-record`, `command-control-verify`, `command-control-cluster` | 0 | #645: with the key of the example, `verify --who` and two records |
+| `command-role-verify`, `command-role-cluster`, `command-control-behind`, `command-role-behind` | ? | #645: the same commands with the key of the role, and `behind` with both keys. The exit code says whether strata gets an answer. Each check records 0 with both roles, so `verify`, the record of cluster A, and `behind` get an answer with Cluster Viewer too. The record that `verify` reads is unchanged, so it needs no audit log. A record that drifted still reports `DRIFT`: see [who.sh](#whosh) |
 
 ## version-states.sh
 
