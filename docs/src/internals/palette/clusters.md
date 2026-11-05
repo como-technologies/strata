@@ -285,7 +285,9 @@ of two roles.
 **Project Viewer is the least built-in role that gives every answer,
 `verify --who` included.** A live run used a user with that role in the project and
 no tenant role. Each request of the cycles answered HTTP 200. `verify`, the record of a
-cluster, and `behind` each exited 0.
+cluster, and `behind` each exited 0. The click "Ask Palette" of the observer sends one more
+request, a `POST` to the validate route. With that role, it answered HTTP 200. That
+request has a result for Project Viewer only.
 
 Cluster Viewer alone gives every answer except the audit log. The audit log answers
 HTTP 403 with the code `AccessDenied`, and the message names `audit.list`. Then
