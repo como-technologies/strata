@@ -113,10 +113,10 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
 #[test]
 fn the_preflight_crate_has_the_version_of_strata() {
     let strata = version_of("Cargo.toml");
-    let preflight = version_of("preflight/Cargo.toml");
+    let preflight = version_of("crates/strata-preflight/Cargo.toml");
     assert_eq!(
         preflight, strata,
-        "preflight/Cargo.toml is {preflight} and Cargo.toml is {strata}: a release keeps them equal"
+        "crates/strata-preflight/Cargo.toml is {preflight} and Cargo.toml is {strata}: a release keeps them equal"
     );
 }
 
@@ -1197,15 +1197,13 @@ fn leave_out_phrases(text: &str) -> Vec<String> {
 }
 
 /// The folders and the files that the scan for "leave out" reads, from the root of the repository.
-const LEAVE_OUT_SCAN: [&str; 17] = [
-    "adapter",
+const LEAVE_OUT_SCAN: [&str; 15] = [
     "benches",
+    "crates",
     "deploy",
     "docs/src",
     "examples",
     "fuzz",
-    "preflight",
-    "report-endpoint",
     "scripts",
     "src",
     "tests",
@@ -1855,7 +1853,10 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
             "The record of the update that waits for a cluster holds",
         ),
         ("src/diff/mod.rs", "The document describes itself"),
-        ("preflight/src/html.rs", "The page shows the readiness"),
+        (
+            "crates/strata-preflight/src/html.rs",
+            "The page shows the readiness",
+        ),
         (
             "src/api/raw.rs",
             "The raw API responses that a profile snapshot",
@@ -3009,7 +3010,7 @@ fn the_section_of_release_0_27_0_names_each_change_of_strata_preflight_that_can_
 /// the example of the page uses a release in that range.
 #[test]
 fn compatibility_says_that_gke_no_release_channel_is_demoted_below_4_11_only() {
-    let rules = repo_file("preflight/rules/kubernetes.yaml");
+    let rules = repo_file("crates/strata-preflight/rules/kubernetes.yaml");
     let rule = section(
         &rules,
         "  - id: gke-no-release-channel\n",
@@ -3458,15 +3459,15 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_13_are_gone() {
 fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_words() {
     let comments = [
         (
-            "preflight/src/probe/backend.rs",
+            "crates/strata-preflight/src/probe/backend.rs",
             "The answer of Palette to one request.",
         ),
         (
-            "preflight/src/probe/backend.rs",
+            "crates/strata-preflight/src/probe/backend.rs",
             "True when the 4xx `status` is the answer of a route",
         ),
         (
-            "preflight/src/probe/backend.rs",
+            "crates/strata-preflight/src/probe/backend.rs",
             "A 401 is the key and a 429 is the rate for each reader.",
         ),
         ("src/closed_set/unknown.rs", "After the first note of a day"),
@@ -3506,15 +3507,15 @@ fn the_four_lines_with_would_that_the_review_of_553_named_are_gone() {
             "The loader refuses a code in `refusal_codes`",
         ),
         (
-            "preflight/src/probe/backend.rs",
+            "crates/strata-preflight/src/probe/backend.rs",
             "An entry of `_responses` with a status that is not 2xx",
         ),
         (
-            "preflight/src/rule/tests.rs",
+            "crates/strata-preflight/src/rule/tests.rs",
             "the library sends a 5xx with another code again",
         ),
         (
-            "preflight/tests/catalog.rs",
+            "crates/strata-preflight/tests/catalog.rs",
             "The check reads a refusal at a 5xx one time.",
         ),
     ] {
@@ -4151,7 +4152,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
         ),
         (".github/workflows/fuzz.yml", "A crash fails that job"),
         (
-            "preflight/src/main.rs",
+            "crates/strata-preflight/src/main.rs",
             "The color of one stream, by the rule of",
         ),
         ("src/api/palette/mod.rs", "The walk ends at a page"),
@@ -4174,11 +4175,14 @@ fn the_modal_and_phrasal_verbs_that_the_review_at_the_end_of_wave_12_named_are_g
     for (file, old) in [
         ("Cargo.toml", "would also build"),
         ("tests/verify.rs", "a request would give missing-credential"),
-        ("preflight/tests/cli.rs", "where the directory should be"),
+        (
+            "crates/strata-preflight/tests/cli.rs",
+            "where the directory should be",
+        ),
         ("tests/common/process.rs", "a file that it will run"),
         ("src/reference/mod.rs", "falls through"),
         ("src/config.rs", "fall through"),
-        ("preflight/src/main.rs", "goes out one time"),
+        ("crates/strata-preflight/src/main.rs", "goes out one time"),
         ("tests/ci_scripts.rs", "steps aside"),
         (
             "xtask/src/tenant/clusters.rs",
@@ -4246,7 +4250,7 @@ fn the_book_says_that_the_gate_stops_for_an_older_strata_and_the_legend_of_regis
 /// The doc comments of public items feed the `description` of `strata schema` and of
 /// `strata-preflight --schema`. The split of long sentences gave some of them new words. The
 /// section of release 0.28.0 names each one, and the schema holds the new words. The test of
-/// `preflight/tests/cli.rs` holds the words of `strata-preflight`.
+/// `crates/strata-preflight/tests/cli.rs` holds the words of `strata-preflight`.
 #[test]
 fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_words() {
     for (kind, pointer, new_words) in [
@@ -4340,9 +4344,9 @@ fn a_literal_line_a_list_item_a_fence_and_a_shebang_are_not_joined_into_a_senten
 
 /// The directories that Wave 13 wrote. Each file in them is new since release 0.26.0.
 const SWEPT_DIRECTORIES: [&str; 7] = [
+    "crates/strata-report-endpoint",
     "deploy/contract",
     "deploy/report",
-    "report-endpoint",
     "src/closed_set/unknown",
     "xtask/facts",
     "xtask/src/contract",
@@ -4357,17 +4361,17 @@ const SWEPT_FILES: [&str; 49] = [
     "examples/live/preflight-plan.sh",
     "examples/live/report-send.sh",
     "examples/live/tiers.sh",
-    "preflight/src/catalog.rs",
-    "preflight/src/probe/backend.rs",
-    "preflight/src/probe/tests.rs",
-    "preflight/src/report/reproduce.rs",
-    "preflight/src/rule/mod.rs",
-    "preflight/src/rule/validate.rs",
-    "preflight/src/run/tests.rs",
-    "preflight/src/world/packs.rs",
-    "preflight/src/world/tests.rs",
-    "preflight/tests/catalog.rs",
-    "preflight/tests/cli.rs",
+    "crates/strata-preflight/src/catalog.rs",
+    "crates/strata-preflight/src/probe/backend.rs",
+    "crates/strata-preflight/src/probe/tests.rs",
+    "crates/strata-preflight/src/report/reproduce.rs",
+    "crates/strata-preflight/src/rule/mod.rs",
+    "crates/strata-preflight/src/rule/validate.rs",
+    "crates/strata-preflight/src/run/tests.rs",
+    "crates/strata-preflight/src/world/packs.rs",
+    "crates/strata-preflight/src/world/tests.rs",
+    "crates/strata-preflight/tests/catalog.rs",
+    "crates/strata-preflight/tests/cli.rs",
     "scripts/dev/set-version.sh",
     "src/api/codes.rs",
     "src/cli/mod.rs",
@@ -4423,8 +4427,8 @@ const NAMED_FILES: [&str; 20] = [
     "tests/workflows.rs",
     "xtask/Cargo.toml",
     "xtask/src/tenant/registries.rs",
-    "preflight/src/jq/comment.rs",
-    "preflight/src/confidence.rs",
+    "crates/strata-preflight/src/jq/comment.rs",
+    "crates/strata-preflight/src/confidence.rs",
 ];
 
 /// A file with comments in the tree of `root`, by the extension that it has.
@@ -4491,12 +4495,12 @@ fn holds_phrase(file: &str, phrase: &str) -> bool {
 fn the_refused_words_and_the_phrasal_verbs_that_the_review_named_in_internal_comments_are_gone() {
     for (file, old, new) in [
         (
-            "report-endpoint/src/merge.rs",
+            "crates/strata-report-endpoint/src/merge.rs",
             "What a merge will do",
             "What a merge does, found with the reads alone.",
         ),
         (
-            "report-endpoint/src/merge.rs",
+            "crates/strata-report-endpoint/src/merge.rs",
             "How many issues the merge will open.",
             "How many issues the merge opens.",
         ),
@@ -4521,7 +4525,7 @@ fn the_refused_words_and_the_phrasal_verbs_that_the_review_named_in_internal_com
             "must not record the time",
         ),
         (
-            "preflight/src/probe/tests.rs",
+            "crates/strata-preflight/src/probe/tests.rs",
             "a request that goes out is an error",
             "a request that the check sends is an error",
         ),
@@ -4723,7 +4727,7 @@ fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_p
         ("kubernetes", "pack-cloud-support"),
     ];
     for (section, id) in named {
-        let text = repo_file(&format!("preflight/rules/{section}.yaml"));
+        let text = repo_file(&format!("crates/strata-preflight/rules/{section}.yaml"));
         let file: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
         let what = file["rules"]
             .as_sequence()
@@ -4997,7 +5001,7 @@ fn the_rules_that_compatibility_names_for_the_new_nouns_are_rules_of_the_catalog
         "storage",
         "teardown",
     ]
-    .map(|name| repo_file(&format!("preflight/rules/{name}.yaml")))
+    .map(|name| repo_file(&format!("crates/strata-preflight/rules/{name}.yaml")))
     .concat();
     for id in ids {
         assert!(
@@ -5164,7 +5168,7 @@ fn compatibility_says_that_a_program_of_the_library_can_have_written_the_field_p
 
 /// D2: the pages of the endpoint state the sweep as the code does it. It drops the hash of a sender
 /// and the hash of a report, and a request that a check refuses also runs it. The tests of
-/// `report-endpoint/src/server/tests.rs` show the code.
+/// `crates/strata-report-endpoint/src/server/tests.rs` show the code.
 #[test]
 fn the_pages_of_the_endpoint_say_that_the_sweep_drops_both_hashes_also_for_a_refused_request() {
     let service = one_line(&read(&docs().join("development/report-endpoint.md")));
@@ -5354,7 +5358,7 @@ fn the_page_of_the_endpoint_names_the_root_manifest_for_the_repository() {
         service.contains("| `GITHUB_REPOSITORY` | the repository of the root `Cargo.toml` |"),
         "report-endpoint.md names another manifest"
     );
-    assert!(!service.contains("report-endpoint/Cargo.toml"));
+    assert!(!service.contains("crates/strata-report-endpoint/Cargo.toml"));
 }
 
 // ---- the review of Wave 14: the end-of-wave findings of #598 -----------------------------------
@@ -5363,8 +5367,14 @@ fn the_page_of_the_endpoint_names_the_root_manifest_for_the_repository() {
 /// refuses. A new word in one changes the schema, and `compatibility.md` names such a change. So
 /// the scan skips a block that holds one of these phrases.
 const SCHEMA_DESCRIPTIONS: [(&str, &str); 2] = [
-    ("preflight/src/rule/mod.rs", "so that it can go up"),
-    ("preflight/src/rule/mod.rs", "is filled in the report"),
+    (
+        "crates/strata-preflight/src/rule/mod.rs",
+        "so that it can go up",
+    ),
+    (
+        "crates/strata-preflight/src/rule/mod.rs",
+        "is filled in the report",
+    ),
 ];
 
 /// S6: the comments of the swept files and of the named files use no refused word, no phrasal
@@ -5481,7 +5491,7 @@ fn the_text_of_the_book_that_the_review_of_wave_14_named_keeps_to_the_limits() {
 fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain_words() {
     let rows = [
         (
-            "report-endpoint/src/merge.rs",
+            "crates/strata-report-endpoint/src/merge.rs",
             "How many issues the merge will change.",
             "How many issues the merge changes.",
         ),
@@ -5532,12 +5542,12 @@ fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain
             "the run sent the request of the choice `aws`",
         ),
         (
-            "report-endpoint/src/lib.rs",
+            "crates/strata-report-endpoint/src/lib.rs",
             "The values that the limits hold back wait.",
             "The limits make some values wait.",
         ),
         (
-            "report-endpoint/src/server.rs",
+            "crates/strata-report-endpoint/src/server.rs",
             "whose values the limits hold back",
             "whose values the limits make wait",
         ),
@@ -5562,7 +5572,7 @@ fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain
             "has its method and path in the field `route`",
         ),
         (
-            "preflight/tests/catalog.rs",
+            "crates/strata-preflight/tests/catalog.rs",
             "goes down as the catalog grows. It never goes up.",
             "falls as the catalog grows. It never rises.",
         ),
@@ -5650,7 +5660,7 @@ fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain
         ),
         // S7: the "-ing" forms that the review named
         (
-            "report-endpoint/tests/book.rs",
+            "crates/strata-report-endpoint/tests/book.rs",
             "closing an issue",
             "a closed issue",
         ),
@@ -5677,7 +5687,7 @@ fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain
             "lacks it. Add it to the list",
         ),
         (
-            "preflight/tests/catalog.rs",
+            "crates/strata-preflight/tests/catalog.rs",
             "does not: with a fifth copy",
             "does not. With a fifth copy",
         ),
@@ -5992,7 +6002,7 @@ fn contributing_asks_for_a_commit_message_with_no_prefix_and_names_the_release_c
 // ---- the review of Wave 14: the last results state what the code does (#608) --------------------
 
 /// R4 to R6: three sentences of the book say what the code does. The tests of the rules and of the
-/// commands show the code: `preflight/tests/catalog.rs` and `src/ops/packs/tests.rs`.
+/// commands show the code: `crates/strata-preflight/tests/catalog.rs` and `src/ops/packs/tests.rs`.
 #[test]
 fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
     let compatibility = release_0_28_0_part("### For a user of the command line or of a document");

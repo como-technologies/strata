@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 # Inside this repository. The strata crate never depends on knurl: this crate is the only
 # place where the two meet.
-strata = { path = ".." }
+strata = { path = "../.." }
 # knurl is private, so Cargo must fetch it with the git command line:
 # CARGO_NET_GIT_FETCH_WITH_CLI=true. The branch becomes `main` when knurl#2 merges.
 knurl-core = { git = "ssh://git@github.com/como-technologies/knurl.git", branch = "platform-port" }

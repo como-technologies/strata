@@ -1,5 +1,5 @@
 //! The checks of a closed set that the root package and `strata-preflight` share. The tests of
-//! `tests/closed_set.rs` and of `preflight/tests/closed_set.rs` list their sets and call these
+//! `tests/closed_set.rs` and of `crates/strata-preflight/tests/closed_set.rs` list their sets and call these
 //! checks. Then one reader of the schema and one rule for each check exist.
 
 use std::path::PathBuf;

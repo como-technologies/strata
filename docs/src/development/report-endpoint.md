@@ -5,7 +5,7 @@ user of strata sends the report only by choice: see
 [Send the report by itself](../reference/report.md#send-the-report-by-itself). This page is for the
 maintainers. It says what the service checks, what it writes, and how the lead deploys it.
 
-The service is the package `strata-report-endpoint` in `report-endpoint/`. It runs on Cloud Run, in
+The service is the package `strata-report-endpoint` in `crates/strata-report-endpoint/`. It runs on Cloud Run, in
 the project of the lab, and it writes issues of the repository of strata. No release of strata
 carries it.
 

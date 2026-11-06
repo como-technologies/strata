@@ -350,7 +350,7 @@ fn only_a_cloud_fact_has_a_call_or_a_table() {
   reads: {fields: [version.installedVersion]}
   live: [release.sh:release-no-key]
   pages: [internals/preflight.md#the-calls-of-the-clouds]
-  code: [preflight/src/main.rs]
+  code: [crates/strata-preflight/src/main.rs]
   call: [aws, sts, get-caller-identity]
 ",
     )
@@ -802,9 +802,9 @@ fn the_code_of_strata_holds_no_text_that_names_a_cloud_fact() {
         "{:?}",
         code.keys().take(3).collect::<Vec<_>>()
     );
-    assert!(code.contains_key("preflight/src/lib.rs"));
+    assert!(code.contains_key("crates/strata-preflight/src/lib.rs"));
     // the scan reads the code after an item for the tests, such as the types of the outcome of a check
-    assert!(code["preflight/src/probe/outcome.rs"].contains("pub enum Ran"));
+    assert!(code["crates/strata-preflight/src/probe/outcome.rs"].contains("pub enum Ran"));
     let found: Vec<String> = code
         .iter()
         .flat_map(|(path, text)| {

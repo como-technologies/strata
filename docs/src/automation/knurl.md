@@ -5,16 +5,16 @@ them through channels, and converges running instances. It knows three roles:
 leaf, intermediate, and root. It does not know what Palette is. Each external
 system is behind a trait, and an adapter gives the trait.
 
-`adapter/` is the adapter for Palette. It gives the read half of the platform
+`crates/strata-knurl/` is the adapter for Palette. It gives the read half of the platform
 port of knurl, `PlatformRead`, and it reads Palette through the strata library.
 Strata reads and never writes, so there is no write half here.
 
 The port is `async`, and strata blocks. The adapter moves each read to a
 blocking task of tokio, so the thread that waits on the future stays free. The
 port of knurl names no runtime. A caller of this adapter runs the future on a
-tokio runtime, as `adapter/examples/observe.rs` does.
+tokio runtime, as `crates/strata-knurl/examples/observe.rs` does.
 
-The `strata` crate does not depend on knurl. `adapter/` is its own package, as
+The `strata` crate does not depend on knurl. `crates/strata-knurl/` is its own package, as
 `examples/library/` is. `cargo build` and `cargo test` at the root do not build
 it, and no release carries it.
 
@@ -136,7 +136,7 @@ digest of one archive, and gets that one.
 
 ### One command at a time
 
-The knurl side is `adapter/examples/observe.rs`. It is not a command on the
+The knurl side is `crates/strata-knurl/examples/observe.rs`. It is not a command on the
 `PATH`, and it is not in the repository of knurl: `just adapter-observe` builds it
 and runs it. It reads the settings that the `strata` command reads, so it runs
 against a tenant too. It reads, and it never writes.
@@ -204,7 +204,7 @@ against a checkout of knurl on this machine, give Cargo the two paths:
 
 ```bash
 K=$HOME/repos/knurl
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path adapter/Cargo.toml --target-dir target/adapter \
+CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path crates/strata-knurl/Cargo.toml --target-dir target/adapter \
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-core.path='$K/knurl-core'" \
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-ports.path='$K/knurl-ports'"
 ```

@@ -186,8 +186,8 @@ facts:
       - internals/palette/clusters.md#what-the-cluster-listing-answers
     code:
       - src/api/palette/clusters.rs
-      - preflight/src/run/watch.rs
-      - adapter/src/lib.rs
+      - crates/strata-preflight/src/run/watch.rs
+      - crates/strata-knurl/src/lib.rs
     rules: []
 
   - id: cluster-notifications
@@ -231,7 +231,7 @@ facts:
       - reference/palette-api.md#a-cluster
     code:
       - src/api/palette/clusters.rs
-      - preflight/src/run/watch.rs
+      - crates/strata-preflight/src/run/watch.rs
     rules: []
 
   - id: cloud-account
@@ -249,7 +249,7 @@ facts:
       - reference/palette-api.md#a-cluster
     code:
       - src/api/palette/clusters.rs
-      - preflight/src/world/mod.rs
+      - crates/strata-preflight/src/world/mod.rs
     rules:
       - account-missing
 

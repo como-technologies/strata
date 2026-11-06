@@ -419,7 +419,7 @@ fault the lab can make without a build, such as a GKE pool of 4, one zone on
 EKS, a GKE cluster with no release channel, or one worker of four cores, and
 `strata preflight --rule ID` must fail on it. In the second, the clean entity
 runs through every tier, and each rule of severity `fail` that ran must pass.
-The script appends the run to the ledger, `preflight/evidence/runs.yaml`, as
+The script appends the run to the ledger, `crates/strata-preflight/evidence/runs.yaml`, as
 `caught`, `missed`, `passed`, or `false-fail` for each rule, and
 `strata preflight --promotion` reads it. `--build` adds the build of cluster A
 through the provider, with the watch on it from the moment Palette lists it,

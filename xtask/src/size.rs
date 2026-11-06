@@ -140,7 +140,7 @@ fn xtask_src() -> PathBuf {
 
 /// The directory of the source files of strata-preflight.
 fn preflight_src() -> PathBuf {
-    crate::repository().join("preflight/src")
+    crate::repository().join("crates/strata-preflight/src")
 }
 
 /// The directory of the source files of strata-fuzz.
@@ -150,7 +150,7 @@ fn fuzz_src() -> PathBuf {
 
 /// The directory of the source files of strata-report-endpoint.
 fn endpoint_src() -> PathBuf {
-    crate::repository().join("report-endpoint/src")
+    crate::repository().join("crates/strata-report-endpoint/src")
 }
 
 /// The directory of the source files of strata-benches.

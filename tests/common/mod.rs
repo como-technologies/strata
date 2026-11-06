@@ -703,7 +703,7 @@ exit "${FAKE_EXIT:-0}"
 "#;
 
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
-/// `preflight/Cargo.toml`.
+/// `crates/strata-preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
     repo_file(manifest)
         .lines()

@@ -36,7 +36,7 @@ each pool:
 ```
 
 The rules are data in the binary, one file for each section under
-`preflight/rules/`. [The rule format](../../reference/preflight-rules.md) states
+`crates/strata-preflight/rules/`. [The rule format](../../reference/preflight-rules.md) states
 the format.
 
 ## Custom probes

@@ -52,7 +52,7 @@ examples/library/Cargo.lock
 examples/library-preflight/Cargo.lock
 
 # the knurl adapter is its own package, and it resolves its own dependencies too
-adapter/Cargo.lock
+crates/strata-knurl/Cargo.lock
 
 # the book: `just docs` builds it
 docs/book/

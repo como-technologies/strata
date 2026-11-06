@@ -2,7 +2,7 @@
 
 /// A crash that a fuzzer found, or a bug that a review found, kept as a regression case. A case
 /// has the target, the name of the file in `crashes/`, and the input. Each case is a bug that has
-/// a fix and a unit test in `src/` or in `preflight/src/`.
+/// a fix and a unit test in `src/` or in `crates/strata-preflight/src/`.
 pub(super) fn cases() -> Vec<(&'static str, &'static str, Vec<u8>)> {
     let draft = "mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes";
     let palette =

@@ -22,7 +22,7 @@ const AT: &str = "2026-09-16T00:00:00Z";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fixture =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../preflight/rules/fixtures/aws/clean.json");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../crates/strata-preflight/rules/fixtures/aws/clean.json");
 
     // ANCHOR: run
     // The rules, and the runs that prove them, are data that the library carries.

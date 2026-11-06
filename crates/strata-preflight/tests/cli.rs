@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 // The lock of the tests of strata: a process that a test starts takes it. These tests write no
 // script, so they do not call `executable`.
-#[path = "../../tests/common/process.rs"]
+#[path = "../../../tests/common/process.rs"]
 #[allow(dead_code)]
 mod process;
 use process::CommandExt;

@@ -39,7 +39,7 @@ fn a_script_that_a_test_writes_runs_while_other_threads_write_scripts_and_start_
 /// are the tests of strata, the tests of strata-preflight, and the source of xtask. The unit tests
 /// and the runner of the book in xtask start processes. The three include
 /// `tests/common/process.rs`. The other packages start no process.
-const TREES: [&str; 3] = ["tests", "preflight/tests", "xtask/src"];
+const TREES: [&str; 3] = ["tests", "crates/strata-preflight/tests", "xtask/src"];
 
 /// Each Rust file of [`TREES`] but the file that holds the lock and the two methods that take it.
 fn files_that_start_processes() -> Vec<std::path::PathBuf> {
@@ -80,12 +80,19 @@ fn no_test_starts_a_process_with_a_method_of_command_that_takes_no_lock() {
 
 #[test]
 fn the_trees_that_the_scan_reads_are_the_trees_that_include_the_lock() {
-    // a package that starts a process in a test includes the file with `#[path]`
+    // a package that starts a process in a test includes the file with `#[path]`. The path goes up
+    // to the root with one `../` for each level of the file, so its depth is not fixed.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let include = "#[path = \"../../tests/common/process.rs\"]";
-    for file in ["preflight/tests/cli.rs", "xtask/src/main.rs"] {
+    let includes = |text: &str| {
+        text.lines().any(|line| {
+            line.strip_prefix("#[path = \"")
+                .and_then(|path| path.strip_suffix("tests/common/process.rs\"]"))
+                .is_some_and(|up| !up.is_empty() && up.split_terminator('/').all(|p| p == ".."))
+        })
+    };
+    for file in ["crates/strata-preflight/tests/cli.rs", "xtask/src/main.rs"] {
         let text = std::fs::read_to_string(root.join(file)).unwrap();
-        assert!(text.contains(include), "{file} includes process.rs");
+        assert!(includes(&text), "{file} includes process.rs");
     }
     for tree in TREES {
         assert!(root.join(tree).is_dir(), "{tree}");

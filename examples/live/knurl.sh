@@ -6,11 +6,11 @@
 #
 #   examples/live/knurl.sh
 #
-# Each check runs the knurl side, `adapter/examples/observe.rs`, and the strata command for the
+# Each check runs the knurl side, `crates/strata-knurl/examples/observe.rs`, and the strata command for the
 # same object, and compares the two answers: the exact digest is the root, the content digest is
 # contentDigest, the content of a leaf is the digest of the pack in its registry, and pinned-by
 # is consumers. So the checks say that the port gives what strata gives, against a tenant and not
-# a stand-in. The rules the port itself states are in adapter/tests/conformance.rs.
+# a stand-in. The rules the port itself states are in crates/strata-knurl/tests/conformance.rs.
 #
 #   1  a profile version: the two digests, its pins, verify, and the identity of its definition
 #   2  each cluster that runs it: the state, and the copies it holds against its cluster records
@@ -26,7 +26,7 @@ script=knurl
 repo=$(cd "$live/../.." && pwd)
 observe=$repo/target/adapter/debug/examples/observe
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-cargo build --quiet --manifest-path "$repo/adapter/Cargo.toml" --target-dir "$repo/target/adapter" --example observe \
+cargo build --quiet --manifest-path "$repo/crates/strata-knurl/Cargo.toml" --target-dir "$repo/target/adapter" --example observe \
   || die "the observe example does not build"
 
 load_outputs

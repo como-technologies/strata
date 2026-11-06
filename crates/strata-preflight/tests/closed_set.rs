@@ -16,9 +16,9 @@ use strata_preflight::rule::{
 };
 use strata_preflight::world::cloud_list;
 
-#[path = "../../tests/common/closed_set.rs"]
+#[path = "../../../tests/common/closed_set.rs"]
 mod closed_set;
-#[path = "../../tests/common/walk.rs"]
+#[path = "../../../tests/common/walk.rs"]
 mod walk;
 
 use closed_set::{
@@ -115,7 +115,7 @@ fn the_kind_of_a_check_is_the_tag_that_the_rule_files_write() {
 
 #[test]
 fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
-    let script = include_str!("../../examples/live/preflight-plan.sh");
+    let script = include_str!("../../../examples/live/preflight-plan.sh");
     let results: Vec<&str> = script
         .lines()
         .map(str::trim)
@@ -130,7 +130,7 @@ fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
 #[test]
 fn the_workflow_lists_the_engines_of_the_world_in_order() {
     let workflow: serde_yaml::Value =
-        serde_yaml::from_str(include_str!("../../.github/workflows/preflight.yml")).unwrap();
+        serde_yaml::from_str(include_str!("../../../.github/workflows/preflight.yml")).unwrap();
     let description = workflow["on"]["workflow_call"]["inputs"]["cloud"]["description"]
         .as_str()
         .expect("the input `cloud` has a description");

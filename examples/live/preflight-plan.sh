@@ -4,7 +4,7 @@
 # `strata preflight` with the static and the live tiers, and the cloud tier with the tools of this
 # machine. The plan builds no cluster; the profiles of the live example are enough (just
 # live-profiles, with the cloud of the engine). Each result goes to the ledger of the runs,
-# preflight/evidence/runs.yaml, from which strata-preflight counts the confidence of each rule.
+# crates/strata-preflight/evidence/runs.yaml, from which strata-preflight counts the confidence of each rule.
 #
 #   examples/live/preflight-plan.sh ENGINE [--build [--down]]
 #
@@ -61,7 +61,7 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$down" ] || [ -n "$build" ] || die "--down goes with --build"
 
-ledger=$live/../../preflight/evidence/runs.yaml
+ledger=$live/../../crates/strata-preflight/evidence/runs.yaml
 release=${PALETTE_RELEASE:-}
 
 run_id=$(date -u +%Y%m%dT%H%M%SZ)

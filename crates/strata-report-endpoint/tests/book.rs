@@ -11,7 +11,7 @@ mod common;
 use common::read;
 
 fn page() -> String {
-    read("../docs/src/development/report-endpoint.md")
+    read("../../docs/src/development/report-endpoint.md")
 }
 
 /// The text of the section `heading` of `page`, up to the next section.

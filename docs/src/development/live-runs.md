@@ -1746,7 +1746,7 @@ one row of the catalog with `engines: [lab]`.
 
 The test plan of #91 for one engine, with no cluster. Each fault the lab can make
 fails when it must, and the clean entity passes. Each run appends to the ledger,
-`preflight/evidence/runs.yaml`, and `strata preflight --promotion` reads it. The
+`crates/strata-preflight/evidence/runs.yaml`, and `strata preflight --promotion` reads it. The
 checks of each run, and what each one shows, are in `summary.md` of the run.
 This table names the faults.
 

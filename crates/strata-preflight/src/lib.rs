@@ -43,5 +43,5 @@ pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 // them, so the others are dead code here.
 #[cfg(test)]
 #[allow(dead_code)]
-#[path = "../../tests/common/palette.rs"]
+#[path = "../../../tests/common/palette.rs"]
 mod routes;

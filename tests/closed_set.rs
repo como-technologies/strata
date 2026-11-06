@@ -4,7 +4,7 @@
 //! release renames or removes a value, a record of an earlier release gives no error. These tests
 //! make that change fail. They hold the values of each set, and make sure that serde, the JSON
 //! Schema, and `ClosedSet::as_str` give one text for each value. The checks are in
-//! `tests/common/closed_set.rs`, and `preflight/tests/closed_set.rs` calls them too.
+//! `tests/common/closed_set.rs`, and `crates/strata-preflight/tests/closed_set.rs` calls them too.
 
 use std::path::Path;
 

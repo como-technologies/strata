@@ -139,7 +139,7 @@ A program starts from these items:
 
 `examples/library-preflight/` is a separate crate that depends on
 `strata-preflight` by path. It loads the catalog and reads
-`preflight/rules/fixtures/aws/clean.json`. It runs the static rule
+`crates/strata-preflight/rules/fixtures/aws/clean.json`. It runs the static rule
 `aws-local-zone-letter` and prints the verdict. It needs no key, no network,
 and no command line:
 

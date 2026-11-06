@@ -26,7 +26,7 @@ cluster A, filled from your tenant (the account, the profile, the region, two
 `t3.xlarge` pools).
 
 ```bash
-R=$(grep -o 'run: [0-9]*T[0-9]*Z' preflight/evidence/runs.yaml | tail -1 | cut -d' ' -f2)
+R=$(grep -o 'run: [0-9]*T[0-9]*Z' crates/strata-preflight/evidence/runs.yaml | tail -1 | cut -d' ' -f2)
 cp examples/live/runs/$R/preflight-plan/clean.json ~/cluster.json
 jq '{name: .metadata.name, account: .spec.cloudAccountUid, profile: .spec.profiles[0].uid, region: .spec.cloudConfig.region}' ~/cluster.json
 ```

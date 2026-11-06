@@ -14,8 +14,8 @@ use strata_preflight::run::{self, RunInputs, Selection};
 use strata_preflight::world::World;
 
 fn preflight(c: &mut Criterion) {
-    let fixture =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../preflight/rules/fixtures/aws/clean.json");
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../crates/strata-preflight/rules/fixtures/aws/clean.json");
     let catalog = catalog::builtin().expect("the catalog");
     let ledger = catalog::builtin_ledger().expect("the ledger");
     let world = World::from_file(&fixture, Some("aws")).expect("an entity");

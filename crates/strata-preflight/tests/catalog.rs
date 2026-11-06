@@ -17,13 +17,13 @@ use strata_preflight::rule::{
 };
 use strata_preflight::world;
 
-#[path = "../../tests/common/walk.rs"]
+#[path = "../../../tests/common/walk.rs"]
 mod walk;
 
 use walk::walk;
 
 // The lock of the tests of strata: a process that a test starts takes it.
-#[path = "../../tests/common/process.rs"]
+#[path = "../../../tests/common/process.rs"]
 #[allow(dead_code)]
 mod process;
 use process::CommandExt;
@@ -1556,7 +1556,7 @@ fn the_answer_of_the_rule_of_the_managed_policies_of_a_role_shows_the_exit_code_
 #[test]
 fn each_run_of_the_ledger_of_the_binary_names_a_rule_of_the_catalog_or_of_the_lab_probes() {
     let lab =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/live/preflight/lab-probes.yaml");
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/live/preflight/lab-probes.yaml");
     let catalog = catalog::with_probes(&[lab]).unwrap();
     let ledger = catalog::builtin_ledger().unwrap();
     let unknown: BTreeSet<&str> = ledger

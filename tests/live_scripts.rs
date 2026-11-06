@@ -1300,13 +1300,7 @@ fn palette_curl_escapes_the_key_for_the_config_and_refuses_a_line_break() {
 fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut named = Vec::new();
-    for dir in [
-        "examples",
-        "scripts",
-        "deploy",
-        "adapter",
-        "report-endpoint",
-    ] {
+    for dir in ["examples", "scripts", "deploy", "crates"] {
         for path in walk(&root.join(dir)) {
             if path.extension().is_none_or(|e| e != "sh") {
                 continue;

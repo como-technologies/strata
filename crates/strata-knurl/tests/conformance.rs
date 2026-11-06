@@ -37,7 +37,7 @@ fn block_on<F: Future>(future: F) -> F::Output {
 }
 
 fn examples() -> PathBuf {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples");
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     assert!(
         dir.join("profiles/raw").is_dir(),
         "no built examples: run `just examples` first, or use `just adapter-test`"

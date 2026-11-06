@@ -6,7 +6,7 @@
 # and jq. The strata that it runs is the one this checkout builds.
 #
 # Usage:
-#   adapter/scripts/by-hand.sh [cluster-release|candidate]      just adapter-by-hand does the same
+#   crates/strata-knurl/scripts/by-hand.sh [cluster-release|candidate]      just adapter-by-hand does the same
 #
 #   cluster-release   a profile version, the cluster that runs it, and who uses it
 #   candidate         the identity of a definition, and a leaf. This chapter serves the
@@ -15,7 +15,7 @@
 # On the strata side, `root` and `contentDigest` are bare hex. On the knurl side, `exact` and
 # `content` are the same two values with the prefix `sha256:`.
 set -euo pipefail
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.."
 
 chapter="${1:-cluster-release}"
 case "$chapter" in
@@ -25,7 +25,7 @@ esac
 
 just build examples stand-in >/dev/null
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-cargo build --quiet --manifest-path adapter/Cargo.toml --target-dir target/adapter --example observe
+cargo build --quiet --manifest-path crates/strata-knurl/Cargo.toml --target-dir target/adapter --example observe
 
 work=$(mktemp -d)
 target/debug/xtask playground "$chapter" >"$work/server.log" 2>&1 &

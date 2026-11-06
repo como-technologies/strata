@@ -14,7 +14,7 @@ facts:
       - internals/palette/limits.md#the-release-of-palette
       - commands/preflight.md#options
     code:
-      - preflight/src/main.rs
+      - crates/strata-preflight/src/main.rs
 
   - id: limit-spectro-pack-digest
     kind: behavior

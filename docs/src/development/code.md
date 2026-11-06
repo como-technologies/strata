@@ -46,7 +46,7 @@ where each module goes. The Go code of the observer follows
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
-  `src/`, `xtask/src/`, `preflight/src/`, `fuzz/src/`, `report-endpoint/src/`, and
+  `src/`, `xtask/src/`, `crates/strata-preflight/src/`, `fuzz/src/`, `crates/strata-report-endpoint/src/`, and
   `benches/src/`. It checks the limit of 80 lines for each function of the six.
 - The check parses each file, so it counts a function with any head, such as `async fn`.
   Code under `#[cfg(test)]` is out of the count, and the code after it is in. A file named
@@ -69,8 +69,8 @@ where each module goes. The Go code of the observer follows
 - Give each closed set its `ALL` and its `as_str` with `impl_closed_set!`, from one table.
   Do not write a list of the values or a `match` of their texts by hand. The test
   `tests/closed_set.rs` makes sure that each text is the one that serde writes.
-  `preflight/` uses the same macro, `strata::impl_closed_set`.
-  `preflight/tests/closed_set.rs` makes the same check there, with the same checks from
+  `crates/strata-preflight/` uses the same macro, `strata::impl_closed_set`.
+  `crates/strata-preflight/tests/closed_set.rs` makes the same check there, with the same checks from
   `tests/common/closed_set.rs`.
 - An enum that no document holds, such as a segment of a route or a layer, has no serde. Give
   it `ALL`, `as_str`, and `from_text` with `impl_texts!`, from one table. Do not write a
@@ -83,7 +83,7 @@ where each module goes. The Go code of the observer follows
   `opt_flag`, `opt_set`, `object_at`, `value_at`, `value_or_null`, and
   `value_or_empty_object`.
 - Do not write a pointer read of text, of an array, of an object, of a flag, or
-  of a value in a module. The rule holds for `preflight/` and `adapter/` too.
+  of a value in a module. The rule holds for `crates/strata-preflight/` and `crates/strata-knurl/` too.
   `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`, `strings`,
   `text_map`, `flag`, `opt_flag`, `value_at`, `value_or_null`, and
   `value_or_empty_object` are public for them. `set_at` is public too, for the
@@ -227,7 +227,7 @@ ASD-STE100.
 - `CommandExt` and `executable` are in `tests/common/process.rs`. The tests of
   `strata-preflight` and of `xtask` include that file with `#[path]`, so one lock
   covers the processes of the three packages. The runner of the book in `xtask`
-  takes the same lock. `tests/spawn.rs` scans `tests/`, `preflight/tests/`, and
+  takes the same lock. `tests/spawn.rs` scans `tests/`, `crates/strata-preflight/tests/`, and
   `xtask/src/`, and makes sure of the rule. The other packages start no process, so
   they need no lock.
 - Make a temporary directory with `tempfile::tempdir()`, never by hand from

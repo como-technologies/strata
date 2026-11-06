@@ -38,7 +38,11 @@ const ENGINE_LAB: &str = "lab";
 
 /// The directories of the code of strata, from the root of the repository, that hold no table of
 /// cloud facts.
-const CODE: &[&str] = &["src", "preflight/src", "adapter/src"];
+const CODE: &[&str] = &[
+    "src",
+    "crates/strata-preflight/src",
+    "crates/strata-knurl/src",
+];
 
 /// The last word of the operation of a call starts with one of these words. A call that starts
 /// with another word could change the account, so the list refuses it.

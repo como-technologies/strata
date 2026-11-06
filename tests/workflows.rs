@@ -808,7 +808,12 @@ fn each_member_of_the_workspace_takes_the_repository_that_the_link_and_the_endpo
         );
     }
     // the manifests that named the address before it was one line
-    for member in [".", "preflight", "fuzz", "report-endpoint"] {
+    for member in [
+        ".",
+        "crates/strata-preflight",
+        "fuzz",
+        "crates/strata-report-endpoint",
+    ] {
         let manifest = repo_file(&format!("{member}/Cargo.toml"));
         assert!(
             manifest.lines().any(|l| l == "repository.workspace = true"),

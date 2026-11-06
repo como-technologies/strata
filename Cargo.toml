@@ -1,15 +1,15 @@
 [workspace]
-members = [".", "xtask", "preflight", "fuzz", "benches", "report-endpoint"]
-# `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
-# xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
-# preflight/ is a package of its own, `strata-preflight`. The release carries it as a second
-# binary, `just build` builds it, and another repository can depend on it by name. The fuzz
-# targets in fuzz/ are tests of both, and `just test` runs them.
+members = [".", "crates/strata-preflight", "crates/strata-report-endpoint", "xtask", "fuzz", "benches"]
+# The root package is the strata app: `cargo build` and `cargo test` at the root build it alone.
+# crates/ holds the other parts of strata, each in a folder with the name of its package:
+# strata-preflight is the second binary of the release, and another repository can depend on it by
+# name. strata-report-endpoint is a service on Cloud Run that no release carries. strata-knurl is
+# not a member: it builds on its own with `just adapter-test`, so strata never builds knurl.
 #
-# The benchmarks in benches/ are the package `strata-benches`: `just bench` builds them, and no
-# release carries them. The endpoint of the report in report-endpoint/ is the package
-# `strata-report-endpoint`. It is a service on Cloud Run that no release carries, and `just test`
-# runs its tests.
+# xtask/, fuzz/, and benches/ are the tools of the development, and no release carries them.
+# xtask/ is the stand-in for Palette and the runner of the book. fuzz/ holds the fuzz targets of
+# strata, strata-preflight, and strata-report-endpoint. benches/ holds the benchmarks, the package
+# strata-benches. `just test` runs the tests of each member, and `just bench` runs the benchmarks.
 default-members = ["."]
 
 # Edition 2024 needs 1.85, and the `if let` chains in this workspace need 1.88, which is where they

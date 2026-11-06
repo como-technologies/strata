@@ -39,7 +39,7 @@ facts:
       - reference/preflight-rules.md#a-check-that-a-validate-route-answers
     code:
       - src/api/codes.rs
-      - preflight/src/world/mod.rs
+      - crates/strata-preflight/src/world/mod.rs
     rules:
       - ecr-oci-images
       - pack-dependency
@@ -86,7 +86,7 @@ facts:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
       - development/live-runs.md#what-the-preflight-runs-show
     code:
-      - preflight/src/world/mod.rs
+      - crates/strata-preflight/src/world/mod.rs
     rules:
       - palette-validate
 

@@ -16,7 +16,7 @@ use strata_preflight::world::World;
 // The routes that the tests of strata serve, in the file that they use. This test uses some of
 // them, so the others are dead code here.
 #[allow(dead_code)]
-#[path = "../../tests/common/palette.rs"]
+#[path = "../../../tests/common/palette.rs"]
 mod routes;
 
 use routes::{

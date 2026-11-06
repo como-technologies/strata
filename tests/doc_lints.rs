@@ -19,8 +19,8 @@ const DOC_LINTS: [&str; 4] = [
 /// The manifest of each package that has public documentation.
 const MANIFESTS: [&str; 3] = [
     "Cargo.toml",
-    "preflight/Cargo.toml",
-    "report-endpoint/Cargo.toml",
+    "crates/strata-preflight/Cargo.toml",
+    "crates/strata-report-endpoint/Cargo.toml",
 ];
 
 /// The lines of the table `[lints.clippy]` of the manifest `manifest`, in the root of the repository.
@@ -57,10 +57,10 @@ fn no_source_file_turns_off_one_of_the_four_doc_lints() {
     for dir in [
         "src",
         "tests",
-        "preflight/src",
-        "preflight/tests",
-        "report-endpoint/src",
-        "report-endpoint/tests",
+        "crates/strata-preflight/src",
+        "crates/strata-preflight/tests",
+        "crates/strata-report-endpoint/src",
+        "crates/strata-report-endpoint/tests",
     ] {
         for file in walk(&root.join(dir)) {
             if file == own || file.extension().is_none_or(|e| e != "rs") {

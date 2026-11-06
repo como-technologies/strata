@@ -561,7 +561,7 @@ fn the_examples_fetch_stops_the_send_of_the_report_whatever_the_machine_says() {
 
 /// The scripts of this repository that run the binary of strata. The list omits the drop-ins that
 /// a pipeline of a user runs, because they obey the settings of the user. It also omits
-/// `adapter/scripts/by-hand.sh`: it serves two chapters of the book, and their tenants hold no
+/// `crates/strata-knurl/scripts/by-hand.sh`: it serves two chapters of the book, and their tenants hold no
 /// unknown value.
 fn scripts_that_run_strata() -> Vec<std::path::PathBuf> {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));

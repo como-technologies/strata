@@ -25,5 +25,5 @@ pub fn assigned(file: &str, name: &str) -> String {
 
 /// The label of the weekly contract run, as its script assigns it.
 pub fn contract_label() -> String {
-    assigned(&read("../examples/live/contract-report.sh"), "label")
+    assigned(&read("../../examples/live/contract-report.sh"), "label")
 }
