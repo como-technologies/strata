@@ -100,6 +100,7 @@ just lint && just test   # before a commit
 just docs-check          # the output in the book is the output of this build
 ```
 
+[Where to look](docs/src/development/repository.md) gives each folder and the place of each task.
 [Build and test](docs/src/development/build-test.md) and
 [Write the documentation](docs/src/development/documentation.md) give the rules.
 [CONTRIBUTING](CONTRIBUTING.md) gives the steps for a pull request,

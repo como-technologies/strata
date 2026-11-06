@@ -120,6 +120,7 @@
 
 # Development
 
+- [Where to look in the repository](./development/repository.md)
 - [Build and test](./development/build-test.md)
 - [How a change lands](./development/changes.md)
 - [Release](./development/release.md)

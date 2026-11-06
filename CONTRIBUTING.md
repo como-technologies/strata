@@ -8,6 +8,11 @@ that you keep to it.
 Open an issue first, or write in the issue that you want to take. Two people
 must not write the same change.
 
+## Find the code
+
+[Where to look in the repository](docs/src/development/repository.md) gives each
+folder, and the place of each task.
+
 ## Build and test
 
 [Build and test](docs/src/development/build-test.md) gives the commands and the

@@ -115,6 +115,9 @@ that version.
 
 ## Where the code goes
 
+[Where to look in the repository](./repository.md) gives the folders. This
+table gives the files.
+
 | Path | What it holds |
 | --- | --- |
 | `src/main.rs`, `src/cli/` | The command line, and nothing else. `main.rs` parses the arguments, runs the command, and gives the exit code. `cli/args.rs` holds the arguments, and `cli/<command>.rs` the run of each command. `cli/mod.rs` holds the parts that the commands share: the connection, the time, and the exit code of a comparison. |
