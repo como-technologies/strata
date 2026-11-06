@@ -5963,9 +5963,11 @@ fn the_table_of_colors_gives_the_color_of_each_cluster_state() {
 #[test]
 fn the_comment_of_the_recipe_live_contract_names_each_option_of_the_run() {
     let justfile = repo_file("justfile");
+    // The `[group(...)]` line of the recipe is between its comment and the recipe.
     let comment = justfile
         .lines()
         .take_while(|line| !line.starts_with("live-contract "))
+        .filter(|line| line.starts_with('#'))
         .last()
         .expect("the recipe live-contract has a comment");
     for option in ["--no-cloud", "--with-cluster", "--state"] {
