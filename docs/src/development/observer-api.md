@@ -93,10 +93,10 @@ address names the screen:
 | --- | --- |
 | `#overview` | The tiles, the findings, the events, what a check does not cover, and the profiles. |
 | `#findings` | The findings, and the newer versions. |
-| `#profiles` | The table of the profiles. |
+| `#images` | The images that the pods run, with the status of each. |
 | `#newer` | The newer versions, by profile. |
 | `#notchecked` | The causes of "Not checked", and what a check does not cover. |
-| `#images` | The images that the pods run, with the status of each. |
+| `#profiles` | The table of the profiles. |
 | `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
 | `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
@@ -422,6 +422,8 @@ them:
 - At 760 pixels and below, the compact layout starts. A table drops its columns
   with the class `narrow-hide`. In the events table, the object moves under the
   message.
+- The nav, the tiles, and the facts of a calm splash keep one order: findings,
+  images, newer versions, not checked, and profiles. `ORDER` in `app.js` holds it.
 - The tiles fill each row. With no `--read-pods`, the tile "Image changes" is absent,
   and the other four tiles fill the row. The page never scrolls sideways: a table that
   does not fit scrolls inside its own card, and a long line of a diff wraps.

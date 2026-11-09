@@ -1577,16 +1577,29 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 			if n == nil || n[1] != c.counted {
 				t.Errorf("the nav item is %q, want the count %q", n, c.counted)
 			}
-			drift, image, newer := strings.Index(overview, `href="#findings"><div class="l">Drift`), strings.Index(overview, `href="#images"><div class="l">Image changes`), strings.Index(overview, `href="#newer"><div class="l">Newer versions`)
-			if !c.noTile && !(drift >= 0 && drift < image && image < newer) {
-				t.Errorf("the tiles are not in the order Drift, Image changes, Newer versions: %d %d %d", drift, image, newer)
+			// The tiles and the nav keep one order: findings, images, newer versions, not checked, profiles.
+			tiles := []string{`href="#findings"><div class="l">Drift`, `href="#newer"><div class="l">Newer versions`, `href="#notchecked"><div class="l">Not checked`, `href="#profiles"><div class="l">Profiles`}
+			if !c.noTile {
+				tiles = slices.Insert(tiles, 1, `href="#images"><div class="l">Image changes`)
 			}
-			navNewer, navImages, navNot := strings.Index(overview, `<a href="#newer" class=`), strings.Index(overview, `<a href="#images" class=`), strings.Index(overview, `<a href="#notchecked" class=`)
-			if !(navNewer >= 0 && navNewer < navImages && navImages < navNot) {
-				t.Errorf("the nav is not in the order Newer versions, Images, Not checked: %d %d %d", navNewer, navImages, navNot)
+			if at := indexes(overview, tiles); tileSection.MatchString(overview) && (!slices.IsSorted(at) || slices.Contains(at, -1)) {
+				t.Errorf("the tiles are not in the order of the sections: %v", at)
+			}
+			nav := []string{`<a href="#findings" class=`, `<a href="#images" class=`, `<a href="#newer" class=`, `<a href="#notchecked" class=`, `<a href="#profiles" class=`}
+			if at := indexes(overview, nav); !slices.IsSorted(at) || slices.Contains(at, -1) {
+				t.Errorf("the nav is not in the order of the sections: %v", at)
 			}
 		})
 	}
+}
+
+// indexes gives the place of each of the words in s, or -1 for a word that s does not hold.
+func indexes(s string, words []string) []int {
+	at := make([]int, len(words))
+	for i, w := range words {
+		at[i] = strings.Index(s, w)
+	}
+	return at
 }
 
 var tileSection = regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)

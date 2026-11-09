@@ -413,8 +413,11 @@ function noFindings() {
   const c = D.cluster, n = c.counts, when = `${ago(c.content.checkedAt)} ago`, lim = limits();
   if (calmOk()) {
     return splash(TONE.CALM, `All quiet on ${clusterName()}`, h`Nothing needs attention. <b>${n.packsInFull} of ${n.packs} packs</b> were checked in full, ${when}.`,
-      facts([[n.profiles, plural(n.profiles, "profile matches its record", "profiles match their records")], [n.notChecked, "not checked"],
-        [c.versions.readAt ? n.newer : "-", plural(c.versions.readAt ? n.newer : 0, "newer version", "newer versions")]]), SIZE.CARD);
+      facts(inOrder({
+        findings: [n.profiles, plural(n.profiles, "profile matches its record", "profiles match their records")],
+        newer: [c.versions.readAt ? n.newer : "-", plural(c.versions.readAt ? n.newer : 0, "newer version", "newer versions")],
+        notchecked: [n.notChecked, "not checked"],
+      })), SIZE.CARD);
   }
   const more = n.notChecked > 0 ? next(h`<a href="#notchecked">Read the causes in Not checked.</a>`) : "";
   return splash(settledTone(), "No finding", `${n.packsInFull} of ${n.packs} packs were checked in full, ${when}. ${lim.join(" ")}`, more, SIZE.CARD);
@@ -546,12 +549,20 @@ function imagesCount() {
   return h`<span class="cnt">${podsOff() ? "Off" : imageNum(D.images.counts.images)}</span>`;
 }
 
+// ORDER is the one order of the sections: the nav, the tiles of the overview, and the facts of a calm splash keep it.
+const ORDER = ["findings", "images", "newer", "notchecked", "profiles"];
+const inOrder = byKey => ORDER.filter(k => byKey[k]).map(k => byKey[k]);
+
 function navLinks(cur) {
   const c = D.cluster, n = c.counts;
-  const items = [["overview", "Overview", ""], ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
-    ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`], ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
-    ["images", "Images", imagesCount()],
-    ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`], ["alerts", "Alerts", alertsCount()]];
+  const sections = {
+    findings: ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
+    images: ["images", "Images", imagesCount()],
+    newer: ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
+    notchecked: ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`],
+    profiles: ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`],
+  };
+  const items = [["overview", "Overview", ""], ...inOrder(sections), ["alerts", "Alerts", alertsCount()]];
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
 
@@ -624,13 +635,13 @@ function tiles() {
   const notCheckedSub = n.notChecked === 0 ? `${n.packsInFull} of ${n.packs} packs in full` : `${n.notChecked} ${plural(n.notChecked, "cause", "causes")} · ${n.packsInFull} of ${n.packs} packs in full`;
   // The tile "Image changes" is there only when the observer reads the pods. The other four fill the row.
   const images = () => { const [cls, value, sub] = imageTile(); return T(cls, "Image changes", value, sub, "images"); };
-  return h`<section class="tiles" aria-label="Summary">
-    ${T(n.drift ? "r" : "g", "Drift", n.drift, driftSub, "findings")}
-    ${podsOff() ? "" : images()}
-    ${T("b", "Newer versions", n.newer, newerSub, "newer")}
-    ${T("y", "Not checked", n.notChecked, notCheckedSub, "notchecked")}
-    ${T("", "Profiles", n.profiles, `${n.packs} packs on this cluster`, "profiles")}
-  </section>`;
+  return h`<section class="tiles" aria-label="Summary">${inOrder({
+    findings: T(n.drift ? "r" : "g", "Drift", n.drift, driftSub, "findings"),
+    images: podsOff() ? "" : images(),
+    newer: T("b", "Newer versions", n.newer, newerSub, "newer"),
+    notchecked: T("y", "Not checked", n.notChecked, notCheckedSub, "notchecked"),
+    profiles: T("", "Profiles", n.profiles, `${n.packs} packs on this cluster`, "profiles"),
+  })}</section>`;
 }
 
 // imageTile gives the color, the value, and the words of the tile "Image changes", for an observer that reads the pods. Before a
