@@ -947,16 +947,12 @@ function viewProfile(subject) {
     return h`<tr><td>${badgeOf(EVENT_BADGE, q.type)}</td><td class="m narrow-hide">${q.reason}</td><td class="mut nw">${ago(q.time)}</td><td class="mut narrow-hide">${eventFrom(q)}</td><td>${q.message}</td></tr>`;
   })}</tbody></table></div></section>` : "";
   const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
-  const rows = x.packs.map(p => {
-    const href = packHash(subject, p);
-    return h`<tr class="link" data-go="${href}"><td class="w110">${statusBadge(p.status)}</td><td class="m"><a href="${href}">${p.name}</a></td><td class="mut narrow-hide">${p.layer}</td><td class="m">${p.version}</td><td class="m">${newerCell(p)}</td><td class="n narrow-hide">${imagesListed(p.images)}</td></tr>`;
-  });
-  const packs = x.packs.length ? h`<div class="tw"><table><thead><tr><th>Status</th><th>Pack</th><th class="narrow-hide">Layer</th><th>Version</th><th>Newer</th><th class="n narrow-hide" title="${IMAGES_LISTED}">Images listed</th></tr></thead><tbody>${rows}</tbody></table></div>` : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
+  const packs = x.packs.length ? packStack(subject, x.packs, false, "") : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
   return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subject), body: h`${alertBars()}
     <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subject}</h1>${statusBadge(x.status)}</div>
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
-    <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}</span></h2></div>${packs}</section>
+    <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}, from the top layer to the bottom</span></h2></div>${packs}</section>
     ${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
 }
 
@@ -975,6 +971,29 @@ function newerCell(p) {
   if (p.status === STATUS.NOT_CHECKED) return mut("not checked");
   if (!D.cluster.versions.readAt) return mut("-");
   return mut("current");
+}
+
+/* ---- The stack of the packs ----
+   A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
+   the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
+   sees one picture of a pack on both pages and steps from one pack to the next. */
+function newerWords(p) {
+  if (p.newer) return h`newer: <span class="m">${at(p.name, p.newer)}</span>`;
+  if (p.status === STATUS.NOT_CHECKED) return "not checked";
+  if (!D.cluster.versions.readAt) return "versions not read yet";
+  return "current";
+}
+const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<span title="${IMAGES_LISTED}">no image list</span>`;
+
+function packSlab(subject, p, compact, here) {
+  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0];
+  const sub = compact ? "" : h`<span class="sub">${newerWords(p)} · ${imagesWords(p.images)}</span>`;
+  return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${at(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
+}
+
+// packStack lists the packs from the top layer to the bottom one. here is the key of the lit slab, or "".
+function packStack(subject, packs, compact, here) {
+  return h`<ul class="pstack${compact ? " compact" : ""}" aria-label="The packs of ${subject}, from the top layer to the bottom">${[...packs].reverse().map(p => packSlab(subject, p, compact, p.key === here))}</ul>`;
 }
 
 // viewMissing is the view of a page that the data does not hold. A page with nothing read shows the splash of its state.
@@ -1526,8 +1545,9 @@ function viewPack(subject, layer, name) {
   }
   const row = newerRowOf(subject, p);
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";
-  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="body"><div class="title"><h1 class="m h1m">${at(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
-    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
+  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="phead"><div class="body"><div class="title"><h1 class="m h1m">${at(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
+    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div>
+    <div class="pside">${packStack(subject, x.packs, true, p.key)}</div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
 }
 
 /* ---- The alerts ----

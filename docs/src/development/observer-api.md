@@ -99,8 +99,8 @@ address names the screen:
 | `#profiles` | The table of the profiles. |
 | `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
-| `#p-<name@version>` | One profile: its two sides, its events, and its packs. |
-| `#k-<name@version>/<layer>/<name>` | One pack: its comparison with the record, and its move to the newest version. |
+| `#p-<name@version>` | One profile: its two sides, its events, and its packs as a stack of layers. |
+| `#k-<name@version>/<layer>/<name>` | One pack: the stack of its profile with its own slab lit, its comparison with the record, and its move to the newest version. |
 
 Each pack page has one card of comparison with one dropdown "Compare". The dropdown
 holds these options:
@@ -425,9 +425,13 @@ them:
   message.
 - The nav, the tiles, and the facts of a calm splash keep one order: findings,
   images, newer versions, not checked, and profiles. `ORDER` in `app.js` holds it.
-- The column "Images listed" counts the images that the values of a pack list in
+- A profile shows its packs as a stack of layers: the add-ons on top and the OS at the
+  bottom, as Palette builds a cluster. Each slab is the layer, the ref, the status, the
+  newer version, and the images listed. The page of a pack shows the same stack, small,
+  with its own slab lit.
+- "Images listed" counts the images that the values of a pack list in
   `pack.content.images`. Many packs list none and still run images, such as an OS
-  pack or Kubernetes, so a pack with no list shows "none listed" and not 0.
+  pack or Kubernetes, so a pack with no list shows "no image list" and not 0.
 - A name with its version shows as a ref, `name@version`, as strata writes it. A move
   shows two refs, `name@1.19.6 → name@1.20.1`, as the head of `strata compare` does. A
   column with the head Version or Move shows the bare version.
