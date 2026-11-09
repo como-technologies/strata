@@ -978,6 +978,48 @@ it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
 
+## Release 0.33.0: changes that need action
+
+Release 0.33.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **The report of an offline run says `offline` after the tiers.** The first line
+  of the terminal report reads `tiers static, offline`. The markdown and the HTML
+  reports use the same words. A script that reads that line gets a new word.
+  `strata-preflight/1` has the new field `options.offline`. Read the field: the
+  text forms can change in any release.
+
+### For a user of the CI drop-ins
+
+- **`preflight.sh` finds the key in the places where strata looks for it.** Before,
+  it read `PALETTE_API_KEY` alone. Without that variable, the job ran offline and
+  said nothing.
+  - Now a key in `SPECTROCLOUD_APIKEY` or in `~/.palette.env` makes the job read
+    Palette. When the job sets no tier, it also runs the palette tier and the
+    cloud tier. So it can fail on a check that did not run before.
+  - To keep the static tier alone, give `--offline` to the script. The GitLab job
+    gives it when `STRATA_PREFLIGHT_TIER` is `static`.
+  - A job with no key says in its log that the run is offline, and why. See
+    [The key of the job](../automation/preflight.md#the-key-of-the-job).
+- **`merge-gate.sh` reads `~/.palette.env` as strata does.** A line such as
+  `PALETTE_API_KEY=""` is no key now, so the gate omits the verify and says so. A
+  line such as `PALETTE_API_KEY = k` is a key now, so the gate verifies.
+- **`merge-gate.sh` and `preflight.sh` need `palette-key.sh` beside them.** The
+  installer puts it there. The reusable workflows run the scripts from the
+  checkout of the tag, which holds it. A pipeline that copies one script by hand
+  must copy `palette-key.sh` too. Without it, a script that looks for the key
+  stops with exit `2`.
+
+### For a user of the library of strata-preflight
+
+- `report::Options` has the new field `offline: bool`. A literal must set it.
+  With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
+  `Backend::has_palette` gives `false`.
+
 ## Release 0.28.0: changes that need action
 
 Release 0.28.0 is a minor release, so it can change the API of the library. This

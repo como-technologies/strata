@@ -110,6 +110,7 @@ release and has everything.
 | [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted, is unverified, or could not be checked. |
 | [`upstream-report.sh`](./upstream-issues.md) | One issue per pack that a record pins behind a newer version of its registry. |
 | [`preflight.sh`](./preflight.md#on-another-host) | `strata preflight` with its options from variables, and the report as a comment. |
+| [`palette-key.sh`](./preflight.md#the-key-of-the-job) | Exit `0` when a Palette key is in a place where strata looks for one. Exit `1` and the places, when there is none. |
 | [`observer-records.sh`](../development/observer-deploy.md#the-records) | The records of the observer as four Kubernetes Secrets, on standard output. |
 | [`observer-propose.sh`](./observer.md#approve-the-records-with-a-pipeline) | One pull request with the first-seen records of the observer, so that a review approves them. |
 | [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the signature and the checksums checked. |

@@ -41,6 +41,7 @@ fn options() -> Options {
     Options {
         tiers: vec![Tier::Static],
         strict: false,
+        offline: false,
         ready: None,
         out_dir: None,
     }

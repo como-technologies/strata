@@ -10,6 +10,10 @@ first without a key, then with the answers of Palette.
 {{#include ../../output/preflight-static.txt}}
 ```
 
+The first line names the tiers that ran. `offline` follows them when the run
+read nothing from Palette, as with `--offline`. The markdown and the HTML
+reports say it in the same words.
+
 `--verbose` prints, after each check, what it ran, the answer, the time, and
 the verdict: the request to Palette with its HTTP status, the command with its
 exit code, or `jq over the world` for a static check. A check with one request

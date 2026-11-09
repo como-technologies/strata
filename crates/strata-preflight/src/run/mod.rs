@@ -226,6 +226,7 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
             options: Options {
                 tiers: inputs.selection.tiers.clone(),
                 strict: inputs.selection.strict,
+                offline: !inputs.backend.has_palette(),
                 ready: inputs.selection.ready,
                 out_dir: inputs.out_dir.map(str::to_string),
             },

@@ -80,6 +80,35 @@ fn world(size: u64) -> World {
     }
 }
 
+/// `preflight.sh` gives `--offline` when it finds no key. The report must then say that the run
+/// read nothing from Palette. A job that passes on the static tier alone then hides nothing.
+#[test]
+fn the_report_of_a_run_with_no_client_of_palette_says_that_it_is_offline() {
+    let c = catalog();
+    for (fixture, offline) in [(json!({"_palette": false}), true), (json!({}), false)] {
+        let (backend, _) = FixtureBackend::split(fixture);
+        let report = run(RunInputs {
+            catalog: &c,
+            world: &world(3),
+            backend: &backend,
+            ledger: &Ledger::default(),
+            selection: &Selection::default(),
+            now: "2026-09-30T00:00:00Z",
+            out_dir: None,
+            progress: &Progress::silent(),
+            verbose: false,
+            paint: Paint::off(),
+        })
+        .unwrap();
+        assert_eq!(report.options.offline, offline);
+        assert_eq!(
+            serde_json::to_value(&report).unwrap()["options"]["offline"],
+            json!(offline),
+            "the document holds the field"
+        );
+    }
+}
+
 #[test]
 fn a_run_keeps_the_rules_of_the_engine_and_says_why_the_others_do_not_run() {
     let c = catalog();

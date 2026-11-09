@@ -1886,6 +1886,7 @@ fn reproduce_lines(
             options: report::Options {
                 tiers: vec![],
                 strict: false,
+                offline: false,
                 ready: None,
                 out_dir: Some(out.display().to_string()),
             },

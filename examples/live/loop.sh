@@ -149,6 +149,18 @@ if stage 4 "before a build"; then
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier static --offline --quiet --format markdown > preflight-report.md && \"$ci/pr-comment.sh\" --preflight preflight-report.md --dry-run > preflight-comment.md"
   check preflight-comment-says 0 '#158: the comment starts with the marker of its own and holds the verdict' -- \
     bash -c "head -n 1 preflight-comment.md | grep -qx '<!-- strata-preflight -->' && grep -q '^\*\*OK: ' preflight-comment.md"
+  # the job of a pipeline runs preflight.sh, as the drop-ins do. Offline, the log and the report of
+  # the job say so. With the key of the lab where strata finds it, the job reads Palette.
+  check preflight-job 0 '#618: preflight.sh --offline runs the static tier of the body as the job of a pull request' -- \
+    env STRATA_PREFLIGHT_SOURCE=build.json STRATA_PREFLIGHT_CLOUD="$engine" STRATA_PREFLIGHT_TIER=static \
+    STRATA_PREFLIGHT_OUT=preflight-job "$ci/preflight.sh" --offline
+  check preflight-job-says 0 '#618: the log of the job says that the run is offline, and why, and the report says offline after the tiers' -- \
+    bash -c "grep -qx 'preflight: the run is offline, so it reads nothing from Palette: --offline' preflight-job.err && grep -q 'tiers static, offline\.' preflight-job.out"
+  check preflight-job-key 0 '#618: with the key of the lab where strata finds it, preflight.sh reads Palette' -- \
+    env STRATA_PREFLIGHT_SOURCE=build.json STRATA_PREFLIGHT_CLOUD="$engine" STRATA_PREFLIGHT_TIER=static,palette \
+    STRATA_PREFLIGHT_OUT=preflight-job-key "$ci/preflight.sh"
+  check preflight-job-key-says 0 '#618: the log and the report of the job with the key do not say offline' -- \
+    bash -c "! grep -q 'the run is offline' preflight-job-key.err && grep -q 'tiers static, palette\.' preflight-job-key.out"
   # the tier of Palette calls the validate routes of Palette, and each of them creates nothing
   check preflight-live 0 '#385: the tier of Palette finds no fault in the body, and --strict is the gate' -- \
     "$strata" preflight build.json --cloud "$engine" --tier static,palette --no-exec --strict --quiet
