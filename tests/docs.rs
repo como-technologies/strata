@@ -6094,6 +6094,7 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     for needle in [
         "each line reads, and changes nothing",
         "A `POST` goes only to a validate route of Palette",
+        "A line makes no login to a registry or a cloud",
         "A line names no path of the live example, `examples/live`",
         "A rule that only the lab can reproduce says so in such a line",
     ] {
@@ -6106,6 +6107,7 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     for needle in [
         "the `api.sh delete-named` of `versions-outside-state`",
         "the `--delete` of `eks-delete-waits`",
+        "the `crane auth login` of `ecr-token`",
         "(./preflight-rules.md#the-reproduce-lines)",
     ] {
         assert!(

@@ -2641,9 +2641,11 @@ const LAB_SCRIPTS: &str = "examples/live";
 
 /// The words that start a command or a subcommand that changes something, in lower case, and the
 /// names of the options that do. A command counts by its part before the first dash, so
-/// `delete-named` and `delete-nodegroup` are deletes, and `describe-vpcs` is no change. An option
-/// counts by its whole name, so `--delete` is a delete, and `--tag-filters` is no change.
-const CHANGES: [&str; 50] = [
+/// `delete-named` and `delete-nodegroup` are deletes, and `describe-vpcs` is no change. A command
+/// also counts by its whole name, so `get-credentials` is a change: it writes the kubeconfig. A
+/// login writes a file of credentials, so it is a change too. An option counts by its whole name,
+/// so `--delete` is a delete, and `--tag-filters` is no change.
+const CHANGES: [&str; 54] = [
     "add",
     "annotate",
     "apply",
@@ -2661,11 +2663,14 @@ const CHANGES: [&str; 50] = [
     "drain",
     "edit",
     "enable",
+    "get-credentials",
     "import",
     "install",
     "kill",
     "label",
     "lock",
+    "login",
+    "logout",
     "modify",
     "mv",
     "patch",
@@ -2694,6 +2699,7 @@ const CHANGES: [&str; 50] = [
     "untag",
     "update",
     "upgrade",
+    "use-context",
 ];
 
 /// The text of a shell line that the shell reads as the words of its commands. Each quoted part,
@@ -2777,12 +2783,10 @@ fn change_in(line: &str) -> Option<String> {
         .split(|c: char| c.is_whitespace() || "|;&()$`<>".contains(c))
         .filter(|word| !word.is_empty())
         .collect();
-    if let Some(word) = words.iter().find(|word| {
-        let name = match word.strip_prefix('-') {
-            Some(option) => option.trim_start_matches('-'),
-            None => word.split('-').next().unwrap_or_default(),
-        };
-        CHANGES.contains(&name.to_ascii_lowercase().as_str())
+    let changes = |name: &str| CHANGES.contains(&name.to_ascii_lowercase().as_str());
+    if let Some(word) = words.iter().find(|word| match word.strip_prefix('-') {
+        Some(option) => changes(option.trim_start_matches('-')),
+        None => changes(word) || changes(word.split('-').next().unwrap_or_default()),
     }) {
         return Some(format!("the word `{word}`"));
     }
@@ -2840,6 +2844,12 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         r#"code=$(curl -s -d @body.json "https://h/v1/x")"#,
         "jq . world.json > ~/.kube/config",
         "rm -rf out",
+        "aws ecr get-login-password --region r | crane auth login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
+        "aws ecr get-login-password --region r | docker login -u AWS --password-stdin <account>.dkr.ecr.r.amazonaws.com",
+        "helm registry login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
+        "crane auth logout <account>.dkr.ecr.r.amazonaws.com",
+        "gcloud container clusters get-credentials c --region r",
+        "kubectl config use-context c",
     ] {
         assert!(change_in(bad).is_some(), "{bad}");
     }
@@ -2855,6 +2865,9 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         r"curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/",
         r#"jq '"a '\''delete'\'' b"' world.json"#,
         "# only the lab can reproduce this row; a company deletes nothing",
+        "aws ecr get-login-password --region r   # must print a token",
+        "crane digest <account>.dkr.ecr.r.amazonaws.com/app:1.0.0",
+        "gcloud auth print-access-token",
         r#"strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // "<name>" }} '.profiles[] | .version'"#,
     ] {
         assert_eq!(change_in(good), None, "{good}");

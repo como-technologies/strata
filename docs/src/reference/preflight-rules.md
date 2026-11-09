@@ -91,6 +91,8 @@ So each line reads, and changes nothing:
   [The validate routes](../internals/palette/validate-routes.md).
 - A line writes no file outside the current directory. The lines that the report
   adds for a check write `request.json` and `body.json` there.
+- A line makes no login to a registry or a cloud. A login writes the credentials
+  to a file in the home directory.
 - A line names no path of the live example, `examples/live`. No machine outside
   the lab has the scripts of the live example.
 - A line that starts with `#` is words. It says what to read by hand when no

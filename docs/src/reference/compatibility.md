@@ -991,11 +991,12 @@ field, a value, an input, or an option is in the sections above.
 - **`strata preflight`: no `reproduce` line deletes or changes anything, and none
   names `examples/live`.** Each line reads. See
   [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
-  - Five lines that changed something are gone. Three are the `api.sh delete-named`
+  - Six lines that changed something are gone. Three are the `api.sh delete-named`
     of `versions-outside-state`, the `--delete` of `eks-delete-waits`, and the
-    `unlock` of `pause-agent-upgrades`. The other two are the
-    `gcloud services enable` of `gke-api-off` and the `az provider register`
-    of `azure-resource-providers`.
+    `unlock` of `pause-agent-upgrades`. Two are the `gcloud services enable` of
+    `gke-api-off` and the `az provider register` of `azure-resource-providers`.
+    The last is the `crane auth login` of `ecr-token`, which wrote the
+    configuration file of Docker. Its `crane digest` line stays.
   - The lines that ran a script of the live example read the cloud with `aws`,
     `gcloud`, or `curl` now. `inventory-managed` says in words that only the lab
     can reproduce it.

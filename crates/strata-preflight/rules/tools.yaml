@@ -122,7 +122,6 @@ rules:
         if .exec.exit == 0 then []
         else ["crane digest \(image) failed: \(.exec.stderr | tostring | .[:200]); an ECR login lasts 12 hours, log in again"] end
     reproduce:
-      - "aws ecr get-login-password --region {{ .entity.spec.cloudConfig.region }} | crane auth login <account>.dkr.ecr.{{ .entity.spec.cloudConfig.region }}.amazonaws.com -u AWS --password-stdin"
       - "crane digest {{ [ .profiles[] | .packs[] | (.images // [])[] | select(test(\"\\\\.dkr\\\\.ecr\\\\.\")) ] | .[0] }}"
     fix:
       owner: lab
