@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
+	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -141,13 +141,7 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 	stop, stderr := startServe(t, args, addr)
 	var view alert.View
 	testkit.WaitFor(t, "the rule of drift fires", func() bool {
-		resp, err := http.Get("http://" + addr + "/v1/alerts")
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		raw, _ := io.ReadAll(resp.Body)
-		return json.Unmarshal(raw, &view) == nil && len(view.Rules) == 2 && view.Rules[0].State == alert.StateFiring
+		return getJSON(addr, "/v1/alerts", &view) && len(view.Rules) == 2 && view.Rules[0].State == alert.StateFiring
 	})
 	time.Sleep(50 * time.Millisecond)
 	stop()
@@ -163,25 +157,13 @@ func TestServeWithoutAlertsSendsNothingAndTheRouteSaysSo(t *testing.T) {
 	args, addr := serveArgs(t, fakeStrata(t, drifting, 0, false))
 	stop, stderr := startServe(t, args, addr)
 	defer stop()
-	testkit.WaitFor(t, "the page state ok", func() bool {
-		resp, err := http.Get("http://" + addr + "/v1/findings")
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		var got struct {
-			Findings []json.RawMessage `json:"findings"`
-		}
-		return json.NewDecoder(resp.Body).Decode(&got) == nil && len(got.Findings) == 1
+	testkit.WaitFor(t, "the finding of the drift", func() bool {
+		var got api.FindingsView
+		return getJSON(addr, "/v1/findings", &got) && len(got.Findings) == 1
 	})
-	resp, err := http.Get("http://" + addr + "/v1/alerts")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
 	var view alert.View
-	if err := json.NewDecoder(resp.Body).Decode(&view); err != nil || view.Set || len(view.Rules) != 0 {
-		t.Errorf("view %+v, error %v", view, err)
+	if !getJSON(addr, "/v1/alerts", &view) || view.Set || len(view.Rules) != 0 {
+		t.Errorf("view %+v", view)
 	}
 	if strings.Contains(stderr.String(), "msg=alert") {
 		t.Errorf("stderr %s", stderr.String())

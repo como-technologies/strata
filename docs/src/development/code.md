@@ -372,6 +372,10 @@ the Rust code, and these rules are for the Go code.
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the
   binary skips when `STRATA_BIN` is not set.
+- A wait of a test, with `testkit.WaitFor`, reads the state that its next step
+  reads. The content cycle and the versions cycle end in either order. So the end
+  of one cycle does not show the end of the other. The state of the page reads the
+  content cycle only.
 - `internal/testkit` holds each helper that the tests of two packages use, such
   as the script that stands for `strata`. Only test files import it. A helper
   that one package uses stays in that package.
