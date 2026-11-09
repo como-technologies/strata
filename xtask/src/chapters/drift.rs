@@ -408,32 +408,7 @@ fn cluster_release(r: &mut Runner) {
         false,
         "strata list clusters --applied",
     );
-    // payments runs four profiles, and the cluster side holds the one of the record (#615)
-    r.step(
-        "cluster-identical",
-        0,
-        false,
-        "strata compare releases/1.1.0/dev.json cluster:payments",
-    );
-    r.step(
-        "cluster-many-profiles",
-        0,
-        false,
-        "strata compare releases/1.1.0/dev.json cluster:payments --json | jq -c '.b | {ref, profiles: [.cluster.profiles[].name]}'",
-    );
-    r.step(
-        "cluster-addon",
-        0,
-        false,
-        "strata compare platform-addons@1.0.0 cluster:payments",
-    );
-    // a move of the release: the add-on profiles give no ADDED and no REMOVED line
-    r.step(
-        "cluster-move-repave",
-        1,
-        false,
-        "strata compare cluster:payments aws-stack@1.1.1 --repave",
-    );
+    cluster_release_many_profiles(r);
     r.step(
         "cluster-moved",
         1,
@@ -471,6 +446,36 @@ fn cluster_release(r: &mut Runner) {
         "cluster-run-verify",
         "cluster-run-record",
         r"^([$] |strata: wrote|root |OK:)",
+    );
+}
+
+/// The part of the chapter `cluster-release` for `payments`, which runs four profiles: the cluster
+/// side holds only the profile of the other side (#615).
+fn cluster_release_many_profiles(r: &mut Runner) {
+    r.step(
+        "cluster-identical",
+        0,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments",
+    );
+    r.step(
+        "cluster-many-profiles",
+        0,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments --json | jq -c '.b | {ref, profiles: [.cluster.profiles[].name]}'",
+    );
+    r.step(
+        "cluster-addon",
+        0,
+        false,
+        "strata compare platform-addons@1.0.0 cluster:payments",
+    );
+    // a move of the release: the add-on profiles give no ADDED and no REMOVED line
+    r.step(
+        "cluster-move-repave",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1 --repave",
     );
 }
 
