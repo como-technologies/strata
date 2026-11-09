@@ -328,6 +328,15 @@ func (s *Set) Alerts() alert.View {
 	return s.AlertRules
 }
 
+// StartCycle answers the click "Check now" as an observer with a free loop does: the cycle starts. The
+// set runs no cycle, so its summary does not change.
+func (s *Set) StartCycle(name string) (model.Start, bool) {
+	if name != "content" && name != "versions" {
+		return model.Start{}, false
+	}
+	return model.Start{Cycle: name, State: model.StartStarted}, true
+}
+
 // Answers gives the answers that the set holds.
 func (s *Set) Answers() []model.Answer {
 	s.mu.Lock()

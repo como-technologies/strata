@@ -878,8 +878,14 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 		})
 	}
 	script := string(readPage(t, "app.js"))
-	if got := strings.Count(script, `"POST"`); got != 1 {
-		t.Errorf("app.js holds %d POST requests, want 1", got)
+	if got := strings.Count(script, `"POST"`); got != 2 {
+		t.Errorf("app.js holds %d POST requests, want 2: the clicks Ask Palette and Check now", got)
+	}
+	if got := strings.Count(script, "checkNow("); got != 2 {
+		t.Errorf("checkNow is called in %d places and defined once, want 2 uses", got)
+	}
+	if !strings.Contains(script, "if (nw) { checkNow(nw.dataset.now); return; }") {
+		t.Error("the click handler does not call checkNow")
 	}
 	if got := strings.Count(script, "askPalette("); got != 2 {
 		t.Errorf("askPalette is called in %d places and defined once, want 2 uses", got)

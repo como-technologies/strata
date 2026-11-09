@@ -209,6 +209,13 @@ checked". While a cycle runs, its pill shows a ring of `running`: an arc of `don
 no work yet has a dotted ring and says "checking". Nothing on the pill turns: the ring
 moves on at each read of the observer.
 
+Each pill of a clock is a menu. A click opens a panel with the last good end, the
+period, the next cycle or the progress, and the failed runs. The panel has one button:
+"Check the content now" or "Read the versions now". The button is off while the cycle
+runs, while a click waits for its cycle, and for the seconds of a `429`. A note says
+why. A click out of the panel, or the key Escape, closes it. One panel is open at a
+time. The page draws a panel only while it is open.
+
 A read of the observer patches the page in place. A node that stays, stays, so the
 page does not flicker, and the scroll, the focus, an open card, and the text of a
 filter stay.

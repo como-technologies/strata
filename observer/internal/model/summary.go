@@ -64,11 +64,29 @@ type Health struct {
 
 // Running is the progress of a cycle: when it started, and how many strata processes it ran of the
 // ones that it knows of. Total grows when a step finds more work: a versions cycle knows its moves only
-// after its first process.
+// after its behind of each record.
 type Running struct {
 	StartedAt time.Time `json:"startedAt"`
 	Done      int       `json:"done"`
 	Total     int       `json:"total"`
+}
+
+// The states of an answer to the click "Check now".
+const (
+	// StartStarted says that the cycle starts now.
+	StartStarted = "started"
+	// StartRunning says that a cycle of that kind runs now, and the click joins it.
+	StartRunning = "running"
+	// StartWait says that a cycle of that kind ended less than a minute ago, and no cycle starts.
+	StartWait = "wait"
+)
+
+// Start is the answer to the click "Check now" on one cycle. RetryAfter is the number of seconds until a
+// click can start a cycle. It is 0 unless the state is wait.
+type Start struct {
+	Cycle      string `json:"cycle"`
+	State      string `json:"state"`
+	RetryAfter int    `json:"retryAfter,omitempty"`
 }
 
 // ContentClock is the timer of the content cycle. CheckedAt is the end of the last good cycle.

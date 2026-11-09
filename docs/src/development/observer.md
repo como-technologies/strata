@@ -46,14 +46,14 @@ any other command and any other flag.
 | Content | 2 | `snapshot cluster:<uid> --raw-dir raw -o cluster.json -q` | 0 |
 | Content | 3 | `snapshot cluster:<uid>/<profile> --from-raw raw -o side-<n>.json -q` | 0 |
 | Content | 4 | `compare <record> side-<n>.json --full --json --compact -q` | 0 or 1 |
-| Versions | 1 | `behind <record>... --no-impact --json --compact -q` | 0, 1, or 2 with a document |
+| Versions | 1 | `behind <record> --no-impact --json --compact -q` | 0, 1, or 2 with a document |
 | Versions | 2 | `compare pack:<registryUid>/<name>@<version> pack:<registryUid>/<name>@<newest> --full --json --compact -q` | 0 or 1 |
 | Click | 1 | `behind <record> --pin <layer>/<name> --json --compact -q` | 0, 1, or 2 with a document |
 
 Steps 3 and 4 run for each record that the cluster runs. The side comes from
 the raw answers of step 2, so these two steps make no request.
-Step 2 of the versions cycle runs for each pin that is behind and has no cached
-move.
+Step 1 of the versions cycle runs for each record, and step 2 runs for each pin that
+is behind and has no cached move.
 
 `--full` adds the unified text of the changes to the document of `verify` and of
 `compare`. The text stays in memory: see [The text of a
@@ -66,18 +66,30 @@ the pods](#the-read-of-the-pods).
 
 - A cycle starts at the start of the process, and then after its period. Each
   wait has a random 0 to 10 percent added.
+- The click "Check now" starts a cycle at once: see [Check
+  now](../reference/observer-api.md#check-now). The loop of the cycle then waits a full
+  period again. A click while a cycle of that kind runs joins it. The loop removes a
+  click that came during a run, so no second cycle follows. A cycle that ended less
+  than one minute ago gets no new one.
+- A third loop looks at the record files every 15 seconds. When their names, sizes,
+  or times change, it starts a content cycle. So the page shows the records of a
+  pipeline soon after the kubelet updates the mount.
 - Each timer runs in its own loop, and each kind of cycle has its own slot. So a
   content cycle never waits for a versions cycle, and one cycle of each kind runs at
   a time. A pool of 4 tokens bounds the `strata` processes of both cycles and of the
   detail tier, to keep the memory of the pod in its limit. A run ends after 10
   minutes.
-- A content cycle compares the side of each record at the same time, and a versions
-  cycle compares each move that it does not know at the same time, as many as the
-  pool lets.
+- A content cycle compares the side of each record at the same time. A versions
+  cycle runs `behind` on each record at the same time, and then compares each move
+  that it does not know at the same time, as many as the pool lets. It joins the
+  answers of `behind` into one: one pin for each pack name, registry, pinned version,
+  and tag, with each record that pins it. A pack that many records pin gets one read
+  for each record.
 - The log has one line when a cycle starts and one when it ends, with `phase`,
   `verdict`, the number of `processes`, and the `duration`. While a cycle runs,
   `/v1/cluster` gives its progress in `running`: `startedAt`, `done`, and `total`. A
-  versions cycle knows its moves only after `behind`, so `total` grows then.
+  versions cycle counts one step for each record from its start. It knows its moves
+  only after `behind`, so `total` grows then.
 - A cycle makes a directory under `--work` with mode `0700`. It writes the
   records, `raw/`, and the sides there. It removes the directory at the end,
   also after an error.

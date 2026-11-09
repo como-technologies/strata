@@ -267,5 +267,6 @@ func (s stub) PackDiff(context.Context, string, string, model.Side) (docs.Pack, 
 func (s stub) Ask(context.Context, string, string) (model.Answer, bool, error) {
 	return model.Answer{}, false, nil
 }
-func (s stub) Answers() []model.Answer { return nil }
-func (s stub) Alerts() alert.View      { return alert.Unset() }
+func (s stub) Answers() []model.Answer               { return nil }
+func (s stub) Alerts() alert.View                    { return alert.Unset() }
+func (s stub) StartCycle(string) (model.Start, bool) { return model.Start{}, false }

@@ -173,7 +173,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
 	for _, route := range (&Server{}).Routes() {
-		path := map[string]string{patternAsk: pathAsk, patternAsks: "/v1/asks"}[route.Pattern]
+		path := map[string]string{patternAsk: pathAsk, patternAsks: "/v1/asks", patternCycle: pathCycle}[route.Pattern]
 		if route.Method != http.MethodGet && path == "" {
 			t.Fatalf("the route %s takes %s and the test does not know its path", route.Pattern, route.Method)
 		}
@@ -193,7 +193,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 			t.Errorf("%s %s gave %d, Allow %q", other, path, rec.Code, rec.Header().Get("Allow"))
 		}
 	}
-	// The one POST of the server is the click: a POST with the header to a route that takes GET is refused.
+	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
 	if rec := clickWith(h, "/v1/cluster", "127.0.0.1:8080", sameOrigin); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("a POST to a summary route gave %d", rec.Code)
 	}

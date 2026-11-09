@@ -66,6 +66,19 @@ h2{font-size:14px}
 .chip b{color:var(--ink);font-weight:500}
 /* The pill of a cycle that runs: a ring of its progress. A cycle that does not know its work yet has a dotted ring. */
 .chip.run{color:var(--ink)}
+.cyclemenu{position:relative}
+.cyclemenu>summary{list-style:none;cursor:pointer}
+.cyclemenu>summary::-webkit-details-marker{display:none}
+.cyclemenu>summary:hover,.cyclemenu[open]>summary{border-color:var(--accent)}
+.cyclemenu>summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.caret{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:4px solid currentColor;margin-left:2px;opacity:.7}
+.cyclemenu[open] .caret{transform:rotate(180deg)}
+.cpanel{position:absolute;right:0;top:calc(100% + 6px);z-index:6;width:min(330px,calc(100vw - 32px));background:var(--panel);border:1px solid var(--line);border-radius:7px;box-shadow:0 8px 24px rgba(20,30,50,.18);padding:12px;display:grid;gap:10px;white-space:normal;color:var(--ink);font-size:13px}
+.cpanel .kv div{min-width:0;flex:1 1 130px}
+.cpanel .sub{margin:0}
+.crow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.cpanel .btn:disabled{opacity:.55}
+@media (max-width:640px){.cpanel{left:0;right:auto}}
 .ring{flex:none;display:block}
 .ring .track{fill:none;stroke:var(--line);stroke-width:2.5}
 .ring .arc{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round}

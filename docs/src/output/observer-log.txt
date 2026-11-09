@@ -2,4 +2,4 @@ $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records 
 level=INFO msg=cycle cycle=content phase=start
 level=INFO msg=cycle cycle=content phase=end verdict=ok processes=6
 level=INFO msg=cycle cycle=versions phase=start
-level=INFO msg=cycle cycle=versions phase=end verdict=ok processes=1
+level=INFO msg=cycle cycle=versions phase=end verdict=ok processes=3

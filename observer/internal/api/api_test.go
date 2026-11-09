@@ -43,6 +43,11 @@ var askRoutes = map[string]string{
 	patternAsk:  pathAsk,
 }
 
+// cycleRoutes are the routes of the click "Check now". cycle_test.go holds the tests of their answers.
+var cycleRoutes = map[string]string{
+	patternCycle: pathCycle,
+}
+
 func TestEachRouteHasALineInTheSentinelTable(t *testing.T) {
 	for _, r := range (&Server{}).Routes() {
 		var listed bool
@@ -56,6 +61,8 @@ func TestEachRouteHasALineInTheSentinelTable(t *testing.T) {
 			}
 		case TierHealth:
 			listed = r.Pattern == patternHealth
+		case TierCycle:
+			_, listed = cycleRoutes[r.Pattern]
 		}
 		if !listed {
 			t.Errorf("the route %s of the tier %s has no line in the table of the sentinel test", r.Pattern, r.Tier)

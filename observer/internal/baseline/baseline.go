@@ -9,6 +9,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -81,6 +82,30 @@ func Load(dir string) (Set, error) {
 		set.Entries = append(set.Entries, entry)
 	}
 	return set, nil
+}
+
+// Mark gives a text that changes when meta.json or a record file of dir changes: the name, the size,
+// and the time of change of each one. The kubelet writes a changed Secret as new files, so their times
+// change. A dir that cannot be listed gives the empty text. Mark reads no file.
+func Mark(dir string) string {
+	names, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, n := range names {
+		if n.Name() != metaFile && !strings.HasSuffix(n.Name(), recordSuffix) {
+			continue
+		}
+		// Stat follows the link of the kubelet to the file that it wrote last.
+		info, err := os.Stat(filepath.Join(dir, n.Name()))
+		if err != nil {
+			fmt.Fprintf(&b, "%s -\n", n.Name())
+			continue
+		}
+		fmt.Fprintf(&b, "%s %d %d\n", n.Name(), info.Size(), info.ModTime().UnixNano())
+	}
+	return b.String()
 }
 
 var errNotARecord = errors.New("baseline: not a profile record of strata-snapshot/1")

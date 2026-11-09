@@ -1,8 +1,10 @@
 package check
 
 import (
+	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
@@ -11,7 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/runner"
 )
 
-// versionsCycle runs one versions cycle. It asks `behind` for the pins of the records and compares
+// versionsCycle runs one versions cycle. It asks `behind` for the pins of each record and compares
 // each pinned version with the newest one. files is -1 when the directory was not read. With no record,
 // it runs no `behind`, because the command needs a file. It then reads no version, so At stays zero.
 func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, files int, err error) {
@@ -33,14 +35,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	if err != nil {
 		return err
 	}
-	o.expect(ctx, 1) // behind
-	args := append([]string{runner.CmdBehind}, names...)
-	args = append(args, runner.FlagNoImpact, "--json", "--compact", "-q")
-	res, err := o.run(ctx, dir, exitsWithDocument, args...)
-	if err != nil {
-		return err
-	}
-	doc, err := decode[docs.Behind](res.Stdout, docs.BehindSchema)
+	doc, err := o.behind(ctx, dir, names)
 	if err != nil {
 		return err
 	}
@@ -53,6 +48,84 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc)
 	versions.At = o.now()
 	return err
+}
+
+// behind runs `behind` on each record, as many at once as the pool of processes lets. So the progress
+// of the cycle counts the records, and the reads of the registries of many records overlap. A record
+// that fails stops the cycle with its error, as one `behind` of all the records did. mergeBehind joins
+// the answers.
+func (o *Observer) behind(ctx context.Context, dir string, names []string) (docs.Behind, error) {
+	o.expect(ctx, len(names))
+	answers := make([]docs.Behind, len(names))
+	errs := make([]error, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			res, err := o.run(ctx, dir, exitsWithDocument, runner.CmdBehind, name, runner.FlagNoImpact, "--json", "--compact", "-q")
+			if err == nil {
+				answers[i], err = decode[docs.Behind](res.Stdout, docs.BehindSchema)
+			}
+			errs[i] = err
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return docs.Behind{}, err
+		}
+	}
+	return mergeBehind(answers), nil
+}
+
+// pinKey names one pin as strata does: the pack name, the registry, the pinned version, and the tag.
+type pinKey struct{ name, registryUID, version, tag string }
+
+// mergeBehind joins the answers of `behind` on single records into the answer of one `behind` on all of
+// them. It has one pin for each pack name, registry, pinned version, and tag, in that order, with each
+// record that pins it. When one answer could not read a pin and another could, the pin keeps the read
+// that has no error.
+func mergeBehind(answers []docs.Behind) docs.Behind {
+	var out docs.Behind
+	at := map[pinKey]int{}
+	for _, a := range answers {
+		if out.Schema == "" {
+			out.Schema, out.Tool = a.Schema, a.Tool
+		}
+		for _, p := range a.Pins {
+			k := pinKey{p.Name, p.RegistryUID, p.Version, p.Tag}
+			i, found := at[k]
+			if !found {
+				at[k] = len(out.Pins)
+				out.Pins = append(out.Pins, p)
+				continue
+			}
+			by := append(slices.Clone(out.Pins[i].PinnedBy), p.PinnedBy...)
+			if out.Pins[i].Error != nil && p.Error == nil {
+				out.Pins[i] = p
+			}
+			out.Pins[i].PinnedBy = uniquePinnedBy(by)
+		}
+	}
+	slices.SortStableFunc(out.Pins, func(a, b docs.Pin) int {
+		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.RegistryUID, b.RegistryUID),
+			strings.Compare(a.Version, b.Version), strings.Compare(a.Tag, b.Tag))
+	})
+	return out
+}
+
+// uniquePinnedBy keeps the first of each subject, in order.
+func uniquePinnedBy(by []docs.PinnedBy) []docs.PinnedBy {
+	seen := map[string]bool{}
+	out := by[:0]
+	for _, b := range by {
+		if !seen[b.Subject] {
+			seen[b.Subject] = true
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 // moves compares the pinned version of each pin that is behind with its newest version. A move that

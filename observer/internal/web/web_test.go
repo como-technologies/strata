@@ -48,8 +48,9 @@ func (noSource) PackDiff(context.Context, string, string, model.Side) (docs.Pack
 func (noSource) Ask(context.Context, string, string) (model.Answer, bool, error) {
 	return model.Answer{}, false, nil
 }
-func (noSource) Answers() []model.Answer { return nil }
-func (noSource) Alerts() alert.View      { return alert.Unset() }
+func (noSource) Answers() []model.Answer               { return nil }
+func (noSource) Alerts() alert.View                    { return alert.Unset() }
+func (noSource) StartCycle(string) (model.Start, bool) { return model.Start{}, false }
 
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()

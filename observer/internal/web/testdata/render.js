@@ -37,7 +37,7 @@
 // Palette gets its answer before the next click, and the question of the last click waits until the end. It
 // prints one JSON object: the screen before the clicks, the screen while the last question is on its way,
 // the screen after the answer, the hash at the end, each POST, and each element that the page scrolled to
-// (jumps, by id).
+// (jumps, by id). A click "Check now" waits for the gate too, and its answer says that the cycle starts.
 // STATUS is 0 for the answer that the set gives, an HTTP status for a failed POST, or "network".
 //
 //   node render.js ASSETS_DIR API_DIR STATE asksdown HASH [first]
@@ -198,6 +198,14 @@ async function fakeFetch(url, opts = {}) {
       if (postStatus) return fail(Number(postStatus));
       const [profile, layer, name] = ask.slice(1).map(decodeURIComponent);
       body = replyTo(profile, `${layer}/${name}`);
+    }
+    // the click "Check now": the observer starts the cycle, as the dev server says
+    const cycle = /^\/v1\/cycles\/([^/]+)$/.exec(u.pathname);
+    if (cycle && method === "POST") {
+      await gate;
+      if (postStatus === "network") throw new TypeError("the network failed");
+      if (postStatus) return fail(Number(postStatus));
+      return {ok: true, status: 202, json: async () => ({cycle: cycle[1], state: "started"})};
     }
   }
   return {ok: body !== null, status: body === null ? 404 : 200, json: async () => JSON.parse(JSON.stringify(body))};

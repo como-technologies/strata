@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -24,6 +25,13 @@ const cyclePrefix = "cycle-"
 
 // jitterShare is the largest share of a period that the observer adds to a wait: 10 percent.
 const jitterShare = 0.1
+
+// startPause is the shortest time between the end of a cycle and a cycle that a person starts. A person
+// who clicks again and again then starts at most one cycle of each kind in a minute and its run.
+const startPause = time.Minute
+
+// recordsPoll is the period of the look at the records. A change of the records starts a content cycle.
+const recordsPoll = 15 * time.Second
 
 // Config holds the flags that `serve` and `once` share.
 type Config struct {
@@ -67,6 +75,13 @@ type Observer struct {
 	procs chan struct{}
 	// running holds the progress of the cycle of each kind that runs now. The lock guards it.
 	running map[string]*model.Running
+	// kicks has one channel for each kind of cycle. A token in it starts that cycle at once, and the
+	// loop of the cycle takes it. A second token while one waits adds nothing.
+	kicks map[string]chan struct{}
+	// ended holds the end of the last cycle of each kind, good or failed. The lock guards it.
+	ended map[string]time.Time
+	// recordsPoll is the period of the look at the records.
+	recordsPoll time.Duration
 
 	mu       sync.Mutex
 	state    State
@@ -97,7 +112,9 @@ func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Ti
 	}
 	o := &Observer{cfg: cfg, strata: strata, now: now, jitter: rand.Float64, log: log,
 		contentSlot: make(chan struct{}, 1), versionsSlot: make(chan struct{}, 1), detailSlot: make(chan struct{}, 1), procs: make(chan struct{}, procs),
-		running: map[string]*model.Running{}, details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{}}
+		running: map[string]*model.Running{}, details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{},
+		kicks: map[string]chan struct{}{cycleContent: make(chan struct{}, 1), cycleVersions: make(chan struct{}, 1)},
+		ended: map[string]time.Time{}, recordsPoll: recordsPoll}
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -230,6 +247,7 @@ func (o *Observer) runCycle(ctx context.Context, name string, slot chan struct{}
 	defer o.mu.Unlock()
 	processes := o.running[name].Done
 	delete(o.running, name)
+	o.ended[name] = o.now()
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -424,19 +442,25 @@ func (o *Observer) wait(every time.Duration) time.Duration {
 }
 
 // Run runs each timer in its own loop until ctx ends: the first cycle at the start, and each next one
-// after its wait. A content cycle never waits for a versions cycle.
+// after its wait. A content cycle never waits for a versions cycle. A third loop looks at the records.
 func (o *Observer) Run(ctx context.Context) {
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.RunContent) }()
-	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.RunVersions) }()
+	wg.Add(3)
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.kicks[cycleContent], o.RunContent) }()
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.kicks[cycleVersions], o.RunVersions) }()
+	go func() { defer wg.Done(); o.watchRecords(ctx) }()
 	wg.Wait()
 }
 
-// loop runs one kind of cycle, then waits its period and a random share of it. The failure of a cycle
-// is in the state and in the log.
-func (o *Observer) loop(ctx context.Context, every time.Duration, cycle func(context.Context) error) {
+// loop runs one kind of cycle, then waits its period and a random share of it, or a token of kick. The
+// failure of a cycle is in the state and in the log. A token that came while the cycle ran starts no
+// second cycle: the loop removes it before each cycle. Each cycle starts a full wait again.
+func (o *Observer) loop(ctx context.Context, every time.Duration, kick chan struct{}, cycle func(context.Context) error) {
 	for ctx.Err() == nil {
+		select {
+		case <-kick:
+		default:
+		}
 		_ = cycle(ctx)
 		timer := time.NewTimer(o.wait(every))
 		select {
@@ -444,7 +468,67 @@ func (o *Observer) loop(ctx context.Context, every time.Duration, cycle func(con
 			timer.Stop()
 			return
 		case <-timer.C:
+		case <-kick:
+			timer.Stop()
 		}
+	}
+}
+
+// StartCycle asks the loop of the cycle name to run it at once: the click "Check now" of the page. A
+// cycle of that kind that runs now gets no second one: the click joins it. A cycle that ended less than
+// startPause ago gets no new one, and the answer says when to try again. The second result is false
+// for a name that is no cycle.
+func (o *Observer) StartCycle(name string) (model.Start, bool) {
+	kick, ok := o.kicks[name]
+	if !ok {
+		return model.Start{}, false
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	start := model.Start{Cycle: name, State: model.StartStarted}
+	if o.running[name] != nil {
+		start.State = model.StartRunning
+		return start, true
+	}
+	if end, ok := o.ended[name]; ok {
+		if left := startPause - o.now().Sub(end); left > 0 {
+			start.State, start.RetryAfter = model.StartWait, int((left+time.Second-1)/time.Second)
+			return start, true
+		}
+	}
+	o.kick(kick)
+	return start, true
+}
+
+// kick puts a token in the channel of a loop. A token that waits there already is enough.
+func (o *Observer) kick(kick chan struct{}) {
+	select {
+	case kick <- struct{}{}:
+	default:
+	}
+}
+
+// watchRecords starts a content cycle when the records change, so that the page shows the records that
+// a pipeline published within a minute or two, and not at the end of the period. The kubelet updates
+// the mounted Secrets in place, so the look compares the names, the sizes, and the times of the files.
+// It sends no request.
+func (o *Observer) watchRecords(ctx context.Context) {
+	last := baseline.Mark(o.cfg.Records)
+	ticker := time.NewTicker(o.recordsPoll)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		mark := baseline.Mark(o.cfg.Records)
+		if mark == last {
+			continue
+		}
+		last = mark
+		o.log.Info("records changed", "cycle", cycleContent)
+		o.kick(o.kicks[cycleContent])
 	}
 }
 

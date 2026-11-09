@@ -188,7 +188,7 @@ const POD_ERROR_TEXT = {
 // each diff, asking holds the moves with a question to Palette on its way, and askFailed holds the moves
 // for which the observer could not ask.
 let D = null;
-const S = {filter: "all", q: "", qs: {}, sort: {}, tabs: {}, side: {}, open: {}, diffs: {}, view: "unified", asking: {}, askFailed: {}, offline: false, loadedAt: null};
+const S = {filter: "all", q: "", qs: {}, sort: {}, tabs: {}, side: {}, open: {}, diffs: {}, view: "unified", asking: {}, askFailed: {}, now: {}, nowWait: {}, nowFailed: {}, offline: false, loadedAt: null};
 
 async function getJSON(url) {
   const r = await fetch(url, {cache: "no-store"});
@@ -210,6 +210,11 @@ async function load() {
   const rules = alerts && Array.isArray(alerts.rules) ? alerts : D ? D.alerts : NO_ALERTS;
   D = {cluster, findings: findings.findings, profiles: profiles.profiles, newer: newer.newer, notChecked: notChecked.notChecked, limits: notChecked.limits, events: events.events, images, asks: answers, alerts: rules};
   S.loadedAt = new Date().toISOString();
+  // A click "Check now" waits until a read shows its cycle: one that runs, one that ended, or no sign of it for a minute.
+  for (const name of Object.keys(CYCLES)) {
+    const p = S.now[name], c = cluster[name];
+    if (p && (c.running || c[CYCLES[name].at] !== p.last || Date.now() - p.sent > NOW_WAIT_MS)) delete S.now[name];
+  }
 }
 
 async function refresh() {
@@ -647,31 +652,120 @@ function ring(r) {
   return h`<svg class="ring${open ? " open" : ""}" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path class="track" d="${CIRCLE}"/>${arc ? h`<path class="arc" d="${arc}"/>` : ""}</svg>`;
 }
 
-// runningChip is the pill of a cycle that runs now: its progress, and the age of the last good cycle of its kind.
-function runningChip(label, r, last) {
+// CYCLES are the two cycles that a person can start from the menu of their pill: the field of the end of the last good cycle,
+// and the words of the menu.
+const CYCLES = {
+  content: {at: "checkedAt", label: "Content", run: "Check the content now", does: "Compares the records with the cluster and with Palette."},
+  versions: {at: "readAt", label: "Versions", run: "Read the versions now", does: "Reads the registries for newer versions of each pack."},
+};
+// NOW_WAIT_MS ends the wait of the page for the cycle of a click when no read of the observer shows that cycle.
+const NOW_WAIT_MS = 60000;
+const menuKey = name => `cycle-${name}`;
+
+// runningOf gives the progress that the pill of a cycle shows: the run of the observer, or the click that waits for its run.
+function runningOf(name, c) {
+  const p = S.now[name];
+  return c.running || (p ? {startedAt: new Date(p.sent).toISOString(), done: 0, total: 0} : null);
+}
+
+// runningPill is the pill of a cycle that runs now: its progress, and the age of the last good cycle of its kind. A pill is
+// [class, title, markup].
+function runningPill(label, r, last) {
   const what = r.total > 1 || r.done > 0 ? `checking ${r.done} of ${r.total}` : "checking";
-  return h`<span class="chip run" title="Started ${ago(r.startedAt)} ago">${ring(r)}${label} <b>${what}</b>${last ? h` · last ${ago(last)} ago` : ""}</span>`;
+  return ["chip run", `Started ${ago(r.startedAt)} ago`, h`${ring(r)}${label} <b>${what}</b>${last ? h` · last ${ago(last)} ago` : ""}`];
+}
+
+function contentPill(content, lost, stale) {
+  const r = runningOf("content", content);
+  if (r && !lost) return runningPill("Content", r, content.checkedAt);
+  if (lost) return ["chip", content.checkedAt || "", h`<span class="dot r"></span>Palette <b>lost</b>${content.checkedAt ? h` · content checked <b>${ago(content.checkedAt)} ago</b>` : ""}`];
+  if (!content.checkedAt) return ["chip", "", h`<span class="dot a"></span>Content <b>not checked yet</b> · every ${content.every}`];
+  const dot = stale || content.failedRuns > 0 ? "a" : "";
+  return ["chip", content.checkedAt, h`<span class="dot ${dot}"></span>Content <b>${ago(content.checkedAt)} ago</b> · every ${content.every}`];
+}
+
+function versionsPill(versions) {
+  const r = runningOf("versions", versions);
+  if (r) return runningPill("Versions", r, versions.readAt);
+  if (!versions.readAt) return ["chip", "", h`<span class="dot a"></span>Versions <b>not read yet</b> · every ${versions.every}`];
+  const dot = versions.failedRuns > 0 ? "a" : "";
+  return ["chip", versions.readAt, h`<span class="dot ${dot}"></span>Versions <b>${ago(versions.readAt)} ago</b> · every ${versions.every}`];
+}
+
+// periodMs reads a period of the observer, such as 15m or 6h0m0s, in milliseconds. A period that does not read gives NaN.
+function periodMs(every) {
+  const parts = String(every).match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+  if (!parts || !parts[0]) return NaN;
+  return ((+parts[1] || 0) * 3600 + (+parts[2] || 0) * 60 + (+parts[3] || 0)) * 1000;
+}
+
+// cyclePanel is the menu of a cycle: the facts of its timer, what it does, and the button that starts it now. The button is off
+// while the cycle runs, while a click waits for its cycle, and for a minute after a cycle ends, and a note says why.
+function cyclePanel(name) {
+  const m = CYCLES[name], c = D.cluster[name], last = c[m.at], r = runningOf(name, c);
+  const facts = [["Last good end", last ? `${ago(last)} ago · ${clock(last)}` : "none yet"], ["Every", c.every]];
+  if (r) {
+    facts.push(["Now", r.total > 1 || r.done > 0 ? `checking ${r.done} of ${r.total}` : "checking"]);
+  } else if (last && !Number.isNaN(periodMs(c.every))) {
+    facts.push(["Next", `about ${clock(new Date(when(last) + periodMs(c.every)).toISOString())}`]);
+  }
+  if (c.failedRuns > 0) facts.push(["Failed runs", h`${c.failedRuns}${c.lastError ? h` · ${errorWords(c.lastError)}` : ""}`]);
+  const left = S.nowWait[name] ? Math.ceil((S.nowWait[name] - Date.now()) / 1000) : 0;
+  let note = "";
+  if (c.running) note = "A cycle runs now. The pill shows its progress.";
+  else if (S.now[name]) note = "Starting. The pill shows the progress.";
+  else if (left > 0) note = `A cycle ended less than a minute ago. Try again in ${left} s.`;
+  else if (S.nowFailed[name]) note = "The observer did not take the request. Try again.";
+  const off = !!(r || left > 0);
+  return h`<div class="cpanel"><div class="kv">${facts.map(([k, v]) => h`<div><span>${k}</span>${v}</div>`)}</div><p class="sub">${m.does}</p><div class="crow"><button class="btn" data-now="${name}"${off ? raw(" disabled") : ""}>${m.run}</button>${note ? h`<span class="sub">${note}</span>` : ""}</div></div>`;
+}
+
+// cycleMenu is the pill of a cycle as a menu that a click opens. The page draws the panel only while the menu is open.
+function cycleMenu(name, [cls, title, inner]) {
+  const k = menuKey(name);
+  return h`<details class="cyclemenu" data-open="${k}"${openAttr(k)}><summary class="${cls}" title="${title}">${inner}<span class="caret" aria-hidden="true"></span></summary>${S.open[k] ? cyclePanel(name) : ""}</details>`;
 }
 
 function clocks() {
-  const c = D.cluster, content = c.content, versions = c.versions;
-  const lost = c.page === PAGE.LOST, stale = c.page === PAGE.STALE;
-  let a;
-  if (content.running && !lost) {
-    a = runningChip("Content", content.running, content.checkedAt);
-  } else if (lost) {
-    a = h`<span class="chip" title="${content.checkedAt}"><span class="dot r"></span>Palette <b>lost</b>${content.checkedAt ? h` · content checked <b>${ago(content.checkedAt)} ago</b>` : ""}</span>`;
-  } else if (!content.checkedAt) {
-    a = h`<span class="chip"><span class="dot a"></span>Content <b>not checked yet</b> · every ${content.every}</span>`;
-  } else {
-    const dot = stale || content.failedRuns > 0 ? "a" : "";
-    a = h`<span class="chip" title="${content.checkedAt}"><span class="dot ${dot}"></span>Content <b>${ago(content.checkedAt)} ago</b> · every ${content.every}</span>`;
-  }
+  const c = D.cluster, lost = c.page === PAGE.LOST, stale = c.page === PAGE.STALE;
+  const a = cycleMenu("content", contentPill(c.content, lost, stale));
   if (stale || lost) return a;
-  if (versions.running) return [a, runningChip("Versions", versions.running, versions.readAt)];
-  if (!versions.readAt) return [a, h`<span class="chip"><span class="dot a"></span>Versions <b>not read yet</b> · every ${versions.every}</span>`];
-  const dot = versions.failedRuns > 0 ? "a" : "";
-  return [a, h`<span class="chip" title="${versions.readAt}"><span class="dot ${dot}"></span>Versions <b>${ago(versions.readAt)} ago</b> · every ${versions.every}</span>`];
+  return [a, cycleMenu("versions", versionsPill(c.versions))];
+}
+
+// closeMenus closes the menu of each cycle. A click out of a menu, and the key Escape, call it.
+function closeMenus() {
+  const open = Object.keys(CYCLES).map(menuKey).filter(k => S.open[k]);
+  open.forEach(k => { S.open[k] = false; });
+  if (open.length) render();
+}
+
+// checkNow sends the click "Check now" of the menu of a cycle. The observer starts the cycle, joins the one that runs, or says
+// how long to wait. The pill shows the progress at once, and the page reads the observer again.
+async function checkNow(name) {
+  const c = D.cluster[name];
+  if (!CYCLES[name] || S.now[name] || c.running) return;
+  delete S.nowFailed[name];
+  delete S.nowWait[name];
+  S.now[name] = {sent: Date.now(), last: c[CYCLES[name].at]};
+  render();
+  let r = null, body = null;
+  try {
+    r = await fetch(`/v1/cycles/${name}`, {method: "POST", cache: "no-store"});
+  } catch (err) {
+    r = null;
+  }
+  if (r) {
+    try { body = await r.json(); } catch (err) { body = null; }
+  }
+  if (r && r.status === 429) {
+    delete S.now[name];
+    S.nowWait[name] = Date.now() + 1000 * (body && body.retryAfter > 0 ? body.retryAfter : 60);
+  } else if (!r || !r.ok) {
+    delete S.now[name];
+    S.nowFailed[name] = true;
+  }
+  await refresh();
 }
 
 // recordsChip names the baseline in one place and one form: the revision that a pipeline approved, first-seen, or unknown. An
@@ -1832,6 +1926,9 @@ async function copyText(button) {
 }
 
 function onClick(ev) {
+  if (!ev.target.closest(".cyclemenu")) closeMenus();
+  const nw = ev.target.closest("[data-now]");
+  if (nw) { checkNow(nw.dataset.now); return; }
   const t = ev.target.closest("[data-tab]");
   if (t) { S.tabs[t.dataset.tab] = t.dataset.k; render(); return; }
   const f = ev.target.closest("[data-filter]");
@@ -1872,8 +1969,15 @@ function start() {
   });
   document.addEventListener("toggle", ev => {
     const k = ev.target.dataset && ev.target.dataset.open;
-    if (k) S.open[k] = ev.target.open;
+    if (!k) return;
+    S.open[k] = ev.target.open;
+    // the menu of a cycle draws its panel when it opens, and one menu of a cycle is open at a time
+    if (k.startsWith("cycle-")) {
+      if (ev.target.open) Object.keys(CYCLES).map(menuKey).filter(o => o !== k).forEach(o => { S.open[o] = false; });
+      render();
+    }
   }, true);
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeMenus(); });
   addEventListener("hashchange", () => { render(); scrollTo(0, 0); });
   // A turn of a phone, or a window made narrow, changes the layout of a diff.
   if (typeof matchMedia === "function") matchMedia(NARROW).addEventListener("change", render);

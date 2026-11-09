@@ -6,7 +6,8 @@
 // its manifests, and the answers of Palette to the questions of a person. The gate of the detail tier
 // is Kubernetes: the address is loopback, so a person reaches it with `kubectl port-forward`, and the
 // RBAC verb `create pods/portforward` decides who can. The server holds no key and makes no call to
-// Kubernetes. It takes one POST, the click "Ask Palette" on one move, and no cycle sends a POST to Palette.
+// Kubernetes. It takes two POSTs: the click "Ask Palette" on one move, and the click "Check now" on one
+// cycle, which runs the reads of that cycle. No cycle sends a POST to Palette.
 // The route /v1/alerts shows the rules of the alerts with their states, and it names the channels and holds
 // no address.
 //
@@ -20,6 +21,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -49,6 +51,9 @@ type Source interface {
 	Answers() []model.Answer
 	// Alerts gives the rules of the alerts with their states. It says so when the observer sends no alert.
 	Alerts() alert.View
+	// StartCycle starts the cycle that name names at once, or says why it does not. The second result
+	// is false for a name that is no cycle.
+	StartCycle(name string) (model.Start, bool)
 }
 
 // Tier says what the answer of a route carries.
@@ -59,10 +64,12 @@ const (
 	TierHealth  Tier = "health"
 	TierSummary Tier = "summary"
 	TierDetail  Tier = "detail"
+	// TierCycle is the click "Check now". Its answer says if a cycle starts, and holds no value.
+	TierCycle Tier = "cycle"
 )
 
 // Route names a route of the API, the method that it takes, and the tier of its answer. Each route
-// takes GET, except the click "Ask Palette".
+// takes GET, except the clicks "Ask Palette" and "Check now".
 type Route struct {
 	Pattern string
 	Method  string
@@ -85,6 +92,7 @@ const (
 	patternPackDiff   = "/v1/packs/{profile}/{layer}/{name}/diff"
 	patternAsks       = "/v1/asks"
 	patternAsk        = "/v1/packs/{profile}/{layer}/{name}/ask"
+	patternCycle      = "/v1/cycles/{cycle}"
 )
 
 // The header that a browser sets on a request, and the value of a request from the page itself. A
@@ -124,6 +132,7 @@ func (s *Server) table() []entry {
 		{Route{patternPackDiff, http.MethodGet, TierDetail}, s.packDiff},
 		{Route{patternAsks, http.MethodGet, TierDetail}, s.asks},
 		{Route{patternAsk, http.MethodPost, TierDetail}, s.ask},
+		{Route{patternCycle, http.MethodPost, TierCycle}, s.startCycle},
 	}
 }
 
@@ -340,6 +349,23 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, answer)
+}
+
+// startCycle serves the click "Check now" on one cycle: content or versions. It reads no body. A cycle
+// that starts, or one that runs already, gets 202. A cycle that ended less than a minute ago gets 429,
+// with the seconds to wait in the header Retry-After. Another name gets 404.
+func (s *Server) startCycle(w http.ResponseWriter, r *http.Request) {
+	start, ok := s.Source.StartCycle(r.PathValue("cycle"))
+	if !ok {
+		notFound(w, r)
+		return
+	}
+	if start.State == model.StartWait {
+		w.Header().Set("Retry-After", strconv.Itoa(start.RetryAfter))
+		writeJSON(w, http.StatusTooManyRequests, start)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, start)
 }
 
 // asks serves the answers that the observer holds, so that the page shows them after a reload.

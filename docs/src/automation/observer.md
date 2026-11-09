@@ -47,7 +47,12 @@ finding, and each state of the page.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
   in the registry, and compares each pin with its newest version.
 - **A click** on "Ask Palette" runs `strata behind` for one pack. No timer starts it.
-- Each cycle starts when the process starts. One `strata` process runs at a time.
+- **A click on the pill of a cycle** opens its menu. "Check the content now" or "Read
+  the versions now" runs that cycle at once, and not at the end of its period.
+- **A change of the records** starts a content cycle at once. So the page shows the
+  records of your pipeline soon after the publish.
+- Each cycle starts when the process starts. At most four `strata` processes run at
+  a time.
 - A cycle writes its files to a volume in memory, and removes them at its end.
 - A cycle that fails keeps the last good answer, and the page says how old it is.
 

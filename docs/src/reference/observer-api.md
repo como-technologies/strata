@@ -27,7 +27,8 @@ connect to the address of the pod. A person without that verb cannot open the pa
 the verb.
 
 The page and `curl` both work. A `GET` needs nothing more than the port-forward. The
-click "Ask Palette" is a `POST`, and it needs the header `Sec-Fetch-Site: same-origin`.
+clicks "Ask Palette" and "Check now" are each a `POST`, and each needs the header
+`Sec-Fetch-Site: same-origin`.
 A browser sets that header by itself for a request that the page sends. A `curl` call
 must send it:
 
@@ -38,8 +39,8 @@ curl -s -X POST -H 'Sec-Fetch-Site: same-origin' \
 
 ## The routes
 
-Each route takes `GET`, except the click "Ask Palette", which takes `POST`. Another
-method gets `405` and the header `Allow` with the method of the route.
+Each route takes `GET`, except the clicks "Ask Palette" and "Check now", which take
+`POST`. Another method gets `405` and the header `Allow` with the method of the route.
 
 | Tier | Route | What it carries |
 | --- | --- | --- |
@@ -57,6 +58,7 @@ method gets `405` and the header `Allow` with the method of the route.
 | Detail | `/v1/packs/{profile}/{layer}/{name}/diff?side=` | The changes of one pack, with the old and the new value and the text of the diff. |
 | Detail | `/v1/asks` | `asks`: the answers of Palette that the observer holds in memory. |
 | Detail | `POST /v1/packs/{profile}/{layer}/{name}/ask` | The click "Ask Palette": the answer of Palette about the move of one pack. |
+| Cycle | `POST /v1/cycles/{cycle}` | The click "Check now": the content cycle or the versions cycle starts now. See [Check now](#check-now). |
 
 Each summary route serves a part of [the summary](../development/observer.md#the-summary),
 with the same field names. The two image routes are the exception: they serve
@@ -262,8 +264,7 @@ memory holds no values for a move that the state knows. The route then asks for 
 
 `POST /v1/packs/{profile}/{layer}/{name}/ask` asks Palette whether it gives an error
 for the move of one pack to its newest version. `{profile}` is `name@version`, and
-the key is `{layer}/{name}`, as in the detail route. It is the one `POST` that the
-server takes. It reads no body.
+the key is `{layer}/{name}`, as in the detail route. It reads no body.
 
 The request needs these two things:
 
@@ -325,6 +326,31 @@ with the fields above, and it is an empty list when nobody asked. The list holds
 A refusal holds the message of Palette and the names of clusters. So only the detail
 tier carries an answer. No summary route, no state file, and no log line holds it. The
 log has one line for a click, with the verdict and the status.
+
+## Check now
+
+`POST /v1/cycles/{cycle}` starts a cycle now, and not at the end of its period.
+`{cycle}` is `content` or `versions`. Another name gets `404`. The route reads no
+body. It needs a loopback `Host` and the header `Sec-Fetch-Site: same-origin`, as the
+click "Ask Palette" does.
+
+The click runs the same reads as the timer of the cycle, with the same key. It writes
+nothing. The reply is `{"cycle": "content", "state": "started"}`, with one of these
+statuses:
+
+| Status | `state` | Meaning |
+| --- | --- | --- |
+| `202` | `started` | The cycle starts now. After it, its timer waits a full period again. |
+| `202` | `running` | A cycle of that kind runs now. The click joins it, and no second cycle starts. |
+| `429` | `wait` | A cycle of that kind ended less than one minute ago. `retryAfter` and the header `Retry-After` give the seconds to wait. |
+
+So a person who clicks again and again starts at most one cycle of each kind in one
+minute and the time of its run. The clicks cannot flood Palette or the registries.
+
+The observer also starts a content cycle when the records change. Every 15 seconds,
+it compares the names, the sizes, and the times of change of the record files. It
+reads no file for this, and it sends no request. The kubelet updates the files of a
+mounted Secret after a delay that its sync period sets: one minute by default.
 
 ## What no answer carries
 

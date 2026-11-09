@@ -175,6 +175,7 @@ type Pin struct {
 	Registry     string        `json:"registry"`
 	RegistryUID  string        `json:"registryUid"`
 	Version      string        `json:"version"`
+	Tag          string        `json:"tag"`
 	Floating     bool          `json:"floating"`
 	PinnedState  string        `json:"pinnedState"`
 	PinnedBy     []PinnedBy    `json:"pinnedBy"`
