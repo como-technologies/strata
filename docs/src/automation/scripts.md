@@ -111,6 +111,7 @@ release and has everything.
 | [`upstream-report.sh`](./upstream-issues.md) | One issue per pack that a record pins behind a newer version of its registry. |
 | [`preflight.sh`](./preflight.md#on-another-host) | `strata preflight` with its options from variables, and the report as a comment. |
 | [`observer-records.sh`](../development/observer-deploy.md#the-records) | The records of the observer as four Kubernetes Secrets, on standard output. |
+| [`observer-propose.sh`](./observer.md#approve-the-records-with-a-pipeline) | One pull request with the first-seen records of the observer, so that a review approves them. |
 | [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the signature and the checksums checked. |
 
 They run on GitHub and on GitLab. `examples/ci/github/strata.yml` and

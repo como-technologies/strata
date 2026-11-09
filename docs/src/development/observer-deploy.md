@@ -221,28 +221,37 @@ version is the version of strata, so `just version` sets it with the others.
 | `templates/records.yaml` | The four Secrets of the records, empty. An upgrade keeps their data, because the chart names none. |
 | `templates/seed.yaml` | The job of the seed, its service account, its role on the four Secrets by name, and its network policy. Each revision of the release has its own job. |
 | `templates/pods.yaml`, `templates/reader.yaml` | The role of the read of the pods, and the role that opens the page. |
+| `templates/publisher.yaml` | The service account of a pipeline, its token Secret, and its role on the four Secrets by name. Off by default. |
 
 The chart holds no key and no token. The release workflow packages the chart, pushes
 it to `oci://ghcr.io/<owner>/charts`, and signs its digest with cosign, as it does for
 the image. `just observer-chart` lints the chart and renders it with the least values
 and with each option. A run on kind showed that both pods pass the Pod Security
 standard `restricted`, that the seed can get and update the four Secrets and do
-nothing else, and that a second run of the seed writes nothing.
+nothing else, and that a second run of the seed writes nothing. A second run on kind
+showed that the publisher has the same rights as the seed. The kubeconfig commands of
+[Approve the records with a pipeline](../automation/observer.md#approve-the-records-with-a-pipeline)
+gave it a kubeconfig that works.
 
 ## The records
 
 `observer-records.sh` writes the records as Secrets on standard output. It
-calls no Kubernetes API, so the pipeline applies the output:
+calls no Kubernetes API, so the pipeline gives the output to kubectl. An apply
+makes the Secrets, and a replace changes them:
 
 ```bash
-scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
-  | kubectl apply --server-side -f -
 scripts/ci/observer-records.sh --first-seen <cluster uid> \
   | kubectl apply --server-side -f -
+scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
+  | kubectl replace -f -
 ```
 
-Use `--server-side`. A client-side apply copies each Secret to an annotation,
-and that annotation has a limit of 256 KiB.
+Use `--server-side` for an apply. A client-side apply copies each Secret to an
+annotation, and that annotation has a limit of 256 KiB. A replace sends each Secret
+whole, so it removes each key that the output does not hold. An apply keeps a key
+that another writer made, such as a key of the seed. A run on kind showed both: after
+a seed, an apply kept a first-seen record beside the approved records, and a replace
+removed it. A `helm upgrade` after a replace kept the records.
 
 | Option | Meaning |
 | --- | --- |

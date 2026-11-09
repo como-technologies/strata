@@ -205,8 +205,11 @@ that the step wrote:
 
 ```bash
 scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*/dev.json \
-  | kubectl apply --server-side -f -
+  | kubectl replace -f -
 ```
+
+A replace removes each record that the step does not write, also a first-seen record
+of the seed.
 
 The script stops when two records are for one version. So the glob must not match
 the records of `prod`, which hold the same versions. It stops for a record of a

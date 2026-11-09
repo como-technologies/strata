@@ -12,13 +12,14 @@ use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
-const SHIPPED: [&str; 7] = [
+const SHIPPED: [&str; 8] = [
     "pr-comment.sh",
     "merge-gate.sh",
     "verify-report.sh",
     "upstream-report.sh",
     "preflight.sh",
     "observer-records.sh",
+    "observer-propose.sh",
     "install-strata.sh",
 ];
 
@@ -86,7 +87,7 @@ fn each_script_prints_its_whole_header_as_its_help_from_one_line() {
 /// The files a team copies, and the reusable workflows they call. They name scripts, options and a
 /// release version, and nothing else reads them: a renamed option or a moved script breaks a
 /// drop-in silently.
-const DROP_INS: [&str; 8] = [
+const DROP_INS: [&str; 10] = [
     "examples/ci/github/strata.yml",
     "examples/ci/gitlab/strata.yml",
     ".github/workflows/comment.yml",
@@ -95,6 +96,8 @@ const DROP_INS: [&str; 8] = [
     ".github/workflows/merge-gate.yml",
     ".github/workflows/preflight.yml",
     ".github/workflows/preflight-comment.yml",
+    ".github/workflows/observer-propose.yml",
+    ".github/workflows/observer-publish.yml",
 ];
 
 /// The `--help` of one script that ships.
@@ -376,7 +379,7 @@ const DRY_RUN: Left = Left {
     why: "it touches no host, so a person tries it at a terminal",
 };
 
-const WRAPPERS: [Wrapper; 7] = [
+const WRAPPERS: [Wrapper; 9] = [
     Wrapper {
         workflow: "comment.yml",
         job: "strata-comment",
@@ -479,6 +482,38 @@ const WRAPPERS: [Wrapper; 7] = [
         tool: Listed::Command("same-release"),
         reaches: &[reach("--allow", "allow", "STRATA_PROMOTE_ALLOW")],
         left: &[PRINTING],
+    },
+    Wrapper {
+        workflow: "observer-propose.yml",
+        job: "strata-observer-propose",
+        tool: Listed::Script("observer-propose.sh"),
+        reaches: &[
+            reach("--dir", "dir", "STRATA_OBSERVER_DIR"),
+            reach("--namespace", "namespace", "STRATA_OBSERVER_NAMESPACE"),
+            reach("--base", "base", ""),
+            reach("--repo", "", ""),
+        ],
+        left: &[
+            HOST,
+            DRY_RUN,
+            Left {
+                flags: &["--branch"],
+                why: "one branch for each repository, so that a later run updates the open request",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "observer-publish.yml",
+        job: "strata-observer-publish",
+        tool: Listed::Script("observer-records.sh"),
+        reaches: &[
+            reach("--revision", "", ""),
+            reach("--namespace", "namespace", "STRATA_OBSERVER_NAMESPACE"),
+        ],
+        left: &[Left {
+            flags: &["--first-seen"],
+            why: "the seed of the chart writes the first-seen records, and the publish writes the approved ones",
+        }],
     },
     Wrapper {
         workflow: "retire-gate.yml",
@@ -1091,7 +1126,8 @@ exec "$REAL_STRATA" "$@"
 
 /// A `curl` for the GitLab REST API. It logs each call as "METHOD /path field field". It keeps
 /// each body file that it receives as body-<n>.md, in call order. It answers a GET from a
-/// gl-*.json file under `FAKE_GL` when the test wrote one. It numbers a new issue from 41 up. It
+/// gl-*.json file under `FAKE_GL` when the test wrote one. It numbers a new issue from 41 up, and
+/// gives a new merge request the number 5. It
 /// prints the status code `FAKE_GL_STATUS` (200 by default) the way `-w '%{http_code}'` does.
 const FAKE_GL_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -1117,6 +1153,8 @@ answer='{}'
 from() { [ -f "$FAKE_GL/$1" ] && answer=$(cat "$FAKE_GL/$1") || answer=$2; }
 case "$method $path" in
   "GET "*"/notes"*) from gl-notes.json "[]" ;;
+  "GET "*"/merge_requests?"*) from gl-mrs.json "[]" ;;
+  "POST /projects/"*"/merge_requests") answer='{"iid":5,"web_url":"https://gitlab.example/o/r/-/merge_requests/5"}' ;;
   "GET "*"/merge_requests/"*) from gl-mr.json '{"labels":[]}' ;;
   "GET "*"/labels"*) from gl-labels.json "[]" ;;
   "GET "*"/issues"*) from gl-issues.json "[]" ;;
@@ -2226,6 +2264,7 @@ fn release() -> tempfile::TempDir {
         ),
         ("10", "preflight.sh", "#!/bin/sh\necho preflight\n"),
         ("11", "observer-records.sh", "#!/bin/sh\necho records\n"),
+        ("12", "observer-propose.sh", "#!/bin/sh\necho propose\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -2308,6 +2347,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "verify-report.sh",
         "upstream-report.sh",
         "observer-records.sh",
+        "observer-propose.sh",
         "SHA256SUMS",
     ] {
         assert!(d.join("here").join(name).exists(), "{name} is installed");
@@ -2322,6 +2362,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
             "verify-report.sh",
             "upstream-report.sh",
             "observer-records.sh",
+            "observer-propose.sh",
         ] {
             let mode = std::fs::metadata(d.join("here").join(name))
                 .unwrap()
@@ -2413,6 +2454,7 @@ fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
         "verify-report.sh",
         "upstream-report.sh",
         "observer-records.sh",
+        "observer-propose.sh",
         "SHA256SUMS",
     ] {
         assert!(
@@ -5821,4 +5863,433 @@ fn sign_blobs_prints_its_header_as_its_help() {
     let help = text(&o.stdout);
     assert!(help.contains("sign-blobs.sh FILE..."), "{help}");
     assert!(help.contains("up to 5 times"), "{help}");
+}
+
+// ---- observer-propose.sh -----------------------------------------------------------------------
+
+/// A `kubectl` for `observer-propose.sh`. It logs its arguments to `FAKE_LOG`. It answers
+/// `-n NS get secret NAME -o json` with the file NAME.json under `FAKE_SECRETS`. When that file is
+/// not there, it exits 1 with the words of an API server that refuses the read.
+const FAKE_PROPOSE_KUBECTL: &str = r#"#!/usr/bin/env bash
+echo "kubectl $*" >> "$FAKE_LOG"
+name=$5
+[ -f "$FAKE_SECRETS/$name.json" ] \
+  || { echo "Error from server (Forbidden): secrets \"$name\" is forbidden" >&2; exit 1; }
+cat "$FAKE_SECRETS/$name.json"
+"#;
+
+/// A `gh` for `observer-propose.sh`. It logs its arguments to `FAKE_LOG`, and copies the body file
+/// of a request to `FAKE_BODY`. `repo view` gives the default branch main. `pr list` gives the
+/// number `FAKE_PR` when that is set, as `--jq` gives it.
+const FAKE_PROPOSE_GH: &str = r#"#!/usr/bin/env bash
+echo "gh $*" >> "$FAKE_LOG"
+prev=""
+for a in "$@"; do [ "$prev" = --body-file ] && cp "$a" "$FAKE_BODY"; prev=$a; done
+case "$1 $2" in
+  "repo view") echo main ;;
+  "pr list") printf '%s\n' "${FAKE_PR:-}" ;;
+  "pr create") echo "https://github.com/o/r/pull/9" ;;
+esac
+"#;
+
+/// A repository with a remote origin, the Secrets of an observer, and the stand-ins.
+struct Propose {
+    dir: tempfile::TempDir,
+}
+
+impl Propose {
+    /// An origin with one commit on main, a clone of it in `work`, and no Secret.
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        fake_bin(
+            d,
+            &[
+                ("kubectl", FAKE_PROPOSE_KUBECTL),
+                ("gh", FAKE_PROPOSE_GH),
+                ("curl", FAKE_GL_CURL),
+            ],
+        );
+        std::fs::create_dir(d.join("secrets")).unwrap();
+        std::fs::create_dir(d.join("gitlab")).unwrap();
+        git(d, &["init", "-q", "--bare", "-b", "main", "origin.git"]);
+        git(d, &["clone", "-q", "origin.git", "work"]);
+        let work = d.join("work");
+        std::fs::write(work.join("README.md"), "the records\n").unwrap();
+        git(&work, &["add", "README.md"]);
+        git(&work, &["commit", "-q", "-m", "first"]);
+        git(&work, &["push", "-q", "origin", "HEAD:main"]);
+        std::fs::write(d.join("calls.log"), "").unwrap();
+        Propose { dir }
+    }
+
+    /// The Secrets as `observer-records.sh` writes them for `args`, as kubectl gives them.
+    fn secrets_of(&self, args: &[&str]) {
+        let job = ObserverRecords::new();
+        job.file(
+            "cluster.json",
+            &serde_json::json!({"schema": "strata-snapshot/1", "source": {"cluster": {
+            "uid": "c-1",
+            "profiles": [
+                {"name": "aws-stack", "version": "1.0.0"},
+                {"name": "barney", "version": "2.0.0"},
+            ]}}}),
+        );
+        let args: Vec<String> = args
+            .iter()
+            .map(|a| match *a {
+                "RECORD" => job
+                    .file("aws-stack.json", &profile_doc("aws-stack", "1.0.0"))
+                    .display()
+                    .to_string(),
+                a => a.to_string(),
+            })
+            .collect();
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let o = job.run(&args, &[]);
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        for secret in records_secrets(&text(&o.stdout)) {
+            let name = secret["metadata"]["name"].as_str().unwrap().to_string();
+            let json = serde_json::to_value(&secret).unwrap();
+            let file = self.dir.path().join(format!("secrets/{name}.json"));
+            std::fs::write(file, json.to_string()).unwrap();
+        }
+    }
+
+    /// The Secrets of the seed: the first-seen records of two profiles of the cluster c-1.
+    fn first_seen(&self) {
+        self.secrets_of(&["--first-seen", "c-1"]);
+    }
+
+    /// The Secrets after a publish: one approved record at the revision r1.
+    fn approved(&self) {
+        self.secrets_of(&["--revision", "r1", "RECORD"]);
+    }
+
+    /// The script in the clone, as a job of GitHub runs it, with `envs` added.
+    fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        let d = self.dir.path();
+        std::fs::write(d.join("gitlab/curl.log"), "").unwrap();
+        let mut c = Command::new("bash");
+        c.arg(script("ci/observer-propose.sh"))
+            .args(args)
+            .current_dir(d.join("work"))
+            .env("PATH", path_with(&d.join("bin")))
+            .env("FAKE_LOG", d.join("calls.log"))
+            .env("FAKE_SECRETS", d.join("secrets"))
+            .env("FAKE_BODY", d.join("body.md"))
+            .env("GITHUB_REPOSITORY", "o/r")
+            .env_remove("GITLAB_CI")
+            .env_remove("CI_PROJECT_ID")
+            .env_remove("GITLAB_TOKEN")
+            .env_remove("FAKE_PR");
+        isolate_git(&mut c);
+        c.envs(envs.iter().copied());
+        c.output_locked().unwrap()
+    }
+
+    fn gitlab(&self) -> String {
+        self.dir.path().join("gitlab").display().to_string()
+    }
+
+    /// The calls of the stand-ins since the last [`Propose::clear`].
+    fn calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("calls.log"))
+    }
+
+    fn clear(&self) {
+        std::fs::write(self.dir.path().join("calls.log"), "").unwrap();
+    }
+
+    fn gl_calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("gitlab/curl.log"))
+    }
+
+    fn body(&self) -> String {
+        std::fs::read_to_string(self.dir.path().join("body.md")).expect("gh got a body file")
+    }
+
+    /// Whether the origin has the branch `branch`.
+    fn has_branch(&self, branch: &str) -> bool {
+        let mut c = Command::new("git");
+        c.args([
+            "rev-parse",
+            "--verify",
+            "-q",
+            &format!("refs/heads/{branch}"),
+        ])
+        .current_dir(self.dir.path().join("origin.git"));
+        isolate_git(&mut c)
+            .output_locked()
+            .unwrap()
+            .status
+            .success()
+    }
+
+    /// The files of the branch `branch` of the origin.
+    fn files_of(&self, branch: &str) -> Vec<String> {
+        let origin = self.dir.path().join("origin.git");
+        text(&git(&origin, &["ls-tree", "-r", "--name-only", branch]).stdout)
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The file `path` on the branch `branch` of the origin, as JSON.
+    fn json_on(&self, branch: &str, path: &str) -> serde_json::Value {
+        let origin = self.dir.path().join("origin.git");
+        let shown = git(&origin, &["show", &format!("{branch}:{path}")]);
+        serde_json::from_str(&text(&shown.stdout)).unwrap()
+    }
+
+    /// The number of commits of the branch `branch` of the origin.
+    fn commits_of(&self, branch: &str) -> usize {
+        let origin = self.dir.path().join("origin.git");
+        text(&git(&origin, &["rev-list", "--count", branch]).stdout)
+            .trim()
+            .parse()
+            .unwrap()
+    }
+}
+
+const RECORD_FILES: [&str; 2] = [
+    "releases/observer/aws-stack_1.0.0.json",
+    "releases/observer/barney_2.0.0.json",
+];
+
+/// The script writes back each record that `observer-records.sh` packed, on its own branch, and
+/// opens one request. While the request is open, a later run pushes nothing, so a change of a
+/// reviewer stays.
+#[test]
+fn observer_propose_opens_one_pull_request_with_the_first_seen_records_and_leaves_it_while_open() {
+    let p = Propose::new();
+    p.first_seen();
+    let o = p.run(&[], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("opened https://github.com/o/r/pull/9 with the 2 records"),
+        "{}",
+        text(&o.stderr)
+    );
+    let branch = "strata-observer-records";
+    assert_eq!(
+        p.files_of(branch),
+        ["README.md", RECORD_FILES[0], RECORD_FILES[1]]
+    );
+    assert_eq!(
+        p.json_on(branch, RECORD_FILES[1]),
+        serde_json::json!({"schema": "strata-snapshot/1",
+            "source": {"name": "barney", "version": "2.0.0"}, "packs": []}),
+        "the file is the record that the Secret holds"
+    );
+    assert_eq!(p.files_of("main"), ["README.md"], "main does not change");
+
+    let calls = p.calls();
+    for i in 0..4 {
+        let get =
+            format!("kubectl -n strata-observer get secret strata-observer-records-{i} -o json");
+        assert!(calls.contains(&get), "{calls:#?}");
+    }
+    assert!(
+        calls
+            .iter()
+            .filter(|c| c.starts_with("kubectl"))
+            .all(|c| c.contains(" get secret ")),
+        "kubectl only reads: {calls:#?}"
+    );
+    let created: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("gh pr create"))
+        .collect();
+    assert_eq!(created.len(), 1, "{calls:#?}");
+    assert!(
+        created[0].contains("--repo o/r --base main --head strata-observer-records"),
+        "{}",
+        created[0]
+    );
+    let body = p.body();
+    assert!(
+        body.starts_with("<!-- strata-observer-records -->\n"),
+        "{body}"
+    );
+    assert!(body.contains("the cluster `c-1`"), "{body}");
+    for file in RECORD_FILES {
+        assert!(body.contains(&format!("- `{file}`")), "{body}");
+    }
+
+    assert_eq!(
+        p.commits_of(branch),
+        2,
+        "the branch is the commit of main and one commit of the records"
+    );
+
+    // a reviewer changes a record on the branch, and a later run comes while the request is open
+    let review = p.dir.path().join("review");
+    git(
+        p.dir.path(),
+        &["clone", "-q", "-b", branch, "origin.git", "review"],
+    );
+    std::fs::write(
+        review.join(RECORD_FILES[0]),
+        "{\"schema\": \"strata-snapshot/1\"}\n",
+    )
+    .unwrap();
+    git(&review, &["commit", "-q", "-am", "the review"]);
+    git(&review, &["push", "-q", "origin", branch]);
+    p.clear();
+    let o = p.run(&[], &[("FAKE_PR", "9")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("the request 9 of the branch strata-observer-records is open"),
+        "{}",
+        text(&o.stderr)
+    );
+    let calls = p.calls();
+    assert!(
+        !calls
+            .iter()
+            .any(|c| c.starts_with("gh pr create") || c.starts_with("gh pr edit")),
+        "no second request and no edit: {calls:#?}"
+    );
+    assert_eq!(p.commits_of(branch), 3, "the commit of the reviewer stays");
+}
+
+/// Approved records need no review, and records that the base holds need no request.
+#[test]
+fn observer_propose_changes_nothing_for_approved_records_or_for_records_that_the_base_holds() {
+    let p = Propose::new();
+    p.approved();
+    let o = p.run(&[], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("the records are approved, at the revision r1"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        p.calls().iter().all(|c| c.starts_with("kubectl")),
+        "{:#?}",
+        p.calls()
+    );
+    assert!(!p.has_branch("strata-observer-records"));
+
+    // the first-seen records, which main holds already
+    p.first_seen();
+    let o = p.run(&["--dry-run"], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let work = p.dir.path().join("work");
+    git(&work, &["add", "releases"]);
+    git(&work, &["commit", "-q", "-m", "the records"]);
+    git(&work, &["push", "-q", "origin", "HEAD:main"]);
+    p.clear();
+    let o = p.run(&[], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("the branch holds these 2 records already"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        !p.calls().iter().any(|c| c.starts_with("gh pr create")),
+        "{:#?}",
+        p.calls()
+    );
+    assert!(!p.has_branch("strata-observer-records"));
+}
+
+/// A dry run writes the files to the folder that `--dir` names and prints the change. It does not
+/// commit, push, or call a host.
+#[test]
+fn observer_propose_dry_run_writes_the_files_and_prints_the_change_and_calls_no_host() {
+    let p = Propose::new();
+    p.first_seen();
+    let o = p.run(
+        &["--dry-run", "--dir", "records", "--namespace", "team-a"],
+        &[],
+    );
+    // the stand-in reads the same files for each namespace
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    for file in ["records/aws-stack_1.0.0.json", "records/barney_2.0.0.json"] {
+        assert!(out.contains(&format!("?? {file}")), "{out}");
+        assert!(p.dir.path().join("work").join(file).exists(), "{file}");
+    }
+    let calls = p.calls();
+    assert!(
+        calls
+            .iter()
+            .all(|c| c.starts_with("kubectl -n team-a get secret")),
+        "{calls:#?}"
+    );
+    assert!(!p.has_branch("strata-observer-records"));
+}
+
+/// On GitLab the script opens a merge request through the API. While it is open, a later run
+/// changes nothing.
+#[test]
+fn observer_propose_on_gitlab_opens_one_merge_request_and_a_later_run_leaves_it() {
+    let p = Propose::new();
+    p.first_seen();
+    let gl = p.gitlab();
+    let envs = gitlab_job(&gl);
+    let o = p.run(&["--base", "main"], &envs);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr)
+            .contains("opened https://gitlab.example/o/r/-/merge_requests/5 with the 2 records"),
+        "{}",
+        text(&o.stderr)
+    );
+    let calls = p.gl_calls();
+    assert_eq!(calls.len(), 2, "{calls:#?}");
+    assert!(calls[0].starts_with(
+        "GET /projects/42/merge_requests?state=opened&source_branch=strata-observer-records&target_branch=main"
+    ));
+    assert!(
+        calls[1].starts_with(
+            "POST /projects/42/merge_requests source_branch=strata-observer-records target_branch=main title=Approve the first-seen records of the observer description@"
+        ) && calls[1].ends_with(" remove_source_branch=true"),
+        "{}",
+        calls[1]
+    );
+    let body = handed_in(&p.dir.path().join("gitlab"), "body", 2);
+    assert!(
+        body.starts_with("<!-- strata-observer-records -->\n"),
+        "{body}"
+    );
+    assert!(p.has_branch("strata-observer-records"));
+    assert!(!p.calls().iter().any(|c| c.starts_with("gh")), "no gh");
+
+    // a later run, with the merge request open
+    std::fs::write(p.dir.path().join("gitlab/gl-mrs.json"), r#"[{"iid": 5}]"#).unwrap();
+    let o = p.run(&["--base", "main"], &envs);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("the request 5 of the branch strata-observer-records is open"),
+        "{}",
+        text(&o.stderr)
+    );
+    let calls = p.gl_calls();
+    assert_eq!(calls.len(), 1, "only the list: {calls:#?}");
+    assert!(calls[0].starts_with("GET /projects/42/merge_requests?"));
+}
+
+/// A Secret that kubectl cannot get stops the script before git or the host, with the words of
+/// kubectl.
+#[test]
+fn observer_propose_exits_2_with_the_words_of_kubectl_when_it_cannot_get_a_secret() {
+    let p = Propose::new();
+    p.first_seen();
+    std::fs::remove_file(p.dir.path().join("secrets/strata-observer-records-2.json")).unwrap();
+    let o = p.run(&[], &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(
+            "kubectl cannot get the Secret strata-observer-records-2 in the namespace strata-observer: Error from server (Forbidden)"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!p.calls().iter().any(|c| c.starts_with("gh")));
+    assert!(!p.has_branch("strata-observer-records"));
 }

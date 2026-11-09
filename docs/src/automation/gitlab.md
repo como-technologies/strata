@@ -20,7 +20,7 @@ either: its comment picks the host from the CI variables.
 
 ## The pipeline
 
-`examples/ci/gitlab/strata.yml` holds the seven jobs, ready to include. Copy
+`examples/ci/gitlab/strata.yml` holds the jobs below, ready to include. Copy
 it into `.gitlab/strata.yml` and include it:
 
 ```yaml
@@ -44,6 +44,8 @@ variables:
 | `strata-upstream-save` | a pipeline schedule, when `STRATA_SAVE` names a file | Does the same as `strata-upstream`, and keeps the file as an artifact. |
 | `strata-promote-gate` | a pipeline that carries `STRATA_PROMOTE` | Checks that the records of a promotion are one release. Manual. |
 | `strata-retire-gate` | a pipeline that carries `STRATA_RETIRE` | Checks that no cluster the key can read runs the version. Manual. |
+| `strata-observer-propose` | a pipeline schedule, when `STRATA_OBSERVER_KUBECONFIG` is set | Keeps one merge request open with the first-seen records of the observer. `GITLAB_TOKEN` pushes its branch. |
+| `strata-observer-publish` | each push to the default branch, when `STRATA_OBSERVER_KUBECONFIG` is set | Writes `STRATA_OBSERVER_RECORDS` into the Secrets of the observer, with the revision of the push. |
 
 Add the schedule in CI/CD, Schedules. Make the merge button wait for the gate:
 in Settings, Merge requests, turn on "Pipelines must succeed".
@@ -72,6 +74,10 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `STRATA_PREFLIGHT_STRICT`, `_NO_EXEC`, `_VERBOSE`, `_WATCH` | the preflight job | `true` gives the option of the same name. `false` by default. |
 | `STRATA_PREFLIGHT_OUT` | the preflight job | The directory for `--out`. `preflight` by default. The job keeps it as an artifact. |
 | `STRATA_PREFLIGHT_COMMENT` | the preflight job | `true` posts `report.md` as one note on the merge request, with `pr-comment.sh --preflight`. `false` by default. It needs `GITLAB_TOKEN`. |
+| `STRATA_OBSERVER_KUBECONFIG` | the two jobs of the observer | A CI/CD variable of the type File: a kubeconfig of the publisher of the chart. Without it, the two jobs do not run. See [Approve the records with a pipeline](./observer.md#approve-the-records-with-a-pipeline). |
+| `STRATA_OBSERVER_DIR`, `_NAMESPACE` | `strata-observer-propose` | `--dir` and `--namespace` of `observer-propose.sh`. `releases/observer` and `strata-observer` by default. |
+| `STRATA_OBSERVER_RECORDS` | `strata-observer-publish` | The approved records that the job writes into the Secrets, with the revision of the push. `releases/observer/*.json` by default. |
+| `STRATA_KUBECTL_VERSION` | the two jobs of the observer | The version of kubectl that the jobs install, with its checksum checked. |
 
 The jobs read the merge request from `CI_MERGE_REQUEST_IID`, the project from
 `CI_PROJECT_ID`, and the API from `CI_API_V4_URL`, so a self-hosted GitLab needs

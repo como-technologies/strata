@@ -1393,3 +1393,100 @@ fn the_observer_image_step_reads_the_version_of_the_binary_it_carries() {
         "number=0.29.1\n"
     );
 }
+
+/// A stand-in that logs its name, its arguments, the kubeconfig that it reads with the mode of
+/// that file, and what it got on standard input.
+const KUBE_TOOL: &str = r#"#!/usr/bin/env bash
+in=""
+[ -t 0 ] || in=$(cat)
+echo "$(basename "$0") $* | $(cat "$KUBECONFIG") $(stat -c %a "$KUBECONFIG") | $in" >> "$FAKE_LOG"
+"#;
+
+/// The step writes the secret kubeconfig to a file that only the job reads, expands each pattern
+/// of the records, and gives the output of `observer-records.sh` to `kubectl replace`. A pattern
+/// that finds no file stops the step before kubectl runs.
+#[test]
+fn the_observer_publish_step_replaces_the_secrets_with_the_records_of_each_pattern() {
+    let records =
+        "#!/usr/bin/env bash\necho \"observer-records.sh $*\" >> \"$FAKE_LOG\"\necho the-secrets\n";
+    let temp = tempfile::tempdir().unwrap();
+    let temp_path = temp.path().display().to_string();
+    let path = format!("bin:{}", std::env::var("PATH").unwrap());
+    let tools = [
+        (".strata/scripts/ci/observer-records.sh", records),
+        ("bin/kubectl", KUBE_TOOL),
+        ("releases/observer/a.json", "{}"),
+        ("releases/observer/b.json", "{}"),
+        ("releases/team/c.json", "{}"),
+    ];
+    let env = [
+        ("RECORDS", "releases/observer/*.json\nreleases/**/c.json"),
+        ("NAMESPACE", "team-a"),
+        ("REVISION", "abc123"),
+        ("KUBECONFIG_TEXT", "the-kubeconfig"),
+        ("RUNNER_TEMP", temp_path.as_str()),
+        ("PATH", path.as_str()),
+    ];
+    let run = run_step_with("observer-publish.yml", "publish the records", &env, &tools);
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [
+            "observer-records.sh --revision abc123 --namespace team-a releases/observer/a.json releases/observer/b.json releases/team/c.json",
+            "kubectl replace -f - | the-kubeconfig 600 | the-secrets",
+        ]
+    );
+
+    let mut none = env.to_vec();
+    none[0] = ("RECORDS", "releases/observer/*.json releases/none/*.json");
+    let run = run_step_with("observer-publish.yml", "publish the records", &none, &tools);
+    assert_eq!(run.output.status.code(), Some(2));
+    assert!(
+        text(&run.output.stderr).contains("no record matches releases/none/*.json"),
+        "{}",
+        text(&run.output.stderr)
+    );
+    assert!(run.calls().is_empty(), "{:#?}", run.calls());
+}
+
+/// The step gives `--base` only when the input names a branch, and sets the name of the author of
+/// the commit.
+#[test]
+fn the_observer_propose_step_gives_the_base_only_when_the_input_names_one() {
+    let temp = tempfile::tempdir().unwrap();
+    let temp_path = temp.path().display().to_string();
+    let tools = [(".strata/scripts/ci/observer-propose.sh", KUBE_TOOL)];
+    let env = [
+        ("DIR", "releases/observer"),
+        ("NAMESPACE", "strata-observer"),
+        ("REPO", "o/r"),
+        ("KUBECONFIG_TEXT", "the-kubeconfig"),
+        ("RUNNER_TEMP", temp_path.as_str()),
+    ];
+    let run = run_step_with("observer-propose.yml", "propose the records", &env, &tools);
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [
+            "observer-propose.sh --dir releases/observer --namespace strata-observer --repo o/r | the-kubeconfig 600 | "
+        ]
+    );
+    let name = git(run.dir.path(), &["config", "user.name"]);
+    assert_eq!(text(&name.stdout).trim(), "github-actions[bot]");
+
+    let mut with_base = env.to_vec();
+    with_base.push(("BASE", "dev"));
+    let run = run_step_with(
+        "observer-propose.yml",
+        "propose the records",
+        &with_base,
+        &tools,
+    );
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [
+            "observer-propose.sh --dir releases/observer --namespace strata-observer --repo o/r --base dev | the-kubeconfig 600 | "
+        ]
+    );
+}

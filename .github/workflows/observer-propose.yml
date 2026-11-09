@@ -1,0 +1,75 @@
+name: strata observer propose
+
+# Reusable workflow. A repository calls it from its own scheduled workflow. It reads the first-seen
+# records of the observer on a cluster, and keeps one pull request open with them, so that a
+# review approves them; see docs/src/automation/observer.md. It runs
+# scripts/ci/observer-propose.sh from the tag that the caller names, and needs no strata binary.
+# observer-publish.yml publishes the records after the merge.
+on:
+  workflow_call:
+    inputs:
+      dir:
+        description: The folder of the checkout for the records, which the pull request adds
+        default: releases/observer
+        type: string
+      namespace:
+        description: The namespace of the observer on the cluster
+        default: strata-observer
+        type: string
+      base:
+        description: The branch of the pull request; empty means the default branch of the repository
+        default: ""
+        type: string
+      strata-version:
+        description: The strata release to use, a tag of this repository
+        required: true
+        type: string
+    secrets:
+      kubeconfig:
+        description: A kubeconfig that can get the four Secrets of the records. The role publisher of the chart gives that right and no other.
+        required: true
+      pr-token:
+        description: A token that pushes the branch and opens the pull request. A pull request that the token of the workflow opens starts no workflow, so the checks of the pull request run only with a token of a person or of a GitHub App. Empty means the token of the workflow.
+        required: false
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private.
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      # the repository of the caller. The token stays in the checkout, so the script can push.
+      - uses: actions/checkout@v7
+        with:
+          token: ${{ secrets.pr-token || github.token }}
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v7
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+          persist-credentials: false
+      - name: propose the records
+        env:
+          GH_TOKEN: ${{ secrets.pr-token || github.token }}
+          KUBECONFIG_TEXT: ${{ secrets.kubeconfig }}
+          DIR: ${{ inputs.dir }}
+          NAMESPACE: ${{ inputs.namespace }}
+          BASE: ${{ inputs.base }}
+          REPO: ${{ github.repository }}
+        run: |
+          umask 077
+          printf '%s\n' "$KUBECONFIG_TEXT" > "$RUNNER_TEMP/kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          base=()
+          if [ -n "$BASE" ]; then base=(--base "$BASE"); fi
+          .strata/scripts/ci/observer-propose.sh --dir "$DIR" --namespace "$NAMESPACE" \
+            --repo "$REPO" "${base[@]+"${base[@]}"}"

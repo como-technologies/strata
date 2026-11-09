@@ -40,6 +40,12 @@ records:
 # A group that can open the page with a port-forward. Empty means no binding.
 readerGroup: ""
 
+# The publisher: a service account for a pipeline, with a token that does not expire. Its role can get and
+# update the four Secrets of the records, and nothing else. The workflows observer-propose and
+# observer-publish use it.
+publisher:
+  enabled: false
+
 # Palette reads this block when the chart is a layer of a profile, and Helm does not read it: Palette makes the
 # namespace with the label of the Pod Security standard restricted, and installs the chart there.
 pack:

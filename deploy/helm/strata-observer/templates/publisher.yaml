@@ -1,0 +1,44 @@
+{{- if .Values.publisher.enabled }}
+# The publisher is the identity of a pipeline: it reads the first-seen records, and writes the approved
+# records. Its role can get and update the four Secrets by name, and nothing else. The token Secret gives a
+# kubeconfig for the pipeline a token that does not expire. Delete the Secret to revoke the token.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: strata-observer-publisher
+  labels: {{- include "observer.labels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: strata-observer-publisher-token
+  labels: {{- include "observer.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/service-account.name: strata-observer-publisher
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: strata-observer-publisher
+  labels: {{- include "observer.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [strata-observer-records-0, strata-observer-records-1, strata-observer-records-2, strata-observer-records-3]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: strata-observer-publisher
+  labels: {{- include "observer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: strata-observer-publisher
+subjects:
+  - kind: ServiceAccount
+    name: strata-observer-publisher
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -1,12 +1,12 @@
 # Strata on GitLab CI: the comment, the merge gate, the scheduled drift report and upstream
-# report, and the two gates that run on demand.
+# report, the two gates that run on demand, and the two jobs of the records of the observer.
 #
 # Include it from .gitlab-ci.yml and set the variables your project needs:
 #
 #   include:
 #     - local: .gitlab/strata.yml      # or a remote: URL, or a component
 #   variables:
-#     STRATA_VERSION: vX.Y.Z          # a release that carries the six scripts
+#     STRATA_VERSION: vX.Y.Z          # a release that carries the seven scripts
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
 #     # STRATA_REPAVE: "true"       # a cluster against a version: the answer of Palette decides the label
@@ -22,6 +22,10 @@
 #                     snapshot file, for STRATA_REPAVE, and for the verify of the merge
 #                     gate. The drift and upstream reports need it too.
 #   STRATA_TOKEN      a token that can read the strata releases, while that repository is private.
+#
+# A CI/CD variable of the type File, for the two jobs of the observer:
+#   STRATA_OBSERVER_KUBECONFIG  a kubeconfig of the role publisher of the chart of the observer.
+#                               Without it, the two jobs do not run.
 #
 # STRATA_REPORT: "1" in the variables of a job sends the report at the end of a run that wrote a
 # line to the log. The log is in the state folder of the runner, so save the folder when the runner
@@ -71,6 +75,12 @@ variables:
   STRATA_PREFLIGHT_OUT: preflight
   # "true" posts the report as one note on the merge request, which needs GITLAB_TOKEN
   STRATA_PREFLIGHT_COMMENT: "false"
+  # the two jobs of the observer: the folder of the first-seen records, the namespace of the
+  # observer, the approved records that the publish job writes, and the version of kubectl
+  STRATA_OBSERVER_DIR: releases/observer
+  STRATA_OBSERVER_NAMESPACE: strata-observer
+  STRATA_OBSERVER_RECORDS: "releases/observer/*.json"
+  STRATA_KUBECTL_VERSION: "1.35.0"
 
 # Installs the release binary and the scripts of one strata version, with the checksums checked.
 .strata:
@@ -219,3 +229,59 @@ strata-retire-gate:
     - if: $STRATA_RETIRE
   script:
     - $STRATA_BIN consumers "$STRATA_RETIRE"
+
+# kubectl at the version STRATA_KUBECTL_VERSION, with its checksum checked. The two jobs of the
+# observer run it.
+.kubectl:
+  script:
+    - |
+      set -eu
+      at="https://dl.k8s.io/release/v$STRATA_KUBECTL_VERSION/bin/linux/amd64"
+      curl -fsSLo /usr/local/bin/kubectl "$at/kubectl"
+      echo "$(curl -fsSL "$at/kubectl.sha256")  /usr/local/bin/kubectl" | sha256sum -c -
+      chmod +x /usr/local/bin/kubectl
+
+# A scheduled pipeline: read the first-seen records of the observer, and keep one merge request
+# open with them, so that a review approves them. GITLAB_TOKEN pushes the branch, because a job
+# token cannot push.
+strata-observer-propose:
+  extends: .strata
+  stage: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $STRATA_OBSERVER_KUBECONFIG
+  script:
+    - !reference [.kubectl, script]
+    - export KUBECONFIG="$STRATA_OBSERVER_KUBECONFIG"
+    - git config user.email "strata@$CI_SERVER_HOST"
+    - git config user.name "strata observer"
+    - git remote set-url origin "https://oauth2:$GITLAB_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git"
+    - |
+      .strata/observer-propose.sh --dir "$STRATA_OBSERVER_DIR" \
+        --namespace "$STRATA_OBSERVER_NAMESPACE" --base "$CI_DEFAULT_BRANCH"
+
+# A push to the default branch: write the approved records into the Secrets of the observer, with
+# the revision of the push. The page of the observer then removes the notice of the first-seen
+# records. A replace removes each key that the records do not hold, also a key of the seed.
+strata-observer-publish:
+  extends: .strata
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $STRATA_OBSERVER_KUBECONFIG
+  script:
+    - !reference [.kubectl, script]
+    - export KUBECONFIG="$STRATA_OBSERVER_KUBECONFIG"
+    # the shell expands the patterns, and a pattern that finds no file stops the job
+    - |
+      set -o pipefail
+      set -f
+      patterns=($STRATA_OBSERVER_RECORDS)
+      set +f
+      shopt -s globstar nullglob
+      records=()
+      for pattern in "${patterns[@]}"; do
+        found=($pattern)
+        if [ "${#found[@]}" -eq 0 ]; then echo "no record matches $pattern" >&2; exit 2; fi
+        records+=("${found[@]}")
+      done
+      .strata/observer-records.sh --revision "$CI_COMMIT_SHA" \
+        --namespace "$STRATA_OBSERVER_NAMESPACE" "${records[@]}" | kubectl replace -f -

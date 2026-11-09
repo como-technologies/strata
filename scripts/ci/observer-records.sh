@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Write the records of the observer as Kubernetes Secrets, on standard output. It calls no Kubernetes
-# API, so the pipeline applies the output: observer-records.sh ... | kubectl apply --server-side -f -
+# API, so the pipeline gives the output to kubectl. To make the Secrets, use
+# `kubectl apply --server-side -f -`. To change the Secrets, use `kubectl replace -f -`: a replace
+# removes each key that the output does not hold, also a key that the seed of the chart wrote.
 # A client-side apply fails, because it copies each Secret to an annotation with a limit of 256 KiB.
 #
-#   observer-records.sh --revision REV [--namespace NAME] <record.json>...
-#   observer-records.sh --first-seen <cluster uid> [--namespace NAME]
+#   scripts/ci/observer-records.sh --revision REV [--namespace NAME] <record.json>...
+#   scripts/ci/observer-records.sh --first-seen <cluster uid> [--namespace NAME]
 #
 # --revision names the Git revision of records that a review approved. --first-seen records what each
 # profile of the cluster holds now. No person approved that content, and each screen of the observer

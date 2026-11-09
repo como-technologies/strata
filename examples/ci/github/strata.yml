@@ -2,9 +2,9 @@
 # report, and the two gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls seven reusable workflows of the strata repository,
-# and an eighth when you use the job of the preflight comment.
-# A version bump is sixteen lines here: each job names the tag twice, once in `uses: ...@TAG` and once
+# records that your repository holds. It calls seven reusable workflows of the strata repository.
+# The job of the preflight comment calls an eighth, and the two jobs of the observer call two more.
+# A version bump is twenty lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and installs the binary
 # for, so a mismatch runs one release's workflow against another release's scripts.
@@ -14,6 +14,10 @@
 #                       snapshot file, for `repave: true`, and for the verify of the merge
 #                       gate. The drift and upstream reports need it too.
 #   STRATA_READ_TOKEN   a token that can read the strata repository, while it is private.
+#   OBSERVER_KUBECONFIG a kubeconfig of the role publisher of the chart of the observer, for the
+#                       two jobs of the observer.
+#   STRATA_PR_TOKEN     a token of a person or of a GitHub App that opens the pull request of the
+#                       observer, so that the checks of that pull request run.
 #
 # STRATA_REPORT=1 sends the report at the end of a run that wrote a line to the log. A called
 # workflow gets no variable from this file, so set it in a job of your own that runs strata. The log
@@ -32,6 +36,11 @@ name: strata
 
 on:
   pull_request:
+  # the publish of the records of the observer, after a merge that changes them. Remove the
+  # comment marks with the comment marks of the two jobs of the observer.
+  # push:
+  #   branches: [main]
+  #   paths: ["releases/observer/**"]
   schedule:
     # the drift report and the upstream report, every morning; the runs of one repository must
     # stand minutes apart
@@ -164,3 +173,32 @@ jobs:
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+
+  # the first-seen records of the observer as one pull request, so that a review approves them.
+  # Remove the comment marks to use it. A pull request that the token of the workflow opens starts
+  # no workflow, so give pr-token for the checks of the pull request:
+  # docs/src/automation/observer.md says more
+  # observer-propose:
+  #   if: github.event_name == 'schedule'
+  #   uses: como-technologies/strata/.github/workflows/observer-propose.yml@v0.31.0
+  #   permissions:
+  #     contents: write
+  #     pull-requests: write
+  #   with:
+  #     dir: releases/observer       # the folder of the records
+  #     strata-version: v0.31.0
+  #   secrets:
+  #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
+  #     pr-token: ${{ secrets.STRATA_PR_TOKEN }}
+  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+
+  # the approved records of the observer after the merge, with the revision of the merge
+  # observer-publish:
+  #   if: github.event_name == 'push'
+  #   uses: como-technologies/strata/.github/workflows/observer-publish.yml@v0.31.0
+  #   with:
+  #     records: releases/observer/*.json
+  #     strata-version: v0.31.0
+  #   secrets:
+  #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
+  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}

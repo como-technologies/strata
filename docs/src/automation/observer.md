@@ -229,6 +229,7 @@ shows what it did.
 | `seed.enabled` | `true` | The job that writes the first-seen records. |
 | `records.create` | `true` | The chart makes the four Secrets of the records, empty. Set `false` when a pipeline made them first. |
 | `readerGroup` | empty | A group that gets the role that opens the page. |
+| `publisher.enabled` | `false` | A service account for a pipeline, which can get and update the Secrets of the records. See [Approve the records with a pipeline](#approve-the-records-with-a-pipeline). |
 
 The chart sets no value of a key or a token. The key and the pull Secret stay
 Secrets that you make with `kubectl`, so that no release and no profile holds them.
@@ -441,35 +442,63 @@ is `first-seen`.
 ### Approve the records with a pipeline
 
 A review in Git approves the records, and a pipeline publishes them. No person edits
-the Secrets. A job of your pipeline does these steps:
+the Secrets. Strata gives two jobs for this:
 
-1. **Export the first-seen records** into files of your repository:
+- **`observer-propose`** runs on a schedule. It reads the first-seen records from the
+  Secrets. It keeps one pull request open that adds them to `releases/observer/`.
+- **`observer-publish`** runs after the merge. It writes the approved records into the
+  Secrets, with the revision of the merge.
 
-   ```bash
-   mkdir -p releases
-   for i in 0 1 2 3; do
-     kubectl -n strata-observer get secret strata-observer-records-$i \
-       -o json | jq -r '.data // {} | to_entries[]
-         | select(.key != "meta.json") | "\(.key) \(.value)"'
-   done | while read -r key value; do
-     printf %s "$value" | base64 -d | gunzip > "releases/${key%.gz}"
-   done
-   ```
+The checks of your repository, such as [the merge gate](./merge-gate.md), run on the
+pull request before the merge. After the publish, `meta.json` says `approved` with the
+revision, the top bar says `records: rev <revision>`, and the screens remove the
+notice. The seed sees the records, and it never writes again.
 
-   Or record each profile with `strata snapshot`, as the pipeline does for a new
-   version.
-
-2. **Open a pull request** with the files. The review approves the content.
-3. **Publish the records of the merge** with its revision:
+1. **Add the publisher.** Add `--set publisher.enabled=true` to the install of
+   the chart. The service account `strata-observer-publisher` can get and update the
+   four Secrets of the records, and do nothing else.
+2. **Keep a kubeconfig of the publisher** as the secret `OBSERVER_KUBECONFIG` of your
+   repository. Run these commands with your admin kubeconfig. The runner of the
+   pipeline must reach the address of the API server.
 
    ```bash
-   scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
-     | kubectl apply --server-side --force-conflicts -f -
+   ns=strata-observer
+   sa=strata-observer-publisher-token
+   kubectl -n $ns get secret $sa -o jsonpath='{.data.ca\.crt}' \
+     | base64 -d > ca.crt
+   tok=$(kubectl -n $ns get secret $sa -o jsonpath='{.data.token}' \
+     | base64 -d)
+   server=$(kubectl config view --minify \
+     -o jsonpath='{.clusters[0].cluster.server}')
+   export KUBECONFIG=publisher.kubeconfig
+   kubectl config set-cluster c --server="$server" \
+     --certificate-authority=ca.crt --embed-certs
+   kubectl config set-credentials publisher --token="$tok"
+   kubectl config set-context c --cluster=c --user=publisher \
+     --namespace=$ns
+   kubectl config use-context c
+   gh secret set OBSERVER_KUBECONFIG < publisher.kubeconfig
+   unset KUBECONFIG
+   rm ca.crt publisher.kubeconfig
    ```
 
-`meta.json` then says `approved` with the revision, the top bar says `records: rev
-<revision>`, and the screens drop the notice. The seed sees the records, and it never
-writes again.
+3. **Call the two jobs.** In `examples/ci/github/strata.yml`, remove the comment
+   marks of the trigger `push` and of the two jobs of the observer. On GitLab, set `STRATA_OBSERVER_KUBECONFIG`: see
+   [GitLab CI](./gitlab.md#the-variables).
+4. **Give a token that starts the checks.** A pull request that the token of the
+   workflow opens starts no workflow. So keep a token of a person or of a GitHub App
+   as the secret `STRATA_PR_TOKEN`, with write access to contents and pull requests.
+
+`scripts/ci/observer-propose.sh --dry-run` writes the files of the records and
+pushes nothing. To publish by hand, give the records of the merge to a replace:
+
+```bash
+scripts/ci/observer-records.sh --revision "$GIT_SHA" \
+  releases/observer/*.json | kubectl replace -f -
+```
+
+A replace removes each key that the records do not hold, also a key that the seed
+wrote. An apply keeps the keys of the seed.
 
 ## The pods of the cluster
 

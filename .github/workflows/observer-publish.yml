@@ -1,0 +1,74 @@
+name: strata observer publish
+
+# Reusable workflow. A repository calls it on a push to its default branch. It writes the approved
+# records into the four Secrets of the observer on a cluster, with the revision of the push, and
+# the page of the observer removes the notice of the first-seen records; see
+# docs/src/automation/observer.md. It runs scripts/ci/observer-records.sh from the tag that the
+# caller names, and needs no strata binary.
+on:
+  workflow_call:
+    inputs:
+      records:
+        description: The approved records in the checkout of the caller, files or patterns such as releases/observer/*.json, separated by spaces or new lines. One record for each profile version.
+        default: releases/observer/*.json
+        type: string
+      namespace:
+        description: The namespace of the observer on the cluster
+        default: strata-observer
+        type: string
+      strata-version:
+        description: The strata release to use, a tag of this repository
+        required: true
+        type: string
+    secrets:
+      kubeconfig:
+        description: A kubeconfig that can get and update the four Secrets of the records. The role publisher of the chart gives that right and no other.
+        required: true
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private.
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      # the repository of the caller, where the records live
+      - uses: actions/checkout@v7
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v7
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+          persist-credentials: false
+      - name: publish the records
+        # shell: bash sets pipefail, so a failed observer-records.sh fails the step
+        shell: bash
+        env:
+          KUBECONFIG_TEXT: ${{ secrets.kubeconfig }}
+          RECORDS: ${{ inputs.records }}
+          NAMESPACE: ${{ inputs.namespace }}
+          REVISION: ${{ github.sha }}
+        run: |
+          umask 077
+          printf '%s\n' "$KUBECONFIG_TEXT" > "$RUNNER_TEMP/kubeconfig"
+          export KUBECONFIG="$RUNNER_TEMP/kubeconfig"
+          # the shell expands the patterns, and a pattern that finds no file stops the step
+          set -f
+          patterns=($RECORDS)
+          set +f
+          shopt -s globstar nullglob
+          records=()
+          for pattern in "${patterns[@]}"; do
+            found=($pattern)
+            if [ "${#found[@]}" -eq 0 ]; then echo "no record matches $pattern" >&2; exit 2; fi
+            records+=("${found[@]}")
+          done
+          # replace, and not apply: the Secrets get only these records, also when the seed of the
+          # chart wrote other keys before
+          .strata/scripts/ci/observer-records.sh --revision "$REVISION" --namespace "$NAMESPACE" \
+            "${records[@]}" | kubectl replace -f -
