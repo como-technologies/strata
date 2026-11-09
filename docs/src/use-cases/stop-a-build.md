@@ -72,9 +72,10 @@ preflight check: the runs prove it on this engine, and the exit code is `1`.
 
 `NOT CHECKED` is a fault that strata knows and cannot check here: a check that
 needs the tool of the cloud that is not on this machine, or a row with no check
-yet. The `reproduce:` lines say what to run by hand. The fix of the CPU floor is
-on the person: two workers, or a larger type. Change the file, run the command
-again, until it is clean.
+yet. The `reproduce:` lines say what to run by hand. Each line reads, and changes
+nothing: see [The reproduce lines](../reference/preflight-rules.md#the-reproduce-lines).
+The fix of the CPU floor is on the person: two workers, or a larger type. Change
+the file, run the command again, until it is clean.
 
 A rule that reads a list asks Palette once for each item. An add-on profile that
 a cluster template links fails the build in any position of the list. The same
@@ -171,14 +172,15 @@ never changes the exit code. A change that Palette refuses is a failure.
 
 Delete a cluster that is `Running`, never one that is `Provisioning`: a delete
 during the build stays in `Deleting`, and the rule `delete-while-provisioning`
-says so on `cluster:UID`. Then read the inventory of the cloud, which must be 0
-on every line before any force delete:
+says so on `cluster:UID`. Then read what the cloud still holds. The
+`reproduce:` lines of `force-delete-leaves-cloud` read it by the name of the
+cluster. Each line must find nothing before any force delete:
 
 ```bash
+strata preflight cluster:$uid --rule force-delete-leaves-cloud   # before the delete: the reads of the cloud for this cluster
 printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY" \
   | curl -s --config - -X DELETE -H "ProjectUid: $PALETTE_PROJECT_UID" \
   "https://api.spectrocloud.com/v1/spectroclusters/$uid"
-examples/live/aws-inventory.sh <cluster name> <region>
 ```
 
 [The live example](../development/live-example.md#when-a-teardown-is-slow-or-stuck)

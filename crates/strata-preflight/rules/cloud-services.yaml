@@ -34,7 +34,6 @@ rules:
         else [] end
     reproduce:
       - "gcloud services list --enabled --project {{ .entity.spec.cloudConfig.project }} | grep -E 'container|compute'"
-      - "gcloud services enable container.googleapis.com --project {{ .entity.spec.cloudConfig.project }}"
     fix:
       owner: palette
       text: The GKE create calls the GCP property route, and the route checks Service Usage.
@@ -342,7 +341,6 @@ rules:
           end
     reproduce:
       - "az provider list --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query \"[?namespace=='Microsoft.Compute' || namespace=='Microsoft.Network' || namespace=='Microsoft.Storage' || namespace=='Microsoft.ContainerService'].[namespace,registrationState]\" --output table"
-      - "az provider register --namespace Microsoft.Compute --subscription {{ .entity.spec.cloudConfig.subscriptionId }}"
     fix:
       owner: palette
       text: Read the registration state of the four providers in the Azure account validate.

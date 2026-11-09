@@ -48,20 +48,7 @@ rules:
       The provider sends one plain delete and waits for its own deadline. A pipeline sees an error
       with no reason it can read. Read the state of the cluster after the error.
     reproduce:
-      aws:
-        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
-      eks:
-        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # what the cloud still holds"
-      gcp:
-        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # what the cloud still holds"
-      gke:
-        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # what the cloud still holds"
-      all:
-        - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
+      - "strata-preflight --watch cluster:{{ .clusterUid // \"<cluster uid>\" }}   # the conditions and the events of the delete"
     fix:
       owner: none
     evidence:
@@ -90,8 +77,8 @@ rules:
       - kind: run
         ref: "#47"
       - kind: source
-        ref: examples/live/lib.sh hold_versions
-        note: the lab stores skip_destroy for its flag at the baseline, before any bump
+        ref: docs/src/development/live-example.md
+        note: the scripts of the live example store skip_destroy for the flag at the baseline, before any bump
 
   - id: provider-version
     title: The provider is 0.29.8 or later
@@ -250,8 +237,7 @@ rules:
       text: Check each tool at the start of a run, before the first step that needs one.
     evidence:
       - kind: source
-        ref: examples/live/cluster.sh, examples/live/registry.sh
-        note: each script checks its own tools with `command -v` and stops on the first missing one
+        note: each script of the live example checks its own tools with `command -v`, and stops on the first missing one
     tests:
       - fault: fixtures/eks/tool-missing.json
         clean: fixtures/eks/tools-present-clean.json
@@ -273,5 +259,4 @@ rules:
       text: Build before each run; `lib.sh` refuses a stale binary.
     evidence:
       - kind: source
-        ref: examples/live/lib.sh
-        note: "`find ... -newer \"$strata\"` over src, Cargo.toml, and Cargo.lock; a hit stops the script"
+        note: "the scripts of the live example: `find ... -newer \"$strata\"` over src, Cargo.toml, and Cargo.lock; a hit stops the script"

@@ -2882,10 +2882,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Five sections list the changes that need action"),
-        "the opening does not name five sections"
+        one_line(opening).contains("Six sections list the changes that need action"),
+        "the opening does not name six sections"
     );
     for anchor in [
+        "(#release-0330-changes-that-need-action)",
         "(#release-0280-changes-that-need-action)",
         "(#release-0270-changes-that-need-action)",
         "(#release-0260-changes-that-need-action)",
@@ -6080,5 +6081,41 @@ fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
     assert_eq!(
         shown, 3,
         "stop-a-build.md shows two commands and live-example.md shows one"
+    );
+}
+
+/// A report of strata-preflight printed a line that deletes each version of a profile (#613). The
+/// rule format states what a reproduce line can hold, and the section of release 0.33.0 names the
+/// lines that are gone. The document of the report links to the rule format.
+#[test]
+fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
+    let rules = read(&docs().join("reference/preflight-rules.md"));
+    let lines = one_line(section(&rules, "## The reproduce lines", Some("\n## ")));
+    for needle in [
+        "each line reads, and changes nothing",
+        "A `POST` goes only to a validate route of Palette",
+        "A line names no path of the live example, `examples/live`",
+        "A rule that only the lab can reproduce says so in such a line",
+    ] {
+        assert!(
+            lines.contains(needle),
+            "preflight-rules.md lacks {needle:?}"
+        );
+    }
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.33.0");
+    for needle in [
+        "the `api.sh delete-named` of `versions-outside-state`",
+        "the `--delete` of `eks-delete-waits`",
+        "(./preflight-rules.md#the-reproduce-lines)",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of release 0.33.0 lacks {needle:?}"
+        );
+    }
+    let documents = one_line(&read(&docs().join("reference/documents.md")));
+    assert!(
+        documents.contains("(./preflight-rules.md#the-reproduce-lines)"),
+        "documents.md does not link the reproduce lines"
     );
 }

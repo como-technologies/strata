@@ -262,9 +262,10 @@ rules:
       run, and Palette logs the event "Cluster <name> has been deleted" before the state changes;
       the state stays `Deleting` for several minutes after that event. Judge a delete by the
       cloud inventory, not by a condition or by the time: 0 on every line of the inventory means
-      the cloud is empty. No check reads this before a build; the reproduce line is the inventory.
+      the cloud is empty. No check reads this before a build; the reproduce lines are the inventory.
     reproduce:
-      - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line: the cloud is empty"
+      - "aws ec2 describe-instances --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query 'Reservations[].Instances[].InstanceId' --output text   # no id: the instances are gone"
+      - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Vpcs[].VpcId' --output text   # no id: the network, which goes last, is gone"
     evidence:
       - kind: run
         ref: teardown lab
@@ -353,7 +354,7 @@ rules:
     evidence:
       - kind: run
         ref: teardown lab
-        note: "examples/live/tf.sh and lib.sh: OperationForbidden under the parallel refresh; live-example.md: the plain-text 404 of the gateway"
+        note: "the scripts of the live example: OperationForbidden under the parallel refresh; live-example.md: the plain-text 404 of the gateway"
       - kind: source
         ref: strata src/api/retry.rs Retry
         note: retries a 5xx, a 429, and a transport error, with a backoff from 1 s

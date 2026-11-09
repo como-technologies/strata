@@ -14,7 +14,8 @@ Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Five sections list the changes that need action:
+Six sections list the changes that need action:
+[Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
 [Release 0.26.0](#release-0260-changes-that-need-action),
@@ -977,6 +978,31 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.33.0: changes that need action
+
+Release 0.33.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`strata preflight`: no `reproduce` line deletes or changes anything, and none
+  names `examples/live`.** Each line reads. See
+  [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
+  - Five lines that changed something are gone. Three are the `api.sh delete-named`
+    of `versions-outside-state`, the `--delete` of `eks-delete-waits`, and the
+    `unlock` of `pause-agent-upgrades`. The other two are the
+    `gcloud services enable` of `gke-api-off` and the `az provider register`
+    of `azure-resource-providers`.
+  - The lines that ran a script of the live example read the cloud with `aws`,
+    `gcloud`, or `curl` now. `inventory-managed` says in words that only the lab
+    can reproduce it.
+  - The `evidence[]` of a rule names no path of the live example. A `ref` names
+    the page of the live example, or it is empty and the note names the script.
+  - A script that reads a line of `reproduce[]` by its position must read the new
+    lines.
 
 ## Release 0.28.0: changes that need action
 
