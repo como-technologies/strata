@@ -179,7 +179,7 @@ func TestTheBookQuotesTheWordsOfTheColumnPaletteAndOfTheCardMoveTo(t *testing.T)
 	for _, row := range rows {
 		mustHold(t, "app.js", script, words(row[0]), words(row[1]))
 	}
-	mustHold(t, "app.js", script, `<th class="narrow-hide">Palette</th>`, "Ask again", `The page "behind" in the book says what this answer covers.`)
+	mustHold(t, "app.js", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, "Ask again", "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
 }
 
 // The table of the splashes in the page of the server holds the headline of each splash of app.js, and no other. A place with a

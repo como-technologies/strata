@@ -56,6 +56,11 @@ const NO_ALERTS = {set: false, channels: [], digestEvery: "", waiting: 0, rules:
 // What a row of the table of newer versions says for an answer.
 const ASK_ROW = {[VERDICT.NO_ERROR]: "No error", [VERDICT.REFUSES]: "Refuses", [VERDICT.NO_ANSWER]: "No answer"};
 const ASK_FAILED = "The observer could not ask now. Try again later.";
+// What a click asks, and what an answer of no error covers. Strata sends Palette the packs of the profile, with the newest version of
+// this pack and its default values in the place of the pin. Palette checks them against each cluster that runs the profile. The
+// request changes nothing.
+const ASK_WHAT = "Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.";
+const ASK_COVERS = "Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.";
 // The two layouts of a diff, and the note of a last line that has no end of line.
 const VIEWS = [["unified", "Unified"], ["split", "Split"]];
 const NO_EOL = "\\ No newline at end of file";
@@ -543,13 +548,13 @@ const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class
 function askBlock(subject, p) {
   const a = answerOf(subject, p);
   const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut mt6">${ASK_FAILED}</div>` : "";
-  if (!a) return h`<div class="mt10">${askButton("btn", subject, p, "Ask Palette about this move")}${failed}</div>`;
+  if (!a) return h`<div class="small mut mt10">${ASK_WHAT}</div><div class="mt6">${askButton("btn", subject, p, "Ask Palette about this move")}${failed}</div>`;
   switch (verdictOf(a)) {
     case VERDICT.NO_ERROR:
-      return h`<div class="note small mt10"><b>Palette gave no error.</b> The page "behind" in the book says what this answer covers.</div>`;
+      return h`<div class="note small mt10"><b>Palette gave no error.</b> ${ASK_COVERS}</div>`;
     case VERDICT.REFUSES: {
       const list = a.refusals || [];
-      return h`<div class="note a small mt10">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Nothing on this cluster changed.</div></div>`;
+      return h`<div class="note a small mt10">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Palette would not take this move as the profile is now. Nothing on this cluster changed.</div></div>`;
     }
     default:
       return h`<div class="note small mt10"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div><div class="mt6">${askButton("btn", subject, p, "Ask again")}${failed}</div>`;
@@ -903,7 +908,7 @@ function newerCard() {
     const shownGroups = groups.map(g => matches("newer", g.subject) ? g : {...g, rows: g.rows.filter(r => matches("newer", r.name))}).filter(g => g.rows.length);
     body = h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>
       <div class="body tb pb8">${filterBox("newer", "Filter by pack or profile")}</div>
-      <div class="tw"><table><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
+      <div class="tw"><table><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
         const p = profileOf(g.subject);
         const total = p ? p.packs.length : "";
         return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
@@ -1156,7 +1161,7 @@ function viewImage(ref) {
   const profiles = [...new Set(img.packs.map(p => p.profile))];
   const packs = img.packs.length ? img.packs.map(p => lab("pack", packName(p.key))) : mut("none");
   const links = profiles.length ? profiles.map(s => h`<a class="m" href="${profileHash(s)}">${s}</a> `) : mut("none");
-  const fix = IMAGE_NOTE[img.status] ? h`<section class="card"><div class="chead"><h2>The fix</h2></div><div class="body">The use case "A vendor rebuilds an image under one tag" in the book shows the fix.</div></section>` : "";
+  const fix = IMAGE_NOTE[img.status] ? h`<section class="card"><div class="chead"><h2>The fix</h2></div><div class="body"><ul class="tight"><li>Name the image by its digest where the chart or the manifest reads it, in a new version of the pack.</li><li>Or copy the image, by digest, to a registry with immutable tags, and name the copy in the pack.</li></ul></div></section>` : "";
   return {nav: "images", crumbs: cr, body: h`${alertBars()}
     <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${ref}</h1>${imageBadge(img.status)}</div>
     <div class="meta"><div><span>${img.packs.length > 1 ? "Packs" : "Pack"}</span>${packs}</div><div><span>${profiles.length > 1 ? "Profiles" : "Profile"}</span>${links}</div><div><span>Named by</span>${img.byDigest ? "a digest" : "a tag"}</div><div><span>Match</span>${MATCH_WORDS[img.match] || img.match}</div></div></div></section>

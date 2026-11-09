@@ -613,7 +613,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
 	table := pageOf(t, screens, "#newer", "")
-	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<span class="arrow" aria-hidden="true">↕</span></button></th><th class="narrow-hide">Palette</th></tr></thead>`)
+	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<span class="arrow" aria-hidden="true">↕</span></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
 	if got := strings.Count(table, ">Ask Palette</button>"); got != len(set.Newer.Newer) {
 		t.Errorf("the table has %d buttons for %d rows", got, len(set.Newer.Newer))
 	}
@@ -661,7 +661,7 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 	}
 	// The cards: the words of the issue, exactly.
 	noError := textOf(cardOf(t, pageOf(t, screens, k8sHash, ""), "Palette gave no error"))
-	mustHold(t, "no error", noError, `Palette gave no error. The page "behind" in the book says what this answer covers.`)
+	mustHold(t, "no error", noError, `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
 	mustNotHold(t, "no error", noError, "It read default values", "Ask Palette about this move")
 	refuses := textOf(cardOf(t, pageOf(t, screens, traefikHash, ""), "Palette refuses"))
 	mustHold(t, "refuses", refuses, "Palette refuses: "+refusal.Code, refusal.Message, "on "+refusal.Clusters[0], "Nothing on this cluster changed.")
@@ -720,7 +720,7 @@ func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
 	mustHold(t, "before", r.Before, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
 	mustHold(t, "during", r.During, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex" disabled>Asking...</button>`)
 	mustNotHold(t, "during", r.During, "Ask Palette about this move", "Palette gave")
-	mustHold(t, "after", textOf(r.After), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
+	mustHold(t, "after", textOf(r.After), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
 	mustNotHold(t, "after", r.After, "Asking...", "Ask Palette about this move", "The observer could not ask now")
 	if len(r.Posts) != 1 || r.Posts[0].Method != "POST" || r.Posts[0].Path != "/v1/packs/fred-identity@2.3.0/addon/dex/ask" {
 		t.Fatalf("the posts: %+v", r.Posts)
@@ -799,7 +799,7 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 func TestAnotherClickOnANoAnswerReplacesIt(t *testing.T) {
 	r := click(t, devdata.StateAsks, dexHash, "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
 	mustHold(t, "before", textOf(r.Before), "Palette gave no answer: HTTP 403.")
-	mustHold(t, "after", textOf(r.After), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
+	mustHold(t, "after", textOf(r.After), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
 	mustNotHold(t, "after", textOf(r.After), "Palette gave no answer", "HTTP 403")
 	mustNotHold(t, "after", r.After, "Ask again")
 }
@@ -812,7 +812,7 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 		return []byte(strings.ReplaceAll(string(raw), `"newest":"1.36.2"`, `"newest":"1.37.0"`))
 	}})
 	pages := pagesOf(t, dir, k8sHash, "#newer")
-	mustHold(t, "the card", textOf(pages[0]), `Palette gave no error. The page "behind" in the book says what this answer covers.`)
+	mustHold(t, "the card", textOf(pages[0]), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
 	mustNotHold(t, "the card", pages[0], ">Ask Palette about this move</button>")
 	mustHold(t, "the table", rowWith(t, pages[1], `data-go="`+k8sHash+`"`), `<td class="narrow-hide"><span class="fw">No error</span></td>`)
 }

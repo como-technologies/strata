@@ -579,13 +579,14 @@ for each record that pins the pack. A record of a profile version gives one `POS
 request asks a question and changes nothing. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
 says what the answer covers.
 
-The column "Palette" of the table shows the short word of the answer. The card "Move to"
+Before a click, the card says what the button asks, and the head of the column "Palette"
+says it on a hover. The column shows the short word of the answer. The card "Move to"
 shows the long one:
 
 | The column "Palette" | The card "Move to" | Meaning |
 | --- | --- | --- |
 | Ask Palette | Ask Palette about this move | No click yet. |
-| No error | Palette gave no error. | Palette checked the default values of the new version and gave no error. It did not check your own values. The note says that the page "behind" in the book tells what the answer covers. |
+| No error | Palette gave no error. | Palette checked the default values of the new version and gave no error. It did not check your own values. The card says so in these words. |
 | Refuses | `Palette refuses: <code>` | Palette gave the error `<code>`. The card shows the message of Palette and the clusters that the message names. |
 | No answer | Palette gave no answer. | A request failed. The card adds the HTTP status, when the failure has one. A button "Ask again" follows. |
 

@@ -1481,7 +1481,7 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 				}
 				if img.Status == model.ImageStatusMoved || img.Status == model.ImageStatusSplit {
 					cls := map[model.ImageStatus]string{model.ImageStatusMoved: "a", model.ImageStatusSplit: "r"}[img.Status]
-					mustHold(t, img.Ref, page, `<div class="note `+cls+` small">`, "<h2>The fix</h2>", `The use case "A vendor rebuilds an image under one tag" in the book shows the fix.`)
+					mustHold(t, img.Ref, page, `<div class="note `+cls+` small">`, "<h2>The fix</h2>", "Name the image by its digest where the chart or the manifest reads it", "a registry with immutable tags")
 				} else {
 					mustNotHold(t, img.Ref, page, `class="note`, "The fix")
 				}
