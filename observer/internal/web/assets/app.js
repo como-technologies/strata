@@ -180,7 +180,7 @@ const POD_ERROR_TEXT = {
 // each diff, asking holds the moves with a question to Palette on its way, and askFailed holds the moves
 // for which the observer could not ask.
 let D = null;
-const S = {filter: "all", q: "", tabs: {}, side: {}, open: {}, diffs: {}, view: "unified", asking: {}, askFailed: {}, offline: false, loadedAt: null};
+const S = {filter: "all", q: "", qs: {}, sort: {}, tabs: {}, side: {}, open: {}, diffs: {}, view: "unified", asking: {}, askFailed: {}, offline: false, loadedAt: null};
 
 async function getJSON(url) {
   const r = await fetch(url, {cache: "no-store"});
@@ -294,6 +294,49 @@ const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
 const packName = key => key.slice(key.indexOf("/") + 1);
 const profileOf = subject => D.profiles.find(p => subjectOf(p) === subject);
 const impactOf = i => IMPACT[i] || ["y", i];
+
+/* ---- Sort and filter ----
+   The head of a column with a key sorts its table. A click sorts up, a second click sorts down, and a third gives back the order of the
+   page. A sort keeps the order of the page among equal rows. A version sorts by the precedence of SemVer 2.0.0 when both parse, so a
+   pre-release sorts below its release; any other version sorts in natural order. */
+const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+const natural = (a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: "base"});
+function semverCmp(a, b) {
+  const x = SEMVER.exec(a), y = SEMVER.exec(b);
+  if (!x || !y) return natural(a, b);
+  for (let i = 1; i <= 3; i++) if (Number(x[i]) !== Number(y[i])) return Number(x[i]) - Number(y[i]);
+  if (!x[4] || !y[4]) return x[4] ? -1 : y[4] ? 1 : 0;
+  const p = x[4].split("."), q = y[4].split(".");
+  for (let i = 0; i < Math.max(p.length, q.length); i++) {
+    if (p[i] === undefined) return -1;
+    if (q[i] === undefined) return 1;
+    const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
+    if (pn && qn && Number(p[i]) !== Number(q[i])) return Number(p[i]) - Number(q[i]);
+    if (pn !== qn) return pn ? -1 : 1;
+    if (!pn && p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
+  }
+  return 0;
+}
+const ORDERS = {num: (a, b) => a - b, text: natural, version: semverCmp};
+const rank = list => v => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
+
+// sortBy sorts a list by the column that S.sort holds for the table. keys maps a column to [the value of a row, the kind of order].
+function sortBy(table, list, keys) {
+  const s = S.sort[table], k = s && keys[s.col];
+  if (!k) return list;
+  const [get, kind] = k;
+  return list.map((x, i) => [x, i]).sort(([a, i], [b, j]) => ORDERS[kind](get(a), get(b)) * s.dir || i - j).map(([x]) => x);
+}
+
+// sortTh draws the head of a column that sorts its table.
+function sortTh(table, col, label, cls = "") {
+  const s = S.sort[table], on = !!s && s.col === col;
+  return h`<th class="${cls}" aria-sort="${on ? (s.dir > 0 ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${table}" data-col="${col}">${label}<span class="arrow" aria-hidden="true">${on ? (s.dir > 0 ? "▲" : "▼") : "↕"}</span></button></th>`;
+}
+
+// filterBox is a search field for one list. The page keeps what a person types in S.qs, and matches is the test of a row.
+const filterBox = (key, words) => h`<input class="search" id="q-${key}" data-q="${key}" type="search" placeholder="${words}" aria-label="${words}" value="${S.qs[key] || ""}">`;
+const matches = (key, ...texts) => { const q = (S.qs[key] || "").toLowerCase(); return !q || texts.some(t => String(t).toLowerCase().includes(q)); };
 
 const badge = (cls, text) => h`<span class="badge ${cls}">${text}</span>`;
 // badgeOf draws the badge of a word from one of the tables above. A word that the table lacks shows as it is.
@@ -707,13 +750,15 @@ function eventRows(list) {
   });
 }
 
-const EVENT_HEAD = h`<thead><tr><th>Type</th><th class="narrow-hide">Reason</th><th>Age</th><th class="narrow-hide">Object</th><th>Message</th></tr></thead>`;
 const EVENTS_SHOWN = 8;
 
+const EVENT_KEYS = {type: [x => x.type, "text"], reason: [x => x.reason, "text"], age: [x => -when(x.time), "num"], object: [x => x.object, "text"]};
+const eventHead = table => h`<thead><tr>${sortTh(table, "type", "Type")}${sortTh(table, "reason", "Reason", "narrow-hide")}${sortTh(table, "age", "Age")}${sortTh(table, "object", "Object", "narrow-hide")}<th>Message</th></tr></thead>`;
+
 function eventsCard() {
-  const all = D.events, first = all.slice(0, EVENTS_SHOWN), rest = all.slice(EVENTS_SHOWN);
-  const more = rest.length ? h`<details data-open="events" ${openAttr("events")}><summary>${rest.length} more ${plural(rest.length, "event", "events")}</summary><div class="tw"><table>${EVENT_HEAD}<tbody>${eventRows(rest)}</tbody></table></div></details>` : "";
-  const body = all.length ? h`<div class="tw"><table>${EVENT_HEAD}<tbody>${eventRows(first)}</tbody></table></div>${more}` : h`<div class="body">${inline(quietTone(), calmOk() ? "All quiet: no events in the last 7 days." : "No events in the last 7 days.")}</div>`;
+  const all = sortBy("et", D.events, EVENT_KEYS), first = all.slice(0, EVENTS_SHOWN), rest = all.slice(EVENTS_SHOWN);
+  const more = rest.length ? h`<details data-open="events" ${openAttr("events")}><summary>${rest.length} more ${plural(rest.length, "event", "events")}</summary><div class="tw"><table>${eventHead("et")}<tbody>${eventRows(rest)}</tbody></table></div></details>` : "";
+  const body = all.length ? h`<div class="tw"><table>${eventHead("et")}<tbody>${eventRows(first)}</tbody></table></div>${more}` : h`<div class="body">${inline(quietTone(), calmOk() ? "All quiet: no events in the last 7 days." : "No events in the last 7 days.")}</div>`;
   return h`<section class="card"><div class="chead"><h2>Recent events</h2><span class="small mut">Last 7 days</span></div>${body}</section>`;
 }
 
@@ -795,7 +840,8 @@ function profilesCard() {
   const cnt = {};
   FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });
   const q = S.q.toLowerCase();
-  const shown = list.filter(x => has(x, S.filter) && (!q || subjectOf(x).toLowerCase().includes(q)));
+  const shown = sortBy("pt", list.filter(x => has(x, S.filter) && (!q || subjectOf(x).toLowerCase().includes(q))), {
+    status: [x => SEVERITY.indexOf(x.status), "num"], profile: [x => x.name, "text"], type: [x => x.type, "text"], packs: [x => x.packs.length, "num"]});
   const rows = shown.map(x => {
     const subject = subjectOf(x);
     return h`<tr class="link" data-go="${profileHash(subject)}"><td class="w110">${statusBadge(x.status)}</td><td class="m nw"><a href="${profileHash(subject)}">${x.name}</a><span class="mut">@${x.version}</span></td><td class="mut narrow-hide">${x.type}</td><td class="narrow-hide nw">${hbar(x)}</td><td class="msg">${newsOf(x)}</td></tr>`;
@@ -806,7 +852,7 @@ function profilesCard() {
   return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${neverChecked() ? "Not read yet" : `${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs`}</span></h2>
     <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${num(cnt[k])}</button>`)}</div>
     <input class="search" id="q" type="search" placeholder="Filter by name" aria-label="Filter by name" value="${S.q}"></div></div>
-    <div class="tw"><table id="pt"><thead><tr><th>Status</th><th>Profile</th><th class="narrow-hide">Type</th><th class="narrow-hide">Packs</th><th>Message</th></tr></thead><tbody>${rows.length ? rows : empty}</tbody></table></div></section>`;
+    <div class="tw"><table id="pt"><thead><tr>${sortTh("pt", "status", "Status")}${sortTh("pt", "profile", "Profile")}${sortTh("pt", "type", "Type", "narrow-hide")}${sortTh("pt", "packs", "Packs", "narrow-hide")}<th>Message</th></tr></thead><tbody>${rows.length ? rows : empty}</tbody></table></div></section>`;
 }
 
 /* ---- The screens ---- */
@@ -837,6 +883,9 @@ function viewNewer() {
 }
 
 // newerCard draws the table of the newer versions, or the splash of an empty list.
+const NEWER_KEYS = {pack: [r => r.name, "text"], move: [r => r.newest, "version"], impact: [r => rank(Object.keys(IMPACT))(r.impact), "num"],
+  settings: [r => r.fold.settings, "num"], images: [r => r.images, "num"], charts: [r => r.charts, "num"], listed: [r => when(r.listed) || 0, "num"]};
+
 function newerCard() {
   const n = D.cluster.counts, rows = D.newer;
   let body;
@@ -850,18 +899,21 @@ function newerCard() {
       g.rows.push(r);
     }));
     groups.sort((a, b) => a.subject.localeCompare(b.subject));
+    // A filter keeps a whole group when its profile matches, and else the rows whose pack matches.
+    const shownGroups = groups.map(g => matches("newer", g.subject) ? g : {...g, rows: g.rows.filter(r => matches("newer", r.name))}).filter(g => g.rows.length);
     body = h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>
-      <div class="tw"><table><thead><tr><th>Pack</th><th>Move</th><th>Impact</th><th class="n">Settings</th><th class="n narrow-hide">Images</th><th class="n narrow-hide">Charts</th><th class="narrow-hide">Listed</th><th class="narrow-hide">Palette</th></tr></thead><tbody>${groups.map(g => {
+      <div class="body tb pb8">${filterBox("newer", "Filter by pack or profile")}</div>
+      <div class="tw"><table><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
         const p = profileOf(g.subject);
         const total = p ? p.packs.length : "";
         return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
-          g.rows.map(r => {
+          sortBy("nt", g.rows, NEWER_KEYS).map(r => {
             const k = packOfRow(p, r);
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
             const count = v => moveUnread(g.subject, k) ? DASH : v;
             return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
           })];
-      })}</tbody></table></div>`;
+      }) : h`<tr><td colspan="8">${inline(TONE.OFF, h`No pack or profile matches <span class="m">${S.qs.newer}</span>.`)}</td></tr>`}</tbody></table></div>`;
   }
   const others = packsWithoutMove();
   const sub = rows.length ? h`<span class="sub">${rows.length} in ${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")}. ${others.current} other ${plural(others.current, "pack is", "packs are")} current.${others.unchecked ? ` ${others.unchecked} ${plural(others.unchecked, "is", "are")} not checked.` : ""}</span>` : h`<span class="sub">${num(rows.length)}</span>`;
@@ -1047,7 +1099,11 @@ function imagesBody() {
     return o.error ? podsFailedSplash(o.error) : splash(TONE.BUILD, "Reading the pods", "No read of the pods has ended yet. This page fills in when one does.", "", SIZE.CARD);
   }
   if (!o.images.length) return splash(TONE.OFF, "No image to list", "The observer read the pods, and no pod runs an image.", "", SIZE.CARD);
-  return h`<div class="tw"><table><thead><tr><th>Status</th><th>Image</th><th class="narrow-hide">Pack</th><th class="n narrow-hide">Pods</th><th>Digest</th></tr></thead><tbody>${o.images.map(imageRow)}</tbody></table></div>`;
+  const shown = sortBy("it", o.images.filter(img => matches("images", img.ref, ...img.packs.map(q => q.key))), {
+    status: [img => rank([IMAGE.SPLIT, IMAGE.MOVED, IMAGE.NOT_CHECKED, IMAGE.STEADY])(img.status), "num"], image: [img => img.ref, "text"],
+    pack: [img => img.packs.length ? packName(img.packs[0].key) : "~", "text"], pods: [podsOf, "num"]});
+  const none = h`<tr><td colspan="5">${inline(TONE.OFF, h`No image matches <span class="m">${S.qs.images}</span>.`)}</td></tr>`;
+  return h`<div class="body tb pb8">${filterBox("images", "Filter by image or pack")}</div><div class="tw"><table><thead><tr>${sortTh("it", "status", "Status")}${sortTh("it", "image", "Image")}${sortTh("it", "pack", "Pack", "narrow-hide")}${sortTh("it", "pods", "Pods", "n narrow-hide")}<th>Digest</th></tr></thead><tbody>${shown.length ? shown.map(imageRow) : none}</tbody></table></div>`;
 }
 
 function viewImages() {
@@ -1618,7 +1674,7 @@ function render() {
     return;
   }
   const active = document.activeElement;
-  const typing = active && active.id === "q" ? {start: active.selectionStart, end: active.selectionEnd} : null;
+  const typing = active && /^q(-|$)/.test(active.id || "") ? {id: active.id, start: active.selectionStart, end: active.selectionEnd} : null;
   const v = route();
   put(document.getElementById("navl"), navLinks(v.nav));
   const c = D.cluster.cluster;
@@ -1626,7 +1682,7 @@ function render() {
   put(document.getElementById("top"), topBar(v.crumbs));
   put(main, v.body);
   if (typing) {
-    const q = document.getElementById("q");
+    const q = document.getElementById(typing.id);
     if (q) { q.focus(); q.setSelectionRange(typing.start, typing.end); }
   }
 }
@@ -1655,6 +1711,13 @@ function onClick(ev) {
   if (f) { S.filter = f.dataset.filter; render(); return; }
   const v = ev.target.closest("[data-view]");
   if (v) { S.view = v.dataset.view === "split" ? "split" : "unified"; render(); return; }
+  const so = ev.target.closest("[data-sort]");
+  if (so) {
+    const t = so.dataset.sort, c = so.dataset.col, cur = S.sort[t];
+    S.sort[t] = !cur || cur.col !== c ? {col: c, dir: 1} : cur.dir > 0 ? {col: c, dir: -1} : undefined;
+    render();
+    return;
+  }
   const q = ev.target.closest("[data-ask]");
   if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }
   const j = ev.target.closest("[data-jump]");
@@ -1673,6 +1736,7 @@ function start() {
   document.addEventListener("click", onClick);
   document.addEventListener("input", ev => {
     if (ev.target.id === "q") { S.q = ev.target.value.trim(); render(); }
+    else if (ev.target.dataset && ev.target.dataset.q) { S.qs[ev.target.dataset.q] = ev.target.value.trim(); render(); }
   });
   document.addEventListener("change", ev => {
     if (ev.target.id === "side") { S.side[ev.target.dataset.id] = ev.target.value; render(); }

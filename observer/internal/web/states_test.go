@@ -914,3 +914,68 @@ func TestThePacksOfAProfileAreAStackAndThePageOfAPackLightsItsSlab(t *testing.T)
 		}
 	}
 }
+
+// ---- Sort and filter ----
+
+// The order of the packs of a group of the Newer table, by the name of each pack.
+func newerOrder(page, subject string) []string {
+	at := strings.Index(page, `href="#p-`+subject+`"`)
+	if at < 0 {
+		return nil
+	}
+	rest := page[at:]
+	if end := strings.Index(rest[1:], `<tr class="g">`); end >= 0 {
+		rest = rest[:end+1]
+	}
+	var out []string
+	for _, m := range regexp.MustCompile(`<tr class="link" data-go="[^"]*"><td class="m"><a href="[^"]*">([^<]+)</a>`).FindAllStringSubmatch(rest, -1) {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+// A click on the head of a column sorts the table up, a second click sorts it down, and a third gives back
+// the order of the page. A version sorts by SemVer 2.0.0, so 1.20.1 comes before 1.36.2, and a version that
+// is no SemVer sorts in natural order.
+func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
+	const subject = "barney-base@1.5.0"
+	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), subject)
+	up := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: 1}`)
+	mustHold(t, "up", up, `<th class="" aria-sort="ascending"><button type="button" class="sort on" data-sort="nt" data-col="move">Move<span class="arrow" aria-hidden="true">▲</span>`)
+	if got, want := newerOrder(up, subject), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
+		t.Errorf("up: %v, want %v", got, want)
+	}
+	down := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: -1}`)
+	mustHold(t, "down", down, `aria-sort="descending"`, `<span class="arrow" aria-hidden="true">▼</span>`)
+	if got, want := newerOrder(down, subject), []string{"ubuntu-aws", "csi-aws-ebs", "kubernetes", "cert-manager", "cni-cilium-oss"}; !slices.Equal(got, want) {
+		t.Errorf("down: %v, want %v", got, want)
+	}
+	// The harness clicks twice on each element. So one double click sorts up and then down, and three
+	// double clicks go round the cycle twice, back to the order of the page.
+	sortMove := `{"sort":"nt","col":"move"}`
+	mustHold(t, "a double click", click(t, devdata.StateOK, "#newer", "0", sortMove).After, `aria-sort="descending"`)
+	back := click(t, devdata.StateOK, "#newer", "0", sortMove, sortMove, sortMove).After
+	mustNotHold(t, "three double clicks", back, `aria-sort="ascending"`, `aria-sort="descending"`)
+	if got := newerOrder(back, subject); !slices.Equal(got, natural) {
+		t.Errorf("back: %v, want the order of the page %v", got, natural)
+	}
+	// A pre-release sorts below its release, and numbers compare as numbers.
+	order := pageWith(t, "testdata/api", devdata.StateOK, "#profiles", `S.q = ["1.0.0", "1.0.0-rc.10", "0.9.0", "1.0.0-alpha", "1.0.0-rc.2", "1.10.0", "1.2.0"].sort(semverCmp).join(" ")`)
+	mustHold(t, "the order of the versions", order, `value="0.9.0 1.0.0-alpha 1.0.0-rc.2 1.0.0-rc.10 1.0.0 1.2.0 1.10.0"`)
+}
+
+// A filter of the Newer table keeps a whole group when its profile matches, and else the rows whose pack
+// matches. A filter that matches nothing says so.
+func TestTheFilterOfTheNewerTableKeepsAGroupOrItsMatchingRows(t *testing.T) {
+	byPack := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "cilium"`)
+	if got := newerOrder(byPack, "barney-base@1.5.0"); !slices.Equal(got, []string{"cni-cilium-oss"}) {
+		t.Errorf("by pack: %v", got)
+	}
+	mustNotHold(t, "by pack", byPack, `href="#p-fred-identity@2.3.0"`)
+	byProfile := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "barney"`)
+	if got := newerOrder(byProfile, "barney-base@1.5.0"); len(got) != 5 {
+		t.Errorf("by profile: %v", got)
+	}
+	none := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "wilma-nothing"`)
+	mustHold(t, "no match", none, `No pack or profile matches <span class="m">wilma-nothing</span>.`)
+}

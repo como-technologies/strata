@@ -1357,7 +1357,8 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 			o := set.Images
 			list := pageOf(t, render(t, state, false), "#images", "")
 			mustHold(t, "the list", list, fmt.Sprintf(`<h2>Images <span class="sub">%d images. %d match a pack. %d do not.</span></h2>`, o.Counts.Images, o.Counts.Matched, o.Counts.Images-o.Counts.Matched),
-				`<th>Status</th><th>Image</th><th class="narrow-hide">Pack</th><th class="n narrow-hide">Pods</th><th>Digest</th>`)
+				`data-col="status">Status<`, `data-col="image">Image<`, `<th class="narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pack">Pack<`,
+				`<th class="n narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pods">Pods<`, `<th>Digest</th></tr></thead>`)
 			if got := strings.Count(list, `<tr class="link"`); got != len(o.Images) {
 				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
 			}
