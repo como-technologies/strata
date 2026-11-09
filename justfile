@@ -57,6 +57,14 @@ observer-image: (build-target "x86_64-unknown-linux-musl")
 observer-manifests:
     test "$(kubectl kustomize deploy/observer | grep -c '^kind: ')" = 4
 
+# Lint the chart deploy/helm/strata-observer, and render it with the least values (14 objects) and with each option (17). Needs helm.
+[group('observer')]
+observer-chart:
+    helm lint deploy/helm/strata-observer --set cluster.uid=c1 --set palette.projectUid=p1
+    test "$(helm template obs deploy/helm/strata-observer --set cluster.uid=c1 --set palette.projectUid=p1 | grep -c '^kind: ')" = 14
+    test "$(helm template obs deploy/helm/strata-observer --set cluster.uid=c1 --set palette.projectUid=p1 --set readPods=true --set readerGroup=team | grep -c '^kind: ')" = 17
+    ! helm template obs deploy/helm/strata-observer > /dev/null 2>&1
+
 # Render examples/observer-pods, which lists deploy/observer and the component deploy/observer/pods, and make sure it holds six objects and the flag --read-pods. Needs kubectl.
 [group('observer')]
 observer-manifests-pods:

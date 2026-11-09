@@ -1658,7 +1658,7 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 			list := pageOf(t, render(t, state, false), "#images", "")
 			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`, "Pods are not on the menu here", "This install does not read the pods.",
 				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`,
-				`<b>Next</b> Turn on the read of the pods when you install the observer.`, `class="splash md tone-off"`)
+				`<b>Next</b> Turn on the read of the pods when you install the observer: with the chart, set readPods to true and upgrade.`, `class="splash md tone-off"`)
 			mustNotHold(t, "the screen", list, "<table", "Compared with the first digest")
 		})
 	}

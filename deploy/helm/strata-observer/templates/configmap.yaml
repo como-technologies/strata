@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: strata-observer
+  labels: {{- include "observer.labels" . | nindent 4 }}
+data:
+  cluster-uid: {{ required "cluster.uid is required: the uid of the cluster in Palette" .Values.cluster.uid | quote }}
+  palette-api: {{ .Values.palette.api | quote }}
+  project-uid: {{ required "palette.projectUid is required: the uid of the project of the cluster" .Values.palette.projectUid | quote }}

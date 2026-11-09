@@ -1,0 +1,26 @@
+{{- if .Values.readPods }}
+# The read of the pods: a cluster role that can get and list each pod, and no other verb.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: strata-observer-pods
+  labels: {{- include "observer.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: strata-observer-pods
+  labels: {{- include "observer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: strata-observer-pods
+subjects:
+  - kind: ServiceAccount
+    name: strata-observer
+    namespace: {{ .Release.Namespace }}
+{{- end }}

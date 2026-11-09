@@ -1,0 +1,90 @@
+{{- if .Values.seed.enabled }}
+# The seed writes the first-seen records once, when the Secrets hold no record. Its role can get and update
+# the four Secrets by name, and nothing else. The observer itself holds no verb on Secrets.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: strata-observer-seed
+  labels: {{- include "observer.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: strata-observer-seed
+  labels: {{- include "observer.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [strata-observer-records-0, strata-observer-records-1, strata-observer-records-2, strata-observer-records-3]
+    verbs: [get, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: strata-observer-seed
+  labels: {{- include "observer.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: strata-observer-seed
+subjects:
+  - kind: ServiceAccount
+    name: strata-observer-seed
+    namespace: {{ .Release.Namespace }}
+---
+# The seed reaches DNS, Palette, and the API server, and takes no connection.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: strata-observer-seed
+  labels: {{- include "observer.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: strata-observer-seed
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: 6443 }
+---
+# A job has a template that cannot change, so each revision of the release has its own job. A job that ran
+# goes after a day. A second run finds the records, and writes nothing.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: strata-observer-seed-{{ .Release.Revision }}
+  labels: {{- include "observer.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: strata-observer-seed
+    spec:
+      serviceAccountName: strata-observer-seed
+      restartPolicy: OnFailure
+      securityContext: {{- include "observer.podSecurity" . | nindent 8 }}
+      {{- include "observer.pullSecrets" . | nindent 6 }}
+      containers:
+        - name: seed
+          image: {{ include "observer.image" . }}
+          args: [seed, --strata=/usr/local/bin/strata, --work=/work]
+          env: {{- include "observer.env" . | nindent 12 }}
+          securityContext: {{- include "observer.containerSecurity" . | nindent 12 }}
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - { name: work, mountPath: /work }
+      volumes:
+        - name: work
+          emptyDir:
+            medium: Memory
+            sizeLimit: 128Mi
+{{- end }}

@@ -1,0 +1,13 @@
+{{- if .Values.records.create }}
+# The four Secrets of the records, empty. A pipeline or the seed fills them. An upgrade keeps what they hold,
+# because the chart never names their data.
+{{- range $i := until 4 }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: strata-observer-records-{{ $i }}
+  labels: {{- include "observer.labels" $ | nindent 4 }}
+type: Opaque
+{{- end }}
+{{- end }}

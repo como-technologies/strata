@@ -1,6 +1,7 @@
 # strata-observer
 
 - [The observer](../docs/src/automation/observer.md): install, the baseline, and the options
+- [Install with Helm](../docs/src/automation/observer.md#install-with-helm): one namespace, two Secrets, and `helm install`
 - [The observer shows an edit in place](../docs/src/use-cases/observer.md): the problem, the commands, and the fix
 - [The API of the observer](../docs/src/reference/observer-api.md): the routes and the fields
 - [The checks of the observer](../docs/src/development/observer.md): the command of each step, each finding, and each state of the page

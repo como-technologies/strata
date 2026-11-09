@@ -1,0 +1,48 @@
+# The values of the strata observer. The book of strata, page "The observer", section "Install with Helm",
+# tells each one.
+
+# The cluster that the observer runs in, and its project in Palette. The address of the cluster page in
+# Palette holds both uids.
+cluster:
+  uid: ""
+palette:
+  api: https://api.spectrocloud.com
+  projectUid: ""
+  # The API key. Give the name of a Secret with the key api-key. Make that Secret with kubectl, so the key
+  # stays out of the release and out of a profile of Palette.
+  keySecret: strata-observer-key
+
+image:
+  repository: ghcr.io/como-technologies/strata-observer
+  # The default is the version of the chart.
+  tag: ""
+  # The name of a Secret of the type kubernetes.io/dockerconfigjson that can pull the image. Empty means none.
+  pullSecret: ""
+
+# How often each cycle runs.
+contentEvery: 15m
+versionsEvery: 6h
+
+# The read of the pods: a cluster role that can list each pod, and the digest that each tag runs on the page.
+# The role can also read the env of each pod, so it is off unless a team asks for it.
+readPods: false
+
+# The seed: a job that writes the first-seen records when the Secrets hold no record. It never replaces
+# records that a pipeline published.
+seed:
+  enabled: true
+
+# The Secrets of the records. The chart makes the four of them empty, so the seed needs no right to make a
+# Secret. Set create to false when a pipeline made them before the install.
+records:
+  create: true
+
+# A group that can open the page with a port-forward. Empty means no binding.
+readerGroup: ""
+
+# Palette reads this block when the chart is a layer of a profile, and Helm does not read it: Palette makes the
+# namespace with the label of the Pod Security standard restricted, and installs the chart there.
+pack:
+  namespace: strata-observer
+  namespaceLabels:
+    "strata-observer": "pod-security.kubernetes.io/enforce=restricted"

@@ -79,12 +79,13 @@ const SLABS = [
 ];
 // The commands that the page gives for a next step. The namespace is the one of deploy/observer.
 const LOG_COMMAND = "kubectl -n strata-observer logs deploy/strata-observer --tail=20";
+const SEED_LOG_COMMAND = "kubectl -n strata-observer logs -l app.kubernetes.io/name=strata-observer-seed --tail=20";
 // The page was reached on a local port of a port-forward, often not 8080 because that port is in use. The command keeps that port.
 const portForwardCommand = () => `kubectl -n strata-observer port-forward deploy/strata-observer ${location.port || "80"}:8080`;
 const RECORDS_COMMAND = "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*.json | kubectl apply --server-side -f -";
 // The next step of a choice that the install makes. The page names the section of the book, and no file of the repository: a
 // reader of the page needs not know how strata keeps its manifests.
-const PODS_NEXT = "Turn on the read of the pods when you install the observer. The book of strata tells how, in The observer: The pods of the cluster.";
+const PODS_NEXT = "Turn on the read of the pods when you install the observer: with the chart, set readPods to true and upgrade. The book of strata tells how, in The observer: The pods of the cluster.";
 const ALERTS_NEXT = "Turn on the alerts when you install the observer. The book of strata tells how, in The observer: Alerts.";
 const CAN_LIST_PODS_COMMAND = "kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer";
 // The records are in four Secrets, and the page does not know which one holds a record. A key is the name and the version
@@ -459,7 +460,7 @@ function stateSplash() {
   switch (c.page) {
     case PAGE.NO_RECORDS:
       return splash(TONE.OFF, "Nothing to compare against yet", "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later.",
-        h`<p class="sub"><b>Start now.</b> Record what each profile of this cluster holds now. No pipeline approved that content.</p>${cmd(firstSeenCommand())}<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>${cmd(RECORDS_COMMAND)}`);
+        h`<p class="sub"><b>Start now.</b> An install with the chart runs a job that records what each profile of this cluster holds now. Its log says what it did.</p>${cmd(SEED_LOG_COMMAND)}<p class="sub">With no chart, this command records the same. No pipeline approved that content.</p>${cmd(firstSeenCommand())}<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>${cmd(RECORDS_COMMAND)}`);
     case PAGE.LOST:
       return splash(TONE.LOST, "We lost the signal from Palette", h`${failedChecks()}No check has ended well, and no finding clears until a check proves it.`,
         next(lostNext(c.content.lastError), cmd(LOG_COMMAND)));

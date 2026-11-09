@@ -1,0 +1,23 @@
+# The observer takes no connection, and it reaches DNS and HTTPS. With the read of the pods, it also reaches
+# the API server of the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: strata-observer
+  labels: {{- include "observer.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: strata-observer
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+    {{- if .Values.readPods }}
+    - ports:
+        - { protocol: TCP, port: 6443 }
+    {{- end }}

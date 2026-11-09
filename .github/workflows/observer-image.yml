@@ -1,7 +1,7 @@
 name: Observer image
 
 # Builds the image of the observer from deploy/observer/ for linux/amd64 and linux/arm64, and pushes
-# it to the registry of GitHub. Then it signs the digest with cosign (keyless, through the OIDC
+# it to the registry of GitHub. A release also pushes the chart of deploy/helm/strata-observer. Then it signs the digest with cosign (keyless, through the OIDC
 # identity of the workflow) and verifies the signature. The image holds the signed binary of one
 # release of strata and the observer of the commit that runs.
 #
@@ -112,3 +112,21 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: echo "image = \"$IMAGE:$IMAGE_TAG\", digest $DIGEST" >> "$GITHUB_STEP_SUMMARY"
+      # A release also publishes the chart of the observer as an OCI chart, beside the image, and signs its
+      # digest as it signs the image. The version of the chart is the version of the release, and its default
+      # image is the image of that release. A test tag publishes no chart.
+      - name: push and sign the chart
+        if: startsWith(env.IMAGE_TAG, 'v')
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chart_version=$(sed -n 's/^version: //p' deploy/helm/strata-observer/Chart.yaml)
+          [ "v$chart_version" = "$IMAGE_TAG" ] || { echo "the chart is $chart_version, and the tag is $IMAGE_TAG" >&2; exit 1; }
+          helm package deploy/helm/strata-observer --destination chart
+          printf %s "$REGISTRY_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          charts="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+          helm push "chart/strata-observer-$chart_version.tgz" "oci://$charts" 2>&1 | tee push.txt
+          digest=$(sed -n 's/^Digest: //p' push.txt)
+          [ -n "$digest" ] || { echo "helm push gave no digest" >&2; exit 1; }
+          cosign sign --yes "$charts/strata-observer@$digest"
+          echo "chart = \"oci://$charts/strata-observer\", version $chart_version, digest $digest" >> "$GITHUB_STEP_SUMMARY"

@@ -39,6 +39,7 @@ jobs:
       - run: just observer-manifests
       - run: just observer-manifests-pods
       - run: just observer-manifests-alerts
+      - run: just observer-chart
 
   msrv:
     name: the lowest Rust version

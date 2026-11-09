@@ -160,9 +160,83 @@ lists the routes.
 | `--digest-every` | `168h` | The period of a digest of the alerts. It has an effect only with `--alerts`. |
 | `--alerts-allow-http` | off | Allows an `http` address for a webhook. The tests of the observer use it. Do not use it on a cluster. |
 
+## Install with Helm
+
+The chart `strata-observer` installs the observer, its roles, and a job that writes
+the first-seen records. You need a kubeconfig with admin rights on the cluster, and
+an API key with the role Project Viewer in the project of the cluster. You need no
+tenant role.
+
+1. **Make the namespace.** It enforces the Pod Security standard `restricted`.
+
+   ```bash
+   kubectl create namespace strata-observer
+   kubectl label namespace strata-observer \
+     pod-security.kubernetes.io/enforce=restricted
+   ```
+
+2. **Make the Secret of the key.** Send the key on standard input, so that it is in
+   no argument and no file.
+
+   ```bash
+   printf %s "$PALETTE_API_KEY" \
+     | kubectl -n strata-observer create secret generic \
+         strata-observer-key --from-file=api-key=/dev/stdin
+   ```
+
+3. **Make the pull Secret.** The image is in a private registry. Use a classic token
+   of GitHub with only the scope `read:packages`.
+
+   ```bash
+   printf 'GHCR token: '; read -rs GHCR_TOKEN; echo
+   kubectl -n strata-observer create secret docker-registry ghcr-pull \
+     --docker-server=ghcr.io --docker-username=<github user> \
+     --docker-password="$GHCR_TOKEN"
+   ```
+
+4. **Install the chart.** The address of the page of the cluster in Palette holds
+   the uid of the cluster and the uid of its project.
+
+   ```bash
+   helm install strata-observer \
+     oci://ghcr.io/como-technologies/charts/strata-observer \
+     --version 0.30.1 -n strata-observer \
+     --set cluster.uid=<cluster uid> \
+     --set palette.projectUid=<project uid> \
+     --set image.pullSecret=ghcr-pull
+   ```
+
+5. **Open the page.** Then open `http://127.0.0.1:18080`.
+
+   ```bash
+   kubectl -n strata-observer port-forward deploy/strata-observer 18080:8080
+   ```
+
+The job `strata-observer-seed-1` writes the first-seen records when the Secrets of
+the records hold none, and the first cycle reads them. It never replaces records that
+a pipeline published. `kubectl -n strata-observer logs job/strata-observer-seed-1`
+shows what it did.
+
+| Value | Default | Function |
+| --- | --- | --- |
+| `cluster.uid`, `palette.projectUid` | none, required | The cluster and its project. |
+| `palette.api` | `https://api.spectrocloud.com` | The Palette address. |
+| `palette.keySecret` | `strata-observer-key` | The Secret with the key `api-key`. |
+| `image.pullSecret` | empty | The Secret that pulls the image. |
+| `image.tag` | the version of the chart | The tag of the image. |
+| `contentEvery`, `versionsEvery` | `15m`, `6h` | The period of each cycle. |
+| `readPods` | `false` | The read of the pods: see [The pods of the cluster](#the-pods-of-the-cluster). |
+| `seed.enabled` | `true` | The job that writes the first-seen records. |
+| `records.create` | `true` | The chart makes the four Secrets of the records, empty. Set `false` when a pipeline made them first. |
+| `readerGroup` | empty | A group that gets the role that opens the page. |
+
+The chart sets no value of a key or a token. The key and the pull Secret stay
+Secrets that you make with `kubectl`, so that no release and no profile holds them.
+
 ## Install
 
-The observer needs a namespace, a pull Secret, a ConfigMap with three settings, a
+This section installs the same objects with `kubectl` and the manifests of
+`deploy/observer/`, for a team that does not use Helm. The observer needs a namespace, a pull Secret, a ConfigMap with three settings, a
 Secret of the key, the records, and the manifests. Make the settings first,
 because the pod does not start without the pull Secret, the ConfigMap, and the key.
 
@@ -302,14 +376,28 @@ After a restart, the page worked again.
 
 ## Install with a profile in Palette
 
-You can put the manifests in an add-on profile, and attach the profile to the
-cluster. The profile holds the output of `kubectl kustomize .` as one manifest layer,
-and Palette applies it to the cluster. Make the namespace, the pull Secret, the
-ConfigMap, the Secret of the key, and the records with `kubectl` first, as in
-[Install](#install). The profile holds no key, because a profile variable is in
-clear in the copy of the cluster.
+An add-on profile can install the chart as a Helm layer, so that Palette installs the
+observer and keeps it. The code of Palette shows these steps. No live run shows them
+yet.
 
-A live run shows what Palette does with the layer:
+1. **A tenant admin adds the registry once.** It is an OCI registry of the type
+   `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`, and a
+   classic token with the scope `read:packages`. Palette lets only a role at tenant
+   scope add a registry. A project role can then use it.
+2. **Make the Secret of the key and the pull Secret with `kubectl`**, as in steps 1
+   to 3 of [Install with Helm](#install-with-helm). A value of a layer reaches the
+   cluster in clear, so the profile holds no key and no token.
+3. **Make the profile.** Add a Helm layer: the chart `strata-observer` of that
+   registry, at the version of your release. In its values, set `cluster.uid`,
+   `palette.projectUid`, and `image.pullSecret`. The block `pack` of the values names
+   the namespace and its label `restricted`, and Palette makes the namespace with it.
+4. **Attach the profile to the cluster.**
+
+When you remove the profile, Palette deletes the namespace of the layer, and the key
+goes with it.
+
+A live run applied the manifests of [Install](#install) as one manifest layer of a
+profile. It shows what Palette does with that layer:
 
 - **The nodes stay.** Palette replaces no node when it applies the layer. The check
   `no-repave` of [observer.sh](../development/live-runs.md#observersh) shows it.
@@ -317,9 +405,6 @@ A live run shows what Palette does with the layer:
   its record.
 - **The profile of the observer has no record.** The page lists it under "Not
   checked", and it shows no finding for it.
-- **A removal deletes the Deployment.** When you remove the profile from the cluster,
-  Palette deletes the Deployment. No run shows what happens to the namespace. Delete
-  the namespace with `kubectl delete namespace strata-observer`, so that the key goes.
 
 An edit of the profile that drops an object from the manifest leaves the object on
 the cluster. To remove it, delete it with `kubectl`. See [An object that an edit

@@ -208,6 +208,27 @@ The observer reads the address of each channel when it starts, and it exits 2 wh
 file is absent or does not hold an `https` address. It reads the files again at each
 send, because the kubelet renews a Secret.
 
+## The chart
+
+`deploy/helm/strata-observer/` installs the same objects as the manifests, and a job
+that writes the first-seen records: see [The seed](./observer.md#the-seed). Its
+version is the version of strata, so `just version` sets it with the others.
+
+| File | Holds |
+| --- | --- |
+| `values.yaml` | The uids, the name of the Secret of the key, the name of the pull Secret, the periods, `readPods`, the seed, and the block `pack` that a layer of a profile in Palette reads. |
+| `templates/deployment.yaml`, `networkpolicy.yaml`, `serviceaccount.yaml`, `configmap.yaml` | The objects of `deploy/observer/`, with the values. |
+| `templates/records.yaml` | The four Secrets of the records, empty. An upgrade keeps their data, because the chart names none. |
+| `templates/seed.yaml` | The job of the seed, its service account, its role on the four Secrets by name, and its network policy. Each revision of the release has its own job. |
+| `templates/pods.yaml`, `templates/reader.yaml` | The role of the read of the pods, and the role that opens the page. |
+
+The chart holds no key and no token. The release workflow packages the chart, pushes
+it to `oci://ghcr.io/<owner>/charts`, and signs its digest with cosign, as it does for
+the image. `just observer-chart` lints the chart and renders it with the least values
+and with each option. A run on kind showed that both pods pass the Pod Security
+standard `restricted`, that the seed can get and update the four Secrets and do
+nothing else, and that a second run of the seed writes nothing.
+
 ## The records
 
 `observer-records.sh` writes the records as Secrets on standard output. It
