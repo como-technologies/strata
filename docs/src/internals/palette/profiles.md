@@ -237,6 +237,30 @@ while a cluster uses the version. The provider reports the refusal, and the
 version stays. See
 [A version bump overwrites a version](../../use-cases/overwritten.md#what-to-do).
 
+## The order of versions
+
+Palette orders the versions of a profile and of a pack by semantic version. A
+version that parses has an optional `v`, one to three numbers, an optional
+pre-release after `-`, and optional build data after `+`.
+
+A version that does not parse reads as the first three numbers that it holds
+with dots between them, at any place. Palette ignores the rest of the text,
+also a pre-release after the numbers. So `1.1.8.develop` reads as `1.1.8`, and
+`10.4.0.1` reads as `10.4.0`. Palette gives no order to two versions that read
+as one. A text with no three numbers, such as `LTS__24.x`, holds no version for
+Palette.
+
+The create of a profile version refuses a version that does not parse, with
+`VersionParseFailure`: see
+[The validate routes](./validate-routes.md#get-v1clusterprofilesvalidatename).
+So such a profile version comes from before that rule. A registry can still
+list a pack version of that form.
+
+These rules come from the code of Palette. No run makes such a profile version,
+because Palette refuses the create. Strata reads the same numbers, and it adds
+an order for two versions that read as one: see
+[the rule of `@latest`](../../reference/refs.md#rules).
+
 ## Drafts
 
 A profile version has two templates: `spec.published` and `spec.draft`. An

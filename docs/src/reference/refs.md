@@ -35,10 +35,17 @@ A ref names the thing that a command reads.
 - **`@latest`.** The highest version that is not a pre-release, by Semantic
   Versioning, as Palette orders versions. `22.04` is above `20.04`, and `1.30.6`
   is above `1.29.10`. A pre-release is below its version. A name that has only
-  pre-releases gives its highest one. For a text that does not parse, digit runs
-  compare as numbers and other text as text. The snapshot records the version
-  that it found in `source.version`, and keeps `aws-stack@latest` in
-  `source.ref`.
+  pre-releases gives its highest one. The snapshot records the version that it
+  found in `source.version`, and keeps `aws-stack@latest` in `source.ref`.
+  - A text that does not parse reads as its first three numbers, as Palette
+    reads it: see [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
+  - A tail of text puts a version below its numbers, and makes it a
+    pre-release. So `1.1.8.develop` is below `1.1.8`, and `@latest` gives
+    `1.1.10` over `1.2.0.develop`.
+  - A tail of numbers puts a version above its numbers: `10.4.0.1` is above
+    `10.4.0` and below `10.5.0`.
+  - For a text with no three numbers, digit runs compare as numbers and other
+    text as text. Such a text is above each version.
 - **`@draft`.** The draft template of a profile version, and not its published
   template. A person who edits a published version and does not publish makes
   a draft. The record holds the values and the manifests of the draft, and

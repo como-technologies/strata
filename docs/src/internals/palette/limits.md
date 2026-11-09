@@ -180,6 +180,10 @@ makes no claim that depends on them.
   itself, and a tier with no order is at 0. A live run shows that Palette
   keeps the order of the create: see
   [App profiles](other-objects.md#app-profiles).
+- **The order of a version that does not parse.** Palette reads it as the first
+  three numbers that it holds, so `1.1.8.develop` reads as `1.1.8`. It gives no
+  order to two versions that read as one. Strata reads the same numbers: see
+  [The order of versions](profiles.md#the-order-of-versions).
 - **A version bump with the `immutable-clusterprofiles` flag on and
   `skip_destroy` off.** The provider refuses the plan: a version change needs
   `skip_destroy = true`
