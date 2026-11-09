@@ -1,7 +1,8 @@
-//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, and the
-//! natural order of the text where it does not.
+//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, the
+//! first three numbers where a text holds them, and the natural order of any other text.
 
 use std::cmp::Ordering;
+use std::ops::Range;
 
 use crate::reference::LATEST;
 
@@ -13,13 +14,20 @@ use crate::reference::LATEST;
 /// `1.0.1-rc.1` is below `1.0.1`. Build data has no precedence: `1.0.1+2` equals `1.0.1`. A
 /// missing number is `0`.
 ///
-/// A string that does not parse keeps the natural order. Runs of digits compare as numbers, and a
-/// zero in front does not count. Runs of other characters compare as text. When one string is a
+/// Palette reads a string that does not parse as the first three numbers that it holds. So
+/// `1.1.8.develop` reads as `1.1.8`, and `10.4.0.1` reads as `10.4.0`. Palette gives no order to
+/// two strings that read as one version, and strata adds it. A tail of numbers, such as the `.1`
+/// of `10.4.0.1`, puts the string above the version. Any other text, such as the `.develop` of
+/// `1.1.8.develop`, puts it below the version, and makes it a pre-release: see
+/// [`is_pre_release`]. Two strings with one kind of tail keep the natural order.
+///
+/// A string with no three numbers keeps the natural order. Runs of digits compare as numbers, and
+/// a zero in front does not count. Runs of other characters compare as text. When one string is a
 /// prefix of the other, the longer one is higher. This orders `LTS__24.x` above `LTS__22.04`. The
-/// order of all strings is total: the empty string is the lowest, then each string that parses,
-/// then each string that does not.
+/// order of all strings is total. The empty string is the lowest. Then come the strings that parse
+/// or hold three numbers, and then each other string.
 pub fn compare(a: &str, b: &str) -> Ordering {
-    match (Semver::parse(a), Semver::parse(b)) {
+    match (Version::read(a), Version::read(b)) {
         (Some(x), Some(y)) => x.precedence(&y),
         (Some(_), None) => {
             if b.is_empty() {
@@ -41,7 +49,13 @@ pub fn compare(a: &str, b: &str) -> Ordering {
 
 /// True when `v` parses as Palette parses a version: see [`compare`].
 pub(crate) fn parses(v: &str) -> bool {
-    Semver::parse(v).is_some()
+    Version::parse(v).is_some()
+}
+
+/// True when `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
+/// Palette reads a version that does not parse as these numbers: see [`compare`].
+pub(crate) fn has_three_numbers(text: &str) -> bool {
+    three_numbers(text).is_some()
 }
 
 /// The numbers of `v` as it writes them: one to three. None when `v` does not parse.
@@ -49,7 +63,7 @@ pub(crate) fn parses(v: &str) -> bool {
 /// `4.10.3-rc.1` gives `[4, 10, 3]`, and `4.10` gives `[4, 10]`. A range of releases reads the
 /// numbers that a bound names, and omits the others.
 pub fn numbers(v: &str) -> Option<Vec<u64>> {
-    Semver::parse(v).map(|s| s.numbers[..s.count].to_vec())
+    Version::parse(v).map(|s| s.numbers[..s.count].to_vec())
 }
 
 /// The release line of `v`: its first `count` numbers, joined by dots. A number that `v` omits is
@@ -58,25 +72,29 @@ pub fn numbers(v: &str) -> Option<Vec<u64>> {
 /// `4.10.3-rc.1` with a `count` of 2 gives `4.10`, and `4` gives `4.0`. Two versions are one
 /// release when their lines are equal.
 pub fn line(v: &str, count: usize) -> Option<String> {
-    let semver = Semver::parse(v)?;
+    let semver = Version::parse(v)?;
     let numbers: Vec<String> = (0..count)
         .map(|i| semver.numbers.get(i).copied().unwrap_or(0).to_string())
         .collect();
     Some(numbers.join("."))
 }
 
-/// True when `v` parses and has a pre-release: `1.0.1-rc.1`, `1.0.1-g0123456789ab`. A string that
-/// does not parse is not a pre-release.
+/// True when `v` is a pre-release: `1.0.1-rc.1`, `1.0.1-g0123456789ab`, or `1.1.8.develop`.
+///
+/// A version that parses is a pre-release when it has one. A string with a tail of text after
+/// its three numbers is a pre-release too, because strata puts it below the version of its
+/// numbers: see [`compare`]. A tail of numbers, as in `10.4.0.1`, is no pre-release. A string
+/// with no three numbers is no pre-release.
 pub fn is_pre_release(v: &str) -> bool {
-    Semver::parse(v).is_some_and(|s| !s.pre.is_empty())
+    Version::read(v).is_some_and(|s| !s.pre.is_empty() || s.tail == Tail::Text)
 }
 
 /// The item of `items` whose version is `wanted`, or the item with the highest version by
 /// [`compare`] when `wanted` is [`LATEST`].
 ///
-/// `version_of` gives the version of an item. For [`LATEST`], a pre-release is the highest only
-/// when no item has a version that is not a pre-release. None when no item has the version, and
-/// when `items` is empty.
+/// `version_of` gives the version of an item. For [`LATEST`], a pre-release by
+/// [`is_pre_release`] is the highest only when no item has a version that is not a pre-release.
+/// None when no item has the version, and when `items` is empty.
 pub fn pick<T>(
     items: impl IntoIterator<Item = T>,
     version_of: impl Fn(&T) -> &str,
@@ -95,20 +113,72 @@ pub fn pick<T>(
         .max_by(|a, b| compare(version_of(a), version_of(b)))
 }
 
-/// A version that parses as Palette parses a version.
-struct Semver<'a> {
+/// A version as Palette reads it: a version that parses, or the first three numbers of a text.
+struct Version<'a> {
     /// The three numbers. A number that the version omits is `0`.
     numbers: [u64; 3],
     /// How many numbers the version writes, from one to three.
     count: usize,
     /// The identifiers of the pre-release. Empty for a version that is not a pre-release.
     pre: Vec<&'a str>,
+    /// What the text holds beside its three numbers. [`Tail::None`] for a version that parses.
+    tail: Tail,
+    /// The whole text of the version.
+    text: &'a str,
 }
 
-impl<'a> Semver<'a> {
+/// What a text that does not parse holds beside its three numbers. Palette reads only the
+/// numbers, so strata orders two texts with one set of numbers by the tail.
+///
+/// The derived order is the order of the variants, from the lowest version to the highest.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Tail {
+    /// Any other text, such as `.develop` in `1.1.8.develop`. It is below the version.
+    Text,
+    /// No tail: the version parses.
+    None,
+    /// Only dots and numbers after the three numbers, such as `.1` in `10.4.0.1`, with an
+    /// optional `v` in front. It is above the version.
+    Numbers,
+}
+
+impl<'a> Version<'a> {
+    /// The version that Palette reads in `v`: the version that `v` parses as, or else the first
+    /// three numbers of `v`. None when `v` has no three numbers.
+    fn read(v: &'a str) -> Option<Self> {
+        Self::parse(v).or_else(|| Self::three_numbers_of(v))
+    }
+
+    /// The first three numbers of `v` and the tail around them, as Palette reads a version that
+    /// does not parse. None when `v` has no three numbers, or a number does not fit in a `u64`.
+    fn three_numbers_of(v: &'a str) -> Option<Self> {
+        let found = three_numbers(v)?;
+        let mut numbers = [0; 3];
+        for (slot, n) in numbers.iter_mut().zip(v[found.clone()].split('.')) {
+            *slot = n.parse().ok()?;
+        }
+        let head = &v[..found.start];
+        let numbers_only = v[found.end..]
+            .strip_prefix('.')
+            .is_some_and(|rest| rest.split('.').all(is_digits));
+        let tail = if (head.is_empty() || head == "v") && numbers_only {
+            Tail::Numbers
+        } else {
+            Tail::Text
+        };
+        Some(Version {
+            numbers,
+            count: 3,
+            pre: Vec::new(),
+            tail,
+            text: v,
+        })
+    }
+
     /// The version in `v`, or None when `v` does not parse. A number that does not fit in a `u64`
     /// does not parse, as Palette refuses it.
     fn parse(v: &'a str) -> Option<Self> {
+        let text = v;
         let v = v.strip_prefix('v').unwrap_or(v);
         let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
         let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
@@ -135,26 +205,39 @@ impl<'a> Semver<'a> {
             Some(pre) => ids(pre)?,
             None => Vec::new(),
         };
-        Some(Semver {
+        Some(Version {
             numbers,
             count,
             pre,
+            tail: Tail::None,
+            text,
         })
     }
 
-    /// The precedence of Semantic Versioning 2.0.0, item 11: the numbers, then the pre-release.
-    /// A version is above its pre-releases. Of two pre-releases, the first identifier that
-    /// differs decides. A number is below a text, numbers compare as numbers, and texts compare
-    /// as bytes. The longer list is higher when the shorter one is its prefix.
+    /// The precedence of Semantic Versioning 2.0.0, item 11, and then the order that strata adds.
+    ///
+    /// The numbers decide first, and then the pre-release. A version is above its pre-releases.
+    /// Of two pre-releases, the first identifier that differs decides. A number is below a text,
+    /// numbers compare as numbers, and texts compare as bytes. The longer list is higher when the
+    /// shorter one is its prefix.
+    ///
+    /// Palette sees no difference after these two steps, and strata adds two more. The kind of
+    /// [`Tail`] decides, and then the natural order of the text. Two versions that parse have no
+    /// tail, so they are equal.
     fn precedence(&self, other: &Self) -> Ordering {
-        self.numbers.cmp(&other.numbers).then_with(|| {
-            match (self.pre.is_empty(), other.pre.is_empty()) {
+        self.numbers
+            .cmp(&other.numbers)
+            .then_with(|| match (self.pre.is_empty(), other.pre.is_empty()) {
                 (true, true) => Ordering::Equal,
                 (true, false) => Ordering::Greater,
                 (false, true) => Ordering::Less,
                 (false, false) => self.pre_cmp(other),
-            }
-        })
+            })
+            .then_with(|| self.tail.cmp(&other.tail))
+            .then_with(|| match self.tail {
+                Tail::None => Ordering::Equal,
+                Tail::Text | Tail::Numbers => natural(self.text, other.text),
+            })
     }
 
     /// The order of two pre-releases, item 11.4 of Semantic Versioning 2.0.0.
@@ -219,6 +302,39 @@ fn runs(s: &str) -> Vec<&str> {
         out.push(&s[start..]);
     }
     out
+}
+
+/// The place of the first three numbers in `text` with dots between them, `\d+\.\d+\.\d+`, as
+/// Palette finds them. None when `text` has no such numbers.
+///
+/// Try each start from the left. At a start, read a run of digits, a dot, a run of digits, a dot,
+/// and a run of digits. The first start that gives all five decides. The last run takes each digit
+/// that follows.
+fn three_numbers(text: &str) -> Option<Range<usize>> {
+    let b = text.as_bytes();
+    let digits_from = |mut i: usize| {
+        while i < b.len() && b[i].is_ascii_digit() {
+            i += 1;
+        }
+        i
+    };
+    (0..b.len()).find_map(|start| {
+        let mut i = start;
+        for part in 0..3 {
+            let end = digits_from(i);
+            if end == i {
+                return None;
+            }
+            i = end;
+            if part < 2 {
+                if b.get(i) != Some(&b'.') {
+                    return None;
+                }
+                i += 1;
+            }
+        }
+        Some(start..i)
+    })
 }
 
 fn is_digits(s: &str) -> bool {
@@ -309,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn a_string_that_does_not_parse_keeps_the_natural_order() {
+    fn a_string_with_no_three_numbers_keeps_the_natural_order() {
         for text in [
             "LTS__24.x",
             "1.2.3.4",
@@ -320,8 +436,44 @@ mod tests {
         ] {
             assert!(!parses(text), "{text} does not parse");
         }
+        gt("LTS__24.x", "LTS__22.04");
+        gt("1.2.x", "1.2.3");
+        // a number that does not fit is no version, as Palette refuses it
+        gt("99999999999999999999999.0.0", "2.0.0");
+    }
+
+    /// Issue #616. Palette reads `1.1.8.develop` as `1.1.8`, and strata puts it below `1.1.8`.
+    #[test]
+    fn a_tail_of_text_reads_as_its_three_numbers_and_is_below_them() {
+        gt("1.1.8", "1.1.8.develop");
+        gt("1.1.10", "1.1.8.develop");
+        gt("1.1.8.develop", "1.1.7");
+        // the numbers decide before the tail, as in Palette
+        gt("1.2.0.develop", "1.1.10");
+        // Palette reads no pre-release in such a text, so it is above a pre-release that parses
+        gt("1.1.8.develop", "1.1.8-rc.1");
+        // Palette finds the numbers at any place
+        gt("1.2.3", "chart-1.2.3");
+        gt("1.0.0", "1.0.0-a_b");
+        gt("2.0.0", "1.2.3.4-rc1");
+        // two tails of text keep the natural order
+        gt("1.1.8.develop", "1.1.8.beta");
+        eq("1.1.8.develop", "1.1.8.develop");
+    }
+
+    /// Issue #616. Palette reads `10.4.0.1` as `10.4.0`, and strata puts it above `10.4.0`.
+    #[test]
+    fn a_tail_of_numbers_reads_as_its_three_numbers_and_is_above_them() {
+        gt("10.4.0.1", "10.4.0");
+        gt("10.5.0", "10.4.0.1");
+        gt("10.4.1-rc.1", "10.4.0.1");
+        gt("v10.4.0.1", "10.4.0");
+        // two tails of numbers keep the natural order, which compares the numbers
         gt("1.2.3.5", "1.2.3.4");
         gt("1.2.3.10", "1.2.3.9");
+        gt("1.2.3.4.1", "1.2.3.4");
+        // a tail of numbers is above a tail of text on the same three numbers
+        gt("1.2.3.4", "1.2.3.develop");
     }
 
     #[test]
@@ -333,6 +485,12 @@ mod tests {
             "1.0.0-rc.1",
             "1.0.0",
             "1.2.3.4",
+            "1.1.8.develop",
+            "1.1.8",
+            "v1.1.8",
+            "1.1.8.1",
+            "chart-1.1.8",
+            "1.1.10",
             "LTS__22.04",
             "LTS__24.x",
             "b",
@@ -391,7 +549,28 @@ mod tests {
         assert!(!is_pre_release("1.0.1"));
         assert!(!is_pre_release("1.0.1+2"));
         assert!(!is_pre_release("LTS__24.x"));
-        assert!(!is_pre_release("1.2.3.4-rc1"));
+        // a tail of text after the three numbers is a pre-release, and a tail of numbers is not
+        assert!(is_pre_release("1.1.8.develop"));
+        assert!(is_pre_release("1.2.3.4-rc1"));
+        assert!(is_pre_release("chart-1.2.3"));
+        assert!(!is_pre_release("10.4.0.1"));
+        assert!(!is_pre_release("v10.4.0.1"));
+    }
+
+    #[test]
+    fn has_three_numbers_finds_them_at_any_place() {
+        for text in [
+            "1.2.3",
+            "chart-1.2.3",
+            "1.1.8.develop",
+            "x91.2.3y",
+            "1.2.3.4",
+        ] {
+            assert!(has_three_numbers(text), "{text}");
+        }
+        for text in ["", "1.2", "1.2.x", "LTS__24.x", "1..2.3", "a.b.c"] {
+            assert!(!has_three_numbers(text), "{text}");
+        }
     }
 
     #[test]
@@ -412,6 +591,28 @@ mod tests {
         assert_eq!(pick(only, |v| *v, LATEST), Some("1.0.2-rc.2"));
         // an exact version still names a pre-release
         assert_eq!(pick(versions, |v| *v, "1.0.2-rc.1"), Some("1.0.2-rc.1"));
+    }
+
+    /// Issue #616: `@latest` took `1.1.8.develop` over `1.1.10`, and `10.4.0.1` over `10.5.0`.
+    #[test]
+    fn latest_skips_a_tail_of_text_and_orders_a_tail_of_numbers_by_its_three_numbers() {
+        let barney = ["1.1.8", "1.1.8.develop", "1.1.10"];
+        assert_eq!(pick(barney, |v| *v, LATEST), Some("1.1.10"));
+        assert_eq!(pick(["10.4.0.1", "10.5.0"], |v| *v, LATEST), Some("10.5.0"));
+        assert_eq!(
+            pick(["10.4.0", "10.4.0.1"], |v| *v, LATEST),
+            Some("10.4.0.1")
+        );
+        // a tail of text is a pre-release, so `@latest` skips it also when its numbers are higher
+        assert_eq!(
+            pick(["1.2.0.develop", "1.1.10"], |v| *v, LATEST),
+            Some("1.1.10")
+        );
+        assert_eq!(
+            pick(["1.1.8.develop"], |v| *v, LATEST),
+            Some("1.1.8.develop")
+        );
+        assert_eq!(pick(barney, |v| *v, "1.1.8.develop"), Some("1.1.8.develop"));
     }
 
     #[test]

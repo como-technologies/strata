@@ -83,3 +83,8 @@ pub(super) const A1114: &str = "64e000000000000000000102";
 pub(super) const A1115: &str = "64e000000000000000000103";
 pub(super) const A1116: &str = "64e000000000000000000104";
 pub(super) const A1117: &str = "64e000000000000000000105";
+// aws-stack@1.1.8, its develop build 1.1.8.develop, and 1.1.10: the content of 1.1.1, in the
+// versions that a field test found (#616)
+pub(super) const DEVELOP_118: &str = "64e000000000000000000106";
+pub(super) const DEVELOP_BUILD: &str = "64e000000000000000000107";
+pub(super) const DEVELOP_1110: &str = "64e000000000000000000108";

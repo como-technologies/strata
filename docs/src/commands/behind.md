@@ -117,6 +117,10 @@ compare by their identifiers, as the rules of Semantic Versioning say. So the
 text of a hash, not the time of the build, orders `1.0.1-g0123456789ab` and
 `1.0.1-g0123456789ac`. Pin the final version, and not a pre-release.
 
+A develop build such as `1.66.0.develop` is a pre-release too: it is below
+`1.66.0`. A version with four numbers is not: `1.65.0.1` is above `1.65.0`, and
+below `1.66.0`. See [the rule of `@latest`](../reference/refs.md#rules).
+
 ## Palette accepts the move, or refuses it
 
 `bump to` says what a move does. It does not say that Palette takes the move.

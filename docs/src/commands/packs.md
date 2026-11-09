@@ -59,9 +59,11 @@ omits the field on each other version:
 `--latest` keeps one line for each registry. It keeps a second line, with the
 mark `latest in Palette`, only when Palette marks another version. This can
 happen in two cases. The highest version is a pre-release, such as `1.22.0-rc.1`
-above `1.21.1`: `@latest` skips it, and Palette marks the highest version. Or a
-version does not parse as a semantic version, such as a version with four
-numbers. Here is the first case:
+above `1.21.1`: `@latest` skips it, and Palette marks the highest version. Or
+Palette reads two versions as one, such as `1.30.0.1` and `1.30.0`, and marks
+one of them: see
+[The order of versions](../internals/palette/profiles.md#the-order-of-versions).
+Here is the first case:
 
 ```text
 {{#include ../output/packs-pre-release.txt}}

@@ -3038,20 +3038,30 @@ fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_versi
     assert!(o.status.success(), "build data has no precedence:\n{out}");
 }
 
+/// Issue #616. A version that does not parse reads as its first three numbers, as in Palette.
 #[test]
-fn merge_gate_reads_a_move_from_a_version_that_does_not_parse_to_one_that_parses_as_a_move_back() {
-    // a version that does not parse is above each version that parses
+fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_rest_as_a_move_back()
+{
     let (o, out) = gate_for_pin_move("1.2.3.4", "1.3.0");
+    assert!(o.status.success(), "1.3.0 is above 1.2.3.4:\n{out}");
+    let (o, out) = gate_for_pin_move("1.3.0", "1.2.3.4");
     assert_eq!(o.status.code(), Some(1), "the gate is red:\n{out}");
     assert!(
-        out.contains("k8s/kubernetes: main has 1.2.3.4, the merge result has 1.3.0"),
+        out.contains("k8s/kubernetes: main has 1.3.0, the merge result has 1.2.3.4"),
         "the line names the pack and both versions:\n{out}"
     );
-    let (o, out) = gate_for_pin_move("1.3.0", "1.2.3.4");
-    assert!(
-        o.status.success(),
-        "the move to such a version is forward:\n{out}"
+    // a tail of text is below the version of its numbers
+    let (o, out) = gate_for_pin_move("1.1.8.develop", "1.1.8");
+    assert!(o.status.success(), "1.1.8 is above 1.1.8.develop:\n{out}");
+    let (o, out) = gate_for_pin_move("1.1.10", "1.1.8.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.1.8.develop is below 1.1.10:\n{out}"
     );
+    // a version with no three numbers is still above each version
+    let (o, out) = gate_for_pin_move("1.2.x", "1.3.0");
+    assert_eq!(o.status.code(), Some(1), "1.3.0 is below 1.2.x:\n{out}");
 }
 
 /// A branch that deliberately returns the record to the release that main pinned before.
