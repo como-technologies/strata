@@ -123,9 +123,10 @@ did not light is dim. A hover, or a focus from the keyboard, shows what a flag m
 with the words of [Change flags and impact](../reference/impact.md). A lit flag that has
 a tab opens that tab. `AUTHORED` opens Values, or Manifests when only a manifest changed.
 
-The last card of the page of a profile, and of a pack, is "Check this yourself". It gives
-the commands that answer the same questions at your terminal. Each row has a question, a
-command with a button Copy, and what the page says now. The questions are:
+The last card of the page of a profile, and of a pack, is "Check this yourself". It is
+closed at first. Open it to get the commands that answer the same questions at your
+terminal. Each check has a question, what the page says now, and a command with a button
+Copy. The questions are:
 
 - Get the record that this check used
 - Does Palette still have this version?

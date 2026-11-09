@@ -1510,8 +1510,11 @@ function terminalRows(subject, x, p, row) {
   return rows;
 }
 
+// checkCard is closed at first: most readers trust the page, and the commands are for a person who wants the proof. Each check is a
+// question with what the page says now, then the command that answers it in a terminal. An open card stays open on the next page.
 function checkCard(rows) {
-  return h`<section class="card"><div class="chead"><h2>Check this yourself</h2></div><div class="tw"><table class="term"><thead><tr><th>Ask</th><th>Run</th><th>The page says now</th></tr></thead><tbody>${rows.map(([q, c, a]) => h`<tr><td class="q">${q}</td><td>${cmd(c)}</td><td class="a">${a}</td></tr>`)}</tbody></table></div></section>`;
+  return h`<section class="card"><details class="check" data-open="check"${openAttr("check")}><summary><h2>Check this yourself</h2><span class="sub">${rows.length} ${plural(rows.length, "command gives", "commands give")} the same answers in a terminal</span></summary>
+    <ul class="checks">${rows.map(([q, c, a]) => h`<li><div class="qa"><span class="q">${q}</span><span class="a">${a}</span></div>${cmd(c)}</li>`)}</ul></details></section>`;
 }
 
 function viewPack(subject, layer, name) {

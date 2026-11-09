@@ -302,11 +302,19 @@ details summary:hover{background:var(--panel2)}
 .cmd code{font:12.5px var(--mono);overflow-wrap:anywhere;flex:1;min-width:0;color:var(--ink)}
 .copy{flex:none;background:var(--panel);color:var(--accent);border:1px solid var(--line);border-radius:5px;font-size:11.5px;padding:2px 8px;cursor:pointer}
 a.btn{display:inline-block}
-/* The card "Check this yourself": a question, a command, and what the page says now. */
-.term{width:100%;border-collapse:collapse;font-size:13px}
-.term td.q{width:26%;font-weight:500}
-.term td.a{width:16%;white-space:nowrap}
-.term .cmd{margin:0}
+/* The card "Check this yourself": closed at first. Each check is a question with what the page says now, then its command. */
+details.check > summary{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;padding:11px 15px;border-top:0;color:var(--ink);list-style:none}
+details.check > summary::-webkit-details-marker{display:none}
+details.check > summary::before{content:"\25B8";color:var(--mut);display:inline-block;transition:transform .15s}
+details.check[open] > summary::before{transform:rotate(90deg)}
+details.check[open] > summary{border-bottom:1px solid var(--line)}
+details.check > summary .sub{font-size:12.5px;color:var(--mut)}
+.checks{list-style:none;margin:0;padding:0}
+.checks li{padding:11px 15px;border-bottom:1px solid var(--line)}
+.checks li:last-child{border-bottom:0}
+.checks .qa{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 12px;font-size:13px}
+.checks .q{font-weight:500}
+.checks .cmd{margin-top:7px}
 /* The flags of a comparison. A flag is lit or dim, and it keeps one color. A hover or a focus shows what it means. */
 .flags{margin-left:auto;display:flex;flex-wrap:wrap;gap:4px}
 .flagw{position:relative;display:inline-flex}
@@ -319,8 +327,3 @@ a.badge:hover{text-decoration:none;filter:brightness(.95)}
 .flags:hover .flagw:not(:hover) .tip{display:none}
 .tip b{display:block;font-weight:600}
 .meta div span.bright{display:inline;color:var(--ink);font-size:12.5px}
-@media (max-width:760px){
-  .term,.term tbody,.term tr,.term td{display:block}
-  .term thead{display:none}
-  .term td.q,.term td.a{width:auto;white-space:normal}
-}

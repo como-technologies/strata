@@ -163,8 +163,9 @@ is the signal. A color for each flag competes with the colors of the statuses.
 ### Check this yourself
 
 The page of a profile and the page of a pack end with the card "Check this yourself".
-Each row is a question, a command with a button Copy, and what the page says now. The
-rows change with the page:
+The card is closed at first, and its summary counts the commands. A card that a person
+opens stays open on the next page. Each check is a question with what the page says
+now, then a command with a button Copy. The checks change with the page:
 
 | Question | Command | The page says |
 | --- | --- | --- |

@@ -728,7 +728,7 @@ func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 
 // ---- The card "Check this yourself" and the header of a pack ----
 
-var rowPattern = regexp.MustCompile(`<tr><td class="q">([^<]*)</td><td><div class="cmd"><code>([^<]*)</code><button type="button" class="copy" data-copy="([^"]*)">Copy</button></div></td><td class="a">(.*?)</td></tr>`)
+var rowPattern = regexp.MustCompile(`<li><div class="qa"><span class="q">([^<]*)</span><span class="a">(.*?)</span></div><div class="cmd"><code>([^<]*)</code><button type="button" class="copy" data-copy="([^"]*)">Copy</button></div></li>`)
 
 // termRow is a row of the card: a question, the command that answers it, and what the page says now.
 type termRow struct{ question, command, answer string }
@@ -738,12 +738,12 @@ func termRows(t *testing.T, page string) []termRow {
 	card := cardOf(t, page, "<h2>Check this yourself</h2>")
 	var out []termRow
 	for _, m := range rowPattern.FindAllStringSubmatch(card, -1) {
-		if m[2] != m[3] {
-			t.Errorf("the button Copy holds %q, and the command is %q", m[3], m[2])
+		if m[3] != m[4] {
+			t.Errorf("the button Copy holds %q, and the command is %q", m[4], m[3])
 		}
-		out = append(out, termRow{m[1], htmlpkg.UnescapeString(m[2]), m[4]})
+		out = append(out, termRow{m[1], htmlpkg.UnescapeString(m[3]), m[2]})
 	}
-	if got := strings.Count(card, `<tr><td class="q">`); got != len(out) {
+	if got := strings.Count(card, `<li><div class="qa">`); got != len(out) {
 		t.Fatalf("the card has %d rows, and the pattern reads %d", got, len(out))
 	}
 	return out
@@ -757,6 +757,8 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 	set := loadSet(t, devdata.StateOK)
 	uid := set.Newer.Newer[0].RegistryUID
 	profile := termRows(t, shown(t, devdata.StateOK, "#p-fred-identity@2.3.0")[0])
+	// The card is closed at first, and its summary counts the commands.
+	mustHold(t, "the card", shown(t, devdata.StateOK, "#p-fred-identity@2.3.0")[0], `<details class="check" data-open="check"><summary><h2>Check this yourself</h2><span class="sub">5 commands give the same answers in a terminal</span></summary>`)
 	if len(profile) != 5 {
 		t.Fatalf("the profile page has %d rows, want 5: %+v", len(profile), profile)
 	}
