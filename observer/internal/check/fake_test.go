@@ -40,6 +40,8 @@ type world struct {
 	cluster    docs.ClusterRead
 	clusterErr error
 	sideErr    error
+	// profileErr fails the snapshot of a profile, name@version, which the seed and the observer take.
+	profileErr error
 	// compares gives the diff of the compare of a record with its side, by index of the record.
 	compares map[int]docs.Diff
 
@@ -130,6 +132,17 @@ func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
 			return runner.Result{}, w.sideErr
 		}
 		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), []byte("{}"), 0o600)
+	}
+	if name, version, ok := strings.Cut(args[1], "@"); ok && !strings.HasPrefix(args[1], "cluster:") {
+		if w.profileErr != nil {
+			return runner.Result{}, w.profileErr
+		}
+		raw, err := json.Marshal(map[string]any{"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r-" + name,
+			"source": map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"}, "packs": []any{}})
+		if err != nil {
+			return runner.Result{}, err
+		}
+		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), raw, 0o600)
 	}
 	if w.clusterErr != nil {
 		return runner.Result{}, w.clusterErr

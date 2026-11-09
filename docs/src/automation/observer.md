@@ -444,6 +444,14 @@ change.
 Each screen of the page says "No pipeline approved these records yet" while the baseline
 is `first-seen`.
 
+While the baseline is `first-seen`, the observer also records a profile version that
+the cluster starts to run after the install. At each content check, it records each
+profile version that no record holds, as the seed does, and it checks it at once. It
+keeps that record in memory, and it takes it again after a restart. A record in the
+Secrets for the same profile version takes its place. With approved records, the
+observer records nothing: your pipeline publishes the record of each version that it
+applies. Until then, the version shows as `no-record` in Not checked.
+
 ### Approve the records with a pipeline
 
 A review in Git approves the records, and a pipeline publishes them. No person edits

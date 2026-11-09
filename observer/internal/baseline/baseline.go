@@ -124,6 +124,12 @@ func readRecord(path string) (Entry, error) {
 	if err != nil {
 		return Entry{}, err
 	}
+	return EntryOf("", raw)
+}
+
+// EntryOf makes the entry of one record from its JSON, the content of a record file after the unzip.
+// file names the entry. JSON that is no record of strata-snapshot/1 for a profile is an error.
+func EntryOf(file string, raw []byte) (Entry, error) {
 	if len(raw) > maxRecordBytes {
 		return Entry{}, errNotARecord
 	}
@@ -134,7 +140,7 @@ func readRecord(path string) (Entry, error) {
 	if r.Schema != docs.SnapshotSchema || r.Source.Cluster != nil {
 		return Entry{}, errNotARecord
 	}
-	return Entry{Record: r, Raw: raw}, nil
+	return Entry{File: file, Record: r, Raw: raw}, nil
 }
 
 // readMeta gives Unknown when the file is absent, is not JSON, or names another baseline.

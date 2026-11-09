@@ -82,6 +82,9 @@ type Observer struct {
 	ended map[string]time.Time
 	// recordsPoll is the period of the look at the records.
 	recordsPoll time.Duration
+	// taken holds the first-seen records that the observer took itself, by profile version: see
+	// taken.go. It stays in memory. The lock guards it.
+	taken map[string]baseline.Entry
 
 	mu       sync.Mutex
 	state    State
@@ -114,7 +117,7 @@ func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Ti
 		contentSlot: make(chan struct{}, 1), versionsSlot: make(chan struct{}, 1), detailSlot: make(chan struct{}, 1), procs: make(chan struct{}, procs),
 		running: map[string]*model.Running{}, details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{},
 		kicks: map[string]chan struct{}{cycleContent: make(chan struct{}, 1), cycleVersions: make(chan struct{}, 1)},
-		ended: map[string]time.Time{}, recordsPoll: recordsPoll}
+		ended: map[string]time.Time{}, recordsPoll: recordsPoll, taken: map[string]baseline.Entry{}}
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -305,15 +308,20 @@ func (o *Observer) readFiles(files int) {
 // fail keeps the last answer, adds 1 to the failed runs, and keeps the kind and the status.
 func (o *Observer) fail(name string, clock *ClockState, start time.Time, processes int, err error) {
 	clock.FailedRuns++
-	ref := model.ErrorRef{Kind: docs.KindUnknown}
-	var re *runner.RunError
-	if errors.As(err, &re) {
-		ref = model.ErrorRef{Kind: re.Kind, Status: re.Status}
-	}
+	ref := errorRefOf(err)
 	clock.LastError = &ref
 	o.log.Info("cycle", "cycle", name, "phase", "end", "verdict", "failed", "kind", ref.Kind, "status", ref.Status, "failedRuns", clock.FailedRuns,
 		"processes", processes, "duration", time.Since(start).Round(time.Millisecond))
 	o.save()
+}
+
+// errorRefOf gives the kind and the status of a failed run of strata, and the kind unknown for another error.
+func errorRefOf(err error) model.ErrorRef {
+	var re *runner.RunError
+	if errors.As(err, &re) {
+		return model.ErrorRef{Kind: re.Kind, Status: re.Status}
+	}
+	return model.ErrorRef{Kind: docs.KindUnknown}
 }
 
 // keepFirstSeen keeps the first sight of each finding of a good cycle, and drops the others. The ids in
@@ -444,11 +452,14 @@ func (o *Observer) wait(every time.Duration) time.Duration {
 // Run runs each timer in its own loop until ctx ends: the first cycle at the start, and each next one
 // after its wait. A content cycle never waits for a versions cycle. A third loop looks at the records.
 func (o *Observer) Run(ctx context.Context) {
+	// The first mark of the records comes before the first content cycle reads them. So the look misses no
+	// change after that read, also when its goroutine starts late.
+	mark := baseline.Mark(o.cfg.Records)
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.kicks[cycleContent], o.RunContent) }()
 	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.kicks[cycleVersions], o.RunVersions) }()
-	go func() { defer wg.Done(); o.watchRecords(ctx) }()
+	go func() { defer wg.Done(); o.watchRecords(ctx, mark) }()
 	wg.Wait()
 }
 
@@ -511,9 +522,8 @@ func (o *Observer) kick(kick chan struct{}) {
 // watchRecords starts a content cycle when the records change, so that the page shows the records that
 // a pipeline published within a minute or two, and not at the end of the period. The kubelet updates
 // the mounted Secrets in place, so the look compares the names, the sizes, and the times of the files.
-// It sends no request.
-func (o *Observer) watchRecords(ctx context.Context) {
-	last := baseline.Mark(o.cfg.Records)
+// It sends no request. last is the mark of the records before the first content cycle.
+func (o *Observer) watchRecords(ctx context.Context, last string) {
 	ticker := time.NewTicker(o.recordsPoll)
 	defer ticker.Stop()
 	for {

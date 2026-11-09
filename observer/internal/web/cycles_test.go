@@ -78,3 +78,15 @@ func TestTheButtonWaitsTheSecondsOfA429AndSaysWhenARequestFailed(t *testing.T) {
 		`S.open["cycle-content"] = true; checkNow("content")`)
 	mustHold(t, "a failed request", failed, `<button class="btn" data-now="content">Check the content now</button><span class="sub">The observer did not take the request. Try again.</span>`)
 }
+
+// A profile version with no record says what adds its record. With first-seen records the observer
+// records it at its next content check. With approved records only the pipeline can, and a check
+// cannot: the row says so.
+func TestARowOfNoRecordSaysWhatAddsTheRecordForEachBaseline(t *testing.T) {
+	row := `D.notChecked = [{cause: "no-record", profiles: ["ngp-f5@1.0.0"], packs: [], registry: ""}];`
+	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "first-seen", firstSeenFrom: "c1"}`)
+	mustHold(t, "first-seen", firstSeen, "No record holds this profile version yet. The records are first-seen, so the observer records it at its next content check.")
+	approved := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row)
+	mustHold(t, "approved", approved, "No record holds this profile version, so strata cannot say that anything changed. Your pipeline must publish its record: a check cannot add one.")
+	mustNotHold(t, "approved", approved, "the observer records it")
+}

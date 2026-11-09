@@ -21,13 +21,15 @@ func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, 
 	if err != nil {
 		return versions, -1, failure(docs.KindIO)
 	}
+	files = set.Files()
+	set.Entries = append(set.Entries, o.keptFirstSeen(set)...)
 	if len(set.Entries) == 0 {
-		return versions, set.Files(), nil
+		return versions, files, nil
 	}
 	err = o.withCycleDir(func(dir string) error {
 		return o.readVersions(ctx, dir, set, &versions)
 	})
-	return versions, set.Files(), err
+	return versions, files, err
 }
 
 func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Set, versions *model.Versions) error {

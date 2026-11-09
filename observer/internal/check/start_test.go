@@ -2,12 +2,15 @@ package check
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -111,8 +114,16 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	testkit.WaitFor(t, "the first cycles", func() bool {
 		return w.count(runner.CmdVerify) == 1 && w.count(runner.CmdBehind) == 1
 	})
-	r.meta(`{"baseline":"approved","revision":"5f2d8b3c"}`)
-	testkit.WaitFor(t, "the content cycle of the change", func() bool { return w.count(runner.CmdVerify) == 2 })
+	// the kubelet changes a mounted Secret in one step, so the test writes a new file and renames it
+	newMeta := filepath.Join(t.TempDir(), "meta.json")
+	if err := os.WriteFile(newMeta, []byte(`{"baseline":"approved","revision":"5f2d8b3c"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(newMeta, filepath.Join(r.records, "meta.json")); err != nil {
+		t.Fatal(err)
+	}
+	// a change during a cycle starts one more cycle after it, so the count can pass 2
+	testkit.WaitFor(t, "the content cycle of the change", func() bool { return w.count(runner.CmdVerify) >= 2 })
 	stop()
 	if n := w.count(runner.CmdBehind); n != 1 {
 		t.Errorf("the change ran %d behinds", n)
@@ -120,6 +131,23 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	if !strings.Contains(r.log.String(), "records changed") {
 		t.Errorf("the log:\n%s", r.log.String())
 	}
+}
+
+// The look at the records compares with the mark that Run took before the first content cycle, and not
+// with a mark of its own start. So a change that comes before its goroutine runs still starts a content
+// cycle. A slow runner of CI showed the fault: the look took its first mark after the change of the test.
+func TestTheLookAtTheRecordsComparesWithTheMarkOfTheStartOfRun(t *testing.T) {
+	r, _ := withBehind(t)
+	o := r.observer(&world{})
+	o.recordsPoll = time.Millisecond
+	mark := baseline.Mark(r.records)
+	r.meta(`{"baseline":"approved","revision":"5f2d8b3c"}`)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { o.watchRecords(ctx, mark); close(done) }()
+	testkit.WaitFor(t, "a token for a content cycle", func() bool { return len(o.kicks[cycleContent]) == 1 })
+	cancel()
+	<-done
 }
 
 // The versions cycle runs `behind` on each record by itself, so the progress counts the records.

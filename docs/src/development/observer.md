@@ -310,6 +310,16 @@ the install runs it once.
   observer itself holds no verb on Secrets.
 - **It sends no write to Palette.** The two snapshots read only.
 
+The seed runs once, but a cluster can run a new profile version later. So while
+`meta.json` says `first-seen`, each good content cycle records each profile version
+that the cluster runs and that no record holds. It runs the `strata snapshot` of the
+seed through the pool, and it starts the next content cycle at once. The observer keeps
+these records in memory, and the versions cycle reads them too. A restart takes them
+again. A record of the Secrets for the same profile version drops the one in memory,
+and so does a profile version that the cluster no longer runs. With an approved
+`meta.json`, the observer drops all of them and takes none. A snapshot that fails is a
+log line, the version stays `no-record`, and the content cycle stays good.
+
 ## The findings
 
 One finding is one cause, with one `id`. The `id` is the first 16 hex digits of

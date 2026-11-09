@@ -120,10 +120,16 @@ func (o *Observer) contentCycle(ctx context.Context) (content model.Content, fil
 	if err != nil {
 		return content, -1, failure(docs.KindIO)
 	}
+	files = set.Files()
+	set.Entries = append(set.Entries, o.keptFirstSeen(set)...)
 	err = o.withCycleDir(func(dir string) error {
-		return o.readContent(ctx, dir, set, &content)
+		if err := o.readContent(ctx, dir, set, &content); err != nil {
+			return err
+		}
+		o.recordNewProfiles(ctx, dir, set, content.Cluster)
+		return nil
 	})
-	return content, set.Files(), err
+	return content, files, err
 }
 
 func (o *Observer) readContent(ctx context.Context, dir string, set baseline.Set, content *model.Content) error {

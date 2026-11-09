@@ -153,12 +153,15 @@ const NAMES_PACKS = [KIND.PUBLISHED, KIND.CLUSTER, KIND.IMAGE_ID, ...IMAGE_KINDS
 const CAUSE_TEXT = {
   [CAUSE.NO_DIGEST]: "Palette gives no upstream digest for this registry kind, so a change of the archive does not show.",
   [CAUSE.OLD_COPY]: "Current against an older copy of the registry. A newer version can be missing here.",
-  [CAUSE.NO_RECORD]: "No record holds this profile, so strata cannot say that anything changed.",
+  [CAUSE.NO_RECORD]: "No record holds this profile version, so strata cannot say that anything changed. Your pipeline must publish its record: a check cannot add one.",
   [CAUSE.READ_ERROR]: "Strata could not read the record or its answer.",
   [CAUSE.PIN_ERROR]: "Strata could not look for a newer version of this pack, or could not compare it with the newest version.",
   [CAUSE.PODS_NOT_READ]: "The observer could not read the pods, so the list of images is old or empty.",
 };
 // What a profile says in the list for a cause, with the names of its packs.
+// NO_RECORD_FIRST_SEEN is the cause of a profile version with no record while the records are first-seen: the observer records it
+// itself at its next content check.
+const NO_RECORD_FIRST_SEEN = "No record holds this profile version yet. The records are first-seen, so the observer records it at its next content check.";
 const CAUSE_LINE = {
   [CAUSE.NO_DIGEST]: (names) => `${names} has no upstream digest.`,
   [CAUSE.OLD_COPY]: (names, registry) => `${names} is current against an older copy of ${registry}.`,
@@ -1129,7 +1132,8 @@ function viewNotChecked() {
         return found ? at(found.name, found.version) : packName(k);
       });
       const what = [...new Set(names)].join(", ");
-      const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.` : (CAUSE_TEXT[r.cause] || r.cause);
+      const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.`
+        : r.cause === CAUSE.NO_RECORD && D.cluster.records.baseline === BASELINE.FIRST_SEEN ? NO_RECORD_FIRST_SEEN : (CAUSE_TEXT[r.cause] || r.cause);
       const pods = r.cause === CAUSE.PODS_NOT_READ;
       return h`<tr class="link" data-go="${pods ? "#images" : p ? profileHash(first) : "#profiles"}"><td class="m">${what || mut(pods ? "The pods" : "The profile")}</td><td class="m">${r.profiles.length ? r.profiles.join(", ") : mut("-")}</td><td>${why}</td></tr>`;
     })}</tbody></table></div>` : noCauses();

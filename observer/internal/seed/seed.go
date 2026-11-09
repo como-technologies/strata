@@ -111,12 +111,7 @@ func firstSeen(ctx context.Context, strata Strata, dir, clusterUID string) ([]Re
 	}
 	var out []Record
 	for _, p := range cluster.Source.Cluster.Profiles {
-		ref := p.Name + "@" + p.Version
-		file := notAFileName.ReplaceAllString(ref, "_") + ".json"
-		if _, err := strata.Run(ctx, dir, runner.CmdSnapshot, ref, "-o", file, "-q"); err != nil {
-			return nil, err
-		}
-		rec, err := recordOf(filepath.Join(dir, file))
+		rec, err := Snapshot(ctx, strata, dir, p.Name+"@"+p.Version)
 		if err != nil {
 			return nil, err
 		}
@@ -126,6 +121,16 @@ func firstSeen(ctx context.Context, strata Strata, dir, clusterUID string) ([]Re
 		return nil, fmt.Errorf("seed: the cluster runs no profile")
 	}
 	return out, nil
+}
+
+// Snapshot records one profile, name@version, as `strata snapshot` does, in dir. It gives the record
+// with its key. The observer calls it too, for a profile that the cluster runs after the seed.
+func Snapshot(ctx context.Context, strata Strata, dir, ref string) (Record, error) {
+	file := notAFileName.ReplaceAllString(ref, "_") + ".json"
+	if _, err := strata.Run(ctx, dir, runner.CmdSnapshot, ref, "-o", file, "-q"); err != nil {
+		return Record{}, err
+	}
+	return recordOf(filepath.Join(dir, file))
 }
 
 // recordOf reads one record of a profile, and gives it its key. A record of a cluster is refused.
