@@ -3,6 +3,6 @@ name: strata-observer
 description: "The strata observer checks the profiles of one cluster against their records, and serves a page of the findings."
 type: application
 # The version of the chart is the version of strata. A release sets both.
-version: 0.30.1
-appVersion: "0.30.1"
+version: 0.31.0
+appVersion: "0.31.0"
 home: https://github.com/como-technologies/strata
