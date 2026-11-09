@@ -107,6 +107,15 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .btn:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
 .btn:disabled{color:var(--mut);cursor:default}
 .askmsg{max-width:18em}
+/* The card "Move to": the facts of the move on the left, in a row of labeled values, and the panel "Ask Palette" on the right. */
+.move{display:grid;grid-template-columns:minmax(0,1fr) minmax(240px,340px);gap:16px;padding:13px 15px;align-items:start}
+.movefacts{display:grid;gap:10px;min-width:0}
+.kv{display:flex;flex-wrap:wrap;gap:10px}
+.kv div{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:7px 12px;min-width:110px;font-size:13px}
+.kv div span{display:block;color:var(--mut);font-size:12px}
+.askbox{border:1px solid var(--line);border-radius:6px;padding:11px 13px;background:var(--panel2);display:grid;gap:4px;min-width:0}
+.askh{font-weight:600;font-size:13px}
+@media (max-width:760px){.move{grid-template-columns:minmax(0,1fr)}}
 tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;padding-bottom:7px}
 /* A table of groups: each row under a group row sits to the right, on a guide line from its group. */
 table.tree tr.link td:first-child{position:relative;padding-left:38px}

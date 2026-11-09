@@ -556,7 +556,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	}
 	// The card of the move says the same, and it gives no count of 0 of 0.
 	ubuntu := pageOf(t, screens, packPage("barney-base@1.5.0", "os", "ubuntu-aws"), "")
-	mustHold(t, "the move of ubuntu-aws", ubuntu, "<span>Content</span>The same: only the build of the pack changes. Strata says: node repave (OS image change).")
+	mustHold(t, "the move of ubuntu-aws", ubuntu, "<span>Content</span><b>The same</b>", "<span>Changes</span>Only the build of the pack", "Repave is a hint from strata&#39;s table: node repave (OS image change).")
 	mustNotHold(t, "the move of ubuntu-aws", ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {

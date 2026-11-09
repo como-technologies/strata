@@ -556,17 +556,17 @@ const refusalLines = r => h`<div class="mt3"><b>Palette refuses:</b> <span class
 // askBlock is the part of the card "Move to" that asks Palette, or that shows its answer.
 function askBlock(subject, p) {
   const a = answerOf(subject, p);
-  const failed = S.askFailed[askId(subject, p)] ? h`<div class="small mut mt6">${ASK_FAILED}</div>` : "";
-  if (!a) return h`<div class="small mut mt10">${ASK_WHAT}</div><div class="mt6">${askButton("btn", subject, p, "Ask Palette about this move")}${failed}</div>`;
+  const failed = S.askFailed[askId(subject, p)] ? h`<div class="note a small mt9">${ASK_FAILED}</div>` : "";
+  if (!a) return h`<div class="small mut">${ASK_WHAT}</div><div class="mt9">${askButton("btn", subject, p, "Ask Palette about this move")}</div>${failed}`;
   switch (verdictOf(a)) {
     case VERDICT.NO_ERROR:
-      return h`<div class="note small mt10"><b>Palette gave no error.</b> ${ASK_COVERS}</div>`;
+      return h`<div class="note small"><b>Palette gave no error.</b> ${ASK_COVERS}</div>`;
     case VERDICT.REFUSES: {
       const list = a.refusals || [];
-      return h`<div class="note a small mt10">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Palette would not take this move as the profile is now. Nothing on this cluster changed.</div></div>`;
+      return h`<div class="note a small">${list.length ? list.map(refusalLines) : h`<div><b>Palette refuses.</b></div>`}<div class="mt6">Palette would not take this move as the profile is now. Nothing on this cluster changed.</div></div>`;
     }
     default:
-      return h`<div class="note small mt10"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div><div class="mt6">${askButton("btn", subject, p, "Ask again")}${failed}</div>`;
+      return h`<div class="note small"><b>Palette gave no answer${a.status ? `: HTTP ${a.status}` : ""}.</b> This is not a finding.</div><div class="mt9">${askButton("btn", subject, p, "Ask again")}</div>${failed}`;
   }
 }
 
@@ -1646,11 +1646,17 @@ function moveCard(subject, p, row) {
   const pinned = PINNED[row.pinnedState];
   // A move that changes no value, manifest, image, or chart changes the build of the pack only. The counts would read 0 of 0.
   const buildOnly = !unread && total === 0 && !row.images && !row.charts && !row.flags.includes("AUTHORED");
-  const counts = buildOnly ? h`<div><span>Content</span>The same: only the build of the pack changes${row.impactText ? h`. Strata says: ${row.impactText}` : ""}.</div>`
-    : h`<div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>`;
-  return h`<section class="card"><div class="chead"><h2>Move to ${ref(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
-    <div class="meta mt0">${counts}${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
-    <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p)}</div></section>`;
+  // The facts of the move sit in one row of labeled values. The panel "Ask Palette" sits beside them in its own box.
+  const fact = (label, value) => h`<div><span>${label}</span>${value}</div>`;
+  const facts = buildOnly ? [fact("Content", h`<b>The same</b>`), fact("Changes", "Only the build of the pack")]
+    : [fact("Settings", unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`), fact("Images", count(row.images)), fact("Charts", count(row.charts))];
+  if (row.drops.length) facts.push(fact("Drops", row.drops.join(", ")));
+  if (row.floating) facts.push(fact("Tag", "Floating"));
+  const why = unread ? "Strata could not compare these versions now, so the counts are not known."
+    : `${impactOf(row.impact)[1]} is a hint from strata's table${row.impactText ? `: ${row.impactText}` : ""}.`;
+  return h`<section class="card"><div class="chead"><h2>Move to ${ref(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}</span></h2>${impactCell(subject, p, row)}</div>
+    <div class="move"><div class="movefacts"><div class="kv">${facts}</div><div class="small mut">${why}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div></div>
+    <div class="askbox"><div class="askh">Ask Palette</div>${askBlock(subject, p)}</div></div></section>`;
 }
 
 /* ---- The card "Check this yourself" ----

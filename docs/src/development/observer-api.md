@@ -453,6 +453,9 @@ them:
   version that the registry listed after it, and the newest, with the day of each.
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
+- The card "Move to" shows the facts of the move in a row of labeled values, with the
+  words of strata for the impact under them. The panel "Ask Palette" sits beside them in
+  its own box, with what it asks, the button, and the answer.
 - A profile shows its packs as a stack of layers: the add-ons on top and the OS at the
   bottom, as Palette builds a cluster. Each slab is the layer, the ref, the status, the
   newer version, and the images listed. The page of a pack shows the same stack, small,

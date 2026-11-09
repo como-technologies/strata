@@ -676,7 +676,7 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 	// A request that failed is neutral: no red, no badge, no note of a finding.
 	block := dex[strings.Index(dex, "Palette gave no answer")-40:]
 	block = block[:strings.Index(block, "</div></div>")]
-	mustHold(t, "no answer", block, `<div class="note small mt10">`)
+	mustHold(t, "no answer", block, `<div class="note small"><b>Palette gave no answer`)
 	mustNotHold(t, "no answer", block, "badge", `note r`, `note a`, "Drift")
 }
 
