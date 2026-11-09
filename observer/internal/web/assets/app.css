@@ -102,6 +102,11 @@ td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
 .btn:disabled{color:var(--mut);cursor:default}
 .askmsg{max-width:18em}
 tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;padding-bottom:7px}
+/* A table of groups: each row under a group row sits to the right, on a guide line from its group. */
+table.tree tr.link td:first-child{position:relative;padding-left:38px}
+table.tree tr.link td:first-child::before{content:"";position:absolute;left:22px;top:0;bottom:0;border-left:1px solid var(--line)}
+table.tree tr.link td:first-child::after{content:"";position:absolute;left:22px;top:50%;width:9px;border-top:1px solid var(--line)}
+@media (max-width:760px){table.tree tr.link td:first-child{padding-left:30px}table.tree tr.link td:first-child::before,table.tree tr.link td:first-child::after{left:16px}}
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:1px 8px;border-radius:4px;white-space:nowrap;line-height:18px}
 .badge.r{background:#c9252f;color:#fff}
 .badge.a{background:var(--amb-t);color:var(--amb)}

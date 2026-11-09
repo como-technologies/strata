@@ -435,6 +435,8 @@ them:
   name, as Profiles has.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
+- The table of the newer versions indents each pack under the row of its profile, on a
+  guide line.
 - A profile shows its packs as a stack of layers: the add-ons on top and the OS at the
   bottom, as Palette builds a cluster. Each slab is the layer, the ref, the status, the
   newer version, and the images listed. The page of a pack shows the same stack, small,

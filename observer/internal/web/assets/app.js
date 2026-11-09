@@ -928,7 +928,7 @@ function newerCard() {
     const shownGroups = groups.map(g => matches("newer", g.subject) ? g : {...g, rows: g.rows.filter(r => matches("newer", r.name))}).filter(g => g.rows.length);
     body = h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>
       <div class="body tb pb8">${filterBox("newer", "Filter by pack or profile")}</div>
-      <div class="tw"><table><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
+      <div class="tw"><table class="tree"><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
         const p = profileOf(g.subject);
         const total = p ? p.packs.length : "";
         return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${subjectRef(g.subject)}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
