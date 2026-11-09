@@ -643,13 +643,16 @@ function clocks() {
   return [a, h`<span class="chip" title="${versions.readAt}"><span class="dot ${dot}"></span>Versions <b>${ago(versions.readAt)} ago</b> · every ${versions.every}</span>`];
 }
 
+// recordsChip names the baseline in one place and one form: the revision that a pipeline approved, first-seen, or unknown. An
+// amber dot marks a baseline that no pipeline approved.
+function recordsChip(r) {
+  if (r.baseline === BASELINE.FIRST_SEEN) return h`<span class="chip" title="No pipeline approved these records yet"><span class="dot a"></span>records: <b>first-seen</b></span>`;
+  if (r.baseline === BASELINE.UNKNOWN) return h`<span class="chip" title="The observer holds no record yet"><span class="dot a"></span>records: <b>unknown</b></span>`;
+  return h`<span class="chip">records: <b>${r.revision ? `rev ${r.revision}` : "approved"}</b></span>`;
+}
+
 function topBar(crumbs) {
-  const r = D.cluster.records;
-  let pill = "", rec = "";
-  if (r.baseline === BASELINE.FIRST_SEEN) pill = badge("a", "First-seen records");
-  else if (r.baseline === BASELINE.UNKNOWN) pill = badge("y", "Baseline unknown");
-  else if (r.revision) rec = h`<span class="chip">records: <b>rev ${r.revision}</b></span>`;
-  return h`<nav class="crumbs" aria-label="Where you are">${crumbs}</nav><div class="topr">${pill}${rec}${clocks()}</div>`;
+  return h`<nav class="crumbs" aria-label="Where you are">${crumbs}</nav><div class="topr">${recordsChip(D.cluster.records)}${clocks()}</div>`;
 }
 
 const crumbs = (...a) => a.map((x, i) => i === a.length - 1 ? h`<b>${x}</b>` : h`${x} <span>/</span> `);

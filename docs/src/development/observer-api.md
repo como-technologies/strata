@@ -224,9 +224,11 @@ A page that holds no data and cannot reach the observer shows the splash "This p
 line to the observer". The splash has the command `kubectl port-forward` and a button
 "Try now". With data on the page, the same fault stays an amber bar over that data.
 
-The baseline of the records adds to each screen. With `first-seen`, the top bar
-has a pill, and each screen says "No person approved these records". With
-`unknown`, the top bar says "Baseline unknown".
+The top bar names the baseline in one chip: `records: rev <revision>` for records
+that a pipeline approved, `records: first-seen`, or `records: unknown`. The last two
+have an amber dot. With `first-seen`, each screen also says "No person approved these
+records". The top bar names no project: the observer watches one cluster of one
+project.
 
 ### The splash
 
