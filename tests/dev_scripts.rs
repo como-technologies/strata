@@ -164,6 +164,35 @@ fn set_version_writes_the_outputs_of_the_book_that_print_the_version_in_the_rele
     );
 }
 
+// The chart of the observer and its `helm install` command follow the version of strata. A release
+// that missed them shipped a chart that named the release before it.
+#[test]
+fn set_version_rewrites_the_chart_of_the_observer_and_its_helm_install_command() {
+    let dir = release_tree("0.9.9");
+    let d = dir.path();
+    std::fs::create_dir_all(d.join("deploy/helm/strata-observer")).unwrap();
+    std::fs::write(
+        d.join("deploy/helm/strata-observer/Chart.yaml"),
+        "apiVersion: v2\nname: strata-observer\nversion: 0.9.9\nappVersion: \"0.9.9\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        d.join("install.md"),
+        "helm install strata-observer \\\n  --version 0.9.9 -n strata-observer \\\n",
+    )
+    .unwrap();
+    git(d, &["add", "."]);
+    git(d, &["commit", "-q", "-m", "the chart"]);
+    let (o, _) = set_version(d, "0.9.10", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let chart = committed(d, "deploy/helm/strata-observer/Chart.yaml");
+    assert!(
+        chart.contains("\nversion: 0.9.10\n") && chart.contains("\nappVersion: \"0.9.10\"\n"),
+        "{chart}"
+    );
+    assert!(committed(d, "install.md").contains("--version 0.9.10 -n strata-observer"));
+}
+
 #[test]
 fn set_version_runs_the_book_only_when_an_output_names_the_old_version() {
     let dir = release_tree("1.0.0");

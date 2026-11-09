@@ -94,6 +94,9 @@ for f in "${files[@]}"; do
     -e "s/strata-version: v${old}\b/strata-version: v${new}/g" \
     -e "s/^\( *\)STRATA_VERSION: v${old}\b/\1STRATA_VERSION: v${new}/g" \
     -e "s/tag = \"v${old}\"/tag = \"v${new}\"/g" \
+    -e "s/^version: ${old}$/version: ${new}/" \
+    -e "s/^appVersion: \"${old}\"$/appVersion: \"${new}\"/" \
+    -e "s/--version ${old} -n strata-observer/--version ${new} -n strata-observer/g" \
     "$f"
   if [ "$before" = "$(cat "$f")" ]; then
     echo "set-version: $f names $old, and in no context this command rewrites; read it" >&2

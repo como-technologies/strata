@@ -8,8 +8,8 @@
    ```
 
    The version is in `Cargo.toml` and `Cargo.lock`, the README badge and its
-   install command, the install page, the CI drop-ins, and the pages that show
-   them. The recipe rewrites the version only where the version
+   install command, the install page, the CI drop-ins, the chart of the observer
+   and its `helm install` command, and the pages that show them. The recipe rewrites the version only where the version
    follows this repository. Prose that names a release for a reason keeps it:
    "use v0.5.2 or later, the first release with all four scripts" is a fact
    about v0.5.2. The recipe leaves the recorded live runs alone for the same
