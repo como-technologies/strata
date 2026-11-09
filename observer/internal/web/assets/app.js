@@ -267,7 +267,11 @@ const subjectOf = p => `${p.name}@${p.version}`;
 // at writes a name and a version in the form of a ref, as strata does: name@version. move writes a move as two refs, as the head of
 // strata compare does. A column with the head Version or Move shows the bare version, because the name has its own column.
 const at = (name, version) => `${name}@${version}`;
-const move = (name, from, to) => h`${at(name, from)}${ARROW}${at(name, to)}`;
+// ref draws the same ref on the page: the name, then @version in a softer face, so the eye finds the name first. at stays for plain
+// text, such as an option of a select, a command, and a tip.
+const ref = (name, version) => h`${name}<span class="ver">@${version}</span>`;
+const subjectRef = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? ref(subject.slice(0, i), subject.slice(i + 1)) : subject; };
+const move = (name, from, to) => h`${ref(name, from)}${ARROW}${ref(name, to)}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
 const imageHash = ref => `#i-${enc(ref)}`;
@@ -914,7 +918,7 @@ function newerCard() {
       <div class="tw"><table><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
         const p = profileOf(g.subject);
         const total = p ? p.packs.length : "";
-        return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${g.subject}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
+        return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${subjectRef(g.subject)}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
           sortBy("nt", g.rows, NEWER_KEYS).map(r => {
             const k = packOfRow(p, r);
             const href = k ? packHash(g.subject, k) : profileHash(g.subject);
@@ -1008,8 +1012,8 @@ function viewProfile(subject) {
   })}</tbody></table></div></section>` : "";
   const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
   const packs = x.packs.length ? packStack(subject, x.packs, false, "") : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
-  return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subject), body: h`${alertBars()}
-    <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subject}</h1>${statusBadge(x.status)}</div>
+  return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subjectRef(subject)), body: h`${alertBars()}
+    <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subjectRef(subject)}</h1>${statusBadge(x.status)}</div>
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
     <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}, from the top layer to the bottom</span></h2></div>${packs}</section>
@@ -1038,7 +1042,7 @@ function newerCell(p) {
    the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
    sees one picture of a pack on both pages and steps from one pack to the next. */
 function newerWords(p) {
-  if (p.newer) return h`newer: <span class="m">${at(p.name, p.newer)}</span>`;
+  if (p.newer) return h`newer: <span class="m">${ref(p.name, p.newer)}</span>`;
   if (p.status === STATUS.NOT_CHECKED) return "not checked";
   if (!D.cluster.versions.readAt) return "versions not read yet";
   return "current";
@@ -1048,7 +1052,7 @@ const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<
 function packSlab(subject, p, compact, here) {
   const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0];
   const sub = compact ? "" : h`<span class="sub">${newerWords(p)} · ${imagesWords(p.images)}</span>`;
-  return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${at(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
+  return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${ref(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
 }
 
 // packStack lists the packs from the top layer to the bottom one. here is the key of the lit slab, or "".
@@ -1564,7 +1568,7 @@ function moveCard(subject, p, row) {
   const buildOnly = !unread && total === 0 && !row.images && !row.charts && !row.flags.includes("AUTHORED");
   const counts = buildOnly ? h`<div><span>Content</span>The same: only the build of the pack changes${row.impactText ? h`. Strata says: ${row.impactText}` : ""}.</div>`
     : h`<div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>`;
-  return h`<section class="card"><div class="chead"><h2>Move to ${at(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
+  return h`<section class="card"><div class="chead"><h2>Move to ${ref(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
     <div class="meta mt0">${counts}${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
     <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p)}</div></section>`;
 }
@@ -1588,7 +1592,7 @@ function terminalRows(subject, x, p, row) {
   if (cp) rows.push(["Does this cluster still run the record?", clusterCommand(x, false), copyBadge(cp, carried)]);
   if (p && row) {
     rows.push(["What does the move change?", moveCommand(row), impactCell(subject, p, row)]);
-    rows.push(["Which newer versions does Palette list?", pinCommand(p), mut(`Newest ${at(row.name, row.newest)}`)]);
+    rows.push(["Which newer versions does Palette list?", pinCommand(p), h`<span class="mut">Newest ${ref(row.name, row.newest)}</span>`]);
   }
   return rows;
 }
@@ -1602,15 +1606,15 @@ function checkCard(rows) {
 
 function viewPack(subject, layer, name) {
   const x = profileOf(subject), p = x ? x.packs.find(q => q.layer === layer && q.name === name) : null;
-  const cr = crumbs(h`<a href="#profiles">Profiles</a>`, h`<a href="${profileHash(subject)}">${subject}</a>`, p ? at(name, p.version) : name);
+  const cr = crumbs(h`<a href="#profiles">Profiles</a>`, h`<a href="${profileHash(subject)}">${subjectRef(subject)}</a>`, p ? ref(name, p.version) : name);
   if (!p) {
     return viewMissing(cr, "profiles", x ? {title: "This pack is not here", name, why: "is not in this profile now.", home: [profileHash(subject), "This profile"]}
       : {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: ["#profiles", "All profiles"]});
   }
   const row = newerRowOf(subject, p);
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";
-  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="phead"><div class="body"><div class="title"><h1 class="m h1m">${at(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
-    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div>
+  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="phead"><div class="body"><div class="title"><h1 class="m h1m">${ref(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
+    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subjectRef(subject)}</a></div></div></div>
     <div class="pside">${packStack(subject, x.packs, true, p.key)}</div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
 }
 

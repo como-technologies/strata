@@ -115,6 +115,8 @@ tr.g td{background:var(--panel2);font-weight:500;font-size:13px;padding-top:7px;
 .hbar .r{background:var(--red)}.hbar .a{background:var(--amb)}.hbar .b{background:var(--violet)}.hbar .g{background:var(--grn);opacity:.55}
 .hbar .y{background:repeating-linear-gradient(45deg,var(--gry) 0 2px,transparent 2px 4px);outline:1px solid var(--gry);outline-offset:-1px}
 .mut{color:var(--mut)}
+/* The version of a ref: softer than the name, so name@version does not read as one block. */
+.ver{color:var(--mut);font-weight:400}
 .small{font-size:12.5px}
 .tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}

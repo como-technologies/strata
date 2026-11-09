@@ -877,7 +877,7 @@ func TestNoInlineStyleReachesAScreenOfAnySet(t *testing.T) {
 
 // ---- The stack of the packs ----
 
-var slabPattern = regexp.MustCompile(`<li class="pslab t-([rbgy])( here)?"><a href="([^"]*)"(?: aria-current="page")?><span class="layer">([^<]*)</span><span class="who"><span class="m ref">([^<]*)</span>`)
+var slabPattern = regexp.MustCompile(`<li class="pslab t-([rbgy])( here)?"><a href="([^"]*)"(?: aria-current="page")?><span class="layer">([^<]*)</span><span class="who"><span class="m ref">([^<]*)<span class="ver">@([^<]*)</span></span>`)
 
 // The page of a profile lists its packs as a stack, from the top layer to the bottom one: each slab
 // is a link to its pack, with the ref of the pack and the color of its status. The page of a pack
@@ -895,7 +895,7 @@ func TestThePacksOfAProfileAreAStackAndThePageOfAPackLightsItsSlab(t *testing.T)
 		}
 		for i, m := range slabs {
 			p := x.Packs[len(x.Packs)-1-i]
-			if m[4] != p.Layer || m[5] != p.Name+"@"+p.Version || m[3] != packPage(subject, p.Layer, p.Name) || m[2] != "" {
+			if m[4] != p.Layer || m[5] != p.Name || m[6] != p.Version || m[3] != packPage(subject, p.Layer, p.Name) || m[2] != "" {
 				t.Errorf("%s: slab %d is %q %q %q, want the pack %s from the top", subject, i, m[4], m[5], m[3], p.Key)
 			}
 		}
@@ -904,7 +904,7 @@ func TestThePacksOfAProfileAreAStackAndThePageOfAPackLightsItsSlab(t *testing.T)
 		for _, m := range slabPattern.FindAllStringSubmatch(pageOf(t, screens, packPage(subject, p.Layer, p.Name), ""), -1) {
 			if m[2] != "" {
 				lit++
-				if m[5] != p.Name+"@"+p.Version {
+				if m[5] != p.Name || m[6] != p.Version {
 					t.Errorf("%s: the page of %s lights %s", subject, p.Key, m[5])
 				}
 			}

@@ -441,7 +441,8 @@ them:
   pack or Kubernetes, so a pack with no list shows "no image list" and not 0.
 - A name with its version shows as a ref, `name@version`, as strata writes it. A move
   shows two refs, `name@1.19.6 → name@1.20.1`, as the head of `strata compare` does. A
-  column with the head Version or Move shows the bare version.
+  column with the head Version or Move shows the bare version. The `@version` part has
+  the muted color, so the eye finds the name first.
 - The tiles fill each row. With no `--read-pods`, the tile "Image changes" is absent,
   and the other four tiles fill the row. The page never scrolls sideways: a table that
   does not fit scrolls inside its own card, and a long line of a diff wraps.
