@@ -87,8 +87,7 @@ func checkPlace(t *testing.T, p place, html string) {
 }
 
 const (
-	logCommand  = "<code>kubectl -n strata-observer logs deploy/strata-observer --tail=20</code>"
-	applyKustom = "<code>kubectl apply -k .</code>"
+	logCommand = "<code>kubectl -n strata-observer logs deploy/strata-observer --tail=20</code>"
 )
 
 // The places of the issue: the first check, no records, lost with nothing read, a page that cannot reach the observer, a route
@@ -132,13 +131,13 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{`<button type="button" class="lnk" data-jump="coverage">What a check does not cover</button>`}},
 		{"the pods off", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", "Pods are not on the menu here",
 			[]string{"This install does not read the pods. With the read on, the page shows the digest that each tag runs, and finds a tag that moved."},
-			[]string{`<div class="next"><b>Next</b> Name the component <span class="m">deploy/observer/pods</span> in the kustomization, then apply it.</div>`, applyKustom}},
+			[]string{`<div class="next"><b>Next</b> Turn on the read of the pods when you install the observer. The book of strata tells how, in The observer: The pods of the cluster.</div>`}},
 		{"the read of the pods failed", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", "") }, "warn", "md", "The pods stay silent",
 			[]string{"The last read of the pods failed. <b>HTTP 403, the role of the observer was refused.</b> The findings of the content check are not affected."},
 			[]string{"Ask the API server if the role of the observer can list pods.", "<code>kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer</code>"}},
 		{"alerts not set", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", "Nobody gets paged yet",
 			[]string{"This install has no alert rules. A message goes to a webhook when a finding opens and when it clears."},
-			[]string{`<div class="next"><b>Next</b> Write the rules in <span class="m">alerts.json</span>, name the component <span class="m">deploy/observer/alerts</span> in the kustomization, then apply it.</div>`, applyKustom}},
+			[]string{`<div class="next"><b>Next</b> Turn on the alerts when you install the observer. The book of strata tells how, in The observer: Alerts.</div>`}},
 		{"a pack that matches its record", func(t *testing.T) string {
 			return pageOf(t, crawl(t, devdata.StateQuiet), "#k-fred-identity@2.3.0/addon/dex", "")
 		}, "calm", "md", "Undisturbed",

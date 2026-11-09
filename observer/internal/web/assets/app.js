@@ -75,7 +75,10 @@ const LOG_COMMAND = "kubectl -n strata-observer logs deploy/strata-observer --ta
 // The page was reached on a local port of a port-forward, often not 8080 because that port is in use. The command keeps that port.
 const portForwardCommand = () => `kubectl -n strata-observer port-forward deploy/strata-observer ${location.port || "80"}:8080`;
 const RECORDS_COMMAND = "scripts/ci/observer-records.sh --revision \"$GIT_SHA\" releases/*.json | kubectl apply --server-side -f -";
-const APPLY_COMMAND = "kubectl apply -k .";
+// The next step of a choice that the install makes. The page names the section of the book, and no file of the repository: a
+// reader of the page needs not know how strata keeps its manifests.
+const PODS_NEXT = "Turn on the read of the pods when you install the observer. The book of strata tells how, in The observer: The pods of the cluster.";
+const ALERTS_NEXT = "Turn on the alerts when you install the observer. The book of strata tells how, in The observer: Alerts.";
 const CAN_LIST_PODS_COMMAND = "kubectl auth can-i list pods --all-namespaces --as=system:serviceaccount:strata-observer:strata-observer";
 // The records are in four Secrets, and the page does not know which one holds a record. A key is the name and the version
 // of the profile, as scripts/ci/observer-records.sh writes it.
@@ -1000,7 +1003,7 @@ function imageRow(img) {
 // podsOffSplash is the offer of the read of the pods. The read is a choice of the team, so it is no fault.
 const podsOffSplash = () => splash(TONE.OFF, "Pods are not on the menu here",
   h`This install does not read the pods. With the read on, the page shows the digest that each tag runs, and finds a tag that moved. The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`,
-  next(h`Name the component <span class="m">deploy/observer/pods</span> in the kustomization, then apply it.`, cmd(APPLY_COMMAND)), SIZE.CARD);
+  next(PODS_NEXT), SIZE.CARD);
 
 // podsFailedSplash tells that the first reads of the pods failed. A refused role gets the command that asks the API server.
 function podsFailedSplash(err) {
@@ -1503,7 +1506,7 @@ function viewPack(subject, layer, name) {
 // alertsOffSplash is the offer of the alerts. Off is a choice of the team, so it reads as an offer and not as a fault.
 const alertsOffSplash = () => splash(TONE.OFF, "Nobody gets paged yet",
   "This install has no alert rules. A message goes to a webhook when a finding opens and when it clears. The rules are a file in Git, so a mute always has a name and an end date.",
-  next(h`Write the rules in <span class="m">alerts.json</span>, name the component <span class="m">deploy/observer/alerts</span> in the kustomization, then apply it.`, cmd(APPLY_COMMAND)), SIZE.CARD);
+  next(ALERTS_NEXT), SIZE.CARD);
 
 // digestWords says when a digest goes. The API gives the period in hours.
 const digestWords = every => every === WEEK ? "Weekly digest" : `Digest every ${every}`;

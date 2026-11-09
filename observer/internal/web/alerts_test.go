@@ -86,8 +86,7 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
 			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">Not set</span></h2>`, "Nobody gets paged yet", "This install has no alert rules.",
 				"The rules are a file in Git, so a mute always has a name and an end date.",
-				`<b>Next</b> Write the rules in <span class="m">alerts.json</span>, name the component <span class="m">deploy/observer/alerts</span> in the kustomization, then apply it.`,
-				"<code>kubectl apply -k .</code>", `class="splash md tone-off"`)
+				`<b>Next</b> Turn on the alerts when you install the observer.`, `class="splash md tone-off"`)
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
 		})
 	}
