@@ -309,8 +309,10 @@ th[aria-sort]{padding:0}
 button.sort{display:flex;align-items:center;gap:5px;width:100%;background:none;border:0;padding:8px 15px;font:inherit;color:inherit;cursor:pointer;text-align:inherit;white-space:nowrap}
 th.n button.sort{justify-content:flex-end}
 button.sort:hover,button.sort.on{color:var(--ink)}
-button.sort .arrow{font-size:10px;opacity:.45}
-button.sort.on .arrow{opacity:1;color:var(--accent)}
+.sorti{flex:none;display:block}
+.sorti path{fill:var(--mut);opacity:.35}
+button.sort:hover .sorti path{opacity:.6}
+button.sort.asc .sorti .u,button.sort.desc .sorti .d{fill:var(--accent);opacity:1}
 @media (max-width:760px){button.sort{padding:8px 10px}}
 /* The packs of a profile as a stack of layers: the add-ons on top, the OS at the bottom. The bar on the left is the status. The page
    of a pack shows the same stack, small, beside its header, with its own slab lit. */

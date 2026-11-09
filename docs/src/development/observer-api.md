@@ -429,9 +429,12 @@ them:
   images, newer versions, not checked, and profiles. `ORDER` in `app.js` holds it.
 - The heads of the columns of Profiles, Newer versions, Images, and Recent events sort
   the table: a click sorts up, a second click sorts down, and a third gives back the
-  order of the page. A version sorts by the precedence of SemVer 2.0.0 when it parses,
+  order of the page. Two triangles beside the head show the order, and the triangle of
+  the order lights. A version sorts by the precedence of SemVer 2.0.0 when it parses,
   and in natural order when it does not. Newer versions and Images have a filter by
   name, as Profiles has.
+- In Recent events, each profile and each image in the column Object is a link to its
+  page.
 - A profile shows its packs as a stack of layers: the add-ons on top and the OS at the
   bottom, as Palette builds a cluster. Each slab is the layer, the ref, the status, the
   newer version, and the images listed. The page of a pack shows the same stack, small,

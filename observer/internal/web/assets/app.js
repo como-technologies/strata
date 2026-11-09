@@ -338,9 +338,12 @@ function sortBy(table, list, keys) {
 }
 
 // sortTh draws the head of a column that sorts its table.
+// SORT_ICON is two triangles, one up and one down. A column that sorts its table lights the triangle of its order. The icon is an
+// inline drawing: the page loads nothing from outside the cluster.
+const SORT_ICON = h`<svg class="sorti" viewBox="0 0 10 14" width="10" height="14" aria-hidden="true"><path class="u" d="M5 1 9.5 6h-9z"/><path class="d" d="M5 13 .5 8h9z"/></svg>`;
 function sortTh(table, col, label, cls = "") {
-  const s = S.sort[table], on = !!s && s.col === col;
-  return h`<th class="${cls}" aria-sort="${on ? (s.dir > 0 ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? " on" : ""}" data-sort="${table}" data-col="${col}">${label}<span class="arrow" aria-hidden="true">${on ? (s.dir > 0 ? "▲" : "▼") : "↕"}</span></button></th>`;
+  const s = S.sort[table], on = !!s && s.col === col, dir = on ? (s.dir > 0 ? "asc" : "desc") : "";
+  return h`<th class="${cls}" aria-sort="${on ? (s.dir > 0 ? "ascending" : "descending") : "none"}"><button type="button" class="sort${on ? ` on ${dir}` : ""}" data-sort="${table}" data-col="${col}">${label}${SORT_ICON}</button></th>`;
 }
 
 // filterBox is a search field for one list. The page keeps what a person types in S.qs, and matches is the test of a row.
@@ -756,9 +759,19 @@ function findingsCard() {
   return h`<section class="card"><div class="chead"><h2>Needs attention <span class="sub">${known(rows.length)}</span></h2><a class="small" href="#findings">All findings</a></div>${body}</section>`;
 }
 
+// objectLinks names the objects of an event. A profile or an image that the page holds is a link to its page.
+function objectLinks(object) {
+  const parts = String(object).split(", ").map(o => {
+    if (profileOf(o)) return h`<a href="${profileHash(o)}">${subjectRef(o)}</a>`;
+    if (D.images.images.some(i => i.ref === o)) return h`<a href="${imageHash(o)}">${o}</a>`;
+    return o;
+  });
+  return parts.flatMap((x, i) => i ? [", ", x] : [x]);
+}
+
 function eventRows(list) {
   return list.map(x => {
-    return h`<tr><td>${badgeOf(EVENT_BADGE, x.type)}</td><td class="m narrow-hide">${x.reason}</td><td class="mut nw">${ago(x.time)}</td><td class="m narrow-hide">${x.object}</td><td>${x.message}<div class="m mut narrow-show">${x.object}</div></td></tr>`;
+    return h`<tr><td>${badgeOf(EVENT_BADGE, x.type)}</td><td class="m narrow-hide">${x.reason}</td><td class="mut nw">${ago(x.time)}</td><td class="m narrow-hide">${objectLinks(x.object)}</td><td>${x.message}<div class="m mut narrow-show">${objectLinks(x.object)}</div></td></tr>`;
   });
 }
 

@@ -941,12 +941,12 @@ func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	const subject = "barney-base@1.5.0"
 	natural := newerOrder(pageOf(t, render(t, devdata.StateOK, false), "#newer", ""), subject)
 	up := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: 1}`)
-	mustHold(t, "up", up, `<th class="" aria-sort="ascending"><button type="button" class="sort on" data-sort="nt" data-col="move">Move<span class="arrow" aria-hidden="true">▲</span>`)
+	mustHold(t, "up", up, `<th class="" aria-sort="ascending"><button type="button" class="sort on asc" data-sort="nt" data-col="move">Move<svg class="sorti"`)
 	if got, want := newerOrder(up, subject), []string{"cni-cilium-oss", "cert-manager", "kubernetes", "csi-aws-ebs", "ubuntu-aws"}; !slices.Equal(got, want) {
 		t.Errorf("up: %v, want %v", got, want)
 	}
 	down := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.sort.nt = {col: "move", dir: -1}`)
-	mustHold(t, "down", down, `aria-sort="descending"`, `<span class="arrow" aria-hidden="true">▼</span>`)
+	mustHold(t, "down", down, `aria-sort="descending"`, `class="sort on desc" data-sort="nt" data-col="move"`)
 	if got, want := newerOrder(down, subject), []string{"ubuntu-aws", "csi-aws-ebs", "kubernetes", "cert-manager", "cni-cilium-oss"}; !slices.Equal(got, want) {
 		t.Errorf("down: %v, want %v", got, want)
 	}

@@ -613,7 +613,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
 	table := pageOf(t, screens, "#newer", "")
-	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<span class="arrow" aria-hidden="true">↕</span></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
+	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<svg class="sorti"`, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
 	if got := strings.Count(table, ">Ask Palette</button>"); got != len(set.Newer.Newer) {
 		t.Errorf("the table has %d buttons for %d rows", got, len(set.Newer.Newer))
 	}
