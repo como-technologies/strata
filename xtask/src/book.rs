@@ -15,6 +15,7 @@ use regex::Regex;
 use crate::checks::OutputState;
 use crate::contract::StandIn;
 use crate::files::{files_with_ext, output_dir};
+use crate::git::isolate_git;
 use crate::palette::REPORT_ENDPOINT;
 use crate::process::CommandExt;
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
@@ -475,6 +476,8 @@ impl Runner {
         c.env("PALETTE_API_KEY", "docs-example-key");
         c.env("STRATA_REPORT_URL", self.report_endpoint());
         c.env("STRATA_BIN", &self.strata);
+        // the git settings of the tests, before the chapter: a chapter adds the dates of its commits
+        isolate_git(&mut c);
         for (k, v) in &self.env {
             c.env(k, v);
         }

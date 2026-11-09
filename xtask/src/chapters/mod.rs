@@ -24,15 +24,12 @@ mod repave;
 mod start;
 mod the_loop;
 
-/// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
+/// The project and the dates of the commits that the merge-gate chapters need, so a commit is the
+/// same on every machine. The runner gives each step the other git settings: see [`isolate_git`].
+///
+/// [`isolate_git`]: crate::git::isolate_git
 const GIT: &[(&str, &str)] = &[
     ("PALETTE_PROJECT", "dev"),
-    ("GIT_CONFIG_GLOBAL", "/dev/null"),
-    ("GIT_CONFIG_SYSTEM", "/dev/null"),
-    ("GIT_AUTHOR_NAME", "dev"),
-    ("GIT_AUTHOR_EMAIL", "dev@example.com"),
-    ("GIT_COMMITTER_NAME", "dev"),
-    ("GIT_COMMITTER_EMAIL", "dev@example.com"),
     ("GIT_AUTHOR_DATE", "2026-09-10T10:00:00+00:00"),
     ("GIT_COMMITTER_DATE", "2026-09-10T10:00:00+00:00"),
 ];

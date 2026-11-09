@@ -6,8 +6,8 @@
 use std::process::Command;
 
 use crate::common::{
-    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, repo_file, runs_of,
-    script, steps, text, workflow, workflow_files, workflow_text,
+    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
+    recipe, repo_file, runs_of, script, steps, text, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -316,7 +316,8 @@ impl StepRun {
 /// Run the `run` script of the step `step` of the workflow `file` in a fresh directory.
 ///
 /// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
-/// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
+/// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes. The step gets no
+/// git setting of the machine, but `env` can give one.
 fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
     let tools: Vec<(&str, &str)> = tools.iter().map(|tool| (*tool, LOGGING_TOOL)).collect();
     run_step_with(file, step, env, &tools)
@@ -346,7 +347,7 @@ fn run_step_with(file: &str, step: &str, env: &[(&str, &str)], tools: &[(&str, &
     for name in step["env"].as_mapping().into_iter().flat_map(|e| e.keys()) {
         command.env(name.as_str().unwrap(), "");
     }
-    command.envs(env.iter().copied());
+    isolate_git(&mut command).envs(env.iter().copied());
     let output = command.output_locked().unwrap();
     StepRun { dir, output }
 }
@@ -1449,44 +1450,57 @@ fn the_observer_publish_step_replaces_the_secrets_with_the_records_of_each_patte
     assert!(run.calls().is_empty(), "{:#?}", run.calls());
 }
 
-/// The step gives `--base` only when the input names a branch, and sets the name of the author of
-/// the commit.
-#[test]
-fn the_observer_propose_step_gives_the_base_only_when_the_input_names_one() {
+/// Run the step of `observer-propose.yml` that proposes the records, with its inputs and `more`.
+fn propose_the_records(more: &[(&str, &str)]) -> StepRun {
     let temp = tempfile::tempdir().unwrap();
     let temp_path = temp.path().display().to_string();
-    let tools = [(".strata/scripts/ci/observer-propose.sh", KUBE_TOOL)];
-    let env = [
+    let mut env = vec![
         ("DIR", "releases/observer"),
         ("NAMESPACE", "strata-observer"),
         ("REPO", "o/r"),
         ("KUBECONFIG_TEXT", "the-kubeconfig"),
         ("RUNNER_TEMP", temp_path.as_str()),
     ];
+    env.extend_from_slice(more);
+    let tools = [(".strata/scripts/ci/observer-propose.sh", KUBE_TOOL)];
     let run = run_step_with("observer-propose.yml", "propose the records", &env, &tools);
     assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    run
+}
+
+/// The step gives `--base` only when the input names a branch.
+#[test]
+fn the_observer_propose_step_gives_the_base_only_when_the_input_names_one() {
     assert_eq!(
-        run.calls(),
+        propose_the_records(&[]).calls(),
         [
             "observer-propose.sh --dir releases/observer --namespace strata-observer --repo o/r | the-kubeconfig 600 | "
         ]
     );
-    let name = git(run.dir.path(), &["config", "user.name"]);
-    assert_eq!(text(&name.stdout).trim(), "github-actions[bot]");
-
-    let mut with_base = env.to_vec();
-    with_base.push(("BASE", "dev"));
-    let run = run_step_with(
-        "observer-propose.yml",
-        "propose the records",
-        &with_base,
-        &tools,
-    );
-    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
     assert_eq!(
-        run.calls(),
+        propose_the_records(&[("BASE", "dev")]).calls(),
         [
             "observer-propose.sh --dir releases/observer --namespace strata-observer --repo o/r --base dev | the-kubeconfig 600 | "
         ]
     );
+}
+
+/// The step writes the name of the author of the commit into the config of the repository. A git
+/// user in the environment of the machine wins over that config. So the test reads the name with
+/// [`isolate_git`], which removes that user.
+#[test]
+fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_another_user() {
+    for machine in MACHINE_GIT_USER {
+        let run = propose_the_records(machine);
+        let mut read = Command::new("git");
+        read.args(["config", "user.name"])
+            .current_dir(run.dir.path())
+            .envs(machine.iter().copied());
+        let name = isolate_git(&mut read).output_locked().unwrap();
+        assert_eq!(
+            text(&name.stdout).trim(),
+            "github-actions[bot]",
+            "{machine:?}"
+        );
+    }
 }

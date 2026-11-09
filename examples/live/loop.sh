@@ -69,9 +69,7 @@ undo() {
 trap 'undo; summary' EXIT
 
 # the git of the repository: one author, and no hook or setting of the machine
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
-export GIT_AUTHOR_NAME=loop GIT_AUTHOR_EMAIL=loop@example.com
-export GIT_COMMITTER_NAME=loop GIT_COMMITTER_EMAIL=loop@example.com
+isolate_git loop
 export STRATA_BIN=$strata
 ci=$(cd "$live/../.." && pwd)/scripts/ci
 # in REPO: run a command in the repository of the team, where git and the scripts of CI run

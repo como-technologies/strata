@@ -37,6 +37,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
+mod git;
 mod palette;
 mod process;
 mod stand_in;
@@ -44,6 +45,7 @@ mod walk;
 
 pub use answer::*;
 pub use closed_set::schema_values;
+pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
@@ -738,7 +740,19 @@ pub const INSTALLING_WORKFLOWS: [&str; 7] = [
     "verify.yml",
 ];
 
-/// Run git in `dir` with no user or global configuration, so signing settings cannot leak in.
+/// A git user that a machine gives in the environment, in the two forms that git reads. A session
+/// container sets its user with `GIT_CONFIG_COUNT`, and `git -c` gives `GIT_CONFIG_PARAMETERS` to
+/// the commands that it starts.
+pub const MACHINE_GIT_USER: [&[(&str, &str)]; 2] = [
+    &[
+        ("GIT_CONFIG_COUNT", "1"),
+        ("GIT_CONFIG_KEY_0", "user.name"),
+        ("GIT_CONFIG_VALUE_0", "other"),
+    ],
+    &[("GIT_CONFIG_PARAMETERS", "'user.name'='other'")],
+];
+
+/// Run git in `dir` with no setting of the machine: see [`isolate_git`].
 pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     let mut c = Command::new("git");
     c.args(args).current_dir(dir);
@@ -1287,18 +1301,6 @@ pub fn lines_of(path: &Path) -> Vec<String> {
         .lines()
         .map(str::to_string)
         .collect()
-}
-
-/// Give `command` no user or global git configuration and a fixed author, so that a signing
-/// setting of the machine cannot reach the test.
-pub fn isolate_git(command: &mut Command) -> &mut Command {
-    command
-        .env("GIT_CONFIG_GLOBAL", "/dev/null")
-        .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.com")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.com")
 }
 
 /// The settings of the machine that name a project or a tenant. They are the variables of strata

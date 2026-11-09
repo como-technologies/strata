@@ -34,9 +34,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/merge-gate}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 # the repository this script builds is its own, with no user configuration behind it
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
-export GIT_AUTHOR_NAME=live GIT_AUTHOR_EMAIL=live@example.com
-export GIT_COMMITTER_NAME=live GIT_COMMITTER_EMAIL=live@example.com
+isolate_git live
 
 summary() {
   write_summary "merge gate test" ", profile" \
