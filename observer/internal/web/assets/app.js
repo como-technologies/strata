@@ -259,6 +259,10 @@ const enc = s => encodeURIComponent(s).replace(/%40/g, "@");
 const SAFE_ARGUMENT = /^[A-Za-z0-9_@%+:,./-]+$/;
 const shq = s => SAFE_ARGUMENT.test(s) ? String(s) : `'${String(s).replace(/'/g, `'\\''`)}'`;
 const subjectOf = p => `${p.name}@${p.version}`;
+// at writes a name and a version in the form of a ref, as strata does: name@version. move writes a move as two refs, as the head of
+// strata compare does. A column with the head Version or Move shows the bare version, because the name has its own column.
+const at = (name, version) => `${name}@${version}`;
+const move = (name, from, to) => h`${at(name, from)}${ARROW}${at(name, to)}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
 const imageHash = ref => `#i-${enc(ref)}`;
@@ -757,7 +761,7 @@ function recordNews(x) {
     case STATUS.NEWER: {
       if (ms.length === 1) {
         const row = newerRowOf(subject, ms[0]);
-        return h`${ms[0].name} ${ms[0].version}${ARROW}${ms[0].newer}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
+        return h`${move(ms[0].name, ms[0].version, ms[0].newer)}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
       }
       const rows = D.newer.filter(r => r.profiles.includes(subject));
       const repave = rows.filter(r => r.impact === "repave").length, may = rows.filter(r => r.impact === "may-repave").length;
@@ -817,7 +821,7 @@ function viewFindings() {
     return h`<div class="tw"><table><tbody>${rows.map(r => {
       const first = r.profiles[0], k = packOfRow(first ? profileOf(first) : null, r);
       const href = k ? packHash(first, k) : first ? profileHash(first) : "#newer";
-      return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${r.name} ${r.version}${ARROW}${r.newest}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
+      return h`<tr class="link" data-go="${href}"><td class="w90">${statusBadge(STATUS.NEWER)}</td><td class="m"><a href="${href}">${move(r.name, r.version, r.newest)}</a></td><td>${r.profiles.map(s => lab("profile", s))}</td><td>${impactCell(first, k, r)}</td></tr>`;
     })}</tbody></table></div>`;
   };
   return withChecks("findings", crumbs("Findings"), () => h`${findingsCard()}
@@ -878,7 +882,7 @@ function viewNotChecked() {
       const p = first ? profileOf(first) : null;
       const names = r.packs.map(k => {
         const found = D.profiles.filter(x => r.profiles.includes(subjectOf(x))).flatMap(x => x.packs).find(q => q.key === k);
-        return found ? `${found.name} ${found.version}` : packName(k);
+        return found ? at(found.name, found.version) : packName(k);
       });
       const what = [...new Set(names)].join(", ");
       const why = r.cause === CAUSE.OLD_COPY && r.registry ? `Current against an older copy of ${r.registry}. A newer version can be missing here.` : (CAUSE_TEXT[r.cause] || r.cause);
@@ -1376,7 +1380,7 @@ function sidesOf(x, row) {
   const out = [[SIDE.PUBLISHED, "Record → Published now"]];
   const cp = x.clusterCopy && x.clusterCopy.status;
   if (COPY_READ.includes(cp)) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
-  if (row) out.push([SIDE.NEWER, `Pack ${row.version} → pack ${row.newest}`]);
+  if (row) out.push([SIDE.NEWER, `${at(row.name, row.version)} → ${at(row.name, row.newest)}`]);
   return out;
 }
 
@@ -1455,7 +1459,7 @@ function moveCard(subject, p, row) {
   const f = row.fold, total = f.settings + f.followsTheVersion + f.repeatsTheLists;
   const unread = moveUnread(subject, p), count = v => unread ? DASH : v;
   const pinned = PINNED[row.pinnedState];
-  return h`<section class="card"><div class="chead"><h2>Move to ${row.newest} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
+  return h`<section class="card"><div class="chead"><h2>Move to ${at(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
     <div class="meta mt0"><div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
     <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p)}</div></section>`;
 }
@@ -1479,7 +1483,7 @@ function terminalRows(subject, x, p, row) {
   if (cp) rows.push(["Does this cluster still run the record?", clusterCommand(x, false), copyBadge(cp, carried)]);
   if (p && row) {
     rows.push(["What does the move change?", moveCommand(row), impactCell(subject, p, row)]);
-    rows.push(["Which newer versions does Palette list?", pinCommand(p), mut(`Newest ${row.newest}`)]);
+    rows.push(["Which newer versions does Palette list?", pinCommand(p), mut(`Newest ${at(row.name, row.newest)}`)]);
   }
   return rows;
 }
@@ -1490,15 +1494,15 @@ function checkCard(rows) {
 
 function viewPack(subject, layer, name) {
   const x = profileOf(subject), p = x ? x.packs.find(q => q.layer === layer && q.name === name) : null;
-  const cr = crumbs(h`<a href="#profiles">Profiles</a>`, h`<a href="${profileHash(subject)}">${subject}</a>`, name);
+  const cr = crumbs(h`<a href="#profiles">Profiles</a>`, h`<a href="${profileHash(subject)}">${subject}</a>`, p ? at(name, p.version) : name);
   if (!p) {
     return viewMissing(cr, "profiles", x ? {title: "This pack is not here", name, why: "is not in this profile now.", home: [profileHash(subject), "This profile"]}
       : {title: "This profile is not here", name: subject, why: "is in no record now. A new revision of the records can remove it.", home: ["#profiles", "All profiles"]});
   }
   const row = newerRowOf(subject, p);
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";
-  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="body"><div class="title"><h1 class="m h1m">${p.layer}/${p.name} ${p.version}</h1>${statusBadge(p.status)}${extra}</div>
-    <div class="meta"><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
+  return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="body"><div class="title"><h1 class="m h1m">${at(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
+    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
 }
 
 /* ---- The alerts ----

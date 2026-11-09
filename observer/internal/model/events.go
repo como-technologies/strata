@@ -96,7 +96,7 @@ func versionEvents(vs *Versions) []Event {
 		if pin.Behind && len(pin.Newer) > 0 {
 			if t, ok := parseTime(pin.Newer[0].Listed); ok {
 				out = append(out, Event{Type: EventNewer, Reason: reasonNewVersion, Time: t, Object: strings.Join(profiles, ", "),
-					Message: fmt.Sprintf("%s %s is listed.", pin.Name, pin.Newer[0].Version)})
+					Message: fmt.Sprintf("%s@%s is listed.", pin.Name, pin.Newer[0].Version)})
 			}
 		}
 		if pin.RegistrySync == nil {

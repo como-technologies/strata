@@ -1535,7 +1535,7 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 	profiles := pageOf(t, render(t, devdata.StateImages, false), "#profiles", "")
 	row := rowWith(t, profiles, `data-go="#p-wilma-gateway@3.1.2"`)
-	mustHold(t, "the row", row, "traefik 38.0.1", "<div>vendor-product ran another digest in pods than the first one seen.</div>")
+	mustHold(t, "the row", row, "traefik@38.0.1", "<div>vendor-product ran another digest in pods than the first one seen.</div>")
 }
 
 var (

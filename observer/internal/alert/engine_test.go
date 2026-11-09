@@ -219,7 +219,7 @@ func TestAMuteHoldsBackTheClearOfAMessageThatWent(t *testing.T) {
 func TestADigestGoesOncePerPeriodListsTheOpenItemsAndHasNoClear(t *testing.T) {
 	b := newBench(t, oncall)
 	newer := func(id, profile string) Subject {
-		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "dex 2.42.0 has a newer version, 2.44.0."}
+		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "dex@2.42.0 has a newer version, dex@2.44.0."}
 	}
 	subjects := []Subject{newer("n1", "fred-identity@2.3.0"), newer("n2", "barney-base@1.5.0")}
 	known := Known{Content: true, Newer: true}

@@ -344,7 +344,7 @@ func expectedSides(set *devdata.Set, x api.ProfileView, k model.Pack) (options [
 	}
 	if row != nil {
 		options = append(options, "newer")
-		labels["newer"] = fmt.Sprintf("Pack %s → pack %s", row.Version, row.Newest)
+		labels["newer"] = fmt.Sprintf("%s@%s → %s@%s", row.Name, row.Version, row.Name, row.Newest)
 	}
 	changed = map[string]bool{"newer": row != nil}
 	var ofRecord int

@@ -75,7 +75,7 @@ func newerSubject(n model.Newer, profile string, keys map[string]string) Subject
 		key = n.Name
 	}
 	return Subject{ID: newerPrefix + n.Key() + "|" + profile, News: NewsNewer, Profile: profile, Packs: []string{key},
-		Detail: fmt.Sprintf("%s %s has a newer version, %s.", n.Name, n.Version, n.Newest)}
+		Detail: fmt.Sprintf("%s@%s has a newer version, %s@%s.", n.Name, n.Version, n.Name, n.Newest)}
 }
 
 func lostSubject(c model.ContentClock) Subject {

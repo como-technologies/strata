@@ -47,7 +47,7 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	if got := reasons(events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}
-	if events[1].Message != "Betty Rubble (user) made this change: update." || events[2].Message != "traefik 38.1.0 is listed." ||
+	if events[1].Message != "Betty Rubble (user) made this change: update." || events[2].Message != "traefik@38.1.0 is listed." ||
 		events[3].Message != "Current against a copy of Bitnami from Oct 30." {
 		t.Errorf("messages %+v", events)
 	}
