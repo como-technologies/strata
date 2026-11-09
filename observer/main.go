@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/como-technologies/strata/observer/internal/seed"
 	"io"
 	"log/slog"
 	"os"
@@ -38,7 +39,7 @@ func main() {
 	os.Exit(code)
 }
 
-const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]]"
+const usage = "usage: strata-observer version | once FLAGS | serve FLAGS [--listen ADDR] | health [--listen ADDR] | seed --cluster-uid UID --work DIR [--namespace NS] [--strata FILE] [--kube-dir DIR]; FLAGS are --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]]"
 
 // runContext gives the exit code. The codes have the meaning that they have in strata: 1 says that a
 // finding exists, and 2 is an error. For `health`, 1 says that the server is not healthy. ctx stops
@@ -56,6 +57,8 @@ func runContext(ctx context.Context, args []string, stdout, stderr io.Writer) in
 			return serve(ctx, args[1:], stderr)
 		case "health":
 			return health(ctx, args[1:], stderr)
+		case "seed":
+			return seedRecords(ctx, args[1:], stdout, stderr)
 		}
 	}
 	fmt.Fprintln(stderr, usage)
@@ -276,5 +279,51 @@ func health(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "strata-observer:", err)
 		return 1
 	}
+	return 0
+}
+
+// seedRecords writes the first-seen records of the cluster into the Secrets of the records, unless a
+// Secret already holds a record. The job of an install runs it once, with a role that can get and
+// update the four Secrets and do nothing else. It exits 0 when it wrote the records or kept the ones
+// there, and 2 on an error, with the kind of the error and no message of Palette or of Kubernetes.
+func seedRecords(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("seed", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	clusterUID := fs.String("cluster-uid", os.Getenv("STRATA_CLUSTER_UID"), "the uid of the cluster in Palette")
+	namespace := fs.String("namespace", "", "the namespace of the Secrets; the default is the namespace of the pod")
+	work := fs.String("work", os.TempDir(), "a directory for the files of strata")
+	strataBin := fs.String("strata", "/usr/local/bin/strata", "the strata binary")
+	kubeDir := fs.String("kube-dir", kube.ServiceDir, "the directory of the token, the CA, and the namespace of the pod")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *clusterUID == "" {
+		fmt.Fprintln(stderr, "strata-observer seed: --cluster-uid is empty")
+		return 2
+	}
+	if *namespace == "" {
+		raw, err := os.ReadFile(filepath.Join(*kubeDir, "namespace"))
+		if err != nil || strings.TrimSpace(string(raw)) == "" {
+			fmt.Fprintln(stderr, "strata-observer seed: give --namespace: the pod has no namespace file")
+			return 2
+		}
+		*namespace = strings.TrimSpace(string(raw))
+	}
+	cfg, err := kube.InCluster(os.Getenv, *kubeDir)
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer seed:", err)
+		return 2
+	}
+	strata := check.InDir{Runner: runner.Runner{Binary: *strataBin, Timeout: processTimeout}}
+	res, err := seed.Run(ctx, strata, kube.New(cfg), *namespace, *clusterUID, *work)
+	if err != nil {
+		fmt.Fprintln(stderr, "strata-observer seed:", err)
+		return 2
+	}
+	if res.Kept {
+		fmt.Fprintln(stdout, "strata-observer seed: the Secrets hold records, so the seed wrote nothing")
+		return 0
+	}
+	fmt.Fprintf(stdout, "strata-observer seed: wrote %d first-seen records\n", res.Records)
 	return 0
 }

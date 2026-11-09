@@ -258,11 +258,12 @@ agent of Palette, shows in the list and makes no finding.
 `--records` holds one `<name>_<version>.json.gz` file for each profile version, and
 `meta.json`.
 In a cluster, the volume is four Secrets that the pipeline writes with
-`observer-records.sh`: see [The records](./observer-deploy.md#the-records).
+`observer-records.sh`: see [The records](./observer-deploy.md#the-records). The seed
+can write the first ones: see [The seed](#the-seed).
 
 | `baseline` | `meta.json` | Meaning |
 | --- | --- | --- |
-| `approved` | `{"baseline":"approved","revision":"..."}` | A person approved the records. |
+| `approved` | `{"baseline":"approved","revision":"..."}` | A pipeline published the records of a revision that a review approved. |
 | `first-seen` | `{"baseline":"first-seen","firstSeenFrom":"<uid>"}` | The records come from the first sight of a cluster. |
 | `unknown` | No file, or a file that the observer cannot read. | The summary says `unknown`. |
 
@@ -278,6 +279,24 @@ record with the same name and version. A profile with no such record is a
 `no-record` row in [Not checked](#not-checked). A record that the cluster does
 not run still gets a `verify`, but no cluster side. Its `clusterCopy` is
 `not-on-this-cluster`.
+
+### The seed
+
+`strata-observer seed --cluster-uid <uid>` writes the first-seen records from inside
+the cluster, so a team gets a baseline with no clone and no build of strata. A job of
+the install runs it once.
+
+- **It keeps records that are there.** When a Secret holds a record, the seed writes
+  nothing and exits 0. So it never replaces records that a pipeline published.
+- **It writes what the script writes.** It runs `strata snapshot cluster:<uid>`, then
+  `strata snapshot` of each profile that the cluster runs, and it writes the records
+  as `observer-records.sh --first-seen` does: the same keys, the same order of the
+  four Secrets, and the same `meta.json`. A test runs both on one cluster and compares
+  the Secrets.
+- **Its role is small.** It needs `get` and `update` on the four Secrets by name. The
+  install makes the four Secrets empty first, so the role needs no `create`. The
+  observer itself holds no verb on Secrets.
+- **It sends no write to Palette.** The two snapshots read only.
 
 ## The findings
 

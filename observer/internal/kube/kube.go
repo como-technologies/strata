@@ -1,8 +1,8 @@
-// Package kube reads the pods of the cluster that the observer runs in. It is the one place that
-// calls the Kubernetes API.
+// Package kube is the one place that calls the Kubernetes API. The serving observer reads the pods of
+// the cluster that it runs in, and the seed writes the Secrets of the records: see secrets.go.
 //
-// It sends one request, GET on the list of pods, with paging, and no other. The role of the observer
-// holds `get` and `list` on `pods` and no other verb. The types decode the name and the namespace of
+// The read of the pods sends one request, GET on the list of pods, with paging, and no other. The role
+// of the observer holds `get` and `list` on `pods` and no other verb. The types decode the name and the namespace of
 // a pod. They decode the name and the image of each container, and the image id of its status. They
 // have no field for the environment of a container, so the environment never enters the process.
 package kube

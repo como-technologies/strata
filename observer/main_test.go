@@ -151,12 +151,13 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 
 // The code of the observer sends no HTTP POST to Palette. It asks Palette only through strata, and a POST to
 // Palette comes from the click "Ask Palette" alone: see runner.FlagPin. The server takes that one POST, so the
-// file of its routes names the method. The observer has three HTTP clients: the health check, which calls a
-// loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, and the alerts,
-// which send one POST of a message to the webhook of a team. Only internal/api, internal/kube, and
+// file of its routes names the method. The observer has four HTTP clients: the health check, which calls a
+// loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, the seed, which
+// gets and updates the four Secrets of the records, and the alerts, which send one POST of a message to the
+// webhook of a team. Only internal/api, internal/kube, and
 // internal/alert import a package of the network, and so does the stand-in for the API server in
 // internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
-func TestOnlyTheHealthCheckTheReadOfThePodsAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
+func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string
 		// allowed lists the prefixes of the paths that may hold the text. An empty list allows none.
@@ -165,7 +166,7 @@ func TestOnlyTheHealthCheckTheReadOfThePodsAndTheAlertsSendARequestAndOnlyThePag
 		{[]string{`"POST"`, `http.Post(`, `.PostForm(`}, nil},
 		{[]string{`http.MethodPost`}, []string{"internal/api/api.go", "internal/alert/send.go"}},
 		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/alert/send.go", "internal/testkit/"}},
-		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/alert/send.go"}},
+		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", "internal/alert/send.go"}},
 	}
 	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
@@ -579,5 +580,19 @@ func TestReadPodsNeedsTheVariablesOfTheKubelet(t *testing.T) {
 				t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
 			}
 		})
+	}
+}
+
+// The seed needs the uid of the cluster, and the variables that the kubelet gives a pod. Outside a pod
+// it stops with the kind of the error, and it runs no strata.
+func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
+	var out, errs strings.Builder
+	if code := runContext(context.Background(), []string{"seed"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "--cluster-uid is empty") {
+		t.Errorf("exit %d, stderr %q", code, errs.String())
+	}
+	errs.Reset()
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	if code := runContext(context.Background(), []string{"seed", "--cluster-uid", "c1", "--namespace", "strata-observer", "--strata", "/no/strata"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "kube-config") {
+		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}
 }
