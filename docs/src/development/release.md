@@ -55,7 +55,9 @@ The release workflow then:
    which checks the signature of `SHA256SUMS`, and runs each script it installed
 7. at the same time as step 6, builds the image of the observer from the signed
    binaries of the release, signs its digest, and pushes it as
-   `ghcr.io/como-technologies/strata-observer:<tag>`
+   `ghcr.io/como-technologies/strata-observer:<tag>`, then packages the chart
+   of the observer, pushes it to `oci://ghcr.io/como-technologies/charts`, and signs
+   its digest
 
 The transparency log of Sigstore can refuse one try of step 4. So the script
 `scripts/ci/sign-blobs.sh` tries each file up to 5 times, with 30 seconds
