@@ -1,3 +1,5 @@
 $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>&1 >/dev/null | sed -E 's/^time=[^ ]+ //; s/ duration=[0-9.]+m?s//' | grep 'msg=cycle'
-level=INFO msg=cycle cycle=content verdict=ok
-level=INFO msg=cycle cycle=versions verdict=ok
+level=INFO msg=cycle cycle=content phase=start
+level=INFO msg=cycle cycle=content phase=end verdict=ok processes=6
+level=INFO msg=cycle cycle=versions phase=start
+level=INFO msg=cycle cycle=versions phase=end verdict=ok processes=1
