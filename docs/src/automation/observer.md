@@ -434,9 +434,38 @@ change.
 Each screen of the page says "No pipeline approved these records yet" while the baseline
 is `first-seen`.
 
-To move to approved records, record each profile with `strata snapshot`. Let a review
-approve the files, and commit them. Then run the script with `--revision`. `meta.json`
-then says `approved`, and the screens drop the notice.
+### Approve the records with a pipeline
+
+A review in Git approves the records, and a pipeline publishes them. No person edits
+the Secrets. A job of your pipeline does these steps:
+
+1. **Export the first-seen records** into files of your repository:
+
+   ```bash
+   mkdir -p releases
+   for i in 0 1 2 3; do
+     kubectl -n strata-observer get secret strata-observer-records-$i \
+       -o json | jq -r '.data // {} | to_entries[]
+         | select(.key != "meta.json") | "\(.key) \(.value)"'
+   done | while read -r key value; do
+     printf %s "$value" | base64 -d | gunzip > "releases/${key%.gz}"
+   done
+   ```
+
+   Or record each profile with `strata snapshot`, as the pipeline does for a new
+   version.
+
+2. **Open a pull request** with the files. The review approves the content.
+3. **Publish the records of the merge** with its revision:
+
+   ```bash
+   scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*.json \
+     | kubectl apply --server-side --force-conflicts -f -
+   ```
+
+`meta.json` then says `approved` with the revision, the top bar says `records: rev
+<revision>`, and the screens drop the notice. The seed sees the records, and it never
+writes again.
 
 ## The pods of the cluster
 
