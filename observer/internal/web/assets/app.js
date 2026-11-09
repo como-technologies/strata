@@ -634,11 +634,29 @@ function navLinks(cur) {
   return items.map(([k, l, cnt]) => h`<a href="#${k}" class="${k === cur ? "on" : ""}"><span>${l}</span>${cnt}</a>`);
 }
 
+// ring draws the progress of a cycle: an arc of done in total. A cycle that does not know its work yet gets a dotted ring. Nothing
+// turns: the slabs are the one thing on the page that moves, and the ring moves on at each read of the observer.
+const CIRCLE = "M8 2a6 6 0 1 1 0 12a6 6 0 1 1 0-12";
+function ring(r) {
+  const open = r.total <= 1 && r.done === 0, f = Math.min(1, r.done / Math.max(1, r.total));
+  const a = f * 2 * Math.PI, x = (8 + 6 * Math.sin(a)).toFixed(2), y = (8 - 6 * Math.cos(a)).toFixed(2);
+  const arc = open ? "" : f >= 1 ? CIRCLE : f > 0 ? `M8 2A6 6 0 ${f > 0.5 ? 1 : 0} 1 ${x} ${y}` : "";
+  return h`<svg class="ring${open ? " open" : ""}" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path class="track" d="${CIRCLE}"/>${arc ? h`<path class="arc" d="${arc}"/>` : ""}</svg>`;
+}
+
+// runningChip is the pill of a cycle that runs now: its progress, and the age of the last good cycle of its kind.
+function runningChip(label, r, last) {
+  const what = r.total > 1 || r.done > 0 ? `checking ${r.done} of ${r.total}` : "checking";
+  return h`<span class="chip run" title="Started ${ago(r.startedAt)} ago">${ring(r)}${label} <b>${what}</b>${last ? h` · last ${ago(last)} ago` : ""}</span>`;
+}
+
 function clocks() {
   const c = D.cluster, content = c.content, versions = c.versions;
   const lost = c.page === PAGE.LOST, stale = c.page === PAGE.STALE;
   let a;
-  if (lost) {
+  if (content.running && !lost) {
+    a = runningChip("Content", content.running, content.checkedAt);
+  } else if (lost) {
     a = h`<span class="chip" title="${content.checkedAt}"><span class="dot r"></span>Palette <b>lost</b>${content.checkedAt ? h` · content checked <b>${ago(content.checkedAt)} ago</b>` : ""}</span>`;
   } else if (!content.checkedAt) {
     a = h`<span class="chip"><span class="dot a"></span>Content <b>not checked yet</b> · every ${content.every}</span>`;
@@ -647,6 +665,7 @@ function clocks() {
     a = h`<span class="chip" title="${content.checkedAt}"><span class="dot ${dot}"></span>Content <b>${ago(content.checkedAt)} ago</b> · every ${content.every}</span>`;
   }
   if (stale || lost) return a;
+  if (versions.running) return [a, runningChip("Versions", versions.running, versions.readAt)];
   if (!versions.readAt) return [a, h`<span class="chip"><span class="dot a"></span>Versions <b>not read yet</b> · every ${versions.every}</span>`];
   const dot = versions.failedRuns > 0 ? "a" : "";
   return [a, h`<span class="chip" title="${versions.readAt}"><span class="dot ${dot}"></span>Versions <b>${ago(versions.readAt)} ago</b> · every ${versions.every}</span>`];
@@ -1736,8 +1755,33 @@ function route() {
 }
 
 // put writes markup to one place of the page. It is the one write of markup in this file.
-function put(el, markup) {
+// put writes markup into an element. In a browser it parses the markup in a template, and patches the nodes of the element in
+// place: each node that stays, stays, so a read of the observer does not flicker, and the scroll, the focus, an open card, and the
+// text of a filter stay. With no DOM, as in the tests with node, it writes the markup into the element itself.
+function put(dest, markup) {
+  const inPlace = typeof document.createElement === "function";
+  const el = inPlace ? document.createElement("template") : dest;
   el.innerHTML = part(markup);
+  if (inPlace) patch(dest, el.content);
+}
+
+// sameAttributes says that two elements carry the same attributes with the same values.
+const sameAttributes = (x, y) => x.attributes.length === y.attributes.length && [...y.attributes].every(a => x.getAttribute(a.name) === a.value);
+
+// patch makes the children of from equal to the children of to. A text that changed takes the new words. An element with the same
+// name and the same attributes stays, and its children are patched. Any other node takes the place of the old one. The field that a
+// person types in stays as it is.
+function patch(from, to) {
+  const now = [...to.childNodes];
+  now.forEach((y, i) => {
+    const x = from.childNodes[i];
+    if (!x) { from.appendChild(y); return; }
+    if (x.nodeType === 1 && x === document.activeElement && x.nodeName === "INPUT") return;
+    if (x.nodeType !== y.nodeType || x.nodeName !== y.nodeName || (x.nodeType === 1 && !sameAttributes(x, y))) { from.replaceChild(y, x); return; }
+    if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; return; }
+    patch(x, y);
+  });
+  while (from.childNodes.length > now.length) from.removeChild(from.lastChild);
 }
 
 function render() {

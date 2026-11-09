@@ -204,7 +204,14 @@ server, and it runs each command against the stand-in of the chapter
 
 `page` from `/v1/cluster` sets the state. The top bar shows the two clocks:
 the content check and the read of the versions. The page never shows one "last
-checked".
+checked". While a cycle runs, its pill shows a ring of `running`: an arc of `done` in
+`total`, and "checking 3 of 8" with the age of the last good cycle. A cycle that knows
+no work yet has a dotted ring and says "checking". Nothing on the pill turns: the ring
+moves on at each read of the observer.
+
+A read of the observer patches the page in place. A node that stays, stays, so the
+page does not flicker, and the scroll, the focus, an open card, and the text of a
+filter stay.
 
 | `page` | The page shows |
 | --- | --- |

@@ -64,6 +64,12 @@ h2{font-size:14px}
 .topr{margin-left:auto;display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:12.5px}
 .chip{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);background:var(--panel2);border-radius:5px;padding:3px 9px;color:var(--mut);white-space:nowrap}
 .chip b{color:var(--ink);font-weight:500}
+/* The pill of a cycle that runs: a ring of its progress. A cycle that does not know its work yet has a dotted ring. */
+.chip.run{color:var(--ink)}
+.ring{flex:none;display:block}
+.ring .track{fill:none;stroke:var(--line);stroke-width:2.5}
+.ring .arc{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linecap:round}
+.ring.open .track{stroke:var(--accent);stroke-dasharray:2 3}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;flex:none}
 .dot.r{background:var(--red)}.dot.a{background:var(--amb)}
 .page{padding:18px 22px 40px;display:grid;grid-template-columns:minmax(0,1fr);gap:16px;width:100%}

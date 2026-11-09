@@ -1023,3 +1023,13 @@ func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 		}
 	}
 }
+
+// While a cycle runs, its pill shows a ring of its progress and how much is done, with the age of the
+// last good cycle of its kind. A cycle that knows no work yet has an open ring and says "checking".
+func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
+	page := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.running = {startedAt: new Date(Date.now() - 120000).toISOString(), done: 3, total: 8};
+		D.cluster.content.running = {startedAt: new Date().toISOString(), done: 0, total: 1};`)
+	mustHold(t, "the pill of the versions", page, `<svg class="ring" viewBox="0 0 16 16"`, `Versions <b>checking 3 of 8</b> · last `)
+	mustHold(t, "the pill of the content", page, `<svg class="ring open" viewBox="0 0 16 16"`, `Content <b>checking</b> · last `)
+	mustNotHold(t, "the pills", page, "every 15m", "every 6h")
+}
