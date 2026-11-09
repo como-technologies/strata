@@ -3,8 +3,8 @@
 use super::DEV_ENV;
 use super::edits::{LATER_PROFILE_TYPE, RETAIN};
 use super::ids::{
-    A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, A1112, AWS_STANDARD, DEV, LEGACY,
-    PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
+    A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, A1112, AWS_STANDARD, DEV, DEVELOP_118,
+    DEVELOP_1110, DEVELOP_BUILD, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -18,6 +18,7 @@ pub(super) fn run(r: &mut Runner) {
     unknown_value(r);
     scope(r);
     snapshot(r);
+    latest_develop(r);
     candidate(r);
     compare(r);
     schema(r);
@@ -289,6 +290,30 @@ fn snapshot(r: &mut Runner) {
         0,
         false,
         "jq -r .root online.json offline.json",
+    );
+}
+
+/// The chapter `latest-develop`: a develop build beside two releases, as a field test found it
+/// (#616). Palette reads `1.1.8.develop` as `1.1.8`. Strata puts it below `1.1.8`, and `@latest`
+/// skips it.
+fn latest_develop(r: &mut Runner) {
+    r.chapter("latest-develop", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.profile(DEV, DEVELOP_118, "1.1.8", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, DEVELOP_BUILD, "1.1.8.develop", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, DEVELOP_1110, "1.1.10", "aws-stack@1.1.1", &[]);
+    r.step("latest-develop-list", 0, false, "strata list profiles");
+    r.step(
+        "latest-develop",
+        0,
+        true,
+        "strata snapshot aws-stack@latest -o latest.json",
+    );
+    r.step(
+        "latest-develop-version",
+        0,
+        false,
+        r#"jq -r '.source | "\(.name)@\(.version)"' latest.json"#,
     );
 }
 

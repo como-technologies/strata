@@ -285,22 +285,30 @@ fn latest_resolves_to_the_highest_version_that_is_not_a_pre_release() {
     assert!(err.to_string().contains("'latest'"));
 }
 
+/// Issue #616. A field test recorded `1.1.8.develop` for `@latest`, in place of `1.1.10`. Palette
+/// reads a version that does not parse as its first three numbers, and so does strata.
 #[test]
-fn latest_takes_a_version_that_does_not_parse_above_each_version_that_parses_and_ties_two_equal_versions()
- {
-    // `1.2.3.4` does not parse as a version, so it is above `2.0.0`, as the book says
+fn latest_reads_a_version_that_does_not_parse_by_its_three_numbers_and_ties_two_equal_versions() {
     let listing = json!({"items": [
-        {"metadata": {"name": "four", "uid": "u1"}, "spec": {"version": "2.0.0"}},
-        {"metadata": {"name": "four", "uid": "u2"}, "spec": {"version": "1.2.3.4"}},
-        {"metadata": {"name": "two", "uid": "u3"}, "spec": {"version": "1.2"}},
-        {"metadata": {"name": "two", "uid": "u4"}, "spec": {"version": "1.2.0"}},
+        {"metadata": {"name": "barney", "uid": "u1"}, "spec": {"version": "1.1.8"}},
+        {"metadata": {"name": "barney", "uid": "u2"}, "spec": {"version": "1.1.8.develop"}},
+        {"metadata": {"name": "barney", "uid": "u3"}, "spec": {"version": "1.1.10"}},
+        {"metadata": {"name": "four", "uid": "u4"}, "spec": {"version": "10.4.0.1"}},
+        {"metadata": {"name": "four", "uid": "u5"}, "spec": {"version": "10.5.0"}},
+        {"metadata": {"name": "develop", "uid": "u6"}, "spec": {"version": "1.1.8"}},
+        {"metadata": {"name": "develop", "uid": "u7"}, "spec": {"version": "1.1.8.develop"}},
+        {"metadata": {"name": "two", "uid": "u8"}, "spec": {"version": "1.2"}},
+        {"metadata": {"name": "two", "uid": "u9"}, "spec": {"version": "1.2.0"}},
     ]});
     let api = MemoryApi::new()
         .with("/v1/dashboard/clusterprofiles/metadata", listing)
-        .with("/v1/clusterprofiles/u3", json!({"metadata": {"uid": "u3"}}))
-        .with("/v1/clusterprofiles/u4", json!({"metadata": {"uid": "u4"}}));
+        .with("/v1/clusterprofiles/u8", json!({"metadata": {"uid": "u8"}}))
+        .with("/v1/clusterprofiles/u9", json!({"metadata": {"uid": "u9"}}));
     let p = Palette::new(api);
-    assert_eq!(p.resolve_latest("four").unwrap(), "u2");
+    assert_eq!(p.resolve_latest("barney").unwrap(), "u3");
+    assert_eq!(p.resolve_latest("four").unwrap(), "u5");
+    // `1.1.8.develop` reads as `1.1.8`, and strata puts it below `1.1.8`
+    assert_eq!(p.resolve_latest("develop").unwrap(), "u6");
     // `1.2` and `1.2.0` are one version, so no uid is the latest
     let err = p.resolve_latest("two").unwrap_err();
     assert_eq!(err.kind(), "profile-name-ambiguous", "{err}");

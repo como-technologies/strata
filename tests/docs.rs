@@ -1827,7 +1827,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
         (
             "src/reference/version.rs",
-            "A string that does not parse keeps",
+            "A string with no three numbers keeps",
         ),
         ("src/candidate/resolve.rs", "The documents are those that"),
         (
@@ -2882,10 +2882,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Five sections list the changes that need action"),
-        "the opening does not name five sections"
+        one_line(opening).contains("Six sections list the changes that need action"),
+        "the opening does not name six sections"
     );
     for anchor in [
+        "(#release-0330-changes-that-need-action)",
         "(#release-0280-changes-that-need-action)",
         "(#release-0270-changes-that-need-action)",
         "(#release-0260-changes-that-need-action)",
@@ -4112,10 +4113,81 @@ fn the_order_of_versions_names_the_equal_versions_and_the_version_that_does_not_
         "A version that does not parse is above each version that parses.",
         "`behind` names no three-number version as newer than the pin `1.2.3.4`.",
         "`strata list` orders the profiles by the same order.",
-        "The order of a version that does not parse is the order of strata. No live run shows how Palette orders such a version.",
+        "Release 0.33.0 reads such a version by its first three numbers: see [the section of release 0.33.0](#release-0330-changes-that-need-action).",
+        "Release 0.33.0 follows the order of Palette for a version that does not parse. The code of Palette gives that order, and no live run shows it:",
     ] {
         assert!(order.contains(needle), "the section lacks {needle:?}");
     }
+    assert!(
+        !order.contains("The order of a version that does not parse is the order of strata."),
+        "the section says that the order of such a version is the order of strata alone"
+    );
+}
+
+/// Issue #616. The book stated that a version that does not parse is above each version that
+/// parses. Release 0.33.0 reads it by its first three numbers, as Palette does. The section of the
+/// release states each change, and the pages of `@latest` and of `packs` state the new order.
+#[test]
+fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_numbers() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = release_section(&page, "0.33.0");
+    for needle in [
+        "**A version that does not parse reads as its first three numbers.** Palette reads it so too.",
+        "So `<name>@latest` gives `1.1.10` over `1.1.8.develop`.",
+        "So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.",
+        "`behind` names `10.5.0` as newer than the pin `10.4.0.1`.",
+        "A move from `1.2.3.4` to `1.3.0` passes the gate now.",
+        "`reference::version::is_pre_release` is true for a text with a tail of text",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of 0.33.0 lacks {needle:?}"
+        );
+    }
+    let release_at = page.find("\n## Release 0.33.0: changes that need action\n");
+    let older_at = page.find("\n## Release 0.28.0: changes that need action\n");
+    assert!(
+        release_at.is_some() && release_at < older_at,
+        "release 0.33.0 comes above release 0.28.0"
+    );
+
+    let refs = one_line(&read(&docs().join("reference/refs.md")));
+    for needle in [
+        "So `1.1.8.develop` is below `1.1.8`, and `@latest` gives `1.1.10` over `1.2.0.develop`.",
+        "`10.4.0.1` is above `10.4.0` and below `10.5.0`.",
+    ] {
+        assert!(refs.contains(needle), "refs.md lacks {needle:?}");
+    }
+    assert!(
+        !refs.contains("For a text that does not parse, digit runs compare as numbers"),
+        "refs.md gives the natural order to each text that does not parse"
+    );
+    let packs = one_line(&read(&docs().join("commands/packs.md")));
+    assert!(
+        packs.contains("Or Palette reads two versions as one, such as `1.30.0.1` and `1.30.0`, and marks one of them: see"),
+        "packs.md lacks the case of two versions that Palette reads as one"
+    );
+    assert!(
+        !packs.contains(
+            "a version does not parse as a semantic version, such as a version with four numbers"
+        ),
+        "packs.md still states the old order"
+    );
+    let snapshot = read(&docs().join("commands/snapshot/profile-version.md"));
+    for include in [
+        "{{#include ../../output/latest-develop-list.txt}}",
+        "{{#include ../../output/latest-develop.txt}}",
+    ] {
+        assert!(
+            snapshot.contains(include),
+            "profile-version.md lacks {include}"
+        );
+    }
+    let picked = read(&docs().join("output/latest-develop-version.txt"));
+    assert!(
+        picked.ends_with("\naws-stack@1.1.10\n"),
+        "the playground records another version: {picked}"
+    );
 }
 
 /// The fuzz package is the newest code, and the review at the end of Wave 12 found 42 comment

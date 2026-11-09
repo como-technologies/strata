@@ -151,6 +151,41 @@ fn a_pre_release_is_below_its_version_so_latest_keeps_one_version() {
     assert_eq!(order, ["1.30.0", "1.30.0-rc.1", "1.29.0"]);
 }
 
+/// The order of `packs` for a version that does not parse, from issue #616. `1.1.8.develop` reads
+/// as `1.1.8`, below it, and `latest` skips it. `10.4.0.1` reads as `10.4.0`, above it.
+#[test]
+fn packs_orders_a_version_that_does_not_parse_by_its_three_numbers_and_latest_skips_a_tail_of_text()
+{
+    let order = |versions: &[&str]| -> Vec<(String, bool)> {
+        let summaries = versions
+            .iter()
+            .enumerate()
+            .map(|(i, v)| version(&format!("pk-{i}"), v, &["aws"]))
+            .collect();
+        packs_with(&PackOptions::default(), summaries).registries[0]
+            .versions
+            .iter()
+            .map(|v| (v.version.clone(), v.latest))
+            .collect()
+    };
+    let owned = |pairs: &[(&str, bool)]| -> Vec<(String, bool)> {
+        pairs.iter().map(|(v, l)| (v.to_string(), *l)).collect()
+    };
+    assert_eq!(
+        order(&["1.1.8", "1.1.8.develop", "1.1.10"]),
+        owned(&[("1.1.10", true), ("1.1.8", false), ("1.1.8.develop", false)])
+    );
+    assert_eq!(
+        order(&["10.4.0.1", "10.5.0", "10.4.0"]),
+        owned(&[("10.5.0", true), ("10.4.0.1", false), ("10.4.0", false)])
+    );
+    // a tail of text is a pre-release: the highest version, and still not the one of `latest`
+    assert_eq!(
+        order(&["1.1.10", "1.2.0.develop"]),
+        owned(&[("1.2.0.develop", false), ("1.1.10", true)])
+    );
+}
+
 /// With `--cloud`, `latest` marks the highest version that is not a pre-release, of the versions
 /// that support the cloud. A pre-release above the release has no mark (#608).
 #[test]
@@ -323,8 +358,8 @@ fn the_marks_agree_for_two_pre_releases_and_differ_for_a_release_below_a_pre_rel
 
 #[test]
 fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
-    // a version with four numbers does not parse as a semantic version: strata puts it above
-    // the versions that parse, and Palette marks another one
+    // Palette reads a version with four numbers as its first three, so it reads `1.30.0.1` and
+    // `1.30.0` as one version, and it marks one of them. Strata puts `1.30.0.1` above `1.30.0`
     let options = PackOptions {
         latest: true,
         ..Default::default()

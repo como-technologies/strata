@@ -47,6 +47,31 @@ version, so `1.0.1` is above `1.0.1-g0123456789ab`. A name that has only
 pre-releases gives its highest one. See
 [The order of versions](../../reference/compatibility.md#the-order-of-versions).
 
+A develop build such as `1.1.8.develop` does not parse as a semantic version.
+Palette reads it as `1.1.8`. Strata puts it below `1.1.8`, and `@latest` skips
+it as a pre-release. Here the name has `1.1.8`, `1.1.8.develop`, and `1.1.10`:
+
+```text
+{{#include ../../output/latest-develop-list.txt}}
+```
+
+The record takes `1.1.10`:
+
+```text
+{{#include ../../output/latest-develop.txt}}
+{{#include ../../output/latest-develop-version.txt}}
+```
+
+<div class="playground-demo">
+
+`just playground latest-develop` serves this tenant on this machine, with no key and no cost.
+
+</div>
+
+A version with four numbers reads as its first three, and the fourth number puts
+it above them. So `10.4.0.1` is above `10.4.0`, and `@latest` gives `10.5.0` over
+it. See [the rule of `@latest`](../../reference/refs.md#rules).
+
 ## The cluster templates of a version
 
 A cluster template links profile versions and applies them to the clusters
