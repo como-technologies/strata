@@ -176,6 +176,28 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     assert_eq!(snap.source.uid, UID_B);
 }
 
+/// Issue #616. A field test recorded a develop build, such as `1.2.0.develop`, for `@latest`, with
+/// exit 0. Palette reads it as `1.2.0`. Strata puts it below `1.2.0`, and `@latest` skips it.
+#[test]
+fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+        {"metadata": {"name": "lab-profile", "uid": "uid-dev-2"}, "spec": {"version": "1.2.0.develop"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.3.0"}},
+        {"metadata": {"name": "lab-profile", "uid": "uid-dev-4"}, "spec": {"version": "1.4.0.develop"}},
+    ]});
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
+    let api = serve_fixture(api, dir.path(), "b", UID_B).with(PROFILE_LISTING, listing);
+    let snap = snapshot_of(&api, "lab-profile@latest").unwrap();
+    assert_eq!(
+        (snap.source.version.as_str(), snap.source.uid.as_str()),
+        ("1.3.0", UID_B)
+    );
+    assert_eq!(snap.source.reference, "lab-profile@latest");
+}
+
 #[test]
 fn name_at_latest_takes_the_highest_version_that_is_not_a_pre_release() {
     let dir = tempfile::tempdir().unwrap();
@@ -3648,6 +3670,45 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
     assert_eq!(json["profiles"][0]["ref"], "addons@2.0.0");
     assert_eq!(json["clusters"][1]["cloudType"], "aws");
     assert!(json.get("projects").is_none(), "{json}");
+}
+
+/// Issue #616. `list` reads a version that does not parse by its first three numbers, as
+/// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`.
+#[test]
+fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
+    let listing = serde_json::json!({"items": [
+        listed_profile("barney", "1.1.10", "u1"),
+        listed_profile("barney", "1.1.8.develop", "u2"),
+        listed_profile("barney", "1.1.8", "u3"),
+        listed_profile("four", "10.5.0", "u4"),
+        listed_profile("four", "10.4.0.1", "u5"),
+        listed_profile("four", "10.4.0", "u6"),
+    ]});
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(PROFILE_LISTING, listing)
+        .with(CLUSTER_LISTING, serde_json::json!([]))
+        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+    let connect = |_: Option<&str>| Ok(Palette::new(api.clone()));
+    let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
+    let refs: Vec<&str> = l
+        .profiles
+        .as_ref()
+        .expect("profiles are listed by default")
+        .iter()
+        .map(|p| p.reference.as_str())
+        .collect();
+    assert_eq!(
+        refs,
+        [
+            "barney@1.1.8.develop",
+            "barney@1.1.8",
+            "barney@1.1.10",
+            "four@10.4.0",
+            "four@10.4.0.1",
+            "four@10.5.0",
+        ]
+    );
 }
 
 #[test]
@@ -13897,8 +13958,8 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
 
 #[test]
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
-    // a version with four numbers does not parse as a semantic version, so strata puts it above
-    // 1.65.0, and Palette calls 1.65.0 the latest
+    // Palette reads a version with four numbers as its first three, so it reads 1.65.0.1 and
+    // 1.65.0 as one version, and here it calls 1.65.0 the latest. Strata puts 1.65.0.1 above it
     let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
     let api = serve_summaries(
@@ -14053,6 +14114,83 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     assert_eq!(
         newer_than("1.65.0-g0123456789ab", false),
         ["1.66.0-rc.1", "1.65.0", "1.65.0-rev1"]
+    );
+}
+
+/// A registry with 1.63.1 and 1.65.0, and three versions that do not parse: 1.63.1.1, with a tail
+/// of numbers, and the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text.
+fn serve_develop_builds() -> MemoryApi {
+    let more = ["1.63.1.1", "1.65.0.develop", "1.66.0.develop"];
+    let mut entity = public_entity();
+    for v in more {
+        entity = with_tag(entity, v, &format!("pk-{v}"));
+    }
+    serve_registry(
+        more.map(|v| pack_summary_with(v, None, &["aws"])).to_vec(),
+        &[("reg-public", entity)],
+    )
+}
+
+/// The versions that `behind` names as newer than the pack version `pin`, in the registry of
+/// `serve_develop_builds`, with the option `pre_release`.
+fn newer_than_in_develop_builds(pin: &str, pre_release: bool) -> Vec<String> {
+    let api = serve_develop_builds();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("dev.json");
+    let record = snapshot_of(&api, &format!("pack:csi-aws-ebs@{pin}")).unwrap();
+    common::write_snapshot(&path, &record, false);
+    let options = ops::BehindOptions {
+        pre_release,
+        ..Default::default()
+    };
+    let r = behind_of(&api, &[path], &options);
+    r.pins[0].newer.iter().map(|n| n.version.clone()).collect()
+}
+
+/// Issue #616. `pack:<name>@latest` and `packs` read a version that does not parse by its first
+/// three numbers. A tail of text is a pre-release, so neither picks a develop build.
+#[test]
+fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_below_the_next_version()
+{
+    let api = serve_develop_builds();
+    let latest = snapshot_of(&api, "pack:csi-aws-ebs@latest").unwrap();
+    assert_eq!(latest.source.version, "1.65.0");
+    let listing = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let order: Vec<(&str, bool)> = listing.registries[0]
+        .versions
+        .iter()
+        .map(|v| (v.version.as_str(), v.latest))
+        .collect();
+    assert_eq!(
+        order,
+        [
+            ("1.66.0.develop", false),
+            ("1.65.0", true),
+            ("1.65.0.develop", false),
+            ("1.63.1.1", false),
+            ("1.63.1", false),
+        ]
+    );
+}
+
+/// Issue #616. With `10.4.0.1` and `10.5.0`, `behind` said nothing. Now `1.65.0` is newer than the
+/// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release.
+#[test]
+fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop_build_as_a_pre_release()
+ {
+    assert_eq!(newer_than_in_develop_builds("1.63.1.1", false), ["1.65.0"]);
+    assert_eq!(
+        newer_than_in_develop_builds("1.63.1", false),
+        ["1.65.0", "1.63.1.1"]
+    );
+    assert_eq!(
+        newer_than_in_develop_builds("1.63.1", true),
+        ["1.66.0.develop", "1.65.0", "1.65.0.develop", "1.63.1.1"]
+    );
+    // a pin of a develop build follows the pre-releases, as a pin of `1.65.0-rc.1` does
+    assert_eq!(
+        newer_than_in_develop_builds("1.65.0.develop", false),
+        ["1.66.0.develop", "1.65.0"]
     );
 }
 

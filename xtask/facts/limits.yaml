@@ -173,6 +173,18 @@ facts:
     rules:
       - profile-order
 
+  - id: limit-version-three-numbers
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.version
+    unchecked: Palette refuses the create of a profile version that does not parse, so no run makes one. The page states the order from the source of Palette.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/profiles.md#the-order-of-versions
+    code:
+      - src/reference/version.rs
+
   - id: limit-retired-pack-pinned
     kind: behavior
     reads:

@@ -14,7 +14,8 @@ Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Five sections list the changes that need action:
+Six sections list the changes that need action:
+[Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
 [Release 0.26.0](#release-0260-changes-that-need-action),
@@ -963,11 +964,14 @@ Three more results follow from the order:
 - **A version that does not parse is above each version that parses.** Examples
   are `1.2.3.4` and `1.0.0-a_b`. So `<name>@latest` gives `1.2.3.4` in place of
   `2.0.0`, and `strata packs` lists it first. `behind` names no three-number
-  version as newer than the pin `1.2.3.4`.
+  version as newer than the pin `1.2.3.4`. Release 0.33.0 reads such a version
+  by its first three numbers: see
+  [the section of release 0.33.0](#release-0330-changes-that-need-action).
 - **`strata list` orders the profiles by the same order.**
 
-The order of a version that does not parse is the order of strata. No live run
-shows how Palette orders such a version.
+Release 0.33.0 follows the order of Palette for a version that does not parse.
+The code of Palette gives that order, and no live run shows it: see
+[The order of versions](../internals/palette/profiles.md#the-order-of-versions).
 
 `strata-diff/1` has the new field `versionMove`, in the document and in each
 entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
@@ -977,6 +981,51 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.33.0: changes that need action
+
+Release 0.33.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A version that does not parse reads as its first three numbers.** Palette reads it so too.
+  Before, strata put such a version above each version that parses. See
+  [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
+  - A tail of text puts the version below its numbers, and makes it a pre-release.
+    `1.1.8.develop` is below `1.1.8`. So `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
+    Before, it recorded the develop build. `pack:<name>@latest` skips such a version too.
+  - A tail of numbers puts the version above its numbers. `10.4.0.1` is above `10.4.0` and
+    below `10.5.0`. So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.
+  - `strata list` and `strata packs` list such a version in the new order. `latest` of
+    `strata packs` marks the version that `@latest` records.
+  - `behind` names `10.5.0` as newer than the pin `10.4.0.1`. Before, it named nothing. It
+    names a develop build as newer only with `--pre-release`, or for a pin that is a
+    pre-release.
+  - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.3.4` to `1.3.0` is
+    `forward` now.
+  - A text with no three numbers, such as `LTS__24.x`, keeps its order.
+  - A record that `@latest` wrote before can name a develop build. Take the record again to
+    pin the version that `@latest` gives now.
+
+### For a user of the CI drop-ins
+
+- **`merge-gate.sh` reads a version that does not parse by its first three numbers.** The
+  script reads `versionMove`, so it follows the new order.
+  - A move from `1.2.3.4` to `1.3.0` passes the gate now. Before, it failed with `BEHIND`.
+  - A move from `1.3.0` to `1.2.3.4`, or from `1.1.10` to `1.1.8.develop`, fails the gate
+    with `BEHIND` now. Add the line `Rollback: <record> to <name>@<version>` to a commit, or pin
+    a final version.
+
+### For a user of the library of strata
+
+- `reference::version::compare` reads a version that does not parse by its first three numbers.
+  `reference::version::pick` follows that order.
+- `reference::version::is_pre_release` is true for a text with a tail of text after its three
+  numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It was false for each text that does not
+  parse.
 
 ## Release 0.28.0: changes that need action
 

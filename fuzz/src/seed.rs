@@ -298,8 +298,8 @@ fn refs() -> Vec<Vec<u8>> {
 
 /// Versions that the order must place, in the forms that Palette gives. The forms are a number, a
 /// number with a suffix, a pre-release, and build data. They also include a name with a number, a
-/// date, and a version with no digit.
-const VERSION_CASES: [&str; 24] = [
+/// date, a version with no digit, and a tail after three numbers.
+const VERSION_CASES: [&str; 27] = [
     "1.0.0",
     "1.0.0",
     "1.00.0",
@@ -320,6 +320,9 @@ const VERSION_CASES: [&str; 24] = [
     "1.0.1+2",
     "01.2.3",
     "1.2.3.4",
+    "1.1.8.develop",
+    "10.4.0.1",
+    "chart-1.2.3",
     "2026-09-17",
     "latest",
     "x",

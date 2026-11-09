@@ -166,31 +166,7 @@ pub(super) fn check_cloud(
 /// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
 /// dots between them (`chart-1.2.3`).
 fn palette_pack_tag(tag: &str) -> bool {
-    version::parses(tag) || has_three_numbers(tag)
-}
-
-/// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.
-fn has_three_numbers(text: &str) -> bool {
-    let b = text.as_bytes();
-    (0..b.len()).any(|start| {
-        let mut i = start;
-        for part in 0..3 {
-            let from = i;
-            while i < b.len() && b[i].is_ascii_digit() {
-                i += 1;
-            }
-            if i == from {
-                return false;
-            }
-            if part < 2 {
-                if b.get(i) != Some(&b'.') {
-                    return false;
-                }
-                i += 1;
-            }
-        }
-        true
-    })
+    version::parses(tag) || version::has_three_numbers(tag)
 }
 
 /// Check `tag`, the tag of a pack from a registry that Palette does not sync.
