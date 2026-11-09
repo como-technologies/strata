@@ -467,6 +467,9 @@ them:
   shows two refs, `name@1.19.6 → name@1.20.1`, as the head of `strata compare` does. A
   column with the head Version or Move shows the bare version. The `@version` part has
   the muted color, so the eye finds the name first.
+- Before the first read of the versions ends, the tile and the nav item of the newer
+  versions show `-`, with "Reading the registries" or "Not read yet". A count of 0
+  would say that each pack is current. A restart of the pod starts with no read.
 - The tiles fill each row. With no `--read-pods`, the tile "Image changes" is absent,
   and the other four tiles fill the row. The page never scrolls sideways: a table that
   does not fit scrolls inside its own card, and a long line of a diff wraps.

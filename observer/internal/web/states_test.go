@@ -1036,3 +1036,15 @@ func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
 	mustHold(t, "the pill of the content", page, `<svg class="ring open" viewBox="0 0 16 16"`, `Content <b>checking</b> · last `)
 	mustNotHold(t, "the pills", page, "every 15m", "every 6h")
 }
+
+// Before the first read of the versions ends, the tile and the nav item of the newer versions show a
+// dash and say why: a count of 0 would read as "every pack is current".
+func TestNewerVersionsShowADashUntilTheFirstReadOfTheVersions(t *testing.T) {
+	unread := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.readAt = null; D.cluster.versions.running = null;`)
+	mustHold(t, "unread", unread, `<div class="l">Newer versions</div><div class="v">-</div><div class="s">Not read yet</div>`,
+		`<span>Newer versions</span><span class="cnt">-</span>`)
+	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.readAt = null; D.cluster.versions.running = {startedAt: new Date().toISOString(), done: 0, total: 1};`)
+	mustHold(t, "reading", reading, `<div class="v">-</div><div class="s">Reading the registries</div>`)
+	read := pageWith(t, "testdata/api", devdata.StateOK, "#overview", "")
+	mustNotHold(t, "read", read, `<div class="l">Newer versions</div><div class="v">-</div>`)
+}

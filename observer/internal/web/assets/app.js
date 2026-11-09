@@ -300,6 +300,8 @@ const known = n => neverChecked() ? "-" : n;
 // podsRead says that the observer holds a read of the pods. A count of images is "-" before that, as num() is for a check.
 // podsOff says that the observer does not read the pods, because the install has no --read-pods.
 const podsOff = () => D.images.pods === PODS.OFF;
+// versionsRead says that a read of the versions ended well since the observer started. Before it, a count of newer versions means nothing.
+const versionsRead = () => !!D.cluster.versions.readAt;
 const podsRead = () => D.images.pods === PODS.READ;
 const imageNum = n => podsRead() ? n : "-";
 const asCount = st => st === STATUS.NO_RECORD ? STATUS.NOT_CHECKED : st;
@@ -627,7 +629,7 @@ function navLinks(cur) {
   const sections = {
     findings: ["findings", "Findings", h`<span class="cnt ${n.findings ? "r" : ""}">${num(n.findings)}</span>`],
     images: ["images", "Images", imagesCount()],
-    newer: ["newer", "Newer versions", h`<span class="cnt">${num(n.newer)}</span>`],
+    newer: ["newer", "Newer versions", h`<span class="cnt">${versionsRead() ? num(n.newer) : "-"}</span>`],
     notchecked: ["notchecked", "Not checked", h`<span class="cnt">${num(n.notChecked)}</span>`],
     profiles: ["profiles", "Profiles", h`<span class="cnt">${known(n.profiles)}</span>`],
   };
@@ -729,7 +731,8 @@ function tiles() {
   return h`<section class="tiles" aria-label="Summary">${inOrder({
     findings: T(n.drift ? "r" : "g", "Drift", n.drift, driftSub, "findings"),
     images: podsOff() ? "" : images(),
-    newer: T("b", "Newer versions", n.newer, newerSub, "newer"),
+    // Before the first read of the versions ends, the page knows of no newer version, and it says so: 0 would read as "all current".
+    newer: versionsRead() ? T("b", "Newer versions", n.newer, newerSub, "newer") : T("y", "Newer versions", "-", D.cluster.versions.running ? "Reading the registries" : "Not read yet", "newer"),
     notchecked: T("y", "Not checked", n.notChecked, notCheckedSub, "notchecked"),
     profiles: T("", "Profiles", n.profiles, `${n.packs} packs on this cluster`, "profiles"),
   })}</section>`;
