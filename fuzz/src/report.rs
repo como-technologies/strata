@@ -3,7 +3,7 @@
 use strata_report_endpoint::accept::parse;
 
 /// The content type that a sender of a report gives.
-const JSON: Option<&str> = Some("application/json");
+pub(crate) const JSON: Option<&str> = Some("application/json");
 
 /// The statuses that the check gives for a body that it refuses.
 const REFUSALS: [u16; 4] = [400, 413, 415, 422];

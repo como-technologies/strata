@@ -17,6 +17,7 @@
 //!   that the tests and the benchmarks use, so no second list of the routes exists.
 #![cfg(any(test, doc))]
 
+mod behind;
 mod candidate;
 mod canon;
 mod config;
@@ -29,6 +30,7 @@ mod reference;
 mod report;
 mod seed;
 mod support;
+mod unknown;
 
 #[path = "../../tests/common/answer.rs"]
 pub mod answer;
