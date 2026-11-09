@@ -342,11 +342,11 @@ The script writes the baseline in `meta.json`:
 
 This is an exception to the rule of [Where each part belongs](../boundary.md#the-rule-that-decides):
 a record in Git holds the content that the team approved. A first-seen record holds
-the content that Palette gave at that time. No person approved it. If somebody edited
+the content that Palette gave at that time. No pipeline approved it. If somebody edited
 a profile before that time, the record holds the edit, and the observer reports no
 change.
 
-Each screen of the page says "No person approved these records" while the baseline
+Each screen of the page says "No pipeline approved these records yet" while the baseline
 is `first-seen`.
 
 To move to approved records, record each profile with `strata snapshot`. Let a review

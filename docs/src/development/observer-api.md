@@ -233,8 +233,8 @@ line to the observer". The splash has the command `kubectl port-forward` and a b
 
 The top bar names the baseline in one chip: `records: rev <revision>` for records
 that a pipeline approved, `records: first-seen`, or `records: unknown`. The last two
-have an amber dot. With `first-seen`, each screen also says "No person approved these
-records". The top bar names no project: the observer watches one cluster of one
+have an amber dot. With `first-seen`, each screen also says "No pipeline approved these
+records yet", and what takes their place. The top bar names no project: the observer watches one cluster of one
 project.
 
 ### The splash

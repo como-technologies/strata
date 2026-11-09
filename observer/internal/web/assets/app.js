@@ -458,8 +458,8 @@ function stateSplash() {
   const c = D.cluster;
   switch (c.page) {
     case PAGE.NO_RECORDS:
-      return splash(TONE.OFF, "Nothing to compare against yet", "A record is the copy your team approved. Your pipeline writes the records, and the observer checks against them.",
-        h`${cmd(RECORDS_COMMAND)}<p class="sub">On a test cluster, this command records what each profile holds now. No person approved that content.</p>${cmd(firstSeenCommand())}`);
+      return splash(TONE.OFF, "Nothing to compare against yet", "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later.",
+        h`<p class="sub"><b>Start now.</b> Record what each profile of this cluster holds now. No pipeline approved that content.</p>${cmd(firstSeenCommand())}<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>${cmd(RECORDS_COMMAND)}`);
     case PAGE.LOST:
       return splash(TONE.LOST, "We lost the signal from Palette", h`${failedChecks()}No check has ended well, and no finding clears until a check proves it.`,
         next(lostNext(c.content.lastError), cmd(LOG_COMMAND)));
@@ -706,7 +706,7 @@ function alertBars() {
   }
   if (c.records.baseline === BASELINE.FIRST_SEEN) {
     const from = c.records.firstSeenFrom;
-    bars.push(h`<div class="alertbar a">No person approved these records. <span>They come from the first sight of ${from ? h`the cluster <span class="m">${from}</span>` : "a cluster"}.</span></div>`);
+    bars.push(h`<div class="alertbar a">No pipeline approved these records yet. <span>They hold what ${from ? h`the cluster <span class="m">${from}</span>` : "a cluster"} ran when the observer first saw it. Records that your pipeline publishes from Git, with a revision, take their place.</span></div>`);
   }
   const pods = D.images;
   if (pods.pods === PODS.READ && pods.error) {

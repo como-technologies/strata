@@ -526,10 +526,10 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
 		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Strata compares the name and the tag."}},
 		{devdata.StateFirstLoad, []string{"Reading the layers", "The first check is running", "records: <b>unknown</b>"}},
-		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy your team approved. Your pipeline writes the records, and the observer checks against them.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "records: <b>unknown</b>"}},
+		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "records: <b>unknown</b>"}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
 		{devdata.StateLost, []string{"Lost contact with Palette", "HTTP 401, the API key was refused", "no finding clears until a check proves it"}},
-		{devdata.StateFirstSeen, []string{"records: <b>first-seen</b>", "No person approved these records"}},
+		{devdata.StateFirstSeen, []string{"records: <b>first-seen</b>", "No pipeline approved these records yet."}},
 		{devdata.StateLostUnchecked, []string{"We lost the signal from Palette", "The last 3 checks failed: <b>HTTP 401, the API key was refused.</b> No check has ended well", "strata-observer-key"}},
 		{devdata.StateStaleUnchecked, []string{"Checks stopped before one ended well", "No check has ended well", "kubectl -n strata-observer logs"}},
 		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
@@ -668,7 +668,7 @@ func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
 
 // With first-seen records, each screen shows the pill and the words. With approved records, none does.
 func TestFirstSeenShowsOnEachScreen(t *testing.T) {
-	const pill, words = "records: <b>first-seen</b>", "No person approved these records"
+	const pill, words = "records: <b>first-seen</b>", "No pipeline approved these records yet."
 	first := render(t, devdata.StateFirstSeen, false)
 	if len(first) < 10 {
 		t.Fatalf("only %d screens", len(first))

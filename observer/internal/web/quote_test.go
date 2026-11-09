@@ -217,7 +217,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 
 			// The splash of a page with no records names the cluster by its uid.
 			first := renamedSet(t, devdata.StateNoRecords, [][2]string{{baseline, uid}})
-			check("the splash with no records", commandAfter(t, pagesOf(t, first, "#overview")[0], "No person approved that content."), []string{"--first-seen", uid})
+			check("the splash with no records", commandAfter(t, pagesOf(t, first, "#overview")[0], "No pipeline approved that content."), []string{"--first-seen", uid})
 
 			if made := markersIn(t, dir); len(made) != 0 {
 				t.Errorf("a name ran as code and wrote %q", made)
