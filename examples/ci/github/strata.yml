@@ -65,12 +65,12 @@ jobs:
   # one comment on the pull request, and a label from the impact
   comment:
     if: github.event_name == 'pull_request'
-    uses: como-technologies/strata/.github/workflows/comment.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.32.1
     with:
       a: releases/dev.json          # the record the default branch has
       b: candidate.yaml             # what this pull request proposes
       # repave: true               # a cluster against a version: the answer of Palette decides the label
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -80,7 +80,7 @@ jobs:
   # the job that builds: see docs/src/automation/preflight.md
   preflight:
     if: github.event_name == 'pull_request'
-    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.32.1
     with:
       source: clusters/payments.json  # the body of the create that this repository keeps
       cloud: eks
@@ -94,7 +94,7 @@ jobs:
       # watch: true                 # source: cluster:UID; the job from the create, with the key,
       # every: "30"                 #   reads the build every 30 seconds
       # limit: "3600"               #   for 3600 seconds at most
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
@@ -104,20 +104,20 @@ jobs:
   # preflight-comment:
   #   needs: preflight
   #   if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-  #   uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.32.0
+  #   uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.32.1
   #   with:
-  #     strata-version: v0.32.0
+  #     strata-version: v0.32.1
   #   secrets:
   #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the records of the merge result, against the default branch as it is now
   gate:
     if: github.event_name == 'pull_request'
-    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.32.1
     with:
       records: releases/**/*.json
       # allow-no-digest: true       # accept a pack from a registry that lists no digest
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -125,12 +125,12 @@ jobs:
   # one issue per record that drifted or could not be checked
   verify:
     if: github.event_name == 'schedule'
-    uses: como-technologies/strata/.github/workflows/verify.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.32.1
     with:
       records: releases/**/*.json
       # allow-no-digest: true       # accept a pack from a registry that lists no digest
       # who: true                   # name who changed a record that drifted, from the audit log
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -139,12 +139,12 @@ jobs:
   # decision and not an error, so it keeps its own issues, apart from the drift report
   upstream:
     if: github.event_name == 'schedule'
-    uses: como-technologies/strata/.github/workflows/upstream.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/upstream.yml@v0.32.1
     with:
       records: releases/**/*.json
       # no-impact: true             # skip the comparison and the question to Palette
       # save: behind.json           # keep the report of the run as the artifact strata-behind
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -152,12 +152,12 @@ jobs:
   # the records of a promotion are one release, before a cluster moves
   promote-gate:
     if: github.event_name == 'workflow_dispatch' && inputs.promote != ''
-    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.32.1
     with:
       records: ${{ inputs.promote }}
       # allow: registry-move no-digest   # the differences to accept, separated by spaces
       # project: dev                     # the project of a ref such as name@version
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -166,10 +166,10 @@ jobs:
   # no cluster runs the version, so the delete that follows is safe
   retire-gate:
     if: github.event_name == 'workflow_dispatch' && inputs.retire != ''
-    uses: como-technologies/strata/.github/workflows/retire-gate.yml@v0.32.0
+    uses: como-technologies/strata/.github/workflows/retire-gate.yml@v0.32.1
     with:
       version: ${{ inputs.retire }}
-      strata-version: v0.32.0
+      strata-version: v0.32.1
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
@@ -180,13 +180,13 @@ jobs:
   # docs/src/automation/observer.md says more
   # observer-propose:
   #   if: github.event_name == 'schedule'
-  #   uses: como-technologies/strata/.github/workflows/observer-propose.yml@v0.32.0
+  #   uses: como-technologies/strata/.github/workflows/observer-propose.yml@v0.32.1
   #   permissions:
   #     contents: write
   #     pull-requests: write
   #   with:
   #     dir: releases/observer       # the folder of the records
-  #     strata-version: v0.32.0
+  #     strata-version: v0.32.1
   #   secrets:
   #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
   #     pr-token: ${{ secrets.STRATA_PR_TOKEN }}
@@ -195,10 +195,10 @@ jobs:
   # the approved records of the observer after the merge, with the revision of the merge
   # observer-publish:
   #   if: github.event_name == 'push'
-  #   uses: como-technologies/strata/.github/workflows/observer-publish.yml@v0.32.0
+  #   uses: como-technologies/strata/.github/workflows/observer-publish.yml@v0.32.1
   #   with:
   #     records: releases/observer/*.json
-  #     strata-version: v0.32.0
+  #     strata-version: v0.32.1
   #   secrets:
   #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
   #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}

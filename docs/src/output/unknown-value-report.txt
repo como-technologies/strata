@@ -1,4 +1,4 @@
 $ strata report
 Palette gave 1 value that this release of strata does not know
 
-  ProfileType  later-type  /v1/clusterprofiles/{uid}  2 times  strata 0.32.0
+  ProfileType  later-type  /v1/clusterprofiles/{uid}  2 times  strata 0.32.1

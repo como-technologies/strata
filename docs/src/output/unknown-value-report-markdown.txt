@@ -5,4 +5,4 @@ The table is the output of `strata report`, the document `strata-report/1`.
 
 | set | value | route | count | strata |
 | --- | --- | --- | --- | --- |
-| `ProfileType` | `later-type` | `/v1/clusterprofiles/{uid}` | 2 | 0.32.0 |
+| `ProfileType` | `later-type` | `/v1/clusterprofiles/{uid}` | 2 | 0.32.1 |

@@ -205,7 +205,7 @@ tenant role.
    ```bash
    helm install strata-observer \
      oci://ghcr.io/como-technologies/charts/strata-observer \
-     --version 0.32.0 -n strata-observer \
+     --version 0.32.1 -n strata-observer \
      --set cluster.uid=<cluster uid> \
      --set palette.projectUid=<project uid> \
      --set image.pullSecret=ghcr-pull
