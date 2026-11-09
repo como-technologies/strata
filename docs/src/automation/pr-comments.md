@@ -143,11 +143,11 @@ permissions:
   pull-requests: write
 jobs:
   strata:
-    uses: como-technologies/strata/.github/workflows/comment.yml@v0.31.0
+    uses: como-technologies/strata/.github/workflows/comment.yml@v0.32.0
     with:
       a: releases/1.1.0/dev.json
       b: releases/1.1.1/dev.json
-      strata-version: v0.31.0
+      strata-version: v0.32.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}   # only when a ref is not a snapshot file
