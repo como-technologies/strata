@@ -228,6 +228,7 @@ and the `flags` of the pack. It also holds these lists:
 | `masked` | The paths that Palette masks. They have no value. |
 | `manifests` | The `op`, the `name`, and the `unified` text of each changed, added, or removed manifest. `unified` is empty when the pack has no text. |
 | `paramChanges` | The `op` and the `name` of each change. |
+| `build` | Each field of the build of the pack that differs: `version`, `tag`, `packUid`, or `upstream`, with its value `a` before and `b` after. Empty for an added or a removed pack. |
 | `textTooLarge` | True when the pack had text and the observer dropped all of it. |
 
 A pack with no diff on a side gets `404`.

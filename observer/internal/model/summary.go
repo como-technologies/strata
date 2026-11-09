@@ -148,11 +148,13 @@ type Pack struct {
 // Move is what the observer keeps of the comparison of a pinned version and the newest version. The
 // counts go to the state. The changed values never do.
 type Move struct {
-	Impact string   `json:"impact"`
-	Flags  []string `json:"flags"`
-	Fold   Fold     `json:"fold"`
-	Images int      `json:"images"`
-	Charts int      `json:"charts"`
+	Impact string `json:"impact"`
+	// ImpactText is the words of strata for the impact of the pack, such as "node repave (OS image change)".
+	ImpactText string   `json:"impactText,omitempty"`
+	Flags      []string `json:"flags"`
+	Fold       Fold     `json:"fold"`
+	Images     int      `json:"images"`
+	Charts     int      `json:"charts"`
 }
 
 // Newer is one pack that a newer version exists for.

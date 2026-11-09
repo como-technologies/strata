@@ -117,6 +117,7 @@ func MoveOf(d docs.Diff) Move {
 		return m
 	}
 	m.Flags = d.Packs[0].Flags()
+	m.ImpactText = d.Packs[0].Impact.Text
 	m.Fold = FoldOf(d.Packs[0].Values.Paths())
 	return m
 }

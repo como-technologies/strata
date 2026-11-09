@@ -348,9 +348,14 @@ its packs are `not-checked`, and `counts.packsInFull` does not count them.
 
 A pin with `behind` true is one row. The row holds `newest` and `listed` from
 `newer[0]`, and `profiles` from `pinnedBy[].subject`. The observer compares the
-pinned version with the newest version. It keeps `impact`, the flags, the
-counts of images and charts, and the three counts of `fold`. `new` is true when
-`listed` is in the last 7 days.
+pinned version with the newest version. It keeps `impact`, the words of strata
+for the impact in `impactText`, the flags, the counts of images and charts, and the
+three counts of `fold`. `new` is true when `listed` is in the last 7 days.
+
+A move of an OS pack can change no value, manifest, image, or chart: the version
+and the upstream digest change, and the image of the nodes with them. The counts are
+then all 0, so the card of the move says that the content is the same, and it gives
+`impactText`.
 
 The cache of a move has the key `<registryUid>/<name>@<version>-><newest>` and
 the version of the binary. A new binary asks again. The cache in the state holds

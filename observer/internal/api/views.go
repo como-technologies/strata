@@ -113,6 +113,8 @@ type PackDiff struct {
 	Masked       []string        `json:"masked"`
 	Manifests    []docs.Manifest `json:"manifests"`
 	ParamChanges []docs.Named    `json:"paramChanges"`
+	// Build lists each field of the identity of the pack, and its upstream digest, that differs.
+	Build []BuildChange `json:"build"`
 	// TextTooLarge says that the pack has text, and the observer dropped it: the text is above the cap.
 	TextTooLarge bool `json:"textTooLarge"`
 }
@@ -135,8 +137,41 @@ func PackDiffOf(profile, key string, side model.Side, p docs.Pack) PackDiff {
 		Profile: profile, Key: key, Side: side, Status: p.Status, Impact: p.Impact, Flags: p.Flags(),
 		Values:       ValueLists{Parseable: p.Values.Parseable, Unified: p.Values.Unified, Settings: settings, FollowsTheVersion: follows, RepeatsTheLists: repeats},
 		ImageChanges: nonNil(p.ImageChanges), ChartChanges: nonNil(p.ChartChanges), Masked: nonNil(p.Masked),
-		Manifests: nonNil(p.Manifests), ParamChanges: nonNil(p.ParamChanges), TextTooLarge: p.TextTooLarge,
+		Manifests: nonNil(p.Manifests), ParamChanges: nonNil(p.ParamChanges), Build: buildOf(p), TextTooLarge: p.TextTooLarge,
 	}
+}
+
+// BuildChange is one field of the identity of a pack, or its upstream digest, with its value on each side.
+type BuildChange struct {
+	Field string `json:"field"`
+	A     string `json:"a"`
+	B     string `json:"b"`
+}
+
+// The fields of the build, in the order that the page shows them.
+const (
+	BuildVersion  = "version"
+	BuildTag      = "tag"
+	BuildPackUID  = "packUid"
+	BuildUpstream = "upstream"
+)
+
+// buildOf lists the fields of the build that differ between the two sides. A pack with one side, an
+// added or a removed pack, gives an empty list.
+func buildOf(p docs.Pack) []BuildChange {
+	out := []BuildChange{}
+	if p.A == nil || p.B == nil {
+		return out
+	}
+	for _, f := range []BuildChange{
+		{BuildVersion, p.A.Version, p.B.Version}, {BuildTag, p.A.Tag, p.B.Tag},
+		{BuildPackUID, p.A.PackUID, p.B.PackUID}, {BuildUpstream, p.A.Upstream, p.B.Upstream},
+	} {
+		if f.A != f.B {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func nonNil[T any](s []T) []T {

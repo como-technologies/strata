@@ -260,6 +260,23 @@ func packOf(d api.PackDiff) docs.Pack {
 	p.Layer, p.Name, _ = strings.Cut(d.Key, "/")
 	p.Values.Parseable, p.Values.Unified = d.Values.Parseable, d.Values.Unified
 	p.TextTooLarge = d.TextTooLarge
+	// Each field of the build that differs gives its value to the two sides. A field that the list does not
+	// hold is the same on both sides, so api.PackDiffOf drops it again.
+	if len(d.Build) > 0 {
+		p.A, p.B = &docs.PackSide{}, &docs.PackSide{}
+		for _, b := range d.Build {
+			switch b.Field {
+			case api.BuildVersion:
+				p.A.Version, p.B.Version = b.A, b.B
+			case api.BuildTag:
+				p.A.Tag, p.B.Tag = b.A, b.B
+			case api.BuildPackUID:
+				p.A.PackUID, p.B.PackUID = b.A, b.B
+			case api.BuildUpstream:
+				p.A.Upstream, p.B.Upstream = b.A, b.B
+			}
+		}
+	}
 	for _, list := range [][]docs.Leaf{d.Values.Settings, d.Values.FollowsTheVersion, d.Values.RepeatsTheLists} {
 		p.Values.Diff = append(p.Values.Diff, list...)
 	}

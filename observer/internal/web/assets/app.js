@@ -1361,14 +1361,28 @@ function retrySplash(d) {
 
 // comparePanel gives the flags and the body of a comparison from the answer of the detail route. The command is the one that prints
 // the text when the observer kept none.
+// The build of a pack: the fields of its identity, and its upstream digest. A move of an OS pack can change only these: the values
+// stay, and the image of the nodes changes. The table shows each field that differs, so a change of the build is never "0 of 0".
+const BUILD_WORDS = {version: "Version", tag: "Tag", packUid: "Pack uid", upstream: "Upstream digest"};
+const buildValue = (field, v) => field === "upstream" ? digestText(v) : v || mut("none");
+function buildTable(d) {
+  if (!d.build || !d.build.length) return "";
+  return h`<div class="tw"><table><thead><tr><th>The build of the pack</th><th>Before</th><th>After</th></tr></thead><tbody>${d.build.map(b => h`<tr><td>${BUILD_WORDS[b.field] || b.field}</td><td class="m was">${buildValue(b.field, b.a)}</td><td class="m now">${buildValue(b.field, b.b)}</td></tr>`)}</tbody></table></div>`;
+}
+
+// sameContent says that no tab has a change and no text: only the build of the pack changed.
+const sameContent = d => d.build && d.build.length > 0 && tabCounts(d).every(([, , n]) => n === 0) && !d.values.unified && !d.textTooLarge;
+const sameContentWords = impact => `The values, the manifests, the images, and the charts are the same on both sides. Only the build of the pack changes.${impact ? ` Strata says: ${impact}.` : ""}`;
+
 function comparePanel(id, d, href, command) {
   switch (d.state) {
     case "loading": return {flags: "", inner: h`<div class="body">${inline(TONE.BUILD, "Loading the changes.")}</div>`};
     case "none": return {flags: "", inner: splash(TONE.OFF, "No changes held", "The observer holds no changes for this side.", "", SIZE.LINE)};
     case "ok": {
       const data = d.data, tab = S.tabs[id] || firstTab(data);
+      if (sameContent(data)) return {flags: flagRow(data, id, href), inner: h`${buildTable(data)}<div class="body">${inline(TONE.OFF, sameContentWords(data.impact.text))}</div>`};
       const panel = tab === "manifests" ? manifestsPanel(data, id, command) : tab === "images" ? changesPanel(data.imageChanges, "image", "Repository", id, data) : tab === "charts" ? changesPanel(data.chartChanges, "chart", "Chart", id, data) : valuesPanel(data, id, command);
-      return {flags: flagRow(data, id, href), inner: h`${tabBar(id, tabCounts(data), tab)}${panel}`};
+      return {flags: flagRow(data, id, href), inner: h`${buildTable(data)}${tabBar(id, tabCounts(data), tab)}${panel}`};
     }
     default: return {flags: "", inner: retrySplash(d)};
   }
@@ -1459,8 +1473,12 @@ function moveCard(subject, p, row) {
   const f = row.fold, total = f.settings + f.followsTheVersion + f.repeatsTheLists;
   const unread = moveUnread(subject, p), count = v => unread ? DASH : v;
   const pinned = PINNED[row.pinnedState];
+  // A move that changes no value, manifest, image, or chart changes the build of the pack only. The counts would read 0 of 0.
+  const buildOnly = !unread && total === 0 && !row.images && !row.charts && !row.flags.includes("AUTHORED");
+  const counts = buildOnly ? h`<div><span>Content</span>The same: only the build of the pack changes${row.impactText ? h`. Strata says: ${row.impactText}` : ""}.</div>`
+    : h`<div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>`;
   return h`<section class="card"><div class="chead"><h2>Move to ${at(row.name, row.newest)} <span class="sub">Listed ${day(row.listed)}.</span></h2>${impactCell(subject, p, row)}</div><div class="body">
-    <div class="meta mt0"><div><span>Settings</span>${unread ? DASH : h`<b>${f.settings}</b> of ${total} ${plural(total, "value", "values")}`}</div><div><span>Images</span>${count(row.images)}</div><div><span>Charts</span>${count(row.charts)}</div>${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
+    <div class="meta mt0">${counts}${row.drops.length ? h`<div><span>Drops</span>${row.drops.join(", ")}</div>` : ""}${row.floating ? h`<div><span>Tag</span>Floating</div>` : ""}</div>
     <div class="small mut mt9">${unread ? "Strata could not compare these versions now, so the counts are not known." : `${impactOf(row.impact)[1]} is a hint from strata's table.`}${pinned ? ` The pinned version is ${pinned} in the registry.` : ""}</div>${askBlock(subject, p)}</div></section>`;
 }
 

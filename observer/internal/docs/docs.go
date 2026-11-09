@@ -75,7 +75,19 @@ type Pack struct {
 	ImageChanges    []Change   `json:"imageChanges"`
 	ChartChanges    []Change   `json:"chartChanges"`
 	Masked          []string   `json:"masked"`
+	A               *PackSide  `json:"a"`
+	B               *PackSide  `json:"b"`
 	TextTooLarge    bool       `json:"-"`
+}
+
+// PackSide is one side of a changed pack: the fields of its identity, and its upstream digest. It holds
+// no value. The two sides show what a change does when no value, manifest, image, or chart changes:
+// an OS pack can move to a new image with the same values.
+type PackSide struct {
+	Tag      string `json:"tag"`
+	Version  string `json:"version"`
+	PackUID  string `json:"packUid"`
+	Upstream string `json:"upstream"`
 }
 
 // Impact is the level of a pack change, in the words of strata.

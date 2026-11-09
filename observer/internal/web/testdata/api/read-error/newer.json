@@ -1,6 +1,6 @@
 {
   "newer": [
-    {"name":"ubuntu-aws","registry":"Public Repo","registryUid":"0b5e1d2a-4c7f-4e9b-8a3d-1f6c2e7a9b01","version":"20.04","newest":"24.04","listed":"2025-11-14T12:00:00Z","new":false,"floating":true,"pinnedState":"","drops":[],"profiles":["barney-base@1.5.0"],"impact":"repave","flags":["IDENTITY","UPSTREAM"],"fold":{"settings":0,"followsTheVersion":0,"repeatsTheLists":0},"images":0,"charts":0},
+    {"name":"ubuntu-aws","registry":"Public Repo","registryUid":"0b5e1d2a-4c7f-4e9b-8a3d-1f6c2e7a9b01","version":"20.04","newest":"24.04","listed":"2025-11-14T12:00:00Z","new":false,"floating":true,"pinnedState":"","drops":[],"profiles":["barney-base@1.5.0"],"impact":"repave","impactText":"node repave (OS image change)","flags":["IDENTITY","UPSTREAM"],"fold":{"settings":0,"followsTheVersion":0,"repeatsTheLists":0},"images":0,"charts":0},
     {"name":"vault","registry":"Public Repo","registryUid":"0b5e1d2a-4c7f-4e9b-8a3d-1f6c2e7a9b01","version":"0.31.0","newest":"0.32.0","listed":"2026-10-20T12:00:00Z","new":false,"floating":false,"pinnedState":"","drops":[],"profiles":["bambam-secrets@2.0.1"],"impact":"","flags":[],"fold":{"settings":0,"followsTheVersion":0,"repeatsTheLists":0},"images":0,"charts":0}
   ]
 }

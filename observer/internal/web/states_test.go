@@ -495,6 +495,11 @@ func valuesChanged(d api.PackDiff) bool {
 	return len(d.Values.Settings)+len(d.Values.FollowsTheVersion)+len(d.Values.RepeatsTheLists) > 0 || !d.Values.Parseable || d.Values.Unified != ""
 }
 
+// onlyTheBuild says that a diff changes the build of the pack, and no value, manifest, image, or chart.
+func onlyTheBuild(d api.PackDiff) bool {
+	return len(d.Build) > 0 && !valuesChanged(d) && d.Values.Unified == "" && len(d.Manifests)+len(d.ParamChanges)+len(d.ImageChanges)+len(d.ChartChanges) == 0
+}
+
 func firstTabOf(d api.PackDiff) string {
 	switch {
 	case valuesChanged(d):
@@ -524,11 +529,28 @@ func tabOn(id, k string) string {
 // The pack page opens on the first tab with a change.
 func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	set, screens := loadSet(t, devdata.StateOK), crawl(t, devdata.StateOK)
+	var buildOnly int
 	for _, d := range set.Diffs {
 		layer, name, _ := strings.Cut(d.Key, "/")
 		page := pageOf(t, screens, packPage(d.Profile, layer, name), "side "+string(d.Side))
-		mustHold(t, d.Profile+" "+d.Key+" "+string(d.Side), page, tabOn(tabId(d), firstTabOf(d)))
+		where := d.Profile + " " + d.Key + " " + string(d.Side)
+		if onlyTheBuild(d) {
+			// A change of the build alone shows the build and one line, and no tab: each tab would be empty.
+			buildOnly++
+			mustHold(t, where, page, "<th>The build of the pack</th>", "<td>Version</td>", "<td>Upstream digest</td>",
+				"Only the build of the pack changes. Strata says: "+d.Impact.Text+".")
+			mustNotHold(t, where, page, `data-tab="`+tabId(d)+`" data-k="values"`)
+			continue
+		}
+		mustHold(t, where, page, tabOn(tabId(d), firstTabOf(d)))
 	}
+	if buildOnly == 0 {
+		t.Error("no diff of the set changes the build alone")
+	}
+	// The card of the move says the same, and it gives no count of 0 of 0.
+	ubuntu := pageOf(t, screens, packPage("barney-base@1.5.0", "os", "ubuntu-aws"), "")
+	mustHold(t, "the move of ubuntu-aws", ubuntu, "<span>Content</span>The same: only the build of the pack changes. Strata says: node repave (OS image change).")
+	mustNotHold(t, "the move of ubuntu-aws", ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
