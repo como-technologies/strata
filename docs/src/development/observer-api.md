@@ -424,6 +424,9 @@ them:
   message.
 - The nav, the tiles, and the facts of a calm splash keep one order: findings,
   images, newer versions, not checked, and profiles. `ORDER` in `app.js` holds it.
+- The column "Images listed" counts the images that the values of a pack list in
+  `pack.content.images`. Many packs list none and still run images, such as an OS
+  pack or Kubernetes, so a pack with no list shows "none listed" and not 0.
 - A name with its version shows as a ref, `name@version`, as strata writes it. A move
   shows two refs, `name@1.19.6 → name@1.20.1`, as the head of `strata compare` does. A
   column with the head Version or Move shows the bare version.

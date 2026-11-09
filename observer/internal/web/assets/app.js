@@ -305,6 +305,10 @@ const digestBadge = st => badgeOf(DIGEST_BADGE, st);
 const lab = (k, v) => h`<span class="lab"><i>${k}=</i>"${v}"</span>`;
 const hbar = x => h`<span class="hbar" role="img" aria-label="Status of each pack">${x.packs.map(p => h`<i class="${(BADGE[p.status] || ["y"])[0]}" title="${p.name}: ${(BADGE[p.status] || [0, p.status])[1]}"></i>`)}</span>`;
 const mut = text => h`<span class="mut">${text}</span>`;
+// The images of a pack in its record are the list that its values declare, pack.content.images. Many packs declare none, and they
+// still run images: an OS pack, Kubernetes, a chart that names its images inside. So 0 reads as none listed, and not as no image.
+const IMAGES_LISTED = "The images that the values of the pack list in pack.content.images. A pack that lists none can still run images.";
+const imagesListed = n => n ? String(n) : h`<span class="mut" title="${IMAGES_LISTED}">none listed</span>`;
 const openAttr = k => S.open[k] ? raw(" open") : "";
 const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
@@ -945,9 +949,9 @@ function viewProfile(subject) {
   const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
   const rows = x.packs.map(p => {
     const href = packHash(subject, p);
-    return h`<tr class="link" data-go="${href}"><td class="w110">${statusBadge(p.status)}</td><td class="m"><a href="${href}">${p.name}</a></td><td class="mut narrow-hide">${p.layer}</td><td class="m">${p.version}</td><td class="m">${newerCell(p)}</td><td class="n narrow-hide">${p.images}</td></tr>`;
+    return h`<tr class="link" data-go="${href}"><td class="w110">${statusBadge(p.status)}</td><td class="m"><a href="${href}">${p.name}</a></td><td class="mut narrow-hide">${p.layer}</td><td class="m">${p.version}</td><td class="m">${newerCell(p)}</td><td class="n narrow-hide">${imagesListed(p.images)}</td></tr>`;
   });
-  const packs = x.packs.length ? h`<div class="tw"><table><thead><tr><th>Status</th><th>Pack</th><th class="narrow-hide">Layer</th><th>Version</th><th>Newer</th><th class="n narrow-hide">Images</th></tr></thead><tbody>${rows}</tbody></table></div>` : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
+  const packs = x.packs.length ? h`<div class="tw"><table><thead><tr><th>Status</th><th>Pack</th><th class="narrow-hide">Layer</th><th>Version</th><th>Newer</th><th class="n narrow-hide" title="${IMAGES_LISTED}">Images listed</th></tr></thead><tbody>${rows}</tbody></table></div>` : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
   return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subject), body: h`${alertBars()}
     <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subject}</h1>${statusBadge(x.status)}</div>
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
@@ -1520,7 +1524,7 @@ function viewPack(subject, layer, name) {
   const row = newerRowOf(subject, p);
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";
   return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="body"><div class="title"><h1 class="m h1m">${at(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
-    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
+    <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subject}</a></div></div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
 }
 
 /* ---- The alerts ----
