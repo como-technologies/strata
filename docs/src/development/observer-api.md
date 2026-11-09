@@ -435,8 +435,14 @@ them:
   name, as Profiles has.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
-- The table of the newer versions indents each pack under the row of its profile, on a
-  guide line.
+- The page of the newer versions opens with four tiles: packs behind, moves that
+  repave, new this week, and versions behind. The head of its card holds a switch,
+  Table or Timeline, and the filter. The table indents each pack under the row of its
+  profile, on a guide line. A move that changes only the build says "same" in the
+  column Settings. The timeline gives each pack one lane: the pinned version, each
+  version that the registry listed after it, and the newest, with the day of each.
+- The filters of Newer versions and Images sit in the head of the card, at the right,
+  as the filter of Profiles does.
 - A profile shows its packs as a stack of layers: the add-ons on top and the OS at the
   bottom, as Palette builds a cluster. Each slab is the layer, the ref, the status, the
   newer version, and the images listed. The page of a pack shows the same stack, small,

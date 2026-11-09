@@ -170,7 +170,16 @@ type Newer struct {
 	PinnedState string   `json:"pinnedState"`
 	Drops       []string `json:"drops"`
 	Profiles    []string `json:"profiles"`
+	// Steps lists each newer version that the registry gives, from the oldest to the newest, with the
+	// time that the registry listed it. The page draws them as a timeline of the pack.
+	Steps []Step `json:"steps,omitempty"`
 	Move
+}
+
+// Step is one newer version of a pack, and the time that the registry listed it.
+type Step struct {
+	Version string `json:"version"`
+	Listed  string `json:"listed"`
 }
 
 // NotChecked is one cause that a check did not cover some profiles or packs.

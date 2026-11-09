@@ -979,3 +979,41 @@ func TestTheFilterOfTheNewerTableKeepsAGroupOrItsMatchingRows(t *testing.T) {
 	none := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.qs.newer = "wilma-nothing"`)
 	mustHold(t, "no match", none, `No pack or profile matches <span class="m">wilma-nothing</span>.`)
 }
+
+// ---- The page of the newer versions ----
+
+var lanePattern = regexp.MustCompile(`<a class="lane" href="[^"]*"><span class="lname m">([^<]+)</span><span class="steps">(.*?)</span><span class="limp">`)
+var stepPattern = regexp.MustCompile(`<span class="step ([a-z]*)"><i></i><b>([^<]+)</b>`)
+
+// The page opens with four tiles and the table. The switch shows the timeline: one lane for each pack of
+// each profile, from the pinned version through each listed version to the newest. A move that changes only
+// the build says "same" in the table.
+func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
+	set := loadSet(t, devdata.StateOK)
+	table := pageOf(t, render(t, devdata.StateOK, false), "#newer", "")
+	mustHold(t, "the tiles", table, `<div class="l">Packs behind</div><div class="v">10</div>`, `<div class="l">Moves that repave</div><div class="v">2</div>`,
+		`<div class="l">New this week</div>`, `<div class="l">Versions behind</div><div class="v">16</div>`)
+	mustHold(t, "the head", table, `<button data-nview="table" aria-pressed="true" class="on">Table</button>`, `id="q-newer"`)
+	mustHold(t, "the row of ubuntu-aws", rowWith(t, table, `data-go="#k-barney-base@1.5.0/os/ubuntu-aws"`), `title="Only the build of the pack changes: the values stay the same">same</span>`)
+	timeline := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.newerView = "timeline"`)
+	lanes := lanePattern.FindAllStringSubmatch(timeline, -1)
+	want := 0
+	for _, r := range set.Newer.Newer {
+		want += len(r.Profiles)
+	}
+	if len(lanes) != want {
+		t.Fatalf("%d lanes, want %d", len(lanes), want)
+	}
+	for _, l := range lanes {
+		if l[1] != "cni-cilium-oss" {
+			continue
+		}
+		var got []string
+		for _, s := range stepPattern.FindAllStringSubmatch(l[2], -1) {
+			got = append(got, s[1]+":"+s[2])
+		}
+		if want := []string{"pin:1.19.6", ":1.20.0", "newest:1.20.1"}; !slices.Equal(got, want) {
+			t.Errorf("the lane of cni-cilium-oss: %v, want %v", got, want)
+		}
+	}
+}

@@ -907,42 +907,86 @@ function viewNewer() {
   return withChecks("newer", crumbs("Newer versions"), newerCard);
 }
 
-// newerCard draws the table of the newer versions, or the splash of an empty list.
+// newerCard draws the newer versions: four tiles, then one card with a table or a timeline, or the splash of an empty list.
 const NEWER_KEYS = {pack: [r => r.name, "text"], move: [r => r.newest, "version"], impact: [r => rank(Object.keys(IMPACT))(r.impact), "num"],
   settings: [r => r.fold.settings, "num"], images: [r => r.images, "num"], charts: [r => r.charts, "num"], listed: [r => when(r.listed) || 0, "num"]};
+const NEWER_VIEWS = [["table", "Table"], ["timeline", "Timeline"]];
+const REPAVES = ["repave", "may-repave"];
+// stepsOf gives the newer versions of a row from the oldest to the newest. An observer of an older release gives the newest alone.
+const stepsOf = r => r.steps && r.steps.length ? r.steps : [{version: r.newest, listed: r.listed}];
+// buildOnly says that a move changes no value, manifest, image, or chart: only the build of the pack moves.
+const buildOnly = r => r.fold.settings + r.fold.followsTheVersion + r.fold.repeatsTheLists === 0 && !r.images && !r.charts && !(r.flags || []).includes("AUTHORED");
+
+// newerGroups groups the rows by profile, and keeps what the filter matches: a whole group when its profile matches, and else the
+// rows whose pack matches.
+function newerGroups(rows) {
+  const groups = [];
+  rows.forEach(r => r.profiles.forEach(s => {
+    let g = groups.find(q => q.subject === s);
+    if (!g) { g = {subject: s, rows: []}; groups.push(g); }
+    g.rows.push(r);
+  }));
+  groups.sort((a, b) => a.subject.localeCompare(b.subject));
+  return groups.map(g => matches("newer", g.subject) ? g : {...g, rows: g.rows.filter(r => matches("newer", r.name))}).filter(g => g.rows.length);
+}
+
+function newerTiles(rows) {
+  const n = D.cluster.counts, others = packsWithoutMove();
+  const repave = rows.filter(r => REPAVES.includes(r.impact)).length, fresh = rows.filter(r => r.new).length;
+  const behind = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
+  const T = (cls, label, value, sub) => h`<div class="tile ${cls}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
+  return h`<section class="tiles" aria-label="Newer versions in numbers">
+    ${T("b", "Packs behind", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
+    ${T(repave ? "a" : "g", "Moves that repave", repave, repave ? "The move replaces the nodes" : "No move replaces the nodes")}
+    ${T("b", "New this week", fresh, "Listed in the last 7 days")}
+    ${T("y", "Versions behind", behind, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
+  </section>`;
+}
+
+function newerGroupHead(g, cols) {
+  const p = profileOf(g.subject), total = p ? p.packs.length : "";
+  const count = h`<span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span>`;
+  return cols ? h`<tr class="g"><td colspan="${cols}"><a class="m" href="${profileHash(g.subject)}">${subjectRef(g.subject)}</a> ${count}</td></tr>`
+    : h`<div class="lane-g"><a class="m" href="${profileHash(g.subject)}">${subjectRef(g.subject)}</a> ${count}</div>`;
+}
+
+function newerTable(groups) {
+  const none = h`<tr><td colspan="8">${inline(TONE.OFF, h`No pack or profile matches <span class="m">${S.qs.newer}</span>.`)}</td></tr>`;
+  return h`<div class="tw"><table class="tree"><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${groups.length ? groups.map(g => {
+    const p = profileOf(g.subject);
+    return [newerGroupHead(g, 8), sortBy("nt", g.rows, NEWER_KEYS).map(r => {
+      const k = packOfRow(p, r), href = k ? packHash(g.subject, k) : profileHash(g.subject);
+      const unread = moveUnread(g.subject, k), same = !unread && buildOnly(r);
+      const count = v => unread ? DASH : same ? mut(DASH) : v;
+      const settings = same ? h`<span class="mut" title="Only the build of the pack changes: the values stay the same">same</span>` : h`<b>${count(r.fold.settings)}</b>`;
+      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
+    })];
+  }) : none}</tbody></table></div>`;
+}
+
+// newerTimeline draws one lane for each pack: the pinned version, each version that the registry listed after it, and the newest,
+// with the day of each. The lane links to the page of the pack.
+function newerTimeline(groups) {
+  if (!groups.length) return h`<div class="body">${inline(TONE.OFF, h`No pack or profile matches <span class="m">${S.qs.newer}</span>.`)}</div>`;
+  return h`<div class="lanes">${groups.map(g => {
+    const p = profileOf(g.subject);
+    return [newerGroupHead(g, 0), sortBy("nt", g.rows, NEWER_KEYS).map(r => {
+      const k = packOfRow(p, r), href = k ? packHash(g.subject, k) : profileHash(g.subject), steps = stepsOf(r);
+      const step = (cls, version, when, word) => h`<span class="step ${cls}"><i></i><b>${version}</b><span>${when}${word ? h` · ${word}` : ""}</span></span>`;
+      return h`<a class="lane" href="${href}"><span class="lname m">${r.name}</span><span class="steps">${step("pin", r.version, "pinned", "")}${steps.map((x, i) => step(i === steps.length - 1 ? "newest" : "", x.version, day(x.listed), i === steps.length - 1 && r.new ? "new" : ""))}</span><span class="limp">${impactBadge(r.impact)}</span></a>`;
+    })];
+  })}</div>`;
+}
 
 function newerCard() {
   const n = D.cluster.counts, rows = D.newer;
-  let body;
-  if (!rows.length) {
-    body = noNewer(SIZE.CARD);
-  } else {
-    const groups = [];
-    rows.forEach(r => r.profiles.forEach(s => {
-      let g = groups.find(q => q.subject === s);
-      if (!g) { g = {subject: s, rows: []}; groups.push(g); }
-      g.rows.push(r);
-    }));
-    groups.sort((a, b) => a.subject.localeCompare(b.subject));
-    // A filter keeps a whole group when its profile matches, and else the rows whose pack matches.
-    const shownGroups = groups.map(g => matches("newer", g.subject) ? g : {...g, rows: g.rows.filter(r => matches("newer", r.name))}).filter(g => g.rows.length);
-    body = h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>
-      <div class="body tb pb8">${filterBox("newer", "Filter by pack or profile")}</div>
-      <div class="tw"><table class="tree"><thead><tr>${sortTh("nt", "pack", "Pack")}${sortTh("nt", "move", "Move")}${sortTh("nt", "impact", "Impact")}${sortTh("nt", "settings", "Settings", "n")}${sortTh("nt", "images", "Images", "n narrow-hide")}${sortTh("nt", "charts", "Charts", "n narrow-hide")}${sortTh("nt", "listed", "Listed", "narrow-hide")}<th class="narrow-hide" title="${ASK_WHAT}">Palette</th></tr></thead><tbody>${shownGroups.length ? shownGroups.map(g => {
-        const p = profileOf(g.subject);
-        const total = p ? p.packs.length : "";
-        return [h`<tr class="g"><td colspan="8"><a class="m" href="${profileHash(g.subject)}">${subjectRef(g.subject)}</a> <span class="mut">· ${g.rows.length}${total !== "" ? h` of ${total}` : ""} ${plural(total === "" ? g.rows.length : total, "pack", "packs")}</span></td></tr>`,
-          sortBy("nt", g.rows, NEWER_KEYS).map(r => {
-            const k = packOfRow(p, r);
-            const href = k ? packHash(g.subject, k) : profileHash(g.subject);
-            const count = v => moveUnread(g.subject, k) ? DASH : v;
-            return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n"><b>${count(r.fold.settings)}</b></td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
-          })];
-      }) : h`<tr><td colspan="8">${inline(TONE.OFF, h`No pack or profile matches <span class="m">${S.qs.newer}</span>.`)}</td></tr>`}</tbody></table></div>`;
-  }
-  const others = packsWithoutMove();
-  const sub = rows.length ? h`<span class="sub">${rows.length} in ${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")}. ${others.current} other ${plural(others.current, "pack is", "packs are")} current.${others.unchecked ? ` ${others.unchecked} ${plural(others.unchecked, "is", "are")} not checked.` : ""}</span>` : h`<span class="sub">${num(rows.length)}</span>`;
-  return h`<section class="card"><div class="chead"><h2>Newer versions ${sub}</h2></div>${body}</section>`;
+  if (!rows.length) return h`<section class="card"><div class="chead"><h2>Newer versions <span class="sub">${num(rows.length)}</span></h2></div>${noNewer(SIZE.CARD)}</section>`;
+  const groups = newerGroups(rows), view = S.newerView || "table";
+  const seg = h`<span class="seg" role="group" aria-label="View">${NEWER_VIEWS.map(([k, l]) => h`<button data-nview="${k}" aria-pressed="${view === k ? "true" : "false"}" class="${view === k ? "on" : ""}">${l}</button>`)}</span>`;
+  const sub = h`<span class="sub">${rows.length} in ${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")}</span>`;
+  const note = view === "table" ? h`<div class="body small mut pb9"><b>Settings</b> counts what a move really changes. Impact is a hint from strata's table, so read the two together.</div>`
+    : h`<div class="body small mut pb9">Each lane runs from the pinned version to the newest one, with the day that the registry listed each version.</div>`;
+  return h`${newerTiles(rows)}<section class="card"><div class="chead"><h2>Newer versions ${sub}</h2><div class="tb">${seg}${filterBox("newer", "Filter by pack or profile")}</div></div>${note}${view === "table" ? newerTable(groups) : newerTimeline(groups)}</section>`;
 }
 
 // packsWithoutMove counts the packs that have no newer version: the ones that are current, and the ones that were not checked.
@@ -1128,14 +1172,14 @@ function imagesBody() {
     status: [img => rank([IMAGE.SPLIT, IMAGE.MOVED, IMAGE.NOT_CHECKED, IMAGE.STEADY])(img.status), "num"], image: [img => img.ref, "text"],
     pack: [img => img.packs.length ? packName(img.packs[0].key) : "~", "text"], pods: [podsOf, "num"]});
   const none = h`<tr><td colspan="5">${inline(TONE.OFF, h`No image matches <span class="m">${S.qs.images}</span>.`)}</td></tr>`;
-  return h`<div class="body tb pb8">${filterBox("images", "Filter by image or pack")}</div><div class="tw"><table><thead><tr>${sortTh("it", "status", "Status")}${sortTh("it", "image", "Image")}${sortTh("it", "pack", "Pack", "narrow-hide")}${sortTh("it", "pods", "Pods", "n narrow-hide")}<th>Digest</th></tr></thead><tbody>${shown.length ? shown.map(imageRow) : none}</tbody></table></div>`;
+  return h`<div class="tw"><table><thead><tr>${sortTh("it", "status", "Status")}${sortTh("it", "image", "Image")}${sortTh("it", "pack", "Pack", "narrow-hide")}${sortTh("it", "pods", "Pods", "n narrow-hide")}<th>Digest</th></tr></thead><tbody>${shown.length ? shown.map(imageRow) : none}</tbody></table></div>`;
 }
 
 function viewImages() {
   const o = D.images, n = o.counts, rest = n.images - n.matched;
   const sub = podsRead() ? h`${n.images} ${plural(n.images, "image", "images")}. ${n.matched} ${plural(n.matched, "matches", "match")} a pack. ${rest} ${plural(rest, "does", "do")} not.` : podsOff() ? "Pods not read" : "Not read yet";
   const note = podsRead() && o.images.length ? h`<div class="note small">This page says so when what this cluster pulled differs from what it first pulled, or when two pods of one tag differ. It cannot say whether a tag moved at its source.</div>` : "";
-  return {nav: "images", crumbs: crumbs("Images"), body: h`${alertBars()}<section class="card"><div class="chead"><h2>Images <span class="sub">${sub}</span></h2></div>${imagesBody()}</section>${note}`};
+  return {nav: "images", crumbs: crumbs("Images"), body: h`${alertBars()}<section class="card"><div class="chead"><h2>Images <span class="sub">${sub}</span></h2>${podsRead() && o.images.length ? h`<div class="tb">${filterBox("images", "Filter by image or pack")}</div>` : ""}</div>${imagesBody()}</section>${note}`};
 }
 
 // recordRows gives one row for each pack that names the image. The status is the one of its profile.
@@ -1736,6 +1780,8 @@ function onClick(ev) {
   if (f) { S.filter = f.dataset.filter; render(); return; }
   const v = ev.target.closest("[data-view]");
   if (v) { S.view = v.dataset.view === "split" ? "split" : "unified"; render(); return; }
+  const nv = ev.target.closest("[data-nview]");
+  if (nv) { S.newerView = nv.dataset.nview === "timeline" ? "timeline" : "table"; render(); return; }
   const so = ev.target.closest("[data-sort]");
   if (so) {
     const t = so.dataset.sort, c = so.dataset.col, cur = S.sort[t];

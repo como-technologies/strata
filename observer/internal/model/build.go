@@ -255,9 +255,18 @@ func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 		}
 		rows = append(rows, Newer{Name: pin.Name, Registry: v.registry(pin.RegistryUID), RegistryUID: pin.RegistryUID, Version: pin.Version,
 			Newest: newest.Version, Listed: newest.Listed, New: listedWithin(newest.Listed, now), Floating: pin.Floating,
-			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin), Move: move})
+			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin), Steps: stepsOf(pin), Move: move})
 	}
 	return rows
+}
+
+// stepsOf lists the newer versions of a pin from the oldest to the newest. Strata gives them newest first.
+func stepsOf(pin docs.Pin) []Step {
+	steps := make([]Step, 0, len(pin.Newer))
+	for i := len(pin.Newer) - 1; i >= 0; i-- {
+		steps = append(steps, Step{Version: pin.Newer[i].Version, Listed: pin.Newer[i].Listed})
+	}
+	return steps
 }
 
 // listedWithin says that a version came in the last 7 days. A time that does not parse is not new.

@@ -350,7 +350,9 @@ A pin with `behind` true is one row. The row holds `newest` and `listed` from
 `newer[0]`, and `profiles` from `pinnedBy[].subject`. The observer compares the
 pinned version with the newest version. It keeps `impact`, the words of strata
 for the impact in `impactText`, the flags, the counts of images and charts, and the
-three counts of `fold`. `new` is true when `listed` is in the last 7 days.
+three counts of `fold`. `new` is true when `listed` is in the last 7 days. `steps`
+lists each version in `newer[]`, from the oldest to the newest, with its `listed`
+time.
 
 A move of an OS pack can change no value, manifest, image, or chart: the version
 and the upstream digest change, and the image of the nodes with them. The counts are
