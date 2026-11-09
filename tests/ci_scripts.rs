@@ -5001,10 +5001,9 @@ fn preflight_sh_finds_the_key_where_strata_does_and_says_in_the_log_when_the_run
 fn preflight_sh_stops_with_exit_2_when_palette_key_sh_is_not_beside_it() {
     let job = preflight_job();
     let alone = job.dir.path().join("alone");
-    std::fs::create_dir(&alone).unwrap();
-    std::fs::copy(script("ci/preflight.sh"), alone.join("preflight.sh")).unwrap();
+    copy_scripts(&alone, &["scripts/ci/preflight.sh"]);
     let o = Command::new("bash")
-        .arg(alone.join("preflight.sh"))
+        .arg(alone.join("scripts/ci/preflight.sh"))
         .current_dir(job.dir.path())
         .env("HOME", job.dir.path())
         .env("STRATA_BIN", job.bin.join("strata"))

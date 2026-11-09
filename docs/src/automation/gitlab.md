@@ -95,10 +95,11 @@ export STRATA_BIN=$PWD/.strata/strata
 .strata/merge-gate.sh "releases/*.json"
 ```
 
-Each release carries the binary for four targets, `SHA256SUMS`, and the five
-scripts, so one download gives a job everything. Use **v0.5.2** or later: it is
-the first release with all four. `v0.5.1` carries three of them and no
-`merge-gate.sh`, and `v0.5.0` carries none. An older pipeline clones this
+Each release carries the binary for four targets, `SHA256SUMS`, and
+[the CI scripts](./scripts.md#the-scripts-in-this-repository), so one download
+gives a job everything. Use **v0.5.2** or later: it is the first release with
+`merge-gate.sh`. `v0.5.1` carries three scripts and no `merge-gate.sh`, and
+`v0.5.0` carries none. An older pipeline clones this
 repository at the tag and runs what `scripts/` holds there: at `v0.5.0`, the
 comment and the report alone. The installer
 itself is a release file: the pipeline downloads it first. A token in `STRATA_TOKEN`,
