@@ -42,7 +42,7 @@ func TestTheNewerSideAfterARestartAsksForOneCompareAndKeepsTheAnswer(t *testing.
 	}
 }
 
-func TestRequestsForTheSameMoveAskTheWorkerOnceAndNeverRunTwoProcessesTogether(t *testing.T) {
+func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *testing.T) {
 	r := newRig(t)
 	strata := &fakeStrata{dir: r.fixtures}
 	r.cycled(strata)

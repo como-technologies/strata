@@ -173,9 +173,9 @@ func TestAskKnowsNoMoveForAProfileAPackOrAPinThatIsCurrent(t *testing.T) {
 	}
 }
 
-func TestAskWaitsForTheWorkerAndEndsWithTheContext(t *testing.T) {
+func TestAskWaitsForTheVersionsSlotAndEndsWithTheContext(t *testing.T) {
 	_, _, o := askable(t, docs.Bump{To: "1.36.2", PaletteValidation: &docs.Validation{Accepts: true}})
-	if err := o.acquire(context.Background()); err != nil {
+	if err := o.acquire(context.Background(), o.versionsSlot); err != nil { // a versions cycle holds the slot
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -183,7 +183,7 @@ func TestAskWaitsForTheWorkerAndEndsWithTheContext(t *testing.T) {
 	if _, _, err := o.Ask(ctx, moveSubject, "k8s/kubernetes"); !errors.Is(err, context.Canceled) {
 		t.Errorf("error %v", err)
 	}
-	o.release()
+	o.release(o.versionsSlot)
 }
 
 func TestAnAnswerStaysInMemoryAndTheStateHoldsNone(t *testing.T) {

@@ -3,6 +3,7 @@ package check
 import (
 	"context"
 	"slices"
+	"sync"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
@@ -32,6 +33,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	if err != nil {
 		return err
 	}
+	o.expect(ctx, 1) // behind
 	args := append([]string{runner.CmdBehind}, names...)
 	args = append(args, runner.FlagNoImpact, "--json", "--compact", "-q")
 	res, err := o.run(ctx, dir, exitsWithDocument, args...)
@@ -54,15 +56,23 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 }
 
 // moves compares the pinned version of each pin that is behind with its newest version. A move that
-// the cache knows costs no request. A compare that fails is one row of the list with no counts: it is
-// in the second result, it is not cached, and the next cycle asks again for that move only. The other
-// pins stay in the cycle. Only a stop of ctx ends the loop, and then the error is the one of ctx.
+// the cache knows costs no request. The other moves compare at the same time, as many as the pool of
+// processes lets. A compare that fails is one row of the list with no counts: it is in the second
+// result, it is not cached, and the next cycle asks again for that move only. The other pins stay in
+// the cycle. Only a stop of ctx ends the cycle, and then the error is the one of ctx.
 //
 // Each move of the cycle counts as used, also when its compare fails: the answer of Palette about a
 // move lives as long as the move, and a failed compare must not drop it.
 func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[string]model.Move, map[string]bool, error) {
 	moves, unread := map[string]model.Move{}, map[string]bool{}
 	used := map[string]bool{}
+	type job struct {
+		pin           docs.Pin
+		key, cacheKey string
+		diff          docs.Diff
+		err           error
+	}
+	var jobs []*job
 	for _, pin := range doc.Pins {
 		key := model.MoveKey(pin)
 		if !pin.Behind || key == "" || pin.Error != nil {
@@ -70,24 +80,37 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 		}
 		cacheKey := doc.Tool.Version + " " + key
 		used[cacheKey] = true
-		move, ok := o.cachedMove(cacheKey)
-		if !ok {
-			diff, err := o.compareMove(ctx, dir, pin)
-			if ctx.Err() != nil {
-				return moves, unread, ctx.Err()
-			}
-			if err != nil {
-				unread[key] = true
-				continue
-			}
-			// The counts go to the state. The pack, with its changed values, stays in memory.
-			move = model.MoveOf(diff)
-			o.storeMove(cacheKey, move)
-			if pack, ok := movePack(diff); ok {
-				o.storeDetail(cacheKey, pack)
-			}
+		if move, ok := o.cachedMove(cacheKey); ok {
+			moves[key] = move
+			continue
 		}
-		moves[key] = move
+		jobs = append(jobs, &job{pin: pin, key: key, cacheKey: cacheKey})
+	}
+	o.expect(ctx, len(jobs))
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			j.diff, j.err = o.compareMove(ctx, dir, j.pin)
+		}()
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return moves, unread, ctx.Err()
+	}
+	for _, j := range jobs {
+		if j.err != nil {
+			unread[j.key] = true
+			continue
+		}
+		// The counts go to the state. The pack, with its changed values, stays in memory.
+		move := model.MoveOf(j.diff)
+		o.storeMove(j.cacheKey, move)
+		if pack, ok := movePack(j.diff); ok {
+			o.storeDetail(j.cacheKey, pack)
+		}
+		moves[j.key] = move
 	}
 	o.pruneMoves(used)
 	return moves, unread, nil

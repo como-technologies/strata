@@ -55,6 +55,8 @@ type Clock struct {
 	Last       *time.Time
 	FailedRuns int
 	LastError  *ErrorRef
+	// Running is the progress of the cycle that runs now, or nil.
+	Running *Running
 }
 
 // Input is everything that Build reads. Content and Versions are nil until a good cycle ended.

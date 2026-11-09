@@ -563,7 +563,7 @@ read of the pods worked.
 | Nobody gets paged yet | The observer sends no alert. This is a choice, and no fault. | [Turn the alerts on](#turn-them-on). |
 | Undisturbed | A side of a pack holds what the record holds. | None. |
 | Part of this layer is hidden | Strata did not check the pack in full, or the last read of its profile failed in part. A side with no change then keeps the last good answer, and the page does not call it unchanged. The line gives the cause. | Read the page "Not checked". |
-| One moment, a check is running | A cycle holds the one slot of the observer for a read. | Wait, or click "Try now". |
+| One moment, a check is running | The read of a diff waited for a process of the observer. | Wait, or click "Try now". |
 | Too much rock to carry | The text of the pack is above 256 KiB. | Run the command that the page gives. |
 
 ## Ask Palette about a move

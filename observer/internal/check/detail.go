@@ -16,9 +16,9 @@ import (
 // The published side and the cluster side come from the last good content cycle. The newer side
 // comes from the move of the last good versions cycle. The state keeps the counts of a move and not
 // its values. So after a restart the memory holds no values for a move that the state knows. Then
-// the call asks the worker for one `compare` of the two packs, as a cycle does, and keeps the answer
-// in memory. It waits for a cycle that holds the worker, and it ends with the context. No call
-// sends a POST.
+// the call runs one `compare` of the two packs, as a cycle does, and keeps the answer in memory. It
+// waits for the detail slot and a token of the pool, and never for a cycle, and it ends with the
+// context. No call sends a POST.
 func (o *Observer) PackDiff(ctx context.Context, subject, key string, side model.Side) (docs.Pack, bool, error) {
 	if side == model.SideNewer {
 		return o.newerPack(ctx, subject, key)
@@ -92,11 +92,11 @@ func (o *Observer) newerPack(ctx context.Context, subject, key string) (docs.Pac
 	if pack, ok := o.cachedDetail(cacheKey); ok {
 		return pack, true, nil
 	}
-	if err := o.acquire(ctx); err != nil {
+	if err := o.acquire(ctx, o.detailSlot); err != nil {
 		return docs.Pack{}, false, err
 	}
-	defer o.release()
-	// A request that waited for the worker can find the answer that another request got.
+	defer o.release(o.detailSlot)
+	// A request that waited for the slot can find the answer that another request got.
 	if pack, ok := o.cachedDetail(cacheKey); ok {
 		return pack, true, nil
 	}

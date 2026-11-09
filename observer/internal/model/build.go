@@ -50,7 +50,7 @@ func Build(in Input) Summary {
 }
 
 func (c Clock) health() Health {
-	return Health{Every: ShortDuration(c.Every), FailedRuns: c.FailedRuns, LastError: c.LastError}
+	return Health{Every: ShortDuration(c.Every), FailedRuns: c.FailedRuns, LastError: c.LastError, Running: c.Running}
 }
 
 // view holds what the rows need from the two cycles, so that a row does not search for it.

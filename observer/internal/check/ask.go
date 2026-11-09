@@ -25,9 +25,9 @@ type askKey struct {
 //
 // An answer stays in memory until the pin moves or the process restarts. A second call for an answered
 // move sends nothing. A request that failed is not an answer, so the next call asks again. The second
-// result is false when the profile, the pack, or the move is not known. The call waits for a cycle that
-// holds the worker, and it ends with the context. A versions cycle can run during the wait and move
-// the pin. So the call reads the pin again when it has the worker, and the answer belongs to the move
+// result is false when the profile, the pack, or the move is not known. The call waits for a versions
+// cycle that holds the versions slot, and it ends with the context. That cycle can move the pin during
+// the wait. So the call reads the pin again when it has the slot, and the answer belongs to the move
 // that the page shows.
 func (o *Observer) Ask(ctx context.Context, subject, key string) (model.Answer, bool, error) {
 	pin, move, ok := o.pinOf(subject, key)
@@ -38,15 +38,15 @@ func (o *Observer) Ask(ctx context.Context, subject, key string) (model.Answer, 
 	if a, ok := o.cachedAsk(k); ok && a.Answered() {
 		return a, true, nil
 	}
-	if err := o.acquire(ctx); err != nil {
+	if err := o.acquire(ctx, o.versionsSlot); err != nil {
 		return model.Answer{}, false, err
 	}
-	defer o.release()
-	// No cycle runs while this call holds the worker, so the pin that it reads now holds until the end.
+	defer o.release(o.versionsSlot)
+	// No versions cycle runs while this call holds the slot, so the pin that it reads now holds until the end.
 	if pin, move, ok = o.pinOf(subject, key); !ok {
 		return model.Answer{}, false, nil
 	}
-	// A request that waited for the worker can find the answer that another request got.
+	// A request that waited for the slot can find the answer that another request got.
 	k = askKey{subject, move}
 	if a, ok := o.cachedAsk(k); ok && a.Answered() {
 		return a, true, nil

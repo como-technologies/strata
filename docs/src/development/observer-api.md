@@ -331,9 +331,9 @@ page changes.
   status has no answer, and the page sends no request for it.
 - A move that strata could not compare has no counts. Its row shows a dash and
   "Not read", and "Not checked" names its pack.
-- A detail request that fails is not kept. A 503 is a normal answer while a
-  cycle holds the slot. The page then shows the splash "One moment, a check is
-  running" with a button "Try now". Another failure shows an amber splash. The
+- A detail request that fails is not kept. A 503 says that the request waited 50
+  seconds for a process of the pool. The page then shows the splash "One moment, a
+  check is running" with a button "Try now". Another failure shows an amber splash. The
   next render that a person or the clock causes asks again. A render that an
   answer causes does not, so two requests that fail do not ask each other again
   without end.
@@ -542,9 +542,9 @@ which `internal/runner` starts.
   each refusal has a fixed text. The header stops a page of another origin in the
   browser of a person: such a page sends another value, or none. It stops no other
   client, so the gate stays `create` on `pods/portforward`.
-- **The slot.** `Observer.Ask` takes the slot of the worker with `acquire`, as the
-  detail route does. One `strata` process runs at a time, so the click waits for a
-  cycle. The limit is `detailTimeout`, 50 seconds. A stop or the limit gives `503`, and
+- **The slot.** `Observer.Ask` takes the versions slot with `acquire`, so no versions
+  cycle moves the pin while Palette answers, and the click waits for a versions cycle
+  that runs. The limit is `detailTimeout`, 50 seconds. A stop or the limit gives `503`, and
   another error gives `502`. A click that waited looks at the answers again, so two
   clicks on one move send one question.
 - **The question.** `Ask` finds the pin of the move in the last good versions cycle.

@@ -18,7 +18,8 @@ func (o *Observer) WithAlerts(e *alert.Engine) *Observer {
 // alertStep hands the last content cycle to the alerts. good says that the cycle ended well, and held
 // holds the findings that this content cannot clear. A cycle that failed only lets the alert "lost"
 // open: a failed read clears nothing. The step plans under the lock and sends outside it, so a slow
-// webhook never holds a request of the page. The worker runs it, so no two steps run together.
+// webhook never holds a request of the page. The content cycle runs it in its slot, so no two steps
+// run together.
 func (o *Observer) alertStep(ctx context.Context, good bool, held map[string]bool) {
 	if o.alerts == nil || ctx.Err() != nil {
 		return

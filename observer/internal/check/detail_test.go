@@ -184,12 +184,15 @@ func (s *slowStrata) Run(ctx context.Context, dir string, args ...string) (runne
 	return s.Strata.Run(ctx, dir, args...)
 }
 
-func TestARequestWaitsForTheCycleAndNeverRunsAProcessWithIt(t *testing.T) {
+// The two cycles and a request of the detail tier run at the same time, and the pool bounds their
+// processes: with a pool of 2, two processes run together and never three.
+func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 	r, w := withBehind(t)
 	ctx := context.Background()
 	if err := r.observer(w).RunVersions(ctx); err != nil {
 		t.Fatal(err)
 	}
+	r.cfg.Processes = 2
 	slow := &slowStrata{Strata: w}
 	o := r.restart(slow)
 	var wg sync.WaitGroup
@@ -201,8 +204,8 @@ func TestARequestWaitsForTheCycleAndNeverRunsAProcessWithIt(t *testing.T) {
 		_, _, _ = o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
 	}()
 	wg.Wait()
-	if slow.mostAt != 1 {
-		t.Errorf("%d processes ran together", slow.mostAt)
+	if slow.mostAt != 2 {
+		t.Errorf("%d processes ran together, want the 2 of the pool", slow.mostAt)
 	}
 }
 
@@ -216,10 +219,16 @@ func TestARequestThatWaitsEndsWithItsContext(t *testing.T) {
 	if err := o.RunVersions(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := o.acquire(ctx); err != nil { // a cycle holds the worker
-		t.Fatal(err)
+	for range cap(o.procs) { // the cycles hold each token of the pool
+		if err := o.acquire(ctx, o.procs); err != nil {
+			t.Fatal(err)
+		}
 	}
-	defer o.release()
+	defer func() {
+		for range cap(o.procs) {
+			o.release(o.procs)
+		}
+	}()
 	short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
 	if _, ok, err := o.PackDiff(short, moveSubject, "k8s/kubernetes", model.SideNewer); ok || !errors.Is(err, context.DeadlineExceeded) {

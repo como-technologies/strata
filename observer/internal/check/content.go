@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sync"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
@@ -133,7 +134,9 @@ func (o *Observer) readContent(ctx context.Context, dir string, set baseline.Set
 		return err
 	}
 	var doc docs.VerifySummary
+	o.expect(ctx, 1) // the read of the cluster
 	if len(names) > 0 {
+		o.expect(ctx, 1)
 		if doc, err = o.verify(ctx, dir, names); err != nil {
 			return err
 		}
@@ -217,30 +220,42 @@ func runsProfile(read docs.ClusterRead, r docs.Record) bool {
 }
 
 // compareRecords gives each record its `verify` row and, when the cluster runs it, its `compare` with
-// the cluster side. The side comes from the raw answers, so it makes no request. When a side or a
+// the cluster side. The side comes from the raw answers, so it makes no request. The records compare
+// at the same time, as many as the pool of processes lets, and keep their order. When a side or a
 // compare fails, the record gets no Diff and the page says "not read". When all of them fail, the
 // cycle fails, because the cluster side is then not readable at all.
 func (o *Observer) compareRecords(ctx context.Context, dir string, entries []baseline.Entry, names []string, rows map[string]docs.VerifyRow, read docs.ClusterRead) ([]model.Record, error) {
-	out := make([]model.Record, 0, len(entries))
+	out := make([]model.Record, len(entries))
+	errs := make([]error, len(entries))
+	var wg sync.WaitGroup
+	for i, e := range entries {
+		out[i] = model.Record{File: e.File, Doc: e.Record}
+		if row, ok := rows[names[i]]; ok {
+			out[i].Row = &row
+		}
+		if out[i].Cluster.Runs = runsProfile(read, e.Record); out[i].Cluster.Runs {
+			o.expect(ctx, 2) // the side, and its compare
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				out[i].Cluster.Diff, errs[i] = o.compareSide(ctx, dir, names[i], i, e.Record.Source.Name)
+			}()
+		}
+	}
+	wg.Wait()
 	var attempted, failed int
 	var first error
-	for i, e := range entries {
-		rec := model.Record{File: e.File, Doc: e.Record}
-		if row, ok := rows[names[i]]; ok {
-			rec.Row = &row
+	for i := range out {
+		if !out[i].Cluster.Runs {
+			continue
 		}
-		if rec.Cluster.Runs = runsProfile(read, e.Record); rec.Cluster.Runs {
-			attempted++
-			diff, err := o.compareSide(ctx, dir, names[i], i, e.Record.Source.Name)
-			if err != nil {
-				failed++
-				if first == nil {
-					first = err
-				}
+		attempted++
+		if errs[i] != nil {
+			failed++
+			if first == nil {
+				first = errs[i]
 			}
-			rec.Cluster.Diff = diff
 		}
-		out = append(out, rec)
 	}
 	if attempted > 0 && failed == attempted {
 		return nil, first

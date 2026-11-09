@@ -256,7 +256,9 @@ func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
 	}
 }
 
-func TestTheFirstCycleOfEachTimerRunsAtTheStartAndOneProcessRunsAtATime(t *testing.T) {
+// Each timer runs its first cycle at the start, in its own loop: the two cycles overlap, and the pool
+// keeps the processes at its size.
+func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *testing.T) {
 	r, w := withBehind(t)
 	w.delay = 5 * time.Millisecond
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = time.Hour, time.Hour
@@ -272,8 +274,8 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndOneProcessRunsAtATime(t *testi
 	if w.count(runner.CmdVerify) != 1 || w.count(runner.CmdBehind) != 1 {
 		t.Errorf("verify %d, behind %d", w.count(runner.CmdVerify), w.count(runner.CmdBehind))
 	}
-	if w.maxActive != 1 {
-		t.Errorf("%d processes ran at once", w.maxActive)
+	if w.maxActive < 2 || w.maxActive > defaultProcesses {
+		t.Errorf("%d processes ran at once, want from 2 to %d", w.maxActive, defaultProcesses)
 	}
 }
 
@@ -287,8 +289,8 @@ func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	testkit.WaitFor(t, "three cycles of each timer", func() bool { return w.count(runner.CmdVerify) >= 3 && w.count(runner.CmdBehind) >= 3 })
 	cancel()
 	<-done
-	if w.maxActive != 1 {
-		t.Errorf("%d processes ran at once", w.maxActive)
+	if w.maxActive > defaultProcesses {
+		t.Errorf("%d processes ran at once, and the pool has %d", w.maxActive, defaultProcesses)
 	}
 }
 
@@ -326,5 +328,60 @@ func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 	}
 	if snapshots != 2 {
 		t.Errorf("%d snapshots", snapshots)
+	}
+}
+
+// gatedStrata holds each `behind` until the test opens the gate, and lets each other command run.
+type gatedStrata struct {
+	Strata
+	gate    chan struct{}
+	waiting chan struct{}
+}
+
+func (g *gatedStrata) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
+	if args[0] == runner.CmdBehind {
+		g.waiting <- struct{}{}
+		select {
+		case <-g.gate:
+		case <-ctx.Done():
+			return runner.Result{}, ctx.Err()
+		}
+	}
+	return g.Strata.Run(ctx, dir, args...)
+}
+
+// A content cycle ends while a versions cycle waits for its `behind`: each cycle has its own slot. The
+// summary shows the progress of the versions cycle while it runs, and drops it at the end. The log has
+// a line for the start and the end of each cycle, with the number of processes.
+func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.T) {
+	r, w := withBehind(t)
+	g := &gatedStrata{Strata: w, gate: make(chan struct{}), waiting: make(chan struct{}, 1)}
+	o := r.observer(g)
+	ctx := context.Background()
+	versions := make(chan error, 1)
+	go func() { versions <- o.RunVersions(ctx) }()
+	<-g.waiting // the versions cycle holds its slot, and its `behind` runs
+	if err := o.RunContent(ctx); err != nil {
+		t.Fatalf("the content cycle: %v", err)
+	}
+	running := o.Summary().Versions.Running
+	if running == nil || running.Done != 0 || running.Total != 1 {
+		t.Fatalf("the progress of the versions cycle during its behind: %+v", running)
+	}
+	if o.Summary().Content.Running != nil {
+		t.Error("the content cycle ended, and the summary still shows its progress")
+	}
+	close(g.gate)
+	if err := <-versions; err != nil {
+		t.Fatalf("the versions cycle: %v", err)
+	}
+	if o.Summary().Versions.Running != nil {
+		t.Error("the versions cycle ended, and the summary still shows its progress")
+	}
+	log := r.log.String()
+	for _, want := range []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the log has no %q", want)
+		}
 	}
 }

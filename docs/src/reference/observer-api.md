@@ -79,7 +79,7 @@ plain text. The route `/` serves the page of the dashboard.
 | `405` | The method is not the method of the route. The header `Allow` names it. |
 | `421` | The `Host` header is not `localhost` or a loopback address. A person can choose the local port, so the port can be any port. |
 | `502` | The detail route asked for a compare of the `newer` side, and the compare failed. Or the click failed in the observer. The next request asks again. |
-| `503` | The detail route or the click did not end in 50 seconds. The usual cause is a cycle that holds the slot of the worker. |
+| `503` | The detail route or the click did not end in 50 seconds. The usual cause of a click is a versions cycle that holds its slot. |
 
 ## The images
 
@@ -280,8 +280,8 @@ be one that the last good versions cycle found for that profile.
 The click runs `strata behind <record> --pin <layer>/<name>` once, on the record of
 the profile. That sends one `POST /v1/clusterprofiles/{uid}/validate/packs` to
 Palette for each record that pins the pack. A record of a profile version gives one.
-It sends no other write. The click waits for the slot of the worker, so it waits for
-a cycle that runs. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+It sends no other write. The click waits for the versions slot, so it waits for a
+versions cycle that runs. [The page of `behind`](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
 says what the answer of Palette covers.
 
 The reply is one answer, also when the request to Palette failed. The reply has the

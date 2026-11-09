@@ -33,10 +33,18 @@ type Config struct {
 	State         string
 	ContentEvery  time.Duration
 	VersionsEvery time.Duration
+	// Processes is the most strata processes that run at one time. 0 is defaultProcesses.
+	Processes int
 }
 
-// Observer runs the cycles and keeps the last good answer of each. One worker runs the cycles, so
-// one strata process runs at a time. A call of Summary can happen while a cycle runs.
+// defaultProcesses keeps the memory of the pod in its limit: each strata process holds the documents
+// that it reads, and a compare of a large pack holds two of them.
+const defaultProcesses = 4
+
+// Observer runs the cycles and keeps the last good answer of each. A content cycle and a versions
+// cycle run at the same time, each in its own slot, so a long versions cycle never delays a check of
+// the content. The pool of processes bounds the strata processes of both, and of the detail tier. A
+// call of Summary can happen while a cycle runs.
 type Observer struct {
 	cfg    Config
 	strata Strata
@@ -49,9 +57,16 @@ type Observer struct {
 	jitter func() float64
 	log    *slog.Logger
 
-	// worker has one slot. A strata process runs only while its holder has the slot, so that a cycle and
-	// a request of the detail tier never run two processes at once.
-	worker chan struct{}
+	// contentSlot and versionsSlot each let one cycle of their kind run. A click "Ask Palette" holds the
+	// versions slot, so that no versions cycle moves the pin while Palette answers.
+	contentSlot, versionsSlot chan struct{}
+	// detailSlot lets one compare of the detail tier run. A request that waited for it finds the answer of
+	// the request before it in memory, so many requests for one move run one compare.
+	detailSlot chan struct{}
+	// procs has one token for each strata process that can run at one time.
+	procs chan struct{}
+	// running holds the progress of the cycle of each kind that runs now. The lock guards it.
+	running map[string]*model.Running
 
 	mu       sync.Mutex
 	state    State
@@ -76,8 +91,13 @@ func New(cfg Config, strata Strata, log *slog.Logger) *Observer {
 }
 
 func newObserver(cfg Config, strata Strata, log *slog.Logger, now func() time.Time) *Observer {
+	procs := cfg.Processes
+	if procs <= 0 {
+		procs = defaultProcesses
+	}
 	o := &Observer{cfg: cfg, strata: strata, now: now, jitter: rand.Float64, log: log,
-		worker: make(chan struct{}, 1), details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{}}
+		contentSlot: make(chan struct{}, 1), versionsSlot: make(chan struct{}, 1), detailSlot: make(chan struct{}, 1), procs: make(chan struct{}, procs),
+		running: map[string]*model.Running{}, details: map[string]docs.Pack{}, asks: map[askKey]model.Answer{}}
 	state, err := loadState(cfg.State)
 	if err != nil {
 		log.Error("the state cannot be read", "kind", docs.KindIO)
@@ -105,9 +125,15 @@ func (o *Observer) sweep() {
 	}
 }
 
-// run starts one strata command and writes one log line: the command, the exit code, the duration,
-// and the kind of the error. The line holds no argument and no output.
+// run starts one strata command when the pool has a token, and writes one log line: the command, the
+// exit code, the duration, and the kind of the error. The line holds no argument and no output. The
+// process counts as one step of the cycle of ctx.
 func (o *Observer) run(ctx context.Context, dir string, exits []int, args ...string) (runner.Result, error) {
+	if err := o.acquire(ctx, o.procs); err != nil {
+		return runner.Result{}, err
+	}
+	defer o.release(o.procs)
+	defer o.step(ctx)
 	start := time.Now()
 	res, err := o.strata.Run(ctx, dir, args...)
 	if err == nil && !slices.Contains(exits, res.Exit) {
@@ -128,7 +154,7 @@ func (o *Observer) RunContent(ctx context.Context) error {
 	var content model.Content
 	var good bool
 	var held map[string]bool
-	err := o.runCycle(ctx, "content", &o.state.Content,
+	err := o.runCycle(ctx, cycleContent, o.contentSlot, &o.state.Content,
 		func(ctx context.Context) (files int, err error) {
 			content, files, err = o.contentCycle(ctx)
 			return files, err
@@ -163,7 +189,7 @@ func (o *Observer) heldIDs(content model.Content) map[string]bool {
 // RunVersions runs one versions cycle, and keeps its answer or its failure.
 func (o *Observer) RunVersions(ctx context.Context) error {
 	var versions model.Versions
-	return o.runCycle(ctx, "versions", &o.state.Versions,
+	return o.runCycle(ctx, cycleVersions, o.versionsSlot, &o.state.Versions,
 		func(ctx context.Context) (files int, err error) {
 			versions, files, err = o.versionsCycle(ctx)
 			return files, err
@@ -177,31 +203,78 @@ func (o *Observer) RunVersions(ctx context.Context) error {
 		})
 }
 
-// runCycle runs one cycle in the slot of the worker. read runs the cycle and gives the number of
-// record files, which is -1 when the directory was not read. keep stores the answer of a cycle that
-// worked, with the lock held. A failure goes to clock, and a good cycle clears it.
-func (o *Observer) runCycle(ctx context.Context, name string, clock *ClockState, read func(context.Context) (int, error), keep func()) error {
-	if err := o.acquire(ctx); err != nil {
+// The names of the two cycles, in the log, in the progress, and in the context of a cycle.
+const (
+	cycleContent  = "content"
+	cycleVersions = "versions"
+)
+
+type cycleKey struct{}
+
+// runCycle runs one cycle in its slot. read runs the cycle and gives the number of record files, which
+// is -1 when the directory was not read. keep stores the answer of a cycle that worked, with the lock
+// held. A failure goes to clock, and a good cycle clears it. The log has one line when the cycle starts
+// and one when it ends, with the number of strata processes that it ran.
+func (o *Observer) runCycle(ctx context.Context, name string, slot chan struct{}, clock *ClockState, read func(context.Context) (int, error), keep func()) error {
+	if err := o.acquire(ctx, slot); err != nil {
 		return err
 	}
-	defer o.release()
+	defer o.release(slot)
 	start := time.Now()
-	files, err := read(ctx)
+	o.mu.Lock()
+	o.running[name] = &model.Running{StartedAt: o.now().UTC()}
+	o.mu.Unlock()
+	o.log.Info("cycle", "cycle", name, "phase", "start")
+	files, err := read(context.WithValue(ctx, cycleKey{}, name))
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	processes := o.running[name].Done
+	delete(o.running, name)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	o.mu.Lock()
-	defer o.mu.Unlock()
 	o.readFiles(files)
 	if err != nil {
-		o.fail(name, clock, start, err)
+		o.fail(name, clock, start, processes, err)
 		return err
 	}
 	keep()
 	*clock = ClockState{}
-	o.log.Info("cycle", "cycle", name, "verdict", "ok", "duration", time.Since(start).Round(time.Millisecond))
+	o.log.Info("cycle", "cycle", name, "phase", "end", "verdict", "ok", "processes", processes, "duration", time.Since(start).Round(time.Millisecond))
 	o.save()
 	return nil
+}
+
+// expect adds n processes to the progress of the cycle of ctx. A call with no cycle does nothing.
+func (o *Observer) expect(ctx context.Context, n int) {
+	o.progress(ctx, func(r *model.Running) { r.Total += n })
+}
+
+// step counts one process of the cycle of ctx as done.
+func (o *Observer) step(ctx context.Context) {
+	o.progress(ctx, func(r *model.Running) {
+		r.Done++
+		r.Total = max(r.Total, r.Done)
+	})
+}
+
+func (o *Observer) progress(ctx context.Context, change func(*model.Running)) {
+	name, _ := ctx.Value(cycleKey{}).(string)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if r := o.running[name]; r != nil {
+		change(r)
+	}
+}
+
+// runningOf gives a copy of the progress of a cycle, or nil. The caller holds the lock.
+func (o *Observer) runningOf(name string) *model.Running {
+	r := o.running[name]
+	if r == nil {
+		return nil
+	}
+	c := *r
+	return &c
 }
 
 // readFiles keeps the number of record files of the last read. -1 says that the read failed.
@@ -212,7 +285,7 @@ func (o *Observer) readFiles(files int) {
 }
 
 // fail keeps the last answer, adds 1 to the failed runs, and keeps the kind and the status.
-func (o *Observer) fail(name string, clock *ClockState, start time.Time, err error) {
+func (o *Observer) fail(name string, clock *ClockState, start time.Time, processes int, err error) {
 	clock.FailedRuns++
 	ref := model.ErrorRef{Kind: docs.KindUnknown}
 	var re *runner.RunError
@@ -220,8 +293,8 @@ func (o *Observer) fail(name string, clock *ClockState, start time.Time, err err
 		ref = model.ErrorRef{Kind: re.Kind, Status: re.Status}
 	}
 	clock.LastError = &ref
-	o.log.Info("cycle", "cycle", name, "verdict", "failed", "kind", ref.Kind, "status", ref.Status, "failedRuns", clock.FailedRuns,
-		"duration", time.Since(start).Round(time.Millisecond))
+	o.log.Info("cycle", "cycle", name, "phase", "end", "verdict", "failed", "kind", ref.Kind, "status", ref.Status, "failedRuns", clock.FailedRuns,
+		"processes", processes, "duration", time.Since(start).Round(time.Millisecond))
 	o.save()
 }
 
@@ -313,9 +386,9 @@ func (o *Observer) input() model.Input {
 		Now: o.now(), ClusterUID: o.cfg.ClusterUID, StartedAt: o.state.StartedAt,
 		Files: o.files, FilesKnown: o.filesKnown,
 		Content:       o.content,
-		ContentClock:  model.Clock{Every: o.cfg.ContentEvery, Last: o.contentAt, FailedRuns: o.state.Content.FailedRuns, LastError: o.state.Content.LastError},
+		ContentClock:  model.Clock{Every: o.cfg.ContentEvery, Last: o.contentAt, FailedRuns: o.state.Content.FailedRuns, LastError: o.state.Content.LastError, Running: o.runningOf(cycleContent)},
 		Versions:      o.versions,
-		VersionsClock: model.Clock{Every: o.cfg.VersionsEvery, Last: o.versionsAt, FailedRuns: o.state.Versions.FailedRuns, LastError: o.state.Versions.LastError},
+		VersionsClock: model.Clock{Every: o.cfg.VersionsEvery, Last: o.versionsAt, FailedRuns: o.state.Versions.FailedRuns, LastError: o.state.Versions.LastError, Running: o.runningOf(cycleVersions)},
 		FirstSeen:     firstSeen,
 		ReadPods:      o.pods != nil,
 		FirstDigests:  o.state.Images.First,
@@ -350,48 +423,41 @@ func (o *Observer) wait(every time.Duration) time.Duration {
 	return every + time.Duration(float64(every)*jitterShare*o.jitter())
 }
 
-// Run runs the first cycle of each timer at the start, and then each cycle after its wait, until
-// ctx ends. It is the one worker: a cycle ends before the next one starts.
+// Run runs each timer in its own loop until ctx ends: the first cycle at the start, and each next one
+// after its wait. A content cycle never waits for a versions cycle.
 func (o *Observer) Run(ctx context.Context) {
-	contentDue, versionsDue := o.now(), o.now()
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.ContentEvery, o.RunContent) }()
+	go func() { defer wg.Done(); o.loop(ctx, o.cfg.VersionsEvery, o.RunVersions) }()
+	wg.Wait()
+}
+
+// loop runs one kind of cycle, then waits its period and a random share of it. The failure of a cycle
+// is in the state and in the log.
+func (o *Observer) loop(ctx context.Context, every time.Duration, cycle func(context.Context) error) {
 	for ctx.Err() == nil {
-		if wait := earlier(contentDue, versionsDue).Sub(o.now()); wait > 0 {
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
-			}
-		}
-		if !o.now().Before(contentDue) && ctx.Err() == nil {
-			_ = o.RunContent(ctx) // the failure is in the state and in the log
-			contentDue = o.now().Add(o.wait(o.cfg.ContentEvery))
-		}
-		if !o.now().Before(versionsDue) && ctx.Err() == nil {
-			_ = o.RunVersions(ctx) // the failure is in the state and in the log
-			versionsDue = o.now().Add(o.wait(o.cfg.VersionsEvery))
+		_ = cycle(ctx)
+		timer := time.NewTimer(o.wait(every))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
 		}
 	}
 }
 
-func earlier(a, b time.Time) time.Time {
-	if b.Before(a) {
-		return b
-	}
-	return a
-}
-
-// acquire waits for the slot of the worker. It gives up when ctx ends.
-func (o *Observer) acquire(ctx context.Context) error {
+// acquire waits for a token of slot. It gives up when ctx ends.
+func (o *Observer) acquire(ctx context.Context, slot chan struct{}) error {
 	select {
-	case o.worker <- struct{}{}:
+	case slot <- struct{}{}:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (o *Observer) release() {
-	<-o.worker
+func (o *Observer) release(slot chan struct{}) {
+	<-slot
 }

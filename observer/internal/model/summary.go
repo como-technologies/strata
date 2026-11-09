@@ -58,6 +58,17 @@ type Health struct {
 	Every      string    `json:"every"`
 	FailedRuns int       `json:"failedRuns"`
 	LastError  *ErrorRef `json:"lastError"`
+	// Running is the progress of the cycle that runs now. It is absent between two cycles.
+	Running *Running `json:"running,omitempty"`
+}
+
+// Running is the progress of a cycle: when it started, and how many strata processes it ran of the
+// ones that it knows of. Total grows when a step finds more work: a versions cycle knows its moves only
+// after its first process.
+type Running struct {
+	StartedAt time.Time `json:"startedAt"`
+	Done      int       `json:"done"`
+	Total     int       `json:"total"`
 }
 
 // ContentClock is the timer of the content cycle. CheckedAt is the end of the last good cycle.

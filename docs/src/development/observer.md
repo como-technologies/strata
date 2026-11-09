@@ -66,8 +66,18 @@ the pods](#the-read-of-the-pods).
 
 - A cycle starts at the start of the process, and then after its period. Each
   wait has a random 0 to 10 percent added.
-- One worker runs the cycles. One `strata` process runs at a time, and a run
-  ends after 10 minutes.
+- Each timer runs in its own loop, and each kind of cycle has its own slot. So a
+  content cycle never waits for a versions cycle, and one cycle of each kind runs at
+  a time. A pool of 4 tokens bounds the `strata` processes of both cycles and of the
+  detail tier, to keep the memory of the pod in its limit. A run ends after 10
+  minutes.
+- A content cycle compares the side of each record at the same time, and a versions
+  cycle compares each move that it does not know at the same time, as many as the
+  pool lets.
+- The log has one line when a cycle starts and one when it ends, with `phase`,
+  `verdict`, the number of `processes`, and the `duration`. While a cycle runs,
+  `/v1/cluster` gives its progress in `running`: `startedAt`, `done`, and `total`. A
+  versions cycle knows its moves only after `behind`, so `total` grows then.
 - A cycle makes a directory under `--work` with mode `0700`. It writes the
   records, `raw/`, and the sides there. It removes the directory at the end,
   also after an error.
@@ -379,7 +389,7 @@ move must be one that the last good versions cycle found for the profile.
 The click runs `behind` on the record of the profile with `--pin`, and reads the
 `bump` of the pin in the document. An answer holds the `profile`, the `key`, the
 `newest` version, the `verdict`, the `refusals`, and the `status`. The click waits for
-the slot of the worker. A versions cycle can run during the wait, so the click reads the
+the versions slot. A versions cycle can run during the wait, so the click reads the
 move again when it has the slot.
 
 | `verdict` | When |
@@ -436,7 +446,7 @@ of a variable, no text of a diff, and no answer of Palette.
 | `cluster` | `uid`, `name`, and the two flags of the cluster when a finding exists. |
 | `page`, `strataVersion` | The page state, and the version of the `strata` binary. |
 | `records` | `count`, `baseline`, `revision`, `firstSeenFrom`, and `startedAt`. |
-| `content`, `versions` | `checkedAt` or `readAt`, `every`, `failedRuns`, and `lastError`: the kind and the status, or `null`. |
+| `content`, `versions` | `checkedAt` or `readAt`, `every`, `failedRuns`, and `lastError`: the kind and the status, or `null`. While a cycle runs, `running`: `startedAt`, `done`, and `total`. |
 | `counts` | The numbers at the top of the page. |
 | `findings` | The findings of the table above. |
 | `profiles` | Each profile: `status`, `published`, `clusterCopy`, and its packs. |
