@@ -381,7 +381,7 @@ observer and keeps it. The code of Palette shows these steps. No live run shows 
 yet.
 
 1. **A tenant admin adds the registry once.** It is an OCI registry of the type
-   `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`, and a
+   `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`. It uses a
    classic token with the scope `read:packages`. Palette lets only a role at tenant
    scope add a registry. A project role can then use it.
 2. **Make the Secret of the key and the pull Secret with `kubectl`**, as in steps 1
@@ -393,8 +393,9 @@ yet.
    the namespace and its label `restricted`, and Palette makes the namespace with it.
 4. **Attach the profile to the cluster.**
 
-When you remove the profile, Palette deletes the namespace of the layer, and the key
-goes with it.
+The code of Palette deletes the namespace of a Helm layer when you remove the profile.
+No run shows it yet. If the namespace stays, delete it with `kubectl`, so that the key
+goes.
 
 A live run applied the manifests of [Install](#install) as one manifest layer of a
 profile. It shows what Palette does with that layer:
@@ -405,6 +406,9 @@ profile. It shows what Palette does with that layer:
   its record.
 - **The profile of the observer has no record.** The page lists it under "Not
   checked", and it shows no finding for it.
+- **A removal deletes the Deployment.** When you remove the profile from the cluster,
+  Palette deletes the Deployment. No run shows what happens to the namespace. Delete
+  the namespace with `kubectl delete namespace strata-observer`, so that the key goes.
 
 An edit of the profile that drops an object from the manifest leaves the object on
 the cluster. To remove it, delete it with `kubectl`. See [An object that an edit
