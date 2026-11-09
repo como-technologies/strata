@@ -493,7 +493,8 @@ of the pods](../development/observer.md#a-failed-read-of-the-pods) gives the rul
 The page of a pack shows the text of its diff, beside the table of settings. The
 Values tab shows the raw values as a diff block. The Manifests tab shows the text of
 each changed, added, or removed manifest. A control "Unified / Split" on both tabs
-chooses between two layouts of the same text.
+chooses between two layouts of the same text. A long line wraps, and a phone shows
+the unified layout.
 
 Each cycle passes `--full` to `strata compare` and to `strata verify`. The documents
 then carry the text in the field `unified`: see [See the full

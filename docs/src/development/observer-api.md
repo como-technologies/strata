@@ -138,9 +138,11 @@ A side with a change has four tabs:
 
 The card opens on the first tab that has a change. An empty tab says so, and it links
 to the first other tab that has a change. A control "Unified / Split" on the tabs of
-values and manifests chooses between two layouts of the same text. A pack with
-`textTooLarge` shows the splash "Too much rock to carry", and it gives the command
-`strata compare ... --full`. The table of the newer versions and the card "Move to"
+values and manifests chooses between two layouts of the same text. A long line wraps
+in its column, so the text never scrolls sideways. At 640 pixels and below, two
+columns are too narrow to read: the page shows the unified layout, with no control.
+A pack with `textTooLarge` shows the splash "Too much rock to carry", and it gives the
+command `strata compare ... --full`. The table of the newer versions and the card "Move to"
 of a pack show the button "Ask Palette". The text and the answers come from the
 detail tier only.
 
@@ -149,10 +151,11 @@ detail tier only.
 The head of the card shows the five change flags. A flag keeps one color: lit or dim
 is the signal. A color for each flag competes with the colors of the statuses.
 
-- A hover or a focus on a flag shows what it means, lit or dim. The words come from
+- A hover on a flag shows what it means, lit or dim. The words come from
   the table in [Change flags and impact](../reference/impact.md), and `FLAG_WORDS` in
   `app.js` holds the one copy of them. A keyboard reaches the words too, because each
-  flag takes the focus.
+  flag takes the focus. A click with a mouse leaves no words open, and the page shows
+  the words of one flag at a time.
 - A lit flag with a tab is a link to that tab. `AUTHORED` opens the first of Values and
   Manifests that has a change. `IMAGES` opens Images, and `CHARTS` opens Charts.
 - `IDENTITY` and `UPSTREAM` have no tab, so they stay plain. A dim flag is no link.
@@ -421,7 +424,8 @@ them:
   message.
 - The tiles fill each row. With no `--read-pods`, the tile "Image changes" is absent,
   and the other four tiles fill the row. The page never scrolls sideways: a table that
-  does not fit scrolls inside its own card.
+  does not fit scrolls inside its own card, and a long line of a diff wraps.
+- At 640 pixels and below, a diff shows the unified layout.
 
 ### Try each state
 

@@ -160,15 +160,17 @@ td.vm{vertical-align:top}
 .vl.a{background:var(--add);color:var(--addw)}
 .vl.d .no{background:var(--del)}
 .vl.a .no{background:var(--add)}
-/* The text of a diff. A table of lines scrolls sideways in its own box, so a long line never widens the page. */
+/* The text of a diff. A long line wraps in its own column, so the reader never scrolls sideways. The table has a fixed
+   layout: the columns of the numbers keep their width, and the two sides of a split view each take a half. */
 .dblock + .dblock,.tw + .dblock{border-top:1px solid var(--line)}
 .dblock{scroll-margin-top:64px}
 .diffhead{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;align-items:center;padding:7px 15px;background:var(--panel2);border-bottom:1px solid var(--line);font:12.5px var(--mono)}
 .diffhead > span:first-child{min-width:0;overflow-wrap:anywhere}
-.diff{font:12.5px/20px var(--mono);overflow-x:auto}
-.diff table{width:100%;min-width:640px}
-.diff td{padding:0 10px;border:0;white-space:pre;vertical-align:top}
-.diff td.no{width:44px;min-width:44px;text-align:right;color:var(--mut);background:var(--gut);user-select:none;padding:0 8px}
+.diff{font:12.5px/20px var(--mono)}
+.diff table{width:100%;table-layout:fixed}
+.diff col.no{width:48px}
+.diff td{padding:0 10px;border:0;white-space:pre-wrap;overflow-wrap:anywhere;vertical-align:top}
+.diff td.no{text-align:right;color:var(--mut);background:var(--gut);user-select:none;padding:0 8px;white-space:nowrap}
 .diff td + td + td.no{border-left:1px solid var(--line)}
 .diff tr.a td.c{background:var(--add);color:var(--addw)}
 .diff tr.a td.no{background:var(--add)}
@@ -178,8 +180,8 @@ td.vm{vertical-align:top}
 .diff tr.n td{color:var(--mut)}
 .diff td.ca{background:var(--add);color:var(--addw)}
 .diff td.cd{background:var(--del);color:var(--delw)}
-.pre{font:12.5px/1.7 var(--mono);background:var(--panel2);border-top:1px solid var(--line);padding:9px 15px;overflow-x:auto;white-space:pre}
-.note{border-left:3px solid var(--gry);background:var(--gry-t);padding:9px 12px;border-radius:0 5px 5px 0;font-size:13px}
+.pre{font:12.5px/1.7 var(--mono);background:var(--panel2);border-top:1px solid var(--line);padding:9px 15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.note{border-left:3px solid var(--gry);background:var(--gry-t);padding:9px 12px;border-radius:0 5px 5px 0;font-size:13px;overflow-wrap:anywhere}
 .note.a{border-color:var(--amb);background:var(--amb-t)}
 .note.r{border-color:var(--red);background:var(--red-t)}
 ul.tight{margin:0;padding-left:18px}
@@ -311,7 +313,10 @@ a.btn{display:inline-block}
 .flagw .badge:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 a.badge:hover{text-decoration:none;filter:brightness(.95)}
 .tip{display:none;position:absolute;top:100%;right:0;z-index:6;margin-top:4px;width:max-content;max-width:min(300px,80vw);padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--panel);box-shadow:0 2px 8px rgba(20,30,50,.18);font-size:12.5px;font-weight:400;line-height:1.4;white-space:normal;text-align:left;color:var(--ink)}
-.flagw:hover .tip,.flagw:focus-within .tip{display:block}
+/* One tip at a time. A hover shows the tip, and so does a focus from the keyboard. A click with a mouse also gives the
+   focus, but no tip stays after it, and a flag with the focus hides its tip while the pointer is on another flag. */
+.flagw:hover .tip,.flagw:has(:focus-visible) .tip{display:block}
+.flags:hover .flagw:not(:hover) .tip{display:none}
 .tip b{display:block;font-weight:600}
 .meta div span.bright{display:inline;color:var(--ink);font-size:12.5px}
 @media (max-width:760px){

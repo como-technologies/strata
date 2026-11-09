@@ -384,7 +384,7 @@ page as markup, and on a screen that throws. */
 // The tags and the attributes that a screen can hold.
 var (
 	anyTag     = regexp.MustCompile(`<[^>]*>`)
-	validTag   = regexp.MustCompile(`^</?(div|span|a|nav|section|table|thead|tbody|tr|th|td|h1|h2|h3|p|b|i|em|code|button|input|select|option|label|details|summary|ul|li|noscript|svg|path)(\s+[a-zA-Z][a-zA-Z0-9-]*(="[^"<>]*")?)*\s*/?>$`)
+	validTag   = regexp.MustCompile(`^</?(div|span|a|nav|section|table|colgroup|col|thead|tbody|tr|th|td|h1|h2|h3|p|b|i|em|code|button|input|select|option|label|details|summary|ul|li|noscript|svg|path)(\s+[a-zA-Z][a-zA-Z0-9-]*(="[^"<>]*")?)*\s*/?>$`)
 	handler    = regexp.MustCompile(`(?i)\son[a-z]+=`)
 	attrValue  = regexp.MustCompile(`="[^"]*"`)
 	hrefValues = regexp.MustCompile(`href="([^"]*)"`)

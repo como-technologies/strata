@@ -656,8 +656,12 @@ func TestEachFlagHasItsWordsAndALitFlagWithATabOpensIt(t *testing.T) {
 		}
 	}
 	css := string(readPage(t, "app.css"))
-	if got := ruleOf(css, ".flagw:hover .tip,.flagw:focus-within .tip"); got != "display:block;" {
-		t.Errorf("the words of a flag show on hover and on focus: the rule is %q", got)
+	if got := ruleOf(css, ".flagw:hover .tip,.flagw:has(:focus-visible) .tip"); got != "display:block;" {
+		t.Errorf("the words of a flag show on hover and on a focus from the keyboard: the rule is %q", got)
+	}
+	// One tip at a time: a flag that keeps the focus hides its tip while the pointer is on another flag.
+	if got := ruleOf(css, ".flags:hover .flagw:not(:hover) .tip"); got != "display:none;" {
+		t.Errorf("two tips can show at once: the rule is %q", got)
 	}
 	if !strings.Contains(ruleOf(css, ".tip"), "display:none;") {
 		t.Error("the words of a flag show before a hover or a focus")

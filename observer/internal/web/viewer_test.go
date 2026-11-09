@@ -174,7 +174,7 @@ func splitRowsOf(text string) []string {
 }
 
 var (
-	diffTable = regexp.MustCompile(`(?s)<div class="diff"><table><tbody>(.*?)</tbody></table></div>`)
+	diffTable = regexp.MustCompile(`(?s)<div class="diff"><table class="(?:unified|split)"><colgroup>.*?</colgroup><tbody>(.*?)</tbody></table></div>`)
 	diffRow   = regexp.MustCompile(`<tr(?: class="([^"]*)")?>(.*?)</tr>`)
 	diffCell  = regexp.MustCompile(`<td(?: class="([^"]*)")?(?: colspan="4")?>([^<]*)</td>`)
 )
@@ -961,14 +961,15 @@ func TestAnAnswerWithMarkupShowsAsText(t *testing.T) {
 	}
 }
 
-// The rules of the style for the viewer keep the phone and the two themes: a diff scrolls in its own
-// box, the text keeps its spaces, and each color of the diff is a token with a light and a dark value.
+// The rules of the style for the viewer keep the phone and the two themes: a long line of a diff wraps
+// in its own column, the text keeps its spaces, and each color of the diff is a token with a light and a
+// dark value.
 func TestTheStyleOfTheViewerKeepsThePhoneAndTheThemes(t *testing.T) {
 	css := string(readPage(t, "app.css"))
 	for selector, want := range map[string][]string{
-		".diff":           {"overflow-x:auto;"},
-		".diff table":     {"min-width:640px;"},
-		".diff td":        {"white-space:pre;", "border:0;"},
+		".diff table":     {"table-layout:fixed;", "width:100%;"},
+		".diff col.no":    {"width:48px;"},
+		".diff td":        {"white-space:pre-wrap;", "overflow-wrap:anywhere;", "border:0;"},
 		".diff td.no":     {"user-select:none;", "background:var(--gut);"},
 		".diff tr.a td.c": {"background:var(--add);", "color:var(--addw);"},
 		".diff tr.d td.c": {"background:var(--del);", "color:var(--delw);"},

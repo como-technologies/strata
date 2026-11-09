@@ -1246,12 +1246,25 @@ function splitRows(rows) {
   return out;
 }
 
+// NARROW is the width below which two columns of a split view are too thin to read. There the page shows the unified
+// layout and no control of the layout.
+const NARROW = "(max-width: 640px)";
+const narrow = () => typeof matchMedia === "function" && matchMedia(NARROW).matches;
+
+// The columns of each layout. A table with a fixed layout takes its widths from these, so a long line wraps in its own
+// column and never pushes the other side away.
+const COLS = {
+  unified: h`<colgroup><col class="no"><col class="no"><col></colgroup>`,
+  split: h`<colgroup><col class="no"><col><col class="no"><col></colgroup>`,
+};
+
 // diffBlock draws the head and the lines of one diff. The control of the layout sits in the head, and it sets the one layout of the page.
 // With an id, a link of the page can jump to the block.
 function diffBlock(title, op, rows, id) {
-  const seg = h`<span class="seg" role="group" aria-label="Diff layout">${VIEWS.map(([k, l]) => h`<button data-view="${k}" aria-pressed="${S.view === k ? "true" : "false"}" class="${S.view === k ? "on" : ""}">${l}</button>`)}</span>`;
-  const lines = S.view === "split" ? splitRows(rows) : unifiedRows(rows);
-  return h`<div class="dblock"${id ? h` id="${id}"` : ""}><div class="diffhead"><span>${title}${op ? h` <span class="mut">${op}</span>` : ""} <span class="now">+${countOf(rows, "+")}</span> <span class="was">-${countOf(rows, "-")}</span></span>${seg}</div><div class="diff"><table><tbody>${lines}</tbody></table></div></div>`;
+  const view = narrow() ? "unified" : S.view;
+  const seg = narrow() ? "" : h`<span class="seg" role="group" aria-label="Diff layout">${VIEWS.map(([k, l]) => h`<button data-view="${k}" aria-pressed="${S.view === k ? "true" : "false"}" class="${S.view === k ? "on" : ""}">${l}</button>`)}</span>`;
+  const lines = view === "split" ? splitRows(rows) : unifiedRows(rows);
+  return h`<div class="dblock"${id ? h` id="${id}"` : ""}><div class="diffhead"><span>${title}${op ? h` <span class="mut">${op}</span>` : ""} <span class="now">+${countOf(rows, "+")}</span> <span class="was">-${countOf(rows, "-")}</span></span>${seg}</div><div class="diff"><table class="${view}">${COLS[view]}<tbody>${lines}</tbody></table></div></div>`;
 }
 
 // tooLargeNote tells that the observer kept no text, and it names the command that prints the text.
@@ -1606,6 +1619,8 @@ function start() {
     if (k) S.open[k] = ev.target.open;
   }, true);
   addEventListener("hashchange", () => { render(); scrollTo(0, 0); });
+  // A turn of a phone, or a window made narrow, changes the layout of a diff.
+  if (typeof matchMedia === "function") matchMedia(NARROW).addEventListener("change", render);
   render();
   refresh();
   setInterval(refresh, REFRESH_MS);

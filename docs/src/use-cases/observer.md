@@ -119,9 +119,9 @@ check `diff-text` of [What the live example verifies](../development/live-runs.m
 reads the text from the pod on a cluster that Palette built, through the port-forward.
 
 The head of the card shows the five change flags. A lit flag is violet, and a flag that
-did not light is dim. A hover or a focus shows what a flag means, with the words of
-[Change flags and impact](../reference/impact.md). A lit flag that has a tab opens that
-tab. `AUTHORED` opens Values, or Manifests when only a manifest changed.
+did not light is dim. A hover, or a focus from the keyboard, shows what a flag means,
+with the words of [Change flags and impact](../reference/impact.md). A lit flag that has
+a tab opens that tab. `AUTHORED` opens Values, or Manifests when only a manifest changed.
 
 The last card of the page of a profile, and of a pack, is "Check this yourself". It gives
 the commands that answer the same questions at your terminal. Each row has a question, a
