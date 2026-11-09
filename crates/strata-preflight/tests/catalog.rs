@@ -2720,8 +2720,8 @@ fn command_text(line: &str) -> String {
                 continue;
             }
         };
-        // a double quote ends at a double quote with no backslash before it, and a template at
-        // the first `}`: the second `}` is the next character
+        // a double quote ends at a double quote with no backslash before it. A template ends at
+        // its first `}`, and the second `}` is the next character.
         while let Some(inner) = chars.next() {
             if inner == '\\' && end == '"' {
                 chars.next();
@@ -2767,10 +2767,10 @@ fn written_files(text: &str) -> Vec<&str> {
         .collect()
 }
 
-/// What `line` changes, when it changes something. A change is a word of [`CHANGES`], a `POST`
-/// to a route that is not a validate route, or a write of a file outside the current directory.
-/// A validate route of Palette checks a body and writes nothing. `request.json` and `body.json`
-/// of the lines that a report adds are files of the current directory.
+/// What `line` changes, when it changes something. A change is a word of [`CHANGES`], or a
+/// `POST` to a route that is not a validate route. A write of a file outside the current
+/// directory is a change too. A validate route of Palette checks a body. `request.json` and
+/// `body.json` of the lines that a report adds are files of the current directory.
 fn change_in(line: &str) -> Option<String> {
     let text = command_text(line);
     let words: Vec<&str> = text
@@ -2799,7 +2799,7 @@ fn change_in(line: &str) -> Option<String> {
 /// nothing. The report of #613 printed `api.sh delete-named` for `versions-outside-state`: the
 /// line deletes each version of the profile, also the version that the cluster runs. The test
 /// reads each line of each engine. It also reads the lines that a report prints for the fault
-/// fixture of each rule, with the lines that the report adds for the check.
+/// fixture of each rule. The report adds lines for the check to them.
 #[test]
 fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
     let catalog = catalog::builtin().unwrap();
