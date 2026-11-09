@@ -79,7 +79,8 @@ of a job and the page that describes it.
 
 This section follows one team through one change. The tenant has the projects
 `dev` and `prod`. Each runs `aws-stack@1.0.0` on a cluster `payments`, and the
-cluster in `prod` has the label `env=prod`. The saved tag filter `production`
+cluster in `prod` has the label `env=prod`. In `dev`, `payments` also runs three
+add-on profiles, as many clusters do. The saved tag filter `production`
 selects that label. The repository of the team has `main`, with a record of
 each project.
 
@@ -180,6 +181,10 @@ gives the rule for the label.
 ```text
 {{#include output/loop-cluster.txt}}
 ```
+
+The record holds `aws-stack`, so the cluster side holds `aws-stack` alone. The
+add-on profiles of `payments` are not in the question. The two questions to
+Palette above hold `aws-stack` alone too.
 
 ### 4. The promotion
 

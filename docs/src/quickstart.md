@@ -23,8 +23,8 @@ replaces no node.
 ## With a tenant
 
 These steps use the tenant of this book. Its project `dev` holds the versions
-1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. Its cluster `payments` runs 1.1.0.
-With your own tenant, put your project, profile, and cluster names in place of
+1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. Its cluster `payments` runs 1.1.0 and
+three add-on profiles, as many clusters do. With your own tenant, put your project, profile, and cluster names in place of
 these. `strata list` prints yours.
 
 <div class="playground-demo">
@@ -73,9 +73,12 @@ names who can change it. Run this check on a schedule:
 {{#include output/quickstart-cluster.txt}}
 ```
 
-`IDENTICAL`: the cluster runs the recorded release. A cluster has no
-consumers, so the `consumers` line gives the profile side alone. Palette lists
-`payments` as one of the clusters that use the version.
+`IDENTICAL`: the cluster runs the recorded release. The record holds
+`aws-stack` alone, so the cluster side holds `aws-stack` alone, and not the
+three add-on profiles. See
+[Compare a profile version with a cluster](./commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+A cluster has no consumers, so the `consumers` line gives the profile side
+alone. Palette lists `payments` as one of the clusters that use the version.
 
 ### 5. See what the next version changes
 

@@ -9,7 +9,9 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 
-use super::{CLUSTER_FIELD, SNAPSHOT_SCHEMA, SubjectKind, macro_placeholder, parse_document};
+use super::{
+    CLUSTER_FIELD, SNAPSHOT_SCHEMA, Source, SubjectKind, macro_placeholder, parse_document,
+};
 use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
@@ -195,7 +197,7 @@ pub(super) fn take_record(
     Ok(Some(cluster))
 }
 
-/// Read the field `cluster` of [`Source`](super::Source) from a record of any release.
+/// Read the field `cluster` of [`Source`] from a record of any release.
 ///
 /// A record of strata 0.24 and before holds the read errors of the cluster in two fields. A later
 /// record holds them in [`ClusterSource::errors`]. This function reads both into `errors`. So a
@@ -595,6 +597,27 @@ impl AppliedProfile {
                 .then_with(|| a.uid.cmp(&b.uid))
         });
         pairs
+    }
+
+    /// The profile of `running` that a move to the profile version `target` replaces.
+    ///
+    /// It is the profile with the uid of `target`, else the profile with its name. Else, when
+    /// `target` builds a cluster, it is the profile that builds the cluster: a cluster runs one.
+    /// `None` for an add-on that the cluster does not run, because the move adds it.
+    pub(crate) fn replaced_by<'a>(
+        running: &'a [AppliedProfile],
+        target: &Source,
+    ) -> Option<&'a AppliedProfile> {
+        let builds_cluster = |p: &&AppliedProfile| ProfileType::text_builds_cluster(&p.kind);
+        running
+            .iter()
+            .find(|p| p.uid == target.uid)
+            .or_else(|| running.iter().find(|p| p.name == target.name))
+            .or_else(|| {
+                ProfileType::text_builds_cluster(&target.kind)
+                    .then(|| running.iter().find(builds_cluster))
+                    .flatten()
+            })
     }
 
     /// The cluster or infra profile comes first: a cluster runs it before any add-on.

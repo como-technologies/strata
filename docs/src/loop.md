@@ -80,6 +80,11 @@ The record is a file with the content of the version and its root, which is one
 digest of that content. These commands change nothing in Palette. You now hold a
 copy of what you run, in Git.
 
+A cluster can run more profiles than the record, such as the add-on profiles of
+each team. The comparison then holds only the profile of the record, so exit
+`0` says that the cluster runs it. See
+[Compare a profile version with a cluster](./commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+
 ### 3. Comment on each pull request
 
 Add this job first. It shows what a change does when a person reviews it. It reads

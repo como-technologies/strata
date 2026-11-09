@@ -75,6 +75,12 @@ pub(super) const SHOP: &str = "64f6000000000000000000a1";
 pub(super) const SHOP_DEV: &str = "64f7000000000000000000a1";
 // the manifest pack of platform-addons
 pub(super) const ADDONS_PACK: &str = "64e2000000000000000000d1";
+// observability@1.0.0 and payments-apps@1.0.0: two more add-on profiles of payments in dev, each
+// with a manifest pack of its own
+pub(super) const OBSERVABILITY: &str = "64e2000000000000000000c1";
+pub(super) const OBSERVABILITY_PACK: &str = "64e2000000000000000000d5";
+pub(super) const PAYMENTS_APPS: &str = "64e2000000000000000000c2";
+pub(super) const PAYMENTS_APPS_PACK: &str = "64e2000000000000000000d6";
 // aws-stack@1.1.13 to 1.1.17: the content of 1.1.1, whose Kubernetes pack names one more image. The
 // image moves from a short tag (1.1.13) to a build tag (1.1.14) and to another registry (1.1.15).
 // Then it gets a digest that changes (1.1.16 and 1.1.17)

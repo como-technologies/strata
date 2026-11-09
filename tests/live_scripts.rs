@@ -7207,6 +7207,39 @@ fn loop_sh_stage_9_reads_the_log_of_the_unknown_values_from_a_state_folder_in_th
     );
 }
 
+/// Cluster A runs the release and the add-on. A strata that holds each profile on the cluster side
+/// fails the checks of #615, and a strata that holds the release alone passes them.
+#[test]
+fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_alone() {
+    for whole in [false, true] {
+        let mut stage = lab_stage();
+        let addon = stage.path("out/repo/releases/addon.json");
+        std::fs::create_dir_all(addon.parent().unwrap()).unwrap();
+        std::fs::write(&addon, r#"{"packs":[{"name":"strata-addon"}]}"#).unwrap();
+        let (exit, report) = if whole {
+            (
+                1,
+                r#"{"a":{"ref":"cluster:c-a"},"packs":[{"name":"kubernetes"},{"name":"strata-addon"}]}"#,
+            )
+        } else {
+            (
+                0,
+                r#"{"a":{"ref":"cluster:c-a/strata-live-profile"},"packs":[{"name":"kubernetes"}]}"#,
+            )
+        };
+        stage.strata("compare repo/releases/1.0.0.json cluster:c-a", exit, "");
+        stage.strata("compare cluster:c-a n-1 --repave --json", 1, report);
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        passed(&steps, &["ask-repave-plain"]);
+        let checks = ["cluster-plain", "ask-repave-plain-says"];
+        if whole {
+            failed(&steps, &checks);
+        } else {
+            passed(&steps, &checks);
+        }
+    }
+}
+
 #[test]
 fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
     let mut stage = lab_stage();

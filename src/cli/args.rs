@@ -201,7 +201,9 @@ impl OutputArgs {
 pub(crate) struct CompareArgs {
     /// The first side: a ref or a snapshot file
     pub(crate) a: String,
-    /// The second side, in the same forms as the first
+    /// The second side, in the same forms as the first. Beside a profile version,
+    /// cluster:<cluster> holds only the profile that the version replaces, as
+    /// cluster:<cluster>/<profile> does. Beside a cluster group, it holds the profiles of the group
     pub(crate) b: String,
     /// Also print the unified diffs of the values and the manifests
     #[arg(long)]

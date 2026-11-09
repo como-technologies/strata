@@ -13,7 +13,7 @@ use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
 use crate::reference::Ref;
-use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
+use crate::snapshot::{AppliedProfile, GroupMember, Snapshot, Source, SubjectKind};
 use crate::term::progress::Progress;
 
 mod behind;
@@ -203,11 +203,7 @@ where
 {
     options.check(reference)?;
     let text = reference.to_string();
-    // a ref that a request answers connects first, and the record names the project of the client
-    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| {
-        let palette = connect()?;
-        Ok(read(&palette)?.with_project(palette.project_uid()))
-    };
+    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, read);
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(names_a_set(reference)),
@@ -266,6 +262,20 @@ where
             )
         }),
     }
+}
+
+/// The record that `read` makes through the [`Palette`] that `connect` returns. A ref that a
+/// request answers connects first, and the record names the project of the client.
+fn read_live<A, F>(
+    connect: F,
+    read: impl FnOnce(&Palette<A>) -> Result<Snapshot>,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
+    let palette = connect()?;
+    Ok(read(&palette)?.with_project(palette.project_uid()))
 }
 
 /// A record of the published template of the profile `uid`, with what `options` add.
@@ -482,11 +492,14 @@ fn held_snapshot<A: PaletteApi>(
 
 /// The two sides of a comparison, each as [`snapshot_for`] reads it.
 ///
-/// One side can be a cluster group, and the other side a cluster ref that selects no profile. The
-/// cluster side then holds only the profiles that the group pins. The question is whether the
-/// member runs the pin, and not what else it runs. So the function takes the other side first.
-/// `connect` gives the [`Palette`] for each side that a request answers, and `fetched_at` is the
-/// time of the read, in RFC 3339.
+/// A cluster ref that selects no profile holds only the profiles that the other side asks about.
+/// Beside a cluster group, it holds the profiles that the group pins. Beside one version of a
+/// cluster profile, it holds the profile that the version replaces, as [`validate_body`] does:
+/// the profile with the uid of the version, else with its name, else the profile that builds the
+/// cluster when the version builds one. The question is whether the cluster runs the pin or the
+/// version, and not what else it runs. So the function reads the other side first. Two clusters
+/// stay whole. `connect` gives the [`Palette`] for each side that a request answers, and
+/// `fetched_at` is the time of the read, in RFC 3339.
 ///
 /// # Errors
 ///
@@ -506,25 +519,82 @@ where
     let content = SnapshotOptions::default();
     if open(a) && !open(b) {
         let sb = snapshot_for(b, &content, &mut connect, fetched_at, progress)?;
-        let sa = snapshot_for(
-            &narrowed(a, &sb),
-            &content,
-            &mut connect,
-            fetched_at,
-            progress,
-        )?;
+        let sa = side_beside(a, &sb, &mut connect, fetched_at, progress)?;
         Ok((sa, sb))
     } else {
         let sa = snapshot_for(a, &content, &mut connect, fetched_at, progress)?;
-        let sb = snapshot_for(
-            &narrowed(b, &sa),
-            &content,
-            &mut connect,
-            fetched_at,
-            progress,
-        )?;
+        let sb = side_beside(b, &sa, &mut connect, fetched_at, progress)?;
         Ok((sa, sb))
     }
+}
+
+/// The record of `r`, one side of a comparison, beside `other`, the record of the other side: see
+/// [`snapshot_pair`].
+fn side_beside<A, F>(
+    r: &Ref,
+    other: &Snapshot,
+    connect: F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
+    match r {
+        Ref::Cluster {
+            uid,
+            profile: None,
+            pending,
+        } if other.source.is_profile_version() => read_live(connect, |palette| {
+            cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
+        }),
+        _ => snapshot_for(
+            &narrowed(r, other),
+            &SnapshotOptions::default(),
+            connect,
+            fetched_at,
+            progress,
+        ),
+    }
+}
+
+/// The record of the cluster `uid` beside the profile version `target`: it holds only the profile
+/// that `target` replaces, and the record names the ref as `cluster:<uid>/<profile>`.
+///
+/// The cluster document shows the profile, so the selection comes after the read. A cluster that
+/// runs no profile that `target` replaces stays whole, because the move adds `target`. With
+/// `pending`, the record holds the update that waits for the cluster.
+fn cluster_beside<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    pending: bool,
+    target: &Source,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
+    let running = AppliedProfile::of_cluster(&raw.cluster);
+    let profile = AppliedProfile::replaced_by(&running, target).map(|p| p.name.clone());
+    let reference = Ref::Cluster {
+        uid: uid.to_string(),
+        profile: profile.clone(),
+        pending,
+    };
+    let reads = HolderReads {
+        profile: profile.as_deref(),
+        pending,
+        ..HolderReads::default()
+    };
+    holder_snapshot(
+        palette,
+        SubjectKind::Cluster,
+        raw,
+        uid,
+        &reads,
+        &reference.to_string(),
+        fetched_at,
+    )
 }
 
 /// `cluster:<uid>` narrowed to the profiles that `other` pins, when `other` is a cluster group.
