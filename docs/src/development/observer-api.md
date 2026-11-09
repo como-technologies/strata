@@ -243,7 +243,8 @@ The tone sets the look of the mark and its animation:
 
 | Tone | The mark | The animation | Use |
 | --- | --- | --- | --- |
-| `calm` | The four colors of the logo. | The slabs breathe. | The check ended well and found nothing. |
+| `calm` | The four colors of the logo. | The slabs breathe. | The check ended well and found nothing. It speaks for the whole page. |
+| `same` | As `calm`. | As `calm`. | One comparison that strata read found no difference. It speaks for one place. |
 | `build` | The four colors. | The slabs stack. | A read is on its way. |
 | `off` | An outline. | The dashes march. | Off by a choice of the team, or nothing to compare with. |
 | `warn` | Amber. | The slabs pulse. | A read failed, or part of the layer is hidden. |
@@ -278,8 +279,9 @@ The rule of a state:
 
 On a page that fails the gate, no screen shows a calm tone. A place that a limit touches
 gets an amber mark, and any other place gets an outline. An open finding is no limit.
-A page with a finding and no other fault shows the outline `off` on a place with
-nothing to show, such as the side "Undisturbed" of a pack.
+The tone `same` is no claim about the page, so the gate does not touch it: a side that
+strata read and found the same says "Undisturbed" with the mark `same`, also on a page
+with a finding. The outline stays for a place that is off, or that has nothing yet.
 
 These places have a splash:
 
@@ -302,14 +304,15 @@ These places have a splash:
 | The pods run no image | `off` | `md` | No image to list |
 | The read of the pods failed | `warn` | `md` | The pods stay silent |
 | Alerts are not set | `off` | `md` | Nobody gets paged yet |
-| A side with no change | `calm` or `off` | `md` | Undisturbed |
+| A side with no change | `same` | `md` | Undisturbed |
 | A pack that was not checked | `warn` | `md` | Part of this layer is hidden |
 | A side that was not read | `warn` | `md` | This side was not read |
 | The observer holds no changes for a side | `off` | `sm` | No changes held |
 | A diff that a cycle holds | `build` | `sm` | One moment, a check is running |
 | A diff that failed | `warn` | `sm` | The observer could not read these changes |
 | A text above the cap | `off` | `sm` | Too much rock to carry |
-| An empty tab, no event, and a filter with no match | `calm` or `off` | line | The sentence of the line |
+| An empty tab, and a move that changes only the build | `same` | line | The sentence of the line |
+| No event, and a filter with no match | `calm` or `off` | line | The sentence of the line |
 
 A test of `internal/web` fails for each rule. It draws each place and checks the tone,
 the headline, the fact, and the next step. It fails when a page with a finding, a failed

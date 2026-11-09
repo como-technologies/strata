@@ -261,6 +261,9 @@ details summary:hover{background:var(--panel2)}
 .slabs.tone-lost .s0{fill:var(--red)}
 .slabs.tone-calm .s{animation:breathe 4.6s ease-in-out infinite}
 .slabs.tone-calm .s1{animation-delay:.28s}.slabs.tone-calm .s2{animation-delay:.56s}.slabs.tone-calm .s3{animation-delay:.84s}
+/* SAME looks as CALM does: one place that a check read and found the same. */
+.slabs.tone-same .s{animation:breathe 4.6s ease-in-out infinite}
+.slabs.tone-same .s1{animation-delay:.28s}.slabs.tone-same .s2{animation-delay:.56s}.slabs.tone-same .s3{animation-delay:.84s}
 .slabs.tone-build .s{animation:rise 2.2s ease-in-out infinite both}
 .slabs.tone-build .s0{animation-delay:.9s}.slabs.tone-build .s1{animation-delay:.6s}.slabs.tone-build .s2{animation-delay:.3s}
 .slabs.tone-off .s{animation:march 9s linear infinite}

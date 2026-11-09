@@ -65,7 +65,9 @@ const ASK_COVERS = "Palette checked the profile with the new version and its def
 const VIEWS = [["unified", "Unified"], ["split", "Split"]];
 const NO_EOL = "\\ No newline at end of file";
 // The tone of a splash sets the look of its mark and its animation. The size is the place: the page, a card, or a line.
-const TONE = {CALM: "calm", BUILD: "build", OFF: "off", WARN: "warn", LOST: "lost"};
+// SAME is the mark of one comparison that strata read and found the same: it looks as CALM does. CALM speaks for the whole page, so a
+// finding anywhere takes it away; SAME speaks for one place, and stays.
+const TONE = {CALM: "calm", SAME: "same", BUILD: "build", OFF: "off", WARN: "warn", LOST: "lost"};
 const SIZE = {PAGE: "lg", CARD: "md", LINE: "sm"};
 // The geometry of the mark in assets/logo/strata-mark-dark.svg, one path for each slab, from the top one down.
 // app.css gives each slab its color, because the policy of the page refuses an inline style.
@@ -1330,7 +1332,7 @@ const firstTab = d => (tabCounts(d).find(([k]) => hasChange(d, k)) || ["values"]
 function emptyTab(id, d, here, noun) {
   const other = tabCounts(d).find(([k]) => k !== here && hasChange(d, k));
   const link = other ? h`<button type="button" class="lnk" data-tab="${id}" data-k="${other[0]}">The change is on ${other[1]} →</button>` : "";
-  return h`<div class="body">${inline(quietTone(), `No ${noun} changed${other ? " here" : ""}.`, link)}</div>`;
+  return h`<div class="body">${inline(TONE.SAME, `No ${noun} changed${other ? " here" : ""}.`, link)}</div>`;
 }
 
 function changesPanel(list, noun, head, id, d) {
@@ -1528,7 +1530,7 @@ function comparePanel(id, d, href, command) {
     case "none": return {flags: "", inner: splash(TONE.OFF, "No changes held", "The observer holds no changes for this side.", "", SIZE.LINE)};
     case "ok": {
       const data = d.data, tab = S.tabs[id] || firstTab(data);
-      if (sameContent(data)) return {flags: flagRow(data, id, href), inner: h`${buildTable(data)}<div class="body">${inline(TONE.OFF, sameContentWords(data.impact.text))}</div>`};
+      if (sameContent(data)) return {flags: flagRow(data, id, href), inner: h`${buildTable(data)}<div class="body">${inline(TONE.SAME, sameContentWords(data.impact.text))}</div>`};
       const panel = tab === "manifests" ? manifestsPanel(data, id, command) : tab === "images" ? changesPanel(data.imageChanges, "image", "Repository", id, data) : tab === "charts" ? changesPanel(data.chartChanges, "chart", "Chart", id, data) : valuesPanel(data, id, command);
       return {flags: flagRow(data, id, href), inner: h`${buildTable(data)}${tabBar(id, tabCounts(data), tab)}${panel}`};
     }
@@ -1574,9 +1576,11 @@ function sideFacts(x, p, row, changed) {
 }
 
 // undisturbed is the splash of a side with no change.
+// undisturbed is the splash of a side that strata read and found the same as the record. That is a result of a check, so it takes the
+// mark SAME wherever the rest of the cluster stands. The outline is for a place that is off, or that has nothing yet.
 function undisturbed(side, list) {
   const words = side === SIDE.CLUSTER ? "The copy of this cluster holds what the record holds." : "The published version holds what the record holds.";
-  return splash(quietTone(), "Undisturbed", words, facts(list), SIZE.CARD);
+  return splash(TONE.SAME, "Undisturbed", words, facts(list), SIZE.CARD);
 }
 
 // notCheckedSplash is the splash of a pack that strata did not check in full. It names the cause, and it points to the screen of the causes.

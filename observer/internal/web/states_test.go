@@ -140,12 +140,12 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{`<div class="next"><b>Next</b> Turn on the alerts when you install the observer. The book of strata tells how, in The observer: Alerts.</div>`}},
 		{"a pack that matches its record", func(t *testing.T) string {
 			return pageOf(t, crawl(t, devdata.StateQuiet), "#k-fred-identity@2.3.0/addon/dex", "")
-		}, "calm", "md", "Undisturbed",
+		}, "same", "md", "Undisturbed",
 			[]string{"The published version holds what the record holds."},
 			[]string{`<b class="ok">Same</b><span>Published now</span>`, `<b class="ok">Same</b><span>This cluster&#39;s copy</span>`, `<b class="ok">Current</b><span>No newer version</span>`}},
 		{"a pack that matches its record, on a page with findings", func(t *testing.T) string {
 			return pageOf(t, crawl(t, devdata.StateOK), "#k-fred-identity@2.3.0/addon/reloader", "")
-		}, "off", "md", "Undisturbed", []string{"The published version holds what the record holds."},
+		}, "same", "md", "Undisturbed", []string{"The published version holds what the record holds."},
 			[]string{`<b class="ok">Same</b><span>Published now</span>`, `<b class="ok">Current</b><span>No newer version</span>`}},
 		{"a pack that was not checked", func(t *testing.T) string {
 			return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/addon/velero", "")
@@ -164,7 +164,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{"<code>strata compare record.json fred-identity@2.3.0 --full</code>"}},
 		{"an empty tab", func(t *testing.T) string {
 			return pageWith(t, "testdata/api", devdata.StateOK, dexHash, `S.tabs["`+dexTab+`"] = "images"`)
-		}, "off", "inl", "",
+		}, "same", "inl", "",
 			[]string{"<span>No image changed here.</span>", `<button type="button" class="lnk" data-tab="` + dexTab + `" data-k="values">The change is on Values →</button>`}, nil},
 		{"a filter with no match", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateOK), "#profiles", "search none") }, "off", "inl", "",
 			[]string{`<span>No profile matches <span class="m">no profile has this name</span>.</span>`, `<button type="button" class="lnk" data-clear="filter">Clear the filter</button>`}, nil},
@@ -276,7 +276,8 @@ func TestAPageWithAFindingAFailedReadOrACauseShowsNoCalmTone(t *testing.T) {
 }
 
 // The test above fails without the rule. A copy of the script whose gate of the calm tone always says yes shows a calm tone on
-// the set ok, which holds a finding and two causes.
+// the set ok with no events, which holds a finding and two causes: the card of the events says "All quiet". A place that one
+// check found the same takes the tone same, which is no claim about the page, so the set ok needs the empty list of events.
 func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 	gate := regexp.MustCompile(`(?m)^const calmOk = .*$`)
 	script := string(readPage(t, "app.js"))
@@ -287,14 +288,19 @@ func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "app.js"), []byte(gate.ReplaceAllString(script, "const calmOk = () => true;")), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	quiet := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"events.json": func([]byte) []byte { return []byte(`{"events":[]}`) }})
 	var screens []screen
-	if err := json.Unmarshal(runNodeAssets(t, dir, "testdata/api", devdata.StateOK), &screens); err != nil {
+	if err := json.Unmarshal(runNodeAssets(t, dir, quiet, "scratch"), &screens); err != nil {
 		t.Fatal(err)
 	}
 	if got := calmScreens(screens); len(got) == 0 {
 		t.Error("without the rule, the page with a finding still shows no calm tone: the test cannot fail")
 	}
-	if got := calmScreens(crawl(t, devdata.StateOK)); len(got) != 0 {
+	var real []screen
+	if err := json.Unmarshal(runNodeAssets(t, "assets", quiet, "scratch"), &real); err != nil {
+		t.Fatal(err)
+	}
+	if got := calmScreens(real); len(got) != 0 {
 		t.Errorf("the real script shows a calm tone on %q", got)
 	}
 }
