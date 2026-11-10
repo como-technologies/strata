@@ -315,17 +315,24 @@ fn latest_reads_a_version_that_does_not_parse_by_its_three_numbers_and_ties_two_
 }
 
 /// Issue #714. `1.2.develop` holds no three numbers, so Palette reads no version in it. Strata put
-/// it above each version, and `@latest` took it over `1.10.0`. Now it is below each version.
+/// it above each version, and `@latest` took it over `1.10.0`. Now it is a pre-release of `1.2.0`,
+/// as the crate `versions` orders it.
 #[test]
 fn latest_skips_a_text_with_no_three_numbers_while_the_name_has_a_version() {
     let listing = json!({"items": [
         {"metadata": {"name": "short", "uid": "u1"}, "spec": {"version": "1.2.develop"}},
         {"metadata": {"name": "short", "uid": "u2"}, "spec": {"version": "1.10.0"}},
         {"metadata": {"name": "short", "uid": "u3"}, "spec": {"version": "1.9.0"}},
+        {"metadata": {"name": "barney", "uid": "u10"}, "spec": {"version": "1.1.8"}},
+        {"metadata": {"name": "barney", "uid": "u11"}, "spec": {"version": "1.1.8.develop"}},
+        {"metadata": {"name": "barney", "uid": "u12"}, "spec": {"version": "1.1.10"}},
+        {"metadata": {"name": "barney", "uid": "u13"}, "spec": {"version": "1.2.develop"}},
         {"metadata": {"name": "rc", "uid": "u4"}, "spec": {"version": "1.2.develop"}},
         {"metadata": {"name": "rc", "uid": "u5"}, "spec": {"version": "1.0.0-rc.1"}},
         {"metadata": {"name": "texts", "uid": "u6"}, "spec": {"version": "1.2.develop"}},
         {"metadata": {"name": "texts", "uid": "u7"}, "spec": {"version": "1.10.develop"}},
+        {"metadata": {"name": "word", "uid": "u14"}, "spec": {"version": "develop"}},
+        {"metadata": {"name": "word", "uid": "u15"}, "spec": {"version": "1.2.develop"}},
         {"metadata": {"name": "vee", "uid": "u8"}, "spec": {"version": "v1.1.8.1"}},
         {"metadata": {"name": "vee", "uid": "u9"}, "spec": {"version": "1.1.8.1"}},
     ]});
@@ -335,10 +342,12 @@ fn latest_skips_a_text_with_no_three_numbers_while_the_name_has_a_version() {
         .with("/v1/clusterprofiles/u9", json!({"metadata": {"uid": "u9"}}));
     let p = Palette::new(api);
     assert_eq!(p.resolve_latest("short").unwrap(), "u2");
-    // a pre-release holds a version, so `@latest` takes it first
-    assert_eq!(p.resolve_latest("rc").unwrap(), "u5");
-    // with no version, the natural order decides
+    assert_eq!(p.resolve_latest("barney").unwrap(), "u12");
+    // with no version that is no pre-release, the highest pre-release is the answer
+    assert_eq!(p.resolve_latest("rc").unwrap(), "u4");
     assert_eq!(p.resolve_latest("texts").unwrap(), "u7");
+    // a text with no version is the answer only when no item holds a version
+    assert_eq!(p.resolve_latest("word").unwrap(), "u15");
     // a `v` in front does not count, so `v1.1.8.1` and `1.1.8.1` are one version, as `v1.1.8` and
     // `1.1.8` are
     let err = p.resolve_latest("vee").unwrap_err();

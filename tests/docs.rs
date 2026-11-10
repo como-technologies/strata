@@ -1836,9 +1836,9 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
         (
             "src/reference/version.rs",
-            "Two strings with no three numbers keep",
+            "Two strings with no version keep",
         ),
-        ("src/reference/version.rs", "Three forms are a pre-release:"),
+        ("src/reference/version.rs", "Five forms are a pre-release:"),
         ("src/candidate/resolve.rs", "The documents are those that"),
         (
             "src/candidate/resolve.rs",
@@ -4255,56 +4255,76 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
 }
 
 /// Issue #714. The book stated that a text with no three numbers, such as `1.2.develop`, is above
-/// each version. Release 0.33.0 puts it below each version, and a `v` in front does not count in a
-/// tie. The rule of `@latest`, the pages of Palette, and the section of the release state it.
+/// each version. brett changed the answer: where Palette gives no order or reads no version, strata
+/// follows the crate `versions`, and the rules of Palette stay. The rule of `@latest`, the pages of
+/// Palette and of `behind`, the rules of the code, and the section of the release state it.
 #[test]
-fn the_book_states_that_a_text_with_no_three_numbers_is_below_each_version() {
+fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
     let page = read(&docs().join("reference/compatibility.md"));
     let release = release_section(&page, "0.33.0");
     for needle in [
-        "**A text with no three numbers is below each version.**",
+        "**One or two numbers and a tail of text make a pre-release of the version of the numbers.**",
         "`<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
-        "`behind` names no such text as newer than a version.",
+        "So `behind --pre-release` names `1.2.develop` as newer than `1.1.10`.",
+        "**A text with no number at its start and no three numbers is below each version.**",
+        "`1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`.",
+        "`1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below `1.2.4`.",
+        "`chart-1.2.3` is above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release.",
         "**A `v` in front of the three numbers does not count in a tie.**",
         "A move from `1.2.develop` to `1.10.0` passes the gate now.",
-        "`compare` puts a text with no three numbers, such as `1.2.develop`, below each version.",
-        "It is also true for a text with other text before its three numbers, such as `chart-1.2.3`.",
+        "Where Palette gives no order or reads no version, `compare` follows the order of the crate `versions` 8.0.1.",
+        "It is true for one or two numbers and a tail of text, such as `1.2.develop`.",
     ] {
         assert!(
             release.contains(needle),
             "the section of 0.33.0 lacks {needle:?}"
         );
     }
-    assert!(
-        !release.contains("A text with no three numbers, such as `LTS__24.x`, keeps its order."),
-        "the section of 0.33.0 still states the old rank"
-    );
+    for old in [
+        "A text with no three numbers, such as `LTS__24.x`, keeps its order.",
+        "**A text with no three numbers is below each version.**",
+    ] {
+        assert!(
+            !release.contains(old),
+            "the section of 0.33.0 still states {old:?}"
+        );
+    }
 
     let refs = one_line(&read(&docs().join("reference/refs.md")));
     for needle in [
-        "A text with no three numbers, such as `1.2.develop`, holds no version. It is below each version, also below a pre-release.",
-        "So `@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
-        "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`",
-        "Text before the numbers does the same, as in `chart-1.2.3`.",
+        "There, strata follows the order of the Rust crate `versions` 8.0.1.",
+        "2. One or two numbers and a tail of text, as in `1.2.develop`.",
+        "6. A fourth number, as in `1.2.0.1`.",
+        "`@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "Strata puts it below `1.1.8-alpha`, as the crate does.",
+        "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`.",
+        "Palette finds the numbers at any place, so `chart-1.2.3` is above `1.2.2`.",
+        "The crate gives no total order to text right after the numbers, as in `1.2.3rc1` and `1.0.0-a_b`.",
     ] {
         assert!(refs.contains(needle), "refs.md lacks {needle:?}");
     }
-    assert!(
-        !refs.contains("Such a text is above each version."),
-        "refs.md still states the old rank"
-    );
+    for old in [
+        "Such a text is above each version.",
+        "It is below each version, also below a pre-release.",
+    ] {
+        assert!(!refs.contains(old), "refs.md still states {old:?}");
+    }
     for (path, needle) in [
         (
             "internals/palette/profiles.md",
-            "It puts a text with no three numbers below each version: see",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
         ),
         (
             "internals/palette/limits.md",
-            "it puts such a text below each version: see",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
         ),
         (
             "commands/behind.md",
-            "so `behind` never names it as newer than a version.",
+            "So `--pre-release` names it as newer than `1.65.0`.",
+        ),
+        (
+            "development/code.md",
+            "`tests/version_order.rs` compares the order with the crate, row by row.",
         ),
     ] {
         let text = one_line(&read(&docs().join(path)));
@@ -4312,8 +4332,13 @@ fn the_book_states_that_a_text_with_no_three_numbers_is_below_each_version() {
     }
     let listed = read(&docs().join("output/latest-develop-list.txt"));
     assert!(
-        listed.contains("4 profiles\n  aws-stack@1.2.develop "),
-        "the playground does not list 1.2.develop first: {listed}"
+        listed.contains("\n  aws-stack@1.1.10 ") && listed.ends_with(" aws\n"),
+        "the playground does not list the profiles: {listed}"
+    );
+    let last = listed.lines().last().unwrap_or_default();
+    assert!(
+        last.starts_with("  aws-stack@1.2.develop "),
+        "the playground does not list 1.2.develop last: {listed}"
     );
 }
 
@@ -4357,7 +4382,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
         ("src/api/palette/mod.rs", "The walk ends at a page"),
         (
             "src/reference/version.rs",
-            "Of two pre-releases, the first identifier",
+            "The identifiers of two pre-releases decide",
         ),
         (
             "scripts/ci/merge-gate.sh",

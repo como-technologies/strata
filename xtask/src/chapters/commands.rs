@@ -295,7 +295,8 @@ fn snapshot(r: &mut Runner) {
 
 /// The chapter `latest-develop`: a develop build beside two releases, as a field test found it
 /// (#616). Palette reads `1.1.8.develop` as `1.1.8`. Strata puts it below `1.1.8`, and `@latest`
-/// skips it. `1.2.develop` holds no three numbers, so strata puts it below each version (#714).
+/// skips it. `1.2.develop` holds no three numbers. Strata reads it as a pre-release of `1.2.0`,
+/// above `1.1.10`, and `@latest` skips it too (#714).
 fn latest_develop(r: &mut Runner) {
     r.chapter("latest-develop", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));

@@ -972,8 +972,9 @@ Three more results follow from the order:
 Release 0.33.0 follows the order of Palette for a version that does not parse.
 The code of Palette gives that order, and no live run shows it: see
 [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
-Release 0.33.0 also puts a text with no three numbers, such as `1.2.develop`,
-below each version.
+Where Palette gives no order or reads no version, release 0.33.0 follows the
+order of the Rust crate `versions` 8.0.1. So `1.2.develop` is a pre-release of
+`1.2.0`, and `develop` is below each version.
 
 `strata-diff/1` has the new field `versionMove`, in the document and in each
 entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
@@ -996,11 +997,17 @@ field, a value, an input, or an option is in the sections above.
 - **A version that does not parse reads as its first three numbers.** Palette reads it so too.
   Before, strata put such a version above each version that parses. See
   [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
-  - A tail of text puts the version below its numbers, and makes it a pre-release.
-    `1.1.8.develop` is below `1.1.8`. So `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
+  - A tail of text right after the numbers puts the version below each pre-release of its
+    numbers, and makes it a pre-release. `1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`. So
+    `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
     Before, it recorded the develop build. `pack:<name>@latest` skips such a version too.
   - A tail of numbers puts the version above its numbers. `10.4.0.1` is above `10.4.0` and
     below `10.5.0`. So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.
+  - A tail after a fourth number puts the version above its four numbers, as the crate
+    `versions` orders it. `1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below `1.2.4`.
+    Text after the fourth number still makes a pre-release.
+  - Text before the numbers reads as the numbers too, as Palette reads it. `chart-1.2.3` is
+    above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release.
   - `strata list` and `strata packs` list such a version in the new order. `latest` of
     `strata packs` marks the version that `@latest` records.
   - `behind` names `10.5.0` as newer than the pin `10.4.0.1`. Before, it named nothing. It
@@ -1010,20 +1017,24 @@ field, a value, an input, or an option is in the sections above.
     `forward` now.
   - A record that `@latest` wrote before can name a develop build. Take the record again to
     pin the version that `@latest` gives now.
-- **A text with no three numbers is below each version.** An example is `1.2.develop`. Palette
-  reads no version in such a text. Before, strata put it above each version. See
+- **One or two numbers and a tail of text make a pre-release of the version of the numbers.** An
+  example is `1.2.develop`. A missing number is `0`, so it is above `1.1.10` and below
+  `1.2.0-0`. Palette reads no version in such a text, and strata follows the order of the crate
+  `versions`. Before, strata put it above each version. See
   [the rule of `@latest`](./refs.md#rules).
   - `<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. Before, it recorded
-    `1.2.develop`. `@latest` gives such a text only when the name has no version. This holds
-    for `pack:<name>@latest` too.
-  - `strata list` and `strata packs` list such a text below each version. `latest` of
+    `1.2.develop`. `@latest` skips such a text while the name has a version that is no
+    pre-release. This holds for `pack:<name>@latest` too.
+  - `strata list` and `strata packs` list such a text by its numbers. `latest` of
     `strata packs` marks the version that `@latest` records.
-  - `behind` names no such text as newer than a version. Each version is above a pin of such a
-    text, and `--pre-release` still decides for a pre-release.
+  - `behind` names such a text as newer only with `--pre-release`, or for a pin that is a
+    pre-release. So `behind --pre-release` names `1.2.develop` as newer than `1.1.10`.
   - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.develop` to
-    `1.10.0` is `forward` now.
-  - Two such texts keep the natural order: `LTS__24.x` is above `LTS__22.04`.
+    `1.10.0` is `forward` now, and a move from `1.2.0-rc.1` to `1.2.develop` is `back`.
   - A record that `@latest` wrote before can name such a text. Take the record again.
+- **A text with no number at its start and no three numbers is below each version.** Examples
+  are `develop` and `LTS__24.x`. Before, strata put it above each version. Two such texts keep
+  the natural order: `LTS__24.x` is above `LTS__22.04`.
 - **A `v` in front of the three numbers does not count in a tie.** Palette reads `v1.1.8.1`,
   `1.1.8.1`, `v1.1.8`, and `1.1.8` as `1.1.8`. Now `v1.1.8.1` equals `1.1.8.1`, as `v1.1.8`
   equals `1.1.8`. Before, `v1.1.8.1` was above `1.1.8.1`.
@@ -1087,8 +1098,9 @@ field, a value, an input, or an option is in the sections above.
   - A move from `1.3.0` to `1.2.3.4`, or from `1.1.10` to `1.1.8.develop`, fails the gate
     with `BEHIND` now. Add the line `Rollback: <record> to <name>@<version>` to a commit, or pin
     a final version.
-  - A move from `1.2.develop` to `1.10.0` passes the gate now. A move from `1.10.0` to
-    `1.2.develop` fails with `BEHIND` now. Before, the two verdicts were the other way.
+  - A move from `1.2.develop` to `1.10.0` passes the gate now. A move from `1.10.0` or from
+    `1.2.0-rc.1` to `1.2.develop` fails with `BEHIND` now. Before, these verdicts were the other
+    way.
 - **`preflight.sh` finds the key in the places where strata looks for it.** Before,
   it read `PALETTE_API_KEY` alone. Without that variable, the job ran offline and
   said nothing.
@@ -1112,15 +1124,20 @@ field, a value, an input, or an option is in the sections above.
 
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.
-  - `compare` puts a text with no three numbers, such as `1.2.develop`, below each version.
-    Before, it put such a text above each version.
+  - Where Palette gives no order or reads no version, `compare` follows the order of the crate
+    `versions` 8.0.1. It puts `1.2.develop` above `1.1.10` and below `1.2.0-0`, and
+    `1.1.8.develop` below `1.1.8-0`. Before, it put each such text above each version.
+  - `compare` puts a text with no number at its start and no three numbers, such as `develop`,
+    below each version.
   - A `v` in front of the three numbers does not count in a tie, so `v1.1.8.1` equals `1.1.8.1`.
-  - For `latest`, `pick` gives a text with no three numbers only when no item holds a version.
+  - For `latest`, `pick` skips a pre-release while an item has a version that is no pre-release.
+    It gives a text with no version only when no item holds a version.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
-  numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It is also true for a text with other
-  text before its three numbers, such as `chart-1.2.3`. One `v` in front is no such text. A
-  tail of numbers, as in `10.4.0.1`, makes no pre-release. It was false for each text that does
-  not parse, and it stays false for a text with no three numbers.
+  numbers, such as `1.1.8.develop`, `1.2.3rc1`, and `1.2.3.4-rc1`. It is also true for a text
+  with other text before its three numbers, such as `chart-1.2.3`. One `v` in front is no such
+  text. It is true for one or two numbers and a tail of text, such as `1.2.develop`. A tail of
+  numbers, as in `10.4.0.1`, makes no pre-release. It was false for each text that does not
+  parse, and it stays false for a text with no version, such as `develop`.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
   `profile` gives a cluster record of the profile that the version replaces. Its
   `source.reference` names that profile. The signature stays.

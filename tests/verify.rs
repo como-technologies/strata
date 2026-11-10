@@ -3677,7 +3677,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
 
 /// Issue #616. `list` reads a version that does not parse by its first three numbers, as
 /// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`. Issue #714:
-/// `1.2.develop` holds no three numbers, so it is below each version.
+/// `1.2.develop` is a pre-release of `1.2.0`, so it is above `1.1.10`.
 #[test]
 fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
     let listing = serde_json::json!({"items": [
@@ -3706,10 +3706,10 @@ fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
     assert_eq!(
         refs,
         [
-            "barney@1.2.develop",
             "barney@1.1.8.develop",
             "barney@1.1.8",
             "barney@1.1.10",
+            "barney@1.2.develop",
             "four@10.4.0",
             "four@10.4.0.1",
             "four@10.5.0",
@@ -14249,7 +14249,7 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
 
 /// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
 /// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
-/// 1.66.develop, with no three numbers.
+/// 1.66.develop, with two numbers and a tail of text.
 fn serve_develop_builds() -> MemoryApi {
     let more = [
         "1.63.1.1",
@@ -14284,8 +14284,8 @@ fn newer_than_in_develop_builds(pin: &str, pre_release: bool) -> Vec<String> {
 }
 
 /// Issue #616. `pack:<name>@latest` and `packs` read a version that does not parse by its first
-/// three numbers. A tail of text is a pre-release, so neither picks a develop build. Issue #714: a
-/// text with no three numbers is below each version, so neither picks it.
+/// three numbers. A tail of text is a pre-release, so neither picks a develop build. Issue #714:
+/// `1.66.develop` is a pre-release of `1.66.0`, below `1.66.0.develop`, so neither picks it.
 #[test]
 fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_below_the_next_version()
 {
@@ -14302,19 +14302,19 @@ fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_belo
         order,
         [
             ("1.66.0.develop", false),
+            ("1.66.develop", false),
             ("1.65.0", true),
             ("1.65.0.develop", false),
             ("1.63.1.1", false),
             ("1.63.1", false),
-            ("1.66.develop", false),
         ]
     );
 }
 
 /// Issue #616. With `10.4.0.1` and `10.5.0`, `behind` said nothing. Now `1.65.0` is newer than the
 /// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release. Issue
-/// #714: `1.66.develop` is newer than no version, and each version that is no pre-release is newer
-/// than it.
+/// #714: `1.66.develop` is a pre-release of `1.66.0`, so `--pre-release` names it as newer than
+/// `1.65.0`.
 #[test]
 fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop_build_as_a_pre_release()
  {
@@ -14325,16 +14325,27 @@ fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop
     );
     assert_eq!(
         newer_than_in_develop_builds("1.63.1", true),
-        ["1.66.0.develop", "1.65.0", "1.65.0.develop", "1.63.1.1"]
+        [
+            "1.66.0.develop",
+            "1.66.develop",
+            "1.65.0",
+            "1.65.0.develop",
+            "1.63.1.1"
+        ]
     );
     // a pin of a develop build follows the pre-releases, as a pin of `1.65.0-rc.1` does
     assert_eq!(
         newer_than_in_develop_builds("1.65.0.develop", false),
-        ["1.66.0.develop", "1.65.0"]
+        ["1.66.0.develop", "1.66.develop", "1.65.0"]
+    );
+    assert!(newer_than_in_develop_builds("1.65.0", false).is_empty());
+    assert_eq!(
+        newer_than_in_develop_builds("1.65.0", true),
+        ["1.66.0.develop", "1.66.develop"]
     );
     assert_eq!(
         newer_than_in_develop_builds("1.66.develop", false),
-        ["1.65.0", "1.63.1.1", "1.63.1"]
+        ["1.66.0.develop"]
     );
 }
 

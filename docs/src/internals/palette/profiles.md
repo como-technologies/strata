@@ -258,9 +258,9 @@ So such a profile version comes from before that rule. A registry can still
 list a pack version of that form.
 
 These rules come from the code of Palette. No run makes such a profile version,
-because Palette refuses the create. Strata reads the same numbers, and it adds
-an order for two versions that read as one. It puts a text with no three
-numbers below each version: see
+because Palette refuses the create. Strata reads the same numbers, and the
+numbers decide first. Where Palette gives no order or reads no version, strata
+follows the order of the Rust crate `versions` 8.0.1: see
 [the rule of `@latest`](../../reference/refs.md#rules).
 
 ## Drafts
