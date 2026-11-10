@@ -1,16 +1,18 @@
 // Package testkit holds the helpers that the tests of more than one package of the observer use:
-// a script that stands for the strata binary, a gzip file, a cluster read, and the documents that
-// the commands promise. Only test files import it.
+// a script that stands for the strata binary, a gzip file, a cluster read, the documents that the
+// commands promise, a wait, and a count of the calls that run at one time. Only test files import it.
 package testkit
 
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -97,15 +99,57 @@ func OutFile(args []string) (string, error) {
 	return args[i+1], nil
 }
 
+// waitLimit is the longest time that a test waits for an event.
+const waitLimit = 10 * time.Second
+
 // WaitFor calls ready every 20 ms until it is true, and fails the test after 10 seconds. what names
 // the event for the message of the failure.
 func WaitFor(t *testing.T, what string, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(waitLimit)
 	for !ready() {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s did not happen", what)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// Overlap counts the calls of a stand-in for strata that run at one time. The stand-in calls Start when
+// a call starts, and the function that Start gives when the call ends.
+type Overlap struct {
+	// Delay makes each call take this time, so that calls that can run together do.
+	Delay time.Duration
+	// Hold makes each call wait until this many calls ran at one time, for 10 seconds at most. A test
+	// that must see calls run together sets it, so that its count does not depend on a delay.
+	Hold int
+
+	mu           sync.Mutex
+	active, most int
+}
+
+// Start counts a call that starts, and waits as Hold and then Delay say. The wait for Hold also ends
+// when ctx ends. Start gives the function that counts the end of the call.
+func (o *Overlap) Start(ctx context.Context) (end func()) {
+	o.mu.Lock()
+	o.active++
+	o.most = max(o.most, o.active)
+	o.mu.Unlock()
+	deadline := time.Now().Add(waitLimit)
+	for o.Most() < o.Hold && ctx.Err() == nil && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(o.Delay)
+	return func() {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		o.active--
+	}
+}
+
+// Most gives the most calls that ran at one time.
+func (o *Overlap) Most() int {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.most
 }

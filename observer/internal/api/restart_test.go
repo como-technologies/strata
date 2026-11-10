@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // The state keeps the counts of a move, and not its values. After a restart the memory holds no
@@ -46,7 +47,8 @@ func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *test
 	r := newRig(t)
 	strata := &fakeStrata{dir: r.fixtures}
 	r.cycled(strata)
-	slow := &countingStrata{fakeStrata: strata}
+	// Each process takes 20 ms, so that two processes that are allowed to overlap do overlap.
+	slow := &countingStrata{fakeStrata: strata, overlap: testkit.Overlap{Delay: 20 * time.Millisecond}}
 	h := handlerOf(r.cycled(slow))
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -62,34 +64,20 @@ func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *test
 	if strata.moveCompares() != 2 {
 		t.Errorf("%d compares, want 2", strata.moveCompares())
 	}
-	if slow.most() != 1 {
-		t.Errorf("%d processes ran together", slow.most())
+	if most := slow.overlap.Most(); most != 1 {
+		t.Errorf("%d processes ran together", most)
 	}
 }
 
-// countingStrata counts the processes that run at one time.
+// countingStrata counts the processes that run at one time. The fake holds its lock for each whole
+// call, so the count is in front of it.
 type countingStrata struct {
 	*fakeStrata
-	mu             sync.Mutex
-	active, mostAt int
+	overlap testkit.Overlap
 }
 
 func (c *countingStrata) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
-	c.mu.Lock()
-	c.active++
-	c.mostAt = max(c.mostAt, c.active)
-	c.mu.Unlock()
-	time.Sleep(20 * time.Millisecond) // so that two processes that are allowed to overlap do overlap
-	defer func() {
-		c.mu.Lock()
-		c.active--
-		c.mu.Unlock()
-	}()
+	end := c.overlap.Start(ctx)
+	defer end()
 	return c.fakeStrata.Run(ctx, dir, args...)
-}
-
-func (c *countingStrata) most() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.mostAt
 }

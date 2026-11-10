@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
@@ -371,23 +370,17 @@ func TestAClickAfterAFailedCompareSendsNoSecondPost(t *testing.T) {
 	}
 }
 
-// gated stops the first `behind` of the world until the test lets it go. It tells the test when the call
-// has started, so that the test knows a versions cycle holds the worker.
-type gated struct {
-	*world
-	started chan struct{}
-	proceed chan struct{}
-	once    sync.Once
+// waitedCtx closes waited when a call first asks for its Done channel. Ask first asks for it when it
+// waits for the versions slot, after it read the pin. So a test knows that a click waits.
+type waitedCtx struct {
+	context.Context
+	once   sync.Once
+	waited chan struct{}
 }
 
-func (g *gated) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
-	if args[0] == runner.CmdBehind {
-		g.once.Do(func() {
-			close(g.started)
-			<-g.proceed
-		})
-	}
-	return g.world.Run(ctx, dir, args...)
+func (c *waitedCtx) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waited) })
+	return c.Context.Done()
 }
 
 // A click that waits for a versions cycle must ask about the move that the cycle read. The cycle ends with
@@ -400,26 +393,27 @@ func TestAClickThatWaitedForAVersionsCycleAsksAboutTheMoveOfThatCycle(t *testing
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	// The second cycle holds the worker at its first `behind`.
-	g := &gated{world: w, started: make(chan struct{}), proceed: make(chan struct{})}
+	// The second cycle holds the worker at its `behind`.
+	g := gated(w)
 	o.strata = g
 	cycle := make(chan error, 1)
 	go func() { cycle <- o.RunVersions(context.Background()) }()
-	<-g.started
+	<-g.waiting
+	ctx := &waitedCtx{Context: context.Background(), waited: make(chan struct{})}
 	clicked := make(chan model.Answer, 1)
 	go func() {
-		a, _, _ := o.Ask(context.Background(), moveSubject, "k8s/kubernetes")
+		a, _, _ := o.Ask(ctx, moveSubject, "k8s/kubernetes")
 		clicked <- a
 	}()
-	// The click reads the pin of the first cycle, and then it waits for the worker. The registry gains a
-	// version, and the second cycle reads it.
-	time.Sleep(100 * time.Millisecond)
+	// The click reads the pin of the first cycle, and then it waits for the worker until the gate opens.
+	// The registry gains a version, and the second cycle reads it.
+	<-ctx.waited
 	w.mu.Lock()
 	w.behind.Pins[i].Newer = append([]docs.Newer{{Version: "1.37.0"}}, w.behind.Pins[i].Newer...)
 	w.behind.Pins[i].Bump = &docs.Bump{To: "1.37.0", PaletteValidation: &docs.Validation{Accepts: true}}
 	w.moves[move("kubernetes", "1.35.3", "1.37.0")] = w.moves[move("kubernetes", "1.35.3", "1.36.2")]
 	w.mu.Unlock()
-	close(g.proceed)
+	close(g.gate)
 	if err := <-cycle; err != nil {
 		t.Fatal(err)
 	}

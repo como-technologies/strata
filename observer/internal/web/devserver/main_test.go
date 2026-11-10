@@ -8,7 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestAnUnknownStateExitsTwoAndNamesTheSets(t *testing.T) {
@@ -48,16 +49,10 @@ func TestTheServerGivesThePageAndTheRoutesOfTheSet(t *testing.T) {
 		done <- run(ctx, []string{"-data", "../testdata/api", "-state", "lost", "-listen", addr}, io.Discard)
 	}()
 	var resp *http.Response
-	for i := 0; i < 100; i++ {
+	testkit.WaitFor(t, "the start of the server", func() bool {
 		resp, err = http.Get("http://" + addr + "/v1/cluster")
-		if err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
+		return err == nil
+	})
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(body), `"page":"lost"`) || resp.Header.Get("Content-Security-Policy") == "" {
@@ -99,15 +94,15 @@ func serveSet(t *testing.T, state string) string {
 		stop()
 		<-done
 	})
-	for i := 0; i < 100; i++ {
-		if resp, err := http.Get("http://" + addr + "/v1/cluster"); err == nil {
-			resp.Body.Close()
-			return addr
+	testkit.WaitFor(t, "the start of the server", func() bool {
+		resp, err := http.Get("http://" + addr + "/v1/cluster")
+		if err != nil {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("the server did not start")
-	return ""
+		resp.Body.Close()
+		return true
+	})
+	return addr
 }
 
 // send sends a request to the server and gives the status and the body. A request from the page of the
