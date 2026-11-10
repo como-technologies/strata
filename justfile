@@ -496,6 +496,11 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
+# The public repository (#65): with no login, the book opens, the install command of the README installs a release, and the registry gives the image and the chart of the observer. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
+[group('live checks')]
+live-public: build
+    examples/live/public.sh
+
 # The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). --with-cluster holds the floor of a window with a cluster: a skipped fact of the floor is an error. Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
 [group('contract')]
 live-contract *args: examples stand-in
