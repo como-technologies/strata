@@ -1041,6 +1041,12 @@ field, a value, an input, or an option is in the sections above.
   reports use the same words. A script that reads that line gets a new word.
   `strata-preflight/1` has the new field `options.offline`. Read the field: the
   text forms can change in any release.
+- **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
+  `HOME` read the file of the working folder. A relative `HOME` read a file below
+  that folder. So a file of a checkout could give the address that got the key.
+  Now strata reads no file then, and the environment gives each setting. A job with
+  a relative `HOME` must set an absolute path, or give the settings in the
+  environment. See [Settings](./settings.md).
 
 ### For a user of the CI drop-ins
 
@@ -1068,6 +1074,10 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
+  does.** Before, a relative `HOME` read a file below the working folder. Now, when
+  no variable gives a key, `merge-gate.sh` omits the verify and `preflight.sh` runs
+  offline.
 
 ### For a user of the library of strata
 
@@ -1076,6 +1086,8 @@ field, a value, an input, or an option is in the sections above.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
   numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It was false for each text that does not
   parse.
+- `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
+  Before, it read the file below the working folder.
 
 ### For a user of the library of strata-preflight
 
