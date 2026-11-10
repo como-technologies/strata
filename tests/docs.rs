@@ -6348,7 +6348,7 @@ fn the_page_names_the_renumber_as_open_while_same_release_does_not_take_it() {
 fn the_page_states_the_order_of_versions_that_its_outputs_show() {
     let text = one_line(&read(&docs().join(PIPELINE_PAGE)));
     assert!(
-        text.contains("**The order of versions.** Closed by"),
+        text.contains("**The order of versions.** No gap now."),
         "the page does not state the gap of the order of versions as closed"
     );
     let latest = read(&docs().join("output/pipeline-latest.txt"));

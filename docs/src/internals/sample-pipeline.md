@@ -281,11 +281,11 @@ so the pipeline runs no preflight before a build.
 Each gap names the item that closes it. When an item closes a gap, it changes the
 row of the gap on this page.
 
-- **The order of versions.** Closed by
+- **The order of versions.** No gap now. The items
   [#489](https://github.com/como-technologies/strata/issues/489) and
-  [#616](https://github.com/como-technologies/strata/issues/616). Strata orders
-  versions as Palette does: a pre-release is below its version, and a version that
-  does not parse reads as its first three numbers.
+  [#616](https://github.com/como-technologies/strata/issues/616) are in strata.
+  Strata orders versions as Palette does: a pre-release is below its version, and
+  a version that does not parse reads as its first three numbers.
 - **A pre-release and its final version.** Open:
   [#730](https://github.com/como-technologies/strata/issues/730) adds
   `same-release --allow renumber`. In `compare`, it also gives the impact `none`
