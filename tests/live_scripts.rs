@@ -760,9 +760,11 @@ jq -s '.[0] * {listmeta: .[1].listmeta}' "$FAKE_ROUTES/page-${offset}.json" "$FA
 
 /// A pack of the listing: its name, version, and registry, and the uid and the values of the pack.
 fn listed_pack(name: &str, version: &str, registry: &str) -> serde_json::Value {
-    serde_json::json!({"metadata": {"uid": format!("pk-{name}-{version}")},
-        "spec": {"name": name, "version": version, "registryUid": registry, "type": "spectro",
-            "layer": "addon", "values": format!("values of {name}\n")}})
+    let (uid, values) = (
+        format!("pk-{name}-{version}"),
+        format!("values of {name}\n"),
+    );
+    PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
 }
 
 #[test]
@@ -4144,9 +4146,18 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
     let mut stage = registry_stage(serde_json::json!({}));
     stage.route("/v1/clusterprofiles", r#"{"uid":"fm-1"}"#);
     stage.route("/v1/clusterprofiles/fm-1/publish", "{}");
+    let pack = PackFixture::new(
+        "strata-live-pack",
+        "addon",
+        "1.0.1",
+        "pk-101",
+        "reg-1",
+        "",
+        "",
+    );
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-101"},"spec":{"registryUid":"reg-1","version":"1.0.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.strata(
         "packs strata-live-pack --json",
@@ -4392,9 +4403,10 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
         "/v1/clusterprofiles/validate/packs",
         r#"{"packs":{"results":[]}}"#,
     );
+    let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-1"},"spec":{"registryUid":"reg-pub","version":"1.21.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
@@ -6707,48 +6719,22 @@ fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list
 /// one that lists aws, one that lists `all`, one with no cloud type, and one of another layer.
 /// `gcp-dns`, which lists gcp alone, is in the listing when `without_aws` is true.
 fn route_packs(without_aws: bool) -> String {
-    let pack =
-        |name: &str, version: &str, registry: &str, layer: &str, clouds: serde_json::Value| {
-            serde_json::json!({"metadata": {"uid": format!("pk-{name}")},
-            "spec": {"name": name, "version": version, "registryUid": registry,
-                "layer": layer, "cloudTypes": clouds}})
-        };
+    let pack = |name: &str, version: &str, registry: &str, layer: &str, clouds: &[&str]| {
+        let uid = format!("pk-{name}");
+        PackFixture::new(name, layer, version, &uid, registry, "", "").summary(clouds)
+    };
     let mut items = vec![
-        pack(
-            "gcp-elsewhere",
-            "1.0.0",
-            "reg-other",
-            "addon",
-            ["gcp"].into(),
-        ),
-        pack(
-            "aws-and-gcp",
-            "3.0.0",
-            "reg-pub",
-            "addon",
-            ["aws", "gcp"].into(),
-        ),
-        pack("all-clouds", "4.0.0", "reg-pub", "addon", ["all"].into()),
-        pack(
-            "no-clouds",
-            "5.0.0",
-            "reg-pub",
-            "addon",
-            serde_json::json!([]),
-        ),
-        pack("gcp-csi", "6.0.0", "reg-pub", "csi", ["gcp"].into()),
-        pack("gloo", "1.2.18", "reg-pub", "addon", ["all"].into()),
-        pack(
-            "generic-vm-libvirt",
-            "1.0.0",
-            "reg-pub",
-            "infra",
-            ["all"].into(),
-        ),
-        pack("cert-manager", "1.21.1", "reg-pub", "addon", ["all"].into()),
+        pack("gcp-elsewhere", "1.0.0", "reg-other", "addon", &["gcp"]),
+        pack("aws-and-gcp", "3.0.0", "reg-pub", "addon", &["aws", "gcp"]),
+        pack("all-clouds", "4.0.0", "reg-pub", "addon", &["all"]),
+        pack("no-clouds", "5.0.0", "reg-pub", "addon", &[]),
+        pack("gcp-csi", "6.0.0", "reg-pub", "csi", &["gcp"]),
+        pack("gloo", "1.2.18", "reg-pub", "addon", &["all"]),
+        pack("generic-vm-libvirt", "1.0.0", "reg-pub", "infra", &["all"]),
+        pack("cert-manager", "1.21.1", "reg-pub", "addon", &["all"]),
     ];
     if without_aws {
-        items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", ["gcp"].into()));
+        items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", &["gcp"]));
     }
     serde_json::json!({"items": items, "listmeta": {"count": items.len()}}).to_string()
 }

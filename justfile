@@ -201,7 +201,9 @@ fuzz-list:
 fuzz target time="60s":
     scripts/dev/fuzz.sh run "{{target}}" "{{time}}"
 
-# The seeds come from examples/, the catalog of strata-preflight, and the output of the book.
+# The seeds come from examples/, the catalog of strata-preflight, and the output of the book. The
+# recipe writes each seed that the corpus does not hold. `just docs-check` fails until the corpus
+# holds each one.
 
 # Write the seed corpus of each fuzz target into fuzz/src/__fuzz__/
 [group('fuzz')]
@@ -245,10 +247,14 @@ docs-examples: examples stand-in observer-build
 stand-in:
     cargo build --quiet -p xtask
 
-# Fail when docs/src/output/ is not the output of this build of strata
+# The check of the seed corpus reads the profiles and the cluster that `just examples` builds. So
+# this recipe runs it, and `just test` does not.
+
+# Fail when docs/src/output/ is not the output of this build of strata, or when the seed corpus of fuzz/ is stale
 [group('docs')]
 docs-check: examples stand-in observer-build
     cargo run --quiet -p xtask -- docs-examples --check
+    cargo test --quiet -p strata-fuzz -- --ignored --exact seed::corpus::the_corpus_holds_each_seed_that_the_writer_gives
 
 # The list is in xtask/facts/. A script reads the JSON with jq. See docs/src/development/facts.md.
 

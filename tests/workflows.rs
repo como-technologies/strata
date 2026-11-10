@@ -617,6 +617,46 @@ fn the_test_recipe_runs_the_fuzz_targets_and_the_property_tests() {
     );
 }
 
+/// The check of the seed corpus reads the files that `just examples` builds, and the job
+/// `lint and test` runs `just test` before `just examples`. So `just docs-check` runs the check,
+/// and the job `docs` runs that recipe. `cargo test` passes when no test has the name that it
+/// gets, so each recipe must name a test of the fuzz package. `just fuzz-seed` writes the files
+/// that the check names.
+#[test]
+fn docs_check_runs_the_check_of_the_seed_corpus_and_each_recipe_names_a_test_of_the_corpus() {
+    let corpus = repo_file("fuzz/src/seed/corpus.rs");
+    let check = recipe("docs-check")
+        .into_iter()
+        .find_map(|line| {
+            line.strip_prefix(
+                "cargo test --quiet -p strata-fuzz -- --ignored --exact seed::corpus::",
+            )
+            .map(String::from)
+        })
+        .expect("docs-check runs the check of the seed corpus");
+    let write = recipe("fuzz-seed")
+        .into_iter()
+        .find_map(|line| {
+            line.strip_prefix("cargo test -p strata-fuzz -- --ignored ")
+                .map(String::from)
+        })
+        .expect("fuzz-seed runs the write of the seed corpus");
+    let lines: Vec<&str> = corpus.lines().collect();
+    for test in [&check, &write] {
+        let head = format!("fn {test}() {{");
+        assert!(
+            lines
+                .windows(2)
+                .any(|w| w[0].starts_with("#[ignore = ") && w[1] == head),
+            "fuzz/src/seed/corpus.rs has no ignored test {test}"
+        );
+    }
+    assert!(
+        runs_of("checks.yml", "docs").contains(&"just docs-check".to_string()),
+        "the job docs runs just docs-check"
+    );
+}
+
 /// The run of the targets under libFuzzer needs a nightly toolchain and ten minutes for each
 /// target. So no pull request and no push starts it. A schedule starts it, and so does a person.
 /// The list of targets comes from the recipe, so a new target needs no change of the workflow. A

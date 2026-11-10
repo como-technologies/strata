@@ -1,0 +1,70 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "a: 1\n---\nb: 2\n",
+      "valuesCanon": [
+        {
+          "a": 1
+        },
+        {
+          "b": 2
+        }
+      ],
+      "valuesHash": "b1bc76dc908891d8a6435e1c16a1025287627fcf71c224cf207b2edc79b08226",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "a: 1\n---\nb: 2\n",
+          "contentHash": "b1bc76dc908891d8a6435e1c16a1025287627fcf71c224cf207b2edc79b08226"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "e3cb090a24d6782a213b89ab1a1191105abef138ee70e83c983f32aa0cd0b76b",
+        "node": "d2df83cc1c187c35aaaf62459076e27cef68a19e25f39c970690e087f01c955f"
+      }
+    }
+  ],
+  "root": "158dc6bae318988e88f6af4adb890fc69679ba77b62899d51addecc770ccd0a3",
+  "contentDigest": "5f4d8b81e6c5b352841f85bfbeffd23d9e2ade40fb1812320d990e36490ecae5"
+}

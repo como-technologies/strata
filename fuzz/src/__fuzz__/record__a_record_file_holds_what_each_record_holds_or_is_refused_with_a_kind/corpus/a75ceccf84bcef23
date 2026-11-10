@@ -1,0 +1,121 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "name: Session image\n\n# Builds the session image of riff from deploy/session/ and pushes it to the registry of GitHub,\n# with the commit as its tag. The summary of the run gives the line for riff.toml: riff pins the\n# digest, never a tag. A pull request from a branch of this repository builds and pushes the image\n# too, so that the pull request can pin it.\non:\n  push:\n    branches: [main]\n    paths: [deploy/session/**]\n  pull_request:\n    paths: [deploy/session/**]\n\npermissions:\n  contents: read\n  packages: write\n\njobs:\n  image:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - run: echo \"IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}-session\" >> \"$GITHUB_ENV\"\n      - uses: docker/login-action@v4\n        with:\n          registry: ghcr.io\n          username: ${{ github.actor }}\n          password: ${{ secrets.GITHUB_TOKEN }}\n      - uses: docker/setup-buildx-action@v4\n      - id: build\n        uses: docker/build-push-action@v7\n        with:\n          context: deploy/session\n          push: true\n          tags: ${{ env.IMAGE }}:${{ github.sha }}\n          provenance: false\n      - run: echo \"image = \\\"$IMAGE@${{ steps.build.outputs.digest }}\\\"\" >> \"$GITHUB_STEP_SUMMARY\"\n",
+      "valuesCanon": {
+        "jobs": {
+          "image": {
+            "runs-on": "ubuntu-latest",
+            "steps": [
+              {
+                "uses": "actions/checkout@v7"
+              },
+              {
+                "run": "echo \"IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}-session\" >> \"$GITHUB_ENV\""
+              },
+              {
+                "uses": "docker/login-action@v4",
+                "with": {
+                  "password": "${{ secrets.GITHUB_TOKEN }}",
+                  "registry": "ghcr.io",
+                  "username": "${{ github.actor }}"
+                }
+              },
+              {
+                "uses": "docker/setup-buildx-action@v4"
+              },
+              {
+                "id": "build",
+                "uses": "docker/build-push-action@v7",
+                "with": {
+                  "context": "deploy/session",
+                  "provenance": false,
+                  "push": true,
+                  "tags": "${{ env.IMAGE }}:${{ github.sha }}"
+                }
+              },
+              {
+                "run": "echo \"image = \\\"$IMAGE@${{ steps.build.outputs.digest }}\\\"\" >> \"$GITHUB_STEP_SUMMARY\""
+              }
+            ]
+          }
+        },
+        "name": "Session image",
+        "on": {
+          "pull_request": {
+            "paths": [
+              "deploy/session/**"
+            ]
+          },
+          "push": {
+            "branches": [
+              "main"
+            ],
+            "paths": [
+              "deploy/session/**"
+            ]
+          }
+        },
+        "permissions": {
+          "contents": "read",
+          "packages": "write"
+        }
+      },
+      "valuesHash": "be71c3b04a90ce4d3c531543875fd5521093fd96bc6631f0fed6c8cbcc6cb977",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "name: Session image\n\n# Builds the session image of riff from deploy/session/ and pushes it to the registry of GitHub,\n# with the commit as its tag. The summary of the run gives the line for riff.toml: riff pins the\n# digest, never a tag. A pull request from a branch of this repository builds and pushes the image\n# too, so that the pull request can pin it.\non:\n  push:\n    branches: [main]\n    paths: [deploy/session/**]\n  pull_request:\n    paths: [deploy/session/**]\n\npermissions:\n  contents: read\n  packages: write\n\njobs:\n  image:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v7\n      - run: echo \"IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}-session\" >> \"$GITHUB_ENV\"\n      - uses: docker/login-action@v4\n        with:\n          registry: ghcr.io\n          username: ${{ github.actor }}\n          password: ${{ secrets.GITHUB_TOKEN }}\n      - uses: docker/setup-buildx-action@v4\n      - id: build\n        uses: docker/build-push-action@v7\n        with:\n          context: deploy/session\n          push: true\n          tags: ${{ env.IMAGE }}:${{ github.sha }}\n          provenance: false\n      - run: echo \"image = \\\"$IMAGE@${{ steps.build.outputs.digest }}\\\"\" >> \"$GITHUB_STEP_SUMMARY\"\n",
+          "contentHash": "be71c3b04a90ce4d3c531543875fd5521093fd96bc6631f0fed6c8cbcc6cb977"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "3a3eb22de026e651b3f999a99e8a282dc58ef4ab2ad7cdc7329cc739c3704272",
+        "node": "e347935ecce8f36e495a4ea4cdf82e759886d21611f7b69ccffb98126c4eb4a6"
+      }
+    }
+  ],
+  "root": "7746765e27fefebba68607a33b5426c8fe92e4a6f5e82a5c3ccba4526a2ddd1b",
+  "contentDigest": "951df2e4756720ebc5edfa0b73b391d672964a4bffd146595987956403302063"
+}

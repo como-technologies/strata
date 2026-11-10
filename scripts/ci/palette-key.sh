@@ -6,7 +6,8 @@
 # Strata reads the key from PALETTE_API_KEY or SPECTROCLOUD_APIKEY. When the environment gives
 # neither, strata reads the two names from ~/.palette.env. This script looks in the same places,
 # and it reads the file as strata does. A line can start with `export `, and quotes can hold the
-# value. A line that starts with # is a comment. An empty value is no key.
+# value. A line that starts with # is a comment. An empty value is no key. Strata reads the file
+# only when HOME is an absolute path, and so does this script.
 #
 # Exit 0 when the script finds a key. It then prints nothing. Exit 1 when it finds no key. It
 # then prints the places where it looked, in one line. Exit 2 for an unknown option. The script
@@ -64,8 +65,13 @@ in_file() {
 for name in "${names[@]}"; do
   [ -z "${!name:-}" ] || exit 0
 done
-file="${HOME:-}/.palette.env"
-if [ -n "${HOME:-}" ] && [ -f "$file" ] && [ -r "$file" ]; then
+# An empty or a relative HOME names a folder below the working folder, such as the checkout of
+# the job, and not a folder of the person.
+case ${HOME:-} in
+  /*) file=$HOME/.palette.env ;;
+  *) file= ;;
+esac
+if [ -n "$file" ] && [ -f "$file" ] && [ -r "$file" ]; then
   for name in "${names[@]}"; do
     if in_file "$name" < "$file"; then exit 0; fi
   done

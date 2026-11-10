@@ -5,11 +5,12 @@
 //! catalog of strata-preflight, or a file or an output of the book. It can also be a report that
 //! the contract test of the observer writes. A seed can also be a document that the library
 //! builds from them. A file has the name `fingerprint` gives its bytes, so a second run changes
-//! no file.
+//! no file. A seed names [`SEED_VERSION`] where a document names the version of strata.
 //!
-//! A seed makes a fuzzer start in the code, and not at the first byte that a parser refuses. The
-//! check at the end of this file fails when the seeds of a target no longer reach its code. A
-//! change of a schema id is one example.
+//! A seed makes a fuzzer start in the code, and not at the first byte that a parser refuses. A
+//! check of [`corpus`] fails when the corpus does not hold a seed that this file gives. Another
+//! fails when the seeds of a target no longer reach its code. A change of a schema id is one
+//! example.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -22,14 +23,15 @@ use strata::api::codes::{
 };
 use strata::api::{RawCluster, RawProfile};
 use strata::ops;
-use strata::snapshot::Snapshot;
+use strata::snapshot::{Snapshot, Tool};
 
-use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
+use crate::support::{AT, cluster_files, profile_files, raw_profile, scratch, utf8};
 use crate::{
     behind, candidate, canon, config, mask, palette, preflight, record, reference, report, unknown,
 };
 
 mod catalog;
+mod corpus;
 mod regressions;
 mod since;
 mod state;
@@ -37,6 +39,17 @@ mod state;
 /// The most bytes of a seed that a file gives. A longer file is a poor start for a fuzzer: each
 /// input of it costs more, and libFuzzer keeps its inputs short.
 const SEED_LIMIT: usize = 8 * 1024;
+
+/// The version of strata that a seed names. A document that strata writes names the version of
+/// the build, and each release changes that version. A seed names this version in its place, so a
+/// release makes no seed stale. It is the version of the build when the corpus got this check, so
+/// the seeds of that time stay current.
+const SEED_VERSION: &str = "0.32.2";
+
+/// Give `tool` the version [`SEED_VERSION`].
+fn pin_version(tool: &mut Tool) {
+    tool.version = SEED_VERSION.to_string();
+}
 
 /// A byte target: the name of its test, and what it does with one input.
 struct Target {
@@ -429,7 +442,7 @@ fn real_cluster() -> RawCluster {
 }
 
 /// The records that the seeds build. They are one for each short YAML text as the values of one
-/// pack, and the profile versions and the cluster of `examples/`.
+/// pack, and the profile versions and the cluster of `examples/`. Each names [`SEED_VERSION`].
 fn built_records() -> Vec<Snapshot> {
     let mut records: Vec<Snapshot> = yaml_texts()
         .iter()
@@ -441,6 +454,9 @@ fn built_records() -> Vec<Snapshot> {
         records.extend(Snapshot::from_raw(&raw, "seed", AT).ok());
     }
     records.extend(Snapshot::from_cluster(&real_cluster(), None, "seed", AT).ok());
+    for record in &mut records {
+        pin_version(&mut record.tool);
+    }
     records
 }
 
@@ -457,13 +473,15 @@ fn records() -> Vec<Vec<u8>> {
         .collect()
 }
 
-/// The seeds of the comparison: the comparison of each record with the next one.
+/// The seeds of the comparison: the comparison of each record with the next one, which names
+/// [`SEED_VERSION`].
 fn comparisons() -> Vec<Vec<u8>> {
     let records = built_records();
     records
         .windows(2)
         .map(|pair| {
-            let diff = ops::compare(&pair[0], &pair[1], AT);
+            let mut diff = ops::compare(&pair[0], &pair[1], AT);
+            pin_version(&mut diff.tool);
             serde_json::to_vec(&diff).expect("a comparison is JSON")
         })
         .collect()
@@ -638,52 +656,6 @@ fn settings() -> Vec<Vec<u8>> {
         .collect()
 }
 
-// ---- the files of the corpus ----------------------------------------------------------------
-
-/// The directory that bolero reads for the target `test` and the kind of input `kind`. The kind is
-/// `corpus` for the inputs that a fuzzer grows from, and `crashes` for a regression case.
-fn directory(test: &str, kind: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/__fuzz__")
-        .join(test.replace("::", "__"))
-        .join(kind)
-}
-
-/// The inputs of the target `test` in `kind`.
-fn inputs(test: &str, kind: &str) -> Vec<Vec<u8>> {
-    fs::read_dir(directory(test, kind))
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter(|entry| entry.path().is_file())
-        .map(|entry| fs::read(entry.path()).expect("an input reads"))
-        .collect()
-}
-
-/// Write `bytes` as `name` in `directory`.
-fn put(directory: &Path, name: &str, bytes: &[u8]) {
-    fs::create_dir_all(directory).expect("the directory of the corpus is made");
-    fs::write(directory.join(name), bytes).expect("a seed is written");
-}
-
-/// Write the seeds and the regression cases. A seed that is empty or longer than the limit of a
-/// seed is not kept, and a file that a fuzzer added stays.
-#[test]
-#[ignore = "writes the files of the corpus: run it with `just fuzz-seed`"]
-fn write_the_seed_corpus() {
-    for target in &TARGETS {
-        let dir = directory(target.test, "corpus");
-        for seed in (target.seeds)() {
-            if seed.len() <= SEED_LIMIT * 4 {
-                put(&dir, &format!("{:016x}", fingerprint(&seed)), &seed);
-            }
-        }
-    }
-    for (test, name, input) in regressions::cases() {
-        put(&directory(test, "crashes"), name, &input);
-    }
-}
-
 /// The modules of the targets are the files of this crate, and each target is a test of its module.
 /// A name in `TARGETS` that no test has sends its seeds to a directory that no test reads.
 #[test]
@@ -704,30 +676,6 @@ fn each_target_names_a_test_of_its_module() {
             TARGETS.iter().any(|t| t.test == test),
             "{test} is no target"
         );
-    }
-}
-
-/// The seeds of a target reach the code that it fuzzes, and the regression cases pass. A corpus
-/// that a schema change made useless, or a directory that bolero does not read, fails here.
-#[test]
-fn the_seeds_of_each_target_reach_its_code_and_the_regression_cases_pass() {
-    for target in &TARGETS {
-        let corpus = inputs(target.test, "corpus");
-        assert!(
-            !corpus.is_empty(),
-            "{} has no seed: run `just fuzz-seed`",
-            target.test
-        );
-        let reached = corpus.iter().filter(|bytes| (target.run)(bytes)).count();
-        assert!(
-            reached * 3 >= corpus.len(),
-            "only {reached} of {} seeds of {} reach its code",
-            corpus.len(),
-            target.test
-        );
-        for case in inputs(target.test, "crashes") {
-            (target.run)(&case);
-        }
     }
 }
 

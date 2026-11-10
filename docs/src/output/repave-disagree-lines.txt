@@ -1,9 +1,10 @@
 $ strata compare cluster:payments aws-stack@1.1.7 --repave
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.7 (uid 64e0000000000000000000fa)
-root       088136c929bd -> 871be831b29a   CHANGED
+root       088136c929bd -> d5504ffcb8ba   CHANGED
 palette    no repave
 note       the impact table says repave, and Palette says no repave for this cluster: the table does not describe its upgrade engine
 ...
-~ [k8s  ] kubernetes                 1.36.2 -> 1.36.3   IDENTITY
+~ [k8s  ] kubernetes                 1.36.2 -> 1.36.3   IDENTITY UPSTREAM
+...
       impact: node repave (Kubernetes version change)
 ...

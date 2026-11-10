@@ -1058,6 +1058,12 @@ field, a value, an input, or an option is in the sections above.
   - A version of an add-on that the cluster does not run, two clusters, and a
     `cluster:<cluster>/<profile>` ref give what they gave before.
   - To compare each profile of a cluster with a release, compare a record of the cluster.
+- **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
+  `HOME` read the file of the working folder. A relative `HOME` read a file below
+  that folder. So a file of a checkout could give the address that got the key.
+  Now strata reads no file then, and the environment gives each setting. A job with
+  a relative `HOME` must set an absolute path, or give the settings in the
+  environment. See [Settings](./settings.md).
 
 ### For a user of the CI drop-ins
 
@@ -1097,6 +1103,10 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
+  does.** Before, a relative `HOME` read a file below the working folder. Now, when
+  no variable gives a key, `merge-gate.sh` omits the verify and `preflight.sh` runs
+  offline.
 
 ### For a user of the library of strata
 
@@ -1112,6 +1122,8 @@ field, a value, an input, or an option is in the sections above.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
   `profile` gives a cluster record of the profile that the version replaces. Its
   `source.reference` names that profile. The signature stays.
+- `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
+  Before, it read the file below the working folder.
 
 ### For a user of the library of strata-preflight
 
