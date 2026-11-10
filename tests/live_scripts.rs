@@ -1536,7 +1536,10 @@ fn public_web(dir: &Path, book: u16) {
     }
     let routes = [
         format!("https://o.github.io/r/ {book} book.html"),
-        "https://github.com/o/r/releases/latest/download/install-strata.sh 200 installer.sh".into(),
+        format!(
+            "{}/releases/latest/download/install-strata.sh 200 installer.sh",
+            env!("CARGO_PKG_REPOSITORY")
+        ),
         "https://ghcr.io/token* 200 token.json".into(),
         "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
         "https://ghcr.io/v2/o/charts/strata-observer/manifests/9.9.9 200 manifest.json".into(),

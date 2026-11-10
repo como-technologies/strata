@@ -42,12 +42,19 @@ book_opens() {
   [ "$(curl -s -o book.html -w '%{http_code}' "$url")" = 200 ]
 }
 
-# install_no_token: the install command of the README, with no token in the environment. A failed
-# download gives bash no input, and bash then exits with 0. So the pipe fails when curl fails.
+# install_no_token: the install command of the README as it is, with the folder of the run in place
+# of ~/.local/bin, and with no token in the environment. A failed download gives bash no input, and
+# bash then exits with 0. So the pipe fails when curl fails.
 install_no_token() {
+  local command
+  command=$(awk '/^## Install$/ { section = 1; next }
+    section && /^```bash$/ { block = 1; next }
+    block && /^```$/ { exit }
+    block' "$live/../../README.md" | sed "s#--dir ~/.local/bin#--dir '$run/bin'#")
+  case "$command" in *"--dir '$run/bin'"*) ;; *) echo "the README gives no install into ~/.local/bin" >&2; return 1 ;; esac
+  echo "$command"
   env -u STRATA_TOKEN -u GITHUB_TOKEN -u GH_TOKEN bash -c "set -o pipefail
-    curl -fsSL https://github.com/$repo/releases/latest/download/install-strata.sh \
-      | bash -s -- --bin-only --dir '$run/bin'"
+$command"
 }
 
 # anonymous_manifest NAME TAG: the registry gives the manifest of NAME:TAG for an anonymous token,
@@ -63,7 +70,7 @@ anonymous_manifest() {
 
 echo "== what a reader with no login gets (#65)" | tee -a steps.log
 check book-opens 0 '#65: the address of the book in strata --help answers 200 with no login' -- book_opens
-check install-no-token 0 '#65: the install command of the README installs the latest release with no token' -- \
+check install-no-token 0 '#65: the install command of the README, as it is, installs the latest release with no token' -- \
   install_no_token
 check install-runs 0 '#65: the two binaries of the install run' -- \
   bash -c "'$run/bin/strata' --version && '$run/bin/strata-preflight' --version"
