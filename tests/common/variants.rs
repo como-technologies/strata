@@ -1,7 +1,8 @@
 //! The list of one value of each variant of an enum, for a test that walks the variants.
 //!
-//! The tests of `error/` in strata and the tests of the edits of the stand-in in `xtask` include
-//! this file with `#[path]`. So the list of the errors and the list of the edits keep one rule.
+//! The tests of `error/` in strata include this file with `#[path]`. So do the tests of the edits
+//! of the stand-in in `xtask`, and the test of `Check` in `strata-preflight`. So the lists keep
+//! one rule.
 
 /// Make the `Vec` of the values of the list, in order, and tie the list to each variant of their
 /// enum.

@@ -16,6 +16,7 @@ use super::model::{DIRECTORY, Fact, load, split_request};
 use super::sets::{Set, SetRead, closed_sets, reads};
 use crate::checks::anchors;
 use crate::files::{book, files_with_ext, pages};
+use crate::table::cells;
 
 /// The page that lists the requests of strata, under `docs/src/`.
 pub const API_PAGE: &str = "reference/palette-api.md";
@@ -183,11 +184,6 @@ pub(super) fn method_pattern() -> String {
     methods.join("|")
 }
 
-/// The cells of the table row `line`, from the first column, with no `|`.
-fn cells(line: &str) -> std::str::Split<'_, char> {
-    line.trim_start_matches('|').split('|')
-}
-
 /// The text of each code span in `cell`.
 fn spans_in(cell: &str) -> impl Iterator<Item = String> + '_ {
     static SPAN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").expect("a pattern"));
@@ -218,7 +214,7 @@ fn section_lines<'a>(page: &'a str, heading: &'a str) -> impl Iterator<Item = &'
 pub(super) fn api_requests(page: &str) -> BTreeSet<String> {
     page.lines()
         .filter(|line| line.starts_with('|'))
-        .filter_map(|line| cells(line).next())
+        .filter_map(|line| cells(line).first().copied())
         .flat_map(requests_in)
         .collect()
 }
@@ -231,8 +227,8 @@ pub(super) fn api_requests(page: &str) -> BTreeSet<String> {
 pub(super) fn rule_rows(page: &str) -> BTreeMap<String, BTreeSet<String>> {
     let mut rows: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for line in section_lines(page, RULES_HEADING) {
-        let mut row = cells(line);
-        let (Some(requests), Some(rules)) = (row.next(), row.next()) else {
+        let row = cells(line);
+        let [requests, rules, ..] = row[..] else {
             continue;
         };
         for request in requests_in(requests) {
@@ -276,7 +272,7 @@ fn live_checks(repo: &Path) -> BTreeMap<String, BTreeSet<String>> {
 /// the next `##` heading.
 pub(super) fn section_rows(page: &str, heading: &str) -> BTreeSet<String> {
     section_lines(page, heading)
-        .filter_map(|line| cells(line).next())
+        .filter_map(|line| cells(line).first().copied())
         .flat_map(spans_in)
         .collect()
 }

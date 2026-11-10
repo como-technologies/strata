@@ -7,8 +7,9 @@ use std::path::Path;
 // the two tests read a table in one way.
 #[path = "../../tests/common/table.rs"]
 mod table;
-// The macro that ties the list of a test to each variant of an enum. The test of each edit of the
-// stand-in of `xtask` uses it too, so the two lists keep one rule.
+// The macro that ties the list of a test to each variant of an enum. Two more tests use it: the
+// test of each edit of the stand-in in `xtask`, and the test of `Check` in `strata-preflight`. So
+// the lists keep one rule.
 #[path = "../../tests/common/variants.rs"]
 mod variants;
 

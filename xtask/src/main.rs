@@ -39,6 +39,11 @@ mod process;
 mod route;
 #[cfg(test)]
 mod size;
+// The read of a table of the book. The check of the facts reads a row with it, and so do the
+// tests. So the check and the tests read a row in one way. The check uses no other helper of it.
+#[path = "../../tests/common/table.rs"]
+#[allow(dead_code)]
+mod table;
 mod tenant;
 // The readers of a TOML file of the tests of strata. The checks read the version of `Cargo.toml`
 // with them, so the tests and the checks keep one reader. The checks read no table.
@@ -46,7 +51,8 @@ mod tenant;
 #[allow(dead_code)]
 mod toml;
 // The macro that ties the list of a test to each variant of an enum. The test of each edit of the
-// stand-in uses it, and so do the tests of the errors of strata. So the two lists keep one rule.
+// stand-in uses it. So do the tests of the errors of strata and the test of `Check` in
+// `strata-preflight`. So the lists keep one rule.
 #[cfg(test)]
 #[path = "../../tests/common/variants.rs"]
 mod variants;

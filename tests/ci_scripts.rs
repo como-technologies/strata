@@ -4560,12 +4560,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))
             .unwrap();
-        let cell = row
-            .split(" | ")
-            .nth(4)
-            .unwrap()
-            .strip_prefix("bump to ")
-            .unwrap();
+        let cell = cells(row)[4].strip_prefix("bump to ").unwrap();
         let o = u.run(&["releases/*.json", "--dry-run"]);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
         let body = text(&o.stdout);
