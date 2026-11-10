@@ -129,9 +129,13 @@ the real pack data in `examples/`. It changes the tenant between commands as
 Palette does.
 
 A pack version that a chapter adds, such as a pre-release, gets a uid and a
-digest of its own. An upgrade of a pin takes the uid and the digest of the new
-version from the listing. See
-[The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest).
+digest of its own in its registry. An upgrade of a pin takes the uid and the
+digest of the new version from the listing of the registry of the pin. A version
+that the listing does not hold gets a uid and a digest of its own in that
+registry. Each edit changes the pin and its pack summary in `packs/manifests`
+together, at a publish and at an edit in place. See
+[The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest) and
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
 1. Find the chapter of the page in `xtask/src/chapters/`. To add one, put
    `r.chapter("name", env)` in the file of its group of pages.

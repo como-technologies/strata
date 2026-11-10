@@ -644,12 +644,37 @@ a release does not have. A release that called a workflow that asked for it
 failed before it started.
 
 Run the same recipes in a clean checkout before you push. A file that is not
-tracked can hide a failure:
+tracked can hide a failure. The checkout builds into a target directory of its
+own: see [A temporary worktree](#a-temporary-worktree).
 
 ```bash
 git worktree add --detach ../strata-check HEAD
-cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
+cd ../strata-check && export CARGO_TARGET_DIR="$PWD/target"
+just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
 ```
+
+### A temporary worktree
+
+Give each temporary worktree its own target directory. Set `CARGO_TARGET_DIR`
+to a directory in the worktree, never to the `target/` of the main tree. The
+rule is for each command that builds in a worktree. Examples are the clean
+checkout above, and a test that must fail without its fix.
+
+Cargo puts a build of the worktree and a build of the main tree in the same
+place of a shared `target/`. The build of the worktree is newer than the files
+of the main tree, so cargo does not build again in the main tree. The debug
+builds of `xtask`, `strata`, `strata-preflight`, and `strata-report-endpoint`
+then keep the path of the worktree. After you remove the worktree, `just
+docs-check` fails with "No such file or directory" for a fixture under that
+path.
+
+```bash
+d=$(mktemp -d) && git worktree add -q --detach "$d" HEAD
+(cd "$d" && CARGO_TARGET_DIR="$d/target" cargo test -p xtask)
+git worktree remove --force "$d"   # also removes the target directory of the worktree
+```
+
+When the shared `target/` already holds such a build, `cargo clean` removes it.
 
 ## A change to how strata reads Palette
 
