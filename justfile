@@ -537,7 +537,7 @@ contract-timer-status:
 
 # The lead runs this on its host after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
 
-# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login. --dry-run prints the gcloud commands and runs none.
+# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login, and the project in STRATA_REPORT_PROJECT or --project ID. --dry-run prints the gcloud commands and runs none.
 [group('report-endpoint')]
 report-deploy *args:
     deploy/report/deploy.sh {{args}}

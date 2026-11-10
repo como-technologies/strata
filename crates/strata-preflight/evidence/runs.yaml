@@ -83,7 +83,7 @@ runs:
       - {rule: gcp-name-length, result: caught, note: "the fault was made: .metadata.name = \"a-cluster-name-that-is-longer-than-forty-characters\""}
       - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
       - {rule: account-missing, result: passed, note: "the clean entity"}
-      - {rule: gcp-account-roles, result: false-fail, note: "the clean entity: no service account holds the five roles of Palette on project como-strata-test (roles/owner counts): palette-sa@como-palette.iam.gserviceaccount.com lacks roles"}
+      - {rule: gcp-account-roles, result: false-fail, note: "the clean entity: no service account holds the five roles of Palette on the project of the lab (roles/owner counts): the account of Palette lacks roles"}
       - {rule: gcp-default-sa-no-role, result: passed, note: "the clean entity"}
       - {rule: gcp-default-sa-missing, result: passed, note: "the clean entity"}
       - {rule: gke-api-off, result: passed, note: "the clean entity"}
@@ -112,7 +112,7 @@ runs:
       - {rule: gcp-name-length, result: caught, note: "the fault was made: .metadata.name = \"a-cluster-name-that-is-longer-than-fifty-two-characters-x\""}
       - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
       - {rule: account-missing, result: passed, note: "the clean entity"}
-      - {rule: gcp-account-roles, result: false-fail, note: "the clean entity: no service account holds the five roles of Palette on project como-strata-test (roles/owner counts): palette-sa@como-palette.iam.gserviceaccount.com lacks roles"}
+      - {rule: gcp-account-roles, result: false-fail, note: "the clean entity: no service account holds the five roles of Palette on the project of the lab (roles/owner counts): the account of Palette lacks roles"}
       - {rule: gcp-default-sa-no-role, result: passed, note: "the clean entity"}
       - {rule: gcp-default-sa-missing, result: passed, note: "the clean entity"}
       - {rule: gcp-apis-off, result: false-fail, note: "the clean entity: cloudresourcemanager.googleapis.com is not enabled in the project"}
