@@ -489,6 +489,7 @@ func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string
 }
 
 // runNodeAssets does the same with the scripts of another directory. A test uses it to run a changed copy of the scripts.
+// render.js gets the files of the scripts in the order of the index.html of that directory.
 func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -496,7 +497,15 @@ func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, ext
 		whenNodeIsMissing(os.Getenv("CI"), t.Fatal, t.Skip)
 		return nil
 	}
-	args := append([]string{"testdata/render.js", assets, apiDir, string(state)}, extra...)
+	names, err := scriptsOf(os.DirFS(assets))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var scripts []string
+	for _, name := range names {
+		scripts = append(scripts, filepath.Join(assets, name))
+	}
+	args := append([]string{"testdata/render.js", strings.Join(scripts, ","), apiDir, string(state)}, extra...)
 	out, err := exec.Command(node, args...).Output()
 	if err != nil {
 		var exit *exec.ExitError
@@ -1038,17 +1047,30 @@ func readPage(t *testing.T, name string) []byte {
 // scriptSrc finds the file of each script that index.html loads.
 var scriptSrc = regexp.MustCompile(`<script src="([^"]*)"></script>`)
 
-// screenScripts gives the scripts of the screens: the scripts that the body of index.html loads, in their order. theme.js is
-// the script in the head.
-func screenScripts(t *testing.T) []string {
-	t.Helper()
-	_, body, _ := strings.Cut(string(readPage(t, "index.html")), "</head>")
+// scriptsOf gives the scripts of the screens of the page in fsys: the scripts that the body of index.html loads, in their
+// order. theme.js is the script in the head.
+func scriptsOf(fsys fs.FS) ([]string, error) {
+	index, err := fs.ReadFile(fsys, "index.html")
+	if err != nil {
+		return nil, err
+	}
+	_, body, _ := strings.Cut(string(index), "</head>")
 	var names []string
 	for _, m := range scriptSrc.FindAllStringSubmatch(body, -1) {
 		names = append(names, m[1])
 	}
 	if len(names) == 0 {
-		t.Fatal("the body of index.html loads no script")
+		return nil, errors.New("the body of index.html loads no script")
+	}
+	return names, nil
+}
+
+// screenScripts gives the scripts of the screens of the page that the program carries.
+func screenScripts(t *testing.T) []string {
+	t.Helper()
+	names, err := scriptsOf(files(t))
+	if err != nil {
+		t.Fatal(err)
 	}
 	return names
 }
