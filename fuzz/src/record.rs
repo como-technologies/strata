@@ -7,7 +7,9 @@ use strata::render::{Format, renderer};
 use strata::snapshot::Snapshot;
 use strata::term::color::Paint;
 
-use crate::support::{AT, answer, cluster_files, parts, profile_files, scratch, write};
+use crate::support::{
+    AGAIN_FILE, AT, RECORD_FILE, answer, cluster_files, parts, profile_files, scratch, write,
+};
 
 /// Make sure that `a` and `b`, two records of one profile, compare as one. The roots are equal,
 /// and both records hold the same packs. The order of the packs and the variables are the
@@ -75,8 +77,8 @@ fn assert_nothing_differs(diff: &Diff) {
 pub(crate) fn writes_and_reads_again(record: &Snapshot) -> Snapshot {
     let json = answer(record.to_json(false)).expect("a record is written as JSON");
     let dir = scratch();
-    write(&dir, "record.json", json.as_bytes());
-    let back = answer(Snapshot::load(&dir.join("record.json")))
+    write(&dir, RECORD_FILE, json.as_bytes());
+    let back = answer(Snapshot::load(&dir.join(RECORD_FILE)))
         .unwrap_or_else(|| panic!("strata cannot load the record that it wrote:\n{json}"));
     assert_eq!(
         back.root, record.root,
@@ -84,8 +86,8 @@ pub(crate) fn writes_and_reads_again(record: &Snapshot) -> Snapshot {
     );
     assert_eq!(back.content_digest(), record.content_digest());
     let again = answer(back.to_json(false)).expect("a loaded record is written as JSON");
-    write(&dir, "again.json", again.as_bytes());
-    let third = answer(Snapshot::load(&dir.join("again.json"))).expect("the second JSON loads");
+    write(&dir, AGAIN_FILE, again.as_bytes());
+    let third = answer(Snapshot::load(&dir.join(AGAIN_FILE))).expect("the second JSON loads");
     assert_eq!(
         answer(third.to_json(false)).as_deref(),
         Some(again.as_str()),
@@ -105,8 +107,8 @@ pub(crate) fn check_record(record: &Snapshot) {
 /// Load `bytes` as a record file. Return true when the file is a record.
 pub(crate) fn snapshot(bytes: &[u8]) -> bool {
     let dir = scratch();
-    write(&dir, "record.json", bytes);
-    let Some(record) = answer(Snapshot::load(&dir.join("record.json"))) else {
+    write(&dir, RECORD_FILE, bytes);
+    let Some(record) = answer(Snapshot::load(&dir.join(RECORD_FILE))) else {
         return false;
     };
     check_record(&record);

@@ -24,6 +24,13 @@ pub(crate) const UID: &str = UID_A;
 /// The time that the targets stamp on a record.
 pub(crate) const AT: &str = "2026-09-17T09:30:00Z";
 
+/// The name of the file of a record that a target writes.
+pub(crate) const RECORD_FILE: &str = "record.json";
+
+/// The name of the file of the JSON that a target writes from a document that it read, to read it
+/// again.
+pub(crate) const AGAIN_FILE: &str = "again.json";
+
 /// The text of `bytes`. A target that reads text leaves an input that is not UTF-8.
 pub(crate) fn utf8(bytes: &[u8]) -> Option<&str> {
     std::str::from_utf8(bytes).ok()
