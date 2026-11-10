@@ -87,7 +87,7 @@ status of strata.
 | `watch`, `every`, `limit` | `--watch`, `--every`, and `--limit`. Give `cluster:UID` as `source`. The job needs the key. |
 | `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
-| secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
+| secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone, and says so: see [The key of the job](#the-key-of-the-job). |
 
 The workflow sets `--format markdown`. It sets `--quiet` too, except when
 `verbose` is `true`: `--quiet` has priority over `--verbose`. The options `--rules`,
@@ -99,6 +99,31 @@ workflow has no input for them.
 static tier on each pull request, with the records of the repository. The job
 that builds runs the live tier with the key, and the watch after the create.
 The GitHub file also holds the job of the comment, in a comment of the file.
+
+### The key of the job
+
+`preflight.sh` looks for the key in the places where strata looks:
+`PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`. It reads the
+file as strata does. [Settings](../reference/settings.md) states the order. When
+the script finds a key, the job reads Palette. When it finds no key, the script
+gives `--offline`, and the job runs the static tier alone.
+
+The first line of the log then says that the run is offline, and why. The report
+says `offline` after the tiers, and the JSON report holds `options.offline`. Here
+the variable of the key is empty:
+
+```text
+{{#include ../output/preflight-job-offline.txt}}
+```
+
+An offline job exits `0` when each static check passes. The checks that did not
+run count against the readiness. To stop such a job, give the input `ready`,
+such as `80`. See [Exit codes, and `--strict`](../commands/preflight.md#exit-codes-and---strict).
+
+The script `palette-key.sh` looks for the key. `preflight.sh` and
+`merge-gate.sh` call it, and each release carries it beside them. A job can call
+it too: exit `0` when it finds a key, and exit `1` when it finds none. With exit
+`1` it prints the places where it looked. It never prints the key.
 
 ### The report as a comment
 
@@ -161,14 +186,15 @@ the default of each one.
 
 The job runs the static tier with `--offline`, also when the other jobs have
 `PALETTE_API_KEY`. For the live tier, or for the watch, set
-`STRATA_PREFLIGHT_TIER` to an empty value. The job then reads Palette when the
-key is set.
+`STRATA_PREFLIGHT_TIER` to an empty value. The job then reads Palette when it
+finds a key: see [The key of the job](#the-key-of-the-job).
 
 ### On another host
 
 The reusable workflow and the GitLab job call one script,
 `scripts/ci/preflight.sh`. A pipeline on another host calls it too. The
-installer puts it beside `pr-comment.sh`, which the comment needs.
+installer puts it beside `palette-key.sh`, which looks for the key, and
+`pr-comment.sh`, which the comment needs.
 
 Set `STRATA_BIN` to the binary, and set the variables with the prefix
 `STRATA_PREFLIGHT_`. [GitLab CI](./gitlab.md#the-variables) lists them. The
@@ -176,7 +202,8 @@ script prints the markdown report and exits with the status of `strata
 preflight`.
 
 The script has one option, `--offline`: it reads nothing from Palette. The script
-gives it too when `PALETTE_API_KEY` is empty.
+gives it too when it finds no key. The log and the report then say that the run
+is offline: see [The key of the job](#the-key-of-the-job).
 
 ## Custom probes of a company
 

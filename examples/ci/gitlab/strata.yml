@@ -6,7 +6,7 @@
 #   include:
 #     - local: .gitlab/strata.yml      # or a remote: URL, or a component
 #   variables:
-#     STRATA_VERSION: vX.Y.Z          # a release that carries the seven scripts
+#     STRATA_VERSION: vX.Y.Z          # a release that carries the eight scripts
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
 #     # STRATA_REPAVE: "true"       # a cluster against a version: the answer of Palette decides the label

@@ -1,5 +1,5 @@
 $ strata preflight cluster.json --cloud aws --tier static --offline --quiet
-strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static
+strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers static, offline
 
 Identity and permissions
   NOT RUN       4 checks did not run: tier cloud was not asked for (2); tier palette was not asked for (2)

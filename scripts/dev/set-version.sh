@@ -20,7 +20,7 @@
 # It rewrites the version only where the version is meant to follow this repository. These places
 # are the manifest, the badge, an install command, a pinned workflow ref, and the variables the
 # drop-ins set. Prose that names a version names it for a reason. The sentence "use v0.5.2 or
-# later: it is the first release with all four scripts" is a fact about v0.5.2. It is not a fact
+# later: it is the first release with merge-gate.sh" is a fact about v0.5.2. It is not a fact
 # about the version now. So free text is never rewritten, whatever version it holds.
 #
 # Recorded evidence is never touched, because it says which build produced a result:

@@ -130,7 +130,7 @@ cluster.
 
 The script is in this repository, at `scripts/ci/merge-gate.sh`, and every
 release carries it beside the binary. It needs `strata` (or `STRATA_BIN`),
-`git`, and `jq`. It
+`git`, `jq`, and `palette-key.sh` beside it, which looks for the key. It
 needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
 `fetch-depth: 0`. It writes to no host: the exit status is the gate, and
 [the comment](./pr-comments.md) is what people read.

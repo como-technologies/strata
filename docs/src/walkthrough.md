@@ -217,6 +217,9 @@ request can run it:
 
 A pipeline runs the same command through `preflight.sh`, which reads its options
 from variables. See [On another host](./automation/preflight.md#on-another-host).
+The script looks for the key where strata looks for it. With no key, the job
+runs offline, and its log and its report say so. See
+[The key of the job](./automation/preflight.md#the-key-of-the-job).
 
 The pull request can also show the report. `pr-comment.sh --preflight` posts
 `report.md` as a comment of its own, with the marker `<!-- strata-preflight -->`,

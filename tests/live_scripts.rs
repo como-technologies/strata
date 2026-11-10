@@ -7433,6 +7433,17 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         0,
         "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`\n",
     );
+    // the job of a pull request runs preflight.sh: offline, and then with the key of the lab
+    stage.strata(
+        "preflight build.json --cloud aws --tier static --quiet --offline --out preflight-job --format markdown",
+        0,
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`, Palette release not given, tiers static, offline. 4 ran\n",
+    );
+    stage.strata(
+        "preflight build.json --cloud aws --tier static,palette --quiet --out preflight-job-key --format markdown",
+        0,
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`, Palette release not given, tiers static, palette. 6 ran\n",
+    );
     stage.strata(
         "preflight build.json --cloud aws --tier static,palette --no-exec --strict --quiet",
         0,
@@ -7473,6 +7484,10 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "preflight-static",
             "preflight-comment",
             "preflight-comment-says",
+            "preflight-job",
+            "preflight-job-says",
+            "preflight-job-key",
+            "preflight-job-key-says",
             "preflight-live",
             "preflight-each",
             "preflight-offering",
