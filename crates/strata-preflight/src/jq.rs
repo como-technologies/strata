@@ -18,10 +18,11 @@ use jaq_json::Val;
 use jaq_std::ValT;
 use serde_json::Value;
 
+use strata::closed_set::ClosedSet;
 use strata::reference::version;
 use strata::render::count_of;
 
-use crate::curl::palette_curl;
+use crate::curl::{Saves, palette_curl};
 use crate::error::{Error, Result};
 
 mod comment;
@@ -85,6 +86,14 @@ const COUNT_OF_DEF: &str = r#"def count_of($noun): if . == 0 then "no \($noun)s"
 /// the key in a config, and in no argument of a process.
 pub const PALETTE_CURL: &str = "palette_curl";
 
+/// The name of the filter that gives the end of a `reproduce` line that sends a request at which
+/// Palette saves something.
+///
+/// A rule writes `{{ saves_comment("console-address") }}` at the end of such a line, with the
+/// value of `saves` of its check. So no rule holds its own copy of the words. The report fills it
+/// with [`Saves::comment`], as at the end of its own line for the request.
+pub const SAVES_COMMENT: &str = "saves_comment";
+
 /// The definitions of the filters that `program` names and the `jq` tool lacks, to put in front
 /// of the program. Empty when it names none.
 pub(crate) fn tool_definitions(program: &str) -> String {
@@ -102,14 +111,26 @@ pub(crate) fn tool_definitions(program: &str) -> String {
 ///
 /// A rule reads a version with `semver_numbers`, so that the one module of `strata` that parses a
 /// version parses it. A rule writes a count with `count_of_filter`, so that its words are those
-/// of the reports. A `reproduce` line starts a `curl` to Palette with [`PALETTE_CURL`].
+/// of the reports. A `reproduce` line starts a `curl` to Palette with [`PALETTE_CURL`], and ends
+/// with [`SAVES_COMMENT`] when Palette saves something at its request.
 fn added_funs() -> impl Iterator<Item = Fun<data::JustLut<Val>>> {
     [
         run((SEMVER_NUMBERS, v(0), |cv| bome(semver_numbers(&cv.1)))),
         run((COUNT_OF, v(1), |cv| unary(cv, count_of_filter))),
         run((PALETTE_CURL, v(0), |_| bome(Ok(Val::from(palette_curl()))))),
+        run((SAVES_COMMENT, v(1), |cv| unary(cv, saves_comment))),
     ]
     .into_iter()
+}
+
+/// `saves_comment`: the [`Saves::comment`] of the value `saves`, such as `console-address`. The
+/// filter does not read its input. A text that is no value of [`Saves`] is an error, so a wrong
+/// name in a rule shows.
+fn saves_comment(_: Val, saves: Val) -> ValR<Val> {
+    let text = std::str::from_utf8(saves.try_as_utf8_bytes()?).map_err(JaqError::str)?;
+    Saves::parse(text)
+        .map(|saves| Val::from(saves.comment().to_string()))
+        .ok_or_else(|| JaqError::str(format!("`{text}` is no value of `saves`")))
 }
 
 /// `semver_numbers`: the numbers of the version in the input, as [`version::numbers`] reads them.
@@ -575,6 +596,23 @@ mod tests {
             format!("{} \"$PALETTE_API/v1/gke\"", palette_curl())
         );
         jq.check_template("t", &line, false).unwrap();
+    }
+
+    /// A rule ends a line with the template of [`SAVES_COMMENT`], and the report fills it with the
+    /// comment of its own line for the request. A name that is no value of `saves` fails (#717).
+    #[test]
+    fn the_template_of_saves_comment_gives_the_comment_of_the_value_and_refuses_another_name() {
+        let jq = Jq::new();
+        for saves in Saves::ALL {
+            let line = format!("curl x{{{{ {SAVES_COMMENT}(\"{}\") }}}}", saves.as_str());
+            assert_eq!(
+                jq.render("t", &line, &json!({}), None).unwrap(),
+                format!("curl x{}", saves.comment())
+            );
+            jq.check_template("t", &line, false).unwrap();
+        }
+        let wrong = format!("curl x{{{{ {SAVES_COMMENT}(\"console\") }}}}");
+        assert!(jq.render("t", &wrong, &json!({}), None).is_err());
     }
 
     #[test]

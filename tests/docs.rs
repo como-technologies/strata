@@ -6257,7 +6257,7 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
 ///
 /// A page sends the header to `curl` as a config on standard input, as
 /// `examples/live/palette-curl.sh` does. A line of a report sends it as a config that `printf`
-/// writes into `<( )` (#694).
+/// writes into `<( )` (#694), after the escape of the key (#717).
 #[test]
 fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
     let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/strata-preflight/rules");
@@ -6285,8 +6285,7 @@ fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
                 n + 1
             );
         }
-        if file.starts_with(docs().join("output")) && text.contains("--config <(printf 'header = ")
-        {
+        if file.starts_with(docs().join("output")) && text.contains("&& curl -s --config <(k=") {
             outputs += 1;
         }
         for block in crate::common::code_blocks(&text, "bash") {
@@ -6315,7 +6314,10 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     let lines = one_line(section(&rules, "## The reproduce lines", Some("\n## ")));
     for needle in [
         "each line reads, and changes nothing",
-        "A `POST` goes only to a validate route of Palette",
+        // a `POST` to `validate/repave` can save a record of Palette (#717)
+        "A `POST` goes to a validate route of Palette, which checks the body",
+        "The test of the catalog names each such route that saves nothing",
+        "One route can save a record, `validate/repave`",
         "A line makes no login to a registry or a cloud",
         "A line names no path of the live example, `examples/live`",
         "A rule that only the lab can reproduce says so in such a line",
@@ -6342,6 +6344,56 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
         documents.contains("(./preflight-rules.md#the-reproduce-lines)"),
         "documents.md does not link the reproduce lines"
     );
+}
+
+/// At `validate/repave`, Palette can save the address that the console of a pack of virtual
+/// machines forwards to (#717). A block that says a request or a reproduce line changes nothing
+/// also says what Palette can save there.
+#[test]
+fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_save() {
+    let pages = walk(&docs())
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "md"));
+    for page in pages {
+        let text = one_line(&read(&page));
+        assert!(
+            !text.contains("none of them changes anything"),
+            "{}",
+            page.display()
+        );
+    }
+    for (page, anchor) in [
+        (
+            "reference/palette-api.md",
+            "Eight of the ten `POST` requests change nothing",
+        ),
+        (
+            "reference/documents.md",
+            "Each line reads, and changes nothing",
+        ),
+        (
+            "use-cases/stop-a-build.md",
+            "Each line reads, and changes nothing",
+        ),
+        ("development/live-example.md", "| `tenant.sh` | Lookups"),
+        (
+            "internals/palette/validate-routes.md",
+            "The request changes no setting of the cluster",
+        ),
+        (
+            "automation/pr-comments.md",
+            "The question changes no setting in Palette",
+        ),
+        ("commands/compare/repave.md", "The `POST` asks a question"),
+    ] {
+        let text = block(&read(&docs().join(page)), anchor);
+        assert!(
+            ["Palette can save", "Palette can also save"]
+                .iter()
+                .any(|says| text.contains(says)),
+            "{page}: {text}"
+        );
+    }
 }
 
 // ---- the page of the pipeline of a team (#492) ---------------------------------------------------

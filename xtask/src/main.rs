@@ -33,6 +33,10 @@ mod palette;
 #[path = "../../tests/common/process.rs"]
 #[allow(dead_code)]
 mod process;
+// The match of a route of Palette with a pattern. The checks of the facts and of the stand-in use
+// it, and so does the change test of the catalog of strata-preflight. So the two keep one match.
+#[path = "../../tests/common/route.rs"]
+mod route;
 #[cfg(test)]
 mod size;
 mod tenant;
