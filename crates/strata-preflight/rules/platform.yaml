@@ -37,8 +37,8 @@ rules:
       owner: palette
       text: Run the validate route at the start of each create, and add it to the SDK and the provider.
     evidence:
-      - kind: report
-        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+      - kind: run
+        ref: a live run
       - kind: source
         note: the validate route of a cluster checks the profiles of the cluster
     tests:
@@ -110,8 +110,8 @@ rules:
       - kind: run
         ref: "#90"
         note: PreparingInfrastructure for about 30 minutes with the Kubernetes Engine API off, and no error in the status
-      - kind: report
-        ref: palette-precreate-validation-gaps-findings-2026-09-28 F1
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/gke/infrastructure-stalled.json
         clean: fixtures/gke/watch-running.json
@@ -151,8 +151,8 @@ rules:
       owner: palette
       text: Order the pivot so the webhook is up first, and retry the call.
     evidence:
-      - kind: report
-        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26
+      - kind: run
+        ref: a live run
       - kind: run
         ref: "#89, #90, lab"
     tests:
@@ -248,8 +248,8 @@ rules:
       owner: palette
       text: Call the routes at create, and add them to the SDK and the provider.
     evidence:
-      - kind: report
-        ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+      - kind: run
+        ref: a live run
 
   - id: conditions-not-cloud
     title: The cloud inventory is the truth of a delete
@@ -380,8 +380,8 @@ rules:
         note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from Palette
       - kind: source
         note: a delete goes to the pilot only while DeProvisionDone is absent
-      - kind: report
-        ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2
+      - kind: run
+        ref: a live run
 
   - id: pcg-running
     title: The PCG of the cloud account is Running and active

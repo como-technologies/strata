@@ -481,8 +481,8 @@ rules:
       owner: provider
       text: Read the field, or remove it from the EKS resource.
     evidence:
-      - kind: report
-        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 B5
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/eks/update-strategy.json
         clean: fixtures/eks/clean.json

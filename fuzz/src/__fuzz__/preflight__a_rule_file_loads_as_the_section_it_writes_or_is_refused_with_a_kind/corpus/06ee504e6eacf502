@@ -73,8 +73,8 @@ rules:
   - kind: source
     ref: strata examples/live/terraform/iam/eks-controllers.json
     note: eks:CreateCluster, eks:DescribeCluster, and eks:ListClusters on arn:*:eks:*:*:cluster/* and arn:*:eks:*:*:nodegroup/*/*/*
-  - kind: report
-    ref: palette-precreate-validation-gaps-findings-2026-09-28 F4
+  - kind: run
+    ref: a live run
   - kind: doc
     ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/additional-iam-policies-specific-use-cases/
   tests:
@@ -151,8 +151,8 @@ rules:
     owner: palette
     text: A permission check for each cloud type (SimulatePrincipalPolicy) in the validate route, with the actions of the documented policies and the resources of the build.
   evidence:
-  - kind: report
-    ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
+  - kind: run
+    ref: a live run
   - kind: run
     ref: preflight-plan aws 20260929T041905Z, eks 20260929T042910Z
     note: with no --resource-arns, iam:PassRole and the EKS actions gave implicitDeny on roles that build clusters; the EC2, load balancer, and CloudFormation actions gave allowed

@@ -122,5 +122,5 @@ rules:
     note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from Palette
   - kind: source
     note: a delete goes to the pilot only while DeProvisionDone is absent
-  - kind: report
-    ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2
+  - kind: run
+    ref: a live run

@@ -32,8 +32,8 @@
 //!       owner: palette
 //!       text: Check the count of distinct zones in the EKS validate route.
 //!     evidence:
-//!       - kind: report
-//!         ref: palette-precreate-validation-gaps-findings-2026-09-28 F6
+//!       - kind: run
+//!         ref: a live run
 //!     tests:
 //!       - fault: fixtures/eks/one-zone.json
 //!         clean: fixtures/eks/clean.json

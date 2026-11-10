@@ -2138,9 +2138,8 @@ The ledger gives the gcp run as `passed` for the narrowed rule. Its events are i
 the fixture `watch-webhook-refused` that the tests of the rule replay. The ledger
 gives `caught` for the warning on gcp and on eks. The eks entry of the old rule
 is gone, because the cluster was deleted before the outcome was known. The
-findings report on the build runs,
-`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the eks
-delete and the source of each finding.
+findings report on the build runs holds the timeline of the eks delete and the
+source of each finding.
 
 ## A chart pushed again, on a cluster
 

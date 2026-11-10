@@ -42,8 +42,8 @@ rules:
   - kind: run
     ref: 20260929T043631Z
     note: the plan made the fault and the check found it; the clean entity passed
-  - kind: report
-    ref: palette-gke-release-channel-findings-2026-09-28
+  - kind: run
+    ref: a live run
   - kind: source
     note: Palette sets the release channel of the GKE control plane from the cluster config
   tests:

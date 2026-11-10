@@ -26,11 +26,11 @@ rules:
     owner: palette
     text: Sort the profiles by a stated key in the API; the provider keeps the configured order.
   evidence:
-  - kind: report
-    ref: palette-profile-order-findings-2026-09-22 F1
+  - kind: run
+    ref: a live run
     note: the provider discards the configured order
-  - kind: report
-    ref: palette-profile-order-findings-2026-09-22 F7
+  - kind: run
+    ref: a live run
     note: the install order on the cluster does not depend on the profile order
   - kind: source
     note: the profiles are a set since v0.28.1
@@ -65,10 +65,10 @@ rules:
     owner: palette
     text: Read the infrastructure profile by its type, not by its position.
   evidence:
-  - kind: report
-    ref: palette-profile-order-findings-2026-09-22 F5
-  - kind: report
-    ref: palette-profile-order-findings-2026-09-22 B1
+  - kind: run
+    ref: a live run
+  - kind: run
+    ref: a live run
     note: the FIPS guard of the console passes when position 0 is an add-on; reproduced against FIPS fixtures
   - kind: source
     note: the position-0 reads and the first-match pack lookups

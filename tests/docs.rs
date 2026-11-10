@@ -2252,7 +2252,9 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 
 /// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
 /// with a comment that says what it holds. The book states where the copy is and how old it can
-/// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
+/// be. A session that finds no mount cannot read the code that rule 7 tells it to read. The
+/// repository is public, so the book names no path of the host: the notes of the lead give the
+/// clones and their refresh (#65).
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
@@ -2270,19 +2272,24 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "the mount has no comment that says what the volume holds"
     );
 
-    let page = one_line(&read(&docs().join("development/changes.md")));
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(&changes);
     for needle in [
         "A session reads the code of Palette at `$HOME/palette`.",
         "On another host, the volume is empty.",
         "so it can be some hours old.",
         "it asks the lead with `riff tell lead`.",
         "A session on the host itself, not in a container, has no `$HOME/palette`.",
-        "the copy comes from the clones in `~/repos/spectrocloud/`.",
-        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
-        "A session on the host runs it first, then reads the clones.",
+        "The notes of the lead give the place of the clones on the host, and the command that refreshes them.",
+        "A session on the host runs that command first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
+    let code = section(&changes, "\n## The code of Palette\n", Some("\n## "));
+    assert!(
+        !code.contains("`~/"),
+        "the section names a path of the host:\n{code}"
+    );
 }
 
 /// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
@@ -6472,6 +6479,11 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
     assert!(
         sample.contains("It is one opinionated example, and not a rule."),
         "the page does not name the sample pipeline as one opinionated example"
+    );
+    // The repository is public, so the page names no decision record of the team (#65).
+    assert!(
+        !sample.contains("ADR-"),
+        "the page names a decision record of the team"
     );
 }
 

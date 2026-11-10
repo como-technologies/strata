@@ -43,8 +43,8 @@ rules:
   evidence:
   - kind: run
     ref: '#90'
-  - kind: report
-    ref: palette-precreate-validation-gaps-findings-2026-09-28 F1
+  - kind: run
+    ref: a live run
   tests:
   - fault: fixtures/gke/api-off.json
     clean: fixtures/gke/clean.json
