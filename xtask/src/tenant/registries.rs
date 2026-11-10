@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use strata::reference::{LATEST, version};
 
 use super::Tenant;
@@ -23,6 +24,42 @@ pub(super) const PRIVATE_CHARTS: &str = "64ed000000000000000000a1";
 pub(super) const CHART: &str = "podinfo";
 pub(super) const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
+
+/// The uid and the digest that the stand-in gives to a version that `examples/packs/` does not
+/// hold, as an item of the pack listing.
+///
+/// Palette keeps each version of a pack in a record of its own, with a uid and a digest of its
+/// own. A hash of the name `name` and the version `version` gives the uid and the digest. So two
+/// versions differ, and each run of the book gives the same item. The uid has 24 hex digits, as a
+/// pack uid of Palette has.
+fn made_version(name: &str, version: &str) -> Value {
+    let hash = |part: &str| format!("{:x}", Sha256::digest(format!("{part} {name}@{version}")));
+    let digest = format!("sha256:{}", hash("digest"));
+    json!({"metadata": {"uid": hash("uid")[..24]},
+        "spec": {"name": name, "version": version, "digest": digest}})
+}
+
+/// The item of the pack listing `listing` for the version `version` of the pack `name` in the
+/// registry `registry`.
+///
+/// A version that the listing does not hold has the item of [`made_version`], as a copy of
+/// [`Tenant::copy_pack_version`] has. Its `metadata.uid` and its `spec.digest` are those of a pin
+/// of the version.
+pub(super) fn listed_version(listing: &Value, name: &str, registry: &str, version: &str) -> Value {
+    listing["items"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .find(|i| is_listed(i, registry, version))
+        .cloned()
+        .unwrap_or_else(|| made_version(name, version))
+}
+
+/// True when the item `item` of a pack listing is the version `version` in the registry
+/// `registry`.
+fn is_listed(item: &Value, registry: &str, version: &str) -> bool {
+    item["spec"]["version"] == version && item["spec"]["registryUid"] == registry
+}
 
 /// The last sync of a registry, in the summary listing of its kind.
 #[derive(Clone, Copy)]
@@ -180,15 +217,26 @@ impl Tenant {
         }
     }
 
+    /// The pack listing of the pack `name` in `project`, as an edit reads it: see
+    /// [`Listing`](super::edit::Listing).
+    pub(super) fn listing_of(&self, project: &str, name: &str) -> Value {
+        let path = pack_listing(name);
+        // a chapter with no registries has no listing: an upgrade then gives the version a build
+        // of its own
+        if self.doc(project, &path).is_file() {
+            self.read(project, &path)
+        } else {
+            Value::Null
+        }
+    }
+
     /// Take one version of a pack out of the listing of the Public Repo, as before the registry
     /// published it. `registries` restores it.
     pub fn hide_pack_version(&self, project: &str, name: &str, version: &str) {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         if let Some(items) = listing["items"].as_array_mut() {
-            items.retain(|i| {
-                !(i["spec"]["version"] == version && i["spec"]["registryUid"] == PUBLIC_REPO)
-            });
+            items.retain(|i| !is_listed(i, PUBLIC_REPO, version));
             let count = items.len();
             listing["listmeta"]["count"] = json!(count);
         }
@@ -202,7 +250,7 @@ impl Tenant {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         for item in listing["items"].as_array_mut().into_iter().flatten() {
-            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+            if is_listed(item, PUBLIC_REPO, version) {
                 item["spec"]["annotations"]["disabled"] = json!("true");
             }
         }
@@ -218,6 +266,9 @@ impl Tenant {
     /// A copy above its base is a pre-release of the next version, such as `1.66.0-rc.1` of
     /// `1.65.0`. Palette marks the highest version of a pack, so the copy takes the mark from the
     /// base. The floating tags still stay on the base.
+    ///
+    /// The copy is a version of its own, so it has a uid and a digest of its own: see
+    /// [`made_version`]. A copy of a copy is a version of its own too.
     pub fn copy_pack_version(&self, project: &str, name: &str, version: &str, copy_version: &str) {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
@@ -226,22 +277,20 @@ impl Tenant {
         };
         let Some(mut copy) = items
             .iter()
-            .find(|i| i["spec"]["version"] == version && i["spec"]["registryUid"] == PUBLIC_REPO)
+            .find(|i| is_listed(i, PUBLIC_REPO, version))
             .cloned()
         else {
             return;
         };
-        // a pack uid of Palette is 24 hex digits: the copy_version changes the last one
-        let base = copy["metadata"]["uid"].as_str().unwrap_or_default();
-        let uid = format!("{}f", &base[..base.len().saturating_sub(1)]);
-        copy["metadata"]["uid"] = json!(uid);
+        let made = made_version(name, copy_version);
+        copy["metadata"]["uid"] = made["metadata"]["uid"].clone();
+        copy["spec"]["digest"] = made["spec"]["digest"].clone();
         let above = version::compare(copy_version, version) == Ordering::Greater;
         copy["metadata"]["annotations"]["latestVersion"] = json!(above.to_string());
         copy["spec"]["version"] = json!(copy_version);
         if above {
             for item in items.iter_mut() {
-                if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO
-                {
+                if is_listed(item, PUBLIC_REPO, version) {
                     item["metadata"]["annotations"]["latestVersion"] = json!("false");
                 }
             }
@@ -262,8 +311,8 @@ impl Tenant {
             .unwrap_or(Value::Null);
         if let Some(tags) = entity["tags"].as_array_mut() {
             tags.push(
-                json!({"packUid": uid, "parentTags": above, "tag": copy_version,
-                             "version": copy_version}),
+                json!({"packUid": made["metadata"]["uid"], "parentTags": above,
+                    "tag": copy_version, "version": copy_version}),
             );
         }
         self.write(project, &path, &entity);
@@ -283,7 +332,7 @@ impl Tenant {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         for item in listing["items"].as_array_mut().into_iter().flatten() {
-            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+            if is_listed(item, PUBLIC_REPO, version) {
                 item["spec"]["annotations"]["architecture"] = json!(architectures);
             }
         }
@@ -297,7 +346,7 @@ impl Tenant {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         for item in listing["items"].as_array_mut().into_iter().flatten() {
-            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+            if is_listed(item, PUBLIC_REPO, version) {
                 item["spec"]["template"] = template.clone();
             }
         }
@@ -353,6 +402,8 @@ fn csi_entity_in_oci(entity: &Value) -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
     use crate::files::files_under;
 
@@ -475,6 +526,46 @@ mod tests {
         // a pre-release of the next version is above the base, and Palette marks the highest
         tenant.copy_pack_version("dev", "cert-manager", "1.21.1", "1.22.0-rc.1");
         assert_eq!(marked_versions(&tenant, "cert-manager"), ["1.22.0-rc.1"]);
+    }
+
+    #[test]
+    fn each_copy_of_a_pack_version_has_a_uid_and_a_digest_of_its_own() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), &crate::repository());
+        tenant.registries("dev");
+        // two copies of one base version, and a copy of a copy
+        tenant.copy_pack_version("dev", "cert-manager", "1.21.1", "1.21.1-rev1");
+        tenant.copy_pack_version("dev", "cert-manager", "1.21.1", "1.22.0-rc.1");
+        tenant.copy_pack_version("dev", "cert-manager", "1.22.0-rc.1", "1.22.0");
+        let listing = tenant.read("dev", &pack_listing("cert-manager"));
+        let items = listing["items"].as_array().expect("a listing has items");
+        let uids: BTreeSet<&str> = items
+            .iter()
+            .filter_map(|i| i["metadata"]["uid"].as_str())
+            .collect();
+        let digests: BTreeSet<&str> = items
+            .iter()
+            .filter_map(|i| i["spec"]["digest"].as_str())
+            .collect();
+        assert_eq!((uids.len(), digests.len()), (items.len(), items.len()));
+
+        // the tag of each copy names the uid of the copy
+        let entity = tenant.read("dev", &pack_entity_route("cert-manager", PUBLIC_REPO));
+        for copy in ["1.21.1-rev1", "1.22.0-rc.1", "1.22.0"] {
+            let item = items.iter().find(|i| is_listed(i, PUBLIC_REPO, copy));
+            let tag = entity["tags"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|t| t["tag"] == copy);
+            let uid = item.map(|i| &i["metadata"]["uid"]);
+            assert_eq!(tag.map(|t| &t["packUid"]), uid, "{copy}");
+            assert_eq!(
+                uid.and_then(Value::as_str).map(str::len),
+                Some(24),
+                "{copy}"
+            );
+        }
     }
 
     #[test]

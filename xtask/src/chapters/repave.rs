@@ -94,7 +94,6 @@ fn repave_csi(r: &mut Runner) {
         "aws-stack@1.1.1",
         &[Edit::Upgrade {
             pack: "kubernetes",
-            uid: "64ea0000000000000000a117",
             version: "1.36.3",
         }],
     );
