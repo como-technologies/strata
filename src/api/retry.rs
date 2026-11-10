@@ -103,7 +103,8 @@ fn is_transient(e: &Error) -> bool {
 
 impl<A: PaletteApi> Retry<A> {
     /// Run `call` until it succeeds, fails for a reason that does not pass, or runs out of
-    /// retries. A GET and a POST that changes nothing retry the same way.
+    /// retries. A GET and a POST of a question retry the same way. A POST to `validate/repave`
+    /// again saves the same address again.
     fn attempts(&self, path: &str, call: impl Fn() -> Result<Value>) -> Result<Value> {
         let mut attempt = 0;
         loop {

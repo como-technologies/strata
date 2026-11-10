@@ -47,7 +47,11 @@ pub(super) fn auto_reproduce(
             }
         }
         Some(Check::Palette(PaletteCheck {
-            method, expr, body, ..
+            method,
+            expr,
+            body,
+            saves,
+            ..
         })) => {
             let path = match &outcome.ran {
                 Ran::Request(call) => call.path.as_str(),
@@ -70,7 +74,11 @@ pub(super) fn auto_reproduce(
                 ),
                 (Method::Get, _) => String::new(),
             };
-            lines.push(code_line(&data, path, dir));
+            let mut line = code_line(&data, path, dir);
+            if let Some(saves) = saves {
+                line.push_str(saves.comment());
+            }
+            lines.push(line);
             lines.push(format!(
                 "jq --arg code \"$code\" --slurpfile body {dir}/body.json '{}' {dir}/world.json",
                 tool_program(&format!(".response = {RESPONSE_OF_CURL} | "), expr)

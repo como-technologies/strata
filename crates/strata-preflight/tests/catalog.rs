@@ -11,11 +11,15 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use strata::api::API_KEY_HEADER;
+use strata::closed_set::ClosedSet;
 #[cfg(target_os = "linux")]
 use strata::config::{KEY_VARS, PROJECT_VARS, URL_VARS};
 use strata_preflight::catalog;
+#[cfg(target_os = "linux")]
+use strata_preflight::curl::KEY_LINE_BREAK;
+use strata_preflight::curl::Saves;
 use strata_preflight::fixture;
-use strata_preflight::jq::{Jq, PALETTE_CURL};
+use strata_preflight::jq::{Jq, PALETTE_CURL, SAVES_COMMENT};
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::report;
 use strata_preflight::rule::{
@@ -37,6 +41,11 @@ mod common;
 #[allow(dead_code)]
 mod process;
 use process::CommandExt;
+
+// The match of a route with a pattern, as xtask matches the routes of the stand-in.
+#[path = "../../../tests/common/route.rs"]
+mod route;
+use route::route_matches;
 
 /// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
 /// rules send it. Its query lifts the default filter of Palette, which drops each type with fewer
@@ -2048,6 +2057,72 @@ fn a_reproduce_line_sends_the_key_to_palette_in_a_header_and_in_no_argument_of_a
     }
 }
 
+/// A key with a quote or a backslash reaches Palette as it is. The start of the `curl` puts a `\`
+/// before each one in the config. A key with a line break stops the line before `curl`, because
+/// the break can add a line to the config (#717). `palette_curl` of `examples/live/palette-curl.sh`
+/// gets the same keys, sends each one as the line does, and stops with the same words.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_start_of_a_curl_escapes_the_key_for_the_config_and_stops_on_a_line_break() {
+    let jq = Jq::new();
+    let start = jq
+        .first("t", PALETTE_CURL, &serde_json::Value::Null, None)
+        .unwrap();
+    let line = format!("{} \"${}/v1/x\"", start.as_str().unwrap(), URL_VARS[0]);
+    let script = format!(
+        r#"script=palette-curl; . "$LIVE/common.sh"; . "$LIVE/palette-curl.sh"; palette_curl -s "${}/v1/x""#,
+        URL_VARS[0]
+    );
+    let live = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/live");
+    let dir = folder_for_reproduce();
+    let (address, seen) = palette_that_keeps_the_key("{}");
+    let run = |program: &str, key: &str| {
+        Command::new("bash")
+            .args(["-c", program])
+            .current_dir(dir.path())
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .env("HOME", dir.path())
+            .env(URL_VARS[0], &address)
+            .env(KEY_VARS[0], key)
+            .env(PROJECT_VARS[0], "p-1")
+            .env("LIVE", &live)
+            .env("KEY", key)
+            .output_locked()
+            .unwrap()
+    };
+    let sent = [r#"a"b\c"#, r#"\""#, "key-of-the-test-717"];
+    for (program, stop) in [
+        (line.as_str(), KEY_LINE_BREAK.to_string()),
+        (script.as_str(), format!("palette-curl: {KEY_LINE_BREAK}")),
+    ] {
+        for key in sent {
+            let ran = run(program, key);
+            assert!(
+                ran.status.success(),
+                "{program}: {key}: {}",
+                String::from_utf8_lossy(&ran.stderr)
+            );
+        }
+        for key in ["ab\nheader = \"X: y\"", "ab\r"] {
+            let ran = run(program, key);
+            assert!(!ran.status.success(), "{program}: {key:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&ran.stderr).trim_end(),
+                stop,
+                "{program}: {key:?}"
+            );
+        }
+    }
+    let seen = seen.lock().unwrap();
+    let keys: Vec<&str> = seen.iter().map(|request| request.key.as_str()).collect();
+    assert_eq!(
+        keys,
+        [sent, sent].concat(),
+        "Palette gets each key as it is from the line and from the script, and no key with a line break"
+    );
+}
+
 /// Run the program `expr` in the engine and in the `jq` tool, over each input. The tool runs the
 /// line that a report prints for a static rule: the definitions of the filters in front, then the
 /// program. The line starts with `start`. The two give the same answer, or both fail.
@@ -2754,13 +2829,17 @@ const LAB_SCRIPTS: &str = "examples/live";
 /// also counts by its whole name, so `get-credentials` is a change: it writes the kubeconfig. A
 /// login writes a file of credentials, so it is a change too. An option counts by its whole name,
 /// so `--delete` is a delete, and `--tag-filters` is no change.
-const CHANGES: [&str; 54] = [
+///
+/// A copy writes an image or a file again. A pull writes the store of images of the machine. A tag
+/// gives an image or a resource a new tag.
+const CHANGES: [&str; 57] = [
     "add",
     "annotate",
     "apply",
     "attach",
     "chmod",
     "chown",
+    "copy",
     "cordon",
     "cp",
     "create",
@@ -2783,6 +2862,7 @@ const CHANGES: [&str; 54] = [
     "modify",
     "mv",
     "patch",
+    "pull",
     "push",
     "put",
     "reboot",
@@ -2799,6 +2879,7 @@ const CHANGES: [&str; 54] = [
     "set",
     "start",
     "stop",
+    "tag",
     "taint",
     "tee",
     "terminate",
@@ -2882,26 +2963,116 @@ fn written_files(text: &str) -> Vec<&str> {
         .collect()
 }
 
-/// What `line` changes, when it changes something. A change is a word of [`CHANGES`], or a
-/// `POST` to a route that is not a validate route. A write of a file outside the current
-/// directory and outside `world_dir` is a change too. A validate route of Palette checks a body.
-/// The lines that a report adds write `request.json` and `body.json` into `world_dir`, the folder
-/// of `world.json`, beside the values of the variables.
-fn change_in(line: &str, world_dir: &str) -> Option<String> {
+/// The commands that hold a word of [`CHANGES`] and change nothing outside the current directory,
+/// as two words in a row. `helm pull` writes the chart into the current directory. The MAAS
+/// command `tag machines` lists the machines of a tag.
+const READ_FORMS: [[&str; 2]; 2] = [["helm", "pull"], ["tag", "machines"]];
+
+/// The routes of Palette that take a `POST` from a line of the catalog and save nothing. Each one
+/// checks the body, and the code of Palette shows that it saves no record. A part in braces is
+/// one part of the path, such as a uid. `validate/repave` is not one of them: Palette can save a
+/// record there, see [`Saves::ConsoleAddress`].
+const POST_READS: [&str; 7] = [
+    "/v1/clouds/aws/account/validate",
+    "/v1/clouds/aws/properties/validate",
+    "/v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity",
+    "/v1/clouds/eks/properties/validate",
+    "/v1/clouds/gcp/properties/validate",
+    "/v1/registries/oci/ecr/validate",
+    "/v1/spectroclusters/{cloudType}/validate",
+];
+
+/// The path of each address of Palette in `line`, from its `/v1/` to its end: a quote, a `?`, a
+/// `)`, a `\`, or a space. Each `{{ }}` template is the part `{}`, also when it holds a `/`.
+fn palette_paths(line: &str) -> Vec<String> {
+    let mut paths = Vec::new();
+    let mut rest = line;
+    while let Some(at) = rest.find("/v1/") {
+        let mut path = String::new();
+        rest = &rest[at..];
+        loop {
+            if let Some(template) = rest.strip_prefix("{{") {
+                path.push_str("{}");
+                rest = template.find("}}").map_or("", |end| &template[end + 2..]);
+                continue;
+            }
+            match rest.chars().next() {
+                Some(c) if !(c.is_whitespace() || "\"'?)\\".contains(c)) => {
+                    path.push(c);
+                    rest = &rest[c.len_utf8()..];
+                }
+                _ => break,
+            }
+        }
+        paths.push(path);
+    }
+    paths
+}
+
+/// The route of the check of a rule, with what Palette saves there, when the check names it. A
+/// line of the rule can send a `POST` to this route when it says what Palette saves.
+fn saving_route(rule: &Rule) -> Option<(String, Saves)> {
+    let Some(Check::Palette(PaletteCheck {
+        path,
+        saves: Some(saves),
+        ..
+    })) = &rule.check
+    else {
+        return None;
+    };
+    palette_paths(path)
+        .into_iter()
+        .next()
+        .map(|route| (route, *saves))
+}
+
+/// What `line` changes, when it changes something. A change is a word of [`CHANGES`] outside
+/// [`READ_FORMS`], or a `POST` to a route that is not in [`POST_READS`]. A write of a file outside
+/// the current directory and outside `world_dir` is a change too. The lines that a report adds
+/// write `request.json` and `body.json` into `world_dir`, the folder of `world.json`, beside the
+/// values of the variables.
+///
+/// `saving` is the route of the check of the rule of the line, and what Palette saves there, when
+/// the check names it: see [`saving_route`]. A `POST` to it passes when the line ends with a
+/// comment that says what Palette saves.
+fn change_in(line: &str, world_dir: &str, saving: Option<(&str, Saves)>) -> Option<String> {
     let text = command_text(line);
     let words: Vec<&str> = text
         .split(|c: char| c.is_whitespace() || "|;&()$`<>".contains(c))
         .filter(|word| !word.is_empty())
         .collect();
     let changes = |name: &str| CHANGES.contains(&name.to_ascii_lowercase().as_str());
-    if let Some(word) = words.iter().find(|word| match word.strip_prefix('-') {
-        Some(option) => changes(option.trim_start_matches('-')),
-        None => changes(word) || changes(word.split('-').next().unwrap_or_default()),
+    let read_form = |at: usize| {
+        let pair = |from: usize| {
+            words
+                .get(from..from + 2)
+                .is_some_and(|two| READ_FORMS.iter().any(|form| form == two))
+        };
+        pair(at) || at.checked_sub(1).is_some_and(pair)
+    };
+    if let Some((_, word)) = words.iter().enumerate().find(|(at, word)| {
+        let change = match word.strip_prefix('-') {
+            Some(option) => changes(option.trim_start_matches('-')),
+            None => changes(word) || changes(word.split('-').next().unwrap_or_default()),
+        };
+        change && !read_form(*at)
     }) {
         return Some(format!("the word `{word}`"));
     }
-    if curl_posts(&words) && !line.contains("/validate") {
-        return Some("a POST to a route that is not a validate route".to_string());
+    if curl_posts(&words) {
+        let says = |saves: Saves| line.ends_with(saves.comment());
+        let paths = palette_paths(line);
+        if let Some(path) = paths.iter().find(|path| {
+            !POST_READS.iter().any(|route| route_matches(route, path))
+                && !saving.is_some_and(|(route, saves)| route_matches(route, path) && says(saves))
+        }) {
+            return Some(format!(
+                "a POST to {path}, which is not a route that saves nothing"
+            ));
+        }
+        if paths.is_empty() {
+            return Some("a POST to no route of Palette".to_string());
+        }
     }
     // a file of the folder of the world is `<world_dir>/<name>`, with no other slash in the name
     let in_world_dir = |file: &str| {
@@ -2919,7 +3090,8 @@ fn change_in(line: &str, world_dir: &str) -> Option<String> {
 /// nothing. The report of #613 printed `api.sh delete-named` for `versions-outside-state`: the
 /// line deletes each version of the profile, also the version that the cluster runs. The test
 /// reads each line of each engine. It also reads the lines that a report prints for the fault
-/// fixture of each rule. The report adds lines for the check to them.
+/// fixture of each rule. The report adds lines for the check to them. A line can send a `POST` to the
+/// route of the check of its rule, at which Palette saves something, when it says what (#717).
 #[test]
 fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
     let catalog = catalog::builtin().unwrap();
@@ -2933,19 +3105,41 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
         .first("t", PALETTE_CURL, &serde_json::Value::Null, None)
         .unwrap();
     let start = start.as_str().unwrap();
+    // a line that sends a request at which Palette saves something ends with a template. The
+    // test fills it too, so that the line ends with the comment that `change_in` reads.
+    let comments: Vec<(String, String)> = Saves::ALL
+        .iter()
+        .map(|saves| {
+            let template = format!("{{{{ {SAVES_COMMENT}(\"{}\") }}}}", saves.as_str());
+            let comment = jq
+                .render("t", &template, &serde_json::Value::Null, None)
+                .unwrap();
+            (template, comment)
+        })
+        .collect();
     let mut found = Vec::new();
     for rule in catalog.rules() {
         let mut lines: Vec<String> = rule
             .reproduce
             .lines()
-            .map(|line| line.replace(&template, start))
+            .map(|line| {
+                comments
+                    .iter()
+                    .fold(line.replace(&template, start), |line, (saves, comment)| {
+                        line.replace(saves, comment)
+                    })
+            })
             .collect();
         if let Some(fault) = rule.tests.iter().find_map(|t| t.fault.as_ref()) {
             let doc = fixture::load(fault).unwrap();
             lines.extend(reproduce_lines(&catalog, rule, doc, dir.path(), &jq));
         }
+        let saving = saving_route(rule);
         for line in lines {
-            if let Some(change) = change_in(&line, &world_dir) {
+            let saving = saving
+                .as_ref()
+                .map(|(route, saves)| (route.as_str(), *saves));
+            if let Some(change) = change_in(&line, &world_dir, saving) {
                 found.push(format!("{}: {change}: {line}", rule.id));
             }
         }
@@ -2980,8 +3174,13 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "crane auth logout <account>.dkr.ecr.r.amazonaws.com",
         "gcloud container clusters get-credentials c --region r",
         "kubectl config use-context c",
+        "crane copy <registry>/app:1.0.0 <mirror>/app:1.0.0",
+        "crane tag <registry>/app:1.0.0 stable",
+        "aws ecr tag-resource --resource-arn <arn> --tags Key=k,Value=v",
+        "aws eks tag-resource --resource-arn <arn> --tags k=v",
+        "docker pull <registry>/app:1.0.0",
     ] {
-        assert!(change_in(bad, "out").is_some(), "{bad}");
+        assert!(change_in(bad, "out", None).is_some(), "{bad}");
     }
     for good in [
         "aws ec2 describe-vpcs --filters Name=tag-key,Values=x --query 'Vpcs[].VpcId' --output text   # no id before a force delete",
@@ -3001,9 +3200,55 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "crane digest <account>.dkr.ecr.r.amazonaws.com/app:1.0.0",
         "gcloud auth print-access-token",
         r#"strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // "<name>" }} '.profiles[] | .version'"#,
+        "helm pull <chart> --version <version> --repo <url> && sha256sum <chart>-<version>.tgz",
+        "aws ecr list-tags-for-resource --resource-arn <arn>",
     ] {
-        assert_eq!(change_in(good, "out"), None, "{good}");
+        assert_eq!(change_in(good, "out", None), None, "{good}");
     }
+}
+
+/// A `POST` passes to a route of [`POST_READS`]. It also passes to the route of the check of its
+/// rule, when the line says what Palette saves there (#717). A route that ends in `/validate` is no
+/// read for that reason alone. `validate/repave` with no comment is a change, and so is a comment
+/// on another route.
+#[test]
+fn the_change_test_passes_a_post_only_to_a_route_that_saves_nothing_or_to_the_route_of_the_check_that_says_what_it_saves()
+ {
+    let post = |path: &str| format!(r#"curl -s -X POST --data @request.json "https://h{path}""#);
+    for route in POST_READS {
+        let path: Vec<&str> = route
+            .split('/')
+            .map(|part| if part.starts_with('{') { "x-1" } else { part })
+            .collect();
+        let line = post(&path.join("/"));
+        assert_eq!(change_in(&line, "out", None), None, "{line}");
+    }
+    let saving = Some((
+        "/v1/spectroclusters/{}/validate/repave",
+        Saves::ConsoleAddress,
+    ));
+    let says = Saves::ConsoleAddress.comment();
+    let repave = post("/v1/spectroclusters/u-1/validate/repave");
+    for (line, saving) in [
+        (repave.clone(), None),
+        (repave.clone(), saving),
+        (format!("{repave}{says}"), None),
+        (format!("{repave}   # Palette saves nothing"), saving),
+        (
+            format!("{}{says}", post("/v1/spectroclusters/u-1/validate/packs")),
+            saving,
+        ),
+        (post("/v1/clusterprofiles/x-1/validate"), None),
+        ("curl -s -d @body.json https://h/x".to_string(), None),
+    ] {
+        assert!(change_in(&line, "out", saving).is_some(), "{line}");
+    }
+    assert_eq!(change_in(&format!("{repave}{says}"), "out", saving), None);
+    // a line of a rule names the uid with a template, which can hold a `/`
+    let line = format!(
+        r#"curl -s -X POST "${{PALETTE_API}}/v1/spectroclusters/{{{{ .clusterUid // "<uid>" }}}}/validate/repave" -d @x.json{says}"#
+    );
+    assert_eq!(change_in(&line, "out", saving), None, "{line}");
 }
 
 /// No machine outside the lab has the scripts of the live example. So no text of the catalog

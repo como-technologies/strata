@@ -12,6 +12,7 @@ use super::model::{Fact, Kind, Piece, is_placeholder, pieces, unread};
 use super::sets;
 use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, query_names, shape};
 use super::subjects;
+use crate::route::route_matches;
 
 /// The headings of `internals/palette/` that state nothing about Palette, each as `page#anchor`:
 /// they say how strata or the book works. Every other `##` heading needs a fact.
@@ -442,18 +443,6 @@ fn live_fault(sources: &Sources, live: &str) -> Option<String> {
         .get(script)
         .is_some_and(|rows| rows.iter().any(|row| same_check(row, check)));
     (!has_row).then(|| format!("the book has no row for the check `{check}` of `{script}`"))
-}
-
-/// A route matches a pattern when the two have the same number of segments, and each segment is
-/// equal or is `{name}` in the pattern.
-pub fn route_matches(pattern: &str, route: &str) -> bool {
-    let (pattern, route): (Vec<&str>, Vec<&str>) =
-        (pattern.split('/').collect(), route.split('/').collect());
-    pattern.len() == route.len()
-        && pattern
-            .iter()
-            .zip(&route)
-            .all(|(p, r)| is_placeholder(p) || p == r)
 }
 
 /// A pattern of the stand-in is a path under `v1/`, with a whole segment as `{name}`.

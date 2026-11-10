@@ -52,7 +52,8 @@ fault shows after a full apply. See
 
 Each `reproduce:` line that reads Palette starts with the same `curl`. The key
 goes to `curl` in a config that `printf` writes into `<( )`, so no argument of a
-process holds it. Run the line in a shell with `<( )`, such as bash or zsh. See
+process holds it. A key with a line break stops the line before `curl`. Run the
+line in bash or zsh. See
 [The reproduce lines](../../reference/preflight-rules.md#the-reproduce-lines).
 
 A run sends each request one time. The backend keeps the answer of each request,

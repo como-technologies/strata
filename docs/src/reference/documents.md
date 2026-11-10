@@ -769,8 +769,10 @@ what it answered.
     the list, and no `ran` and no `answer` of its own. A check of kind `exec`
     with `palette` has one entry, the read of Palette, beside `ran` and `answer`.
   - `reproduce[]`: the lines a person runs to see the same thing. Each line
-    reads, and changes nothing. A line that reads Palette sends the key in a
-    config of `curl`, and in no argument: see
+    reads, and changes nothing, with one exception. At `validate/repave`,
+    Palette can save the address of the console of a pack of virtual
+    machines. A line that sends that route says so in a comment. A line that
+    reads Palette sends the key in a config of `curl`, and in no argument: see
     [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
     `owner` is `palette`, `provider`, `lab`, `strata`, `operator`, or `none`.

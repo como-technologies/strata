@@ -3,7 +3,7 @@
 use serde_json::{Value, json};
 
 use super::macros::user_macro;
-use super::registries::{OCI_CSI_DIGEST, OCI_CSI_PACK, PALETTE_REGISTRY};
+use super::registries::{OCI_CSI_DIGEST, OCI_CSI_PACK, PALETTE_REGISTRY, listed_version};
 
 /// One change to a published profile document, as a person makes it through the API.
 #[derive(Clone, Debug)]
@@ -33,13 +33,15 @@ pub enum Edit {
     /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
     /// Palette repaves on.
     KubeadmCommand(&'static str),
-    /// Move a pack to another version: its `packUid`, tag, and version change, as an upgrade of
-    /// the pack does. The impact table calls this a repave for the OS and Kubernetes layers.
+    /// Move a pack to another version, as an upgrade of the pack does. The impact table calls this
+    /// a repave for the OS and Kubernetes layers.
+    ///
+    /// The tag and the version change. The `packUid` and the digest become those of the other
+    /// version in the pack listing, as Palette takes them from the record of that version: see
+    /// [`listed_version`].
     Upgrade {
         /// The pack that moves.
         pack: &'static str,
-        /// The `packUid` of the other version.
-        uid: &'static str,
         /// The other version, also its tag.
         version: &'static str,
     },
@@ -91,24 +93,40 @@ pub enum Edit {
     },
 }
 
+/// The pack listing of a pack name in the project of the profile, as `GET /v1/packs` gives it.
+/// Null when the project has no listing of that pack.
+pub(super) type Listing<'a> = &'a dyn Fn(&str) -> Value;
+
 impl Edit {
-    /// The part of an edit that lands in the pack summaries of `packs/manifests`.
-    pub(super) fn apply_manifests(&self, manifests: &mut Value) {
-        if let Edit::NoDigest(name) = self {
-            for pack in manifests["spec"]["packs"]
-                .as_array_mut()
-                .into_iter()
-                .flatten()
-            {
-                if pack["spec"]["name"] == *name {
-                    pack["spec"]["digest"] = json!("");
+    /// The part of an edit that lands in the pack summaries of `packs/manifests`. `listing` gives
+    /// the pack listing that an upgrade reads.
+    ///
+    /// Palette gives the summary of a pack from the record of the version that the profile pins:
+    /// its uid, its version, and its digest.
+    pub(super) fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
+        match self {
+            Edit::NoDigest(name) => {
+                for summary in summaries_named(manifests, name) {
+                    summary["spec"]["digest"] = json!("");
                 }
             }
+            Edit::Upgrade { pack, version } => {
+                let listing = listing(pack);
+                for summary in summaries_named(manifests, pack) {
+                    let registry = summary["spec"]["registryUid"].as_str().unwrap_or_default();
+                    let listed = listed_version(&listing, pack, registry, version);
+                    summary["metadata"]["uid"] = listed["metadata"]["uid"].clone();
+                    summary["spec"]["version"] = json!(version);
+                    summary["spec"]["digest"] = listed["spec"]["digest"].clone();
+                }
+            }
+            _ => {}
         }
     }
 
-    /// Apply the edit to the profile document `doc`.
-    pub(super) fn apply(&self, doc: &mut Value) {
+    /// Apply the edit to the profile document `doc`. `listing` gives the pack listing that an
+    /// upgrade reads.
+    pub(super) fn apply(&self, doc: &mut Value, listing: Listing) {
         match self {
             Edit::Reclaim(policy) => {
                 for pack in packs_named(doc, "csi-aws-ebs") {
@@ -141,9 +159,13 @@ impl Edit {
                     }
                 }
             }
-            Edit::Upgrade { pack, uid, version } => {
+            Edit::Upgrade { pack, version } => {
+                let listing = listing(pack);
                 for p in packs_named(doc, pack) {
-                    p["packUid"] = json!(uid);
+                    let registry = p["registryUid"].as_str().unwrap_or_default();
+                    let listed = listed_version(&listing, pack, registry, version);
+                    p["packUid"] = listed["metadata"]["uid"].clone();
+                    p["digest"] = listed["spec"]["digest"].clone();
                     p["tag"] = json!(version);
                     p["version"] = json!(version);
                 }
@@ -224,6 +246,18 @@ fn packs_named<'a>(doc: &'a mut Value, name: &'a str) -> impl Iterator<Item = &'
     packs_mut(doc).filter(move |pack| pack["name"] == name)
 }
 
+/// Each pack summary of a `packs/manifests` answer that has the name `name`.
+fn summaries_named<'a>(
+    manifests: &'a mut Value,
+    name: &'a str,
+) -> impl Iterator<Item = &'a mut Value> {
+    manifests["spec"]["packs"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .filter(move |summary| summary["spec"]["name"] == name)
+}
+
 /// Each pack of the published template.
 fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
     doc["spec"]["published"]["packs"]
@@ -235,14 +269,29 @@ fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
 
 #[cfg(test)]
 mod tests {
+    use strata::api::{MemoryApi, Palette};
+    use strata::diff::ChangeFlag;
+    use strata::ops::{self, SnapshotOptions};
+    use strata::reference::Ref;
+    use strata::snapshot::Snapshot;
+    use strata::term::progress::Progress;
+
+    use super::super::Tenant;
+    use super::super::registries::PUBLIC_REPO;
+    use super::super::routes::{manifests_route, profile_route, variables_route};
     use super::*;
+
+    /// The pack listing of a project that lists no pack.
+    fn no_listing(_: &str) -> Value {
+        Value::Null
+    }
 
     #[test]
     fn the_reclaim_edit_changes_the_csi_pack_alone() {
         let mut doc = json!({"spec": {"published": {"packs": [
             {"name": "csi-aws-ebs", "values": "a\nreclaimPolicy: Delete\nb"},
             {"name": "kubernetes", "values": "reclaimPolicy: Delete"}]}}});
-        Edit::Reclaim("Retain").apply(&mut doc);
+        Edit::Reclaim("Retain").apply(&mut doc, &no_listing);
         let packs = doc["spec"]["published"]["packs"].as_array().unwrap();
         assert_eq!(packs[0]["values"], "a\nreclaimPolicy: Retain\nb");
         assert_eq!(packs[1]["values"], "reclaimPolicy: Delete");
@@ -251,7 +300,7 @@ mod tests {
     #[test]
     fn the_oci_edit_moves_the_csi_pack_to_the_other_registry() {
         let mut doc = json!({"spec": {"published": {"packs": [{"name": "csi-aws-ebs"}]}}});
-        Edit::OciCsi.apply(&mut doc);
+        Edit::OciCsi.apply(&mut doc, &no_listing);
         let pack = &doc["spec"]["published"]["packs"][0];
         assert_eq!(pack["type"], "oci");
         assert_eq!(pack["registryUid"], PALETTE_REGISTRY);
@@ -268,7 +317,7 @@ mod tests {
             Edit::Reclaim("Retain"),
             Edit::Version("1.1.2"),
         ] {
-            edit.apply(&mut doc);
+            edit.apply(&mut doc, &no_listing);
         }
         assert_eq!(doc["spec"]["version"], "1.1.2");
         let pack = &doc["spec"]["published"]["packs"][0];
@@ -285,7 +334,7 @@ mod tests {
             pack: "cert-manager",
             key: "registryPassword",
         }
-        .apply(&mut doc);
+        .apply(&mut doc, &no_listing);
         let packs = doc["spec"]["published"]["packs"].as_array().unwrap();
         assert_eq!(packs[0]["values"], "a: 1\nregistryPassword: '********'\n");
         assert_eq!(packs[1]["values"], "b: 2\n");
@@ -299,7 +348,7 @@ mod tests {
             pack: "csi-aws-ebs",
             name: "region",
         }
-        .apply(&mut doc);
+        .apply(&mut doc, &no_listing);
         assert_eq!(
             doc["spec"]["published"]["packs"][0]["values"],
             "a: 1\nregion: \"{{.spectro.macro.region}}\"\n"
@@ -316,7 +365,7 @@ mod tests {
             pack: "kubernetes",
             image: "vendor.example/product:2026.2@sha256:aa",
         }
-        .apply(&mut doc);
+        .apply(&mut doc, &no_listing);
         let packs = doc["spec"]["published"]["packs"].as_array().unwrap();
         assert_eq!(
             packs[0]["values"],
@@ -330,7 +379,7 @@ mod tests {
         let mut doc = json!({"spec": {"published": {"packs": [
             {"name": "kubernetes",
              "values": "x:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\ny: 1\n"}]}}});
-        Edit::KubeadmCommand("echo one").apply(&mut doc);
+        Edit::KubeadmCommand("echo one").apply(&mut doc, &no_listing);
         assert_eq!(
             doc["spec"]["published"]["packs"][0]["values"],
             "x:\n    - 'chmod 600 /var/lib/kubelet/config.yaml'\n    - 'echo one'\ny: 1\n"
@@ -338,18 +387,111 @@ mod tests {
     }
 
     #[test]
-    fn the_upgrade_edit_moves_the_pack_uid_the_tag_and_the_version_together() {
-        let mut doc = json!({"spec": {"published": {"packs": [
-            {"name": "kubernetes", "packUid": "a", "tag": "1.36.2", "version": "1.36.2"}]}}});
-        Edit::Upgrade {
+    fn the_upgrade_edit_gives_the_pin_the_uid_and_the_digest_of_the_listed_version() {
+        let pin = json!({"name": "kubernetes", "packUid": "a", "tag": "1.36.2",
+            "version": "1.36.2", "registryUid": "r1", "digest": "sha256:a"});
+        let listing = json!({"items": [
+            {"metadata": {"uid": "b"}, "spec": {"version": "1.36.3", "registryUid": "r1",
+                "digest": "sha256:b"}},
+            {"metadata": {"uid": "c"}, "spec": {"version": "1.36.3", "registryUid": "r2",
+                "digest": "sha256:c"}}]});
+        let mut doc = json!({"spec": {"published": {"packs": [pin]}}});
+        let upgrade = Edit::Upgrade {
             pack: "kubernetes",
-            uid: "b",
             version: "1.36.3",
-        }
-        .apply(&mut doc);
+        };
+        upgrade.apply(&mut doc, &|_| listing.clone());
         let pack = &doc["spec"]["published"]["packs"][0];
         assert_eq!(pack["packUid"], "b");
+        assert_eq!(pack["digest"], "sha256:b");
         assert_eq!(pack["tag"], "1.36.3");
         assert_eq!(pack["version"], "1.36.3");
+
+        // a version that the project does not list has a build of its own
+        let mut doc = json!({"spec": {"published": {"packs": [pin]}}});
+        upgrade.apply(&mut doc, &no_listing);
+        let pack = &doc["spec"]["published"]["packs"][0];
+        assert_ne!(pack["packUid"], "a");
+        assert_ne!(pack["digest"], "sha256:a");
+    }
+
+    /// A published profile with one pin: `csi-aws-ebs` at the version `version` of the Public
+    /// Repo, with its uid and its digest in `listing`. Also the pack summary of the pin.
+    fn csi_profile(uid: &str, listing: &Value, version: &str) -> (Value, Value) {
+        let item = listed_version(listing, "csi-aws-ebs", PUBLIC_REPO, version);
+        let (pack, digest) = (&item["metadata"]["uid"], &item["spec"]["digest"]);
+        let doc = json!({"metadata": {"uid": uid, "name": "aws-stack"},
+            "spec": {"version": "1.1.1", "published": {"cloudType": "aws", "type": "cluster",
+                "packs": [{"name": "csi-aws-ebs", "layer": "csi", "type": "spectro",
+                    "tag": version, "version": version, "packUid": pack,
+                    "registryUid": PUBLIC_REPO, "digest": digest, "values": "a: 1\n"}]}}});
+        let manifests = json!({"spec": {"packs": [
+            {"metadata": {"name": "csi-aws-ebs", "uid": pack},
+                "spec": {"name": "csi-aws-ebs", "layer": "csi", "version": version,
+                    "registryUid": PUBLIC_REPO, "digest": digest, "manifests": []}}]}});
+        (doc, manifests)
+    }
+
+    /// The record that `strata snapshot` writes of the profile `doc`, with the pack summaries
+    /// `manifests`.
+    fn record(doc: &Value, manifests: &Value) -> Snapshot {
+        let uid = doc["metadata"]["uid"].as_str().expect("a uid");
+        let api = MemoryApi::new()
+            .with(format!("/{}", profile_route(uid)), doc.clone())
+            .with(format!("/{}", manifests_route(uid)), manifests.clone())
+            .with(
+                format!("/{}", variables_route(uid)),
+                json!({"variables": []}),
+            );
+        ops::snapshot_for(
+            &Ref::Uid(uid.to_string()),
+            &SnapshotOptions::default(),
+            || Ok(Palette::new(api)),
+            "2026-09-17T09:30:00Z",
+            &Progress::silent(),
+        )
+        .expect("the record builds")
+    }
+
+    #[test]
+    fn an_upgraded_pin_has_the_build_of_its_version_in_the_listing_and_compare_shows_upstream() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), &crate::repository());
+        tenant.registries("dev");
+        tenant.copy_pack_version("dev", "csi-aws-ebs", "1.65.0", "1.66.0-rc.1");
+        let listing = |name: &str| tenant.listing_of("dev", name);
+        let csi = listing("csi-aws-ebs");
+        let uid = "64ea00000000000000000a01";
+        let (old, old_manifests) = csi_profile(uid, &csi, "1.65.0");
+        // a copy, a lower version of the listing, and a version that the listing does not hold
+        for version in ["1.66.0-rc.1", "1.63.1", "1.67.0"] {
+            let upgrade = Edit::Upgrade {
+                pack: "csi-aws-ebs",
+                version,
+            };
+            let (mut doc, mut manifests) = (old.clone(), old_manifests.clone());
+            upgrade.apply(&mut doc, &listing);
+            upgrade.apply_manifests(&mut manifests, &listing);
+            let listed = listed_version(&csi, "csi-aws-ebs", PUBLIC_REPO, version);
+            let build = (&listed["metadata"]["uid"], &listed["spec"]["digest"]);
+            let pin = &doc["spec"]["published"]["packs"][0];
+            let summary = &manifests["spec"]["packs"][0];
+            assert_eq!((&pin["packUid"], &pin["digest"]), build, "{version}");
+            let summary_build = (&summary["metadata"]["uid"], &summary["spec"]["digest"]);
+            assert_eq!(summary_build, build, "{version}");
+            assert_eq!(summary["spec"]["version"], version);
+
+            let diff = ops::compare(&record(&old, &old_manifests), &record(&doc, &manifests), "");
+            let pack = diff
+                .packs
+                .iter()
+                .find(|p| p.name == "csi-aws-ebs")
+                .expect("a csi pack");
+            assert_eq!(
+                pack.flags(),
+                [ChangeFlag::Identity, ChangeFlag::Upstream],
+                "{version}"
+            );
+        }
     }
 }

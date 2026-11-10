@@ -7,7 +7,7 @@ use std::path::Path;
 use strata::api::Method;
 use strata_preflight::rule::Catalog;
 
-use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
+use super::check::{NOT_FACTS, check as faults_of, template_matches};
 use super::cloud::CloudSources;
 use super::from_text;
 use super::model::{SCHEMA, load};
@@ -16,6 +16,7 @@ use super::sources::{
     Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
     section_headings, section_rows, shape,
 };
+use crate::route::route_matches;
 
 /// A request fact that is right in the world of [`world`].
 const FACT: &str = r"

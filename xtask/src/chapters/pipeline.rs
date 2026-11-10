@@ -52,7 +52,6 @@ fn sample_pipeline(r: &mut Runner) {
         "aws-stack@1.1.1",
         &[Edit::Upgrade {
             pack: "csi-aws-ebs",
-            uid: "64ea0000000000000000c1a1",
             version: CSI_PRE,
         }],
     );
@@ -115,7 +114,6 @@ fn the_final_numbers(r: &mut Runner) {
         "aws-stack@1.1.1",
         &[Edit::Upgrade {
             pack: "csi-aws-ebs",
-            uid: "64ea0000000000000000c1a2",
             version: CSI_FINAL,
         }],
     );

@@ -1,4 +1,5 @@
 use super::*;
+use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
 use std::time::Duration;
@@ -240,6 +241,76 @@ rules:
         Some("out"),
     );
     assert!(lines[0].contains("--data @out/entity.json"), "{}", lines[0]);
+}
+
+/// Palette can save the address of the console of a pack of virtual machines at `validate/repave`.
+/// So the line of the request of a check that names it in `saves` says it, and the line of
+/// another request has no comment (#717).
+#[test]
+fn the_line_of_a_request_at_which_palette_saves_something_says_what_it_saves() {
+    let section = r#"
+section: kubernetes
+title: K
+rules:
+  - id: engine-repave-rules
+    title: t
+    engines: [eks]
+    tier: palette
+    status: seen
+    what: w
+    check: {kind: palette, method: POST, path: "/v1/spectroclusters/{{ .clusterUid }}/validate/repave", body: "{profiles: .entity.spec.profiles}", saves: console-address, expr: "true"}
+  - id: palette-validate
+    title: t
+    engines: [eks]
+    tier: palette
+    status: seen
+    what: w
+    check: {kind: palette, method: POST, path: "/v1/spectroclusters/eks/validate", expr: "true"}
+"#;
+    let mut c = crate::rule::Catalog::default();
+    c.push(
+        crate::rule::Catalog::parse_section(section, std::path::Path::new("k.yaml")).unwrap(),
+        std::path::Path::new("k.yaml"),
+    )
+    .unwrap();
+    let subject = Subject {
+        cloud: "eks".into(),
+        release: None,
+        source: "c.json".into(),
+        name: "fred".into(),
+        cluster_uid: Some("u-1".into()),
+    };
+    let outcome = |path: &str| Outcome {
+        verdict: Verdict::Passed,
+        messages: vec![],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Request(Call {
+            method: Method::Post,
+            path: path.to_string(),
+            answer: None,
+        }),
+    };
+    let repave = c.rule("engine-repave-rules").unwrap();
+    let lines = auto_reproduce(
+        repave,
+        &outcome("/v1/spectroclusters/u-1/validate/repave"),
+        &subject,
+        Some("out"),
+    );
+    let comment = format!("\"){}", Saves::ConsoleAddress.comment());
+    assert!(lines[1].ends_with(&comment), "{}", lines[1]);
+    let validate = c.rule("palette-validate").unwrap();
+    let lines = auto_reproduce(
+        validate,
+        &outcome("/v1/spectroclusters/eks/validate"),
+        &subject,
+        Some("out"),
+    );
+    assert!(
+        lines[0].ends_with("/v1/spectroclusters/eks/validate\")"),
+        "{}",
+        lines[0]
+    );
 }
 
 #[test]
@@ -922,7 +993,7 @@ fn a_check_with_each_keeps_each_request_and_prints_a_line_and_a_curl_for_each() 
     let curls: Vec<&String> = check
         .reproduce
         .iter()
-        .filter(|l| l.starts_with("curl "))
+        .filter(|l| l.starts_with(&crate::curl::palette_curl()))
         .collect();
     assert_eq!(curls.len(), 2, "{:?}", check.reproduce);
     assert!(curls[1].ends_with("/v1/edgehosts/h2\""), "{}", curls[1]);

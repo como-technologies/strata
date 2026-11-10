@@ -46,8 +46,9 @@ impl Tenant {
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
+        let listing = |name: &str| self.listing_of(project, name);
         for edit in edits {
-            edit.apply(&mut doc);
+            edit.apply(&mut doc, &listing);
         }
         self.write(project, &profile_route(uid), &doc);
 
@@ -55,7 +56,7 @@ impl Tenant {
         let mut manifests: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
         manifests["metadata"]["uid"] = json!(uid);
         for edit in edits {
-            edit.apply_manifests(&mut manifests);
+            edit.apply_manifests(&mut manifests, &listing);
         }
         self.write(project, &manifests_route(uid), &manifests);
 
@@ -206,8 +207,9 @@ impl Tenant {
     pub fn edit(&self, project: &str, uid: &str, edits: &[Edit]) {
         let path = profile_route(uid);
         let mut doc = self.read(project, &path);
+        let listing = |name: &str| self.listing_of(project, name);
         for edit in edits {
-            edit.apply(&mut doc);
+            edit.apply(&mut doc, &listing);
         }
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
@@ -226,8 +228,9 @@ impl Tenant {
         let path = profile_route(uid);
         let mut doc = self.read(project, &path);
         let mut edited = doc.clone();
+        let listing = |name: &str| self.listing_of(project, name);
         for edit in edits {
-            edit.apply(&mut edited);
+            edit.apply(&mut edited, &listing);
         }
         doc["spec"]["draft"] = edited["spec"]["published"].clone();
         let at = self.log_write(project, "clusterprofile", uid, &doc);
@@ -250,7 +253,7 @@ impl Tenant {
             }
         }
         for edit in edits {
-            edit.apply_manifests(&mut manifests);
+            edit.apply_manifests(&mut manifests, &listing);
         }
         self.write(project, &listed, &manifests);
         for pack in manifests["spec"]["packs"].as_array().into_iter().flatten() {
