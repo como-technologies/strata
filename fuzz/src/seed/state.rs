@@ -12,7 +12,7 @@ use strata::closed_set::unknown::send::{ANSWER_FILE, Choice, keep_answer};
 
 use crate::support::{scratch, utf8};
 
-use super::book_output;
+use super::{SEED_VERSION, book_output};
 
 // ---- the report ------------------------------------------------------------------------------
 
@@ -68,12 +68,17 @@ fn lines_of(report: &Report) -> String {
 }
 
 /// The report of the output of the book that shows the entries of a report, one on each line.
+/// Each entry names [`SEED_VERSION`] in place of the version of the build of the book.
 fn book_report() -> Report {
     let output = book_output("unknown-value-report-json");
     let unknown: Vec<Entry> = utf8(&output)
         .expect("the output of the book is text")
         .lines()
         .map(|line| serde_json::from_str(line).expect("each line is an entry"))
+        .map(|mut entry: Entry| {
+            entry.sighting.strata = SEED_VERSION.to_string();
+            entry
+        })
         .collect();
     Report {
         schema: SCHEMA.to_string(),

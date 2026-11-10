@@ -1,0 +1,144 @@
+section: networking
+title: Networking
+about: |
+  The zones, the subnets, the CIDRs, the routes, and the endpoints that a build needs. The section
+  with the most rows and the least evidence: the lab runs go here first.
+rules:
+- id: ntp-servers
+  title: The NTP servers of the cluster are addresses, and a cluster that needs them has some
+  engines:
+  - maas
+  - edge
+  - vsphere
+  tier: static
+  severity: warn
+  status: source
+  what: |
+    The converter refuses an entry of `ntpServers` that is not an IPv4, IPv6, or DNS name. With
+    no server, a vSphere cluster drifts: the docs recommend NTP servers. A multi-node edge cluster
+    needs synchronized time; the cluster setting overwrites the per-host TUI and user-data
+    setting, and with none each host keeps its own. MAAS gives its machines the time of the
+    region controller, so an empty list is not a fault there. No check reaches the servers from
+    the site; the reproduce line asks one from this machine.
+  check:
+    kind: static
+    expr: |
+      def is_addr: test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$") or test("^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)+$"; "i") or test("^[0-9a-f:]+$"; "i");
+      .cloud as $cloud
+      | ((.entity.spec.cloudConfig.ntpServers // []) | map(select(. != ""))) as $ntp
+      | ([ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // []) | length ] | add // 0) as $hosts
+      | [ ( $ntp[] | select(is_addr | not) | "ntpServers entry \(.) is not an address or a host name: the converter refuses the create" ),
+          ( if ($ntp | length) == 0 then
+              (if $cloud == "vsphere" then "no NTP server: the docs recommend NTP servers for a vSphere cluster, and without them the nodes drift"
+               elif $cloud == "edge" and $hosts > 1 then "no NTP server on a multi-node edge cluster: the docs need synchronized time across the hosts, and each host keeps its own TUI or user-data setting"
+               else empty end)
+            else empty end ) ]
+  reproduce:
+  - 'for s in {{ (.entity.spec.cloudConfig.ntpServers // []) | join(" ") }}; do dig +short $s; nc -zu -w 2 $s 123 && echo "$s answers on udp/123"; done   # from this machine, not from the site'
+  fix:
+    owner: palette
+    text: Warn in the validate route when a vSphere or a multi-node edge cluster names no NTP server.
+  evidence:
+  - kind: source
+    note: Palette refuses an NTP server that is not an IPv4 address, an IPv6 address, or a DNS name
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+    note: we recommend specifying NTP servers; without them, time drift issues
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
+    note: NTP servers correctly configured in a multi-node cluster; all nodes must have their time synchronized
+  tests:
+  - fault: fixtures/vsphere/ntp-empty.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/edge/ntp-bad.json
+    clean: fixtures/edge/clean.json
+- id: vsphere-ip-pool-capacity
+  title: The IP pool of the PCG has the addresses the cluster needs
+  engines:
+  - vsphere
+  tier: palette
+  severity: fail
+  status: source
+  when: (.entity.spec.cloudConfig.staticIp // false) and ((.account.metadata.annotations.overlordUid // "") != "")
+  what: |
+    Each node takes one address, a control plane pool reserves two more, and a worker pool one
+    more, for the rolling update. Palette counts the range from `start` to `end` less the allotted
+    addresses. It counts at the machine pool create, after the cluster document exists. The
+    failure is `IPPoolExhausted`, and the cluster stays at `IpAllocationDone`. A pool restricted to a single
+    cluster that another cluster holds is refused. `GET /v1/overlords/vsphere/{uid}/pools` lists
+    the pools of the PCG; the check reads the pool of the first placement and sums the pools
+    that use it.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/overlords/vsphere/{{ .account.metadata.annotations.overlordUid }}/pools
+    expr: |
+      def ip2n: split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+      .account.metadata.annotations.overlordUid as $ol | (.entity.spec.cloudConfig.placement // {}) as $cp
+      | ([ .entity.spec.machinepoolconfig[] | { pool: .poolConfig.name, size: (.poolConfig.size // 0), extra: (if (.poolConfig.isControlPlane // false) then 2 else 1 end),
+            uid: ((((.cloudConfig.placements // []) | first) // $cp).network.parentPoolUid // $cp.network.parentPoolUid // "") } ]) as $pools
+      | ([ $pools[] | .uid | select(. != "") ] | first) as $uid
+      | if $uid == null then []
+        elif (.response.ok | not) then ["Palette cannot list the IP pools of PCG \($ol): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        else ([ (.response.body.items // [])[] | select(.metadata.uid == $uid) ] | first) as $ip
+          | if $ip == null then ["no IP pool \($uid) on PCG \($ol): the placement names it as parentPoolUid"]
+            else ([ $pools[] | select(.uid == $uid) ]) as $mine
+              | ([ $mine[] | .size + .extra ] | add) as $need
+              | (($ip.spec.pool.end | ip2n) - ($ip.spec.pool.start | ip2n) + 1) as $total
+              | (($ip.status.allottedIps // []) | length) as $used
+              | ($total - $used) as $free
+              | [ ( if ($ip.spec.restrictToSingleCluster // false) and ($ip.status.inUse // false) then "IP pool \($ip.metadata.name // $uid) is restricted to a single cluster and in use by \(($ip.status.associatedClusters // []) | join(", ")): Palette refuses another cluster on it" else empty end ),
+                  ( if $need > $free then "IP pool \($ip.metadata.name // $uid) has \($free) free of \($total) addresses (\($used) allotted), and the pools \([ $mine[] | .pool ] | join(", ")) need \($need): one for each node, plus 2 for a control plane pool and 1 for a worker pool; Palette answers IPPoolExhausted, and the cluster stays at IpAllocationDone" else empty end ) ]
+            end
+        end
+  reproduce:
+  - '{{ palette_curl }} "${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/vsphere/{{ .account.metadata.annotations.overlordUid }}/pools" | jq ''.items[] | {uid: .metadata.uid, name: .metadata.name, start: .spec.pool.start, end: .spec.pool.end, allotted: (.status.allottedIps | length), single: .spec.restrictToSingleCluster, inUse: .status.inUse}'''
+  fix:
+    owner: palette
+    text: Count the free addresses of the pool in the validate route, as the machine pool create does.
+  evidence:
+  - kind: source
+    note: free is the range less the allotted and the extra addresses; IPPoolExhausted
+  - kind: source
+    note: extra is 1, 2 for a control plane pool, 0 with RollingUpdateScaleIn
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/pcg/manage-pcg/create-manage-node-pool/
+    note: two more IPs for a control plane pool and one for a worker pool; with too few, the cluster is not deployed
+  tests:
+  - fault: fixtures/vsphere/ip-pool-exhausted.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/vsphere/ip-pool-single-cluster.json
+- id: vsphere-static-ip-pool
+  title: A static vSphere cluster names an IP pool on each placement
+  engines:
+  - vsphere
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    With `staticIp` on the cluster, each placement network of a pool needs `parentPoolUid`, the
+    uid of an IP pool of the PCG; the converter refuses an empty one. With `staticIp` off, no
+    placement network can set `staticIp`; the converter refuses the pair. The docs say an IPAM
+    pool is required for static addresses. A pool with no placements takes the placement of the
+    cluster. `vsphere-ip-pool-capacity` reads the pool itself.
+  check:
+    kind: static
+    expr: |
+      (.entity.spec.cloudConfig.staticIp // false) as $static | (.entity.spec.cloudConfig.placement // {}) as $cp
+      | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[] | (.network // $cp.network // {}) as $n
+          | ( if $static and (($n.parentPoolUid // "") == "") then "pool \($p), network \($n.networkName // "?"): staticIp is on and parentPoolUid is empty; the converter refuses it (\"ParentPoolUid should not be empty\")" else empty end ),
+            ( if ($static | not) and ($n.staticIp // false) then "pool \($p), network \($n.networkName // "?"): the cluster is DHCP (staticIp false) and the placement network sets staticIp true; the converter refuses the pair" else empty end ) ]
+  fix:
+    owner: none
+    text: The check exists in the converter; strata-preflight runs it before the request.
+  evidence:
+  - kind: source
+    note: Palette checks the static IP data of each placement when it converts the network config
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+    note: an IPAM pool is required to assign static IP addresses to the nodes
+  tests:
+  - fault: fixtures/vsphere/static-no-pool.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/vsphere/dhcp-static-placement.json
+    clean: fixtures/vsphere/dhcp-clean.json

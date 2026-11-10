@@ -1,0 +1,111 @@
+section: kubernetes
+title: Kubernetes version and engine
+about: |
+  The Kubernetes version, the release channel, and what each engine does with a change of the
+  version or of the pack values.
+rules:
+- id: skip-k8s-upgrade
+  title: No pool skips the Kubernetes upgrade
+  engines:
+  - all
+  tier: static
+  severity: note
+  status: source
+  what: |
+    A pool with `skipK8sUpgrade: enabled` keeps its Kubernetes version when the cluster
+    upgrades. The `repave` level of strata says the whole cluster rolls; for that pool it does
+    not. The scope is each machine pool of the entity, on every engine.
+  check:
+    kind: static
+    expr: |
+      [ .entity.spec.machinepoolconfig[]
+        | select((.poolConfig.skipK8sUpgrade // "") as $s | $s == "enabled" or $s == true)
+        | "pool \(.poolConfig.name) sets skipK8sUpgrade \(.poolConfig.skipK8sUpgrade): a Kubernetes bump does not roll this pool, so the repave level of strata does not hold for it" ]
+  evidence:
+  - kind: run
+    ref: '#73'
+  - kind: source
+    note: an enum of enabled and disabled on each pool config
+  tests:
+  - fault: fixtures/eks/skip-upgrade.json
+    clean: fixtures/eks/clean.json
+- id: gke-repave-answers
+  title: The change of the GKE cluster repaves no node pool
+  engines:
+  - gke
+  tier: palette
+  severity: warn
+  status: seen
+  when: .clusterUid != null and .before != null
+  what: |
+    On GKE, a bump of the `kubernetes-gke` tag repaves. The four GKE packs (`cos-gke`,
+    `kubernetes-gke`, `cni-vpc-native-gke`, `gke-csi-gcp-driver`) have values of comments alone,
+    so an edit of their values changes no root of strata and repaves nothing. `validate/repave`
+    gives the answer before the change is applied. This rule warns when Palette says the change
+    repaves, and when the Kubernetes tag changes and Palette says it does not, which contradicts
+    run #90.
+  check:
+    kind: palette
+    method: POST
+    path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
+    body: '{profiles: .entity.spec.profiles}'
+    expr: |
+      def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
+      def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
+      if (.response.ok | not) then ["Palette refused validate/repave: \(.response.body.code // .response.status): \(.response.body.message // "")"]
+      else
+        (.response.body.isRepaveRequired // false) as $r
+        | k8s_tag(.before) as $b | k8s_tag(.entity) as $a
+        | [ if $r then "Palette repaves the GKE cluster for this change; GKE rolls each node pool: \(reasons)" else empty end ]
+          + [ if ($b != null and $a != null and $b != $a and ($r | not))
+              then "the kubernetes-gke tag changes \($b) to \($a), and Palette says no repave; run #90 saw a repave for a Kubernetes bump"
+              else empty end ]
+      end
+  reproduce:
+  - '{{ palette_curl }} -X POST -H ''Content-Type: application/json'' "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave" -d @<(jq ''{profiles: .spec.profiles}'' entity.json) | jq ''{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'''
+  evidence:
+  - kind: run
+    ref: '#90'
+    note: a Kubernetes bump repaved; the values of the four GKE packs are comments alone
+  tests:
+  - fault: fixtures/gke/repave-k8s-bump.json
+    clean: fixtures/gke/repave-none.json
+- id: eks-repave-answers
+  title: The change of the EKS cluster repaves no node group
+  engines:
+  - eks
+  tier: palette
+  severity: warn
+  status: seen
+  when: .clusterUid != null and .before != null
+  what: |
+    On EKS, a bump of the `kubernetes-eks` tag repaves: EKS rolls each node group. A change of
+    the `kubernetes-eks` values or of the CSI values does not. `validate/repave` gives the answer
+    before the change is applied. This rule warns when Palette says the change repaves, and when
+    the Kubernetes tag changes and Palette says it does not, which contradicts run #89.
+  check:
+    kind: palette
+    method: POST
+    path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
+    body: '{profiles: .entity.spec.profiles}'
+    expr: |
+      def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
+      def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
+      if (.response.ok | not) then ["Palette refused validate/repave: \(.response.body.code // .response.status): \(.response.body.message // "")"]
+      else
+        (.response.body.isRepaveRequired // false) as $r
+        | k8s_tag(.before) as $b | k8s_tag(.entity) as $a
+        | [ if $r then "Palette repaves the EKS cluster for this change; EKS rolls each node group: \(reasons)" else empty end ]
+          + [ if ($b != null and $a != null and $b != $a and ($r | not))
+              then "the kubernetes-eks tag changes \($b) to \($a), and Palette says no repave; run #89 saw a repave for a Kubernetes bump"
+              else empty end ]
+      end
+  reproduce:
+  - '{{ palette_curl }} -X POST -H ''Content-Type: application/json'' "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave" -d @<(jq ''{profiles: .spec.profiles}'' entity.json) | jq ''{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'''
+  evidence:
+  - kind: run
+    ref: '#89'
+    note: a Kubernetes bump repaved; a change of the kubernetes-eks values and of the CSI values did not
+  tests:
+  - fault: fixtures/eks/repave-k8s-bump.json
+    clean: fixtures/eks/repave-none.json
