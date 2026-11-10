@@ -199,7 +199,7 @@ This route says whether a change of the profiles of a cluster replaces its
 nodes. The body is the `v1SpectroClusterPacksEntity` of `validate/packs`.
 `compare --repave` sends it, and so do the checks of `engine-repave-rules`,
 `eks-repave-answers`, and `gke-repave-answers`. The request changes no setting
-of the cluster. For a pack of virtual machines, Palette saves a record: see
+of the cluster. For a pack of virtual machines, Palette can save a record: see
 [What the route saves](#what-the-route-saves).
 
 Palette builds the target cluster from the body. These facts come from the

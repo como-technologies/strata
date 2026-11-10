@@ -6346,6 +6346,56 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     );
 }
 
+/// At `validate/repave`, Palette can save the address that the console of a pack of virtual
+/// machines forwards to (#717). A block that says a request or a reproduce line changes nothing
+/// also says what Palette can save there.
+#[test]
+fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_save() {
+    let pages = walk(&docs())
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "md"));
+    for page in pages {
+        let text = one_line(&read(&page));
+        assert!(
+            !text.contains("none of them changes anything"),
+            "{}",
+            page.display()
+        );
+    }
+    for (page, anchor) in [
+        (
+            "reference/palette-api.md",
+            "Eight of the ten `POST` requests change nothing",
+        ),
+        (
+            "reference/documents.md",
+            "Each line reads, and changes nothing",
+        ),
+        (
+            "use-cases/stop-a-build.md",
+            "Each line reads, and changes nothing",
+        ),
+        ("development/live-example.md", "| `tenant.sh` | Lookups"),
+        (
+            "internals/palette/validate-routes.md",
+            "The request changes no setting of the cluster",
+        ),
+        (
+            "automation/pr-comments.md",
+            "The question changes no setting in Palette",
+        ),
+        ("commands/compare/repave.md", "The `POST` asks a question"),
+    ] {
+        let text = block(&read(&docs().join(page)), anchor);
+        assert!(
+            ["Palette can save", "Palette can also save"]
+                .iter()
+                .any(|says| text.contains(says)),
+            "{page}: {text}"
+        );
+    }
+}
+
 // ---- the page of the pipeline of a team (#492) ---------------------------------------------------
 
 /// The page for a team that brings its own pipeline, with the sample pipeline as one example.

@@ -785,9 +785,9 @@ through OpenTofu, and puts it back.
 
 Stage 9 runs only with `VMO_CLUSTER=<uid>` of a cluster with the pack
 `virtual-machine-orchestrator` and no cluster template. It moves the console of
-the pack to a mark, and back. The question that moves it back sends the values
-of the cluster in the profile of the pack. A profile by its uid alone can move
-the address that the console forwards to: see
+the pack to a mark, and back. Each question sends the values of the cluster in
+each profile with a pack of virtual machines, also `vm-migration-assistant`. A
+profile by its uid alone can move the address that the console forwards to: see
 [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 The stage stops before the first question when a check before it fails. So a
 cluster without the pack, or under a cluster template, gets no question.

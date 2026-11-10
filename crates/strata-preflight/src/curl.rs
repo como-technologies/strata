@@ -44,7 +44,7 @@ impl Saves {
 }
 
 /// What the start of a `curl` prints when the key holds a line break, and it then runs no `curl`.
-/// `examples/live/palette-curl.sh` stops with the same words.
+/// `examples/live/palette-curl.sh` stops with the same words, and a test of the catalog runs both.
 pub const KEY_LINE_BREAK: &str = "the key of Palette holds a line break";
 
 /// The start of a `curl` to Palette: a check of the key, the command, and the headers of the key

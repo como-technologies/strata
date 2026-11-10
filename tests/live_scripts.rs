@@ -4413,15 +4413,16 @@ echo "$status" > "$FAKE_ROUTES/v1_tenantApps_f-1_.status"
 echo console
 "#;
 
-/// A cluster for stage 9 of `repave.sh`, with two profiles. One has no pack of virtual machines.
-/// The other has `cert-manager` and `virtual-machine-orchestrator`, whose values hold
-/// `consoleBaseAddress`.
+/// A cluster for stage 9 of `repave.sh`, with three profiles. One has no pack of virtual machines.
+/// One has `cert-manager` and `virtual-machine-orchestrator`, whose values hold
+/// `consoleBaseAddress`. One has `vm-migration-assistant`, whose console address Palette saves too.
 const VMO_CLUSTER: &str = r#"{"spec":{"clusterProfileTemplates":[
     {"uid":"p-k8s","packs":[{"name":"kubernetes","tag":"1.36.2","type":"spectro","values":"a: 1\n"}]},
     {"uid":"p-vmo","packs":[
         {"name":"virtual-machine-orchestrator","tag":"4.6.0","type":"spectro",
          "values":"charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
-        {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]}]}}"#;
+        {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]},
+    {"uid":"p-vma","packs":[{"name":"vm-migration-assistant","tag":"1.2.0","type":"spectro","values":"c: 3\n"}]}]}}"#;
 
 /// A stage for stage 9 of `repave.sh` on the cluster `v-1`, with the document `cluster`. The
 /// summary gives the console address, and `FAKE_CONSOLE_FORWARD` answers at it.
@@ -4494,8 +4495,12 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
                  "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: https://strata-live-check.invalid\n"},
                 {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
             ]},
+            {"uid": "p-vma", "packValues": [
+                {"name": "vm-migration-assistant", "tag": "1.2.0", "type": "spectro", "values": "c: 3\n"},
+            ]},
         ]}),
-        "the profile of the pack names each of its packs, so the target keeps them"
+        "each profile with a pack of virtual machines names each of its packs, so the target keeps \
+         them, and the console of vm-migration-assistant does not move"
     );
     assert_eq!(
         sent[1],
@@ -4505,6 +4510,9 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
                 {"name": "virtual-machine-orchestrator", "tag": "4.6.0", "type": "spectro",
                  "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
                 {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
+            ]},
+            {"uid": "p-vma", "packValues": [
+                {"name": "vm-migration-assistant", "tag": "1.2.0", "type": "spectro", "values": "c: 3\n"},
             ]},
         ]}),
         "the second question sends the values of the cluster, and not the profile by its uid alone"
@@ -4566,8 +4574,8 @@ fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address
 
 /// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
 /// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
-/// with no `virtual-machine-orchestrator` sends each profile by its uid alone, which can move the
-/// console address. A console that reaches no host before the question shows nothing after it.
+/// with no `virtual-machine-orchestrator` holds no mark, so the question shows nothing. A console
+/// that reaches no host before the question shows nothing after it.
 #[test]
 fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fails() {
     let template = VMO_CLUSTER.replacen(

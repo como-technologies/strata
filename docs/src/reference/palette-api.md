@@ -1,9 +1,15 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Ten are `POST` requests, and
-none of them changes anything. Four are searches that Palette takes as a
-`POST`. With the other six, `compare --repave`, `compare --validate`,
-`snapshot --validate`, and `behind` ask Palette a question.
+Strata reads. Most requests are `GET` requests. Ten are `POST` requests. Four
+are searches that Palette takes as a `POST`. With the other six,
+`compare --repave`, `compare --validate`, `snapshot --validate`, and `behind`
+ask Palette a question.
+
+Eight of the ten `POST` requests change nothing. The other two go to the two
+routes of `validate/repave`, which `compare --repave` asks. They change no
+setting of a cluster. But Palette can save the address that the console
+of a pack of virtual machines forwards to: see
+[What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 
 Each request has the headers `ApiKey` and `Accept: application/json`. A request
 in a project has the header `ProjectUid` too. The

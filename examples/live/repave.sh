@@ -178,6 +178,9 @@ fi
 # .invalid has no host, so the forward of the console answers 502 when Palette saved the mark.
 vmo_pack=virtual-machine-orchestrator
 vmo_mark=https://strata-live-check.invalid
+# The packs whose console address Palette saves at validate/repave: vmo_pack, its older name, and
+# the pack of the move of virtual machines
+vm_packs='["virtual-machine-orchestrator", "spectro-vm-dashboard", "vm-migration-assistant"]'
 
 # console_is WANT URL: print the HTTP status of the console address URL. True when the console
 # reaches WANT. For "host", the forward finds its record (no 404), the host answers (no 502), and
@@ -213,19 +216,20 @@ vmo_stopped() {
 }
 
 # vmo_body MARK: the body of a question about the cluster in vmo-cluster.out. Each profile goes by
-# its uid, and the profile of the pack names each of its packs with the values of the cluster. A
-# profile with pack values keeps only the packs that it names. A profile by its uid alone can move
-# the address that the console forwards to. A MARK goes into consoleBaseAddress of the pack.
+# its uid. Each profile with one of vm_packs names each of its packs with the values of the
+# cluster. A profile with pack values keeps only the packs that it names. A profile by its uid
+# alone can move the address that the console of such a pack forwards to. A MARK goes into
+# consoleBaseAddress of vmo_pack alone.
 vmo_body() {
-  jq --arg p "$vmo_pack" --arg mark "$1" '{profiles: [.spec.clusterProfileTemplates[]
-    | {uid} + (if any(.packs[]; .name == $p) then {packValues: [.packs[] | {name, tag, type, values: (if .name == $p and $mark != ""
+  jq --arg p "$vmo_pack" --argjson vm "$vm_packs" --arg mark "$1" '{profiles: [.spec.clusterProfileTemplates[]
+    | {uid} + (if any(.packs[]; .name | IN($vm[])) then {packValues: [.packs[] | {name, tag, type, values: (if .name == $p and $mark != ""
         then (.values | sub("(?<i>[ ]*)consoleBaseAddress:[^\n]*"; "\(.i)consoleBaseAddress: \($mark)")) else .values end)}]}
       else {} end)]}' vmo-cluster.out
 }
 
 # vmo_stage CLUSTER: the checks of stage 9 on CLUSTER. They stop before the first question when a
-# check before it fails. For a cluster without the pack, vmo_body sends each profile by its uid
-# alone, and such a body can move the console address.
+# check before it fails. For a cluster without vmo_pack, the body holds no mark, so the question
+# shows nothing.
 vmo_stage() {
   V=$1 wait=${VMO_WAIT:-960}
   local before=$failures

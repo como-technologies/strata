@@ -2057,8 +2057,9 @@ fn a_reproduce_line_sends_the_key_to_palette_in_a_header_and_in_no_argument_of_a
 }
 
 /// A key with a quote or a backslash reaches Palette as it is. The start of the `curl` puts a `\`
-/// before each one in the config. A key with a line break stops the line before `curl`, as
-/// `examples/live/palette-curl.sh` stops, because the break can add a line to the config (#717).
+/// before each one in the config. A key with a line break stops the line before `curl`, because
+/// the break can add a line to the config (#717). `palette_curl` of `examples/live/palette-curl.sh`
+/// gets the same keys, sends each one as the line does, and stops with the same words.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_start_of_a_curl_escapes_the_key_for_the_config_and_stops_on_a_line_break() {
@@ -2067,11 +2068,16 @@ fn the_start_of_a_curl_escapes_the_key_for_the_config_and_stops_on_a_line_break(
         .first("t", PALETTE_CURL, &serde_json::Value::Null, None)
         .unwrap();
     let line = format!("{} \"${}/v1/x\"", start.as_str().unwrap(), URL_VARS[0]);
+    let script = format!(
+        r#"script=palette-curl; . "$LIVE/common.sh"; . "$LIVE/palette-curl.sh"; palette_curl -s "${}/v1/x""#,
+        URL_VARS[0]
+    );
+    let live = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/live");
     let dir = folder_for_reproduce();
     let (address, seen) = palette_that_keeps_the_key("{}");
-    let run = |key: &str| {
+    let run = |program: &str, key: &str| {
         Command::new("bash")
-            .args(["-c", &line])
+            .args(["-c", program])
             .current_dir(dir.path())
             .env_clear()
             .env("PATH", std::env::var_os("PATH").unwrap_or_default())
@@ -2079,32 +2085,40 @@ fn the_start_of_a_curl_escapes_the_key_for_the_config_and_stops_on_a_line_break(
             .env(URL_VARS[0], &address)
             .env(KEY_VARS[0], key)
             .env(PROJECT_VARS[0], "p-1")
+            .env("LIVE", &live)
+            .env("KEY", key)
             .output_locked()
             .unwrap()
     };
     let sent = [r#"a"b\c"#, r#"\""#, "key-of-the-test-717"];
-    for key in sent {
-        let ran = run(key);
-        assert!(
-            ran.status.success(),
-            "{key}: {}",
-            String::from_utf8_lossy(&ran.stderr)
-        );
-    }
-    for key in ["ab\nheader = \"X: y\"", "ab\r"] {
-        let ran = run(key);
-        assert!(!ran.status.success(), "{key:?}");
-        assert_eq!(
-            String::from_utf8_lossy(&ran.stderr).trim_end(),
-            KEY_LINE_BREAK,
-            "{key:?}"
-        );
+    for (program, stop) in [
+        (line.as_str(), KEY_LINE_BREAK.to_string()),
+        (script.as_str(), format!("palette-curl: {KEY_LINE_BREAK}")),
+    ] {
+        for key in sent {
+            let ran = run(program, key);
+            assert!(
+                ran.status.success(),
+                "{program}: {key}: {}",
+                String::from_utf8_lossy(&ran.stderr)
+            );
+        }
+        for key in ["ab\nheader = \"X: y\"", "ab\r"] {
+            let ran = run(program, key);
+            assert!(!ran.status.success(), "{program}: {key:?}");
+            assert_eq!(
+                String::from_utf8_lossy(&ran.stderr).trim_end(),
+                stop,
+                "{program}: {key:?}"
+            );
+        }
     }
     let seen = seen.lock().unwrap();
     let keys: Vec<&str> = seen.iter().map(|request| request.key.as_str()).collect();
     assert_eq!(
-        keys, sent,
-        "Palette gets each key as it is, and no key with a line break"
+        keys,
+        [sent, sent].concat(),
+        "Palette gets each key as it is from the line and from the script, and no key with a line break"
     );
 }
 
