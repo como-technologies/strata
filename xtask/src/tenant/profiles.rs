@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use strata::closed_set::ClosedSet;
 use strata::model::scope::ProfileScope;
 
-use super::edit::Edit;
+use super::edit::{Edit, apply_edits};
 use super::routes::{
     REGISTRY_LISTING, audit_log_file, empty_audit_log, export_file, manifest_route,
     manifests_route, profile_route, variables_route,
@@ -46,18 +46,12 @@ impl Tenant {
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
-        let listing = |name: &str| self.listing_of(project, name);
-        for edit in edits {
-            edit.apply(&mut doc, &listing);
-        }
-        self.write(project, &profile_route(uid), &doc);
-
         let text = std::fs::read_to_string(from.join("manifests.json")).unwrap_or_default();
         let mut manifests: Value = serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
         manifests["metadata"]["uid"] = json!(uid);
-        for edit in edits {
-            edit.apply_manifests(&mut manifests, &listing);
-        }
+        let listing = |name: &str| self.listing_of(project, name);
+        apply_edits(edits, &mut doc, &mut manifests, &listing);
+        self.write(project, &profile_route(uid), &doc);
         self.write(project, &manifests_route(uid), &manifests);
 
         let text = std::fs::read_to_string(from.join("variables.json")).unwrap_or_default();
@@ -203,17 +197,17 @@ impl Tenant {
 
     /// Change a published profile in place, as an edit through the API does, and log the write
     /// in the audit log, as Palette does. The document takes the time of the write in
-    /// `metadata.lastModifiedTimestamp`.
+    /// `metadata.lastModifiedTimestamp`. The pack summaries of `packs/manifests` follow the pins.
     pub fn edit(&self, project: &str, uid: &str, edits: &[Edit]) {
-        let path = profile_route(uid);
+        let (path, listed) = (profile_route(uid), manifests_route(uid));
         let mut doc = self.read(project, &path);
+        let mut manifests = self.read(project, &listed);
         let listing = |name: &str| self.listing_of(project, name);
-        for edit in edits {
-            edit.apply(&mut doc, &listing);
-        }
+        apply_edits(edits, &mut doc, &mut manifests, &listing);
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
+        self.write(project, &listed, &manifests);
         self.notify_clusters(project, uid, &doc);
         self.listings();
     }
@@ -225,20 +219,17 @@ impl Tenant {
     /// Each manifest with a uid answers its own route, with its draft content and its published
     /// content. An edit of values leaves the draft content of a manifest empty.
     pub fn draft(&self, project: &str, uid: &str, edits: &[Edit]) {
-        let path = profile_route(uid);
+        let (path, listed) = (profile_route(uid), manifests_route(uid));
         let mut doc = self.read(project, &path);
         let mut edited = doc.clone();
+        let mut manifests = self.read(project, &listed);
         let listing = |name: &str| self.listing_of(project, name);
-        for edit in edits {
-            edit.apply(&mut edited, &listing);
-        }
+        apply_edits(edits, &mut edited, &mut manifests, &listing);
         doc["spec"]["draft"] = edited["spec"]["published"].clone();
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
 
-        let listed = manifests_route(uid);
-        let mut manifests = self.read(project, &listed);
         let draft = doc["spec"]["draft"]["packs"]
             .as_array()
             .cloned()
@@ -251,9 +242,6 @@ impl Tenant {
             if let Some(d) = draft.iter().find(|d| d["name"] == pack["spec"]["name"]) {
                 pack["spec"]["values"] = d["values"].clone();
             }
-        }
-        for edit in edits {
-            edit.apply_manifests(&mut manifests, &listing);
         }
         self.write(project, &listed, &manifests);
         for pack in manifests["spec"]["packs"].as_array().into_iter().flatten() {

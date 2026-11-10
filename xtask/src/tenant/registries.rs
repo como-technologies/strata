@@ -26,17 +26,21 @@ pub(super) const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
 /// The uid and the digest that the stand-in gives to a version that `examples/packs/` does not
-/// hold, as an item of the pack listing.
+/// hold, as an item of the pack listing of the registry `registry`.
 ///
-/// Palette keeps each version of a pack in a record of its own, with a uid and a digest of its
-/// own. A hash of the name `name` and the version `version` gives the uid and the digest. So two
-/// versions differ, and each run of the book gives the same item. The uid has 24 hex digits, as a
-/// pack uid of Palette has.
-fn made_version(name: &str, version: &str) -> Value {
-    let hash = |part: &str| format!("{:x}", Sha256::digest(format!("{part} {name}@{version}")));
+/// Palette keeps each version of a pack in each registry in a record of its own, with a uid and a
+/// digest of its own. A hash of the registry, the name `name`, and the version `version` gives the
+/// uid and the digest. So two versions differ, one version in two registries differs too, and
+/// each run of the book gives the same item. The uid has 24 hex digits, as a pack uid of Palette
+/// has.
+fn made_version(name: &str, registry: &str, version: &str) -> Value {
+    let hash = |part: &str| {
+        let text = format!("{part} {registry}/{name}@{version}");
+        format!("{:x}", Sha256::digest(text))
+    };
     let digest = format!("sha256:{}", hash("digest"));
     json!({"metadata": {"uid": hash("uid")[..24]},
-        "spec": {"name": name, "version": version, "digest": digest}})
+        "spec": {"name": name, "version": version, "registryUid": registry, "digest": digest}})
 }
 
 /// The item of the pack listing `listing` for the version `version` of the pack `name` in the
@@ -52,7 +56,7 @@ pub(super) fn listed_version(listing: &Value, name: &str, registry: &str, versio
         .flatten()
         .find(|i| is_listed(i, registry, version))
         .cloned()
-        .unwrap_or_else(|| made_version(name, version))
+        .unwrap_or_else(|| made_version(name, registry, version))
 }
 
 /// True when the item `item` of a pack listing is the version `version` in the registry
@@ -282,7 +286,7 @@ impl Tenant {
         else {
             return;
         };
-        let made = made_version(name, copy_version);
+        let made = made_version(name, PUBLIC_REPO, copy_version);
         copy["metadata"]["uid"] = made["metadata"]["uid"].clone();
         copy["spec"]["digest"] = made["spec"]["digest"].clone();
         let above = version::compare(copy_version, version) == Ordering::Greater;

@@ -22,9 +22,11 @@ work starts.
    comes from `just docs-examples`.
 3. Give each item of the `Done when:` line a test, when a test can show it.
    Remove the new code temporarily. Make sure that the test fails. Then restore
-   the code.
+   the code. When you remove the code in a temporary worktree, give the worktree
+   its own target directory: see
+   [A temporary worktree](./build-test.md#a-temporary-worktree).
 4. Run each check of CI in a clean worktree of the commit, not only in the tree
-   you work in:
+   you work in. Give that worktree its own target directory too:
 
    ```bash
    just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs

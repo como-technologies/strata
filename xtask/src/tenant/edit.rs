@@ -97,13 +97,31 @@ pub enum Edit {
 /// Null when the project has no listing of that pack.
 pub(super) type Listing<'a> = &'a dyn Fn(&str) -> Value;
 
+/// Apply each edit of `edits`, in order, to the profile document `doc` and to its pack summaries
+/// `manifests`. `listing` gives the pack listing that an upgrade reads.
+///
+/// Palette builds the answer of `packs/manifests` from the pins of the profile at each read. So
+/// each edit changes the two documents together: at a publish, at an edit in place, and in a
+/// draft.
+pub(super) fn apply_edits(
+    edits: &[Edit],
+    doc: &mut Value,
+    manifests: &mut Value,
+    listing: Listing,
+) {
+    for edit in edits {
+        edit.apply(doc, listing);
+        edit.apply_manifests(manifests, listing);
+    }
+}
+
 impl Edit {
     /// The part of an edit that lands in the pack summaries of `packs/manifests`. `listing` gives
     /// the pack listing that an upgrade reads.
     ///
     /// Palette gives the summary of a pack from the record of the version that the profile pins:
     /// its uid, its version, and its digest.
-    pub(super) fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
+    fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
         match self {
             Edit::NoDigest(name) => {
                 for summary in summaries_named(manifests, name) {
@@ -126,7 +144,7 @@ impl Edit {
 
     /// Apply the edit to the profile document `doc`. `listing` gives the pack listing that an
     /// upgrade reads.
-    pub(super) fn apply(&self, doc: &mut Value, listing: Listing) {
+    fn apply(&self, doc: &mut Value, listing: Listing) {
         match self {
             Edit::Reclaim(policy) => {
                 for pack in packs_named(doc, "csi-aws-ebs") {
@@ -493,5 +511,64 @@ mod tests {
                 "{version}"
             );
         }
+    }
+
+    #[test]
+    fn an_upgrade_in_an_edit_in_place_moves_the_pin_and_its_pack_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), &crate::repository());
+        tenant.registries("dev");
+        let csi = tenant.listing_of("dev", "csi-aws-ebs");
+        let uid = "64ea00000000000000000a01";
+        // `just test` runs before `just examples`, so the test publishes no example profile
+        let (doc, manifests) = csi_profile(uid, &csi, "1.65.0");
+        tenant.put("dev", &profile_route(uid), &doc);
+        tenant.put("dev", &manifests_route(uid), &manifests);
+        let upgrade = Edit::Upgrade {
+            pack: "csi-aws-ebs",
+            version: "1.63.1",
+        };
+        tenant.edit("dev", uid, &[upgrade]);
+
+        let listed = listed_version(&csi, "csi-aws-ebs", PUBLIC_REPO, "1.63.1");
+        let build = (&listed["metadata"]["uid"], &listed["spec"]["digest"]);
+        let mut doc = tenant.read("dev", &profile_route(uid));
+        let pin = packs_named(&mut doc, "csi-aws-ebs")
+            .next()
+            .expect("a csi pin");
+        assert_eq!((&pin["packUid"], &pin["digest"]), build);
+        assert_eq!(
+            (&pin["tag"], &pin["version"]),
+            (&json!("1.63.1"), &json!("1.63.1"))
+        );
+        let mut manifests = tenant.read("dev", &manifests_route(uid));
+        let summary = summaries_named(&mut manifests, "csi-aws-ebs")
+            .next()
+            .expect("a csi summary");
+        let summary_build = (&summary["metadata"]["uid"], &summary["spec"]["digest"]);
+        assert_eq!(summary_build, build);
+        assert_eq!(summary["spec"]["version"], "1.63.1");
+    }
+
+    #[test]
+    fn two_unlisted_pins_of_one_version_in_two_registries_have_two_uids() {
+        let upgrade = Edit::Upgrade {
+            pack: "kubernetes",
+            version: "1.36.3",
+        };
+        let [public, oci] = [PUBLIC_REPO, PALETTE_REGISTRY].map(|registry| {
+            let mut doc = json!({"spec": {"published": {"packs": [{"name": "kubernetes",
+                "packUid": "a", "tag": "1.36.2", "version": "1.36.2", "registryUid": registry,
+                "digest": "sha256:a"}]}}});
+            upgrade.apply(&mut doc, &no_listing);
+            doc["spec"]["published"]["packs"][0].clone()
+        });
+        assert_ne!(public["packUid"], oci["packUid"]);
+        assert_ne!(public["digest"], oci["digest"]);
+
+        // the item of each registry names its registry
+        let made = listed_version(&Value::Null, "kubernetes", PALETTE_REGISTRY, "1.36.3");
+        assert_eq!(made["metadata"]["uid"], oci["packUid"]);
+        assert_eq!(made["spec"]["registryUid"], PALETTE_REGISTRY);
     }
 }
