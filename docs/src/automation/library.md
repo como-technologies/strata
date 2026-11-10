@@ -77,15 +77,14 @@ digests to another tool, behind a trait of that tool.
 
 ## Add the dependency
 
-Pin a release tag:
+The package is `strata-palette`, and Rust code names the crate `strata`. The
+name `strata` on crates.io belongs to another crate, so `cargo add strata` gets
+the wrong one. Pin a release tag, and give the name of the package:
 
 ```toml
 [dependencies]
-strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
 ```
-
-The crate is not on crates.io. The name `strata` there belongs to another crate,
-so `cargo add strata` gets the wrong one.
 
 ## Use strata-preflight as a library
 
@@ -98,14 +97,14 @@ Give `strata-preflight` and `strata` the same git address and the same tag:
 
 ```toml
 [dependencies]
-strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
 strata-preflight = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
 ```
 
 The package is `strata-preflight`, and Rust code names the crate
 `strata_preflight`. A run takes a `strata::term::progress::Progress`, so the
 program needs `strata` too. With one tag, Cargo builds one copy of `strata`.
-The crate is not on crates.io.
+`strata-preflight` is not on crates.io.
 
 A program starts from these items:
 

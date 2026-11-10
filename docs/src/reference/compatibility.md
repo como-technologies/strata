@@ -11,7 +11,8 @@ it. A patch release removes nothing from it, and changes nothing in it. Code
 inside the crate, such as the mask of a secret, is not part of the API.
 
 Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
-The crate is not on crates.io, so a dependency names the tag: see
+The package is `strata-palette`, and Rust code names the crate `strata`. A
+dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
 Six sections list the changes that need action:
@@ -1060,6 +1061,9 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata
 
+- **The package is `strata-palette`.** Rust code names the crate `strata`, as before. A git
+  dependency on a tag adds `package = "strata-palette"`, and the package goes to crates.io under
+  that name. See [Add the dependency](../automation/library.md#add-the-dependency).
 - `BOOK_URL` is `https://como-technologies.github.io/strata/`, the public address of the book.
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.

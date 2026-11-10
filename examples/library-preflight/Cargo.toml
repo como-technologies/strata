@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 # Inside this repository. Elsewhere, git dependencies on a release tag; see
 # docs/src/automation/library.md, Use strata-preflight as a library.
-strata = { path = "../.." }
+strata = { path = "../..", package = "strata-palette" }
 strata-preflight = { path = "../../crates/strata-preflight" }
 
 # Not a member of the strata package: built on its own with `just library-example`.

@@ -61,7 +61,7 @@ curl -fsSL https://github.com/como-technologies/strata/releases/latest/download/
 ```
 
 [Install](docs/src/install.md) gives the options, the other platforms, the
-signature check, and the source build.
+signature check, the install with Cargo, and the source build.
 
 ## Documentation
 

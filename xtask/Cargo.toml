@@ -28,7 +28,7 @@ proc-macro2 = { version = "1", features = ["span-locations"] }
 syn = { version = "2", features = ["full", "visit"] }
 # The order of versions comes from strata, the one parse of a version: see "Types and data" in
 # docs/src/development/code.md.
-strata = { path = ".." }
+strata = { path = "..", package = "strata-palette" }
 # The list of the facts compares with the rules that the catalog of strata-preflight gives, the
 # one parse of a rule file.
 strata-preflight = { path = "../crates/strata-preflight" }

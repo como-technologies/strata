@@ -20,7 +20,7 @@ default: build
 # Build the release binaries at target/release/strata and target/release/strata-preflight
 [group('build')]
 build:
-    cargo build --release -p strata -p strata-preflight
+    cargo build --release -p strata-palette -p strata-preflight
 
 # The observer is a Go program in observer/. The build is static (no cgo), and the version is that of Cargo.toml.
 
@@ -87,8 +87,8 @@ build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
-      *linux*) cross build --release --target "{{target}}" -p strata -p strata-preflight ;;
-      *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
+      *linux*) cross build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
+      *) cargo build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
     esac
 
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
@@ -128,7 +128,7 @@ bench-short:
 # strata-report-endpoint, and strata-fuzz, and runs the command a second time with all items. The
 # build of the public items does not read the comment of a private item. The build of all items does not warn when a public item links to a private item.
 # So `just lint` needs both.
-rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
+rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata-palette -p strata-preflight'
 
 # The last two lines fail when a module enters observer/go.mod or the go.mod of the request counter: both use the standard library only.
 

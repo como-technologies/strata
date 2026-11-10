@@ -19,7 +19,7 @@ serde = "1"
 serde_json = "1"
 serde_yaml = "0.9"
 sha2 = "0.10"
-strata = { path = ".." }
+strata = { path = "..", package = "strata-palette" }
 strata-preflight = { path = "../crates/strata-preflight" }
 strata-report-endpoint = { path = "../crates/strata-report-endpoint" }
 tempfile = "3"

@@ -10,7 +10,7 @@
 | `curl`, `jq` | Read the JSON documents in scripts and in this book, and fetch a release. |
 | `gh` | Posts pull request comments and drift issues. |
 | `cosign` 3 or later | Checks the signature of `SHA256SUMS`. Optional, unless you give `--require-signature`. |
-| Rust, `just` | Build from source. `cross` builds another target. |
+| Rust, `just` | Install with Cargo, or build from source. `cross` builds another target. |
 
 ## Download a release
 
@@ -136,6 +136,18 @@ v0.24.0 and before has no `--require-signature`, so with such a `strata-version`
 the job stops with `unknown option`. An organization that limits the actions of
 its repositories must allow `actions/checkout` and `sigstore/cosign-installer`.
 `preflight-comment.yml` installs no binary: it runs one script from the tag.
+
+## Install with Cargo
+
+The package of strata on crates.io is `strata-palette`. It gives the command
+`strata`:
+
+```bash
+cargo install --locked strata-palette
+```
+
+The package does not give `strata-preflight`. So `strata preflight` needs the
+binaries of a release.
 
 ## Build from source
 

@@ -25,7 +25,10 @@ rust-version = "1.88"
 repository = "https://github.com/como-technologies/strata"
 
 [package]
-name = "strata"
+# The name `strata` on crates.io belongs to another crate, so the package is strata-palette (#65).
+# `[lib]` and `[[bin]]` keep the name `strata`: Rust code names the crate `strata`, and a person
+# types the command `strata`.
+name = "strata-palette"
 version = "0.32.2"
 edition = "2024"
 rust-version.workspace = true
@@ -40,9 +43,6 @@ categories = ["command-line-utilities", "development-tools"]
 # tools of the development need the rest of this repository. So a package carries none of them.
 # A list of what goes in keeps a new folder of the repository out of the package.
 include = ["/src/", "/LICENSE", "/README.md"]
-# crates.io refuses a publish under this name: `strata` there belongs to another crate. So the
-# first publish gives the package another name (#65). `[[bin]]` keeps the name of the command,
-# `strata`, whatever the name of the package is.
 # The tests under tests/ are one crate, tests/main.rs: each file is a module of it. So a helper of
 # tests/common/mod.rs with no caller in any test warns as dead code. 14 crates with a copy of the
 # module each could not show that.

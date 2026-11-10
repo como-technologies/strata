@@ -182,7 +182,7 @@ fn the_package_of_strata_carries_the_sources_the_license_and_the_readme_and_no_o
             "--allow-dirty",
             "--offline",
             "-p",
-            "strata",
+            env!("CARGO_PKG_NAME"),
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .output_locked()
