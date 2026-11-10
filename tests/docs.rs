@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, gitlab_drop_in, one_line, recipe, repo_file, schema,
-    script, version_of, walk,
+    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
+    schema, script, toml_table, version_of, walk,
 };
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
@@ -2142,18 +2142,13 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
-    let lines: Vec<&str> = riff.lines().collect();
-    let volumes = lines
-        .iter()
-        .position(|line| *line == "[session.volumes]")
-        .expect("riff.toml has no [session.volumes] table");
-    let mount = lines
+    let volumes = toml_table(&riff, "[session.volumes]");
+    let mount = volumes
         .iter()
         .position(|line| *line == "strata-palette = \"$HOME/palette\"")
-        .expect("riff.toml does not mount strata-palette at $HOME/palette");
-    assert!(volumes < mount, "the mount is outside [session.volumes]");
+        .expect("[session.volumes] of riff.toml does not mount strata-palette at $HOME/palette");
     assert!(
-        lines[volumes..mount]
+        volumes[..mount]
             .iter()
             .rev()
             .take_while(|line| line.starts_with('#'))
@@ -2176,13 +2171,11 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
     }
 }
 
-/// The entries `key = "value"` of the table `table` of `riff.toml`, such as `[session.env]`.
+/// The entries `key = "value"` of the table `table`, such as `[session.env]`, of `riff`: the text
+/// of `riff.toml` without its comment lines.
 fn riff_entries<'a>(riff: &'a str, table: &str) -> Vec<(&'a str, &'a str)> {
-    riff.lines()
-        .skip_while(|line| *line != table)
-        .skip(1)
-        .take_while(|line| !line.starts_with('['))
-        .filter(|line| !line.starts_with('#'))
+    toml_table(riff, table)
+        .into_iter()
         .filter_map(|line| {
             let (key, value) = line.split_once(" = ")?;
             Some((key, value.strip_prefix('"')?.strip_suffix('"')?))
@@ -2205,7 +2198,7 @@ fn riff_value<'a>(riff: &'a str, table: &str, key: &str) -> &'a str {
 /// each session. The book states where each cache goes.
 #[test]
 fn each_cache_of_a_session_is_in_a_folder_that_the_session_can_write() {
-    let riff = repo_file("riff.toml");
+    let riff = code_of("riff.toml");
     let (env, volumes) = ("[session.env]", "[session.volumes]");
     let cargo = riff_value(&riff, env, "CARGO_HOME");
     let sccache = riff_value(&riff, env, "SCCACHE_DIR");

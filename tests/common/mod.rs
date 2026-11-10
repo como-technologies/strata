@@ -790,6 +790,16 @@ pub fn code_of(path: &str) -> String {
     without_comments(&repo_file(path))
 }
 
+/// The lines of the table `table` of the TOML text `text`, such as `[lints.clippy]`: each line
+/// after its header, up to the next header. The lines keep their comments and their indent.
+pub fn toml_table<'a>(text: &'a str, table: &str) -> Vec<&'a str> {
+    let mut lines = text.lines().skip_while(|line| line.trim() != table);
+    assert!(lines.next().is_some(), "the TOML text has no table {table}");
+    lines
+        .take_while(|line| !line.trim_start().starts_with('['))
+        .collect()
+}
+
 /// `text` with each run of white space as one space, as a line break can fall inside a sentence.
 pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
