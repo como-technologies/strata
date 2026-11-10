@@ -13,7 +13,9 @@
    follows this repository. Prose that names a release for a reason keeps it:
    "use v0.5.2 or later, the first release with `merge-gate.sh`" is a fact
    about v0.5.2. The recipe leaves the recorded live runs alone for the same
-   reason, because each one says which build produced it. It refuses when a file
+   reason, because each one says which build produced it. It also leaves the seed
+   corpus of `fuzz/` alone, because a seed names a fixed version of strata: see
+   [The corpus](./build-test.md#the-corpus). It refuses when a file
    it must rewrite already holds uncommitted changes, so the commit is the
    version and nothing else.
 

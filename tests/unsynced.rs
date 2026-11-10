@@ -15,8 +15,8 @@ use strata::term::progress::Progress;
 
 use crate::common;
 use common::{
-    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, no_variables, profile_document,
-    serve_pack_listing, serve_registry_pack, snapshot_of, template, write_yaml,
+    OCI_REGISTRY_SUMMARY, PackFixture, REGISTRY_LISTING, candidate_snapshot, no_variables,
+    profile_document, serve_pack_listing, serve_registry_pack, snapshot_of, template, write_yaml,
 };
 
 const CHART: &str = "strata-live-chart";
@@ -115,11 +115,13 @@ fn a_layer_from_a_registry_that_syncs_is_still_pack_not_found() {
 fn a_version_that_the_listing_has_goes_through_the_listing_also_in_a_private_registry() {
     // a pack that Palette made for an earlier profile is in the listing, with its uid
     let dir = tempfile::tempdir().unwrap();
+    let mut minted =
+        PackFixture::new(CHART, "addon", "1.0.0", "pk-minted", PRIVATE, "", "").summary(&[]);
+    minted["spec"]["type"] = json!("helm");
     let api = serve_registry_pack(
         tenant(),
         CHART,
-        json!([{"metadata": {"uid": "pk-minted"}, "spec": {"name": CHART, "version": "1.0.0",
-            "registryUid": PRIVATE, "layer": "addon", "type": "helm"}}]),
+        json!([minted]),
         json!({"tags": [{"tag": "1.0.0", "packUid": "pk-minted", "version": "1.0.0"}]}),
         PRIVATE,
     );
@@ -342,11 +344,17 @@ fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
     // its registry. One is from the same registry, one from the private Helm registry. Each layer
     // names its registry by name, so each needs its uid. One resolve reads each listing one time
     // (#327)
-    let listed = json!({
-        "metadata": {"uid": "pack-listed-1"},
-        "spec": {"name": "listed-chart", "version": "1.0.0", "registryUid": ZARF,
-                 "digest": "sha256:l1", "layer": "addon", "type": "oci", "values": "a: 1\n"},
-    });
+    let pack = PackFixture::new(
+        "listed-chart",
+        "addon",
+        "1.0.0",
+        "pack-listed-1",
+        ZARF,
+        "sha256:l1",
+        "a: 1\n",
+    );
+    let mut listed = pack.summary(&[]);
+    listed["spec"]["type"] = json!("oci");
     let api = serve_registry_pack(
         tenant(),
         "listed-chart",
