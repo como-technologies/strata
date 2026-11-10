@@ -205,7 +205,8 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 	if c.Schema != SnapshotSchema {
 		t.Errorf("the snapshot of a cluster states %q", c.Schema)
 	}
-	if len(c.Source.Cluster.Profiles) != 2 {
+	// the seed gives payments the release and three add-on profiles
+	if len(c.Source.Cluster.Profiles) != 4 {
 		t.Errorf("payments runs %d profiles", len(c.Source.Cluster.Profiles))
 	}
 	var r Record
