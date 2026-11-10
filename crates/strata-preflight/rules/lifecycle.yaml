@@ -55,11 +55,10 @@ rules:
              | select(.type == "CloudInfrastructureCleanedUp" and .status == "False" and (.reason // "") == "DeletingInfrastructure") ] | length > 0) as $waits
         | ([ (.events // [])[] | select((.message // "") | test("Deleting control plane nodes")) ] | length) as $n
         | if $s == "Deleting" and $waits and .elapsed > 1800
-          then ["the delete waits at CloudInfrastructureCleanedUp=False, DeletingInfrastructure, for \(.elapsed) s, with \($n) 'Deleting control plane nodes' events: an orphan node group can hold the EKS control plane. Run examples/live/eks-nodegroups.sh; --delete removes the node groups of the example. Then delete the EKS cluster and its VPC in AWS, and force delete the cluster in Palette"]
+          then ["the delete waits at CloudInfrastructureCleanedUp=False, DeletingInfrastructure, for \(.elapsed) s, with \($n) 'Deleting control plane nodes' events: an orphan node group can hold the EKS control plane. Delete the node groups, the EKS cluster, and its VPC in AWS, then force delete the cluster in Palette"]
           else [] end
     reproduce:
-      - "examples/live/eks-nodegroups.sh            # one line for each node group of the cluster; two for one pool is an orphan"
-      - "examples/live/eks-nodegroups.sh --delete   # deletes the node groups of the example, and waits until they are gone"
+      - "for g in $(aws eks list-nodegroups --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --query nodegroups --output text); do aws eks describe-nodegroup --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --nodegroup-name \"$g\" --query 'nodegroup.[nodegroupName,instanceTypes[0],status]' --output text; done   # one line for each node group of the cluster; two for one pool is an orphan"
       - "aws eks describe-cluster --region {{ .entity.spec.cloudConfig.region }} --name {{ .entity.metadata.name }} --query cluster.status   # ACTIVE while the delete waits"
     fix:
       owner: palette
@@ -452,7 +451,6 @@ rules:
         else [] end
     reproduce:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.metadata.annotations.spectroComponentsUpgradeForbidden // \"not set\"'"
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' -d '{\"spectroComponents\":\"unlock\"}' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/upgrade/settings\"   # resume"
     evidence:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/platform-settings/pause-platform-upgrades/

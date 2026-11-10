@@ -1009,6 +1009,22 @@ field, a value, an input, or an option is in the sections above.
   - A text with no three numbers, such as `LTS__24.x`, keeps its order.
   - A record that `@latest` wrote before can name a develop build. Take the record again to
     pin the version that `@latest` gives now.
+- **`strata preflight`: no `reproduce` line deletes or changes anything, and none
+  names `examples/live`.** Each line reads. See
+  [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
+  - Six lines that changed something are gone. Three are the `api.sh delete-named`
+    of `versions-outside-state`, the `--delete` of `eks-delete-waits`, and the
+    `unlock` of `pause-agent-upgrades`. Two are the `gcloud services enable` of
+    `gke-api-off` and the `az provider register` of `azure-resource-providers`.
+    The last is the `crane auth login` of `ecr-token`, which wrote the
+    configuration file of Docker. Its `crane digest` line stays.
+  - The lines that ran a script of the live example read the cloud with `aws`,
+    `gcloud`, or `curl` now. `inventory-managed` says in words that only the lab
+    can reproduce it.
+  - The `evidence[]` of a rule names no path of the live example. A `ref` names
+    the page of the live example, or it is empty and the note names the script.
+  - A script that reads a line of `reproduce[]` by its position must read the new
+    lines.
 - **The report of an offline run says `offline` after the tiers.** The first line
   of the terminal report reads `tiers static, offline`. The markdown and the HTML
   reports use the same words. A script that reads that line gets a new word.

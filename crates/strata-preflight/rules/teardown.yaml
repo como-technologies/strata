@@ -12,19 +12,30 @@ rules:
     status: seen
     what: |
       A force delete removes the records of a cluster in Palette. The cloud keeps each instance,
-      volume, and load balancer, and bills for them. Empty the cloud first. The inventory scripts
-      of the lab read AWS and GCP; a company reads its own estate.
+      volume, and load balancer, and bills for them. Empty the cloud first. The reproduce lines
+      read AWS and GCP by the cluster name; for another cloud, a company reads its own estate.
     reproduce:
       aws:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+        - "aws ec2 describe-instances --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query 'Reservations[].Instances[].InstanceId' --output text   # no id before a force delete"
+        - "aws ec2 describe-volumes --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Volumes[].VolumeId' --output text   # no id before a force delete"
+        - "aws elb describe-load-balancers --region {{ .entity.spec.cloudConfig.region }} --query \"LoadBalancerDescriptions[?LoadBalancerName=='{{ .entity.metadata.name }}-apiserver'].LoadBalancerName\" --output text   # no name before a force delete"
+        - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Vpcs[].VpcId' --output text   # the network goes last, minutes after the instances"
       eks:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a force delete"
+        - "aws ec2 describe-instances --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query 'Reservations[].Instances[].InstanceId' --output text   # no id before a force delete"
+        - "aws ec2 describe-volumes --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Volumes[].VolumeId' --output text   # no id before a force delete"
+        - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Vpcs[].VpcId' --output text   # the network goes last, minutes after the instances"
+        - "aws eks describe-cluster --name {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query cluster.status   # ResourceNotFoundException means no cluster of the name"
       gcp:
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # 0 on every line before a force delete"
+        - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format 'value(name)'   # no line before a force delete"
+        - "gcloud compute disks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format 'value(name)'   # no line before a force delete"
+        - "gcloud compute forwarding-rules list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format 'value(name)'   # the load balancer: no line before a force delete"
+        - "gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format 'value(name)'   # the network goes last, minutes after the instances"
       gke:
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # 0 on every line before a force delete"
+        - "gcloud container clusters list --project {{ .entity.spec.cloudConfig.project }} --filter 'name={{ .entity.metadata.name }}' --format 'value(name,status)'   # no line means no cluster of the name"
+        - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^gke-{{ .entity.metadata.name }}-' --format 'value(name)'   # the nodes: no line before a force delete"
+        - "gcloud compute disks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^gke-{{ .entity.metadata.name }}-' --format 'value(name)'   # no line before a force delete"
       all:
-        - "examples/live/inventory.sh   # the lab: 0 on every line before a force delete; a company runs its own inventory of the cluster name"
+        - "# strata-preflight has no line for this cloud: count what the cloud holds under the cluster name {{ .entity.metadata.name }}, and find nothing before a force delete"
     fix:
       owner: palette
       text: Warn, or refuse a force delete while the cloud holds resources of the cluster.
@@ -64,20 +75,16 @@ rules:
                  | "VPC \(.VpcId) of a cluster named \($n) is still in \($r); the network goes last, so the teardown before is not finished. Wait until the inventory is 0 on every line" ]
           end
     reproduce:
-      aws:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line, the vpcs line last"
       gcp:
         - "gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json   # the network goes last"
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }}   # 0 on every line, the network line last"
     fix:
       owner: none
     evidence:
       - kind: source
-        ref: examples/live/aws-inventory.sh
-        note: a deletion removes the security groups, route tables, subnets, internet gateway, and VPC last, minutes after the instances and the NAT gateway
+        ref: docs/src/development/live-example.md
+        note: on AWS, a deletion removes the security groups, route tables, subnets, internet gateway, and VPC last, minutes after the instances and the NAT gateway
       - kind: source
-        ref: examples/live/gcp-inventory.sh
-        note: a deletion removes the network last, minutes after the instances
+        note: the GCP inventory of the live example; a deletion removes the network last, minutes after the instances
     tests:
       - fault: fixtures/aws/vpc-left.json
         clean: fixtures/aws/teardown-order-clean.json
@@ -94,10 +101,7 @@ rules:
       `aws-inventory.sh` counts the EKS cluster of the name. `gcp-inventory.sh --gke` counts the
       GKE cluster and the `gke-<name>-` nodes, disks, and instance groups. A row of the lab.
     reproduce:
-      eks:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # the 'eks clusters' line"
-      gke:
-        - "examples/live/gcp-inventory.sh {{ .entity.spec.cloudConfig.project }} {{ .entity.metadata.name }} --gke   # the 'gke clusters' and 'gke nodes' lines"
+      - "# only the lab can reproduce this: the fault was in the inventory scripts of the live example"
     fix:
       owner: lab
       text: Count the managed cluster and its node groups in each inventory.
@@ -105,8 +109,7 @@ rules:
       - kind: run
         ref: "#90"
       - kind: source
-        ref: examples/live/gcp-inventory.sh
-        note: "`--gke` counts the GKE cluster, which needs the Kubernetes Engine API"
+        note: "the GCP inventory of the live example; `--gke` counts the GKE cluster, which needs the Kubernetes Engine API"
 
   - id: leftovers-before-build
     title: No instance of a run before is in the cloud
@@ -143,24 +146,22 @@ rules:
         end
     reproduce:
       aws:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a build"
+        - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Vpcs[].VpcId' --output text   # no id before a build"
       eks:
-        - "examples/live/aws-inventory.sh {{ .entity.metadata.name }} {{ .entity.spec.cloudConfig.region }}   # 0 on every line before a build"
+        - "aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query 'Vpcs[].VpcId' --output text   # no id before a build"
         - "aws eks describe-cluster --name {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query cluster.status   # ResourceNotFoundException means no cluster of the name"
       gcp:
         - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^{{ .entity.metadata.name }}' --format json"
       gke:
         - "gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter 'name ~ ^gke-{{ .entity.metadata.name }}-' --format json"
         - "gcloud container clusters list --project {{ .entity.spec.cloudConfig.project }} --filter 'name={{ .entity.metadata.name }}' --format 'value(name,status)'   # no line means no cluster of the name"
-      all:
-        - "examples/live/inventory.sh   # the lab: 0 on every line before a build; a company runs its own inventory of the cluster name"
     fix:
       owner: lab
       text: Run the inventory before each build, and stop while a line is not 0.
     evidence:
       - kind: source
-        ref: examples/live/inventory.sh
-        note: exit 0 when nothing is left, 1 while anything is; the lab runs it after live-down
+        ref: docs/src/development/live-example.md
+        note: the inventory of the live example exits 0 when nothing is left, and 1 while anything is; the lab runs it after live-down
     tests:
       - fault: fixtures/eks/instances-left.json
         clean: fixtures/eks/leftovers-clean.json
@@ -176,9 +177,9 @@ rules:
       macro before the cluster fails at that step. The values and the manifests of the packs name
       each macro they read as a `.spectro.macro.NAME` template, and `strata snapshot --macros`
       records them for a cluster. The world has no project uid, so strata-preflight cannot call
-      `GET /v1/projects/{uid}/macros` here; the lab calls it through `api.sh`.
+      `GET /v1/projects/{uid}/macros` here; the first reproduce line calls it.
     reproduce:
-      - "examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros\" | jq -r '.macros[].name'   # the macros of the project"
       - "strata snapshot cluster:{{ .clusterUid // \"<cluster uid>\" }} --macros --json | jq '.macros'   # the macros the cluster reads"
     fix:
       owner: none
@@ -201,14 +202,13 @@ rules:
     reproduce:
       - "strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // \"<profile name>\" }} '.profiles[] | select(.name == $n) | .version'   # every version of the name in Palette"
       - "tofu state list | grep spectrocloud_cluster_profile   # the versions the state holds"
-      - "examples/live/api.sh delete-named {{ .profiles[0].source.name // \"<profile name>\" }}   # the fix of the lab: every version of the name"
+      - "strata consumers {{ .profiles[0].source.name // \"<profile name>\" }}@<version>   # the clusters that run the version: keep each version that a cluster runs"
     fix:
       owner: lab
-      text: Delete by name after the destroy; `just live-down` runs `api.sh delete-named`.
+      text: After the destroy, delete by name each version that the state does not hold and no cluster runs.
     evidence:
       - kind: source
-        ref: examples/live/api.sh delete-named
-        note: deletes the versions that skip_destroy kept out of the OpenTofu state
+        note: the teardown of the live example deletes by name each version that skip_destroy kept out of the OpenTofu state
       - kind: source
         ref: docs/src/development/live-example.md
         note: skip_destroy keeps the versions that a bump replaced out of the state
@@ -238,8 +238,7 @@ rules:
       text: Match names exactly, or give each cluster and pool a name that is no prefix of another.
     evidence:
       - kind: source
-        ref: examples/live/gcp-inventory.sh
-        note: "the filter `name ~ ^$name` matches every name with the prefix"
+        note: "the GCP inventory of the live example; its filter `name ~ ^$name` matches every name with the prefix"
     tests:
       - fault: fixtures/aws/pool-name-prefix.json
         clean: fixtures/aws/clean.json

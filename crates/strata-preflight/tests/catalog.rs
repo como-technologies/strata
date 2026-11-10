@@ -2635,3 +2635,279 @@ fn the_rule_of_an_image_named_by_a_tag_is_a_note_for_the_operator_with_the_two_f
         "a note that no check before the build finds"
     );
 }
+
+/// The directory of the scripts of the live example. No machine outside the lab has it, so a line
+/// that names it sends a person to a path that does not exist (#613).
+const LAB_SCRIPTS: &str = "examples/live";
+
+/// The words that start a command or a subcommand that changes something, in lower case, and the
+/// names of the options that do. A command counts by its part before the first dash, so
+/// `delete-named` and `delete-nodegroup` are deletes, and `describe-vpcs` is no change. A command
+/// also counts by its whole name, so `get-credentials` is a change: it writes the kubeconfig. A
+/// login writes a file of credentials, so it is a change too. An option counts by its whole name,
+/// so `--delete` is a delete, and `--tag-filters` is no change.
+const CHANGES: [&str; 54] = [
+    "add",
+    "annotate",
+    "apply",
+    "attach",
+    "chmod",
+    "chown",
+    "cordon",
+    "cp",
+    "create",
+    "delete",
+    "deregister",
+    "destroy",
+    "detach",
+    "disable",
+    "drain",
+    "edit",
+    "enable",
+    "get-credentials",
+    "import",
+    "install",
+    "kill",
+    "label",
+    "lock",
+    "login",
+    "logout",
+    "modify",
+    "mv",
+    "patch",
+    "push",
+    "put",
+    "reboot",
+    "register",
+    "remove",
+    "replace",
+    "reset",
+    "resize",
+    "restart",
+    "revoke",
+    "rm",
+    "run",
+    "scale",
+    "set",
+    "start",
+    "stop",
+    "taint",
+    "tee",
+    "terminate",
+    "uncordon",
+    "uninstall",
+    "unlock",
+    "untag",
+    "update",
+    "upgrade",
+    "use-context",
+];
+
+/// The text of a shell line that the shell reads as the words of its commands. Each quoted part,
+/// each `{{ }}` template, and each `<placeholder>` becomes a space, and the comment goes. So a jq
+/// program, a filter, and a note are no words of a command.
+fn command_text(line: &str) -> String {
+    let mut out = String::new();
+    let mut chars = line.chars().peekable();
+    let mut word_start = true;
+    while let Some(c) = chars.next() {
+        let end = match c {
+            '\'' | '"' => c,
+            '<' if chars.peek().is_some_and(char::is_ascii_alphabetic) => '>',
+            '{' if chars.peek() == Some(&'{') => '}',
+            '#' if word_start => break,
+            '\\' => {
+                chars.next();
+                word_start = false;
+                continue;
+            }
+            _ => {
+                out.push(c);
+                word_start = c.is_whitespace();
+                continue;
+            }
+        };
+        // a double quote ends at a double quote with no backslash before it. A template ends at
+        // its first `}`, and the second `}` is the next character.
+        while let Some(inner) = chars.next() {
+            if inner == '\\' && end == '"' {
+                chars.next();
+            } else if inner == end {
+                break;
+            }
+        }
+        if end == '}' {
+            chars.next();
+        }
+        out.push(' ');
+        word_start = false;
+    }
+    out
+}
+
+/// True when the `curl` of `words` sends a `POST`: `-X POST`, or an option of data, with which
+/// `curl` sends a `POST`. A `PUT`, a `PATCH`, and a `DELETE` are words of [`CHANGES`].
+fn curl_posts(words: &[&str]) -> bool {
+    words.contains(&"curl")
+        && words.iter().enumerate().any(|(at, word)| {
+            matches!(*word, "-d" | "-F" | "--form" | "--json")
+                || word.starts_with("--data")
+                || word.eq_ignore_ascii_case("-XPOST")
+                || (matches!(*word, "-X" | "--request")
+                    && words
+                        .get(at + 1)
+                        .is_some_and(|method| method.eq_ignore_ascii_case("post")))
+        })
+}
+
+/// The file that each `>` of `text` writes, such as `request.json` in `jq . > request.json`. A
+/// `>&` copies a stream, and writes no file.
+fn written_files(text: &str) -> Vec<&str> {
+    text.match_indices('>')
+        .filter_map(|(at, _)| {
+            let rest = text[at + 1..].trim_start_matches('>').trim_start();
+            let file = rest
+                .split(|c: char| c.is_whitespace() || ";|&)".contains(c))
+                .next()?;
+            (!rest.starts_with('&') && !file.is_empty()).then_some(file)
+        })
+        .collect()
+}
+
+/// What `line` changes, when it changes something. A change is a word of [`CHANGES`], or a
+/// `POST` to a route that is not a validate route. A write of a file outside the current
+/// directory is a change too. A validate route of Palette checks a body. `request.json` and
+/// `body.json` of the lines that a report adds are files of the current directory.
+fn change_in(line: &str) -> Option<String> {
+    let text = command_text(line);
+    let words: Vec<&str> = text
+        .split(|c: char| c.is_whitespace() || "|;&()$`<>".contains(c))
+        .filter(|word| !word.is_empty())
+        .collect();
+    let changes = |name: &str| CHANGES.contains(&name.to_ascii_lowercase().as_str());
+    if let Some(word) = words.iter().find(|word| match word.strip_prefix('-') {
+        Some(option) => changes(option.trim_start_matches('-')),
+        None => changes(word) || changes(word.split('-').next().unwrap_or_default()),
+    }) {
+        return Some(format!("the word `{word}`"));
+    }
+    if curl_posts(&words) && !line.contains("/validate") {
+        return Some("a POST to a route that is not a validate route".to_string());
+    }
+    written_files(&text)
+        .into_iter()
+        .find(|file| *file != "/dev/null" && file.contains('/'))
+        .map(|file| format!("a write of {file}"))
+}
+
+/// A person runs a reproduce line by hand to see what a check saw, so the line reads and changes
+/// nothing. The report of #613 printed `api.sh delete-named` for `versions-outside-state`: the
+/// line deletes each version of the profile, also the version that the cluster runs. The test
+/// reads each line of each engine. It also reads the lines that a report prints for the fault
+/// fixture of each rule. The report adds lines for the check to them.
+#[test]
+fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let dir = folder_for_reproduce();
+    let mut found = Vec::new();
+    for rule in catalog.rules() {
+        let mut lines: Vec<String> = rule.reproduce.lines().map(str::to_string).collect();
+        if let Some(fault) = rule.tests.iter().find_map(|t| t.fault.as_ref()) {
+            let doc = fixture::load(fault).unwrap();
+            lines.extend(reproduce_lines(&catalog, rule, doc, dir.path(), &jq));
+        }
+        for line in lines {
+            if let Some(change) = change_in(&line) {
+                found.push(format!("{}: {change}: {line}", rule.id));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "reproduce lines that change something:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
+    for bad in [
+        "examples/live/api.sh delete-named aws-stack   # the fix of the lab",
+        "examples/live/eks-nodegroups.sh --delete   # deletes the node groups",
+        "aws eks delete-nodegroup --cluster-name a --nodegroup-name b",
+        "kubectl delete pod x",
+        "tofu destroy -auto-approve",
+        "gcloud compute instances delete a --zone b",
+        r#"curl -s -X DELETE "https://h/v1/clusterprofiles/x""#,
+        r#"curl -s -X PUT --data @body.json "https://h/v1/x""#,
+        r#"curl -s -X POST -d '{"spectroComponents":"unlock"}' "https://h/v1/spectroclusters/u/upgrade/settings"   # resume"#,
+        r#"code=$(curl -s -d @body.json "https://h/v1/x")"#,
+        "jq . world.json > ~/.kube/config",
+        "rm -rf out",
+        "aws ecr get-login-password --region r | crane auth login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
+        "aws ecr get-login-password --region r | docker login -u AWS --password-stdin <account>.dkr.ecr.r.amazonaws.com",
+        "helm registry login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
+        "crane auth logout <account>.dkr.ecr.r.amazonaws.com",
+        "gcloud container clusters get-credentials c --region r",
+        "kubectl config use-context c",
+    ] {
+        assert!(change_in(bad).is_some(), "{bad}");
+    }
+    for good in [
+        "aws ec2 describe-vpcs --filters Name=tag-key,Values=x --query 'Vpcs[].VpcId' --output text   # no id before a force delete",
+        "aws resourcegroupstaggingapi get-resources --tag-filters Key=k --output text",
+        "maas $PROFILE tag machines palette | jq -r '.[] | .hostname'",
+        r#"curl -s -X POST -H 'Content-Type: application/json' --data @request.json "https://h/v1/spectroclusters/aws/validate""#,
+        "jq '.validateBody' out/world.json > request.json",
+        r#"for t in tofu jq; do command -v $t >/dev/null || echo "$t is missing"; done"#,
+        "aws iam simulate-principal-policy --action-names eks:CreateCluster ec2:RunInstances --output json",
+        r#"gcloud logging read 'protoPayload.methodName="CreateCluster" severity>=WARNING' --limit 3"#,
+        r"curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/",
+        r#"jq '"a '\''delete'\'' b"' world.json"#,
+        "# only the lab can reproduce this row; a company deletes nothing",
+        "aws ecr get-login-password --region r   # must print a token",
+        "crane digest <account>.dkr.ecr.r.amazonaws.com/app:1.0.0",
+        "gcloud auth print-access-token",
+        r#"strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // "<name>" }} '.profiles[] | .version'"#,
+    ] {
+        assert_eq!(change_in(good), None, "{good}");
+    }
+}
+
+/// No machine outside the lab has the scripts of the live example. So no text of the catalog
+/// names their directory: no reproduce line, no message, no fix, and no evidence. A report holds
+/// no other text of the catalog. A rule that only the lab can reproduce says so in words (#613).
+#[test]
+fn no_text_of_the_catalog_names_the_directory_of_the_scripts_of_the_lab() {
+    let mut found = Vec::new();
+    for (name, text) in catalog::SECTIONS {
+        for (n, line) in text.lines().enumerate() {
+            if line.contains(LAB_SCRIPTS) {
+                found.push(format!("{name}.yaml:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "texts that name {LAB_SCRIPTS}:\n{}",
+        found.join("\n")
+    );
+}
+
+/// `inventory-managed` is a fault of the inventory scripts of the lab. Only the lab can reproduce
+/// it, and its reproduce line says so in words for each engine of the rule.
+#[test]
+fn a_rule_that_only_the_lab_can_reproduce_says_so_in_words() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("inventory-managed").unwrap();
+    for engine in rule.engines.iter().filter(|e| e.as_str() != "lab") {
+        let lines = rule.reproduce.for_engine(engine);
+        assert!(
+            lines
+                .iter()
+                .any(|line| line.starts_with("# only the lab can reproduce")),
+            "{engine}: {lines:?}"
+        );
+    }
+}

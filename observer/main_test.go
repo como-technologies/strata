@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -340,16 +341,10 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
 	stop, _ := startServe(t, args, addr)
 	defer stop()
-	testkit.WaitFor(t, "the page state ok", func() bool {
-		resp, err := http.Get("http://" + addr + "/v1/cluster")
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		var got struct {
-			Page string `json:"page"`
-		}
-		return json.NewDecoder(resp.Body).Decode(&got) == nil && got.Page == string(model.PageOK)
+	// The state of the page reads the content cycle only, so the wait also reads the versions cycle.
+	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
+		var got api.ClusterView
+		return getJSON(addr, "/v1/cluster", &got) && got.Page == model.PageOK && got.Versions.ReadAt != nil
 	})
 }
 
@@ -378,11 +373,14 @@ func TestHealthRefusesAWrongFlagAndAnAddressThatIsNotLoopback(t *testing.T) {
 
 // holdingStrata writes a script that stands for the strata binary, with one pin that is behind. While
 // the file hold exists, the compare of two packs writes its process id to pids and waits. It replaces
-// itself with the wait, so the process id is the one that the observer started.
+// itself with the wait, so the process id is the one that the observer started. While hold exists,
+// `verify` also waits 0.2 s, so the content cycle usually ends after the versions cycle.
 func holdingStrata(t *testing.T, hold, pids string) string {
 	t.Helper()
 	return testkit.Strata(t, `case $cmd in
-verify) echo '`+testkit.VerifyUnchanged+`' ;;
+verify)
+  if [ -e '`+hold+`' ]; then sleep 0.2; fi
+  echo '`+testkit.VerifyUnchanged+`' ;;
 snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
 compare)
   case $ref in
@@ -398,17 +396,24 @@ behind)
 esac`)
 }
 
-// newerRows counts the rows of /v1/newer.
-func newerRows(addr string) int {
-	resp, err := http.Get("http://" + addr + "/v1/newer")
+// getJSON reads the answer of the route path of the server into v. It is false when the server does
+// not answer 200, or when the answer does not decode.
+func getJSON(addr, path string, v any) bool {
+	resp, err := http.Get("http://" + addr + path)
 	if err != nil {
-		return 0
+		return false
 	}
 	defer resp.Body.Close()
-	var got struct {
-		Newer []json.RawMessage `json:"newer"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&got) != nil {
+	// A read to the end of the body lets the client use the connection again. So a wait does not open
+	// a new connection at each try.
+	raw, err := io.ReadAll(resp.Body)
+	return err == nil && resp.StatusCode == http.StatusOK && json.Unmarshal(raw, v) == nil
+}
+
+// newerRows counts the rows of /v1/newer.
+func newerRows(addr string) int {
+	var got api.NewerView
+	if !getJSON(addr, "/v1/newer", &got) {
 		return 0
 	}
 	return len(got.Newer)
@@ -417,10 +422,13 @@ func newerRows(addr string) int {
 // After a restart the memory holds no values for a move, so a request of the newer side starts one
 // compare. A stop during that request must cancel it: the server exits 0, and no process stays.
 func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T) {
+	const subject = "aws-stack@1.1.0"
 	dir := t.TempDir()
 	hold, pids := filepath.Join(dir, "hold"), filepath.Join(dir, "pids")
 	args, addr := serveArgs(t, holdingStrata(t, hold, pids))
 	first, _ := startServe(t, args, addr)
+	// The observer keeps the answer of a cycle and writes the state while it holds one lock. So a row
+	// shows that the state holds the counts of the move.
 	testkit.WaitFor(t, "the first versions cycle", func() bool { return newerRows(addr) == 1 })
 	if code := first(); code != 0 {
 		t.Fatalf("the first server exited %d", code)
@@ -431,12 +439,16 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 		t.Fatal(err)
 	}
 	stop, stderr := startServe(t, args, addr)
-	testkit.WaitFor(t, "the versions cycle after the restart", func() bool { return newerRows(addr) == 1 })
+	// The detail route finds the pin in the versions cycle and the profile in the content cycle. The
+	// two cycles end in either order, so the wait reads both.
+	testkit.WaitFor(t, "the two cycles after the restart", func() bool {
+		return newerRows(addr) == 1 && getJSON(addr, "/v1/profiles/"+subject, &api.ProfileView{})
+	})
 	answered := make(chan struct{})
 	go func() {
 		defer close(answered)
 		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Get("http://" + addr + "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer")
+		resp, err := client.Get("http://" + addr + "/v1/packs/" + subject + "/k8s/kubernetes/diff?side=newer")
 		if err == nil {
 			resp.Body.Close()
 		}
@@ -507,28 +519,28 @@ func podsAPI(t *testing.T) *testkit.KubeAPI {
 }
 
 func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
-	api := podsAPI(t)
+	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--kube-dir", api.Dir())
+	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
-	if n := len(api.Requests()); n != 0 {
+	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf("%d requests went to the API server", n)
 	}
 	serve, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, _ := startServe(t, append(serve, "--kube-dir", api.Dir()), addr)
-	resp, err := http.Get("http://" + addr + "/v1/images")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
+	stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()), addr)
+	// With --read-pods, the content cycle reads the pods. So the count of the requests waits for its end.
+	testkit.WaitFor(t, "the first content cycle", func() bool {
+		var got api.ClusterView
+		return getJSON(addr, "/v1/cluster", &got) && got.Content.CheckedAt != nil
+	})
 	var doc model.Observed
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil || doc.Pods != model.PodsOff || len(doc.Images) != 0 {
-		t.Errorf("document %+v, error %v", doc, err)
+	if !getJSON(addr, "/v1/images", &doc) || doc.Pods != model.PodsOff || len(doc.Images) != 0 {
+		t.Errorf("document %+v", doc)
 	}
 	stop()
-	if n := len(api.Requests()); n != 0 {
+	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf("%d requests went to the API server with the server running", n)
 	}
 }
@@ -555,13 +567,8 @@ func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
 	stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", api.Dir()), addr)
 	var doc model.Observed
 	testkit.WaitFor(t, "the first read of the pods", func() bool {
-		resp, err := http.Get("http://" + addr + "/v1/images")
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
 		doc = model.Observed{}
-		return json.NewDecoder(resp.Body).Decode(&doc) == nil && doc.Pods == model.PodsRead
+		return getJSON(addr, "/v1/images", &doc) && doc.Pods == model.PodsRead
 	})
 	if doc.Counts.Images != 3 || doc.Images[0].Ref == "" {
 		t.Errorf("document %+v", doc)

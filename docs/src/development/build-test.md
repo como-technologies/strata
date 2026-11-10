@@ -261,6 +261,23 @@ The release names the address of the endpoint of the report. A run of strata wit
   the book gives each step the address of its stand-in endpoint. The drop-ins in `scripts/ci/`
   and `examples/ci/` obey the settings of the user.
 
+### The tests get no git setting of the machine
+
+Git reads `GIT_CONFIG_COUNT` and `GIT_CONFIG_PARAMETERS` after the config of a repository, so
+their settings win. A session container sets its git user with them. With these rules, git gets
+no setting of the machine:
+
+- A test starts git with `git` or `isolate_git` of `tests/common/`. `isolate_git` sets
+  `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` to `/dev/null`, and gives one author. It also
+  removes each variable whose name starts with `GIT_CONFIG`, such as each `GIT_CONFIG_KEY_<n>`.
+  A test that gives such a variable on purpose gives it after the call.
+- The runner of the book includes `tests/common/git.rs` with `#[path]`, and gives each step the
+  same settings. A chapter adds only the dates of its commits.
+- A live script that makes a repository calls `isolate_git NAME` of `examples/live/lib.sh`. It
+  gives the same settings, with the author `NAME`.
+- A test fails on another file of the tests, of xtask, or of `examples/live/` that sets
+  `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, or the name of an author.
+
 ### The fuzzing
 
 Two kinds of test send hostile input to strata. `tests/fuzz.rs` sends random

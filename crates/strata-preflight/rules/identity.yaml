@@ -69,8 +69,8 @@ rules:
         ref: preflight-plan eks 20260929T042910Z
         note: the simulation with no --resource-arns gave implicitDeny for eks:CreateNodegroup and eks:DescribeCluster on the role that built the #89 clusters; with the cluster, node group, and CAPA role ARNs they are allowed, and eks:CreateCluster stays implicitDeny
       - kind: source
-        ref: strata examples/live/terraform/iam/eks-controllers.json
-        note: eks:CreateCluster, eks:DescribeCluster, and eks:ListClusters on arn:*:eks:*:*:cluster/* and arn:*:eks:*:*:nodegroup/*/*/*
+        ref: docs/src/development/live-example.md
+        note: the EKS policy of Palette that the live example attaches to its role gives eks:CreateCluster, eks:DescribeCluster, and eks:ListClusters on arn:*:eks:*:*:cluster/* and arn:*:eks:*:*:nodegroup/*/*/*
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 F4
       - kind: doc
@@ -235,7 +235,6 @@ rules:
       - kind: run
         ref: "#89"
       - kind: source
-        ref: strata examples/live/terraform/cloud-eks.tf time_sleep.eks_role
         note: the live example waits 30 s after it makes the role, before Palette assumes it
 
   - id: eks-core-policies
@@ -279,7 +278,7 @@ rules:
       - kind: run
         ref: "#89"
       - kind: source
-        ref: strata examples/live/terraform/cloud-eks.tf data.aws_iam_policy.palette_core
+        ref: docs/src/development/live-example.md
         note: the live example reads the core policies of Palette from the AWS account
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/core-iam-policies/
