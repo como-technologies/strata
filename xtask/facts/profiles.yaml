@@ -66,6 +66,7 @@ facts:
       - internals/palette/profiles.md#the-scope-of-a-version
       - internals/palette/profiles.md#drafts
       - internals/palette/profiles.md#what-the-delete-of-a-version-checks
+      - reference/palette-api.md#the-checks-of-strata-preflight
     code:
       - src/api/palette/profiles.rs
       - src/model/scope.rs
