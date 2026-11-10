@@ -185,7 +185,7 @@ EOF
 open_page() {
   kc -n "$ns" get deploy/strata-observer -o name > /dev/null 2>&1 \
     || die "no observer in the cluster $cluster; run just observer-up $cluster"
-  pf_start || { cat port-forward.log; die "no port-forward to the observer"; }
+  pf_start || die "no port-forward to the observer"
   echo "The page of the observer is at http://127.0.0.1:$port. Press Ctrl-C to close it."
   wait "$pf_pid"
 }

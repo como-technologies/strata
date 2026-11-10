@@ -279,6 +279,22 @@ no setting of the machine:
 - A test fails on another file of the tests, of xtask, or of `examples/live/` that sets
   `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, or the name of an author.
 
+### The waits of the live scripts in a test
+
+`tests/live_scripts.rs` runs a script of `examples/live/` with a stand-in for each tool. The
+stand-in `sleep` returns at once, so a test does not wait for the seconds of a live run. With
+these rules, a test gives the same result on each run, on a fast machine and on the runner of CI:
+
+- A wait that counts its looks ends in less than a second. On a test machine, the 30 looks of a
+  wait took 54 ms. So a count of looks limits a wait only when its state comes from an earlier step.
+- A wait for a process that runs in the background has a limit of time. `pf_start` of `lib.sh`
+  waits 30 seconds for the line `Forwarding from` of `kubectl port-forward`. In `observer.sh`, each
+  look for the observer that runs in the background waits up to 5 seconds in the stand-in `curl`.
+- `FAKE_PORT_FORWARD` of `tests/common/mod.rs` stands for each port-forward. It can print its line
+  half a second late, or end with no line. A test shows that each step still gets the right result.
+- A step that fails shows its output in the log of the test. The test prints the files `<id>.out`
+  and `<id>.err` of each check that failed, and the harness shows them when the test fails.
+
 ### The fuzzing
 
 Two kinds of test send hostile input to strata. `tests/fuzz.rs` sends random

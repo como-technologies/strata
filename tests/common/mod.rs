@@ -706,6 +706,18 @@ printf '%s' "${FAKE_OUT-}"
 exit "${FAKE_EXIT:-0}"
 "#;
 
+/// A stand-in for `kubectl port-forward`, named `fake-port-forward` on the `PATH`. Each stand-in
+/// `kubectl` of a live script runs it for a port-forward.
+///
+/// It prints the line of a port-forward that is ready, and stops. `FAKE_FORWARD_LATE` gives a wait
+/// in seconds before the line. The wait is real, because the stand-in `sleep` of a stage returns at
+/// once. With `FAKE_FORWARD_FAILS`, it prints an error and no line, and exits with 1.
+pub const FAKE_PORT_FORWARD: &str = r#"#!/usr/bin/env bash
+[ -z "${FAKE_FORWARD_FAILS-}" ] || { echo "error: lost connection to pod" >&2; exit 1; }
+[ -z "${FAKE_FORWARD_LATE-}" ] || command -p sleep "$FAKE_FORWARD_LATE"
+echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080"
+"#;
+
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `crates/strata-preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {

@@ -2922,6 +2922,10 @@ fn tofu_output_json(outputs: &serde_json::Value) -> String {
 
 /// One run of a stage of a live script against the stand-ins. A test gives the OpenTofu outputs,
 /// the answers of strata, and the routes of Palette.
+///
+/// The stage puts two stand-ins on the `PATH`: a `sleep` that returns at once, and
+/// [`FAKE_PORT_FORWARD`]. So a wait that counts its looks ends in less than a second. A wait for a
+/// process that runs in the background limits its time, as `pf_start` of `lib.sh` does.
 struct Stage {
     root: tempfile::TempDir,
     answers: usize,
@@ -2938,6 +2942,7 @@ impl Stage {
                 ("tofu", FAKE_TOFU_STAGE),
                 ("fake-strata", FAKE_STRATA_STAGE),
                 ("sleep", "#!/usr/bin/env bash\nexit 0\n"),
+                ("fake-port-forward", FAKE_PORT_FORWARD),
             ],
         );
         for d in ["routes", "strata", "aws"] {
@@ -3078,6 +3083,9 @@ fi
             .unwrap();
         let o = run_live(script, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
+        // the harness shows the standard output of a test that fails, so its log holds the output
+        // of each step that failed
+        print!("{}", failed_outputs(&root.join("out"), &steps));
         (o, steps)
     }
 
@@ -3106,11 +3114,62 @@ fi
     }
 }
 
+/// The output and the errors of each check that failed in `steps`, a `steps.log`. They are the
+/// files `<id>.out` and `<id>.err` that `check` of `lib.sh` writes in `out`.
+fn failed_outputs(out: &Path, steps: &str) -> String {
+    let mut shown = String::new();
+    for id in ids_with(steps, "FAIL") {
+        for file in [format!("{id}.out"), format!("{id}.err")] {
+            let body = std::fs::read_to_string(out.join(&file)).unwrap_or_default();
+            shown.push_str(&format!("---- the failed check {id}: {file}\n{body}"));
+            if !body.is_empty() && !body.ends_with('\n') {
+                shown.push('\n');
+            }
+        }
+    }
+    shown
+}
+
+#[test]
+fn the_log_of_a_test_shows_the_output_and_the_errors_of_each_check_that_failed() {
+    let out = tempfile::tempdir().unwrap();
+    for (file, body) in [
+        ("alert-route.out", "the port-forward ended"),
+        ("alert-route.err", "error: lost connection to pod\n"),
+        ("alert-edit.out", "the output of a check that passed\n"),
+    ] {
+        std::fs::write(out.path().join(file), body).unwrap();
+    }
+    let steps = "== stage 8: the alerts\n\
+        FAIL  alert-route                      expected 0, got 1\n\
+        PASS  alert-edit                       expected 0, got 0\n\
+        FAIL  alert-open                       expected 0, got 1\n";
+    assert_eq!(
+        failed_outputs(out.path(), steps),
+        "---- the failed check alert-route: alert-route.out\n\
+         the port-forward ended\n\
+         ---- the failed check alert-route: alert-route.err\n\
+         error: lost connection to pod\n\
+         ---- the failed check alert-open: alert-open.out\n\
+         ---- the failed check alert-open: alert-open.err\n"
+    );
+    assert_eq!(
+        failed_outputs(out.path(), "PASS  alert-edit  expected 0, got 0\n"),
+        ""
+    );
+}
+
 /// True when `steps` has a line of the check `id` that starts with `verdict`: `PASS` or `FAIL`.
 fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
+    ids_with(steps, verdict).any(|i| i == id)
+}
+
+/// The id of each check in `steps` whose line starts with `verdict`, in the order of the lines.
+fn ids_with<'a>(steps: &'a str, verdict: &'a str) -> impl Iterator<Item = &'a str> {
     steps
         .lines()
-        .any(|l| l.starts_with(verdict) && l.split_whitespace().nth(1) == Some(id))
+        .filter(move |l| l.starts_with(verdict))
+        .filter_map(|l| l.split_whitespace().nth(1))
 }
 
 /// Each check of `ids` passed.
@@ -8054,7 +8113,8 @@ fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() 
 ///
 /// The reader can open a port-forward and nothing else. `FAKE_READER_SECRETS` lets the reader read
 /// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page. A pod of the mirror prints
-/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away.
+/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away. A port-forward
+/// runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -8094,7 +8154,7 @@ case "$*" in
       *"get secrets"*) [ -z "${FAKE_READER_SECRETS-}" ] || { echo yes; exit 0; } ;;
     esac
     echo no; exit 1 ;;
-  *"port-forward"*) echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080" ;;
+  *"port-forward"*) exec fake-port-forward ;;
   *" run "*) if [ -n "${FAKE_REACHED-}" ]; then echo reached; else echo refused; fi ;;
 esac
 exit 0
@@ -8686,6 +8746,39 @@ fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_th
     failed(&steps, &["other-pod-refused"]);
 }
 
+/// The checks of observer-kind.sh that open a port-forward with `pf_start` of `lib.sh`.
+const OBSERVER_KIND_FORWARDS: [&str; 3] = ["reader-forward", "component-read", "alert-route"];
+
+#[test]
+fn observer_kind_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &OBSERVER_KIND_CHECKS);
+}
+
+#[test]
+fn observer_kind_sh_fails_each_port_forward_that_ends_with_no_line_and_says_why() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_FAILS", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &OBSERVER_KIND_FORWARDS);
+    passed(&steps, &["reader-health", "alert-edit", "kind-delete"]);
+    for check in OBSERVER_KIND_FORWARDS {
+        let said = std::fs::read_to_string(stage.path(&format!("out/{check}.err"))).unwrap();
+        for line in [
+            "the port-forward ended with no line \"Forwarding from\". Its log:",
+            "error: lost connection to pod",
+        ] {
+            assert!(said.contains(line), "{check}: {line}\n{said}");
+        }
+    }
+}
+
 #[test]
 fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_the_image() {
     let mut stage = observer_kind_stage();
@@ -8971,7 +9064,7 @@ esac
 ///
 /// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
 /// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
-/// `IfNotPresent`.
+/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -9042,7 +9135,7 @@ case "$*" in
     [ -f "$obs/ns.$n" ] || notfound namespaces "$n"
     echo "$n Active" ;;
   *"get clusterrole"*) [ -f "$obs/role.exists" ] || notfound clusterroles strata-observer-pods; echo found ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -9931,7 +10024,8 @@ fi
 /// The `kubectl` of observer.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`: `ns.exists`, `deploy.exists`, `restarts`, and
 /// `first-load-pending`. The key goes to `key.current`, and the pull Secret to `pull.seen`.
-/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults.
+/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults. A port-forward runs
+/// [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -9983,7 +10077,7 @@ case "$*" in
   *" logs "*)
     echo 'time=2026-11-04T10:00:00Z level=INFO msg=strata command=verify exit=0 duration=2s'
     [ -z "${FAKE_LOG_LEAK-}" ] || echo "value strata live example" ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -10409,6 +10503,18 @@ fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     ] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
+}
+
+#[test]
+fn observer_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once. ask-words opens one port-forward.
+    let mut stage = observer_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_observer(&stage, &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    assert_eq!(check_ids(&steps), OBSERVER_CHECKS, "{steps}");
 }
 
 /// What the files of `dir` hold, joined, for a search of a secret
