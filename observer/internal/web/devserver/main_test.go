@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestAnUnknownStateExitsTwoAndNamesTheSets(t *testing.T) {
@@ -34,27 +34,8 @@ func TestADirectoryWithNoSetExitsTwo(t *testing.T) {
 
 // The server gives the page and the routes, with the headers of the real server.
 func TestTheServerGivesThePageAndTheRoutesOfTheSet(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
-	ctx, stop := context.WithCancel(context.Background())
-	done := make(chan int, 1)
-	go func() {
-		done <- run(ctx, []string{"-data", "../testdata/api", "-state", "lost", "-listen", addr}, io.Discard)
-	}()
-	var resp *http.Response
-	for i := 0; i < 100; i++ {
-		resp, err = http.Get("http://" + addr + "/v1/cluster")
-		if err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	addr, stop := startSet(t, "lost")
+	resp, err := http.Get("http://" + addr + "/v1/cluster")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,42 +53,28 @@ func TestTheServerGivesThePageAndTheRoutesOfTheSet(t *testing.T) {
 	if page.StatusCode != 200 || !strings.HasPrefix(page.Header.Get("Content-Type"), "text/html") || !strings.Contains(string(html), "app.js") {
 		t.Errorf("the page: status %d, type %q", page.StatusCode, page.Header.Get("Content-Type"))
 	}
-	stop()
-	if code := <-done; code != 0 {
+	if code := stop(); code != 0 {
 		t.Errorf("exit %d after a stop that ctx asked for", code)
 	}
+}
+
+// startSet starts the dev server on a free port with one set. It gives the address, and the function that
+// stops the server and gives its exit code.
+func startSet(t *testing.T, state string) (addr string, stop func() int) {
+	t.Helper()
+	addr, stop, _ = testkit.StartServer(t, func(ctx context.Context, log io.Writer) int {
+		return run(ctx, []string{"-data", "../testdata/api", "-state", state, "-listen", testkit.PortZero}, log)
+	})
+	return addr, stop
 }
 
 // serveSet starts the dev server on a free port with one set, and it gives the address. The server stops
 // when the test ends.
 func serveSet(t *testing.T, state string) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr := ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
-	ctx, stop := context.WithCancel(context.Background())
-	done := make(chan int, 1)
-	go func() {
-		done <- run(ctx, []string{"-data", "../testdata/api", "-state", state, "-listen", addr}, io.Discard)
-	}()
-	t.Cleanup(func() {
-		stop()
-		<-done
-	})
-	for i := 0; i < 100; i++ {
-		if resp, err := http.Get("http://" + addr + "/v1/cluster"); err == nil {
-			resp.Body.Close()
-			return addr
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatal("the server did not start")
-	return ""
+	addr, stop := startSet(t, state)
+	t.Cleanup(func() { stop() })
+	return addr
 }
 
 // send sends a request to the server and gives the status and the body. A request from the page of the

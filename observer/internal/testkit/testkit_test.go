@@ -1,6 +1,10 @@
 package testkit
 
-import "testing"
+import (
+	"log/slog"
+	"strings"
+	"testing"
+)
 
 func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing.T) {
 	for _, c := range []struct {
@@ -27,5 +31,18 @@ func TestClusterRunsTheProfilesThatTheCallGives(t *testing.T) {
 	}
 	if p := got.Profiles[1]; p.Name != "platform-addons" || p.Version != "1.0.0" || p.Type != "cluster" {
 		t.Errorf("profile %+v", p)
+	}
+}
+
+func TestListenAddrReadsTheAddressOfTheLineListeningOfTheLog(t *testing.T) {
+	var log strings.Builder
+	logger := slog.New(slog.NewTextHandler(&log, nil))
+	logger.Info("serving test data", "state", "ok")
+	if _, ok := listenAddr(log.String()); ok {
+		t.Errorf("a log with no line listening gave an address: %s", log.String())
+	}
+	logger.Info("listening", "addr", "[::1]:41234")
+	if got, ok := listenAddr(log.String()); !ok || got != "[::1]:41234" {
+		t.Errorf("got %q, %v from %s", got, ok, log.String())
 	}
 }

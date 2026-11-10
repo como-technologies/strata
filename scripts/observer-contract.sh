@@ -49,15 +49,19 @@ once() {
   fi
 }
 
-# serve_up CLUSTER-UID RECORDS-NAME PORT starts `strata-observer serve` against the stand-in that runs now.
-# It returns when the first content cycle ended well, and fails when that takes more than two minutes.
+# serve_up CLUSTER-UID RECORDS-NAME starts `strata-observer serve` against the stand-in that runs now. The
+# server listens on port 0, so it gets a free port from the kernel. serve_up sets addr to the address of
+# the line "listening" of its log. It returns when the first content cycle ended well, and fails when that
+# takes more than two minutes.
 serve_up() {
   mkdir -p "$work/serve-work"
   "$observer_bin" serve --strata "$strata" --cluster-uid "$1" --records "$work/records-$2" --work "$work/serve-work" \
-    --state "$work/serve-state" --listen "127.0.0.1:$3" >"$work/serve.out" 2>"$work/serve.err" &
+    --state "$work/serve-state" --listen 127.0.0.1:0 >"$work/serve.out" 2>"$work/serve.err" &
   serve_pid=$!
+  addr=
   for _ in $(seq 120); do
-    [ "$(curl -s "http://127.0.0.1:$3/v1/cluster" | jq -r '.page // empty')" = ok ] && return 0
+    [ -n "$addr" ] || addr=$(sed -n 's/.* msg=listening addr=\([^ ]*\).*/\1/p' "$work/serve.err")
+    [ -n "$addr" ] && [ "$(curl -s "http://$addr/v1/cluster" | jq -r '.page // empty')" = ok ] && return 0
     sleep 1
   done
   cat "$work/serve.err" >&2
@@ -100,10 +104,9 @@ expect edited '(.findings | length) == 1 and .findings[0].kind == "published-cha
 # server, and it runs each command against this stand-in. The server stops before the later seeds, and it leaves no state.
 api=$work/api/edited
 mkdir -p "$api"
-port=$((20000 + RANDOM % 20000))
-serve_up "$(cluster_uid payments)" edited "$port"
+serve_up "$(cluster_uid payments)" edited
 for route in cluster findings profiles newer notchecked events images asks alerts; do
-  curl -s "http://127.0.0.1:$port/v1/$route" >"$api/$route.json"
+  curl -s "http://$addr/v1/$route" >"$api/$route.json"
   jq -e . "$api/$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
 done
 echo '[]' >"$api/diffs.json"
@@ -173,10 +176,9 @@ if [ -n "${OBSERVER_CONTRACT_SHOW:-}" ]; then
 fi
 
 # The server shows the tiers. A summary route holds no clear value, and the server refuses a POST and a
-# Host that is not loopback. The port is high, so that it does not meet a service of the host.
-port=$((20000 + RANDOM % 20000))
-base=http://127.0.0.1:$port
-serve_up "$uid" values "$port"
+# Host that is not loopback.
+serve_up "$uid" values
+base=http://$addr
 for route in cluster findings profiles newer notchecked events; do
   curl -s "$base/v1/$route" >"$work/serve-$route.json"
   jq -e . "$work/serve-$route.json" >/dev/null || { echo "/v1/$route is no JSON" >&2; exit 2; }
@@ -190,10 +192,12 @@ status "ask without the header" 403 -X POST "$base/v1/packs/aws-stack@1.1.1/k8s/
 status "ask for an unknown move" 404 -X POST -H "Sec-Fetch-Site: same-origin" "$base/v1/packs/aws-stack@1.1.1/k8s/kubernetes/ask"
 status "asks" 200 "$base/v1/asks"
 status "health" 200 "$base/healthz"
-"$observer_bin" health --listen "127.0.0.1:$port" || { echo "health failed with the server up" >&2; exit 2; }
+"$observer_bin" health --listen "$addr" || { echo "health failed with the server up" >&2; exit 2; }
 serve_down
+# Health asks port 0, not the port of the stopped server: another process can take that port at once,
+# and a server there can answer. No server can listen on port 0.
 code=0
-"$observer_bin" health --listen "127.0.0.1:$port" 2>/dev/null || code=$?
+"$observer_bin" health --listen 127.0.0.1:0 2>/dev/null || code=$?
 [ "$code" = 1 ] || { echo "health exited $code with no server, expected 1" >&2; exit 2; }
 code=0
 "$observer_bin" serve --strata "$strata" --cluster-uid "$uid" --records "$work/records-values" --work "$work/serve-work" \

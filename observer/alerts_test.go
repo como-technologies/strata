@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
@@ -121,7 +120,7 @@ func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddre
 		t.Fatal(err)
 	}
 	var out, errs bytes.Buffer
-	args, _ := serveArgs(t, "strata")
+	args := serveArgs(t, "strata")
 	if code := run(append(args, "--alerts", rules), &out, &errs); code != 2 || !strings.Contains(errs.String(), `channel "oncall"`) || !strings.Contains(errs.String(), "https") || strings.Contains(errs.String(), "TOKEN-SECRET") {
 		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}
@@ -136,14 +135,16 @@ func TestADigestPeriodThatIsNotPositiveStopsTheStart(t *testing.T) {
 
 func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *testing.T) {
 	w := newWebhook(t)
-	args, addr := serveArgs(t, fakeStrata(t, drifting, 0, false))
+	args := serveArgs(t, fakeStrata(t, drifting, 0, false))
 	args = append(args, "--alerts", rulesFile(t, w), "--alerts-allow-http")
-	stop, stderr := startServe(t, args, addr)
+	addr, stop, stderr := startServe(t, args)
 	var view alert.View
 	testkit.WaitFor(t, "the rule of drift fires", func() bool {
 		return getJSON(addr, "/v1/alerts", &view) && len(view.Rules) == 2 && view.Rules[0].State == alert.StateFiring
 	})
-	time.Sleep(50 * time.Millisecond)
+	// The observer sets the state of the rule before it sends the message. So the state does not show
+	// the send, and the count does.
+	testkit.WaitFor(t, "the message of the drift", func() bool { return w.count() > 0 })
 	stop()
 	if w.count() != 1 || !strings.Contains(w.bodies[0], "Drift") || !strings.Contains(w.bodies[0], "payments") {
 		t.Errorf("the receiver got %d messages: %q", w.count(), w.bodies)
@@ -154,8 +155,8 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 }
 
 func TestServeWithoutAlertsSendsNothingAndTheRouteSaysSo(t *testing.T) {
-	args, addr := serveArgs(t, fakeStrata(t, drifting, 0, false))
-	stop, stderr := startServe(t, args, addr)
+	args := serveArgs(t, fakeStrata(t, drifting, 0, false))
+	addr, stop, stderr := startServe(t, args)
 	defer stop()
 	testkit.WaitFor(t, "the finding of the drift", func() bool {
 		var got api.FindingsView
