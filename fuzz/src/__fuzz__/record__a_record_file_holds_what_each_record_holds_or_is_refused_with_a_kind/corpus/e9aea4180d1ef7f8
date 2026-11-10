@@ -1,0 +1,66 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "password: a\r\nname: b\r\n",
+      "valuesCanon": {
+        "name": "b",
+        "password": "a"
+      },
+      "valuesHash": "261f925e54e1358144c73ab37d5349a55dfeda6ef4f8ee7f9f34608197f8a31c",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "password: a\r\nname: b\r\n",
+          "contentHash": "261f925e54e1358144c73ab37d5349a55dfeda6ef4f8ee7f9f34608197f8a31c"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "e4f3fcfec405ce905ad137a708360deea622fddedab1d0afb3e8ff5cd78a9e92",
+        "node": "f6616f9c59a8ef8642c08a19e5f6745aee5488aa4200a03645f8da26e8fa3a02"
+      }
+    }
+  ],
+  "root": "b3475a515426252374885dbada1ed55fdacae314a962e1c74707c4009daa8a42",
+  "contentDigest": "2707cb29e0a5b1173c0121d43e372c1405dd0357014ee1150765e569f51a4a30"
+}
