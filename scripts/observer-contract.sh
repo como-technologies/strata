@@ -52,9 +52,11 @@ once() {
 # serve_up CLUSTER-UID RECORDS-NAME starts `strata-observer serve` against the stand-in that runs now. The
 # server listens on port 0, so it gets a free port from the kernel. serve_up sets addr to the address of
 # the line "listening" of its log. It returns when the first content cycle ended well, and fails when that
-# takes more than two minutes.
+# takes more than two minutes. The server opens its log after the fork. So serve_up empties the log first,
+# and sed never reads a missing log or the log of an earlier server.
 serve_up() {
   mkdir -p "$work/serve-work"
+  : >"$work/serve.err"
   "$observer_bin" serve --strata "$strata" --cluster-uid "$1" --records "$work/records-$2" --work "$work/serve-work" \
     --state "$work/serve-state" --listen 127.0.0.1:0 >"$work/serve.out" 2>"$work/serve.err" &
   serve_pid=$!

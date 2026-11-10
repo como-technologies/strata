@@ -218,9 +218,9 @@ func parsedFiles(t *testing.T) (*token.FileSet, map[string]*ast.File) {
 	return fset, parsed
 }
 
-// A test that closes a free port and gives its address to a server can lose the port: another process
-// can bind it first, and answer in place of the server. So no test of the observer calls net.Listen. A
-// test starts its server on testkit.PortZero and reads the port from the log, or it uses httptest.
+// A test that closes a free port and gives it to a server can lose the port. Another process can bind
+// it first, and answer in place of the server. So no test of the observer calls net.Listen. A test
+// starts its server on testkit.PortZero and reads the port from the log, or it uses httptest.
 func TestNoTestGivesAServerAPortThatItClosed(t *testing.T) {
 	fset, files := parsedFiles(t)
 	for path, f := range files {
@@ -238,8 +238,60 @@ func TestNoTestGivesAServerAPortThatItClosed(t *testing.T) {
 	}
 }
 
-// A local name that is the name of a package that its file imports hides the package in its scope, for
-// example a variable api in a file that imports internal/api. No file of the observer declares one.
+// The kernel can give the port of a closed server to another process at once, and a server there can
+// answer. So no test uses a name after a statement that closes it, such as srv.Close(). A test of "no
+// server" asks testkit.PortZero.
+func TestNoTestAsksAServerThatItClosed(t *testing.T) {
+	fset, files := parsedFiles(t)
+	for path, f := range files {
+		if !strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			var body *ast.BlockStmt
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				body = n.Body
+			case *ast.FuncLit:
+				body = n.Body
+			}
+			if body == nil {
+				return true
+			}
+			// A close in a nested function runs later, so only the statements of this body count.
+			closed := map[string]token.Pos{}
+			ast.Inspect(body, func(n ast.Node) bool {
+				if _, ok := n.(*ast.FuncLit); ok {
+					return false
+				}
+				if s, ok := n.(*ast.ExprStmt); ok {
+					if c, ok := s.X.(*ast.CallExpr); ok {
+						if sel, ok := c.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Close" {
+							if x, ok := sel.X.(*ast.Ident); ok {
+								if _, seen := closed[x.Name]; !seen {
+									closed[x.Name] = s.End()
+								}
+							}
+						}
+					}
+				}
+				return true
+			})
+			ast.Inspect(body, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok {
+					if end, ok := closed[id.Name]; ok && id.Pos() > end {
+						t.Errorf("%s uses %s after it closes it", fset.Position(id.Pos()), id.Name)
+					}
+				}
+				return true
+			})
+			return true
+		})
+	}
+}
+
+// A local name hides a package in its scope when the file imports a package of that name. An example is
+// a variable api in a file that imports internal/api. No file of the observer declares such a name.
 func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 	fset, files := parsedFiles(t)
 	for _, f := range files {
@@ -311,8 +363,8 @@ func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 	}
 }
 
-// serveArgs turns the arguments of `once` into the arguments of `serve` on port 0 of the loopback
-// address, so the server gets a free port from the kernel.
+// serveArgs changes the arguments of `once` to the arguments of `serve` on testkit.PortZero. So the
+// kernel gives the server a free port.
 func serveArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	args := append([]string{"serve"}, onceArgs(t, bin)[1:]...)

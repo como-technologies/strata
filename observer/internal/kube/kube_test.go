@@ -152,8 +152,10 @@ func TestAFailureHasAKindAndAStatusAndNeverTheBodyOfTheAnswer(t *testing.T) {
 
 func TestAnAddressThatAnswersNothingIsATransportFailure(t *testing.T) {
 	a := testkit.NewKubeAPI(t, func(http.ResponseWriter, *http.Request) {})
-	a.Close()
-	_, err := New(cfgOf(a)).Pods(context.Background())
+	cfg := cfgOf(a)
+	// The client asks testkit.PortZero, because another process can take the port of a closed stand-in.
+	cfg.Host = testkit.PortZero
+	_, err := New(cfg).Pods(context.Background())
 	if kindOf(err) != docs.KindKubeTransport || strings.Contains(err.Error(), "127.0.0.1") {
 		t.Errorf("error %v", err)
 	}

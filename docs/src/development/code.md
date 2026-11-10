@@ -380,10 +380,11 @@ the Rust code, and these rules are for the Go code.
   content cycle only.
 - A test starts a server on `testkit.PortZero`, so the kernel gives it a free port.
   `testkit.StartServer` reads that port from the line `listening` of the log. A test
-  never gives a server a port that it closed. Another process can bind that port
-  first, and answer in place of the server. A test of "no server" asks
-  `testkit.PortZero`, because no server can listen on port 0. A test makes sure
-  that no test calls `net.Listen`.
+  never gives a server a port that it closed, and never asks a server that it
+  closed. Another process can bind that port first, and answer in place of the
+  server. A test of "no server" asks `testkit.PortZero`, because no server can
+  listen on port 0. Two tests make sure that no test calls `net.Listen`, and that
+  no test uses a server after it closes it.
 - No local name hides a package that its file imports, such as a variable `api` in
   a file that imports `internal/api`. A test makes sure of it.
 - `internal/testkit` holds each helper that the tests of two packages use, such
