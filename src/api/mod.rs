@@ -78,8 +78,8 @@ pub trait PaletteApi {
 
     /// POST `body` to `path` and parse the answer as JSON. Strata sends a POST only to ask
     /// Palette a question, at a route that checks the body. Such a route changes no setting. At
-    /// `validate/repave`, Palette saves the address of the console of a pack of virtual machines:
-    /// see [`Palette::validate_repave`]. An API that cannot POST says so.
+    /// `validate/repave`, Palette can save the address of the console of a pack of virtual
+    /// machines: see [`Palette::validate_repave`]. An API that cannot POST says so.
     ///
     /// # Errors
     ///

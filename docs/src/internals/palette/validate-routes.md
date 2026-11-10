@@ -238,15 +238,17 @@ forwards to. A cluster and a body with none of the three packs get no record.
 - The address is the value `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`
   of the pack. With no such value, Palette makes the address from the
   `serviceType` of the pack: the address of its load balancer, or an address
-  under the proxy of Palette.
+  under the proxy of Palette. Palette saves no record while the load balancer
+  has no address.
 - The build of the cluster saves the address from the values that the cluster
   holds. The agent of the cluster reads the cluster in the same form, so it
   saves the same address.
 - The build of the target saves the address from the values of the body. So a
   body with other values of the pack moves the address of the console, until
   the agent reads the cluster again.
-- A body that adds one of the packs saves a record for a cluster that does not
-  run it.
+- A body that adds one of the packs can save a record for a cluster that does
+  not run it. With a load balancer and no `consoleBaseAddress`, Palette saves
+  no record, because the cluster has no such load balancer.
 - When the cluster runs the pack, a body without its values does not stop the
   save: the build of the cluster saves the record.
 - A body can name the profile of the pack by its uid alone, with no
@@ -262,8 +264,11 @@ So it saves the same records for that cluster, and it can move the address
 that the console forwards to, as above. A template with no cluster gets no
 record. `POST /v1/spectroclusters/{cloudType}/validate` saves no record.
 
-The forward of the console keeps the address that it read for up to 15
-minutes. So a new record shows at the console address only after that time.
+The forward of the console keeps the address that it reads for a console,
+usually for at most 15 minutes. It keeps the answer 404 in the same way when it
+finds no record. In some cases, it keeps an address until Palette starts the
+forward service again. When the forward keeps no address for a console, the
+next request reads the record. So a new record shows at once.
 
 A line of a report that sends this route says what Palette saves, in a comment:
 see [The reproduce lines](../../reference/preflight-rules.md#the-reproduce-lines).

@@ -789,9 +789,16 @@ the pack to a mark, and back. The question that moves it back sends the values
 of the cluster in the profile of the pack. A profile by its uid alone can move
 the address that the console forwards to: see
 [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
-The forward of the console keeps the address that it read for up to 15 minutes.
-So the stage waits `VMO_WAIT` seconds (default 960) before each read that must
-show a new address.
+The stage stops before the first question when a check before it fails. So a
+cluster without the pack, or under a cluster template, gets no question.
+
+The forward of the console keeps the address that it read, usually for at most
+15 minutes. So the stage waits `VMO_WAIT` seconds (default 960) before the
+first question. After each question, it reads the console each 5 seconds, for
+at most `VMO_WAIT` seconds. In some cases, the forward keeps an address until
+Palette starts the forward service again. Then `vmo-saved` or `vmo-back` fails,
+and the stage names the forward as a cause. After such a `vmo-back`, the
+console forwards to the mark until Palette starts the forward service again.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -821,8 +828,8 @@ show a new address.
 | `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet: no live window ran stage 9. |
 | `vmo-mark-body`, `vmo-before` | 0 | #717: the body holds the mark `https://strata-live-check.invalid` in `consoleBaseAddress`. Before the question, the console address forwards to a host that answers: no 404, no 502, and an answer in 30 seconds. No result yet: no live window ran stage 9. |
 | `vmo-ask`, `vmo-ask-ok` | 0 | #717: `validate/repave` with the mark answers HTTP 200. No result yet: no live window ran stage 9. |
-| `vmo-saved` | 0 | #717: at once, the console address answers 502: Palette saved the mark at the question, and the mark has no host. No result yet: no live window ran stage 9. |
-| `vmo-own`, `vmo-back` | 0 | #717: `validate/repave` with the values of the cluster in the profile of the pack saves the address of the cluster again. The console address forwards to a host that answers again. No result yet: no live window ran stage 9. |
+| `vmo-saved` | 0 | #717: in `VMO_WAIT` seconds, the console address answers 502: Palette saved the mark at the question, and the mark has no host. `vmo-saved.out` holds the status of each read. No result yet: no live window ran stage 9. |
+| `vmo-own`, `vmo-own-ok`, `vmo-back` | 0 | #717: `validate/repave` with the values of the cluster in the profile of the pack answers HTTP 200, and saves the address of the cluster again. In `VMO_WAIT` seconds, the console address forwards to a host that answers again. No result yet: no live window ran stage 9. |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and

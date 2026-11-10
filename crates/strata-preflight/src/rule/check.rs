@@ -38,9 +38,9 @@ pub struct PaletteCheck {
     /// an error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refusal_codes: Vec<String>,
-    /// What Palette saves at the request, when the route saves something. The line of the report
-    /// for the request ends with [`Saves::comment`]. Each line of the rule that sends the request
-    /// ends with the template of [`SAVES_COMMENT`](crate::jq::SAVES_COMMENT). With no value, the
+    /// What Palette can save at the request, when the route saves something. The line of the
+    /// report for the request ends with a comment that says it. Each line of the rule that sends
+    /// the request ends with the template `{{ saves_comment("<value>") }}`. With no value, the
     /// route saves nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub saves: Option<Saves>,

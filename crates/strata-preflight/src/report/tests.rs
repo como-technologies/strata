@@ -227,7 +227,7 @@ rules:
     assert!(lines[0].contains("--data @out/entity.json"), "{}", lines[0]);
 }
 
-/// Palette saves the address of the console of a pack of virtual machines at `validate/repave`.
+/// Palette can save the address of the console of a pack of virtual machines at `validate/repave`.
 /// So the line of the request of a check that names it in `saves` says it, and the line of
 /// another request has no comment (#717).
 #[test]

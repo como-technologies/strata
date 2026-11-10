@@ -4393,38 +4393,43 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     );
 }
 
-/// The forward of the console address of the VM Orchestrator pack in stage 9 of `repave.sh`. It
-/// answers 502 after a question whose body holds the mark: Palette saved the mark, and it has no
-/// host. It answers 200 before such a question, and after a question with the values of the cluster.
+/// The forward of the console address of the VM Orchestrator pack in stage 9 of `repave.sh`. The
+/// record answers 502 after a question whose body holds the mark: Palette saved the mark, and it
+/// has no host. It answers 200 before such a question, and after a question with the values of the
+/// cluster. The forward keeps the status that it read for `FORWARD_KEEPS` more reads, as the
+/// forward of Palette keeps the address that it read.
 const FAKE_CONSOLE_FORWARD: &str = r#"#!/usr/bin/env bash
 sent="$FAKE_ROUTES/sent/POST_v1_spectroclusters_v-1_validate_repave"
 status=200
 [ -f "$sent" ] && grep -q 'consoleBaseAddress: https://strata-live-check.invalid' "$sent" && status=502
+kept="$FAKE_ROUTES/forward.kept"
+if [ -s "$kept" ] && read -r was left < "$kept" && [ "$left" -gt 0 ]; then
+  status=$was left=$((left - 1))
+else
+  left=${FORWARD_KEEPS:-0}
+fi
+echo "$status $left" > "$kept"
 echo "$status" > "$FAKE_ROUTES/v1_tenantApps_f-1_.status"
 echo console
 "#;
 
-#[test]
-fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_a_mark() {
-    let mut stage = Stage::new(baseline_outputs());
-    let (o, steps) = stage.run("repave.sh", &["9"]);
-    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(
-        steps.contains("== stage 9 skipped: give VMO_CLUSTER="),
-        "no cluster, no question: {steps}"
-    );
+/// A cluster for stage 9 of `repave.sh`, with two profiles. One has no pack of virtual machines.
+/// The other has `cert-manager` and `virtual-machine-orchestrator`, whose values hold
+/// `consoleBaseAddress`.
+const VMO_CLUSTER: &str = r#"{"spec":{"clusterProfileTemplates":[
+    {"uid":"p-k8s","packs":[{"name":"kubernetes","tag":"1.36.2","type":"spectro","values":"a: 1\n"}]},
+    {"uid":"p-vmo","packs":[
+        {"name":"virtual-machine-orchestrator","tag":"4.6.0","type":"spectro",
+         "values":"charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
+        {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]}]}}"#;
 
+/// A stage for stage 9 of `repave.sh` on the cluster `v-1`, with the document `cluster`. The
+/// summary gives the console address, and `FAKE_CONSOLE_FORWARD` answers at it.
+fn vmo_stage(cluster: &str) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
     stage.env("VMO_CLUSTER", "v-1");
     stage.env("VMO_WAIT", "0");
-    stage.route(
-        &cluster_route("v-1"),
-        r#"{"spec":{"clusterProfileTemplates":[
-            {"uid":"p-k8s","packs":[{"name":"kubernetes","tag":"1.36.2","type":"spectro","values":"a: 1\n"}]},
-            {"uid":"p-vmo","packs":[
-                {"name":"virtual-machine-orchestrator","tag":"4.6.0","type":"spectro",
-                 "values":"charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
-                {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]}]}}"#,
-    );
+    stage.route(&cluster_route("v-1"), cluster);
     stage.route(
         "/v1/dashboard/spectroclusters/v-1",
         r#"{"status":{"addOnServices":[{"name":"vm-dashboard","endpoint":"https://console.example/v1/tenantApps/f-1"}]}}"#,
@@ -4437,6 +4442,30 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         &stage.path("routes/v1_tenantApps_f-1_.sh"),
         FAKE_CONSOLE_FORWARD,
     );
+    stage
+}
+
+/// Each read of the console address that the stage sent, as the arguments of `curl`.
+fn console_reads(stage: &Stage) -> Vec<String> {
+    std::fs::read_to_string(stage.path("routes/sent/curl.args"))
+        .unwrap()
+        .lines()
+        .filter(|l| l.contains("tenantApps"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_a_mark() {
+    let stage = Stage::new(baseline_outputs());
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.contains("== stage 9 skipped: give VMO_CLUSTER="),
+        "no cluster, no question: {steps}"
+    );
+
+    let stage = vmo_stage(VMO_CLUSTER);
     let (o, steps) = stage.run("repave.sh", &["9"]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     passed(
@@ -4451,6 +4480,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
             "vmo-ask-ok",
             "vmo-saved",
             "vmo-own",
+            "vmo-own-ok",
             "vmo-back",
         ],
     );
@@ -4480,11 +4510,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         "the second question sends the values of the cluster, and not the profile by its uid alone"
     );
     assert_eq!(sent.len(), 2);
-    let forwards = std::fs::read_to_string(stage.path("routes/sent/curl.args")).unwrap();
-    let forwards: Vec<&str> = forwards
-        .lines()
-        .filter(|l| l.contains("tenantApps"))
-        .collect();
+    let forwards = console_reads(&stage);
     assert_eq!(
         forwards.len(),
         3,
@@ -4494,30 +4520,96 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         forwards.iter().all(|l| !l.contains("--config")),
         "a read of the console sends no key: {forwards:?}"
     );
+}
 
-    // Palette answers the route of a cluster that a template governs with no reasons, and saves
-    // nothing. A forward with no record answers 404, and it reaches no console.
-    let cluster = std::fs::read_to_string(
-        stage
-            .path("routes")
-            .join(Stage::route_key(&cluster_route("v-1"))),
-    )
-    .unwrap();
-    stage.route(
-        &cluster_route("v-1"),
-        &cluster.replacen(
-            r#"{"spec":{"#,
-            r#"{"spec":{"clusterTemplate":{"uid":"t-1"},"#,
-            1,
-        ),
+/// The forward of Palette keeps the address that it read, usually for at most 15 minutes, and in
+/// some cases until Palette starts it again. So stage 9 reads the console again after each
+/// question, for at most `VMO_WAIT` seconds. When no read passes, it names the forward as a cause.
+#[test]
+fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address_that_it_read() {
+    let mut stage = vmo_stage(VMO_CLUSTER);
+    stage.env("VMO_WAIT", "10");
+    stage.env("FORWARD_KEEPS", "2");
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["vmo-before", "vmo-saved", "vmo-back"]);
+    let saved = std::fs::read_to_string(stage.path("out/vmo-saved.out")).unwrap();
+    assert_eq!(
+        saved, "200\n200\n502\n",
+        "the forward keeps the host for two reads"
     );
-    executable(
-        &stage.path("routes/v1_tenantApps_f-1_.sh"),
-        "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
+    let back = std::fs::read_to_string(stage.path("out/vmo-back.out")).unwrap();
+    assert_eq!(
+        back, "502\n502\n200\n",
+        "the forward keeps the mark for two reads"
     );
+    assert_eq!(console_reads(&stage).len(), 7);
+    assert!(!steps.contains("The forward of Palette"), "{steps}");
+
+    let mut stage = vmo_stage(VMO_CLUSTER);
+    stage.env("VMO_WAIT", "10");
+    stage.env("FORWARD_KEEPS", "99");
     let (o, steps) = stage.run("repave.sh", &["9"]);
     assert_ne!(o.status.code(), Some(0), "{steps}");
-    failed(&steps, &["vmo-runs", "vmo-before", "vmo-back"]);
+    failed(&steps, &["vmo-saved"]);
+    assert!(
+        steps.contains(
+            "== vmo-saved: no read in 10 seconds reached the mark. The forward of Palette can keep \
+             the address that it read before the question. Then the console forwards there until \
+             Palette starts the forward service again"
+        ),
+        "{steps}"
+    );
+    let saved = std::fs::read_to_string(stage.path("out/vmo-saved.out")).unwrap();
+    assert_eq!(saved, "200\n200\n200\n", "three reads in 10 seconds");
+}
+
+/// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
+/// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
+/// with no `virtual-machine-orchestrator` sends each profile by its uid alone, which can move the
+/// console address. A console that reaches no host before the question shows nothing after it.
+#[test]
+fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fails() {
+    let template = VMO_CLUSTER.replacen(
+        r#"{"spec":{"#,
+        r#"{"spec":{"clusterTemplate":{"uid":"t-1"},"#,
+        1,
+    );
+    let dashboard = VMO_CLUSTER.replace(
+        r#""name":"virtual-machine-orchestrator""#,
+        r#""name":"spectro-vm-dashboard""#,
+    );
+    for (cluster, forward, fails, reads) in [
+        (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (dashboard.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (
+            VMO_CLUSTER,
+            "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
+            "vmo-before",
+            1,
+        ),
+    ] {
+        let stage = vmo_stage(cluster);
+        executable(&stage.path("routes/v1_tenantApps_f-1_.sh"), forward);
+        let (o, steps) = stage.run("repave.sh", &["9"]);
+        assert_ne!(o.status.code(), Some(0), "{steps}");
+        failed(&steps, &[fails]);
+        assert!(
+            steps.contains(
+                "== stage 9 stopped: a check failed before the first question, so the stage asks \
+                 Palette nothing"
+            ),
+            "{steps}"
+        );
+        assert!(
+            stage
+                .sent("POST", "/v1/spectroclusters/v-1/validate/repave")
+                .is_empty(),
+            "{fails}: no question"
+        );
+        assert_eq!(console_reads(&stage).len(), reads, "{fails}: {steps}");
+        assert!(!steps.contains("vmo-ask"), "{steps}");
+    }
 }
 
 /// A `strata` for pending.sh. An update waits for cluster A while the log of the stand-in curl

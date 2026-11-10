@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Read-only lookups for the live example.
+# Lookups for the live example. Each lookup reads. But at the repave check, Palette can save the
+# address that the console of a pack of virtual machines forwards to.
 #
 #   tenant.sh names [REGION]   the names terraform.tfvars needs: projects, AWS cloud accounts, and
 #                              for each account the availability zones and EC2 key pairs in REGION
@@ -26,7 +27,10 @@
 #                              control that changes what a node runs. REPAVE_VARIABLES, a JSON
 #                              list such as '[{"name": "x", "value": "1"}]', is the variables[]
 #                              of the request; the default is none. Prints each reason; exit 0
-#                              for no repave, 1 for a repave, 2 when the answer cannot be read
+#                              for no repave, 1 for a repave, 2 when the answer cannot be read.
+#                              On a cluster with a pack of virtual machines, Palette can save the
+#                              address that the console of the pack forwards to
+#                              (docs/src/internals/palette/validate-routes.md)
 #   tenant.sh digest KIND REGISTRY_UID NAME VERSION
 #                              the digest a helm or oci registry itself serves for one pack
 #                              version, read from the registry rather than from Palette; exit 2

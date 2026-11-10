@@ -2086,7 +2086,7 @@ fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_reques
     );
 }
 
-/// Palette saves the address of the console of a pack of virtual machines at the request of
+/// Palette can save the address of the console of a pack of virtual machines at the request of
 /// `--repave`. So the help says it before a person sends the request (#717).
 #[test]
 fn the_help_of_repave_says_what_palette_saves_at_the_request() {
@@ -2094,8 +2094,8 @@ fn the_help_of_repave_says_what_palette_saves_at_the_request() {
     assert!(
         help.out.contains(
             "With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or \
-             vm-migration-assistant on either side, Palette saves the address that the console \
-             of that pack forwards to, and the question can move it"
+             vm-migration-assistant on either side, Palette can save the address that the \
+             console of that pack forwards to, and the question can move it"
         ),
         "{}",
         help.out

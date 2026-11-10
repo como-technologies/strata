@@ -57,7 +57,7 @@ rules:
 | `when` | a jq program | When the rule applies: `.before != null` for a change, `.clusterUid != null` for an existing cluster, `.account != null` for the cloud account. A rule that does not apply is `SKIP`. |
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
 | `fix` | `owner`, `text` | The fix for good. `owner` is one of six values, and the loader refuses another: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
-| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. A line reads and changes nothing: see [The reproduce lines](#the-reproduce-lines). |
+| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. A line reads and changes nothing, with one exception that the line names: see [The reproduce lines](#the-reproduce-lines). |
 | `evidence` | `kind`, `ref`, `note` | `kind` is one of four values, and the loader refuses another. `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. |
 | `evidence` of `kind` `source` | `ref`, `note` | A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
@@ -91,8 +91,8 @@ and its line says so. The rules of a line:
 - A `POST` goes to a validate route of Palette, which checks the body: see
   [The validate routes](../internals/palette/validate-routes.md). The test of
   the catalog names each such route that saves nothing.
-- One route saves a record, `validate/repave`: for a pack of virtual machines,
-  Palette saves the address of its console. A line can send it only for a check
+- One route can save a record, `validate/repave`: for a pack of virtual
+  machines, Palette can save the address of its console. A line can send it only for a check
   that names `console-address` in `saves`. The line ends with
   `{{ saves_comment("console-address") }}`. The report fills it with a comment
   that says what Palette saves, and the line that the report adds for the check
@@ -154,7 +154,7 @@ The fields of a check of kind `palette`:
   [A refusal at a 5xx](#a-refusal-at-a-5xx).
 - `saves` names what Palette saves at the request, when the route saves
   something. The one value is `console-address`: at `validate/repave`, Palette
-  saves the address of the console of a pack of virtual machines. The line of
+  can save the address of the console of a pack of virtual machines. The line of
   the report for the request ends with a comment that says it. Each
   `reproduce` line that sends the request ends with
   `{{ saves_comment("console-address") }}`: see

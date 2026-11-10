@@ -6317,7 +6317,7 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
         // a `POST` to `validate/repave` can save a record of Palette (#717)
         "A `POST` goes to a validate route of Palette, which checks the body",
         "The test of the catalog names each such route that saves nothing",
-        "One route saves a record, `validate/repave`",
+        "One route can save a record, `validate/repave`",
         "A line makes no login to a registry or a cloud",
         "A line names no path of the live example, `examples/live`",
         "A rule that only the lab can reproduce says so in such a line",

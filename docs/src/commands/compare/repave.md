@@ -69,8 +69,8 @@ See
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question, and
 the cluster keeps its instances. For a cluster or a change with the pack
 `virtual-machine-orchestrator`, `spectro-vm-dashboard`, or
-`vm-migration-assistant`, Palette also saves the address of the console of that
-pack. Other values of the pack move that address until the agent of the cluster
+`vm-migration-assistant`, Palette can also save the address of the console of
+that pack. Other values of the pack move that address until the agent of the cluster
 reads the cluster again.
 
 Strata sends a profile that the change does not touch by its uid alone. The

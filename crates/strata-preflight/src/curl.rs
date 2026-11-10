@@ -23,6 +23,7 @@ pub enum Saves {
     /// The address that the console of a pack of virtual machines forwards to, at
     /// `POST /v1/spectroclusters/{uid}/validate/repave`. Palette saves it from the cluster, and
     /// then from the body. The address comes from the values of the pack, or Palette makes one.
+    /// Palette saves nothing while the load balancer of the pack has no address.
     ConsoleAddress,
 }
 
@@ -36,7 +37,7 @@ impl Saves {
     pub fn comment(self) -> &'static str {
         match self {
             Saves::ConsoleAddress => {
-                "   # for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette saves the address that the console of that pack forwards to, and the request can move it"
+                "   # for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette can save the address that the console of that pack forwards to, and the request can move it"
             }
         }
     }

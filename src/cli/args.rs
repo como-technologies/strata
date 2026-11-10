@@ -211,8 +211,8 @@ pub(crate) struct CompareArgs {
     /// Ask Palette if the change repaves the cluster side. One side must be a cluster. The other
     /// side is a profile version, or the update that waits for the cluster (cluster:<c>@pending).
     /// With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or
-    /// vm-migration-assistant on either side, Palette saves the address that the console of that
-    /// pack forwards to, and the question can move it
+    /// vm-migration-assistant on either side, Palette can save the address that the console of
+    /// that pack forwards to, and the question can move it
     #[arg(long)]
     pub(crate) repave: bool,
     /// Ask Palette if it accepts the packs of the change on the cluster side; one side must be a

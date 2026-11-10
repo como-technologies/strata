@@ -28,9 +28,11 @@
 #      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator
 #      and no cluster template. It reads the console address of the pack before and after each
 #      question. A body with a mark in consoleBaseAddress moves the console to the mark, which
-#      answers 502. A body with the values of the cluster moves it back. The forward keeps the
-#      address that it read for up to 15 minutes. So the stage waits VMO_WAIT seconds (default
-#      960) before each read that must see a new address
+#      answers 502. A body with the values of the cluster moves it back. The stage stops before
+#      the first question when a check before it fails. The forward of Palette keeps the address
+#      that it read, usually for at most 15 minutes. So the stage waits VMO_WAIT seconds (default
+#      960) before the first question. After each question, it reads the console for at most
+#      VMO_WAIT seconds
 #
 # AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
 # needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
@@ -177,13 +179,38 @@ fi
 vmo_pack=virtual-machine-orchestrator
 vmo_mark=https://strata-live-check.invalid
 
-# forward_status URL: the HTTP status of the console address URL. The request sends no key,
-# because the console forwards each header to the address that Palette saved.
-forward_status() { curl -sk -m30 -o /dev/null -w '%{http_code}' "$1/"; }
+# console_is WANT URL: print the HTTP status of the console address URL. True when the console
+# reaches WANT. For "host", the forward finds its record (no 404), the host answers (no 502), and
+# the answer comes in 30 seconds (no 000). For "mark", the forward answers 502. The request sends
+# no key, because the console forwards each header to the address that Palette saved.
+console_is() {
+  local status
+  status=$(curl -sk -m30 -o /dev/null -w '%{http_code}' "$2/")
+  echo "$status"
+  case "$1:$status" in
+    mark:502) return 0 ;;
+    mark:*|host:404|host:502|host:000) return 1 ;;
+  esac
+}
 
-# forwards URL: true when the console address URL reaches a host. The forward finds its record (no
-# 404), the host answers (no 502), and the answer comes in 30 seconds (no 000).
-forwards() { case "$(forward_status "$1")" in 404|502|000) return 1 ;; esac; }
+# console_check ID WANT WHAT: the check ID that the console address reaches WANT in VMO_WAIT
+# seconds. It reads at once, and then each 5 seconds. The forward of Palette keeps the address
+# that it read, usually for at most 15 minutes. In some cases, it keeps it until Palette starts
+# the forward service again. So when no read passes, the stage names the forward as a cause.
+console_check() {
+  local id=$1 want=$2 what=$3 before=$failures
+  check "$id" 0 "$what" -- poll $((wait / 5 + 1)) console_is "$want" "$console"
+  [ "$failures" = "$before" ] || echo "== $id: no read in $wait seconds reached the $want." \
+    "The forward of Palette can keep the address that it read before the question." \
+    "Then the console forwards there until Palette starts the forward service again" | tee -a steps.log
+}
+
+# vmo_stopped FAILURES: true when a check failed after the count FAILURES. It then writes the stop
+# of stage 9 to steps.log.
+vmo_stopped() {
+  [ "$failures" != "$1" ] || return 1
+  echo "== stage 9 stopped: a check failed before the first question, so the stage asks Palette nothing" | tee -a steps.log
+}
 
 # vmo_body MARK: the body of a question about the cluster in vmo-cluster.out. Each profile goes by
 # its uid, and the profile of the pack names each of its packs with the values of the cluster. A
@@ -196,36 +223,45 @@ vmo_body() {
       else {} end)]}' vmo-cluster.out
 }
 
+# vmo_stage CLUSTER: the checks of stage 9 on CLUSTER. They stop before the first question when a
+# check before it fails. For a cluster without the pack, vmo_body sends each profile by its uid
+# alone, and such a body can move the console address.
+vmo_stage() {
+  V=$1 wait=${VMO_WAIT:-960}
+  local before=$failures
+  check vmo-cluster 0 "#717: a read of the cluster $V" -- "$live/api.sh" get "/v1/spectroclusters/$V"
+  # Palette answers the route of a cluster that a cluster template governs with no reasons, and saves nothing
+  check vmo-runs 0 "#717: the cluster runs $vmo_pack, its values hold consoleBaseAddress, and no cluster template governs it" -- \
+    jq -e --arg p "$vmo_pack" '(.spec.clusterTemplate.uid // "") == "" and any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
+  vmo_stopped "$before" && return
+  check vmo-summary 0 "#717: the summary of the cluster gives the console address of the service vm-dashboard" -- \
+    "$live/api.sh" get "/v1/dashboard/spectroclusters/$V"
+  console=$(jq -r '[.status.addOnServices[]? | select(.name == "vm-dashboard") | .endpoint][0] // empty' vmo-summary.out)
+  [ -n "$console" ] || die "the summary of cluster $V names no console address of vm-dashboard"
+  vmo_body "$vmo_mark" > vmo-mark.json
+  vmo_body "" > vmo-own.json
+  check vmo-mark-body 0 "#717: the body of the question holds the mark in the values of $vmo_pack" -- \
+    jq -e --arg mark "$vmo_mark" 'any(.profiles[].packValues[]?; .values | contains("consoleBaseAddress: \($mark)"))' vmo-mark.json
+  check vmo-before 0 "#717: before the question, the console address forwards to a host that answers" -- \
+    console_is host "$console"
+  vmo_stopped "$before" && return
+  # The forward keeps the address that vmo-before read. It usually removes it in this time.
+  sleep "$wait"
+  check vmo-ask 0 "#717: validate/repave with the mark in the values of $vmo_pack" -- \
+    "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-mark.json
+  check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- grep -qx 'HTTP 200' vmo-ask.out
+  console_check vmo-saved mark "#717: the console address forwards to the mark: Palette saved it at the question, and the forward answers 502"
+  check vmo-own 0 "#717: validate/repave with the values of the cluster: Palette saves the address of the cluster again" -- \
+    "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-own.json
+  check vmo-own-ok 0 "#717: Palette answers the second question with 200" -- grep -qx 'HTTP 200' vmo-own.out
+  console_check vmo-back host "#717: the console address forwards to a host that answers again"
+}
+
 if stage 9 "validate/repave saves the address of the console of the VM Orchestrator pack"; then
   if [ -z "${VMO_CLUSTER:-}" ]; then
     echo "== stage 9 skipped: give VMO_CLUSTER=<uid of a cluster with the pack $vmo_pack>" | tee -a steps.log
   else
-    V=$VMO_CLUSTER wait=${VMO_WAIT:-960}
-    check vmo-cluster 0 "#717: a read of the cluster $V" -- "$live/api.sh" get "/v1/spectroclusters/$V"
-    # Palette answers the route of a cluster that a cluster template governs with no reasons, and saves nothing
-    check vmo-runs 0 "#717: the cluster runs $vmo_pack, its values hold consoleBaseAddress, and no cluster template governs it" -- \
-      jq -e --arg p "$vmo_pack" '(.spec.clusterTemplate.uid // "") == "" and any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
-    check vmo-summary 0 "#717: the summary of the cluster gives the console address of the service vm-dashboard" -- \
-      "$live/api.sh" get "/v1/dashboard/spectroclusters/$V"
-    console=$(jq -r '[.status.addOnServices[]? | select(.name == "vm-dashboard") | .endpoint][0] // empty' vmo-summary.out)
-    [ -n "$console" ] || die "the summary of cluster $V names no console address of vm-dashboard"
-    vmo_body "$vmo_mark" > vmo-mark.json
-    vmo_body "" > vmo-own.json
-    check vmo-mark-body 0 "#717: the body of the question holds the mark in the values of $vmo_pack" -- \
-      jq -e --arg mark "$vmo_mark" 'any(.profiles[].packValues[]?; .values | contains("consoleBaseAddress: \($mark)"))' vmo-mark.json
-    check vmo-before 0 "#717: before the question, the console address forwards to a host that answers" -- \
-      forwards "$console"
-    sleep "$wait"
-    check vmo-ask 0 "#717: validate/repave with the mark in the values of $vmo_pack" -- \
-      "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-mark.json
-    check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- grep -qx 'HTTP 200' vmo-ask.out
-    check vmo-saved 0 "#717: at once, the console address forwards to the mark: Palette saved it at the question, and the forward answers 502" -- \
-      test "$(forward_status "$console")" = 502
-    check vmo-own 0 "#717: validate/repave with the values of the cluster: Palette saves the address of the cluster again" -- \
-      "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-own.json
-    sleep "$wait"
-    check vmo-back 0 "#717: the console address forwards to a host that answers again" -- \
-      forwards "$console"
+    vmo_stage "$VMO_CLUSTER"
   fi
 fi
 
