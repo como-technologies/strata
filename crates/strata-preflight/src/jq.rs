@@ -21,6 +21,7 @@ use serde_json::Value;
 use strata::reference::version;
 use strata::render::count_of;
 
+use crate::curl::palette_curl;
 use crate::error::{Error, Result};
 
 mod comment;
@@ -77,6 +78,13 @@ const COUNT_OF: &str = "count_of";
 /// the same words as [`count_of`], and a test compares the two on a table of counts.
 const COUNT_OF_DEF: &str = r#"def count_of($noun): if . == 0 then "no \($noun)s" elif . == 1 then "1 \($noun)" else "\(.) \($noun)s" end; "#;
 
+/// The name of the filter that gives the start of a `curl` to Palette, for a `reproduce` line.
+///
+/// A rule writes `{{ palette_curl }}`, so that no rule holds its own copy of the headers. The
+/// report fills it with the `curl` that the lines of the report start with too. That `curl` sends
+/// the key in a config, and in no argument of a process.
+pub const PALETTE_CURL: &str = "palette_curl";
+
 /// The definitions of the filters that `program` names and the `jq` tool lacks, to put in front
 /// of the program. Empty when it names none.
 pub(crate) fn tool_definitions(program: &str) -> String {
@@ -94,11 +102,12 @@ pub(crate) fn tool_definitions(program: &str) -> String {
 ///
 /// A rule reads a version with `semver_numbers`, so that the one module of `strata` that parses a
 /// version parses it. A rule writes a count with `count_of_filter`, so that its words are those
-/// of the reports.
+/// of the reports. A `reproduce` line starts a `curl` to Palette with [`PALETTE_CURL`].
 fn added_funs() -> impl Iterator<Item = Fun<data::JustLut<Val>>> {
     [
         run((SEMVER_NUMBERS, v(0), |cv| bome(semver_numbers(&cv.1)))),
         run((COUNT_OF, v(1), |cv| unary(cv, count_of_filter))),
+        run((PALETTE_CURL, v(0), |_| bome(Ok(Val::from(palette_curl()))))),
     ]
     .into_iter()
 }
@@ -554,6 +563,18 @@ mod tests {
             "size 3 !"
         );
         assert!(jq.render("t", "{{ .cloud", &world, None).is_err());
+    }
+
+    #[test]
+    fn the_template_of_palette_curl_gives_the_start_of_the_curl_of_the_report() {
+        let jq = Jq::new();
+        let line = format!("{{{{ {PALETTE_CURL} }}}} \"$PALETTE_API/v1/{{{{ .cloud }}}}\"");
+        assert_eq!(
+            jq.render("t", &line, &json!({"cloud": "gke"}), None)
+                .unwrap(),
+            format!("{} \"$PALETTE_API/v1/gke\"", palette_curl())
+        );
+        jq.check_template("t", &line, false).unwrap();
     }
 
     #[test]

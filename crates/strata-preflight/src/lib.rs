@@ -22,6 +22,7 @@
 
 pub mod catalog;
 pub mod confidence;
+mod curl;
 pub mod error;
 pub mod fixture;
 pub mod html;

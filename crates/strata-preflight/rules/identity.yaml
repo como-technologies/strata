@@ -1085,7 +1085,7 @@ rules:
       cannot report it as the result of the rule. The reproduce line lists the macro keys that
       resolve.
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
     fix:
       owner: palette
       text: Read access to the system macros for a tenant administrator, with no write access.
@@ -1116,7 +1116,7 @@ rules:
         | [ ( if $age < 120 then "the cloud account \(.account.metadata.name) was made \($age) s ago (\(.account.metadata.creationTimestamp)): IAM changes propagate for some seconds, and the #89 lab waits 30 s; wait until it is 2 minutes old, or run sts-account-not-assumable first" else empty end ),
             ( if $state != "" and ($state | ascii_downcase) != "active" then "the cloud account \(.account.metadata.name) has status.state \($state), not Active" else empty end ) ]
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/{{ .accountKind }}/{{ .entity.spec.cloudAccountUid }}\" | jq '{made: .metadata.creationTimestamp, state: .status.state}'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/{{ .accountKind }}/{{ .entity.spec.cloudAccountUid }}\" | jq '{made: .metadata.creationTimestamp, state: .status.state}'"
     fix:
       owner: palette
       text: Set status.state of a cloud account after its first validate, and show the age in the console.

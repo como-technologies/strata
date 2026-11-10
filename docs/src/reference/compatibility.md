@@ -1025,6 +1025,17 @@ field, a value, an input, or an option is in the sections above.
     the page of the live example, or it is empty and the note names the script.
   - A script that reads a line of `reproduce[]` by its position must read the new
     lines.
+- **`strata preflight`: a `reproduce` line sends the key of Palette in a config
+  of `curl`.** No argument holds the key. See
+  [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
+  - The line holds `--config <(printf ...)` in place of the header `ApiKey` after `-H`.
+    Run it in a shell with `<( )`, such as bash or zsh. A POSIX `sh`, such as `dash`,
+    cannot run it.
+  - In a line that the report adds, the options of `curl`, such as `-o body.json`,
+    follow the header `ProjectUid` now.
+  - `rules[].reproduce` of `--rules --json` holds the template `{{ palette_curl }}`
+    in place of the headers. The report fills it.
+  - A script that reads the headers of a `curl` line must read the new form.
 
 ### For a user of the CI drop-ins
 

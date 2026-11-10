@@ -95,6 +95,8 @@ So each line reads, and changes nothing:
   to a file in the home directory.
 - A line names no path of the live example, `examples/live`. No machine outside
   the lab has the scripts of the live example.
+- A line that reads Palette starts its `curl` with `{{ palette_curl }}`, and
+  names no header itself.
 - A line that starts with `#` is words. It says what to read by hand when no
   command of the rule reads it, such as on a cloud with no line of its own.
 
@@ -102,7 +104,16 @@ A rule that only the lab can reproduce says so in such a line, as
 `inventory-managed` does. A command that fixes the fault is no reproduce line,
 because the operator decides when it runs. Write the lines of a file of custom
 probes the same way. A test of the catalog fails on a line that changes
-something, and on a text of a rule that names `examples/live`.
+something, and on a text of a rule that names `examples/live`. It also fails on
+a line that reads Palette with no `{{ palette_curl }}`, or that names a header.
+
+The report fills `{{ palette_curl }}` with the `curl` that its own lines start
+with. That `curl` sends the key in a config that `printf` writes into `<( )`.
+`printf` is a builtin of the shell, so no process gets the key as an argument.
+The list of processes does not show it, also on a shared runner of CI. The
+`curl` sends the project in the header `ProjectUid`, and the line gives the
+address as `"${PALETTE_API:-https://api.spectrocloud.com}/v1/..."`. Run the line
+in a shell with `<( )`, such as bash or zsh.
 
 ## The checks
 
@@ -144,7 +155,7 @@ does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
 
-strata-preflight adds two filters to jq: `semver_numbers` and `count_of`.
+strata-preflight adds three filters to jq: `semver_numbers`, `count_of`, and `palette_curl`.
 
 `semver_numbers` reads the input text as a version, as `strata` does, and gives the numbers
 that the version writes. `"4.10.3-rc.1"` gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A
@@ -164,9 +175,12 @@ writes the number and the plural noun: `-1 | count_of("CPU")` gives `-1 CPUs`. A
 Palette gives can be such a number, and a message must not fail on it. The input must be a
 number.
 
-A program with one of these filters does not run in the `jq` tool. The report writes a
+A program with `semver_numbers` or `count_of` does not run in the `jq` tool. The report writes a
 `reproduce` line for such a program with a definition of each filter in front. So the line runs
 in the tool.
+
+`palette_curl` gives the start of a `curl` to Palette, for a `reproduce` line: see
+[The reproduce lines](#the-reproduce-lines).
 
 ## A request for each item
 

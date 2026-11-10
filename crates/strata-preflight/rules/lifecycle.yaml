@@ -450,7 +450,7 @@ rules:
         then ["Pause Agent Upgrades is on (annotation spectroComponentsUpgradeForbidden=true): such a cluster can stay in Deleting; resume the upgrades (POST /v1/spectroclusters/\(.clusterUid)/upgrade/settings with spectroComponents unlock) before a delete"]
         else [] end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.metadata.annotations.spectroComponentsUpgradeForbidden // \"not set\"'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}\" | jq -r '.metadata.annotations.spectroComponentsUpgradeForbidden // \"not set\"'"
     evidence:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/platform-settings/pause-platform-upgrades/
