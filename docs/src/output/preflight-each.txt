@@ -3,5 +3,5 @@ $ strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rul
                 profile 64e0000000000000000000b2 (aws-stack) is linked to the cluster template aws-standard, and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden
                 ran: GET /v1/clusterprofiles/64e0000000000000000000c3 -> HTTP 200
                 ran: GET /v1/clusterprofiles/64e0000000000000000000b2 -> HTTP 200
-                reproduce: for u in 64e0000000000000000000c3 64e0000000000000000000b2; do curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/$u" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done
+                reproduce: for u in 64e0000000000000000000c3 64e0000000000000000000b2; do curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/$u" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done
                 fix: Build the cluster from the template, or use a version that no template links. (none)

@@ -6119,39 +6119,59 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
     );
 }
 
-/// A reader copies the commands of a page. A key in an argument of `curl` shows in the list of
-/// processes of the machine. So no page gives the header `ApiKey` to `-H` or to `--header`. The
-/// form of `examples/live/palette-curl.sh` sends the header to `curl` as a config on standard input.
+/// A reader copies the commands of a page, of an output of the book, and of a rule of
+/// strata-preflight. A key in an argument of `curl` shows in the list of processes of the machine.
+/// So no page, no output, and no rule file gives the header `ApiKey` to `-H` or to `--header`.
+/// The test also reads a quote with a backslash, as JSON and YAML write it.
+///
+/// A page sends the header to `curl` as a config on standard input, as
+/// `examples/live/palette-curl.sh` does. A line of a report sends it as a config that `printf`
+/// writes into `<( )` (#694).
 #[test]
 fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
+    let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/strata-preflight/rules");
     let mut shown = 0;
-    for page in walk(&docs()) {
-        if page.extension().is_none_or(|e| e != "md") || page.starts_with(docs().join("output")) {
+    let mut outputs = 0;
+    for file in walk(&docs()).into_iter().chain(walk(&rules)) {
+        let kind = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default();
+        if !["md", "txt", "yaml"].contains(&kind) {
             continue;
         }
-        let text = read(&page);
+        let text = read(&file);
         for (n, line) in text.lines().enumerate() {
             let in_argument = ["-H", "--header"].iter().any(|flag| {
-                line.contains(&format!("{flag} \"ApiKey"))
-                    || line.contains(&format!("{flag} 'ApiKey"))
+                ["\"", "'", "\\\""]
+                    .iter()
+                    .any(|quote| line.contains(&format!("{flag} {quote}ApiKey")))
             });
             assert!(
                 !in_argument,
-                "{}:{}: the key of Palette is in an argument of curl: send it on standard input with `curl --config -`",
-                page.display(),
+                "{}:{}: the key of Palette is in an argument of curl: send it in a config with `curl --config`",
+                file.display(),
                 n + 1
             );
+        }
+        if file.starts_with(docs().join("output")) && text.contains("--config <(printf 'header = ")
+        {
+            outputs += 1;
         }
         for block in crate::common::code_blocks(&text, "bash") {
             if block.contains("ApiKey: %s") {
                 shown += 1;
-                assert!(block.contains("--config -"), "{}: {block}", page.display());
+                assert!(block.contains("--config -"), "{}: {block}", file.display());
             }
         }
     }
     assert_eq!(
         shown, 3,
         "stop-a-build.md shows two commands and live-example.md shows one"
+    );
+    assert!(
+        outputs > 0,
+        "the test reads the outputs of strata-preflight, which show the lines that read Palette"
     );
 }
 

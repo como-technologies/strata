@@ -283,7 +283,7 @@ rules:
       type of strata-preflight, so there is no check here; the reproduce lines read the two sizes.
     reproduce:
       - "jq '.spec.machinepoolconfig[].cloudConfig.instanceType' virtual-cluster.json   # maxCPU must be 3 or more"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>\" | jq .spec.clustersConfig.limitConfig"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>\" | jq .spec.clustersConfig.limitConfig"
     fix:
       owner: none
     evidence:

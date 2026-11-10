@@ -21,7 +21,7 @@ Quotas and limits
   NOT CHECKED   vcluster-min                 A virtual cluster has 3 cores or more                            1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: jq '.spec.machinepoolconfig[].cloudConfig.instanceType' virtual-cluster.json   # maxCPU must be 3 or more
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
   PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs, clean 13/13 (79%)
@@ -49,7 +49,7 @@ Images and registries
   NOT CHECKED   private-pack-registry-empty  A private pack registry lists its packs                          1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <pack> --registry <registry>
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'
   NOT CHECKED   profile-follows-push         A published profile keeps its content after a push to the r…     1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
@@ -63,15 +63,15 @@ Images and registries
   NOT CHECKED   helm-oci-endpoint            A Helm registry has an https endpoint                            1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <chart> --registry <registry>
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/helm/summary" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/helm/summary" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'
   NOT CHECKED   registry-sync-delay          A new pack version shows in Palette after the sync               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <pack> --registry <registry> --latest
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/<uid>/sync/status"
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/<uid>/sync/status"
   NOT CHECKED   registry-new-key             A registry create with a new key is accepted                     1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws sts get-caller-identity
-                reproduce: curl -s -X POST -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/oci/ecr/validate" -d @registry.json
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/oci/ecr/validate" -d @registry.json
 
 Profiles and packs
   NOT RUN       1 check did not run: tier palette was not asked for (1)
@@ -102,11 +102,11 @@ The Palette platform
                 reproduce: aws ec2 describe-vpcs --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Vpcs[].VpcId' --output text   # no id: the network, which goes last, is gone
   NOT CHECKED   api-quirks                   The client keeps to the limits of the API                        1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s -o /dev/null -w '%{http_code}\n' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta" | jq -r 'type'   # array
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta" | jq -r 'type'   # array
   NOT CHECKED   transient-errors             A transient error of the API is retried once                     1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s -o /dev/null -w '%{http_code} %{content_type}\n' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/<cluster uid>"   # a 404 must be application/json with code ResourceNotFound
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code} %{content_type}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/<cluster uid>"   # a 404 must be application/json with code ResourceNotFound
   NOT CHECKED   auto-cleanup-never           A delete that makes no progress moves to the cleanup path        1 ms
                 a race: no check before the build finds it; the watch finds its effect
 
@@ -123,7 +123,7 @@ Teardown and leftovers
                 reproduce: aws ec2 describe-vpcs --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Vpcs[].VpcId' --output text   # the network goes last, minutes after the instances
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros" | jq -r '.macros[].name'   # the macros of the project
+                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros" | jq -r '.macros[].name'   # the macros of the project
                 reproduce: strata snapshot cluster:<cluster uid> --macros --json | jq '.macros'   # the macros the cluster reads
   NOT CHECKED   versions-outside-state       Palette holds no version outside the state                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
