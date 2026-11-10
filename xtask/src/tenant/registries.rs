@@ -377,14 +377,22 @@ fn add_csi_to_oci(listing: &mut Value) {
     );
     let Some(newest) = newest else { return };
     let mut copy = newest.clone();
-    copy["metadata"]["uid"] = json!(OCI_CSI_PACK);
-    copy["spec"]["registryUid"] = json!(PALETTE_REGISTRY);
-    copy["spec"]["digest"] = json!(OCI_CSI_DIGEST);
+    with_oci_csi_build(&mut copy);
     copy["spec"]["type"] = json!("oci");
     listing["items"]
         .as_array_mut()
         .expect("an array")
         .push(copy);
+}
+
+/// Give the uid, the registry, and the digest of the OCI copy of `csi-aws-ebs` to `item`.
+///
+/// `item` is an item of a pack listing or a pack summary of `packs/manifests`. The two hold these
+/// fields in the same places.
+pub(super) fn with_oci_csi_build(item: &mut Value) {
+    item["metadata"]["uid"] = json!(OCI_CSI_PACK);
+    item["spec"]["registryUid"] = json!(PALETTE_REGISTRY);
+    item["spec"]["digest"] = json!(OCI_CSI_DIGEST);
 }
 
 /// The OCI copy holds the newest version, under its exact tag. A tag row carries its version, as

@@ -229,20 +229,6 @@ impl Tenant {
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
-
-        let draft = doc["spec"]["draft"]["packs"]
-            .as_array()
-            .cloned()
-            .unwrap_or_default();
-        for pack in manifests["spec"]["packs"]
-            .as_array_mut()
-            .into_iter()
-            .flatten()
-        {
-            if let Some(d) = draft.iter().find(|d| d["name"] == pack["spec"]["name"]) {
-                pack["spec"]["values"] = d["values"].clone();
-            }
-        }
         self.write(project, &listed, &manifests);
         for pack in manifests["spec"]["packs"].as_array().into_iter().flatten() {
             for m in pack["spec"]["manifests"].as_array().into_iter().flatten() {
