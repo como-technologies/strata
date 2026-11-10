@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use common::{
     GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
-    schema, script, toml_table, version_of, walk,
+    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
 };
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
@@ -2171,24 +2171,10 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
     }
 }
 
-/// The entries `key = "value"` of the table `table`, such as `[session.env]`, of `riff`: the text
-/// of `riff.toml` without its comment lines.
-fn riff_entries<'a>(riff: &'a str, table: &str) -> Vec<(&'a str, &'a str)> {
-    toml_table(riff, table)
-        .into_iter()
-        .filter_map(|line| {
-            let (key, value) = line.split_once(" = ")?;
-            Some((key, value.strip_prefix('"')?.strip_suffix('"')?))
-        })
-        .collect()
-}
-
-/// The value of `key` in the table `table` of `riff.toml`.
+/// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
+/// `riff.toml` without its comment lines.
 fn riff_value<'a>(riff: &'a str, table: &str, key: &str) -> &'a str {
-    riff_entries(riff, table)
-        .into_iter()
-        .find(|(name, _)| *name == key)
-        .map(|(_, value)| value)
+    toml_value(toml_table(riff, table), key)
         .unwrap_or_else(|| panic!("{table} of riff.toml sets no {key}"))
 }
 
@@ -2207,7 +2193,7 @@ fn each_cache_of_a_session_is_in_a_folder_that_the_session_can_write() {
     assert_eq!(sccache, riff_value(&riff, volumes, "strata-sccache"));
 
     let home = Path::new("$HOME");
-    for (name, mount) in riff_entries(&riff, volumes) {
+    for (name, mount) in toml_entries(toml_table(&riff, volumes)) {
         for folder in Path::new(mount).ancestors().skip(1) {
             let made = folder.starts_with(home) && folder != home;
             assert!(

@@ -707,10 +707,8 @@ exit "${FAKE_EXIT:-0}"
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `crates/strata-preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
-    repo_file(manifest)
-        .lines()
-        .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
-        .and_then(|l| l.strip_suffix('"').map(str::to_owned))
+    toml_value(repo_file(manifest).lines(), "version")
+        .map(str::to_owned)
         .unwrap_or_else(|| panic!("{manifest} has a version line"))
 }
 
@@ -798,6 +796,25 @@ pub fn toml_table<'a>(text: &'a str, table: &str) -> Vec<&'a str> {
     lines
         .take_while(|line| !line.trim_start().starts_with('['))
         .collect()
+}
+
+/// The entries `key = "value"` among `lines`, such as the lines of a table of a TOML file. A line
+/// with another form of value, such as a number or a list, is not an entry here.
+pub fn toml_entries<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(&'a str, &'a str)> {
+    lines
+        .into_iter()
+        .filter_map(|line| {
+            let (key, value) = line.split_once(" = ")?;
+            Some((key, value.strip_prefix('"')?.strip_suffix('"')?))
+        })
+        .collect()
+}
+
+/// The value of the first entry `key = "value"` among `lines`.
+pub fn toml_value<'a>(lines: impl IntoIterator<Item = &'a str>, key: &str) -> Option<&'a str> {
+    toml_entries(lines)
+        .into_iter()
+        .find_map(|(name, value)| (name == key).then_some(value))
 }
 
 /// `text` with each run of white space as one space, as a line break can fall inside a sentence.
