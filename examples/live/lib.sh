@@ -157,6 +157,22 @@ registry_uid() {
   "$live/api.sh" get /v1/registries/metadata | jq -r --arg n "$1" '.items[] | select(.name == $n) | .uid'
 }
 
+# ---- git ---------------------------------------------------------------------------------------------
+
+# isolate_git NAME: give each git command of the script the author NAME and no setting of the
+# machine. Git reads no global or system file, and no variable whose name starts with GIT_CONFIG.
+# Git reads GIT_CONFIG_COUNT and GIT_CONFIG_PARAMETERS after the config of a repository, so their
+# settings win. tests/common/git.rs gives the same settings to the tests and the chapters of the book.
+isolate_git() {
+  local name
+  for name in $(compgen -e); do
+    case "$name" in GIT_CONFIG*) unset "$name" ;; esac
+  done
+  export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+  export GIT_AUTHOR_NAME="$1" GIT_AUTHOR_EMAIL="$1@example.com"
+  export GIT_COMMITTER_NAME="$1" GIT_COMMITTER_EMAIL="$1@example.com"
+}
+
 # ---- checks ------------------------------------------------------------------------------------------
 
 failures=0

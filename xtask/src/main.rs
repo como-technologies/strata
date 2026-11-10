@@ -22,6 +22,10 @@ mod checks;
 mod contract;
 mod facts;
 mod files;
+// The git settings of the tests of strata. The runner of the book gives them to each step, so the
+// tests and the chapters keep one copy of the settings.
+#[path = "../../tests/common/git.rs"]
+mod git;
 mod palette;
 // The lock of the tests of strata. The runner of the book takes it when it starts a process. A test
 // takes it when it writes a script. So the lock covers each process of a test. The tool writes no

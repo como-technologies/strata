@@ -1075,6 +1075,41 @@ fn lib_sh_stops_the_send_of_the_report_whatever_the_machine_says() {
     }
 }
 
+/// `isolate_git` of lib.sh gives git the author that the script names, and removes each git
+/// setting of the environment. So a git user of the machine does not hide the config of the
+/// repository.
+#[test]
+fn lib_sh_gives_git_the_author_of_the_script_and_no_setting_of_the_machine() {
+    let dir = tempfile::tempdir().unwrap();
+    let probe = dir.path().join("probe.sh");
+    executable(
+        &probe,
+        &format!(
+            "#!/usr/bin/env bash\nset -uo pipefail\nscript=probe\n. '{lib}'\nisolate_git probe\n\
+             git init -q repo && git -C repo config user.name local\n\
+             git -C repo config user.name\n\
+             git -C repo var GIT_AUTHOR_IDENT | cut -d' ' -f1-2\n",
+            lib = live_script("lib.sh").display()
+        ),
+    );
+    for machine in MACHINE_GIT_USER {
+        let work = tempfile::tempdir().unwrap();
+        let o = Command::new("bash")
+            .arg(&probe)
+            .current_dir(work.path())
+            .env("STRATA_BIN", "/no/such/strata")
+            .envs(machine.iter().copied())
+            .output_locked()
+            .unwrap();
+        assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+        assert_eq!(
+            text(&o.stdout),
+            "local\nprobe <probe@example.com>\n",
+            "{machine:?}"
+        );
+    }
+}
+
 #[test]
 fn common_sh_defines_die_and_usage_and_nothing_else_and_it_prints_nothing_when_a_script_sources_it()
 {
@@ -7017,12 +7052,7 @@ fn lab_stage() -> Stage {
     );
     let repo = stage.path("out/repo");
     std::fs::create_dir_all(&repo).unwrap();
-    let init = Command::new("git")
-        .args(["init", "-q", "-b", "main"])
-        .current_dir(&repo)
-        .output_locked()
-        .unwrap();
-    assert!(init.status.success(), "{}", text(&init.stderr));
+    git(&repo, &["init", "-q", "-b", "main"]);
     stage
 }
 

@@ -98,3 +98,44 @@ fn the_trees_that_the_scan_reads_are_the_trees_that_include_the_lock() {
         assert!(root.join(tree).is_dir(), "{tree}");
     }
 }
+
+/// The two files that give git its settings: the helper of the tests and of the runner of the
+/// book, and the function of the live scripts, which are bash.
+const GIT_HELPERS: [&str; 2] = ["tests/common/git.rs", "examples/live/lib.sh"];
+
+#[test]
+fn no_test_chapter_or_live_script_keeps_a_copy_of_the_git_settings() {
+    // the names are in two parts, so that this file does not hold them
+    let settings = [
+        "CONFIG_GLOBAL",
+        "CONFIG_SYSTEM",
+        "AUTHOR_NAME",
+        "COMMITTER_NAME",
+    ]
+    .map(|name| format!("GIT_{name}"));
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let scripts = walk(&root.join("examples/live"))
+        .into_iter()
+        .filter(|f| f.extension().is_some_and(|e| e == "sh"));
+    let mut found = Vec::new();
+    for file in files_that_start_processes().into_iter().chain(scripts) {
+        let name = file
+            .strip_prefix(root)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        if GIT_HELPERS.contains(&name.as_str()) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&file).unwrap();
+        for setting in settings.iter().filter(|s| text.contains(s.as_str())) {
+            found.push(format!("{name}: {setting}"));
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "give git its settings with `isolate_git` of {GIT_HELPERS:?}:\n{}",
+        found.join("\n")
+    );
+}
