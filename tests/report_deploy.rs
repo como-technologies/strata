@@ -473,14 +473,20 @@ fn the_script_stops_before_a_call_of_gcloud_when_no_project_is_set() {
             "{project:?} {args:?}: {}",
             run.err
         );
-        assert_eq!(printed(&run.err), Vec::<String>::new(), "{project:?} {args:?}");
+        assert_eq!(
+            printed(&run.err),
+            Vec::<String>::new(),
+            "{project:?} {args:?}"
+        );
     }
     assert_eq!(calls(dir.path()), Vec::<String>::new());
 
     let run = deploy_with_project(dir.path(), &["--project", "lab-1", "--dry-run"], None);
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(
-        printed(&run.err).iter().all(|c| c.contains("--project lab-1")),
+        printed(&run.err)
+            .iter()
+            .all(|c| c.contains("--project lab-1")),
         "{}",
         run.err
     );
