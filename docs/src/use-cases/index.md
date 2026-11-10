@@ -110,6 +110,9 @@ can give different roots, and how strata says so.
   manifest have different roots.
 - [A pack comes from another registry](./registry-move.md): a team pins a pack
   to another registry, and `same-release` fails without `--allow registry-move`.
+- [A release gets new version numbers](./renumber.md): a pipeline publishes a
+  pre-release and then the same content under its final numbers, and
+  `same-release` fails without `--allow renumber`.
 - [A pack has no digest](./no-digest.md): `verify` reports `UNVERIFIED`, or
   `same-release` reports `NO DIGEST`.
 

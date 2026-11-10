@@ -1,0 +1,16 @@
+$ strata compare aws-stack@1.2.0-rc.1 aws-stack@1.2.0
+aws-stack@1.2.0-rc.1 (uid 64e00000000000000000010e)  ->  aws-stack@1.2.0 (uid 64e00000000000000000010f)
+root       c7a27ae9f54d -> 088136c929bd   CHANGED
+consumers  0 -> 0 clusters
+
+  variables unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+~ [k8s  ] kubernetes                 1.36.2-rc.1 -> 1.36.2 IDENTITY UPSTREAM
+      upstream digest: sha256:2ad825ecd88e -> sha256:c4f7f20f40c7 (packRef.digest)
+      impact: none (renumber only)
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+~ [csi  ] csi-aws-ebs                1.65.0-rc.1 -> 1.65.0 IDENTITY UPSTREAM
+      upstream digest: sha256:545b492316ed -> sha256:bd09e8b4187b (packRef.digest)
+      impact: none (renumber only)
+  [addon] cert-manager               1.21.1             unchanged

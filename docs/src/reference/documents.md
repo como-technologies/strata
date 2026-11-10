@@ -292,6 +292,9 @@ A comparison of two sides, `a` and `b`.
   - `status`: `unchanged`, `changed`, `added`, or `removed`.
   - `identity`, `upstream`, `authored`, and `paramsChanged`.
   - `tagRenamed`: only the tag name differs, for the same build.
+  - `renumbered`, only when true: only the version changed, and it kept its
+    numbers. The impact is then `none (renumber only)`. See
+    [A renumber](./impact.md#a-renumber).
   - `versionMove`: `forward` or `back`, as at the top of the document, for the
     versions of the pack. Absent when a side has no pack, and when the two
     versions have the same precedence.
@@ -476,15 +479,26 @@ of the secret does not show, because the two sides hold the mask: see
 ## strata-chain/1
 
 - `legend`, and `policy`: `exact` or `registry-move`. `allowNoDigest`, only
-  when true: `--allow no-digest` was given.
+  when true: `--allow no-digest` was given. `allowRenumber`, only when true:
+  `--allow renumber` was given.
 - `same`: each pair passed.
 - `summary`: `pairs`, `passed`, and `failed`.
 - `records[]`: `label`, `name`, `version`, `uid`, `projectUid`, and `root`.
 - `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`,
-  `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
-  `packsRetagged`, and `reasons[]`. A pack that names another image in
-  `imageId` on each side makes the pair `different`, also when the roots are
-  equal.
+  `renumber`, `different`, or `unknown-upstream`), `rootA`, `rootB`,
+  `packsRepinned`, `packsRetagged`, and `reasons[]`. A pack that names another
+  image in `imageId` on each side makes the pair `different`, also when the
+  roots are equal.
+  - `renumbers[]`, only with `--allow renumber` and when it is not empty: each
+    pack whose version alone changed, with `key`, `name`, `old`, and `new`.
+    `preReleaseToFinal`, only when true: `new` is the final version of the
+    pre-release `old`, in Semantic Versioning. A pair that fails for another
+    reason lists its renumbers too. See
+    [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+  - `archivesNotCompared`, only when it is not empty: the key of each pack of
+    `renumbers[]` whose archive can differ. Its digest changed, or Palette gives
+    none. Strata does not compare the files of the two archives.
+    A manifest pack has no archive, so it is never in the list.
   - `upstreamUnknown`, only when it is not empty: the packs with no upstream
     digest, also when `--allow no-digest` accepts them.
   - `mintedUidOnly`, only when it is not empty: the packs whose only difference

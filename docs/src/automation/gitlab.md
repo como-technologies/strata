@@ -66,7 +66,7 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `STRATA_WHO` | the drift report | `true` gives the script `--who`: the issue of a record that drifted names who changed it. `false` by default. |
 | `STRATA_NO_IMPACT` | the upstream report | `true` gives the script `--no-impact`. `false` by default. |
 | `STRATA_SAVE` | the upstream report | A file for `--save`, which keeps the report of the run. Then `strata-upstream-save` runs in place of `strata-upstream`, and keeps the file as an artifact. Empty by default: no file, and no artifact. |
-| `STRATA_PROMOTE_ALLOW` | the promotion gate | The differences to accept, separated by spaces: `registry-move`, `no-digest`. Empty by default. |
+| `STRATA_PROMOTE_ALLOW` | the promotion gate | The differences to accept, separated by spaces: `registry-move`, `renumber`, `no-digest`. Empty by default. |
 | `PALETTE_PROJECT` | a ref in a project | The project by name, for a ref such as `name@version` in the promotion gate or the retire gate. `PALETTE_PROJECT_UID` has priority over it. |
 | `STRATA_PREFLIGHT_SOURCE` | the preflight job | The body of the create, or `cluster:UID`. `clusters/payments.json` by default. |
 | `STRATA_PREFLIGHT_CLOUD`, `_TIER`, `_RECORDS` | the preflight job | `--cloud`, `--tier`, and `--records`. `eks`, `static`, and `releases/**/*.json` by default. |

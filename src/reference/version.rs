@@ -89,6 +89,31 @@ pub fn is_pre_release(v: &str) -> bool {
     Version::read(v).is_some_and(|s| !s.pre.is_empty() || s.tail == Tail::Text)
 }
 
+/// True when `a` and `b` both parse and write the same numbers: see [`numbers`].
+///
+/// Only the pre-release or the build data can differ. So `1.66.0-g0123456789ab` and `1.66.0` keep
+/// their numbers, and so do `1.2.0+build.5` and `1.2.0`. `20.04` and `24.04` do not, and neither do
+/// `1.2.0-build5` and `2026.11.0`. A string that does not parse keeps no numbers.
+pub fn keeps_numbers(a: &str, b: &str) -> bool {
+    match (numbers(a), numbers(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// True when `version` is the final version of the pre-release `pre`, in Semantic Versioning.
+///
+/// Both strings parse, `pre` has a pre-release and `version` has none, and the two have the same
+/// numbers. A number that a version omits is `0`, and build data does not count. So `1.2.0` is the
+/// final version of `1.2.0-rc.1` and of `v1.2-g0123456789ab+5`. A string that does not parse,
+/// such as `1.1.8.develop`, is the pre-release of no version.
+pub fn is_final_of(version: &str, pre: &str) -> bool {
+    match (Version::parse(version), Version::parse(pre)) {
+        (Some(v), Some(p)) => v.pre.is_empty() && !p.pre.is_empty() && v.numbers == p.numbers,
+        _ => false,
+    }
+}
+
 /// The item of `items` whose version is `wanted`, or the item with the highest version by
 /// [`compare`] when `wanted` is [`LATEST`].
 ///
@@ -555,6 +580,53 @@ mod tests {
         assert!(is_pre_release("chart-1.2.3"));
         assert!(!is_pre_release("10.4.0.1"));
         assert!(!is_pre_release("v10.4.0.1"));
+    }
+
+    #[test]
+    fn two_versions_keep_their_numbers_when_only_the_pre_release_or_the_build_data_differs() {
+        for (a, b) in [
+            ("1.66.0-g0123456789ab", "1.66.0"),
+            ("1.66.0-rc.1", "1.66.0-rc.2"),
+            ("1.2.0-mr12.345", "1.2.0"),
+            ("1.2.0+build.5", "1.2.0"),
+            ("v1.2.0", "1.2.0"),
+        ] {
+            assert!(keeps_numbers(a, b), "{a} and {b}");
+        }
+        for (a, b) in [
+            ("20.04", "24.04"),
+            ("1.2.0-build5", "2026.11.0"),
+            ("1.2", "1.2.0"),
+            ("1.1.8.develop", "1.1.8"),
+            ("LTS__24.x", "LTS__24.x"),
+            ("", ""),
+        ] {
+            assert!(!keeps_numbers(a, b), "{a} and {b}");
+        }
+    }
+
+    #[test]
+    fn a_version_is_the_final_of_a_pre_release_with_its_numbers_in_semantic_versioning() {
+        for (version, pre) in [
+            ("1.2.0", "1.2.0-rc.1"),
+            ("1.2.0", "1.2.0-g0123456789ab"),
+            ("1.2.0", "1.2.0-mr12.345"),
+            ("1.2.0+build.6", "v1.2-rc.1+build.5"),
+        ] {
+            assert!(is_final_of(version, pre), "{version} of {pre}");
+        }
+        for (version, pre) in [
+            ("1.2.0-rc.2", "1.2.0-rc.1"),
+            ("1.2.1", "1.2.0-rc.1"),
+            ("2026.11.0", "1.2.0-build5"),
+            ("1.2.0+build.6", "1.2.0+build.5"),
+            ("1.2.0", "1.2.0"),
+            ("1.1.8", "1.1.8.develop"),
+            ("1.2.0-rc.1", "1.2.0"),
+            ("", "1.2.0-rc.1"),
+        ] {
+            assert!(!is_final_of(version, pre), "{version} of {pre}");
+        }
     }
 
     #[test]

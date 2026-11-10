@@ -482,6 +482,8 @@ pub(crate) enum Allow {
     RegistryMove,
     /// A pack with no upstream digest, whose archive the root cannot show
     NoDigest,
+    /// Packs whose version alone changed, with the same values, manifests, params, and images
+    Renumber,
 }
 
 #[derive(Clone, Copy, ValueEnum)]

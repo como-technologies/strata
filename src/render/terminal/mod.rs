@@ -15,7 +15,7 @@ use super::notes::{
 };
 use super::report::report_heading;
 use super::same_release::{
-    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word, renumber_lines,
 };
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
@@ -206,7 +206,7 @@ impl Renderer for TerminalRenderer {
             let word = format!("{:<13}", pair_word(pair.status));
             let word = match pair.status {
                 PairStatus::Identical | PairStatus::SameContent => p.bgreen(&word),
-                PairStatus::RegistryMove => p.byellow(&word),
+                PairStatus::RegistryMove | PairStatus::Renumber => p.byellow(&word),
                 PairStatus::Different | PairStatus::UnknownUpstream => p.bred(&word),
             };
             out.push_str(&format!(
@@ -215,6 +215,9 @@ impl Renderer for TerminalRenderer {
                 pair.b,
                 p.dim(&pair_detail(pair))
             ));
+            for line in renumber_lines(pair) {
+                out.push_str(&format!("               {line}\n"));
+            }
             for r in &pair.reasons {
                 out.push_str(&format!("               {r}\n"));
             }

@@ -153,6 +153,15 @@ pub const PUBLISHED_RULES: &str =
 pub const DRAFT_RULES: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
 
+/// The options of `same-release --allow no-digest`: the exact policy, and a pack with no upstream
+/// digest can pass.
+pub fn no_digest_allowed() -> strata::ops::SameReleaseOptions {
+    strata::ops::SameReleaseOptions {
+        allow_no_digest: true,
+        ..strata::ops::SameReleaseOptions::default()
+    }
+}
+
 /// The JSON document in the file at `path`.
 pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()

@@ -114,6 +114,9 @@ if stage 3 "the publish"; then
     in_repo "$strata" snapshot "$NEXT" -o releases/1.0.1.json
   check same-release 0 '#81: Palette holds the content that the reviewer read' -- \
     in_repo "$strata" same-release candidate.json releases/1.0.1.json
+  # no pack of the publish moves its version, so --allow renumber gives the same verdict
+  check same-release-renumber 0 '#730: --allow renumber passes the publish too, and names no renumber' -- \
+    in_repo bash -c "\"$strata\" same-release --allow renumber candidate.json releases/1.0.1.json --json | jq -e '.same and .allowRenumber and (.pairs[0] | has(\"renumbers\") | not)'"
   check commit-publish 0 'main records the published version' -- \
     in_repo bash -c 'git add releases && git commit -qm "record 1.0.1"'
   # Palette answers for a version that it holds: the move of cluster A to the next version. Both

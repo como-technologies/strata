@@ -7,7 +7,7 @@ Arguments:
   <RECORDS> <RECORDS>...  Two or more refs, in promotion order
 
 Options:
-      --allow <ALLOW>    Pass a pair that differs only in this way; give it more than one time for more [possible values: registry-move, no-digest]
+      --allow <ALLOW>    Pass a pair that differs only in this way; give it more than one time for more [possible values: registry-move, no-digest, renumber]
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]

@@ -57,6 +57,7 @@
 - [One pack build under two tag names](./use-cases/tag-name.md)
 - [One manifest in two profiles](./use-cases/manifest-pack.md)
 - [A pack comes from another registry](./use-cases/registry-move.md)
+- [A release gets new version numbers](./use-cases/renumber.md)
 - [A pack has no digest](./use-cases/no-digest.md)
 - [Promote a release to another project](./use-cases/promote.md)
 - [Retire a version](./use-cases/retire.md)

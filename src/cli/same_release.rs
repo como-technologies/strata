@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use strata::error::Result;
 use strata::ops;
-use strata::ops::Policy;
+use strata::ops::{Policy, SameReleaseOptions};
 use strata::reference::Ref;
 
 use super::args::{Allow, SameReleaseArgs};
@@ -25,12 +25,16 @@ pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
         )?;
         records.push((r.clone(), snap));
     }
-    let policy = if a.allow.contains(&Allow::RegistryMove) {
-        Policy::RegistryMove
-    } else {
-        Policy::Exact
+    let options = SameReleaseOptions {
+        policy: if a.allow.contains(&Allow::RegistryMove) {
+            Policy::RegistryMove
+        } else {
+            Policy::Exact
+        },
+        allow_no_digest: a.allow.contains(&Allow::NoDigest),
+        allow_renumber: a.allow.contains(&Allow::Renumber),
     };
-    let c = ops::same_release_with(&records, policy, a.allow.contains(&Allow::NoDigest), &now);
+    let c = ops::same_release_with(&records, options, &now);
     print!("{}", a.out.renderer().render_chain(&c)?);
     Ok(ExitCode::from(c.exit_code()))
 }
