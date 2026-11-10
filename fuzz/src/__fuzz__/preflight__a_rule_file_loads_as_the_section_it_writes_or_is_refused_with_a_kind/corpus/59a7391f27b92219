@@ -29,8 +29,8 @@ rules:
   evidence:
   - kind: run
     ref: '#89'
-  - kind: report
-    ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28
+  - kind: run
+    ref: a live run
   tests:
   - fault: fixtures/eks/type-change.json
     clean: fixtures/eks/type-same.json
@@ -68,8 +68,8 @@ rules:
   - kind: run
     ref: '#89'
     note: the state stayed DeletingInfrastructure for more than 2 hours, with the event every 5 minutes
-  - kind: report
-    ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F4
+  - kind: run
+    ref: a live run
   - kind: source
     note: the delete reads the one machine pool that the MachinePool references
   tests:
@@ -101,8 +101,8 @@ rules:
   evidence:
   - kind: run
     ref: '#90'
-  - kind: report
-    ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28
+  - kind: run
+    ref: a live run
   tests:
   - fault: fixtures/gke/type-change.json
     clean: fixtures/gke/type-same.json

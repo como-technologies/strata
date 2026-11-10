@@ -45,8 +45,8 @@ rules:
     owner: palette
     text: Run the validate route at the start of each create, and add it to the SDK and the provider.
   evidence:
-  - kind: report
-    ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
+  - kind: run
+    ref: a live run
   - kind: source
     note: the validate route of a cluster checks the profiles of the cluster
   tests:
@@ -119,8 +119,8 @@ rules:
   - kind: run
     ref: '#90'
     note: PreparingInfrastructure for about 30 minutes with the Kubernetes Engine API off, and no error in the status
-  - kind: report
-    ref: palette-precreate-validation-gaps-findings-2026-09-28 F1
+  - kind: run
+    ref: a live run
   tests:
   - fault: fixtures/gke/infrastructure-stalled.json
     clean: fixtures/gke/watch-running.json

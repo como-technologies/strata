@@ -31,11 +31,9 @@ rules:
     owner: palette
     text: Compare the digest in the skip check of the sync for Helm and OCI Helm charts. A registry with immutable tags closes it at the source.
   evidence:
-  - kind: report
-    ref: palette-pack-digest-findings-2026-09-25 F1
+  - kind: run
+    ref: a live run
     note: one profile version with one digest gave two different installs, before and after a push again
-  - kind: report
-    ref: palette-pack-digest-findings-2026-09-25 F2
   - kind: source
     note: Helm, OCI Helm, and OCI Zarf compare the annotations alone; the other kinds compare the digest
   tests:
@@ -69,8 +67,8 @@ rules:
   evidence:
   - kind: run
     ref: '#71, #75'
-  - kind: report
-    ref: palette-pack-digest-findings-2026-09-25 F5
+  - kind: run
+    ref: a live run
   - kind: source
     note: the digest comes from the tag listing of the registry, and the listing of a Docker registry gives none
   tests:
@@ -95,7 +93,7 @@ rules:
     owner: palette
     text: Sync a private pack registry, or say in the sync status that a private registry lists no pack.
   evidence:
-  - kind: report
-    ref: palette-pack-digest-findings-2026-09-25 F6
+  - kind: run
+    ref: a live run
   - kind: source
     note: Palette returns no pack of a private registry when it lists or reads packs

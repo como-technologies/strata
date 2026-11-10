@@ -35,8 +35,8 @@ rules:
     owner: provider
     text: Read the field.
   evidence:
-  - kind: report
-    ref: provider-eks-azs-replace-findings-2026-09-28
+  - kind: run
+    ref: a live run
 - id: provider-delete-timeout
   title: A destroy waits until the cluster is gone
   engines:
@@ -53,6 +53,6 @@ rules:
   fix:
     owner: none
   evidence:
-  - kind: report
-    ref: palette-delete-pending-repave-findings-2026-09-25 B4
+  - kind: run
+    ref: a live run
     note: the destroy failed with `context deadline exceeded`; a second destroy sent the delete again and completed
