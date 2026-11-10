@@ -70,7 +70,7 @@ the report and the answer of Palette are about the same profile. The other
 profiles give no `ADDED` and no `REMOVED` line:
 
 ```text
-{{#include ../../output/cluster-move-repave.txt}}
+{{#include ../../output/cluster-move-asks.txt}}
 ```
 
 The version of an add-on that the cluster does not run replaces no profile,

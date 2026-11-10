@@ -391,8 +391,9 @@ fn cluster_release(r: &mut Runner) {
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     payments_addons(r);
     payments_cluster(r, A110);
-    // Palette says that the move of payments to 1.1.1 does not repave it
+    // Palette says that the move of payments to 1.1.1 does not repave it, and it takes the packs
     r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
+    r.tenant(|t| t.packs_answer(DEV, PAYMENTS, None));
     r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
     r.tenant(|t| t.on_cluster_reclaim(DEV, LEDGER, "Retain"));
@@ -472,10 +473,10 @@ fn cluster_release_many_profiles(r: &mut Runner) {
     );
     // a move of the release: the add-on profiles give no ADDED and no REMOVED line
     r.step(
-        "cluster-move-repave",
+        "cluster-move-asks",
         1,
         false,
-        "strata compare cluster:payments aws-stack@1.1.1 --repave",
+        "strata compare cluster:payments aws-stack@1.1.1 --repave --validate",
     );
 }
 
