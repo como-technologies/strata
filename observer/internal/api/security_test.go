@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // The four headers, as the issue states them.
@@ -128,7 +130,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 	if ln, err := Listen("0.0.0.0:0"); err == nil || ln != nil || !errors.Is(err, ErrNotLoopback) {
 		t.Errorf("Listen(0.0.0.0:0) = %v, %v", ln, err)
 	}
-	ln, err := Listen("127.0.0.1:0")
+	ln, err := Listen(testkit.PortZero)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +150,7 @@ func TestTheServerSetsEachTimeout(t *testing.T) {
 // listener opens a loopback port for a test.
 func listener(t *testing.T) net.Listener {
 	t.Helper()
-	ln, err := Listen("127.0.0.1:0")
+	ln, err := Listen(testkit.PortZero)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +169,8 @@ func TestHealthSucceedsWithTheServerUpAndFailsWithNone(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Errorf("a stop that ctx asked for gave %v", err)
 	}
-	if err := Health(context.Background(), ln.Addr().String()); err == nil {
+	// The check asks testkit.PortZero, because another process can take the port of the stopped server.
+	if err := Health(context.Background(), testkit.PortZero); err == nil {
 		t.Error("no server runs, and the health check passed")
 	}
 }

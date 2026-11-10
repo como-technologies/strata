@@ -255,10 +255,10 @@ func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
 
 func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	api := testkit.NewKubeAPI(t, func(rw http.ResponseWriter, _ *http.Request) {
+	kubeAPI := testkit.NewKubeAPI(t, func(rw http.ResponseWriter, _ *http.Request) {
 		_, _ = rw.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", imageRef, "a/b@"+digest1))))
 	})
-	client := kube.New(kube.Config{Host: api.Host, TokenFile: api.TokenFile, CAFile: api.CAFile})
+	client := kube.New(kube.Config{Host: kubeAPI.Host, TokenFile: kubeAPI.TokenFile, CAFile: kubeAPI.CAFile})
 	o := r.observer(w).WithPods(client)
 	cycle(t, o)
 	doc := o.Observed()
