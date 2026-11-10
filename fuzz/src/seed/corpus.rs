@@ -99,8 +99,8 @@ fn the_corpus_holds_each_seed_that_the_writer_gives() {
         .collect();
     assert!(
         stale.is_empty(),
-        "the corpus does not hold these {} files: run `just fuzz-seed`, and commit the files\n{}",
-        stale.len(),
+        "the corpus does not hold each seed that `just fuzz-seed` writes. Run the recipe, and \
+         commit these files:\n{}",
         stale.join("\n")
     );
 }
