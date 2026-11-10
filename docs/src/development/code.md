@@ -375,6 +375,14 @@ the Rust code, and these rules are for the Go code.
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the
   binary skips when `STRATA_BIN` is not set.
+- The state that a wait of a test reads stays until the next step reads it. A
+  count of the calls stays. The progress of a cycle stays only while the cycle
+  runs, and a short cycle can end between two reads. So a test that acts while a
+  cycle runs holds the cycle at a gate, such as `gatedStrata` of `internal/check`.
+  A fixed sleep reads no state, so it is no wait. A test that must see two
+  processes run together holds the first one with `testkit.Overlap`.
+- A wait of a test that has a limit of time, also a wait on a channel, uses
+  `testkit.WaitLimit`.
 - A wait of a test, with `testkit.WaitFor`, reads the state that its next step
   reads. The content cycle and the versions cycle end in either order. So the end
   of one cycle does not show the end of the other. The state of the page reads the

@@ -11,6 +11,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestPackDiffGivesThePackOfEachSideWithItsValues(t *testing.T) {
@@ -163,27 +164,6 @@ func TestAMoveThatTheNextCycleDropsLeavesTheMemory(t *testing.T) {
 	}
 }
 
-// slowStrata makes each command take time, and counts the processes that run together.
-type slowStrata struct {
-	Strata
-	mu             sync.Mutex
-	active, mostAt int
-}
-
-func (s *slowStrata) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
-	s.mu.Lock()
-	s.active++
-	s.mostAt = max(s.mostAt, s.active)
-	s.mu.Unlock()
-	time.Sleep(10 * time.Millisecond)
-	defer func() {
-		s.mu.Lock()
-		s.active--
-		s.mu.Unlock()
-	}()
-	return s.Strata.Run(ctx, dir, args...)
-}
-
 // The two cycles and a request of the detail tier run at the same time, and the pool bounds their
 // processes: with a pool of 2, two processes run together and never three.
 func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
@@ -193,8 +173,10 @@ func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.cfg.Processes = 2
-	slow := &slowStrata{Strata: w}
-	o := r.restart(slow)
+	// The count starts after the first cycle. The first process waits for a second one, so the count does
+	// not depend on how fast the goroutines start.
+	w.overlap = &testkit.Overlap{Delay: 10 * time.Millisecond, Hold: 2}
+	o := r.restart(w)
 	var wg sync.WaitGroup
 	wg.Add(3)
 	go func() { defer wg.Done(); _ = o.RunVersions(ctx) }()
@@ -204,8 +186,8 @@ func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 		_, _, _ = o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
 	}()
 	wg.Wait()
-	if slow.mostAt != 2 {
-		t.Errorf("%d processes ran together, want the 2 of the pool", slow.mostAt)
+	if most := w.overlap.Most(); most != 2 {
+		t.Errorf("%d processes ran together, want the 2 of the pool", most)
 	}
 }
 

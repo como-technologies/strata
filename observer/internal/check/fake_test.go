@@ -52,33 +52,29 @@ type world struct {
 	moves    map[string]docs.Diff
 	moveErrs map[string]error
 
-	// delay makes each call take time, so that a test can see two calls at once.
-	delay time.Duration
+	// overlap counts the calls that run at one time, from the time that a test sets it. Its delay and its
+	// hold let a test see two calls at once.
+	overlap *testkit.Overlap
 
-	mu                sync.Mutex
-	calls             [][]string
-	active, maxActive int
-	modes             []os.FileMode
+	mu    sync.Mutex
+	calls [][]string
+	modes []os.FileMode
 	// dirs holds the directory of each call, so that a test can see the working directory.
 	dirs []string
 }
 
-func (w *world) Run(_ context.Context, dir string, args ...string) (runner.Result, error) {
+func (w *world) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
 	w.mu.Lock()
 	w.calls = append(w.calls, args)
 	w.dirs = append(w.dirs, dir)
 	if info, err := os.Stat(dir); err == nil {
 		w.modes = append(w.modes, info.Mode())
 	}
-	w.active++
-	w.maxActive = max(w.maxActive, w.active)
 	w.mu.Unlock()
-	defer func() {
-		w.mu.Lock()
-		w.active--
-		w.mu.Unlock()
-	}()
-	time.Sleep(w.delay)
+	if w.overlap != nil {
+		end := w.overlap.Start(ctx)
+		defer end()
+	}
 	switch args[0] {
 	case runner.CmdVerify:
 		return w.runVerify(args)

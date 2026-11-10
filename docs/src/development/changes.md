@@ -126,24 +126,31 @@ The image has the latest stable Go. When Go releases a new stable version, chang
 `GOTOOLCHAIN=local` and `GOPROXY=off`. A build then fails when code needs another
 Go, or a module outside the standard library.
 
-### Where each cache goes
+### Where the caches and the state go
 
-`riff.toml` puts each cache of a session in a folder that the session can
-write:
+`riff.toml` puts each cache of a session, and the state of strata, in a folder
+that the session can write:
 
-| Cache | Folder | Users |
+| Files | Folder | Users |
 | --- | --- | --- |
 | The cargo home, with the crates from crates.io | `$HOME/.cargo`, the volume `strata-cargo` | The sessions of a host |
 | The build cache of Rust, from sccache | `$HOME/.cache/sccache`, the volume `strata-sccache` | The sessions of a host |
 | The build cache of Go | `/tmp/cache/go-build` | One session |
 | The cache of `gh`, with the logs of `gh run view` | `/tmp/cache/gh` | One session |
+| The state of strata, with the log of the unknown values | `/tmp/state/strata` | One session |
 
-The container runtime makes `$HOME/.cache` for the mount of sccache, and root
-owns it. So `riff.toml` sets `XDG_CACHE_HOME` to `/tmp/cache`, and Go and `gh`
-use that folder. A session sets no `GOCACHE` and no `GOPATH`. Go writes nothing
-to its `GOPATH`, `$HOME/go`, because `GOPROXY=off` stops each download of a
-module. Each session has a container of its own, so its `/tmp/cache` starts
-empty.
+The container runtime makes each absent folder above a mount, and root owns it.
+It makes `$HOME/.cache` for the mount of sccache. riff mounts the clone under
+`$HOME/.local/share/riff/`, so the runtime also makes `$HOME/.local`. A session
+cannot write in these two folders.
+
+So `riff.toml` sets `XDG_CACHE_HOME` to `/tmp/cache`, and Go and `gh` use that
+folder. It sets `XDG_STATE_HOME` to `/tmp/state`, and strata keeps its state in
+`/tmp/state/strata`. A session sets no `GOCACHE`, no `GOPATH`, and no
+`XDG_STATE_HOME`. Go writes nothing to its `GOPATH`, `$HOME/go`, because
+`GOPROXY=off` stops each download of a module. No other tool of the checks
+writes under `$HOME/.local`. Each session has a container of its own, so its
+`/tmp/cache` and its `/tmp/state` start empty.
 
 ## The code of Palette
 
