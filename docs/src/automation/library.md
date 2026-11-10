@@ -7,7 +7,7 @@ program can use the same parts. `strata-preflight` is a library too: see
 | Item | Function |
 | --- | --- |
 | `api::PaletteApi` | The Palette API. `HttpApi` calls Palette. `MemoryApi` serves documents from memory, for tests. |
-| `api::PaletteApi::post_json` | A `POST` that asks a question and changes nothing. `HttpApi` and `Retry` send it, and `MemoryApi::posted` keeps each body for a test. An API that cannot send it says so. |
+| `api::PaletteApi::post_json` | A `POST` that asks a question, at a route that checks the body. At `validate/repave`, Palette can save the address of the console of a pack of virtual machines. `HttpApi` and `Retry` send it, and `MemoryApi::posted` keeps each body for a test. An API that cannot send it says so. |
 | `api::Palette::validate_repave`, `ops::palette_repave`, `ops::validate_body`, `diff::PaletteRepave` | The answer of Palette to whether a change of the profiles of a cluster replaces its nodes. The input is a cluster and a profile version. The answer has its reasons and says whether it agrees with the impact table. |
 | `api::Palette::validate_profile_packs`, `api::Palette::validate_profile_name`, `api::Palette::validate_profile_import`, `ops::profile_validation`, `ops::profile_validate_body`, `ops::profile_import_body` | The answer of Palette, with each error. Palette says if it takes a candidate in a new profile: its name, its version, and its packs. For a profile version, it says if it takes the packs as an update of itself. |
 | `ops::snapshot_from_candidate`, `ops::require_acceptance`, `model::validation::ProfileValidation` | When `validate` is `true`, `snapshot_from_candidate` puts the answer in `source.paletteValidation`. The caller decides what a refusal does. `require_acceptance` gives the error that the command gives. `ProfileValidation::accepts` is true when `ProfileValidation::errors` is empty, so no answer refuses with no error. |
@@ -124,7 +124,9 @@ A program starts from these items:
 | `run::watch`, `run::WatchInputs` | The watch during a build. It needs a `Palette` client. |
 | `fixture::load`, `probe::FixtureBackend`, `probe::run_check` | A world that holds the answers, for the test of a rule of a company. An entry of `_responses` with a status that is not 2xx follows the live backend. A 401, a 403, and a 429 are errors. A 5xx is an answer only when the check names its code. |
 | `world::clouds`, `world::cloud_list` | The texts of the engines of a run, in the order of the help screen. An engine is a cloud of Palette, or `edge`, which Palette names `edge-native`. |
-| `rule::Tier`, `rule::Level`, `rule::Severity`, `rule::Status`, `rule::EvidenceKind`, `rule::CheckKind`, `rule::Owner`, `confidence::RunResult`, `probe::Verdict` | The closed sets of the rule format and of the report. Each is a `strata::closed_set::ClosedSet`, so `as_str` gives the text that a rule file and the report use. |
+| `rule::Tier`, `rule::Level`, `rule::Severity`, `rule::Status`, `rule::EvidenceKind`, `rule::CheckKind`, `rule::Owner`, `curl::Saves`, `confidence::RunResult`, `probe::Verdict` | The closed sets of the rule format and of the report. Each is a `strata::closed_set::ClosedSet`, so `as_str` gives the text that a rule file and the report use. |
+| `curl::KEY_LINE_BREAK` | The message of a `reproduce` line that runs no `curl`, because the key of Palette holds a line break. |
+| `curl::Saves::comment` | The end of a `reproduce` line that sends a request at which Palette saves something. The comment says what Palette saves. The filter `saves_comment` gives it to a line of a rule. |
 | `error::Error` | The one error type. A run that cannot answer is an `Err`, and the command gives exit code `2` for it. |
 
 `examples/library-preflight/` is a separate crate that depends on

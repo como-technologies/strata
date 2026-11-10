@@ -6,6 +6,7 @@ use strata::api::Method;
 use strata::closed_set::impl_closed_set;
 
 use super::Tier;
+use crate::curl::Saves;
 
 /// The method of a check of Palette that names none: a read.
 fn read() -> Method {
@@ -37,6 +38,12 @@ pub struct PaletteCheck {
     /// an error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refusal_codes: Vec<String>,
+    /// What Palette can save at the request, when the route saves something. The line of the
+    /// report for the request ends with a comment that says it. Each line of the rule that sends
+    /// the request ends with the template `{{ saves_comment("<value>") }}`. With no value, the
+    /// route saves nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saves: Option<Saves>,
     /// The program over the world with `.response`. With `each`, it runs one time over the
     /// world with `.responses`: one `{item, response}` for each item, in the order of the list.
     pub expr: String,

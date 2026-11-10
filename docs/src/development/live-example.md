@@ -32,7 +32,7 @@ show.
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `image-digest.sh` | What cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
-| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). Stage 8 asks about a profile variable in a repave key of a version that the cluster does not run (#132). It needs cluster A. |
+| `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). Stage 8 asks about a profile variable in a repave key of a version that the cluster does not run (#132). It needs cluster A. Stage 9 reads the console address that Palette can save at `validate/repave` for the VM Orchestrator pack (#717). It needs `VMO_CLUSTER`. |
 | `registry-move-nodes.sh` | Whether a move of the OS pack to another registry, at the same version, replaces the nodes of a cluster, and what the impact table and Palette say (#135). It needs cluster A, and it can repave it two times. |
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
@@ -117,7 +117,7 @@ its end.
 | `github.sh` | What the scripts read about GitHub. `remote_repo` gives the project of the `origin` remote of a checkout. The jq function `first_line` gives the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
 | `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image with its pull Secret, the overlay, the key, the ConfigMap, and the test of a pod that cannot connect. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
-| `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
+| `tenant.sh` | Lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. Each lookup reads. But at the repave check, Palette can save the address that the console of a pack of virtual machines forwards to: see [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves). |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
 | `verify.sh` | Runs each read-only check, and writes `runs/<UTC time>/`. |
 | `in-place.sh` | The edit in place test (#27). |
@@ -150,7 +150,7 @@ its end.
 | `macros.sh` | The macro test (#72): what a project macro does to a version, to the copy that cluster A runs, and to a record, when the macro gets another value. |
 | `image-digest.sh` | The image digest test (#630): a digest in the image list of a pack alone, and a digest in the manifest that the workload reads, and the image that cluster A runs for each. |
 | `macro-repave.sh` | The macro repave test (#72): a macro in a field that repaves cluster A, and what a change of its value alone does. It ends with a repave that waits for approval; `live-down` follows it. |
-| `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. `compare --validate` asks Palette if it accepts the packs (#134). |
+| `repave.sh` | The repave test (#73): `compare --repave` asks Palette if a change repaves cluster A, and prints its answer beside the impact level. `compare --validate` asks Palette if it accepts the packs (#134). Stage 9 moves the console address of the VM Orchestrator pack of `VMO_CLUSTER` to a mark, and back (#717). |
 | `registry-move-nodes.sh` | The registry move of a running cluster (#135): the OS pack of the release version from `move_registry_name`, and what cluster A does when it takes it. |
 | `edge-host.sh` | The edge host test (#78). |
 | `cluster-group.sh`, `terraform/cluster-group.tf` | The cluster group test (#78), and the group and the virtual cluster that it builds. Off unless `cluster_group` is set. |
@@ -189,6 +189,7 @@ Its stage 4 makes one profile, and deletes it.
 `macros.sh` does the same, and deletes the macro it makes.
 `image-digest.sh` checks the baseline before it starts, and puts each change back.
 `repave.sh` checks the baseline before it starts, puts each change back, and takes no update on cluster A.
+Its stage 9 moves the console address of `VMO_CLUSTER` to a mark, and back.
 `registry-move-nodes.sh` checks the baseline, and puts the release version back, unless a repave waits for approval.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
@@ -224,7 +225,7 @@ each.
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `image-digest.sh` | the values and the manifest of the add-on version, in place and put back; a Deployment of one pod, and the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
-| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; a profile variable on version 1.0.1, through OpenTofu, and back; no update is accepted | the clusters, the flag (off), the baseline |
+| `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; a profile variable on version 1.0.1, through OpenTofu, and back; no update is accepted. Stage 9: the address that the console of the VM Orchestrator pack of `VMO_CLUSTER` forwards to, moved to a mark and back | the clusters, the flag (off), the baseline |
 | `registry-move-nodes.sh` | the registry of the OS pack of the release version, in place, and the update that cluster A takes; both put back | the version and the values of each pack, the flag (off) |
 | `edge-host.sh` | two edge hosts with no device, each bound to a version; a manifest of the add-on version and a value of the release version, each in place and put back; it deletes the hosts | the profiles, the clusters, the baseline |
 | `cluster-group.sh` | a cluster group on cluster A and a virtual cluster in it; a manifest of the add-on version, in place and put back; the CPU limit of the group, and back; it removes the group | the profiles, cluster A, the baseline |

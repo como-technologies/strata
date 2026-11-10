@@ -24,13 +24,13 @@ Quotas and limits
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
-                reproduce: code=$(curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
+                reproduce: code=$({ [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
                 fix: Call the validate route at plan time. (provider)
   NOT CHECKED   vcluster-min                 A virtual cluster has 3 cores or more                            1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: jq '.spec.machinepoolconfig[].cloudConfig.instanceType' virtual-cluster.json   # maxCPU must be 3 or more
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
   PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs, clean 13/13 (79%)
@@ -62,7 +62,7 @@ Images and registries
   NOT CHECKED   private-pack-registry-empty  A private pack registry lists its packs                          1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <pack> --registry <registry>
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'
   NOT CHECKED   profile-follows-push         A published profile keeps its content after a push to the r…     1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
@@ -81,15 +81,15 @@ Images and registries
   NOT CHECKED   helm-oci-endpoint            A Helm registry has an https endpoint                            1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <chart> --registry <registry>
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/helm/summary" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/helm/summary" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'
   NOT CHECKED   registry-sync-delay          A new pack version shows in Palette after the sync               1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata packs <pack> --registry <registry> --latest
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/<uid>/sync/status"
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/<uid>/sync/status"
   NOT CHECKED   registry-new-key             A registry create with a new key is accepted                     1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws sts get-caller-identity
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/oci/ecr/validate" -d @registry.json
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/oci/ecr/validate" -d @registry.json
   PROBE PASS    ambiguous-pack-ref           One pack name and version comes from one registry                1 ms
 
 Profiles and packs
@@ -121,7 +121,7 @@ The Palette platform
                 pool worker-pool: MachinePoolWithMinCpuRequired: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
-                reproduce: code=$(curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
+                reproduce: code=$({ [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"] else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ] + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ] end' $OUT/world.json
                 fix: Run the validate route at the start of each create, and add it to the SDK and the provider. (palette)
   NOT CHECKED   validate-routes-unused       Only the console calls the cluster validate routes               1 ms
@@ -134,15 +134,15 @@ The Palette platform
                 profile 64e0000000000000000000c3: status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well
                 ran: GET /v1/clusterprofiles/64e0000000000000000000c3 -> HTTP 200
                 reproduce: strata consumers 64e0000000000000000000c3   # each cluster that runs the version, from the list and from the clusters
-                reproduce: code=$(curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' "${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/64e0000000000000000000c3")
+                reproduce: code=$({ [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o body.json -w '%{http_code}' "${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/64e0000000000000000000c3")
                 reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .entity.spec.profiles[0].uid as $u | if (.response.ok | not) then ["cannot read profile \($u): \(.response.body.code // .response.status)"] elif ((.response.body.status.inUseClusters // []) | length) == 0 then ["profile \($u): status.inUseClusters is empty; Palette gives an empty list on an error too, so it does not prove that no cluster runs the profile; strata consumers reads each cluster the key can list as well"] else [] end' $OUT/world.json
   NOT CHECKED   api-quirks                   The client keeps to the limits of the API                        1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta" | jq -r 'type'   # array
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta" | jq -r 'type'   # array
   NOT CHECKED   transient-errors             A transient error of the API is retried once                     1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code} %{content_type}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/<cluster uid>"   # a 404 must be application/json with code ResourceNotFound
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o /dev/null -w '%{http_code} %{content_type}\n' "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/<cluster uid>"   # a 404 must be application/json with code ResourceNotFound
   NOT CHECKED   auto-cleanup-never           A delete that makes no progress moves to the cleanup path        1 ms
                 a race: no check before the build finds it; the watch finds its effect
 
@@ -159,7 +159,7 @@ Teardown and leftovers
                 reproduce: aws ec2 describe-vpcs --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Vpcs[].VpcId' --output text   # the network goes last, minutes after the instances
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: curl -s --config <(printf 'header = "ApiKey: %s"\n' "$PALETTE_API_KEY") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros" | jq -r '.macros[].name'   # the macros of the project
+                reproduce: { [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros" | jq -r '.macros[].name'   # the macros of the project
                 reproduce: strata snapshot cluster:<cluster uid> --macros --json | jq '.macros'   # the macros the cluster reads
   NOT CHECKED   versions-outside-state       Palette holds no version outside the state                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
