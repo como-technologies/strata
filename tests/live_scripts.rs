@@ -3961,9 +3961,18 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
     let mut stage = registry_stage(serde_json::json!({}));
     stage.route("/v1/clusterprofiles", r#"{"uid":"fm-1"}"#);
     stage.route("/v1/clusterprofiles/fm-1/publish", "{}");
+    let pack = PackFixture::new(
+        "strata-live-pack",
+        "addon",
+        "1.0.1",
+        "pk-101",
+        "reg-1",
+        "",
+        "",
+    );
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-101"},"spec":{"registryUid":"reg-1","version":"1.0.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.strata(
         "packs strata-live-pack --json",
@@ -4209,9 +4218,10 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
         "/v1/clusterprofiles/validate/packs",
         r#"{"packs":{"results":[]}}"#,
     );
+    let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-1"},"spec":{"registryUid":"reg-pub","version":"1.21.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
