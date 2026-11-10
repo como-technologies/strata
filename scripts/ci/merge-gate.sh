@@ -35,12 +35,13 @@
 #      the archive of that pack does not show. --allow-no-digest accepts it, as verify does.
 #      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
 #      SPECTROCLOUD_APIKEY, or ~/.palette.env), omits this check, and the last line says so.
+#      palette-key.sh beside this script looks for the key.
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
 # A strata that is older than this script gives 2 too. It writes no versionMove, so no pin
 # reads as backward.
-# Needs strata (or STRATA_BIN), git, and jq. The target branch is --base, or the
+# Needs strata (or STRATA_BIN), git, jq, and palette-key.sh. The target branch is --base, or the
 # CI variable of the merge request: CI_MERGE_REQUEST_TARGET_BRANCH_NAME on GitLab, GITHUB_BASE_REF
 # on GitHub.
 set -euo pipefail
@@ -82,18 +83,15 @@ case $schema in
   *'"versionMove"'*) ;;
   *) die "strata is older than this script: it writes no versionMove, so no backward pin shows" ;;
 esac
-# the key where strata looks for it: the environment, then ~/.palette.env
-has_key() {
-  [ -n "${PALETTE_API_KEY:-${SPECTROCLOUD_APIKEY:-}}" ] && return 0
-  [ -f "${HOME:-}/.palette.env" ] &&
-    grep -qE '^[[:space:]]*(export[[:space:]]+)?(PALETTE_API_KEY|SPECTROCLOUD_APIKEY)=[^[:space:]]' "$HOME/.palette.env"
-}
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 unchecked=""
 if [ -z "$verify" ]; then
   unchecked="--no-verify"
-elif ! has_key; then
-  verify=""
-  unchecked="no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env"
+else
+  # the key where strata looks for it; with none, palette-key.sh prints where it looked
+  unchecked=$("$here/palette-key.sh") || [ $? -eq 1 ] \
+    || die "palette-key.sh beside this script did not answer"
+  [ -z "$unchecked" ] || verify=""
 fi
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

@@ -193,7 +193,8 @@ gives the steps when a delete does not end.
   the report as a comment: see
   [The report as a comment](../automation/preflight.md#the-report-as-a-comment).
 - Before each build: the live tier, with a key. `--strict` makes exit `1` the
-  gate.
+  gate. A job with no key runs offline, and its log and its report say so: see
+  [The key of the job](../automation/preflight.md#the-key-of-the-job).
 - During the build: `--watch cluster:UID`, which stops at the first known stuck
   state with its evidence. In the workflow, give the input `watch`: see
   [The watch in the workflow](../automation/preflight.md#the-watch-in-the-workflow).

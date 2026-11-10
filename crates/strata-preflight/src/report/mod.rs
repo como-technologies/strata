@@ -100,6 +100,10 @@ pub struct Options {
     pub tiers: Vec<Tier>,
     /// True when a failed probe counts as a failed check.
     pub strict: bool,
+    /// True when the run read nothing from Palette: `--offline`, or a backend with no client.
+    /// A report from before 0.33.0 has no such field, and it reads as false.
+    #[serde(default)]
+    pub offline: bool,
     /// The readiness the run needs, as a share, when `--ready` was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready: Option<f64>,
@@ -113,11 +117,13 @@ pub(crate) const DEFAULT_GATE: f64 = 0.8;
 
 impl Options {
     /// The tiers that ran, as each form of the report writes them after `tiers`: `static,
-    /// palette`. `, strict` follows them when a failed probe counts as a failed check.
+    /// palette`. `, strict` follows them when a failed probe counts as a failed check, and
+    /// `, offline` when the run read nothing from Palette.
     pub fn tiers_text(&self) -> String {
         let tiers: Vec<&str> = self.tiers.iter().map(|t| t.as_str()).collect();
         let strict = if self.strict { ", strict" } else { "" };
-        format!("{}{strict}", tiers.join(", "))
+        let offline = if self.offline { ", offline" } else { "" };
+        format!("{}{strict}{offline}", tiers.join(", "))
     }
 }
 

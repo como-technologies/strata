@@ -7,7 +7,8 @@
 #
 # Downloads into DIR (default .strata) the two binaries for this machine, strata and
 # strata-preflight, and SHA256SUMS. Also downloads the CI scripts pr-comment.sh, merge-gate.sh,
-# verify-report.sh, upstream-report.sh, preflight.sh, observer-records.sh, and observer-propose.sh.
+# verify-report.sh, upstream-report.sh, preflight.sh, palette-key.sh, observer-records.sh, and
+# observer-propose.sh.
 # Checks the signature and the checksums, and prints the path of the strata binary. A job then sets
 # STRATA_BIN to that path and runs DIR/<script>. `strata preflight` runs the strata-preflight beside it. A release from
 # before strata-preflight has no such binary, and the installer says so.
@@ -107,7 +108,7 @@ tag=$(jq -r '.tag_name // empty' "$work/release.json")
 
 # SHA256SUMS comes down either way: it is what every file is checked against. The bash on macOS is
 # 3.2, where "${empty[@]}" under set -u is an error, so an empty list expands through the + form.
-scripts=(pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh preflight.sh observer-records.sh observer-propose.sh)
+scripts=(pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh preflight.sh palette-key.sh observer-records.sh observer-propose.sh)
 [ -z "$bin_only" ] || scripts=()
 want=("strata-$target" SHA256SUMS ${scripts[@]+"${scripts[@]}"})
 for name in "${want[@]}"; do

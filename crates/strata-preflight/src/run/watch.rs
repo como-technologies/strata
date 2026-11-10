@@ -185,6 +185,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             options: Options {
                 tiers: vec![Tier::Watch],
                 strict: inputs.selection.strict,
+                offline: false,
                 ready: None,
                 out_dir: inputs.out_dir.map(str::to_string),
             },
