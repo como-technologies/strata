@@ -81,8 +81,9 @@ spec:
   hard:
     pods: \"50\"";
 
-/// The add-on profiles that the cluster `payments` of dev runs beside its release, as the field
-/// test found many clusters (#615): `platform-addons`, `observability`, and `payments-apps`.
+/// The add-on profiles that the cluster `payments` of dev runs beside its release:
+/// `platform-addons`, `observability`, and `payments-apps`. A field test found many clusters with
+/// many profiles (#615).
 const PAYMENTS_ADDONS: [&str; 3] = [ADDONS_DEV, OBSERVABILITY, PAYMENTS_APPS];
 
 /// Publish the add-on profiles of [`PAYMENTS_ADDONS`] in dev, each at 1.0.0. Palette refuses one

@@ -1091,7 +1091,7 @@ esac
 /// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot.
 /// A live ref needs no Palette. Everything else goes to the real binary.
 ///
-/// A `compare` of a file and a live cluster ref answers with the cluster side alone: its `ref` is
+/// A `compare` of a file and a live cluster ref answers with the cluster side alone. Its `ref` is
 /// `FAKE_CLUSTER_SIDE`, the ref that the comparison reads.
 ///
 /// `compare --repave` is the one question that needs Palette. The real binary decides which pair
@@ -1541,8 +1541,8 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
 }
 
 /// A live cluster ref with no profile holds only the profile of the other side in `compare`
-/// (#615). The record of the whole cluster would give a line for each pack of the other profiles,
-/// so the script records the ref that strata names for the cluster side.
+/// (#615). A record of the whole cluster gives a line for each pack of the other profiles. So
+/// the script records the ref that strata names for the cluster side.
 #[test]
 fn pr_comment_records_a_live_cluster_ref_as_compare_reads_it_beside_the_other_side() {
     let h = host();

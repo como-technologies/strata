@@ -12704,7 +12704,7 @@ fn beside_the_cluster(api: &MemoryApi, version: &str) -> Vec<(Snapshot, strata::
         .collect()
 }
 
-/// A cluster that runs two profiles answers for the profile of the other side (#615): a team asks
+/// A cluster that runs two profiles answers for the profile of the other side (#615). A team asks
 /// whether the cluster runs a version, and not what else it runs.
 #[test]
 fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_replaces() {
@@ -12754,8 +12754,8 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
             );
         }
     }
-    // another version of a profile that the cluster runs: only the packs of that profile differ,
-    // and the add-on of the cluster gives no ADDED or REMOVED line
+    // another version of a profile that the cluster runs: only the packs of that profile differ.
+    // The add-on of the cluster gives no ADDED or REMOVED line
     for (side, d) in beside_the_cluster(&api, UID_A) {
         assert_eq!(covered(&side).0, [infra.as_str()]);
         assert!(!d.same, "the cluster runs lab-profile@1.3.0, not 1.2.0");
