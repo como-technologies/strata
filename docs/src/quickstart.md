@@ -24,8 +24,9 @@ replaces no node.
 
 These steps use the tenant of this book. Its project `dev` holds the versions
 1.0.0, 1.1.0, and 1.1.1 of `aws-stack`. Its cluster `payments` runs 1.1.0 and
-three add-on profiles, as many clusters do. With your own tenant, put your project, profile, and cluster names in place of
-these. `strata list` prints yours.
+three add-on profiles, as many clusters do. With your own tenant, put your
+project, profile, and cluster names in place of these. `strata list` prints
+yours.
 
 <div class="playground-demo">
 
