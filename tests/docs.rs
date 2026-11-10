@@ -14,6 +14,7 @@ use common::{
     GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
     schema, script, toml_entries, toml_table, toml_value, version_of, walk,
 };
+use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
 
@@ -2186,41 +2187,53 @@ fn riff_value<'a>(riff: &'a str, table: &str, key: &str) -> &'a str {
         .unwrap_or_else(|| panic!("{table} of riff.toml sets no {key}"))
 }
 
-/// The container runtime makes each absent folder above a mount of `riff.toml`, and root owns it:
-/// `$HOME/.cache` for the mount of sccache. Go and `gh` keep their caches in
-/// `XDG_CACHE_HOME`. When it is in such a folder, `go vet` and `gh run view --log-failed` fail in
-/// each session. The book states where each cache goes.
+/// The mount of the clone of a session. riff makes it, and `riff.toml` does not name it.
+const RIFF_CLONE: &str = "$HOME/.local/share/riff/sessions/<session>/clone";
+
+/// The container runtime makes each absent folder above a mount, and root owns it. It makes
+/// `$HOME/.cache` for the mount of sccache, and `$HOME/.local` for the mount of the clone. Go and
+/// `gh` keep their caches in `XDG_CACHE_HOME`, and strata keeps its state in `XDG_STATE_HOME`.
+/// When one is in such a folder, `go vet`, `gh run view --log-failed`, or `strata report --sent`
+/// fails in each session. The book states where each cache and the state go.
 #[test]
-fn each_cache_of_a_session_is_in_a_folder_that_the_session_can_write() {
+fn each_cache_and_the_state_of_a_session_are_in_a_folder_that_the_session_can_write() {
     let riff = code_of("riff.toml");
     let (env, volumes) = ("[session.env]", "[session.volumes]");
     let cargo = riff_value(&riff, env, "CARGO_HOME");
     let sccache = riff_value(&riff, env, "SCCACHE_DIR");
-    let cache = riff_value(&riff, env, "XDG_CACHE_HOME");
+    let bases = ["XDG_CACHE_HOME", "XDG_STATE_HOME"].map(|key| (key, riff_value(&riff, env, key)));
+    let [(_, cache), (_, state)] = bases;
     assert_eq!(cargo, riff_value(&riff, volumes, "strata-cargo"));
     assert_eq!(sccache, riff_value(&riff, volumes, "strata-sccache"));
 
     let home = Path::new("$HOME");
-    for (name, mount) in toml_entries(toml_table(&riff, volumes)) {
+    let mut mounts = toml_entries(toml_table(&riff, volumes));
+    mounts.push(("the clone", RIFF_CLONE));
+    for (name, mount) in mounts {
         for folder in Path::new(mount).ancestors().skip(1) {
             let made = folder.starts_with(home) && folder != home;
-            assert!(
-                !(made && Path::new(cache).starts_with(folder)),
-                "XDG_CACHE_HOME is in {}, which root owns for the mount of {name}",
-                folder.display()
-            );
+            for (key, value) in bases {
+                assert!(
+                    !(made && Path::new(value).starts_with(folder)),
+                    "{key} is in {}, which root owns for the mount of {name}",
+                    folder.display()
+                );
+            }
         }
     }
 
     let page = read(&docs().join("development/changes.md"));
-    let page = one_line(section(&page, "### Where each cache goes", Some("\n## ")));
+    let heading = "### Where the caches and the state go";
+    let page = one_line(section(&page, heading, Some("\n## ")));
     for needle in [
         format!("`{cargo}`, the volume `strata-cargo`"),
         format!("`{sccache}`, the volume `strata-sccache`"),
         format!("The build cache of Go | `{cache}/go-build`"),
         format!("The cache of `gh`, with the logs of `gh run view` | `{cache}/gh`"),
+        format!("The state of strata, with the log of the unknown values | `{state}/{TOOL_NAME}`"),
         format!("So `riff.toml` sets `XDG_CACHE_HOME` to `{cache}`"),
-        "A session sets no `GOCACHE` and no `GOPATH`.".to_string(),
+        format!("It sets `XDG_STATE_HOME` to `{state}`"),
+        "A session sets no `GOCACHE`, no `GOPATH`, and no `XDG_STATE_HOME`.".to_string(),
     ] {
         assert!(page.contains(&needle), "changes.md lacks {needle:?}");
     }

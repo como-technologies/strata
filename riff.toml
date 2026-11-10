@@ -21,6 +21,9 @@ SCCACHE_IGNORE_SERVER_IO_ERROR = "1"
 # The other caches, such as the build cache of Go and the cache of gh. The container runtime makes
 # $HOME/.cache for the mount of sccache, and root owns it, so a session cannot write there.
 XDG_CACHE_HOME = "/tmp/cache"
+# The state of strata, such as the log of the unknown values. riff mounts the clone under
+# $HOME/.local/share/riff/, so the container runtime also makes $HOME/.local, and root owns it.
+XDG_STATE_HOME = "/tmp/state"
 
 [session.volumes]
 strata-cargo = "$HOME/.cargo"
