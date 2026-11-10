@@ -11,18 +11,19 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(target_os = "linux")]
 use strata::api::API_KEY_HEADER;
-use strata::closed_set::legend::Described;
+use strata::closed_set::ClosedSet;
 #[cfg(target_os = "linux")]
 use strata::config::{KEY_VARS, PROJECT_VARS, URL_VARS};
 use strata_preflight::catalog;
 #[cfg(target_os = "linux")]
 use strata_preflight::curl::KEY_LINE_BREAK;
+use strata_preflight::curl::Saves;
 use strata_preflight::fixture;
-use strata_preflight::jq::{Jq, PALETTE_CURL};
+use strata_preflight::jq::{Jq, PALETTE_CURL, SAVES_COMMENT};
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::report;
 use strata_preflight::rule::{
-    Catalog, Check, Evidence, EvidenceKind, ExecCheck, Owner, PaletteCheck, Rule, Saves, Severity,
+    Catalog, Check, Evidence, EvidenceKind, ExecCheck, Owner, PaletteCheck, Rule, Severity,
 };
 use strata_preflight::world;
 
@@ -2050,7 +2051,7 @@ fn a_reproduce_line_sends_the_key_to_palette_in_a_header_and_in_no_argument_of_a
     }
 }
 
-/// A key with a quote or a backslash reaches Palette as it is: the start of the `curl` puts a `\`
+/// A key with a quote or a backslash reaches Palette as it is. The start of the `curl` puts a `\`
 /// before each one in the config. A key with a line break stops the line before `curl`, as
 /// `examples/live/palette-curl.sh` stops, because the break can add a line to the config (#717).
 #[cfg(target_os = "linux")]
@@ -2807,9 +2808,10 @@ const LAB_SCRIPTS: &str = "examples/live";
 /// `delete-named` and `delete-nodegroup` are deletes, and `describe-vpcs` is no change. A command
 /// also counts by its whole name, so `get-credentials` is a change: it writes the kubeconfig. A
 /// login writes a file of credentials, so it is a change too. An option counts by its whole name,
-/// so `--delete` is a delete, and `--tag-filters` is no change. A copy writes an image or a file
-/// again, a pull writes the store of images of the machine, and a tag gives an image or a resource a
-/// new tag.
+/// so `--delete` is a delete, and `--tag-filters` is no change.
+///
+/// A copy writes an image or a file again. A pull writes the store of images of the machine. A tag
+/// gives an image or a resource a new tag.
 const CHANGES: [&str; 57] = [
     "add",
     "annotate",
@@ -3048,7 +3050,7 @@ fn change_in(line: &str, saving: Option<(&str, Saves)>) -> Option<String> {
         return Some(format!("the word `{word}`"));
     }
     if curl_posts(&words) {
-        let says = |saves: Saves| line.ends_with(&format!("   # {}", saves.describe()));
+        let says = |saves: Saves| line.ends_with(saves.comment());
         let paths = palette_paths(line);
         if let Some(path) = paths.iter().find(|path| {
             !POST_READS.iter().any(|route| is_route(route, path))
@@ -3086,12 +3088,30 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
         .first("t", PALETTE_CURL, &serde_json::Value::Null, None)
         .unwrap();
     let start = start.as_str().unwrap();
+    // a line that sends a request at which Palette saves something ends with a template. The
+    // test fills it too, so that the line ends with the comment that `change_in` reads.
+    let comments: Vec<(String, String)> = Saves::ALL
+        .iter()
+        .map(|saves| {
+            let template = format!("{{{{ {SAVES_COMMENT}(\"{}\") }}}}", saves.as_str());
+            let comment = jq
+                .render("t", &template, &serde_json::Value::Null, None)
+                .unwrap();
+            (template, comment)
+        })
+        .collect();
     let mut found = Vec::new();
     for rule in catalog.rules() {
         let mut lines: Vec<String> = rule
             .reproduce
             .lines()
-            .map(|line| line.replace(&template, start))
+            .map(|line| {
+                comments
+                    .iter()
+                    .fold(line.replace(&template, start), |line, (saves, comment)| {
+                        line.replace(saves, comment)
+                    })
+            })
             .collect();
         if let Some(fault) = rule.tests.iter().find_map(|t| t.fault.as_ref()) {
             let doc = fixture::load(fault).unwrap();
@@ -3166,8 +3186,8 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
     }
 }
 
-/// A `POST` passes only to a route of [`POST_READS`], or to the route of the check of its rule
-/// when the line says what Palette saves there (#717). A route that ends in `/validate` is no
+/// A `POST` passes to a route of [`POST_READS`]. It also passes to the route of the check of its
+/// rule, when the line says what Palette saves there (#717). A route that ends in `/validate` is no
 /// read for that reason alone. `validate/repave` with no comment is a change, and so is a comment
 /// on another route.
 #[test]
@@ -3186,7 +3206,7 @@ fn the_change_test_passes_a_post_only_to_a_route_that_saves_nothing_or_to_the_ro
         "/v1/spectroclusters/{}/validate/repave",
         Saves::ConsoleAddress,
     ));
-    let says = format!("   # {}", Saves::ConsoleAddress.describe());
+    let says = Saves::ConsoleAddress.comment();
     let repave = post("/v1/spectroclusters/u-1/validate/repave");
     for (line, saving) in [
         (repave.clone(), None),

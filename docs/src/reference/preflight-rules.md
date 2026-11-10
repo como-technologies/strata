@@ -83,7 +83,8 @@ clouds](../internals/preflight.md#the-facts-of-the-clouds).
 ## The reproduce lines
 
 A person runs a `reproduce` line of a report by hand, to see what a check saw.
-So each line reads, and changes nothing:
+So each line reads, and changes nothing. One route of Palette is an exception,
+and its line says so. The rules of a line:
 
 - A line reads Palette, the cloud, the cluster, or a file. It deletes nothing,
   makes nothing, and changes no setting.
@@ -92,9 +93,10 @@ So each line reads, and changes nothing:
   the catalog names each such route that saves nothing.
 - One route saves a record, `validate/repave`: for a pack of virtual machines,
   Palette saves the address of its console. A line can send it only for a check
-  that names `console-address` in `saves`. The line ends with a comment that
-  says what Palette saves, and so does the line that the report adds for the
-  check. See
+  that names `console-address` in `saves`. The line ends with
+  `{{ saves_comment("console-address") }}`. The report fills it with a comment
+  that says what Palette saves, and the line that the report adds for the check
+  ends with the same comment. See
   [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 - A line writes no file outside the current directory. The lines that the report
   adds for a check write `request.json` and `body.json` there.
@@ -113,6 +115,8 @@ because the operator decides when it runs. Write the lines of a file of custom
 probes the same way. A test of the catalog fails on a line that changes
 something, and on a text of a rule that names `examples/live`. It also fails on
 a line that reads Palette with no `{{ palette_curl }}`, or that names a header.
+It fails on a line that sends `validate/repave` with no
+`{{ saves_comment("console-address") }}` at its end.
 
 The report fills `{{ palette_curl }}` with the `curl` that its own lines start
 with. That `curl` sends the key in a config that `printf` writes into `<( )`.
@@ -151,7 +155,9 @@ The fields of a check of kind `palette`:
 - `saves` names what Palette saves at the request, when the route saves
   something. The one value is `console-address`: at `validate/repave`, Palette
   saves the address of the console of a pack of virtual machines. The line of
-  the report for the request ends with a comment that says it: see
+  the report for the request ends with a comment that says it. Each
+  `reproduce` line that sends the request ends with
+  `{{ saves_comment("console-address") }}`: see
   [The reproduce lines](#the-reproduce-lines).
 
 The fields of a check of kind `exec`:
@@ -171,7 +177,8 @@ does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
 
-strata-preflight adds three filters to jq: `semver_numbers`, `count_of`, and `palette_curl`.
+strata-preflight adds four filters to jq: `semver_numbers`, `count_of`, `palette_curl`, and
+`saves_comment`.
 
 `semver_numbers` reads the input text as a version, as `strata` does, and gives the numbers
 that the version writes. `"4.10.3-rc.1"` gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A
@@ -195,8 +202,10 @@ A program with `semver_numbers` or `count_of` does not run in the `jq` tool. The
 `reproduce` line for such a program with a definition of each filter in front. So the line runs
 in the tool.
 
-`palette_curl` gives the start of a `curl` to Palette, for a `reproduce` line: see
-[The reproduce lines](#the-reproduce-lines).
+`palette_curl` gives the start of a `curl` to Palette, for a `reproduce` line.
+`saves_comment("console-address")` gives the end of a line that sends a request at which
+Palette saves something: a comment that says what it saves. A name that is not a value of
+`saves` is an error. See [The reproduce lines](#the-reproduce-lines).
 
 ## A request for each item
 

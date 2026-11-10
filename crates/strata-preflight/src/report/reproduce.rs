@@ -1,14 +1,13 @@
 //! The lines that a person runs by hand to see what a check saw.
 
 use strata::api::{Method, cluster_events_path};
-use strata::closed_set::legend::Described;
 use strata::config::{DEFAULT_BASE_URL, URL_VARS};
 
 use super::Subject;
 use crate::curl::palette_curl;
 use crate::jq;
 use crate::probe::{Invocation, Outcome, Ran};
-use crate::rule::{Check, ExecCheck, PaletteCheck, Rule, Saves};
+use crate::rule::{Check, ExecCheck, PaletteCheck, Rule};
 
 /// The jq object that a program reads as `.response`, built from the `curl` of a request. The
 /// status code is in `$code` and the body is in `$body`.
@@ -72,7 +71,7 @@ pub(super) fn auto_reproduce(
             };
             let mut line = code_line(&data, path);
             if let Some(saves) = saves {
-                line.push_str(&saves_comment(*saves));
+                line.push_str(saves.comment());
             }
             lines.push(line);
             lines.push(format!(
@@ -145,12 +144,6 @@ fn code_line(data: &str, path: &str) -> String {
         "code=$({})",
         curl_line(&format!(" -o body.json -w '%{{http_code}}'{data}"), path)
     )
-}
-
-/// The comment at the end of a line that sends a request at which Palette saves something. It
-/// says what Palette saves, so that a person knows it before the line runs.
-fn saves_comment(saves: Saves) -> String {
-    format!("   # {}", saves.describe())
 }
 
 /// The `curl` that reads `path` of Palette.

@@ -10,9 +10,10 @@ use serde_json::Value;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::{Described, legend};
 use strata_preflight::confidence::RunResult;
+use strata_preflight::curl::Saves;
 use strata_preflight::probe::Verdict;
 use strata_preflight::rule::{
-    Check, CheckKind, EvidenceKind, Level, Owner, Saves, Severity, Status, Tier,
+    Check, CheckKind, EvidenceKind, Level, Owner, Severity, Status, Tier,
 };
 use strata_preflight::world::cloud_list;
 

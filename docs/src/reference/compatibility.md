@@ -283,7 +283,8 @@ each new field, and a pattern with no `..` must name it:
 
 After 0.32.2, the module `curl` of `strata-preflight` is public. `curl::KEY_LINE_BREAK` is the
 message of a `reproduce` line that runs no `curl`, because the key of Palette holds a line break.
-`rule::Saves` is a new closed set, and `rule::PaletteCheck` has its field `saves`: see
+`curl::Saves` is a new closed set, and `rule::PaletteCheck` has its field `saves`. The jq engine
+has the filter `saves_comment`, named by `jq::SAVES_COMMENT`: see
 [Release 0.33.0](#release-0330-changes-that-need-action).
 
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
@@ -1048,11 +1049,13 @@ field, a value, an input, or an option is in the sections above.
   - The line checks the key first, with `[[ ]]`. A key with a line break stops the line before
     `curl`, with `the key of Palette holds a line break`, and the line exits `1`. In the config,
     the line puts a `\` before each `\` and each `"` of the key.
-- **`strata preflight`: a line that sends `validate/repave` says what Palette saves.** At that
-  route, Palette saves the address of the console of a pack of virtual machines. See
+- **`strata preflight`: a line that sends `validate/repave` says what Palette saves.** Palette can
+  save the address of a console there. See
   [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
   - The lines of `engine-repave-rules`, `eks-repave-answers`, and `gke-repave-answers` end
     with a comment that says it. So does the line that the report adds for the check of each.
+  - `rules[].reproduce` of `--rules --json` holds the template
+    `{{ saves_comment("console-address") }}` in place of the comment. The report fills it.
   - The check of each of the three rules has `saves: console-address` in `--rules --json`.
 - **The report of an offline run says `offline` after the tiers.** The first line
   of the terminal report reads `tiers static, offline`. The markdown and the HTML
@@ -1116,7 +1119,7 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata-preflight
 
-- `rule::PaletteCheck` has the new field `saves: Option<rule::Saves>`, what Palette saves at the
+- `rule::PaletteCheck` has the new field `saves: Option<curl::Saves>`, what Palette saves at the
   request of the check. A struct literal must set it to `None`, and a pattern with no `..` must
   name it. A rule file takes `saves: console-address` in a check of kind `palette`.
 - `report::Options` has the new field `offline: bool`. A literal must set it.

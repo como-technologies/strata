@@ -4469,8 +4469,15 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
     );
     assert_eq!(
         sent[1],
-        serde_json::json!({"profiles": [{"uid": "p-k8s"}, {"uid": "p-vmo"}]}),
-        "the second question sends the values of the cluster"
+        serde_json::json!({"profiles": [
+            {"uid": "p-k8s"},
+            {"uid": "p-vmo", "packValues": [
+                {"name": "virtual-machine-orchestrator", "tag": "4.6.0", "type": "spectro",
+                 "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
+                {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
+            ]},
+        ]}),
+        "the second question sends the values of the cluster, and not the profile by its uid alone"
     );
     assert_eq!(sent.len(), 2);
     let forwards = std::fs::read_to_string(stage.path("routes/sent/curl.args")).unwrap();
@@ -4487,6 +4494,30 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         forwards.iter().all(|l| !l.contains("--config")),
         "a read of the console sends no key: {forwards:?}"
     );
+
+    // Palette answers the route of a cluster that a template governs with no reasons, and saves
+    // nothing. A forward with no record answers 404, and it reaches no console.
+    let cluster = std::fs::read_to_string(
+        stage
+            .path("routes")
+            .join(Stage::route_key(&cluster_route("v-1"))),
+    )
+    .unwrap();
+    stage.route(
+        &cluster_route("v-1"),
+        &cluster.replacen(
+            r#"{"spec":{"#,
+            r#"{"spec":{"clusterTemplate":{"uid":"t-1"},"#,
+            1,
+        ),
+    );
+    executable(
+        &stage.path("routes/v1_tenantApps_f-1_.sh"),
+        "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
+    );
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_ne!(o.status.code(), Some(0), "{steps}");
+    failed(&steps, &["vmo-runs", "vmo-before", "vmo-back"]);
 }
 
 /// A `strata` for pending.sh. An update waits for cluster A while the log of the stand-in curl

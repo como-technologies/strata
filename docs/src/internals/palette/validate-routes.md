@@ -199,7 +199,7 @@ This route says whether a change of the profiles of a cluster replaces its
 nodes. The body is the `v1SpectroClusterPacksEntity` of `validate/packs`.
 `compare --repave` sends it, and so do the checks of `engine-repave-rules`,
 `eks-repave-answers`, and `gke-repave-answers`. The request changes no setting
-of the cluster. For a pack of virtual machines, Palette saves one record: see
+of the cluster. For a pack of virtual machines, Palette saves a record: see
 [What the route saves](#what-the-route-saves).
 
 Palette builds the target cluster from the body. These facts come from the
@@ -224,13 +224,17 @@ pack that repaves the cluster.
 ### What the route saves
 
 These facts come from the code of Palette, not from a live run. Palette builds
-the cluster as it is now, and the target, in the form that it gives to the
-agent of the cluster. When a build holds one of three packs, it saves one record
-for each such pack: `virtual-machine-orchestrator`, its older name
-`spectro-vm-dashboard`, and `vm-migration-assistant`. The console reaches the
-service of the pack at an address of its own, and the record holds the address
-that it forwards to. A cluster and a body with none of the three packs get no
-record.
+the cluster as it is now, and then the target, in the form that it gives to the
+agent of the cluster. Each build saves at most two records. One is for the
+console of `virtual-machine-orchestrator`, or of its older name
+`spectro-vm-dashboard`. The other is for the console of
+`vm-migration-assistant`.
+
+The console reaches the service of the pack at an address of its own,
+`/v1/tenantApps/<key>` under the address of Palette. Palette makes the key from
+the service and the cluster uid. The record holds the address that the console
+forwards to. A request to the console address needs no key of Palette. A
+cluster and a body with none of the three packs get no record.
 
 - The address is the value `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`
   of the pack. With no such value, Palette makes the address from the
@@ -246,10 +250,26 @@ record.
   run it.
 - When the cluster runs the pack, a body without its values does not stop the
   save: the build of the cluster saves the record.
+- A body can name the profile of the pack by its uid alone, with no
+  `packValues`. Then the two builds share the packs of that profile, unless
+  Palette adds a dependency pack to it. When the values of the cluster hold no
+  `consoleBaseAddress`, the build of the cluster writes the console address
+  into them. The build of the target reads it, and saves the console address as
+  the address to forward to. So the console forwards to itself until the agent
+  reads the cluster again.
+- Palette answers a cluster that a cluster template governs with no reasons, and
+  saves no record. `compare --repave` asks the route of the template for such a
+  cluster.
 
 `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` asks the same
-question about one cluster of the template, so it saves the same record for that
-cluster. `POST /v1/spectroclusters/{cloudType}/validate` saves no record.
+question about one cluster of the template, with each profile by its uid alone.
+So it saves the same records for that cluster, and it can save the console
+address itself, as above. With more than one cluster, the cluster can change
+from one request to the next. A template with no cluster gets no record.
+`POST /v1/spectroclusters/{cloudType}/validate` saves no record.
+
+The forward of the console keeps the address that it read for up to 15
+minutes. So a new record shows at the console address only after that time.
 
 A line of a report that sends this route says what Palette saves, in a comment:
 see [The reproduce lines](../../reference/preflight-rules.md#the-reproduce-lines).

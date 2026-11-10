@@ -1,9 +1,9 @@
 use super::*;
+use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
-use crate::rule::{EvidenceKind, Saves};
+use crate::rule::EvidenceKind;
 use std::time::Duration;
 use strata::api::Method;
-use strata::closed_set::legend::Described;
 
 fn check(
     id: &str,
@@ -281,7 +281,7 @@ rules:
         &subject,
         Some("out"),
     );
-    let comment = format!("\")   # {}", Saves::ConsoleAddress.describe());
+    let comment = format!("\"){}", Saves::ConsoleAddress.comment());
     assert!(lines[1].ends_with(&comment), "{}", lines[1]);
     let validate = c.rule("palette-validate").unwrap();
     let lines = auto_reproduce(

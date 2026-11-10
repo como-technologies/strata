@@ -71,7 +71,13 @@ the cluster keeps its instances. For a cluster or a change with the pack
 `virtual-machine-orchestrator`, `spectro-vm-dashboard`, or
 `vm-migration-assistant`, Palette also saves the address of the console of that
 pack. Other values of the pack move that address until the agent of the cluster
-reads the cluster again: see
+reads the cluster again.
+
+Strata sends a profile that the change does not touch by its uid alone. The
+route of a cluster template takes each profile by its uid alone too. For the
+profile of such a pack, Palette can then save the console address as the
+address to forward to. The console then forwards to itself until the agent
+reads the cluster again. See
 [What the route saves](../../internals/palette/validate-routes.md#what-the-route-saves).
 
 The comment of a pull request asks the same question. See

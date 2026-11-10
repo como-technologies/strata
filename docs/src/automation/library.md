@@ -134,8 +134,9 @@ A program starts from these items:
 | `run::watch`, `run::WatchInputs` | The watch during a build. It needs a `Palette` client. |
 | `fixture::load`, `probe::FixtureBackend`, `probe::run_check` | A world that holds the answers, for the test of a rule of a company. An entry of `_responses` with a status that is not 2xx follows the live backend. A 401, a 403, and a 429 are errors. A 5xx is an answer only when the check names its code. |
 | `world::clouds`, `world::cloud_list` | The texts of the engines of a run, in the order of the help screen. An engine is a cloud of Palette, or `edge`, which Palette names `edge-native`. |
-| `rule::Tier`, `rule::Level`, `rule::Severity`, `rule::Status`, `rule::EvidenceKind`, `rule::CheckKind`, `rule::Owner`, `rule::Saves`, `confidence::RunResult`, `probe::Verdict` | The closed sets of the rule format and of the report. Each is a `strata::closed_set::ClosedSet`, so `as_str` gives the text that a rule file and the report use. |
+| `rule::Tier`, `rule::Level`, `rule::Severity`, `rule::Status`, `rule::EvidenceKind`, `rule::CheckKind`, `rule::Owner`, `curl::Saves`, `confidence::RunResult`, `probe::Verdict` | The closed sets of the rule format and of the report. Each is a `strata::closed_set::ClosedSet`, so `as_str` gives the text that a rule file and the report use. |
 | `curl::KEY_LINE_BREAK` | The message of a `reproduce` line that runs no `curl`, because the key of Palette holds a line break. |
+| `curl::Saves::comment` | The end of a `reproduce` line that sends a request at which Palette saves something. The comment says what Palette saves. The filter `saves_comment` gives it to a line of a rule. |
 | `error::Error` | The one error type. A run that cannot answer is an `Err`, and the command gives exit code `2` for it. |
 
 `examples/library-preflight/` is a separate crate that depends on

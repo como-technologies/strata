@@ -25,12 +25,12 @@
 #      variables, and by tenant.sh, with no variables, with the value 600, and with the value 644
 #      as the control (#132). Then 1.0.1 back. Cluster A takes no update
 #   9  validate/repave saves the address of the console of the VM Orchestrator pack (#717). It
-#      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator,
-#      and it reads the console address of the pack before and after each question. A body
-#      with a mark in consoleBaseAddress moves the console to the mark, which answers 502. A body
-#      with the values of the cluster moves it back. Palette keeps a forward for up to 15
-#      minutes, so the stage waits VMO_WAIT seconds (default 960) before each read that must see
-#      a new address
+#      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator
+#      and no cluster template. It reads the console address of the pack before and after each
+#      question. A body with a mark in consoleBaseAddress moves the console to the mark, which
+#      answers 502. A body with the values of the cluster moves it back. The forward keeps the
+#      address that it read for up to 15 minutes. So the stage waits VMO_WAIT seconds (default
+#      960) before each read that must see a new address
 #
 # AWS and GCP run one upgrade engine, so every answer here agrees with the table. A disagreement
 # needs another engine, such as Edge, and no live run has one. Needs the live example at its baseline with
@@ -181,28 +181,42 @@ vmo_mark=https://strata-live-check.invalid
 # console forwards it to the address that Palette saved.
 forward_status() { curl -sk -m30 -o /dev/null -w '%{http_code}' "$1/"; }
 
+# forwards URL: true when the console address URL reaches a host. The forward finds its record (no
+# 404), the host answers (no 502), and the answer comes in 30 seconds (no 000). A forward to the
+# console address itself goes round until curl stops it.
+forwards() { case "$(forward_status "$1")" in 404|502|000) return 1 ;; esac; }
+
+# vmo_body MARK: the body of a question about the cluster in vmo-cluster.out. Each profile goes by
+# its uid, and the profile of the pack names each of its packs with the values of the cluster. A
+# profile with pack values keeps only the packs that it names. A profile by its uid alone can give
+# the target the values that the build of the cluster wrote, and Palette then saves the console
+# address as the address to forward to. A MARK goes into consoleBaseAddress of the pack.
+vmo_body() {
+  jq --arg p "$vmo_pack" --arg mark "$1" '{profiles: [.spec.clusterProfileTemplates[]
+    | {uid} + (if any(.packs[]; .name == $p) then {packValues: [.packs[] | {name, tag, type, values: (if .name == $p and $mark != ""
+        then (.values | sub("(?<i>[ ]*)consoleBaseAddress:[^\n]*"; "\(.i)consoleBaseAddress: \($mark)")) else .values end)}]}
+      else {} end)]}' vmo-cluster.out
+}
+
 if stage 9 "validate/repave saves the address of the console of the VM Orchestrator pack"; then
   if [ -z "${VMO_CLUSTER:-}" ]; then
     echo "== stage 9 skipped: give VMO_CLUSTER=<uid of a cluster with the pack $vmo_pack>" | tee -a steps.log
   else
     V=$VMO_CLUSTER wait=${VMO_WAIT:-960}
     check vmo-cluster 0 "#717: a read of the cluster $V" -- "$live/api.sh" get "/v1/spectroclusters/$V"
-    check vmo-runs 0 "#717: the cluster runs $vmo_pack, and its values hold consoleBaseAddress" -- \
-      jq -e --arg p "$vmo_pack" 'any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
+    # Palette answers the route of a cluster that a cluster template governs with no reasons, and saves nothing
+    check vmo-runs 0 "#717: the cluster runs $vmo_pack, its values hold consoleBaseAddress, and no cluster template governs it" -- \
+      jq -e --arg p "$vmo_pack" '(.spec.clusterTemplate.uid // "") == "" and any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
     check vmo-summary 0 "#717: the summary of the cluster gives the console address of the service vm-dashboard" -- \
       "$live/api.sh" get "/v1/dashboard/spectroclusters/$V"
     console=$(jq -r '[.status.addOnServices[]? | select(.name == "vm-dashboard") | .endpoint][0] // empty' vmo-summary.out)
     [ -n "$console" ] || die "the summary of cluster $V names no console address of vm-dashboard"
-    # each profile by its uid; the profile of the pack with each of its packs, and the mark in the pack
-    jq --arg p "$vmo_pack" --arg mark "$vmo_mark" '{profiles: [.spec.clusterProfileTemplates[]
-      | {uid} + (if any(.packs[]; .name == $p) then {packValues: [.packs[] | {name, tag, type, values: (if .name == $p
-          then (.values | sub("(?<i>[ ]*)consoleBaseAddress:[^\n]*"; "\(.i)consoleBaseAddress: \($mark)")) else .values end)}]}
-        else {} end)]}' vmo-cluster.out > vmo-mark.json
-    jq '{profiles: [.spec.clusterProfileTemplates[] | {uid}]}' vmo-cluster.out > vmo-own.json
+    vmo_body "$vmo_mark" > vmo-mark.json
+    vmo_body "" > vmo-own.json
     check vmo-mark-body 0 "#717: the body of the question holds the mark in the values of $vmo_pack" -- \
       jq -e --arg mark "$vmo_mark" 'any(.profiles[].packValues[]?; .values | contains("consoleBaseAddress: \($mark)"))' vmo-mark.json
-    check vmo-before 0 "#717: before the question, the console address forwards to the console of the pack, not to a host that is not there" -- \
-      test "$(forward_status "$console")" != 502
+    check vmo-before 0 "#717: before the question, the console address forwards to a host that answers" -- \
+      forwards "$console"
     sleep "$wait"
     check vmo-ask 0 "#717: validate/repave with the mark in the values of $vmo_pack" -- \
       "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-mark.json
@@ -212,8 +226,8 @@ if stage 9 "validate/repave saves the address of the console of the VM Orchestra
     check vmo-own 0 "#717: validate/repave with the values of the cluster: Palette saves the address of the cluster again" -- \
       "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-own.json
     sleep "$wait"
-    check vmo-back 0 "#717: the console address forwards to the console of the pack again" -- \
-      test "$(forward_status "$console")" != 502
+    check vmo-back 0 "#717: the console address forwards to a host that answers again" -- \
+      forwards "$console"
   fi
 fi
 

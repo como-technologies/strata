@@ -432,10 +432,10 @@ impl<A: PaletteApi> Palette<A> {
     /// Palette's answer to whether a change of the profiles of a cluster replaces its nodes:
     /// `POST /v1/spectroclusters/{uid}/validate/repave`.
     ///
-    /// The request changes no setting of the cluster. Palette saves one record: for the pack
-    /// `virtual-machine-orchestrator`, `spectro-vm-dashboard`, or `vm-migration-assistant`, it
-    /// saves the address of the console of the pack. It does so for such a pack that the cluster
-    /// runs, and for one that the body holds.
+    /// The request changes no setting of the cluster. For the pack `virtual-machine-orchestrator`,
+    /// `spectro-vm-dashboard`, or `vm-migration-assistant`, Palette saves the address that the
+    /// console of the pack forwards to. It saves it from the cluster, and then from the body. A
+    /// cluster that a cluster template governs gets no reasons, and Palette saves nothing.
     ///
     /// # Errors
     ///

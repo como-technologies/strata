@@ -1,9 +1,46 @@
-//! The `curl` to Palette that a person runs by hand. A `reproduce` line of a rule starts with it,
-//! through the filter [`PALETTE_CURL`](crate::jq::PALETTE_CURL), and so does each line that the
-//! report adds for a request of a check.
+//! The `curl` to Palette that a person runs by hand, and what Palette saves at its request.
+//!
+//! A `reproduce` line of a rule starts with it, through the filter
+//! [`PALETTE_CURL`](crate::jq::PALETTE_CURL), and so does each line that the report adds for a
+//! request of a check.
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
+use strata::closed_set::impl_closed_set;
 use strata::config::{KEY_VARS, PROJECT_VARS};
+
+/// What Palette saves at a request that only asks a question. The route of the request checks a
+/// body, and it saves a record too.
+///
+/// A check of kind `palette` names it in `saves`. A line that sends the request ends with
+/// [`Saves::comment`], so a person knows it before the line runs.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Saves {
+    /// The address that the console of a pack of virtual machines forwards to, at
+    /// `POST /v1/spectroclusters/{uid}/validate/repave`. Palette saves it from the cluster, and
+    /// then from the body. The address comes from the values of the pack, or Palette makes one.
+    ConsoleAddress,
+}
+
+impl_closed_set!(Saves {
+    ConsoleAddress => "console-address",
+});
+
+impl Saves {
+    /// The end of a line that sends a request at which Palette saves this: three spaces, then a
+    /// comment that says what Palette saves.
+    pub fn comment(self) -> &'static str {
+        match self {
+            Saves::ConsoleAddress => {
+                "   # for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette saves the address of the console of that pack"
+            }
+        }
+    }
+}
 
 /// What the start of a `curl` prints when the key holds a line break, and it then runs no `curl`.
 /// `examples/live/palette-curl.sh` stops with the same words.

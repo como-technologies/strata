@@ -4,9 +4,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strata::api::Method;
 use strata::closed_set::impl_closed_set;
-use strata::closed_set::legend::Described;
 
 use super::Tier;
+use crate::curl::Saves;
 
 /// The method of a check of Palette that names none: a read.
 fn read() -> Method {
@@ -39,41 +39,14 @@ pub struct PaletteCheck {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refusal_codes: Vec<String>,
     /// What Palette saves at the request, when the route saves something. The line of the report
-    /// for the request says it in a comment, and so does each line of the rule that sends it.
-    /// With no value, the route saves nothing.
+    /// for the request ends with [`Saves::comment`]. Each line of the rule that sends the request
+    /// ends with the template of [`SAVES_COMMENT`](crate::jq::SAVES_COMMENT). With no value, the
+    /// route saves nothing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub saves: Option<Saves>,
     /// The program over the world with `.response`. With `each`, it runs one time over the
     /// world with `.responses`: one `{item, response}` for each item, in the order of the list.
     pub expr: String,
-}
-
-/// What Palette saves at a request that only asks a question. The route of the request checks a
-/// body, and it saves a record too.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
-)]
-#[serde(rename_all = "kebab-case")]
-pub enum Saves {
-    /// The address of the console of a pack of virtual machines, at
-    /// `POST /v1/spectroclusters/{uid}/validate/repave`. Palette saves it for each such pack that
-    /// the cluster runs, and for each one that the body holds. The address comes from the values
-    /// of the pack, or Palette makes one.
-    ConsoleAddress,
-}
-
-impl_closed_set!(Saves {
-    ConsoleAddress => "console-address",
-});
-
-impl Described for Saves {
-    fn describe(self) -> &'static str {
-        match self {
-            Saves::ConsoleAddress => {
-                "for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette saves the address of the console of that pack"
-            }
-        }
-    }
 }
 
 /// A command on this machine, as the rule file gives it. [`Check::Exec`] holds it.
