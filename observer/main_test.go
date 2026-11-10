@@ -240,7 +240,8 @@ func TestNoTestGivesAServerAPortThatItClosed(t *testing.T) {
 
 // The kernel can give the port of a closed server to another process at once, and a server there can
 // answer. So no test uses a name after a statement that closes it, such as srv.Close(). A test of "no
-// server" asks testkit.PortZero.
+// server" asks testkit.PortZero. This test finds only a call of Close. It does not find a server that a
+// test stops with a cancel of its context, such as the stop of testkit.StartServer.
 func TestNoTestAsksAServerThatItClosed(t *testing.T) {
 	fset, files := parsedFiles(t)
 	for path, f := range files {

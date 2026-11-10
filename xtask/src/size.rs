@@ -1,6 +1,7 @@
 //! The size limits of `docs/src/development/code.md` for the Rust files of strata, xtask,
 //! strata-preflight, strata-fuzz, strata-report-endpoint, and strata-benches. A module file has at
-//! most 800 lines. A function has at most 80 lines.
+//! most 800 lines. A function has at most 80 lines. The limit of 800 lines also holds for each file
+//! of Go and of JavaScript of the observer.
 
 use std::path::{Path, PathBuf};
 
@@ -83,17 +84,15 @@ fn function_lengths(text: &str) -> Result<Vec<(String, usize)>, syn::Error> {
     Ok(lengths.0)
 }
 
-/// Each Rust file under `src` with its text, in name order. A file `tests.rs` holds only tests, so
-/// it is not in the list: a file of tests can be longer than the limit.
-fn sources(src: &Path) -> Vec<(String, String)> {
-    files_under(src, "rs")
+/// Each file of `paths` with its text, by its path under `dir`.
+fn read_under(dir: &Path, paths: Vec<PathBuf>) -> Vec<(String, String)> {
+    paths
         .into_iter()
-        .filter(|path| path.file_name().is_some_and(|name| name != "tests.rs"))
         .map(|path| {
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             (
-                path.strip_prefix(src)
+                path.strip_prefix(dir)
                     .unwrap_or(&path)
                     .display()
                     .to_string(),
@@ -103,14 +102,53 @@ fn sources(src: &Path) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The module files under `src` with more than [`MODULE_LINES`] lines, each with its count.
-fn long_modules(src: &Path) -> Vec<String> {
-    sources(src)
+/// Each Rust file under `src` with its text, in name order. A file `tests.rs` holds only tests, so
+/// it is not in the list: a file of tests can be longer than the limit.
+fn sources(src: &Path) -> Vec<(String, String)> {
+    let paths = files_under(src, "rs")
+        .into_iter()
+        .filter(|path| path.file_name().is_some_and(|name| name != "tests.rs"))
+        .collect();
+    read_under(src, paths)
+}
+
+/// Each file of Go and of JavaScript under `dir` with its text, in name order. A file that holds
+/// only tests is not in the list, so it can be longer than the limit.
+fn observer_sources(dir: &Path) -> Vec<(String, String)> {
+    let mut paths: Vec<PathBuf> = ["go", "js"]
+        .into_iter()
+        .flat_map(|ext| files_under(dir, ext))
+        .filter(|path| !holds_only_tests(dir, path))
+        .collect();
+    paths.sort();
+    read_under(dir, paths)
+}
+
+/// True when the file `path` of the observer at `dir` holds only tests: its name ends in
+/// `_test.go`, or a directory `testdata` holds it.
+fn holds_only_tests(dir: &Path, path: &Path) -> bool {
+    path.file_name()
+        .is_some_and(|name| name.to_string_lossy().ends_with("_test.go"))
+        || path
+            .strip_prefix(dir)
+            .unwrap_or(path)
+            .components()
+            .any(|part| part.as_os_str() == "testdata")
+}
+
+/// The files of `files` with more than [`MODULE_LINES`] lines, each with its count.
+fn long_files(files: &[(String, String)]) -> Vec<String> {
+    files
         .iter()
         .map(|(file, text)| (file, text.lines().count()))
         .filter(|(_, lines)| *lines > MODULE_LINES)
         .map(|(file, lines)| format!("{file}: {lines} lines"))
         .collect()
+}
+
+/// The module files under `src` with more than [`MODULE_LINES`] lines, each with its count.
+fn long_modules(src: &Path) -> Vec<String> {
+    long_files(&sources(src))
 }
 
 /// The functions under `src` with more than [`FUNCTION_LINES`] lines, outside the unit tests that
@@ -156,6 +194,11 @@ fn endpoint_src() -> PathBuf {
 /// The directory of the source files of strata-benches.
 fn benches_src() -> PathBuf {
     crate::repository().join("benches/src")
+}
+
+/// The directory of the observer, with its Go and the scripts of its page.
+fn observer_dir() -> PathBuf {
+    crate::repository().join("observer")
 }
 
 #[test]
@@ -228,6 +271,33 @@ fn no_module_file_of_strata_benches_has_more_than_800_lines() {
 fn no_function_of_strata_benches_has_more_than_80_lines() {
     let long = long_functions(&benches_src());
     assert!(long.is_empty(), "divide these functions: {long:?}");
+}
+
+#[test]
+fn no_file_of_go_or_of_javascript_of_the_observer_has_more_than_800_lines() {
+    let long = long_files(&observer_sources(&observer_dir()));
+    assert!(long.is_empty(), "divide these files: {long:?}");
+}
+
+#[test]
+fn the_check_of_the_observer_finds_a_long_file_and_lets_a_file_of_tests_be_long() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("internal/web/testdata")).unwrap();
+    let at_limit = "x\n".repeat(MODULE_LINES);
+    let over = "x\n".repeat(MODULE_LINES + 1);
+    for (name, text) in [
+        ("main.go", &at_limit),
+        ("long.go", &over),
+        ("internal/web/app.js", &over),
+        ("internal/web/web_test.go", &over),
+        ("internal/web/testdata/render.js", &over),
+    ] {
+        std::fs::write(dir.path().join(name), text).unwrap();
+    }
+    assert_eq!(
+        long_files(&observer_sources(dir.path())),
+        ["internal/web/app.js: 801 lines", "long.go: 801 lines"]
+    );
 }
 
 #[test]
