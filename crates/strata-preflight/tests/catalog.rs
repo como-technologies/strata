@@ -42,6 +42,11 @@ mod common;
 mod process;
 use process::CommandExt;
 
+// The match of a route with a pattern, as xtask matches the routes of the stand-in.
+#[path = "../../../tests/common/route.rs"]
+mod route;
+use route::route_matches;
+
 /// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
 /// rules send it. Its query lifts the default filter of Palette, which drops each type with fewer
 /// than 2 vCPUs or less than 4 GiB of memory (#393).
@@ -2989,17 +2994,6 @@ fn palette_paths(line: &str) -> Vec<String> {
     paths
 }
 
-/// True when `path` is the route `route`. A part of `route` in braces is any one part of `path`.
-fn is_route(route: &str, path: &str) -> bool {
-    let (route, path): (Vec<&str>, Vec<&str>) =
-        (route.split('/').collect(), path.split('/').collect());
-    route.len() == path.len()
-        && route
-            .iter()
-            .zip(&path)
-            .all(|(r, p)| r == p || (r.starts_with('{') && !p.is_empty()))
-}
-
 /// The route of the check of a rule, with what Palette saves there, when the check names it. A
 /// line of the rule can send a `POST` to this route when it says what Palette saves.
 fn saving_route(rule: &Rule) -> Option<(String, Saves)> {
@@ -3053,8 +3047,8 @@ fn change_in(line: &str, saving: Option<(&str, Saves)>) -> Option<String> {
         let says = |saves: Saves| line.ends_with(saves.comment());
         let paths = palette_paths(line);
         if let Some(path) = paths.iter().find(|path| {
-            !POST_READS.iter().any(|route| is_route(route, path))
-                && !saving.is_some_and(|(route, saves)| is_route(route, path) && says(saves))
+            !POST_READS.iter().any(|route| route_matches(route, path))
+                && !saving.is_some_and(|(route, saves)| route_matches(route, path) && says(saves))
         }) {
             return Some(format!(
                 "a POST to {path}, which is not a route that saves nothing"
