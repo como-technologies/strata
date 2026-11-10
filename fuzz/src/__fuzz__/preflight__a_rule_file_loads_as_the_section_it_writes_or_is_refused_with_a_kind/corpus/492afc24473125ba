@@ -1,0 +1,170 @@
+section: kubernetes
+title: Kubernetes version and engine
+about: |
+  The Kubernetes version, the release channel, and what each engine does with a change of the
+  version or of the pack values.
+rules:
+- id: gke-no-release-channel
+  title: A GKE cluster names a release channel
+  engines:
+  - gke
+  tier: static
+  level: preflight
+  severity: fail
+  promotion:
+    bar: 0.8
+    runs:
+    - 20260929T043631Z
+  status: seen
+  releases: <4.11
+  what: |
+    Palette release-4.10.0 sets no release channel on the GKE control plane, and GCP refuses a
+    cluster in no channel for a new customer. The status says "control plane nodes addition done";
+    GCP refuses `CreateCluster` every 3 seconds, and only the events name it. The cluster-level
+    passthrough `overrideClusterAPIConfig` with `gcpManagedControlPlane.spec.releaseChannel` sets
+    one. A later fix sets a default channel; the range of this rule ends at the release that
+    carries it.
+  check:
+    kind: static
+    expr: |
+      if ((.entity.spec.cloudConfig.overrideClusterAPIConfig // "") | test("releaseChannel"))
+      then []
+      else ["no release channel: set overrideClusterAPIConfig to gcpManagedControlPlane.spec.releaseChannel: regular (or rapid, stable)"] end
+  fix:
+    owner: palette
+    text: Backport the three fixes of the default channel to the 4.10 line.
+  reproduce:
+  - gcloud logging read 'protoPayload.methodName="google.container.v1.ClusterManager.CreateCluster" severity>=WARNING' --project {{ .entity.spec.cloudConfig.project }} --freshness=1h --limit 3 --format='value(timestamp,protoPayload.status.message)'
+  evidence:
+  - kind: run
+    ref: '#90'
+    note: 50 minutes with no error in the status; the override built the cluster in 18 minutes
+  - kind: run
+    ref: 20260929T043631Z
+    note: the plan made the fault and the check found it; the clean entity passed
+  - kind: report
+    ref: palette-gke-release-channel-findings-2026-09-28
+  - kind: source
+    note: Palette sets the release channel of the GKE control plane from the cluster config
+  tests:
+  - fault: fixtures/gke/no-channel.json
+    clean: fixtures/gke/clean.json
+- id: gke-version-not-offered
+  title: GKE offers the Kubernetes version of the pack in the release channel
+  engines:
+  - gke
+  tier: cloud
+  severity: fail
+  status: source
+  when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
+  what: |
+    Palette takes the major.minor of the `kubernetes-gke` pack and asks GKE for the newest valid
+    version with that prefix. It looks in the release channel of the cluster first, then in
+    `validMasterVersions`. When no version matches, the build fails with "no compatible GKE
+    version present". A version from the fallback is outside the channel, and GKE refuses it. A
+    pack version with a patch (three parts) goes to GKE as it is, and GKE must offer that exact
+    version. The channel is `regular`, or the one that `overrideClusterAPIConfig` names.
+  check:
+    kind: exec
+    needs:
+    - gcloud
+    argv:
+    - gcloud
+    - container
+    - get-server-config
+    - --location
+    - '{{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }}'
+    - --project
+    - '{{ .entity.spec.cloudConfig.project }}'
+    - --format
+    - json
+    expr: |
+      def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0];
+      def channel: (.entity.spec.cloudConfig.overrideClusterAPIConfig // "")
+        | if test("releaseChannel:\\s*rapid"; "i") then "RAPID"
+          elif test("releaseChannel:\\s*stable"; "i") then "STABLE"
+          elif test("releaseChannel:\\s*extended"; "i") then "EXTENDED"
+          else "REGULAR" end;
+      def offers($want; $exact): [ .[] | select(if $exact then (. == $want or startswith($want + "-")) else startswith($want + ".") end) ];
+      def minors: [ .[] | semver_numbers // split(".") | .[:2] | map(tostring) | join(".") ] | unique;
+      if .exec.exit != 0 then ["gcloud container get-server-config failed: \(.exec.stderr | .[:200])"]
+      else
+        k8s as $v
+        | if $v == null then [] else
+          ($v | semver_numbers // split(".")) as $parts
+          | (($parts | length) >= 3) as $exact
+          | ($parts | if $exact then . else .[:2] end | map(tostring) | join(".")) as $want
+          | channel as $ch
+          | ([ (.exec.stdout.channels // [])[] | select(.channel == $ch) | (.validVersions // [])[] ]) as $in_channel
+          | (.exec.stdout.validMasterVersions // []) as $master
+          | (.entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region) as $loc
+          | if (($in_channel | offers($want; $exact)) | length) > 0 then []
+            elif (($master | offers($want; $exact)) | length) > 0
+            then ["channel \($ch) in \($loc) offers no Kubernetes \($want); Palette falls back to validMasterVersions, and GKE refuses a version outside the channel; channel \($ch) offers \($in_channel | minors | join(", "))"]
+            else ["GKE in \($loc) offers no Kubernetes \($want) in channel \($ch) and none in validMasterVersions: the build fails with 'no compatible GKE version present'; channel \($ch) offers \($in_channel | minors | join(", "))"]
+            end
+          end
+      end
+  reproduce:
+  - gcloud container get-server-config --location {{ .entity.spec.cloudConfig.managedClusterConfig.location // .entity.spec.cloudConfig.region }} --project {{ .entity.spec.cloudConfig.project }} --format json | jq '.channels[] | {channel, validVersions}'
+  fix:
+    owner: palette
+    text: Call getServerConfig in the GKE validate route, and refuse a version the channel does not offer.
+  evidence:
+  - kind: source
+    note: Palette matches major.minor against the versions of the channel, then against validMasterVersions, and gives an error when none matches
+  tests:
+  - fault: fixtures/gke/version-not-offered.json
+    clean: fixtures/gke/gke-version-not-offered-clean.json
+- id: eks-version-not-offered
+  title: EKS offers the Kubernetes version of the pack in the region
+  engines:
+  - eks
+  tier: cloud
+  severity: fail
+  status: source
+  when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
+  what: |
+    The `kubernetes-eks` pack names a major.minor, and EKS must offer it in the region. A
+    version that EKS does not offer fails the create with `unsupported Kubernetes version`, after
+    Palette has made the VPC and the roles. Palette does not ask EKS before the create.
+    `aws eks describe-cluster-versions` lists what the region offers, with the support status of
+    each version; the command needs AWS CLI 2.22 or later.
+  check:
+    kind: exec
+    needs:
+    - aws
+    argv:
+    - aws
+    - eks
+    - describe-cluster-versions
+    - --region
+    - '{{ .entity.spec.cloudConfig.region }}'
+    - --output
+    - json
+    expr: |
+      def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0];
+      if .exec.exit != 0 then ["aws eks describe-cluster-versions failed (the command needs AWS CLI 2.22 or later): \(.exec.stderr | .[:200])"]
+      else
+        k8s as $v
+        | if $v == null then [] else
+          ($v | semver_numbers // split(".") | .[:2] | map(tostring) | join(".")) as $want
+          | ([ (.exec.stdout.clusterVersions // [])[] | .clusterVersion ]) as $offered
+          | .entity.spec.cloudConfig.region as $r
+          | if ($offered | index($want)) != null then []
+            else ["EKS in \($r) offers no Kubernetes \($want): the create fails with 'unsupported Kubernetes version'; it offers \($offered | join(", "))"] end
+          end
+      end
+  reproduce:
+  - aws eks describe-cluster-versions --region {{ .entity.spec.cloudConfig.region }} --query 'clusterVersions[].[clusterVersion,status]' --output table
+  fix:
+    owner: palette
+    text: Check the version against eks:DescribeClusterVersions in the EKS validate route.
+  evidence:
+  - kind: doc
+    ref: https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeClusterVersions.html
+  - kind: source
+    note: the version of the pack goes to the AWSManagedControlPlane as it is
+  tests:
+  - fault: fixtures/eks/version-not-offered.json
+    clean: fixtures/eks/eks-version-not-offered-clean.json

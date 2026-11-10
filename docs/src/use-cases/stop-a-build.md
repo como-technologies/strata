@@ -73,7 +73,9 @@ preflight check: the runs prove it on this engine, and the exit code is `1`.
 `NOT CHECKED` is a fault that strata knows and cannot check here: a check that
 needs the tool of the cloud that is not on this machine, or a row with no check
 yet. The `reproduce:` lines say what to run by hand. Each line reads, and changes
-nothing: see [The reproduce lines](../reference/preflight-rules.md#the-reproduce-lines).
+nothing, with one exception. At `validate/repave`, Palette can save the address
+of the console of a pack of virtual machines, and the line says so: see
+[The reproduce lines](../reference/preflight-rules.md#the-reproduce-lines).
 The fix of the CPU floor is on the person: two workers, or a larger type. Change
 the file, run the command again, until it is clean.
 

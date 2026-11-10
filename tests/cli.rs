@@ -9,8 +9,8 @@ use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json, schema,
-    schema_values, snapshot_from_raw, strata_command, write_record,
+    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, isolate_palette,
+    read_json, schema, schema_values, snapshot_from_raw, strata_command, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -1956,6 +1956,40 @@ fn a_name_in_the_file_under_a_uid_in_the_environment_starts_no_lookup() {
     );
 }
 
+/// Strata reads `~/.palette.env` only from a `HOME` that is an absolute path. An empty or a
+/// relative `HOME` names a folder from the working folder, and a checkout can put a file there.
+/// Such a file gives no setting, so it cannot send the key of the environment to its address.
+#[test]
+fn an_empty_or_a_relative_home_reads_no_palette_env_of_the_working_folder() {
+    let work = tempfile::tempdir().unwrap();
+    std::fs::create_dir(work.path().join("home")).unwrap();
+    // strata refuses this setting before the first request, so the kind shows a read of the file
+    for file in [".palette.env", "home/.palette.env"] {
+        std::fs::write(work.path().join(file), "STRATA_MAX_RETRY_AFTER=soon\n").unwrap();
+    }
+    let absolute = work.path().join("home");
+    for (home, kind) in [
+        (Path::new(""), "transport"),
+        (Path::new("home"), "transport"),
+        (Path::new("./home"), "transport"),
+        (absolute.as_path(), "invalid-setting"),
+    ] {
+        let mut c = strata_command();
+        isolate_palette(&mut c, home)
+            .current_dir(work.path())
+            .env("STRATA_QUIET", "1")
+            .args(["list", "--json", "projects"]);
+        let r = Run::of(&mut c);
+        let e: serde_json::Value = serde_json::from_str(r.err.trim())
+            .unwrap_or_else(|_| panic!("HOME={home:?}: {}", r.err));
+        assert_eq!(
+            (r.code, e["error"]["kind"].as_str()),
+            (2, Some(kind)),
+            "HOME={home:?}: {e}"
+        );
+    }
+}
+
 /// A quiet run writes no warning, so it also skips the listing that finds one. With `--json`
 /// a quiet run writes one JSON object to standard error and nothing else, which a caller reads.
 #[test]
@@ -2080,6 +2114,22 @@ fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_reques
     assert!(
         help.out.contains(
             "It takes <name>@<version>, a profile uid, cluster:<cluster>, or clustergroup:<group>"
+        ),
+        "{}",
+        help.out
+    );
+}
+
+/// Palette can save the address of the console of a pack of virtual machines at the request of
+/// `--repave`. So the help says it before a person sends the request (#717).
+#[test]
+fn the_help_of_repave_says_what_palette_saves_at_the_request() {
+    let help = run(&["compare", "--help"]);
+    assert!(
+        help.out.contains(
+            "With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or \
+             vm-migration-assistant on either side, Palette can save the address that the \
+             console of that pack forwards to, and the question can move it"
         ),
         "{}",
         help.out

@@ -106,7 +106,6 @@ fn behind_refused(r: &mut Runner) {
         "aws-stack@1.1.1",
         &[Edit::Upgrade {
             pack: "csi-aws-ebs",
-            uid: "6a75f441d410c3b5762fed2d",
             version: "1.63.1",
         }],
     );

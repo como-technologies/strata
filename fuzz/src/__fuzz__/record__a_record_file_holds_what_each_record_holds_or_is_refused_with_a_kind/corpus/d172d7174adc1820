@@ -1,0 +1,75 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "name: certs\nversion: 1.0.0\ntype: add-on\nregistry: Public Repo\nlayers:\n  - name: cert-manager\n    version: 1.21.1\n    values: |\n      pack:\n        namespace: cert-manager\n        access: public\n",
+      "valuesCanon": {
+        "layers": [
+          {
+            "name": "cert-manager",
+            "values": "pack:\n  namespace: cert-manager\n  access: public\n",
+            "version": "1.21.1"
+          }
+        ],
+        "name": "certs",
+        "registry": "Public Repo",
+        "type": "add-on",
+        "version": "1.0.0"
+      },
+      "valuesHash": "dea66143cf4c570f1bd9a72c5ea5280f0229158d5752dcd2182044f41b86dcd6",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "name: certs\nversion: 1.0.0\ntype: add-on\nregistry: Public Repo\nlayers:\n  - name: cert-manager\n    version: 1.21.1\n    values: |\n      pack:\n        namespace: cert-manager\n        access: public\n",
+          "contentHash": "dea66143cf4c570f1bd9a72c5ea5280f0229158d5752dcd2182044f41b86dcd6"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "8d88a83b94be29645f47bcef712ca810a1ee611971b9cb999fe20b2ddc5ee43d",
+        "node": "f8075323b26f8ffe975f51e9ea37b48fbb76a5dbb549a7e54501b3df2238eb6a"
+      }
+    }
+  ],
+  "root": "08cf136fb8ecded023aba08a237454ded4d34bbe3de2cffa2f1c2dda2978d35c",
+  "contentDigest": "88eccfe7e4ec5a7d508a453f1c73f3555885c4eae134196c4d031eaa510b3eff"
+}

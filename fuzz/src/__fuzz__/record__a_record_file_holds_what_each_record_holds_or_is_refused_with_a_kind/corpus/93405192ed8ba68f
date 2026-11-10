@@ -1,0 +1,65 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "replicas: {{ .spectro.var.replicas }}\n",
+      "valuesCanon": null,
+      "valuesHash": "024934155372bea7898fc4476538476c3311f88497e357c775ec569cbdc6da60",
+      "valuesParseError": "found a mapping or sequence used as a mapping key (unquoted template?)",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "replicas: {{ .spectro.var.replicas }}\n",
+          "contentHash": "024934155372bea7898fc4476538476c3311f88497e357c775ec569cbdc6da60",
+          "contentParseError": "found a mapping or sequence used as a mapping key (unquoted template?)"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "2d7d4788b587094da1c07a6fcf3188452c4efd0510aa14ad47099bb763d79036",
+        "node": "f4efe41ef42cec408a1bd6569d2dd2db9e51281f876e3a06f36cad2edc72d124"
+      }
+    }
+  ],
+  "root": "8ca5ae986ceaa1c1be62bfb156f72c7ffb29538a30552a37941604aa3349853c",
+  "contentDigest": "b48f357f546b808c6f0442c25a1a6fc3ff7399c2b96e689b92284e522d0ae81d"
+}

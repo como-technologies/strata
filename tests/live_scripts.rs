@@ -760,9 +760,11 @@ jq -s '.[0] * {listmeta: .[1].listmeta}' "$FAKE_ROUTES/page-${offset}.json" "$FA
 
 /// A pack of the listing: its name, version, and registry, and the uid and the values of the pack.
 fn listed_pack(name: &str, version: &str, registry: &str) -> serde_json::Value {
-    serde_json::json!({"metadata": {"uid": format!("pk-{name}-{version}")},
-        "spec": {"name": name, "version": version, "registryUid": registry, "type": "spectro",
-            "layer": "addon", "values": format!("values of {name}\n")}})
+    let (uid, values) = (
+        format!("pk-{name}-{version}"),
+        format!("values of {name}\n"),
+    );
+    PackFixture::new(name, "addon", version, &uid, registry, "", &values).summary(&[])
 }
 
 #[test]
@@ -4046,9 +4048,18 @@ fn registry_sh_step_4b_pins_a_profile_with_values_of_its_own_under_the_floating_
     let mut stage = registry_stage(serde_json::json!({}));
     stage.route("/v1/clusterprofiles", r#"{"uid":"fm-1"}"#);
     stage.route("/v1/clusterprofiles/fm-1/publish", "{}");
+    let pack = PackFixture::new(
+        "strata-live-pack",
+        "addon",
+        "1.0.1",
+        "pk-101",
+        "reg-1",
+        "",
+        "",
+    );
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-101"},"spec":{"registryUid":"reg-1","version":"1.0.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.strata(
         "packs strata-live-pack --json",
@@ -4294,9 +4305,10 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
         "/v1/clusterprofiles/validate/packs",
         r#"{"packs":{"results":[]}}"#,
     );
+    let pack = PackFixture::new("cert-manager", "addon", "1.21.1", "pk-1", "reg-pub", "", "");
     stage.route(
         "/v1/packs",
-        r#"{"items":[{"metadata":{"uid":"pk-1"},"spec":{"registryUid":"reg-pub","version":"1.21.1"}}]}"#,
+        &serde_json::json!({"items": [pack.summary(&[])]}).to_string(),
     );
     stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
@@ -4461,6 +4473,233 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
         ],
         "the variable before its use, and its use away before the variable"
     );
+}
+
+/// The forward of the console address of the VM Orchestrator pack in stage 9 of `repave.sh`. The
+/// record answers 502 after a question whose body holds the mark: Palette saved the mark, and it
+/// has no host. It answers 200 before such a question, and after a question with the values of the
+/// cluster. The forward keeps the status that it read for `FORWARD_KEEPS` more reads, as the
+/// forward of Palette keeps the address that it read.
+const FAKE_CONSOLE_FORWARD: &str = r#"#!/usr/bin/env bash
+sent="$FAKE_ROUTES/sent/POST_v1_spectroclusters_v-1_validate_repave"
+status=200
+[ -f "$sent" ] && grep -q 'consoleBaseAddress: https://strata-live-check.invalid' "$sent" && status=502
+kept="$FAKE_ROUTES/forward.kept"
+if [ -s "$kept" ] && read -r was left < "$kept" && [ "$left" -gt 0 ]; then
+  status=$was left=$((left - 1))
+else
+  left=${FORWARD_KEEPS:-0}
+fi
+echo "$status $left" > "$kept"
+echo "$status" > "$FAKE_ROUTES/v1_tenantApps_f-1_.status"
+echo console
+"#;
+
+/// A cluster for stage 9 of `repave.sh`, with three profiles. One has no pack of virtual machines.
+/// One has `cert-manager` and `virtual-machine-orchestrator`, whose values hold
+/// `consoleBaseAddress`. One has `vm-migration-assistant`, whose console address Palette saves too.
+const VMO_CLUSTER: &str = r#"{"spec":{"clusterProfileTemplates":[
+    {"uid":"p-k8s","packs":[{"name":"kubernetes","tag":"1.36.2","type":"spectro","values":"a: 1\n"}]},
+    {"uid":"p-vmo","packs":[
+        {"name":"virtual-machine-orchestrator","tag":"4.6.0","type":"spectro",
+         "values":"charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
+        {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]},
+    {"uid":"p-vma","packs":[{"name":"vm-migration-assistant","tag":"1.2.0","type":"spectro","values":"c: 3\n"}]}]}}"#;
+
+/// A stage for stage 9 of `repave.sh` on the cluster `v-1`, with the document `cluster`. The
+/// summary gives the console address, and `FAKE_CONSOLE_FORWARD` answers at it.
+fn vmo_stage(cluster: &str) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    stage.env("VMO_CLUSTER", "v-1");
+    stage.env("VMO_WAIT", "0");
+    stage.route(&cluster_route("v-1"), cluster);
+    stage.route(
+        "/v1/dashboard/spectroclusters/v-1",
+        r#"{"status":{"addOnServices":[{"name":"vm-dashboard","endpoint":"https://console.example/v1/tenantApps/f-1"}]}}"#,
+    );
+    stage.route(
+        "/v1/spectroclusters/v-1/validate/repave",
+        r#"{"isRepaveRequired":false,"reasons":[]}"#,
+    );
+    executable(
+        &stage.path("routes/v1_tenantApps_f-1_.sh"),
+        FAKE_CONSOLE_FORWARD,
+    );
+    stage
+}
+
+/// Each read of the console address that the stage sent, as the arguments of `curl`.
+fn console_reads(stage: &Stage) -> Vec<String> {
+    std::fs::read_to_string(stage.path("routes/sent/curl.args"))
+        .unwrap()
+        .lines()
+        .filter(|l| l.contains("tenantApps"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_a_mark() {
+    let stage = Stage::new(baseline_outputs());
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.contains("== stage 9 skipped: give VMO_CLUSTER="),
+        "no cluster, no question: {steps}"
+    );
+
+    let stage = vmo_stage(VMO_CLUSTER);
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "vmo-cluster",
+            "vmo-runs",
+            "vmo-summary",
+            "vmo-mark-body",
+            "vmo-before",
+            "vmo-ask",
+            "vmo-ask-ok",
+            "vmo-saved",
+            "vmo-own",
+            "vmo-own-ok",
+            "vmo-back",
+        ],
+    );
+    let sent = stage.sent("POST", "/v1/spectroclusters/v-1/validate/repave");
+    assert_eq!(
+        sent[0],
+        serde_json::json!({"profiles": [
+            {"uid": "p-k8s"},
+            {"uid": "p-vmo", "packValues": [
+                {"name": "virtual-machine-orchestrator", "tag": "4.6.0", "type": "spectro",
+                 "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: https://strata-live-check.invalid\n"},
+                {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
+            ]},
+            {"uid": "p-vma", "packValues": [
+                {"name": "vm-migration-assistant", "tag": "1.2.0", "type": "spectro", "values": "c: 3\n"},
+            ]},
+        ]}),
+        "each profile with a pack of virtual machines names each of its packs, so the target keeps \
+         them, and the console of vm-migration-assistant does not move"
+    );
+    assert_eq!(
+        sent[1],
+        serde_json::json!({"profiles": [
+            {"uid": "p-k8s"},
+            {"uid": "p-vmo", "packValues": [
+                {"name": "virtual-machine-orchestrator", "tag": "4.6.0", "type": "spectro",
+                 "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
+                {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
+            ]},
+            {"uid": "p-vma", "packValues": [
+                {"name": "vm-migration-assistant", "tag": "1.2.0", "type": "spectro", "values": "c: 3\n"},
+            ]},
+        ]}),
+        "the second question sends the values of the cluster, and not the profile by its uid alone"
+    );
+    assert_eq!(sent.len(), 2);
+    let forwards = console_reads(&stage);
+    assert_eq!(
+        forwards.len(),
+        3,
+        "a read before and after each question: {forwards:?}"
+    );
+    assert!(
+        forwards.iter().all(|l| !l.contains("--config")),
+        "a read of the console sends no key: {forwards:?}"
+    );
+}
+
+/// The forward of Palette keeps the address that it read, usually for at most 15 minutes, and in
+/// some cases until Palette starts it again. So stage 9 reads the console again after each
+/// question, for at most `VMO_WAIT` seconds. When no read passes, it names the forward as a cause.
+#[test]
+fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address_that_it_read() {
+    let mut stage = vmo_stage(VMO_CLUSTER);
+    stage.env("VMO_WAIT", "10");
+    stage.env("FORWARD_KEEPS", "2");
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["vmo-before", "vmo-saved", "vmo-back"]);
+    let saved = std::fs::read_to_string(stage.path("out/vmo-saved.out")).unwrap();
+    assert_eq!(
+        saved, "200\n200\n502\n",
+        "the forward keeps the host for two reads"
+    );
+    let back = std::fs::read_to_string(stage.path("out/vmo-back.out")).unwrap();
+    assert_eq!(
+        back, "502\n502\n200\n",
+        "the forward keeps the mark for two reads"
+    );
+    assert_eq!(console_reads(&stage).len(), 7);
+    assert!(!steps.contains("The forward of Palette"), "{steps}");
+
+    let mut stage = vmo_stage(VMO_CLUSTER);
+    stage.env("VMO_WAIT", "10");
+    stage.env("FORWARD_KEEPS", "99");
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_ne!(o.status.code(), Some(0), "{steps}");
+    failed(&steps, &["vmo-saved"]);
+    assert!(
+        steps.contains(
+            "== vmo-saved: no read in 10 seconds reached the mark. The forward of Palette can keep \
+             the address that it read before the question. Then the console forwards there until \
+             Palette starts the forward service again"
+        ),
+        "{steps}"
+    );
+    let saved = std::fs::read_to_string(stage.path("out/vmo-saved.out")).unwrap();
+    assert_eq!(saved, "200\n200\n200\n", "three reads in 10 seconds");
+}
+
+/// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
+/// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
+/// with no `virtual-machine-orchestrator` holds no mark, so the question shows nothing. A console
+/// that reaches no host before the question shows nothing after it.
+#[test]
+fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fails() {
+    let template = VMO_CLUSTER.replacen(
+        r#"{"spec":{"#,
+        r#"{"spec":{"clusterTemplate":{"uid":"t-1"},"#,
+        1,
+    );
+    let dashboard = VMO_CLUSTER.replace(
+        r#""name":"virtual-machine-orchestrator""#,
+        r#""name":"spectro-vm-dashboard""#,
+    );
+    for (cluster, forward, fails, reads) in [
+        (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (dashboard.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (
+            VMO_CLUSTER,
+            "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
+            "vmo-before",
+            1,
+        ),
+    ] {
+        let stage = vmo_stage(cluster);
+        executable(&stage.path("routes/v1_tenantApps_f-1_.sh"), forward);
+        let (o, steps) = stage.run("repave.sh", &["9"]);
+        assert_ne!(o.status.code(), Some(0), "{steps}");
+        failed(&steps, &[fails]);
+        assert!(
+            steps.contains(
+                "== stage 9 stopped: a check failed before the first question, so the stage asks \
+                 Palette nothing"
+            ),
+            "{steps}"
+        );
+        assert!(
+            stage
+                .sent("POST", "/v1/spectroclusters/v-1/validate/repave")
+                .is_empty(),
+            "{fails}: no question"
+        );
+        assert_eq!(console_reads(&stage).len(), reads, "{fails}: {steps}");
+        assert!(!steps.contains("vmo-ask"), "{steps}");
+    }
 }
 
 /// A `strata` for pending.sh. An update waits for cluster A while the log of the stand-in curl
@@ -6604,48 +6843,22 @@ fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list
 /// one that lists aws, one that lists `all`, one with no cloud type, and one of another layer.
 /// `gcp-dns`, which lists gcp alone, is in the listing when `without_aws` is true.
 fn route_packs(without_aws: bool) -> String {
-    let pack =
-        |name: &str, version: &str, registry: &str, layer: &str, clouds: serde_json::Value| {
-            serde_json::json!({"metadata": {"uid": format!("pk-{name}")},
-            "spec": {"name": name, "version": version, "registryUid": registry,
-                "layer": layer, "cloudTypes": clouds}})
-        };
+    let pack = |name: &str, version: &str, registry: &str, layer: &str, clouds: &[&str]| {
+        let uid = format!("pk-{name}");
+        PackFixture::new(name, layer, version, &uid, registry, "", "").summary(clouds)
+    };
     let mut items = vec![
-        pack(
-            "gcp-elsewhere",
-            "1.0.0",
-            "reg-other",
-            "addon",
-            ["gcp"].into(),
-        ),
-        pack(
-            "aws-and-gcp",
-            "3.0.0",
-            "reg-pub",
-            "addon",
-            ["aws", "gcp"].into(),
-        ),
-        pack("all-clouds", "4.0.0", "reg-pub", "addon", ["all"].into()),
-        pack(
-            "no-clouds",
-            "5.0.0",
-            "reg-pub",
-            "addon",
-            serde_json::json!([]),
-        ),
-        pack("gcp-csi", "6.0.0", "reg-pub", "csi", ["gcp"].into()),
-        pack("gloo", "1.2.18", "reg-pub", "addon", ["all"].into()),
-        pack(
-            "generic-vm-libvirt",
-            "1.0.0",
-            "reg-pub",
-            "infra",
-            ["all"].into(),
-        ),
-        pack("cert-manager", "1.21.1", "reg-pub", "addon", ["all"].into()),
+        pack("gcp-elsewhere", "1.0.0", "reg-other", "addon", &["gcp"]),
+        pack("aws-and-gcp", "3.0.0", "reg-pub", "addon", &["aws", "gcp"]),
+        pack("all-clouds", "4.0.0", "reg-pub", "addon", &["all"]),
+        pack("no-clouds", "5.0.0", "reg-pub", "addon", &[]),
+        pack("gcp-csi", "6.0.0", "reg-pub", "csi", &["gcp"]),
+        pack("gloo", "1.2.18", "reg-pub", "addon", &["all"]),
+        pack("generic-vm-libvirt", "1.0.0", "reg-pub", "infra", &["all"]),
+        pack("cert-manager", "1.21.1", "reg-pub", "addon", &["all"]),
     ];
     if without_aws {
-        items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", ["gcp"].into()));
+        items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", &["gcp"]));
     }
     serde_json::json!({"items": items, "listmeta": {"count": items.len()}}).to_string()
 }

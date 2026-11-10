@@ -281,6 +281,12 @@ each new field, and a pattern with no `..` must name it:
 - `diff::ManifestChange` has the field `unified: Option<String>`. The type has no `Default`, so a
   struct literal must set the field to `None`.
 
+After 0.32.2, the module `curl` of `strata-preflight` is public. `curl::KEY_LINE_BREAK` is the
+message of a `reproduce` line that runs no `curl`, because the key of Palette holds a line break.
+`curl::Saves` is a new closed set, and `rule::PaletteCheck` has its field `saves`. The jq engine
+has the filter `saves_comment`, named by `jq::SAVES_COMMENT`: see
+[Release 0.33.0](#release-0330-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -343,6 +349,10 @@ of older releases that the counts omit. `strata-preflight-promotion/1` has
 the run names no `--release`. `strata-preflight-rules/1` has the new keys `refusal_codes` in a
 check of kind `palette`, and `palette` and `also` in a check of kind `exec`. A reader that ignores
 unknown fields reads all three.
+
+After 0.32.2, `strata-preflight-rules/1` has the new key `saves` in a check of kind `palette`,
+with the one value `console-address`. The id stays, and a reader that ignores unknown fields
+reads it. The JSON Schema of `preflight --schema rules` has the new key.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1036,6 +1046,17 @@ field, a value, an input, or an option is in the sections above.
   - `rules[].reproduce` of `--rules --json` holds the template `{{ palette_curl }}`
     in place of the headers. The report fills it.
   - A script that reads the headers of a `curl` line must read the new form.
+  - The line checks the key first, with `[[ ]]`. A key with a line break stops the line before
+    `curl`, with `the key of Palette holds a line break`, and the line exits `1`. In the config,
+    the line puts a `\` before each `\` and each `"` of the key.
+- **`strata preflight`: a line that sends `validate/repave` says what Palette saves.** Palette can
+  save the address of a console there. See
+  [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
+  - The lines of `engine-repave-rules`, `eks-repave-answers`, and `gke-repave-answers` end
+    with a comment that says it. So does the line that the report adds for the check of each.
+  - `rules[].reproduce` of `--rules --json` holds the template
+    `{{ saves_comment("console-address") }}` in place of the comment. The report fills it.
+  - The check of each of the three rules has `saves: console-address` in `--rules --json`.
 - **The report of an offline run says `offline` after the tiers.** The first line
   of the terminal report reads `tiers static, offline`. The markdown and the HTML
   reports use the same words. A script that reads that line gets a new word.
@@ -1054,6 +1075,13 @@ field, a value, an input, or an option is in the sections above.
   - A version of an add-on that the cluster does not run, two clusters, and a
     `cluster:<cluster>/<profile>` ref give what they gave before.
   - To compare each profile of a cluster with a release, compare a record of the cluster.
+- **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
+  `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
+  read the file of a folder from the working folder. So a file of a checkout could
+  give the address that got the key.
+  Now strata reads no file then, and the environment gives each setting. A job with
+  a relative `HOME` must set an absolute path, or give the settings in the
+  environment. See [Settings](./settings.md).
 
 ### For a user of the CI drop-ins
 
@@ -1084,6 +1112,10 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
+  does.** Before, a relative `HOME` read the file of a folder from the working
+  folder. Now, when no variable gives a key, `merge-gate.sh` omits the verify and
+  `preflight.sh` runs offline.
 
 ### For a user of the library of strata
 
@@ -1095,9 +1127,15 @@ field, a value, an input, or an option is in the sections above.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
   `profile` gives a cluster record of the profile that the version replaces. Its
   `source.reference` names that profile. The signature stays.
+- `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
+  Before, it read the file of the working folder, or of a folder from the working
+  folder.
 
 ### For a user of the library of strata-preflight
 
+- `rule::PaletteCheck` has the new field `saves: Option<curl::Saves>`, what Palette saves at the
+  request of the check. A struct literal must set it to `None`, and a pattern with no `..` must
+  name it. A rule file takes `saves: console-address` in a check of kind `palette`.
 - `report::Options` has the new field `offline: bool`. A literal must set it.
   With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
   `Backend::has_palette` gives `false`.

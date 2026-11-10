@@ -13,9 +13,10 @@ use serde_json::Value;
 use super::shape::{JsonType, Path as Field};
 use crate::book::{Mode, Runner};
 use crate::chapters;
-use crate::facts::{Fact, Kind, route_matches};
+use crate::facts::{Fact, Kind};
 use crate::files::files_under;
 use crate::palette::{is_refusal, route_of};
+use crate::route::route_matches;
 
 /// The documents of the stand-in, by route.
 #[derive(Debug, Default)]

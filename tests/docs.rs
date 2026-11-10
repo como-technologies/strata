@@ -1824,6 +1824,74 @@ fn build_test_states_the_rustdoc_packages_the_version_order_and_the_save_of_a_cl
     );
 }
 
+/// The files of `tests/common/` that a package other than the root package includes with
+/// `#[path]`. The path goes up to the root with one `../` for each level of the file.
+fn files_of_tests_common_that_another_package_includes() -> BTreeSet<String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    ["benches", "crates", "examples", "fuzz", "xtask"]
+        .iter()
+        .flat_map(|tree| walk(&root.join(tree)))
+        .filter(|f| f.extension().is_some_and(|e| e == "rs"))
+        .filter(|f| !f.components().any(|c| c.as_os_str() == "target"))
+        .flat_map(|f| {
+            read(&f)
+                .lines()
+                .filter_map(|line| {
+                    let path = line
+                        .trim()
+                        .strip_prefix("#[path = \"")?
+                        .strip_suffix("\"]")?;
+                    let path = path.trim_start_matches("../");
+                    Some(path.strip_prefix("tests/common/")?.to_string())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
+/// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
+/// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
+/// left out.
+#[test]
+fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
+    let included = files_of_tests_common_that_another_package_includes();
+    assert!(
+        included.contains("git.rs") && included.contains("palette.rs"),
+        "the scan finds the includes: {included:?}"
+    );
+    let code = one_line(&read(&docs().join("development/code.md")));
+    let rule = code
+        .split(". ")
+        .find(|s| s.ends_with(" have such users"))
+        .expect("code.md names the files that other packages include");
+    let named: BTreeSet<String> = rule
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(String::from)
+        .collect();
+    assert_eq!(named, included, "the rule of Tests in code.md: {rule}");
+
+    let page = read(&docs().join("development/build-test.md"));
+    let table = section(
+        &page,
+        "## Where the code goes",
+        Some("## Where a script goes"),
+    );
+    let rows: Vec<&str> = table
+        .lines()
+        .filter_map(|line| line.strip_prefix("| ")?.split(" | ").next())
+        .collect();
+    for file in &included {
+        let cell = format!("`tests/common/{file}`");
+        assert!(
+            rows.iter().any(|row| row.contains(&cell)),
+            "the table Where the code goes of build-test.md has no row of {cell}"
+        );
+    }
+}
+
 /// The public items show their comments to each user of the library. So each sentence of the
 /// comments that the review at the end of Wave 12 named has 25 words at most. None has a
 /// phrasal verb that the review named.
@@ -6189,7 +6257,7 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
 ///
 /// A page sends the header to `curl` as a config on standard input, as
 /// `examples/live/palette-curl.sh` does. A line of a report sends it as a config that `printf`
-/// writes into `<( )` (#694).
+/// writes into `<( )` (#694), after the escape of the key (#717).
 #[test]
 fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
     let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/strata-preflight/rules");
@@ -6217,8 +6285,7 @@ fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
                 n + 1
             );
         }
-        if file.starts_with(docs().join("output")) && text.contains("--config <(printf 'header = ")
-        {
+        if file.starts_with(docs().join("output")) && text.contains("&& curl -s --config <(k=") {
             outputs += 1;
         }
         for block in crate::common::code_blocks(&text, "bash") {
@@ -6247,7 +6314,10 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     let lines = one_line(section(&rules, "## The reproduce lines", Some("\n## ")));
     for needle in [
         "each line reads, and changes nothing",
-        "A `POST` goes only to a validate route of Palette",
+        // a `POST` to `validate/repave` can save a record of Palette (#717)
+        "A `POST` goes to a validate route of Palette, which checks the body",
+        "The test of the catalog names each such route that saves nothing",
+        "One route can save a record, `validate/repave`",
         "A line makes no login to a registry or a cloud",
         "A line names no path of the live example, `examples/live`",
         "A rule that only the lab can reproduce says so in such a line",
@@ -6274,6 +6344,56 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
         documents.contains("(./preflight-rules.md#the-reproduce-lines)"),
         "documents.md does not link the reproduce lines"
     );
+}
+
+/// At `validate/repave`, Palette can save the address that the console of a pack of virtual
+/// machines forwards to (#717). A block that says a request or a reproduce line changes nothing
+/// also says what Palette can save there.
+#[test]
+fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_save() {
+    let pages = walk(&docs())
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "md"));
+    for page in pages {
+        let text = one_line(&read(&page));
+        assert!(
+            !text.contains("none of them changes anything"),
+            "{}",
+            page.display()
+        );
+    }
+    for (page, anchor) in [
+        (
+            "reference/palette-api.md",
+            "Eight of the ten `POST` requests change nothing",
+        ),
+        (
+            "reference/documents.md",
+            "Each line reads, and changes nothing",
+        ),
+        (
+            "use-cases/stop-a-build.md",
+            "Each line reads, and changes nothing",
+        ),
+        ("development/live-example.md", "| `tenant.sh` | Lookups"),
+        (
+            "internals/palette/validate-routes.md",
+            "The request changes no setting of the cluster",
+        ),
+        (
+            "automation/pr-comments.md",
+            "The question changes no setting in Palette",
+        ),
+        ("commands/compare/repave.md", "The `POST` asks a question"),
+    ] {
+        let text = block(&read(&docs().join(page)), anchor);
+        assert!(
+            ["Palette can save", "Palette can also save"]
+                .iter()
+                .any(|says| text.contains(says)),
+            "{page}: {text}"
+        );
+    }
 }
 
 // ---- the page of the pipeline of a team (#492) ---------------------------------------------------

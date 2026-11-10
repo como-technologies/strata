@@ -208,8 +208,9 @@ ASD-STE100.
   pins the text of a schema id on purpose can stay, with a comment that says so.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
-  uses. `palette.rs`, `closed_set.rs`, `walk.rs`, and `toml.rs` have such users. A file that uses
-  some of the helpers allows `dead_code` on the include.
+  uses. `answer.rs`, `closed_set.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`, `toml.rs`,
+  and `walk.rs` have such users. A file that uses some of the helpers allows `dead_code` on the
+  include.
 - A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
   does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
   the two give the same route.

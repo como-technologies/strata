@@ -10,6 +10,7 @@ use serde_json::Value;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::{Described, legend};
 use strata_preflight::confidence::RunResult;
+use strata_preflight::curl::Saves;
 use strata_preflight::probe::Verdict;
 use strata_preflight::rule::{
     Check, CheckKind, EvidenceKind, Level, Owner, Severity, Status, Tier,
@@ -30,7 +31,7 @@ use closed_set::{
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value, because a file of an earlier release then
 /// stops loading.
-fn sets() -> [Set; 9] {
+fn sets() -> [Set; 10] {
     [
         set::<Tier>(&["static", "palette", "cloud", "watch", "race", "tool"]),
         set::<Level>(&["probe", "preflight"]),
@@ -38,6 +39,7 @@ fn sets() -> [Set; 9] {
         set::<Status>(&["seen", "source", "inferred", "proposed"]),
         set::<EvidenceKind>(&["run", "source", "doc", "report"]),
         set::<CheckKind>(&["static", "palette", "exec", "watch"]),
+        set::<Saves>(&["console-address"]),
         set::<Owner>(&["palette", "provider", "lab", "strata", "operator", "none"]),
         set::<RunResult>(&["caught", "missed", "passed", "false-fail"]),
         set::<Verdict>(&[

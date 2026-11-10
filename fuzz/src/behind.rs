@@ -15,7 +15,7 @@ use strata::snapshot::{Pack, Snapshot};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
-use crate::routes::{REGISTRY_LISTING, serve_registry_pack};
+use crate::routes::{PackFixture, REGISTRY_LISTING, serve_registry_pack};
 use crate::support::{AGAIN_FILE, AT, RECORD_FILE, answer, raw_profile, scratch, write};
 
 /// The versions above the pinned one that the registry offers, newest first.
@@ -32,12 +32,19 @@ fn registry(pinned: &Pack) -> MemoryApi {
         .enumerate()
         .map(|(i, version)| {
             let uid = format!("build-{i}");
-            let summary = json!({
-                "metadata": {"uid": uid},
-                "spec": {"name": pinned.name, "version": version, "registryUid": pinned.registry_uid,
-                    "layer": pinned.layer, "type": "spectro", "cloudTypes": ["aws"]},
-            });
-            (summary, json!({"tag": version, "packUid": uid}))
+            let pack = PackFixture::new(
+                &pinned.name,
+                &pinned.layer,
+                version,
+                &uid,
+                &pinned.registry_uid,
+                "",
+                "",
+            );
+            (
+                pack.summary(&["aws"]),
+                json!({"tag": version, "packUid": uid}),
+            )
         })
         .unzip();
     let listing = json!({"items": [{"name": "Repo", "uid": pinned.registry_uid, "kind": "pack"}]});

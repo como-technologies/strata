@@ -1,0 +1,102 @@
+section: tools
+title: Client tools
+about: |
+  Rules of the tool that makes the entity, such as the provider, and of the lab. They are out of
+  scope for strata-preflight, and they stay in the catalog so that each fault of the live runs has
+  a row. A lab row with a check that a command on this machine can answer runs as a cloud check.
+rules:
+- id: strata-binary-stale
+  title: The strata binary is newer than its sources
+  engines:
+  - all
+  - lab
+  tier: tool
+  severity: warn
+  status: seen
+  what: |
+    A release binary older than a source file runs old code. A script that you run directly does
+    not build first, so a run can use a binary that lacks an option the script needs. `lib.sh`
+    compares the file times and stops. Run `just build`.
+  reproduce:
+  - 'find src Cargo.toml Cargo.lock -type f -newer target/release/strata -print -quit   # a path means the binary is stale; run just build'
+  fix:
+    owner: lab
+    text: Build before each run; `lib.sh` refuses a stale binary.
+  evidence:
+  - kind: source
+    note: 'the scripts of the live example: `find ... -newer "$strata"` over src, Cargo.toml, and Cargo.lock; a hit stops the script'
+- id: tools-present
+  title: Each tool of the lab is on the PATH
+  engines:
+  - all
+  - lab
+  tier: cloud
+  severity: warn
+  status: seen
+  what: |
+    A missing tool stops a lab run at the step that needs it. The list is the lab's: tofu, jq,
+    just, helm, crane, oras, zarf, kubectl, gcloud, aws. The check prints each name that
+    `command -v` cannot find. A company puts its own list in a probes file.
+  check:
+    kind: exec
+    needs:
+    - sh
+    argv:
+    - sh
+    - -c
+    - for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo $t; done
+    expr: |
+      if .exec.exit != 0 then ["the tool check failed: \(.exec.stderr | tostring | .[:200])"]
+      else [ (.exec.stdout | tostring) | split("\n")[] | select(length > 0) | "\(.) is not on the PATH" ] end
+  reproduce:
+  - for t in tofu jq just helm crane oras zarf kubectl gcloud aws; do command -v $t >/dev/null || echo "$t is missing"; done
+  fix:
+    owner: lab
+    text: Check each tool at the start of a run, before the first step that needs one.
+  evidence:
+  - kind: source
+    note: each script of the live example checks its own tools with `command -v`, and stops on the first missing one
+  tests:
+  - fault: fixtures/eks/tool-missing.json
+    clean: fixtures/eks/tools-present-clean.json
+- id: cloud-cli-auth
+  title: The cloud CLI has live credentials
+  engines:
+  - aws
+  - eks
+  - lab
+  tier: cloud
+  severity: warn
+  status: seen
+  what: |
+    An SSO profile of the AWS CLI expires, and `gcloud` needs a new login after some hours. Each
+    cloud check of this machine then fails or is not run, and the inventory cannot run. The check
+    calls `aws sts get-caller-identity`. For GCP, run `gcloud auth print-access-token` by hand.
+    A row of the lab; it runs wherever the AWS CLI is on the PATH.
+  check:
+    kind: exec
+    needs:
+    - aws
+    argv:
+    - aws
+    - sts
+    - get-caller-identity
+    - --output
+    - json
+    expr: |
+      if .exec.exit != 0 then ["aws sts get-caller-identity failed: \(.exec.stderr | tostring | .[:200]); the AWS CLI has no live credentials, log in again"]
+      elif (.exec.stdout.Account // "") == "" then ["aws sts get-caller-identity gave no Account: \(.exec.stdout | tostring | .[:200])"]
+      else [] end
+  reproduce:
+  - aws sts get-caller-identity
+  - 'gcloud auth print-access-token > /dev/null && echo ''gcloud: logged in'''
+  fix:
+    owner: lab
+    text: Check the credentials of each cloud CLI at the start of a run.
+  evidence:
+  - kind: source
+    ref: docs/src/development/live-example.md Prerequisites
+    note: the token expires, so a run after some hours needs the login again
+  tests:
+  - fault: fixtures/eks/aws-token-expired.json
+    clean: fixtures/eks/cloud-cli-auth-clean.json
