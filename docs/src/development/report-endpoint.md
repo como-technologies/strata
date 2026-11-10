@@ -228,9 +228,8 @@ not deploy it, because a session has no account of Google.
    `secretmanager`, and `iam`, and the secret `strata-report-token`.
 2. Make the two accounts, with the commands of [Make the two accounts](#make-the-two-accounts). A
    person who owns the project does this one time.
-3. Set `STRATA_REPORT_PROJECT` to the id of the project. The script has no default project, and
-   it stops with exit 2 when no project is set. Run `just report-deploy --dry-run`, and read the
-   commands.
+3. Set `STRATA_REPORT_PROJECT` to the id of the project. The script has no default project. With
+   no project, it stops with exit 2. Run `just report-deploy --dry-run`, and read the commands.
 4. Move the issues of an older service to the label of this one, one time.
    See [Move the issues to the label of the service](#move-the-issues-to-the-label-of-the-service).
    Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.

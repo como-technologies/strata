@@ -79,7 +79,7 @@ digests to another tool, behind a trait of that tool.
 
 The package is `strata-palette`, and Rust code names the crate `strata`. The
 name `strata` on crates.io belongs to another crate, so `cargo add strata` gets
-the wrong one. Pin a release tag, and give the name of the package:
+the wrong one. A dependency pins a release tag and names the package:
 
 ```toml
 [dependencies]
