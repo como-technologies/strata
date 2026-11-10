@@ -2176,6 +2176,69 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
     }
 }
 
+/// The entries `key = "value"` of the table `table` of `riff.toml`, such as `[session.env]`.
+fn riff_entries<'a>(riff: &'a str, table: &str) -> Vec<(&'a str, &'a str)> {
+    riff.lines()
+        .skip_while(|line| *line != table)
+        .skip(1)
+        .take_while(|line| !line.starts_with('['))
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let (key, value) = line.split_once(" = ")?;
+            Some((key, value.strip_prefix('"')?.strip_suffix('"')?))
+        })
+        .collect()
+}
+
+/// The value of `key` in the table `table` of `riff.toml`.
+fn riff_value<'a>(riff: &'a str, table: &str, key: &str) -> &'a str {
+    riff_entries(riff, table)
+        .into_iter()
+        .find(|(name, _)| *name == key)
+        .map(|(_, value)| value)
+        .unwrap_or_else(|| panic!("{table} of riff.toml sets no {key}"))
+}
+
+/// The container runtime makes each absent folder above a mount of `riff.toml`, and root owns it:
+/// `$HOME/.cache` for the mount of sccache. Go and `gh` keep their caches in
+/// `XDG_CACHE_HOME`. When it is in such a folder, `go vet` and `gh run view --log-failed` fail in
+/// each session. The book states where each cache goes.
+#[test]
+fn each_cache_of_a_session_is_in_a_folder_that_the_session_can_write() {
+    let riff = repo_file("riff.toml");
+    let (env, volumes) = ("[session.env]", "[session.volumes]");
+    let cargo = riff_value(&riff, env, "CARGO_HOME");
+    let sccache = riff_value(&riff, env, "SCCACHE_DIR");
+    let cache = riff_value(&riff, env, "XDG_CACHE_HOME");
+    assert_eq!(cargo, riff_value(&riff, volumes, "strata-cargo"));
+    assert_eq!(sccache, riff_value(&riff, volumes, "strata-sccache"));
+
+    let home = Path::new("$HOME");
+    for (name, mount) in riff_entries(&riff, volumes) {
+        for folder in Path::new(mount).ancestors().skip(1) {
+            let made = folder.starts_with(home) && folder != home;
+            assert!(
+                !(made && Path::new(cache).starts_with(folder)),
+                "XDG_CACHE_HOME is in {}, which root owns for the mount of {name}",
+                folder.display()
+            );
+        }
+    }
+
+    let page = read(&docs().join("development/changes.md"));
+    let page = one_line(section(&page, "### Where each cache goes", Some("\n## ")));
+    for needle in [
+        format!("`{cargo}`, the volume `strata-cargo`"),
+        format!("`{sccache}`, the volume `strata-sccache`"),
+        format!("The build cache of Go | `{cache}/go-build`"),
+        format!("The cache of `gh`, with the logs of `gh run view` | `{cache}/gh`"),
+        format!("So `riff.toml` sets `XDG_CACHE_HOME` to `{cache}`"),
+        "A session sets no `GOCACHE` and no `GOPATH`.".to_string(),
+    ] {
+        assert!(page.contains(&needle), "changes.md lacks {needle:?}");
+    }
+}
+
 /// Rule 7 tells the author to read the code of Palette first, and still bars a citation of it. The
 /// rule is in the book and in `CLAUDE.md`, and the two must agree.
 #[test]

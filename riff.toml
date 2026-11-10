@@ -18,6 +18,9 @@ SCCACHE_CACHE_SIZE = "20G"
 RUSTC_WRAPPER = "sccache"
 SCCACHE_IDLE_TIMEOUT = "0"
 SCCACHE_IGNORE_SERVER_IO_ERROR = "1"
+# The other caches, such as the build cache of Go and the cache of gh. The container runtime makes
+# $HOME/.cache for the mount of sccache, and root owns it, so a session cannot write there.
+XDG_CACHE_HOME = "/tmp/cache"
 
 [session.volumes]
 strata-cargo = "$HOME/.cargo"
