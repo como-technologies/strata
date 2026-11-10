@@ -1,0 +1,17 @@
+$ strata compare cluster:payments aws-stack@1.1.1 --repave --validate
+aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 (uid 64e0000000000000000000c3)
+root       8a8a64d3f95d -> 088136c929bd   CHANGED
+palette    no repave
+palette    accepts
+consumers  aws-stack@1.1.1 has 1 consumer; payments is not one of them
+
+  variables CHANGED
+        + variable platform_owner (required)
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+~ [addon] cert-manager               1.21.1             AUTHORED
+      + manifest namespace-labels
+      impact: in-place addon upgrade

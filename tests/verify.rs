@@ -12693,6 +12693,130 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     assert!(v.unchanged, "{:?}", v.status);
 }
 
+/// The cluster side and the diff of a comparison of a profile version with the cluster, in each
+/// order of the two refs.
+fn beside_the_cluster(api: &MemoryApi, version: &str) -> Vec<(Snapshot, strata::diff::Diff)> {
+    let cluster = cluster_ref(CLUSTER_UID, None, false);
+    let version = Ref::parse(version);
+    let connect = || Ok(Palette::new(api.clone()));
+    [(&version, &cluster), (&cluster, &version)]
+        .into_iter()
+        .map(|(a, b)| {
+            let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+            let d = ops::compare(&sa, &sb, "t1");
+            let side = if sa.source.cluster.is_some() { sa } else { sb };
+            (side, d)
+        })
+        .collect()
+}
+
+/// A cluster that runs two profiles answers for the profile of the other side (#615). A team asks
+/// whether the cluster runs a version, and not what else it runs.
+#[test]
+fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_replaces() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let (infra, addon) = merged_uids(dir.path());
+    // the profile version of the fixture `fixture`, under the uid `uid` and the name `name`
+    let serve = |api: MemoryApi, fixture: &str, uid: &str, name: &str| {
+        let d = dir.path().join(fixture);
+        let mut doc = read_json(&d.join("profile.json"));
+        doc["metadata"]["uid"] = Value::from(uid);
+        doc["metadata"]["name"] = Value::from(name);
+        let manifests = read_json(&d.join("manifests.json"));
+        serve_profile(
+            api,
+            uid,
+            doc,
+            manifests,
+            read_json(&d.join("variables.json")),
+        )
+    };
+    let (other_stack, other_addons) = ("64f0000000000000000000e5", "64f0000000000000000000e6");
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
+    let api = serve(api, "b", UID_B, "lab-profile");
+    let api = serve(api, "addons", UID_ADDONS, "lab-addons");
+    let api = serve(api, "a", UID_A, "lab-profile");
+    let api = serve(api, "a", other_stack, "other-stack");
+    let api = serve(api, "addons", other_addons, "other-addons");
+    let covered = |side: &Snapshot| {
+        let c = side.source.cluster.as_ref().unwrap();
+        let uids: Vec<String> = c.profiles.iter().map(|p| p.uid.clone()).collect();
+        (uids, side.source.reference.clone())
+    };
+    let addon_pack = |d: &strata::diff::Diff| d.packs.iter().any(|p| p.name == "nginx-ingress");
+
+    // the cluster runs each of its two profiles: the root is that of the version
+    for (uid, name, other) in [
+        (infra.as_str(), "lab-profile", &addon),
+        (addon.as_str(), "lab-addons", &infra),
+    ] {
+        for (side, d) in beside_the_cluster(&api, uid) {
+            let reference = format!("cluster:{CLUSTER_UID}/{name}");
+            assert_eq!(covered(&side), (vec![uid.to_string()], reference));
+            assert!(
+                d.same,
+                "the cluster runs {name}, and {other} is not in the question"
+            );
+        }
+    }
+    // another version of a profile that the cluster runs: only the packs of that profile differ.
+    // The add-on of the cluster gives no ADDED or REMOVED line
+    for (side, d) in beside_the_cluster(&api, UID_A) {
+        assert_eq!(covered(&side).0, [infra.as_str()]);
+        assert!(!d.same, "the cluster runs lab-profile@1.3.0, not 1.2.0");
+        assert!(!addon_pack(&d), "{:?}", d.packs);
+    }
+    // a version of another name that builds a cluster replaces the profile that builds it, as
+    // the body of --repave and --validate says
+    for (side, d) in beside_the_cluster(&api, other_stack) {
+        assert_eq!(covered(&side).0, [infra.as_str()]);
+        assert!(!addon_pack(&d), "{:?}", d.packs);
+    }
+    // an add-on that the cluster does not run replaces nothing: the move adds it, so the cluster
+    // stays whole
+    for (side, d) in beside_the_cluster(&api, other_addons) {
+        assert_eq!(
+            covered(&side),
+            (
+                vec![infra.clone(), addon.clone()],
+                format!("cluster:{CLUSTER_UID}")
+            )
+        );
+        assert!(!d.same);
+    }
+    // two clusters stay whole
+    let connect = || Ok(Palette::new(api.clone()));
+    let whole = cluster_ref(CLUSTER_UID, None, false);
+    let (sa, sb) = ops::snapshot_pair(&whole, &whole, connect, "t1", &Progress::silent()).unwrap();
+    for side in [&sa, &sb] {
+        assert_eq!(covered(side).0, [infra.as_str(), addon.as_str()]);
+    }
+    // a cluster ref that selects a profile keeps its selection
+    let (_, selected) = ops::snapshot_pair(
+        &Ref::parse(UID_ADDONS),
+        &cluster_ref(CLUSTER_UID, Some("lab-profile"), false),
+        connect,
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(covered(&selected).0, [infra.as_str()]);
+    // the update that waits for the cluster keeps the same selection
+    let waits = serve_pending(api.clone(), dir.path(), "cluster-merged", |_| {});
+    let (_, pending) = ops::snapshot_pair(
+        &Ref::parse(UID_ADDONS),
+        &cluster_ref(CLUSTER_UID, None, true),
+        || Ok(Palette::new(waits.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let reference = format!("cluster:{CLUSTER_UID}/lab-addons@pending");
+    assert_eq!(covered(&pending), (vec![addon.clone()], reference));
+    assert!(pending.source.cluster.unwrap().pending);
+}
+
 #[test]
 fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     let dir = tempfile::tempdir().unwrap();
