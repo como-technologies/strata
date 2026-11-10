@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -104,6 +105,46 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 	}
 }
 
+// startCall is the call at the top level of a script that starts the page.
+var startCall = regexp.MustCompile(`(?m)^start\(\);$`)
+
+// index.html loads each script of assets/ once: theme.js in the head, and the scripts of the screens at the end of the
+// body. These scripts share one scope. So the first one holds the template h, and the last one starts the page.
+func TestIndexLoadsEachScriptOnceAndTheScriptThatStartsThePageLast(t *testing.T) {
+	index := string(readPage(t, "index.html"))
+	scripts, err := fs.Glob(files(t), "*.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded []string
+	for _, m := range scriptSrc.FindAllStringSubmatch(index, -1) {
+		loaded = append(loaded, m[1])
+	}
+	if sorted := slices.Sorted(slices.Values(loaded)); !slices.Equal(sorted, scripts) {
+		t.Errorf("index.html loads %v, and assets/ holds the scripts %v", loaded, scripts)
+	}
+	screens := screenScripts(t)
+	var tags []string
+	for _, name := range screens {
+		tags = append(tags, `<script src="`+name+`"></script>`)
+	}
+	if !strings.Contains(index, strings.Join(tags, "\n")+"\n</body>") {
+		t.Errorf("the scripts of the screens %v are not at the end of the body", screens)
+	}
+	if !strings.Contains(string(readPage(t, screens[0])), "const h = ") {
+		t.Errorf("%s loads first, and it does not hold the template h", screens[0])
+	}
+	for i, name := range screens {
+		want := 0
+		if i == len(screens)-1 {
+			want = 1
+		}
+		if got := len(startCall.FindAllString(string(readPage(t, name)), -1)); got != want {
+			t.Errorf("%s calls start() %d times at its top level, want %d: only the last script starts the page", name, got, want)
+		}
+	}
+}
+
 func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 	index, err := fs.ReadFile(files(t), "index.html")
 	if err != nil {
@@ -181,6 +222,8 @@ const svgNamespace = `xmlns="http://www.w3.org/2000/svg"`
 // address, an inline style, an inline script, a value that is not escaped, and a maximum width.
 func problems(files fs.FS) []string {
 	var out []string
+	// screens holds the text of each script of the screens. The rules of the one write of markup count over all of them.
+	var screens []string
 	_ = fs.WalkDir(files, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() || name == "LICENSES.md" || path.Ext(name) == ".woff2" {
 			return err
@@ -202,11 +245,17 @@ func problems(files fs.FS) []string {
 			problemsInImage(text, add)
 		case ".js":
 			problemsInScript(name, text, add)
+			if name != themeScript {
+				screens = append(screens, text)
+			}
 		case ".css":
 			problemsInStyle(text, add)
 		}
 		return nil
 	})
+	if len(screens) > 0 {
+		problemsInScreens(strings.Join(screens, "\n"), func(what string) { out = append(out, "the scripts of the screens: "+what) })
+	}
 	return out
 }
 
@@ -233,11 +282,11 @@ func problemsInImage(text string, add func(string)) {
 	}
 }
 
-// appScript is the script of the screens. It writes markup, so it has the rules for markup. theme.js
-// writes none, and it has the rules below instead.
-const appScript = "app.js"
+// themeScript is the script of the theme, in the head. It writes no markup, and it has the rules below
+// instead. Each other script is a script of the screens. It writes markup, so it has the rules for markup.
+const themeScript = "theme.js"
 
-// themeAttributes are the two attributes that a script other than app.js can set, each with a fixed name.
+// themeAttributes are the two attributes that the script of the theme can set, each with a fixed name.
 var themeAttributes = []string{`"data-theme"`, `"aria-pressed"`}
 
 func problemsInScript(name, text string, add func(string)) {
@@ -249,7 +298,7 @@ func problemsInScript(name, text string, add func(string)) {
 		add("an inline event handler in a string of markup")
 	}
 	banned := []string{"insertAdjacentHTML", "outerHTML", "document.write", "eval(", "new Function", "javascript:", "srcdoc"}
-	if name == appScript {
+	if name != themeScript {
 		banned = append(banned, "setAttribute(")
 	}
 	for _, word := range banned {
@@ -257,9 +306,9 @@ func problemsInScript(name, text string, add func(string)) {
 			add("it uses " + word)
 		}
 	}
-	if name != appScript {
+	if name == themeScript {
 		if strings.Contains(text, "innerHTML") {
-			add("it uses innerHTML: only " + appScript + " writes markup")
+			add("it uses innerHTML: only the scripts of the screens write markup")
 		}
 		for _, m := range setCall.FindAllStringSubmatch(text, -1) {
 			if !slices.Contains(themeAttributes, strings.TrimSpace(m[1])) {
@@ -268,19 +317,24 @@ func problemsInScript(name, text string, add func(string)) {
 		}
 		return
 	}
-	// The one write of markup is put(), and it writes what part() escapes.
+	// raw() marks markup that the code wrote itself, so its argument is a fixed word or entity.
+	for _, m := range rawCall.FindAllStringSubmatch(text, -1) {
+		if !rawArgument.MatchString(strings.TrimSpace(m[1])) {
+			add("raw(" + m[1] + ") holds more than a fixed word")
+		}
+	}
+}
+
+// problemsInScreens checks the scripts of the screens as one text, because the page runs them in one scope. The one write
+// of markup is put(), and it writes what part() escapes.
+func problemsInScreens(text string, add func(string)) {
+	text = jsComment.ReplaceAllString(text, "")
 	if n := strings.Count(text, "innerHTML"); n != 1 || !strings.Contains(text, "el.innerHTML = part(markup);") {
 		add("innerHTML must appear once, in put(), with the value that part() escapes")
 	}
 	for _, pair := range [][2]string{{`"&": "&amp;"`, "&"}, {`"<": "&lt;"`, "<"}, {`">": "&gt;"`, ">"}, {`'"': "&quot;"`, `"`}, {`"'": "&#39;"`, "'"}} {
 		if !strings.Contains(text, pair[0]) {
 			add("e() does not escape " + pair[1])
-		}
-	}
-	// raw() marks markup that the code wrote itself, so its argument is a fixed word or entity.
-	for _, m := range rawCall.FindAllStringSubmatch(text, -1) {
-		if !rawArgument.MatchString(strings.TrimSpace(m[1])) {
-			add("raw(" + m[1] + ") holds more than a fixed word")
 		}
 	}
 }
@@ -351,7 +405,7 @@ const A = raw(" &rarr; ");`
 		{"a style tag in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><style>path{fill:red}</style></svg>`, "an inline style"},
 		{"an address in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg"><image href="https://x.example/a.png"/></svg>`, "an external address"},
 		{"an event attribute in an icon", "favicon-light.svg", `<svg xmlns="http://www.w3.org/2000/svg" onload="go()"></svg>`, "an inline event handler"},
-		{"innerHTML in the script of the theme", "theme.js", `document.body.innerHTML = x;`, "only app.js writes markup"},
+		{"innerHTML in the script of the theme", "theme.js", `document.body.innerHTML = x;`, "only the scripts of the screens write markup"},
 		{"an attribute that is not of the theme", "theme.js", `el.setAttribute("onclick", v);`, "sets more than a fixed attribute"},
 		{"an attribute with a name from a variable", "theme.js", `el.setAttribute(name, v);`, "sets more than a fixed attribute"},
 		{"eval in the script of the theme", "theme.js", `eval(x)`, "it uses eval("},
@@ -376,11 +430,22 @@ const A = raw(" &rarr; ");`
 	if got := problems(clean); len(got) != 0 {
 		t.Errorf("a clean page has problems: %q", got)
 	}
+	// The scripts of the screens count as one text. The escape and the write of markup can be in two scripts, and a write in a
+	// third script is a second write.
+	escape, write, _ := strings.Cut(good, "// raw()")
+	split := fstest.MapFS{"app.js": {Data: []byte(escape)}, "routes.js": {Data: []byte("// raw()" + write)}}
+	if got := problems(split); len(got) != 0 {
+		t.Errorf("a page with the escape and the write of markup in two scripts has problems: %q", got)
+	}
+	split["frame.js"] = &fstest.MapFile{Data: []byte("x.innerHTML = y;")}
+	if got := strings.Join(problems(split), "\n"); !strings.Contains(got, "innerHTML must appear once") {
+		t.Errorf("problems %q, want one with a second write of markup in another script", got)
+	}
 }
 
-/* The tests below run app.js with node, when node is there. A session has no browser, so the lead
-checks the render. These tests stand for the view functions: they fail on a value that reaches the
-page as markup, and on a screen that throws. */
+/* The tests below run the scripts of the page with node, when node is there. A session has no browser,
+so the lead checks the render. These tests stand for the view functions: they fail on a value that
+reaches the page as markup, and on a screen that throws. */
 
 // The tags and the attributes that a screen can hold.
 var (
@@ -423,7 +488,7 @@ func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string
 	return runNodeAssets(t, "assets", apiDir, state, extra...)
 }
 
-// runNodeAssets does the same with the script app.js of another directory. A test uses it to run a changed copy of the script.
+// runNodeAssets does the same with the scripts of another directory. A test uses it to run a changed copy of the scripts.
 func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
 	node, err := exec.LookPath("node")
@@ -970,6 +1035,52 @@ func readPage(t *testing.T, name string) []byte {
 	return raw
 }
 
+// scriptSrc finds the file of each script that index.html loads.
+var scriptSrc = regexp.MustCompile(`<script src="([^"]*)"></script>`)
+
+// screenScripts gives the scripts of the screens: the scripts that the body of index.html loads, in their order. theme.js is
+// the script in the head.
+func screenScripts(t *testing.T) []string {
+	t.Helper()
+	_, body, _ := strings.Cut(string(readPage(t, "index.html")), "</head>")
+	var names []string
+	for _, m := range scriptSrc.FindAllStringSubmatch(body, -1) {
+		names = append(names, m[1])
+	}
+	if len(names) == 0 {
+		t.Fatal("the body of index.html loads no script")
+	}
+	return names
+}
+
+// readScripts gives the text of the scripts of the screens, in the order of index.html. A test that reads the script of the
+// page as text reads all of them, so a count over the page stays a count over the page.
+func readScripts(t *testing.T) string {
+	t.Helper()
+	var texts []string
+	for _, name := range screenScripts(t) {
+		texts = append(texts, string(readPage(t, name)))
+	}
+	return strings.Join(texts, "\n")
+}
+
+// copyScripts writes index.html and each script of the screens to a new directory, and gives the directory. change gives the
+// text to write for the text of a script. runNodeAssets runs the changed copy.
+func copyScripts(t *testing.T, change func(string) string) string {
+	t.Helper()
+	dir := t.TempDir()
+	write := func(name, text string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("index.html", string(readPage(t, "index.html")))
+	for _, name := range screenScripts(t) {
+		write(name, change(string(readPage(t, name))))
+	}
+	return dir
+}
+
 // copyProblem says how a copy differs from its source, or gives "" when it is the same, byte for byte.
 func copyProblem(name string, source, copy []byte) string {
 	if bytes.Equal(source, copy) {
@@ -1072,9 +1183,9 @@ func TestTheChipNewHasTheClassFreshAndItsPink(t *testing.T) {
 	if got, want := ruleOf(string(readPage(t, "app.css")), ".badge.fresh"), "background:light-dark(#fde8f0,#3f1830);color:light-dark(#b01b57,#ff9dbd);"; got != want {
 		t.Errorf("the rule of .badge.fresh is %q, want %q", got, want)
 	}
-	chips := regexp.MustCompile(`<span class="([^"]*)">new</span>`).FindAllSubmatch(readPage(t, "app.js"), -1)
+	chips := regexp.MustCompile(`<span class="([^"]*)">new</span>`).FindAllSubmatch([]byte(readScripts(t)), -1)
 	if len(chips) == 0 {
-		t.Error("app.js has no chip new")
+		t.Error("the scripts have no chip new")
 	}
 	for _, c := range chips {
 		if string(c[1]) != "badge fresh" {
@@ -1222,8 +1333,8 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 			t.Errorf("theme.js has no %s", word)
 		}
 	}
-	if strings.Contains(string(readPage(t, "app.js")), "localStorage") {
-		t.Error("app.js reads the storage: the choice of a theme is in theme.js")
+	if strings.Contains(readScripts(t), "localStorage") {
+		t.Error("a script of the screens reads the storage: the choice of a theme is in theme.js")
 	}
 }
 
@@ -1874,9 +1985,9 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 
 // The old words of the line of an image id are gone from the script: they read wrong for one pack.
 func TestTheLineOfAnImageIdNoLongerSaysNameAnotherMachineImage(t *testing.T) {
-	script := string(readPage(t, "app.js"))
-	mustNotHold(t, "app.js", script, "name another machine image")
-	mustHold(t, "app.js", script, "changed the machine image on this cluster.")
+	script := readScripts(t)
+	mustNotHold(t, "the scripts", script, "name another machine image")
+	mustHold(t, "the scripts", script, "changed the machine image on this cluster.")
 }
 
 // The rules that let a long reference wrap are in the style: the reference of an image has no space, and

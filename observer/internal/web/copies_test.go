@@ -10,10 +10,10 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below hold the words and the copies of app.js. Some read the script as text, so they need no node. The others draw a
+/* The tests below hold the words and the copies of the scripts. Some read the scripts as text, so they need no node. The others draw a
 screen with node, as the tests of web_test.go do. */
 
-// builders are the functions of app.js that put a value from the data into a command. Each one quotes its values with shq().
+// builders are the functions of the scripts that put a value from the data into a command. Each one quotes its values with shq().
 var builders = []string{"publishedCommand", "clusterCommand", "packRef", "pinCommand", "firstSeenCommand"}
 
 // linesOf gives the lines of the script without a comment line.
@@ -30,10 +30,10 @@ func linesOf(script string) []string {
 // A value reaches a command only through shq(). The builders quote each value, no other line puts a value in a command, and shq()
 // writes each apostrophe of a value as '\” inside single quotes.
 func TestEachBuilderOfACommandQuotesItsValues(t *testing.T) {
-	script := string(readPage(t, "app.js"))
-	mustHold(t, "app.js", script, "const shq = ", "`'${String(s).replace(/'/g, `'\\\\''`)}'`")
+	script := readScripts(t)
+	mustHold(t, "the scripts", script, "const shq = ", "`'${String(s).replace(/'/g, `'\\\\''`)}'`")
 	if n := strings.Count(script, "const shq = "); n != 1 {
-		t.Errorf("app.js defines shq %d times, want 1", n)
+		t.Errorf("the scripts define shq %d times, want 1", n)
 	}
 	builder := map[string]string{}
 	for _, l := range linesOf(script) {
@@ -45,7 +45,7 @@ func TestEachBuilderOfACommandQuotesItsValues(t *testing.T) {
 	}
 	for _, name := range builders {
 		if line, ok := builder[name]; !ok {
-			t.Errorf("app.js has no builder %s", name)
+			t.Errorf("the scripts have no builder %s", name)
 		} else if !strings.Contains(line, "shq(") {
 			t.Errorf("the builder %s puts a value in a command with no shq(): %s", name, line)
 		}
@@ -79,7 +79,7 @@ func startsBuilder(line string) bool {
 // Each copy of the script has one home: the test for a refused status, the period of the refresh, the name of the cluster, the
 // badge of an event, and the groups of the statuses of a copy.
 func TestEachCopyOfTheScriptHasOneHome(t *testing.T) {
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	for _, c := range []struct {
 		what, text string
 		want       int
@@ -92,11 +92,11 @@ func TestEachCopyOfTheScriptHasOneHome(t *testing.T) {
 		{"a badge drawn from a lookup by hand", "badge(c, t)", 1},
 	} {
 		if got := strings.Count(script, c.text); got != c.want {
-			t.Errorf("%s: app.js holds %q %d times, want %d", c.what, c.text, got, c.want)
+			t.Errorf("%s: the scripts hold %q %d times, want %d", c.what, c.text, got, c.want)
 		}
 	}
 	if m := regexp.MustCompile(`===\s*COPY\.\w+\s*\|\|`).FindString(script); m != "" {
-		t.Errorf("app.js tests a group of the statuses of a copy by hand: %q", m)
+		t.Errorf("the scripts test a group of the statuses of a copy by hand: %q", m)
 	}
 }
 
@@ -135,15 +135,15 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 // book gives the reason, so the note says not to repair the version in place, and to publish a new version through review.
 func TestTheNoteOfAFindingAgreesWithTheUseCaseOfTheEditInPlace(t *testing.T) {
 	useCase := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/use-cases/edited-in-place.md"))), " ")
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	for _, sentence := range []string{
 		"Do not repair the edited version in place: that is a second edit.",
 		"Publish a new version with the change through review, and move the clusters to it.",
 	} {
 		mustHold(t, "the use case", useCase, sentence)
-		mustHold(t, "app.js", script, sentence)
+		mustHold(t, "the scripts", script, sentence)
 	}
-	mustNotHold(t, "app.js", script, "Restore the version first")
+	mustNotHold(t, "the scripts", script, "Restore the version first")
 	mustNotHold(t, "the use case", useCase, "Restore the version first")
 	page := shown(t, devdata.StateOK, "#p-"+dexSubject)[0]
 	mustHold(t, "the profile", page, `<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. `+

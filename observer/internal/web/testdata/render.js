@@ -3,8 +3,8 @@
 //
 //   node render.js ASSETS_DIR API_DIR STATE [poison]
 //
-// It loads app.js in a sandbox with a fake document, and it answers each fetch from the files of one
-// set in API_DIR, as the server does. It starts at #overview and follows each link of each screen, so
+// It loads the scripts of the screens in the order of index.html, in a sandbox with a fake document. It
+// answers each fetch from the files of one set in API_DIR, as the server does. It starts at #overview and follows each link of each screen, so
 // it shows each screen that a person can reach. On each screen, it also shows each tab, each filter,
 // each folded part, and each side. It prints one JSON list: {hash, variant, html} for each screen, or
 // {hash, variant, error} for a screen that threw.
@@ -211,7 +211,7 @@ async function fakeFetch(url, opts = {}) {
   return {ok: body !== null, status: body === null ? 404 : 200, json: async () => JSON.parse(JSON.stringify(body))};
 }
 
-// listeners holds the handlers that app.js adds to the document, by event type.
+// listeners holds the handlers that the scripts add to the document, by event type.
 const listeners = {};
 const elements = {};
 const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}, scrollIntoView() { jumps.push(id); }});
@@ -313,11 +313,20 @@ async function crawl() {
   return screens;
 }
 
+// screenScripts gives the scripts at the end of the body of index.html, in their order. theme.js is in the head, and the sandbox
+// has no storage and no media query for it.
+function screenScripts() {
+  const page = fs.readFileSync(path.join(assetsDir, "index.html"), "utf8");
+  const names = [...page.slice(page.indexOf("<body")).matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+  if (!names.length) throw new Error("index.html loads no script in its body");
+  return names;
+}
+
 async function main() {
-  // The page reads the routes when it starts, so a route that fails from the first read on fails before the script runs.
+  // The page reads the routes when it starts, so a route that fails from the first read on fails before the scripts run.
   failAsks = mode === "asksdown" && args[1] === "first";
   fetchFails = mode === "offline";
-  run(fs.readFileSync(path.join(assetsDir, "app.js"), "utf8"));
+  for (const name of screenScripts()) vm.runInContext(fs.readFileSync(path.join(assetsDir, name), "utf8"), sandbox, {filename: name});
   if (mode === "ago") {
     // The clock stops, so that each age is the number of seconds that the caller names.
     run("(() => { const now = Date.now(); Date.now = () => now; })()");
