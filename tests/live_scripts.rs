@@ -1515,8 +1515,8 @@ printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
 chmod +x "$dir/strata" "$dir/strata-preflight"
 "#;
 
-/// The answers of GitHub and of its registry to a reader with no login, for the repository `o/r`,
-/// once the repository and its packages are public. `book` is the status of the book.
+/// The answers of GitHub and of its registry for the repository `o/r` to a reader with no login.
+/// The repository and its packages are public. `book` is the status of the book.
 fn public_web(dir: &Path, book: u16) {
     let web = dir.join("web");
     std::fs::create_dir_all(&web).unwrap();

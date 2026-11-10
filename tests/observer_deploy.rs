@@ -1373,7 +1373,7 @@ fn step_6_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() 
 }
 
 /// The live run makes the same binding as step 6. So a person who follows the steps meets what the
-/// run checked. The run also makes a pull Secret for the image, which the steps no longer have:
+/// run checked. The run also makes a pull Secret for the image, which the steps no longer have.
 /// #732 removes it from the live example after the packages are public. `create_apply` runs
 /// `kubectl create` with the arguments of the step, and sends the result with `apply`.
 #[test]

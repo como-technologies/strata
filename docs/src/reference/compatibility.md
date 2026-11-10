@@ -1043,13 +1043,13 @@ field, a value, an input, or an option is in the sections above.
 ### For a user of the CI drop-ins
 
 - **The reusable workflows read this repository with the token of the caller.** The
-  repository is public, so the secret `strata-token` is optional. A caller that gives
-  it keeps working. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
+  repository is public, so the secret `strata-token` is optional. A call that gives
+  it still works. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
   repository.
 - **The GitLab drop-in downloads `install-strata.sh` from the page of the release.**
   The variable `STRATA_TOKEN` is optional: the installer sends it to the API of GitHub.
 - **The steps of the observer make no pull Secret.** The image and the chart are
-  public. An install that has the Secret `ghcr-pull` keeps working. Delete the Secret
+  public. An install that has the Secret `ghcr-pull` still works. Delete the Secret
   to remove the token from the cluster.
 - **`merge-gate.sh` reads a version that does not parse by its first three numbers.** The
   script reads `versionMove`, so it follows the new order.

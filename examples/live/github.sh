@@ -1,6 +1,6 @@
-# What the scripts in examples/live read about GitHub: the project of a checkout, the repository of
-# the workspace, and the first line of the body of an issue. Source it. It runs nothing and calls no
-# host.
+# What the scripts in examples/live read about GitHub. They read the project of a checkout, the
+# repository of the workspace, and the first line of the body of an issue. Source it. It runs
+# nothing and calls no host.
 #
 # The scripts in scripts/ci/ do not source it. A user ships those scripts, so each one stands alone.
 
