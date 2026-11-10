@@ -231,7 +231,8 @@ pub fn cluster_template(document: &Value) -> Value {
 /// The registry of a pack when a fixture names none.
 pub const PUBLIC_REGISTRY: &str = "reg-public";
 
-/// A pack as a fixture states it: the fields that its pack ref and its pack manifests share.
+/// A pack as a fixture states it: the fields that its pack ref, its pack manifests, and its entry
+/// in the pack listing share.
 ///
 /// The tag of the pack ref is the version.
 #[derive(Debug, Clone, Copy)]
@@ -320,6 +321,24 @@ impl<'a> PackFixture<'a> {
             },
             "status": {},
         })
+    }
+
+    /// The entry of the pack in the pack listing of [`pack_listing_route`], for the clouds
+    /// `clouds`. The uid of the entry is the uid of the pack, and its type is `spectro`. An empty
+    /// `clouds` omits `cloudTypes`, and an empty digest omits the digest.
+    pub fn summary(&self, clouds: &[&str]) -> Value {
+        let mut v = json!({
+            "metadata": {"uid": self.pack_uid},
+            "spec": {"name": self.name, "version": self.version, "registryUid": self.registry_uid,
+                     "layer": self.layer, "type": "spectro", "values": self.values},
+        });
+        if !self.digest.is_empty() {
+            v["spec"]["digest"] = json!(self.digest);
+        }
+        if !clouds.is_empty() {
+            v["spec"]["cloudTypes"] = json!(clouds);
+        }
+        v
     }
 }
 

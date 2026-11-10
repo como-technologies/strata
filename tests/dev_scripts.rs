@@ -193,6 +193,27 @@ fn set_version_rewrites_the_chart_of_the_observer_and_its_helm_install_command()
     assert!(committed(d, "install.md").contains("--version 0.9.10 -n strata-observer"));
 }
 
+// A seed of the fuzz corpus names a fixed version of strata. A rewrite of a seed makes it differ
+// from the seed that `just fuzz-seed` writes, and `just docs-check` fails on the release commit.
+#[test]
+fn set_version_leaves_the_seed_corpus_of_the_fuzz_targets_alone() {
+    let dir = release_tree("0.9.9");
+    let d = dir.path();
+    let seed = "fuzz/src/__fuzz__/module__a_target/corpus/0123456789abcdef";
+    std::fs::create_dir_all(d.join(seed).parent().unwrap()).unwrap();
+    std::fs::write(d.join(seed), "version: 0.9.9\n").unwrap();
+    git(d, &["add", "."]);
+    git(d, &["commit", "-q", "-m", "a seed"]);
+    let (o, _) = set_version(d, "0.9.10", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(committed(d, seed), "version: 0.9.9\n");
+    assert!(
+        !text(&o.stderr).contains("fuzz/src/__fuzz__"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
 #[test]
 fn set_version_runs_the_book_only_when_an_output_names_the_old_version() {
     let dir = release_tree("1.0.0");

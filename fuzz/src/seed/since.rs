@@ -7,7 +7,7 @@ use strata::ops::{BEHIND_SCHEMA, BehindReport};
 use crate::behind::run;
 use crate::support::{RECORD_FILE, scratch};
 
-use super::file;
+use super::{file, pin_version};
 
 /// The reports that `scripts/observer-contract.sh --write` writes with the strata binary, for the
 /// tests of the observer.
@@ -17,9 +17,11 @@ const OBSERVER_REPORTS: [&str; 2] = [
 ];
 
 /// The report of the run of the target with `since` as `--since`. Each path of the record is the
-/// name of its file, so that the seed is the same on each machine.
+/// name of its file, so that the seed is the same on each machine. The report names
+/// [`SEED_VERSION`](super::SEED_VERSION), so that it is the same in each release.
 fn report(since: Option<BehindReport>) -> BehindReport {
     let mut report = run(&scratch(), since);
+    pin_version(&mut report.tool);
     report.records = vec![RECORD_FILE.to_string()];
     for by in report.pins.iter_mut().flat_map(|pin| &mut pin.pinned_by) {
         by.path = RECORD_FILE.to_string();

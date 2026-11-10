@@ -11,20 +11,14 @@ use strata::snapshot::{PresetOption, Snapshot};
 use strata::term::progress::Progress;
 
 use crate::common;
-use common::{candidate_snapshot, serve_registry_pack, write_yaml};
-
-const REGISTRY: &str = "reg-public";
+use common::{PUBLIC_REGISTRY, PackFixture, candidate_snapshot, serve_registry_pack, write_yaml};
 
 /// `api` with the registry routes for the pack `name` 1.0.0, with `template` in its listing
 /// entry.
 fn with_pack(api: MemoryApi, name: &str, template: Option<Value>) -> MemoryApi {
     let uid = format!("pack-{name}-1");
-    let mut summary = json!({
-        "metadata": {"uid": uid},
-        "spec": {"name": name, "version": "1.0.0", "registryUid": REGISTRY,
-                 "digest": "sha256:b1", "layer": "addon", "type": "spectro",
-                 "values": "a:\n  b: x\n"},
-    });
+    let mut summary =
+        PackFixture::public(name, "addon", "1.0.0", &uid, "sha256:b1", "a:\n  b: x\n").summary(&[]);
     if let Some(t) = template {
         summary["spec"]["template"] = t;
     }
@@ -33,7 +27,7 @@ fn with_pack(api: MemoryApi, name: &str, template: Option<Value>) -> MemoryApi {
         name,
         json!([summary]),
         json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
-        REGISTRY,
+        PUBLIC_REGISTRY,
     )
 }
 
@@ -58,7 +52,7 @@ fn template() -> Value {
 fn write_candidate(dir: &Path, layers: Value) -> std::path::PathBuf {
     let file = dir.join("fred.yaml");
     let candidate = json!({
-        "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": REGISTRY,
+        "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": PUBLIC_REGISTRY,
         "layers": layers,
     });
     write_yaml(&file, &candidate);

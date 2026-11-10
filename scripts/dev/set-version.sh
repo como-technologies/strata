@@ -28,6 +28,10 @@
 #   docs/src/development/live-runs.md     the page that reports those runs
 #   docs/book/                            the built book
 #
+# The seed corpus of fuzz/ is never touched either. A seed names a fixed version of strata, and
+# not the version of the build, so a release makes no seed stale. A rewrite of a seed makes it
+# differ from the seed that `just fuzz-seed` writes, and `just docs-check` fails.
+#
 # `just test` checks the result: the CI drop-ins and the README badge must name the version in
 # Cargo.toml.
 #
@@ -57,12 +61,13 @@ if [ "$old" = "$new" ]; then
   exit 0
 fi
 
-# every tracked file that names the old version, less the recorded runs, the built book, and the
-# outputs of the book. A build of the new version writes the outputs below
+# every tracked file that names the old version, less the recorded runs, the built book, the seed
+# corpus, and the outputs of the book. A build of the new version writes the outputs below
 mapfile -t files < <(git grep -l -F "$old" -- \
   ':!examples/live/runs' \
   ':!docs/src/development/live-runs.md' \
   ':!docs/book' \
+  ':!fuzz/src/__fuzz__' \
   ':!docs/src/output' \
   ':!Cargo.lock' || true)
 # the outputs of the book that name the old version

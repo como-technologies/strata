@@ -130,7 +130,8 @@ report says how to write them. Run the command again on your machine with
 
 `preflight.sh` looks for the key in the places where strata looks:
 `PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`. It reads the
-file as strata does. [Settings](../reference/settings.md) states the order. When
+file as strata does, and only from an absolute `HOME`.
+[Settings](../reference/settings.md) states the order and the rule of the home. When
 the script finds a key, the job reads Palette. When it finds no key, the script
 gives `--offline`, and the job runs the static tier alone.
 

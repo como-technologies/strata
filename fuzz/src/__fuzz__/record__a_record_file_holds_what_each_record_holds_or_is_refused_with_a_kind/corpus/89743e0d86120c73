@@ -1,0 +1,65 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: strata-live-chart\ndata:\n  purpose: {{ .Values.purpose | quote }}\n",
+      "valuesCanon": null,
+      "valuesHash": "f22f104be65afa82f4cc5ae35534b88044f21ab151c179c41279eaeb766d0384",
+      "valuesParseError": "found a mapping or sequence used as a mapping key (unquoted template?)",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: strata-live-chart\ndata:\n  purpose: {{ .Values.purpose | quote }}\n",
+          "contentHash": "f22f104be65afa82f4cc5ae35534b88044f21ab151c179c41279eaeb766d0384",
+          "contentParseError": "found a mapping or sequence used as a mapping key (unquoted template?)"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "bd2cf45310b285e707a8a1ccc9d6275ead02730eb23e6e4062baebd5dc86d03b",
+        "node": "840e1b4c36a95cbab867f0303ea3228313c35af6a8bc672051181986592cb060"
+      }
+    }
+  ],
+  "root": "3f60914b9c66ce4ba00d9e486826e1c1a9b4e87ac3e1494e03304c9412eb9d76",
+  "contentDigest": "39190a32cc79d97944b57a91a92da5cd66bd44bfc7c8c54d2d0c44ff8152a95f"
+}

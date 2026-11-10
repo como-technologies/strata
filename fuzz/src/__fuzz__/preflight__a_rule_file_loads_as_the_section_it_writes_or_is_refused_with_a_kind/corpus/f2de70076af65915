@@ -1,0 +1,117 @@
+section: teardown
+title: Teardown and leftovers
+about: |
+  What a run before can leave in the cloud and in Palette, and what a force delete leaves behind.
+  The lab checks these with its inventory scripts before a build; a company checks its own estate.
+rules:
+- id: force-delete-leaves-cloud
+  title: A force delete removes the records of Palette alone
+  engines:
+  - all
+  tier: cloud
+  severity: warn
+  status: seen
+  what: |
+    A force delete removes the records of a cluster in Palette. The cloud keeps each instance,
+    volume, and load balancer, and bills for them. Empty the cloud first. The reproduce lines
+    read AWS and GCP by the cluster name; for another cloud, a company reads its own estate.
+  reproduce:
+    aws:
+    - 'aws ec2 describe-instances --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query ''Reservations[].Instances[].InstanceId'' --output text   # no id before a force delete'
+    - 'aws ec2 describe-volumes --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query ''Volumes[].VolumeId'' --output text   # no id before a force delete'
+    - 'aws elb describe-load-balancers --region {{ .entity.spec.cloudConfig.region }} --query "LoadBalancerDescriptions[?LoadBalancerName==''{{ .entity.metadata.name }}-apiserver''].LoadBalancerName" --output text   # no name before a force delete'
+    - 'aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query ''Vpcs[].VpcId'' --output text   # the network goes last, minutes after the instances'
+    eks:
+    - 'aws ec2 describe-instances --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query ''Reservations[].Instances[].InstanceId'' --output text   # no id before a force delete'
+    - 'aws ec2 describe-volumes --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query ''Volumes[].VolumeId'' --output text   # no id before a force delete'
+    - 'aws ec2 describe-vpcs --region {{ .entity.spec.cloudConfig.region }} --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }} --query ''Vpcs[].VpcId'' --output text   # the network goes last, minutes after the instances'
+    - 'aws eks describe-cluster --name {{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query cluster.status   # ResourceNotFoundException means no cluster of the name'
+    gcp:
+    - 'gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^{{ .entity.metadata.name }}'' --format ''value(name)''   # no line before a force delete'
+    - 'gcloud compute disks list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^{{ .entity.metadata.name }}'' --format ''value(name)''   # no line before a force delete'
+    - 'gcloud compute forwarding-rules list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^{{ .entity.metadata.name }}'' --format ''value(name)''   # the load balancer: no line before a force delete'
+    - 'gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^{{ .entity.metadata.name }}'' --format ''value(name)''   # the network goes last, minutes after the instances'
+    gke:
+    - 'gcloud container clusters list --project {{ .entity.spec.cloudConfig.project }} --filter ''name={{ .entity.metadata.name }}'' --format ''value(name,status)''   # no line means no cluster of the name'
+    - 'gcloud compute instances list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^gke-{{ .entity.metadata.name }}-'' --format ''value(name)''   # the nodes: no line before a force delete'
+    - 'gcloud compute disks list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^gke-{{ .entity.metadata.name }}-'' --format ''value(name)''   # no line before a force delete'
+    all:
+    - '# strata-preflight has no line for this cloud: count what the cloud holds under the cluster name {{ .entity.metadata.name }}, and find nothing before a force delete'
+  fix:
+    owner: palette
+    text: Warn, or refuse a force delete while the cloud holds resources of the cluster.
+  evidence:
+  - kind: run
+    ref: teardown lab
+- id: teardown-order
+  title: The network of a run before is gone
+  engines:
+  - aws
+  - gcp
+  tier: cloud
+  severity: warn
+  status: seen
+  when: .clusterUid == null and .cloud == "aws"
+  what: |
+    A delete removes the instances first. The security groups, the route tables, the subnets, the
+    gateway, and the network go last, minutes after. An inventory that stops at the instances
+    says 0 too early. The check asks EC2 for a VPC with the Cluster API tag of the name; one
+    found means the teardown before is not finished. For GCP, run the reproduce line by hand.
+  check:
+    kind: exec
+    needs:
+    - aws
+    argv:
+    - aws
+    - ec2
+    - describe-vpcs
+    - --filters
+    - Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/{{ .entity.metadata.name }}
+    - --region
+    - '{{ .entity.spec.cloudConfig.region }}'
+    - --output
+    - json
+    expr: |
+      (.entity.metadata.name // "?") as $n | (.entity.spec.cloudConfig.region // "?") as $r
+      | if .exec.exit != 0 then ["aws ec2 describe-vpcs failed: \(.exec.stderr | tostring | .[:200])"]
+        else [ (.exec.stdout.Vpcs // [])[]
+               | "VPC \(.VpcId) of a cluster named \($n) is still in \($r); the network goes last, so the teardown before is not finished. Wait until the inventory is 0 on every line" ]
+        end
+  reproduce:
+    gcp:
+    - 'gcloud compute networks list --project {{ .entity.spec.cloudConfig.project }} --filter ''name ~ ^{{ .entity.metadata.name }}'' --format json   # the network goes last'
+  fix:
+    owner: none
+  evidence:
+  - kind: source
+    ref: docs/src/development/live-example.md
+    note: on AWS, a deletion removes the security groups, route tables, subnets, internet gateway, and VPC last, minutes after the instances and the NAT gateway
+  - kind: source
+    note: the GCP inventory of the live example; a deletion removes the network last, minutes after the instances
+  tests:
+  - fault: fixtures/aws/vpc-left.json
+    clean: fixtures/aws/teardown-order-clean.json
+- id: inventory-managed
+  title: The inventory counts managed clusters
+  engines:
+  - eks
+  - gke
+  - lab
+  tier: tool
+  severity: warn
+  status: seen
+  what: |
+    The lab inventory counted instances, disks, and networks, and not the EKS or GKE cluster, its
+    nodes, or its node groups. It said 0 while a managed cluster still billed. #90 fixed it.
+    `aws-inventory.sh` counts the EKS cluster of the name. `gcp-inventory.sh --gke` counts the
+    GKE cluster and the `gke-<name>-` nodes, disks, and instance groups. A row of the lab.
+  reproduce:
+  - '# only the lab can reproduce this: the fault was in the inventory scripts of the live example'
+  fix:
+    owner: lab
+    text: Count the managed cluster and its node groups in each inventory.
+  evidence:
+  - kind: run
+    ref: '#90'
+  - kind: source
+    note: the GCP inventory of the live example; `--gke` counts the GKE cluster, which needs the Kubernetes Engine API

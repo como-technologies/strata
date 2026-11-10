@@ -1,0 +1,32 @@
+{
+  "_base": "clean.json",
+  "_note": "a worker with a CPU count under 0, and a control plane with a CPU count that is no whole number",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "instanceType": {
+                "numCPUs": -1
+              }
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          },
+          {
+            "cloudConfig": {
+              "instanceType": {
+                "numCPUs": 0.5
+              }
+            },
+            "poolConfig": {
+              "name": "cp-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

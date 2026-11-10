@@ -1,0 +1,108 @@
+section: lifecycle
+title: 'Lifecycle: update, repave, delete'
+about: |
+  What a change of a running cluster does, and what a delete needs. A rule on a change applies
+  with `cluster:UID CHANGE.json`.
+rules:
+- id: eks-type-change-orphan
+  title: A change of the instance type of an EKS node group leaves the old group
+  engines:
+  - eks
+  tier: static
+  severity: warn
+  status: seen
+  when: .before != null
+  what: |
+    A change of the instance type makes a new node group and keeps the old one, untracked: 4
+    nodes where the config asks 2. The delete of the cluster then waits with no end.
+  check:
+    kind: static
+    expr: |
+      (.before.spec.machinepoolconfig // []) as $b
+      | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig.instanceType as $t
+          | ($b[] | select(.poolConfig.name == $n)) as $old
+          | select($old.cloudConfig.instanceType != null and $old.cloudConfig.instanceType != $t)
+          | "pool \($n): \($old.cloudConfig.instanceType) to \($t) makes a new node group and leaves the old one" ]
+  fix:
+    owner: palette
+    text: Sweep the old machine pools.
+  evidence:
+  - kind: run
+    ref: '#89'
+  - kind: report
+    ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28
+  tests:
+  - fault: fixtures/eks/type-change.json
+    clean: fixtures/eks/type-same.json
+- id: eks-delete-waits
+  title: The delete of an EKS cluster reaches Deleted
+  engines:
+  - eks
+  tier: watch
+  severity: fail
+  status: seen
+  what: |
+    With an orphan node group, the delete waits with no end. `CloudInfrastructureCleanedUp`
+    stays `False` with the reason `DeletingInfrastructure`, and the event "Deleting control
+    plane nodes" repeats every 5 minutes. The EKS control plane waits for every node group of
+    the cluster, and Palette deletes the one it tracks alone. A delete of the orphan in AWS
+    alone does not end the wait: its object keeps its finalizer in the pilot. The recovery is by
+    hand: delete the node groups, the EKS cluster, and the VPC in AWS, then force delete.
+  check:
+    kind: watch
+    expr: |
+      (.cluster.status.state // "") as $s
+      | ([ (.cluster.status.conditions // [])[]
+           | select(.type == "CloudInfrastructureCleanedUp" and .status == "False" and (.reason // "") == "DeletingInfrastructure") ] | length > 0) as $waits
+      | ([ (.events // [])[] | select((.message // "") | test("Deleting control plane nodes")) ] | length) as $n
+      | if $s == "Deleting" and $waits and .elapsed > 1800
+        then ["the delete waits at CloudInfrastructureCleanedUp=False, DeletingInfrastructure, for \(.elapsed) s, with \($n) 'Deleting control plane nodes' events: an orphan node group can hold the EKS control plane. Delete the node groups, the EKS cluster, and its VPC in AWS, then force delete the cluster in Palette"]
+        else [] end
+  reproduce:
+  - 'for g in $(aws eks list-nodegroups --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --query nodegroups --output text); do aws eks describe-nodegroup --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --nodegroup-name "$g" --query ''nodegroup.[nodegroupName,instanceTypes[0],status]'' --output text; done   # one line for each node group of the cluster; two for one pool is an orphan'
+  - 'aws eks describe-cluster --region {{ .entity.spec.cloudConfig.region }} --name {{ .entity.metadata.name }} --query cluster.status   # ACTIVE while the delete waits'
+  fix:
+    owner: palette
+    text: Delete each AWSManagedMachinePool that no MachinePool references, in the delete path, before the control plane.
+  evidence:
+  - kind: run
+    ref: '#89'
+    note: the state stayed DeletingInfrastructure for more than 2 hours, with the event every 5 minutes
+  - kind: report
+    ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F4
+  - kind: source
+    note: the delete reads the one machine pool that the MachinePool references
+  tests:
+  - fault: fixtures/eks/delete-waits.json
+    clean: fixtures/eks/watch-running.json
+- id: gke-type-change
+  title: A change of the machine type of a GKE node pool deletes the pool
+  engines:
+  - gke
+  tier: static
+  severity: fail
+  status: seen
+  when: .before != null
+  what: |
+    The new machine pool gets the GKE name of the old one, so the delete of the old one deletes
+    the GKE node pool, and nothing makes a new one. The cluster keeps no node, and its delete
+    stays `Deleting` until a force delete.
+  check:
+    kind: static
+    expr: |
+      (.before.spec.machinepoolconfig // []) as $b
+      | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $n | .cloudConfig.instanceType as $t
+          | ($b[] | select(.poolConfig.name == $n)) as $old
+          | select($old.cloudConfig.instanceType != null and $old.cloudConfig.instanceType != $t)
+          | "pool \($n): \($old.cloudConfig.instanceType) to \($t) deletes the GKE node pool and makes no new one" ]
+  fix:
+    owner: palette
+    text: Sweep by label, and roll no pool before the control plane is ready.
+  evidence:
+  - kind: run
+    ref: '#90'
+  - kind: report
+    ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28
+  tests:
+  - fault: fixtures/gke/type-change.json
+    clean: fixtures/gke/type-same.json
