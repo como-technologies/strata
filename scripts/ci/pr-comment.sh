@@ -5,7 +5,8 @@
 #                            [--label NAME] [--threshold LEVEL] [--repave] [--dry-run]
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
-# file is snapshotted once, so both renderings read files and Palette is asked once. The comment starts
+# file is snapshotted once, so both renderings read files and Palette is asked once. A cluster ref
+# beside another ref is read one more time, for the profiles that `compare` holds. The comment starts
 # with the marker <!-- strata -->; a later run finds the comment by that marker and updates it, so
 # a pull request carries one strata comment that follows each push. The label (default repave) is
 # added when summary.maxImpact is at or above the threshold (default repave) and removed otherwise.
@@ -212,16 +213,37 @@ fi
 # ---- the comparison --------------------------------------------------------------------------
 strata=${STRATA_BIN:-strata}
 
-# A live ref is fetched once; both renderings then read files.
-files=()
+# A live ref is fetched once; both renderings then read files. `compare` reads a live cluster ref
+# beside the other side: with no profile, it holds only the profiles that the other side asks
+# about. A record of the cluster holds what it holds. So the script records the other side first,
+# and asks strata for the ref that `compare` reads for the cluster. That costs one more read of the
+# cluster, and it asks Palette no question.
+live_cluster() { [ ! -f "$1" ] && [[ $1 == cluster:* ]]; }
+cluster=""
+if live_cluster "${refs[0]}" && ! live_cluster "${refs[1]}"; then
+  cluster=0
+elif live_cluster "${refs[1]}" && ! live_cluster "${refs[0]}"; then
+  cluster=1
+fi
+files=("" "")
 for i in 0 1; do
-  if [ -f "${refs[$i]}" ]; then
-    files+=("${refs[$i]}")
+  if [ "$i" = "$cluster" ]; then
+    continue
+  elif [ -f "${refs[$i]}" ]; then
+    files[i]=${refs[$i]}
   else
     "$strata" snapshot "${refs[$i]}" -o "$work/ref$i.json" || exit 2
-    files+=("$work/ref$i.json")
+    files[i]=$work/ref$i.json
   fi
 done
+if [ -n "$cluster" ]; then
+  "$strata" compare "${files[1 - cluster]}" "${refs[$cluster]}" --format json > "$work/side.json" \
+    || [ "$?" -le 1 ] || exit 2
+  side=$(jq -r '.b.ref // empty' "$work/side.json") || exit 2
+  [ -n "$side" ] || die "strata named no ref for ${refs[$cluster]}"
+  "$strata" snapshot "$side" -o "$work/ref$cluster.json" || exit 2
+  files[cluster]=$work/ref$cluster.json
+fi
 
 # Exit 1 is a difference, which is the normal case; 2 means strata could not answer.
 compare() { # FORMAT OUTPUT [OPTION...]

@@ -5,7 +5,7 @@ use super::ids::{
     A100, A100_PROD, A110, A110_PROD, DEV, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION,
 };
 use super::preflight::{accepted_answer, aws_validate, preflight_entity, preflight_routes};
-use super::{CANDIDATE_YAML, GIT};
+use super::{CANDIDATE_YAML, GIT, payments_addons, payments_cluster};
 use crate::book::Runner;
 use serde_json::json;
 
@@ -31,7 +31,9 @@ pub(super) fn run(r: &mut Runner) {
     r.tenant(|t| t.registries(PROD));
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(PROD, A100_PROD, "1.0.0", "aws-stack@1.0.0", &[]);
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
+    // payments of dev runs the release and three add-on profiles (#615)
+    payments_addons(r);
+    payments_cluster(r, A100);
     r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A100_PROD], &[]));
     label(r, DEV, PAYMENTS, "dev");
     label(r, PROD, PAYMENTS_PROD, "prod");
@@ -131,7 +133,7 @@ fn loop_publish(r: &mut Runner) {
         "grep '^\\*\\*Palette' comment.md",
     );
     // dev moves payments to the new version, and a record says what the cluster runs
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
+    payments_cluster(r, A110);
     label(r, DEV, PAYMENTS, "dev");
     r.step(
         "loop-cluster",

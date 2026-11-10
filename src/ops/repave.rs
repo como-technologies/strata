@@ -14,7 +14,6 @@ use crate::diff::{ImpactLevel, PaletteRepave, Side};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str};
 use crate::model::cluster_template::ClusterTemplateRef;
-use crate::model::profile_type::ProfileType;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 
@@ -45,8 +44,9 @@ fn profiles_body<'a>(
 ///
 /// The request names each profile that the cluster runs after the move, by uid. A profile it runs
 /// now keeps its packs, or takes the pack values of `target` when it is the same uid. A profile
-/// the request omits is not in the target. So `target` replaces the profile it has the name
-/// of, or else the one that builds the cluster when `target` builds one too.
+/// the request omits is not in the target. So `target` replaces the profile it has the name of,
+/// or else the one that builds the cluster when `target` builds one too. The cluster side of
+/// [`snapshot_pair`](super::snapshot_pair) holds that profile alone, by the same rule.
 pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
     let uid = target.source.uid.as_str();
     let pack_values = || -> Vec<Value> { target.packs.iter().map(pack_value).collect() };
@@ -55,18 +55,7 @@ pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
             (running_uid == uid).then(pack_values)
         });
     }
-    let replaced = running
-        .iter()
-        .find(|p| p.name == target.source.name)
-        .or_else(|| {
-            ProfileType::text_builds_cluster(&target.source.kind)
-                .then(|| {
-                    running
-                        .iter()
-                        .find(|p| ProfileType::text_builds_cluster(&p.kind))
-                })
-                .flatten()
-        });
+    let replaced = AppliedProfile::replaced_by(running, &target.source);
     let kept = running
         .iter()
         .filter(|p| Some(p.uid.as_str()) != replaced.map(|r| r.uid.as_str()))

@@ -156,6 +156,21 @@ impl Tenant {
             "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: payments\n  labels:\n    \
              pod-security.kubernetes.io/enforce: {label}"
         );
+        let profile = (uid, name, version);
+        self.manifest_addon(project, profile, ("namespace-policy", pack), &content);
+    }
+
+    /// Publish an add-on profile with one manifest pack. `profile` is the uid, the name, and the
+    /// version of the profile. `pack` is the name and the uid of the pack, whose one manifest has
+    /// the name of the pack and holds `content`.
+    pub fn manifest_addon(
+        &self,
+        project: &str,
+        profile: (&str, &str, &str),
+        pack: (&str, &str),
+        content: &str,
+    ) {
+        let ((uid, name, version), (pack, pack_uid)) = (profile, pack);
         self.write(
             project,
             &profile_route(uid),
@@ -163,9 +178,9 @@ impl Tenant {
                 "apiVersion": "v1", "kind": "ClusterProfile",
                 "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
-                    "packs": [{"name": "namespace-policy", "layer": "addon", "type": "manifest",
-                        "tag": "1.0.0", "version": "1.0.0", "packUid": pack,
-                        "manifests": [{"kind": "manifest", "name": "namespace-policy"}],
+                    "packs": [{"name": pack, "layer": "addon", "type": "manifest",
+                        "tag": "1.0.0", "version": "1.0.0", "packUid": pack_uid,
+                        "manifests": [{"kind": "manifest", "name": pack}],
                         "presets": [], "schema": []}]}},
                 "status": {"isPublished": true, "inUseClusterUids": [], "inUseClusters": []}
             }),
@@ -175,9 +190,9 @@ impl Tenant {
             &manifests_route(uid),
             &json!({
                 "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
-                "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": pack},
-                    "spec": {"name": "namespace-policy", "layer": "addon", "version": "1.0.0",
-                        "manifests": [{"name": "namespace-policy", "content": content}]},
+                "spec": {"packs": [{"metadata": {"name": pack, "uid": pack_uid},
+                    "spec": {"name": pack, "layer": "addon", "version": "1.0.0",
+                        "manifests": [{"name": pack, "content": content}]},
                     "status": {}}]}
             }),
         );

@@ -120,6 +120,13 @@ The script is in this repository, at `scripts/ci/pr-comment.sh`. It needs `strat
 one snapshot, so Palette gets one set of requests. Run from a terminal, the
 script posts the same comment as the job.
 
+A `cluster:` ref beside another ref gets one more read. `compare` holds only the
+profile that the other side replaces: see
+[Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+So the script first asks strata for the ref that the comparison reads, such as
+`cluster:payments/aws-stack`, and records that ref. The comment then names only
+the packs of that profile.
+
 ## Exit status
 
 | Exit | Meaning |

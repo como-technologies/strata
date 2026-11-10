@@ -1,4 +1,4 @@
-$ strata compare releases/1.1.0/dev.json cluster:payments/aws-stack
+$ strata compare releases/1.1.0/dev.json cluster:payments
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
 consumers  aws-stack@1.1.0 has 2 consumers; payments is one of them
