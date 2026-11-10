@@ -1,0 +1,3 @@
+{"schema":"strata-unknown/1","strata":"0.28.0","set":"PackState","value":"retired","route":"/v1/packs"}
+{"schema":"strata-unknown/1","strata":"0.28.0","set":"PackState","value":"retired","route":"/v1/packs"}
+{"schema":"strata-unknown/1","strata":"0.28.0","set":"OciProvider","value":"retired","route":"/v1/registries/oci/summary"}

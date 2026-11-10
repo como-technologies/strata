@@ -1,0 +1,4 @@
+{"schema":"strata-unknown/1","strata":"0.26.0","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary"}
+{"schema":"strata-unknown/1","strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata"}
+{"schema":"strata-unknown/1","strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata"}
+{"schema":"strata-unknown/1","strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata"}

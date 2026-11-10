@@ -337,7 +337,8 @@ with one of two engines:
 So `just test` runs each target on its corpus on every push, and a scheduled job
 fuzzes each target for a fixed time. A target calls the public API of `strata`,
 `strata-preflight`, and `strata-report-endpoint`. The API does not grow for a target. A private parser,
-such as the mask, runs through the public read that calls it.
+such as the mask or a read of the log of the unknown values, runs through the public read that
+calls it.
 
 The first column of each table is the name of the test, with the module of
 `fuzz/src/` before it. A target reads bytes. A target that reads text skips an
@@ -356,10 +357,13 @@ not a fault. A panic is the only fault.
 | `record::a_comparison_writes_the_document_it_reads` | A `strata-diff/1` document | Strata reads the document or refuses it with a kind, and writes the same document again. |
 | `record::a_raw_directory_of_a_profile_builds_a_record_or_is_refused_with_a_kind` | The files of a raw directory of a profile, in the order of their names, apart by a NUL byte | The directory loads and builds a record, or it gives an error with a kind. |
 | `record::a_raw_directory_of_a_cluster_builds_a_record_or_is_refused_with_a_kind` | The files of a raw directory of a cluster, in the order of their names, apart by a NUL byte | The same, for each profile that the cluster applies. |
+| `behind::a_behind_report_is_the_since_of_a_run_or_is_refused_with_a_kind` | A `strata-behind/1` document, the file that `--since` names | `BehindReport::load` gives a report or an error with a kind. The JSON that `--json` writes for the report loads as the same report. The report is the `--since` of a run of `behind` on one record. A pin of the run names as arrived each newer version that the report does not know for its pack and registry. Each renderer shows the run. |
 | `palette::an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind` | A JSON document | Each request answers with the document. Each ref, each listing, and each read of one object gives a record or an error with a kind. |
 | `palette::an_error_of_palette_is_read_as_a_refusal_or_gives_an_error_with_a_kind` | The status of an HTTP error in two bytes, and its body as text | Each request answers with the error. No read gives a record, and no `--validate` question accepts. Each validate route reads the body as its table of codes says. The class of the error follows the rule of the retry. |
 | `config::a_lookup_of_settings_gives_a_config_that_hides_its_key_or_is_refused_with_a_kind` | Lines of `NAME=value` | The lines are the lookup of `Config::from_lookup`. It gives a config or an error with a kind. The key is the first key of the lines, the address has no trailing slash, and the debug form shows no key. The reader of the file `~/.palette.env` is private and reads the home of the person, so no target runs it. |
 | `report::a_request_body_is_refused_with_a_status_or_is_a_report_that_writes_as_itself` | The body of a request to the endpoint of the report | The check gives a report or a refusal with the status 400, 413, 415, or 422. A report that it takes passes the check of the library, and it writes as a body that gives the same report. |
+| `unknown::a_log_of_unknown_values_gives_a_report_that_the_endpoint_takes_or_is_refused_with_a_kind` | The log of the unknown values, `strata-unknown.jsonl` | `ops::unknown_report` calls the private read that stops at the first line that is not valid. `ops::send_unknown_report` calls the private read that skips such a line, and then posts. The report of a valid log counts each line, and the endpoint takes each part of 100 entries of it. The send has no address, so it fails before a connection and marks no line. A send of a log with no valid line posts nothing, and names the lines that are not valid. The first of them is the line that the report refuses. |
+| `unknown::an_answer_file_gives_a_choice_that_it_keeps_and_only_the_yes_sends` | The file of the answer to the question of the send, `strata-unknown.answer` | `read_answer` gives a choice only for the text of a choice, with blank space around it. Only the yes sends the report. With another text, a run in a terminal asks again. The file that `keep_answer` writes for the choice reads as the same choice. |
 | `preflight::a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind` | A rule file | The file loads or gives an error with a kind. A section that loads writes as YAML that loads as the same section. |
 | `preflight::a_jq_program_compiles_and_runs_or_is_refused_with_a_kind` | A program, a NUL byte, and a JSON input | The program compiles with and without `$item`, and it reads as a template. It runs when it has no word that loops, because jq has no step limit. |
 | `preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind` | A world file, as a fixture and as the body of a create | The file loads or gives an error with a kind. A world gives the document of a run for a new cluster and for an existing cluster. An existing cluster has an error exactly when its entity, or its `metadata`, is neither an object nor `null`. |
@@ -427,7 +431,10 @@ bolero reads them, and nothing else:
 
 `just fuzz-seed` writes the seeds into `corpus/`. A seed is a real input. It is a
 file of `examples/`, a rule of the catalog of `strata-preflight`, or a file or an
-output of this book. It can also be a record that the library builds from them.
+output of this book. It can also be a report of `behind` that
+`just observer-contract --write` writes for the tests of the observer. A seed can also be a
+document that the library builds from them. Such a document is a record, a line of
+the log, or a file of the answer.
 
 The name of a seed file is a hash of its bytes, so a second run changes no file.
 The recipe runs
