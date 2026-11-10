@@ -380,11 +380,12 @@ the Rust code, and these rules are for the Go code.
   cycle runs holds the cycle at a gate, such as `gatedStrata` of `internal/check`.
   A fixed sleep reads no state, so it is no wait. A test that must see two
   processes run together holds the first one with `testkit.Overlap`.
+- A wait of a test that has a limit of time, also a wait on a channel, uses
+  `testkit.WaitLimit`.
 - A wait of a test, with `testkit.WaitFor`, reads the state that its next step
   reads. The content cycle and the versions cycle end in either order. So the end
   of one cycle does not show the end of the other. The state of the page reads the
-  content cycle only. A wait that has a limit of time, also a wait on a channel,
-  uses `testkit.WaitLimit`.
+  content cycle only.
 - `internal/testkit` holds each helper that the tests of two packages use, such
   as the script that stands for `strata`. Only test files import it. A helper
   that one package uses stays in that package.
