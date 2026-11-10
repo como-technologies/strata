@@ -45,6 +45,11 @@ mod tenant;
 #[path = "../../tests/common/toml.rs"]
 #[allow(dead_code)]
 mod toml;
+// The macro that ties the list of a test to each variant of an enum. The test of each edit of the
+// stand-in uses it, and so do the tests of the errors of strata. So the two lists keep one rule.
+#[cfg(test)]
+#[path = "../../tests/common/variants.rs"]
+mod variants;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

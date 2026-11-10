@@ -1,15 +1,27 @@
 //! The tests of the error kinds: their messages, their JSON, and their class.
 
+use std::collections::BTreeSet;
+use std::path::Path;
+
+// The macro that ties the list of a test to each variant of an enum. The test of each edit of the
+// stand-in of `xtask` uses it too, so the two lists keep one rule.
+#[path = "../../tests/common/variants.rs"]
+mod variants;
+
 use super::*;
+use variants::one_of_each;
 
 fn bad_json() -> serde_json::Error {
     serde_json::from_str::<serde_json::Value>("{").unwrap_err()
 }
 
-/// One value of every variant. The `match` in `kind` is exhaustive, so the compiler keeps the
-/// mapping total; this test keeps it distinct and keeps `to_json` in step with it.
-fn one_of_each() -> Vec<Error> {
-    vec![
+/// One error of each variant. [`one_of_each!`] ties the list to each variant of [`Error`], so the
+/// build fails on a new variant until the list holds a sample of it.
+///
+/// The tests keep each kind distinct, keep `to_json` in step with it, and keep each kind a row of
+/// the table of `reference/errors.md`.
+fn each_kind_of_error() -> Vec<Error> {
+    one_of_each![
         Error::MissingCredential {
             primary: "PALETTE_API_KEY",
             alternate: "SPECTROCLOUD_APIKEY",
@@ -83,6 +95,10 @@ fn one_of_each() -> Vec<Error> {
             version: "1.1.1".into(),
             uid: "64e0000000000000000000c3".into(),
         },
+        Error::Usage {
+            message: "--repave needs one side that is a cluster and one that is a profile version"
+                .into(),
+        },
         Error::StaleRecord {
             cluster: "64f1000000000000000000e1".into(),
             name: "payments".into(),
@@ -95,6 +111,9 @@ fn one_of_each() -> Vec<Error> {
         },
         Error::NoCloudConfig {
             cluster: "64f1000000000000000000e1".into(),
+        },
+        Error::RecordNotASource {
+            path: "releases/dev.json".into(),
         },
         Error::PaletteRefuses {
             reference: "aws-stack.yaml".into(),
@@ -454,7 +473,7 @@ fn a_refusal_that_a_record_or_a_cluster_causes_has_a_kind_of_its_own_and_stays_t
 
 #[test]
 fn every_variant_has_a_distinct_kind() {
-    let all = one_of_each();
+    let all = each_kind_of_error();
     let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
     kinds.sort_unstable();
     kinds.dedup();
@@ -469,13 +488,13 @@ fn every_variant_has_a_distinct_kind() {
 
 #[test]
 fn to_json_carries_kind_message_and_the_variant_fields() {
-    for e in one_of_each() {
+    for e in each_kind_of_error() {
         let j = e.to_json();
         assert_eq!(j["kind"], e.kind());
         assert_eq!(j["message"], e.to_string());
     }
     let by_kind = |k: &str| {
-        one_of_each()
+        each_kind_of_error()
             .into_iter()
             .find(|e| e.kind() == k)
             .unwrap()
@@ -489,6 +508,7 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         "SPECTROCLOUD_APIKEY"
     );
     assert_eq!(by_kind("not-snapshot")["path"], "profile.json");
+    assert_eq!(by_kind("record-not-a-source")["path"], "releases/dev.json");
     assert_eq!(by_kind("profile-not-found")["name"], "aws-stack");
     let ambiguous = by_kind("profile-name-ambiguous");
     assert_eq!(ambiguous["version"], "1.1.1");
@@ -608,7 +628,7 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
 #[test]
 fn to_json_writes_a_field_of_the_variant_for_each_kind_but_three() {
     let without_fields = ["no-uid", "serialize", "usage"];
-    for e in one_of_each() {
+    for e in each_kind_of_error() {
         let j = e.to_json();
         let fields = j.as_object().unwrap().len() - 2;
         assert_eq!(
@@ -631,12 +651,49 @@ fn the_schema_of_an_error_document_names_the_keys_that_to_json_writes_for_every_
         .collect();
     assert_eq!(named, ["kind", "message"]);
     assert_eq!(schema["required"], serde_json::json!(["kind", "message"]));
-    for e in one_of_each() {
+    for e in each_kind_of_error() {
         let j = e.to_json();
         for key in named.iter() {
             assert!(j[key].is_string(), "{} has no text {key}: {j}", e.kind());
         }
     }
+}
+
+/// The kind of each row of the table of the kinds in `reference/errors.md`, in the order of the
+/// page. The kind is the first cell of the row, in backticks.
+fn kinds_of_the_book() -> Vec<String> {
+    let page = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src/reference/errors.md"),
+    )
+    .unwrap();
+    page.lines()
+        .skip_while(|line| !line.starts_with("| Kind |"))
+        // the head of the table and the line under it
+        .skip(2)
+        .take_while(|line| line.starts_with('|'))
+        .map(|row| {
+            let cell = row.split('|').nth(1).unwrap_or_default();
+            cell.trim().trim_matches('`').to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_kind() {
+    let kinds: BTreeSet<&str> = each_kind_of_error().iter().map(Error::kind).collect();
+    let rows = kinds_of_the_book();
+    for kind in &kinds {
+        assert!(
+            rows.iter().any(|row| row == kind),
+            "the table of reference/errors.md has no row of the kind {kind}"
+        );
+    }
+    // the table holds each kind, so a longer table holds a row of another text, or a kind two times
+    assert_eq!(
+        rows.len(),
+        kinds.len(),
+        "the table of reference/errors.md: {rows:?}"
+    );
 }
 
 /// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters.

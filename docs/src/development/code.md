@@ -124,7 +124,9 @@ where each module goes. The Go code of the observer follows
 
 - Use one error type, `crate::error::Error`, with `Result<T>`. A new variant
   has a `kind()`, a `to_json()`, a `class()`, and a sample in the tests of
-  `error/`.
+  `error/`. The build of the tests fails until the list of samples holds one of
+  the new variant. A test fails until its kind is a row of the table in
+  `errors.md`.
 - Do not use `unwrap`, `expect`, or a slice index that can panic on input from
   a user or from Palette. Slice text at a `char` boundary only.
 - Do not discard an error. `unwrap_or_default()`, `.ok()`, and `let _ =` are
@@ -209,8 +211,12 @@ ASD-STE100.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
   uses. `answer.rs`, `closed_set.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`, `toml.rs`,
-  and `walk.rs` have such users. A file that uses some of the helpers allows `dead_code` on the
-  include.
+  `variants.rs`, and `walk.rs` have such users. A file that uses some of the helpers allows
+  `dead_code` on the include.
+- A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
+  `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new
+  variant until the list holds a value of it. The tests of `error/` and of
+  `xtask/src/tenant/edit.rs` use the macro.
 - A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
   does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
   the two give the same route.
