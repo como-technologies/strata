@@ -3,7 +3,7 @@
 #
 #   deploy/report/deploy.sh [--project ID] [--region NAME] [--dry-run]
 #
-# The lead runs this on kadomony after the merge, with a gcloud login. The script builds the image
+# The lead runs this on the host of the lead after the merge, with a gcloud login. The script builds the image
 # on Cloud Build, and deploys it as the service strata-report. Then it prints the address of the
 # service. The script reads no secret. The token of GitHub stays in Secret Manager, and Cloud Run
 # gives it to the service as GITHUB_TOKEN when the service starts.

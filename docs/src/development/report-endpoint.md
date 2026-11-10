@@ -221,7 +221,7 @@ calls GitHub or Google. No test posts to the endpoint that the release names: se
 
 ## Deploy the endpoint
 
-The lead deploys the endpoint after the merge, on kadomony, after `gcloud auth login`. A session does
+The lead deploys the endpoint after the merge, on its host, after `gcloud auth login`. A session does
 not deploy it, because a session has no account of Google.
 
 1. Make sure that the project has the APIs `run`, `cloudbuild`, `artifactregistry`,

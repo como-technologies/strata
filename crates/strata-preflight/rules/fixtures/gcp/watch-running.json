@@ -2,10 +2,10 @@
   "_base": "clean.json",
   "_note": "a watch reading of a Running gcp cluster with every condition done and no event of note",
   "_patch": {
-    "clusterUid": "6abbfb1272a2c588cbc798a2",
+    "clusterUid": "6abbfb5555555555555555f5",
     "cluster": {
       "metadata": {
-        "uid": "6abbfb1272a2c588cbc798a2",
+        "uid": "6abbfb5555555555555555f5",
         "name": "fred"
       },
       "spec": {

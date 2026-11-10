@@ -244,8 +244,8 @@ runs:
       - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: InvalidParam: Invalid parameter 'SkipK8sUpgrade'; caused by: SkipK8sUpgrade is not supported for gke cloud type"}
-      - {rule: gke-type-change, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}
-      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbb086e8fdde7591c3d0a8 to e2-standard-8"}
+      - {rule: gke-type-change, result: caught, note: "the change of the worker pool of the cluster of the run to e2-standard-8"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of the cluster of the run to e2-standard-8"}
   - run: 20260929T142534Z
     engine: eks
     release: ""
@@ -315,8 +315,8 @@ runs:
       - {rule: delete-while-provisioning, result: caught, note: "the cluster as Palette holds it was Provisioning when the provider returned; the plan then deleted it, and the delete waited, as the rule says"}
       - {rule: delete-blockers, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: palette-validate, result: false-fail, note: "the cluster as Palette holds it: Palette refused the entity: ResourceAlreadyExists: 'Cluster' resource  with name 'fred' already exists"}
-      - {rule: eks-type-change-orphan, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}
-      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbcaafe8fde17044a4cc8f to m5.xlarge"}
+      - {rule: eks-type-change-orphan, result: caught, note: "the change of the worker pool of the cluster of the run to m5.xlarge"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of the cluster of the run to m5.xlarge"}
   - run: 20260929T171058Z
     engine: aws
     release: ""
@@ -372,7 +372,7 @@ runs:
       - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: delete-blockers, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: palette-validate, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbf1781444b47912014ade to m5.xlarge"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of the cluster of the run to m5.xlarge"}
   - run: 20260929T175213Z
     engine: gcp
     release: ""
@@ -420,7 +420,7 @@ runs:
       - {rule: delete-pending-repave, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: palette-validate, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abbfb1272a2c588cbc798a2 to e2-standard-8"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of the cluster of the run to e2-standard-8"}
   - run: 20260929T221118Z
     engine: aws
     release: ""
@@ -505,7 +505,7 @@ runs:
       - {rule: delete-while-provisioning, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: delete-blockers, result: passed, note: "the cluster as Palette holds it, after a clean build"}
       - {rule: palette-validate, result: passed, note: "the cluster as Palette holds it, after a clean build"}
-      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of cluster 6abc3e9a72a2cd717a9970c6 to m5.xlarge"}
+      - {rule: pool-replace-fields, result: caught, note: "the change of the worker pool of the cluster of the run to m5.xlarge"}
   - run: 20261030T192137Z
     engine: aws
     release: ""

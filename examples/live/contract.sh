@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The contract run: ask a real tenant the requests of the facts of Palette, and compare each answer
-# with the stand-in. A weekly timer on kadomony runs it (deploy/contract/).
+# with the stand-in. A weekly timer on the host of the lead runs it (deploy/contract/).
 #
 #   just live-contract [--state FILE] [--stand-in DIR] [--github URL] [--no-cloud] [--with-cluster]
 #

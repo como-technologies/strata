@@ -12,12 +12,12 @@
               {
                 "kind": "spectrocluster",
                 "name": "payments",
-                "uid": "6aba747adb74c300c31dd404",
+                "uid": "6aba744444444444444444d4",
                 "projectUid": "proj-1"
               }
             ],
             "inUseClusterUids": [
-              "6aba747adb74c300c31dd404"
+              "6aba744444444444444444d4"
             ]
           }
         }
