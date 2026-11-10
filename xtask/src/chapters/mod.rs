@@ -5,9 +5,14 @@
 //!
 //! One file holds the chapters of one group of pages: the first pages, the everyday loop, the
 //! command pages, each group of use cases, and the pages of How it works. `ids.rs` and `edits.rs`
-//! hold what the files share.
+//! hold what the files share. This file holds the settings, the candidate, and the cluster
+//! `payments` of dev with its add-on profiles, which several files use.
 
 use crate::book::Runner;
+use ids::{
+    ADDONS_DEV, ADDONS_PACK, DEV, OBSERVABILITY, OBSERVABILITY_PACK, PAYMENTS, PAYMENTS_APPS,
+    PAYMENTS_APPS_PACK,
+};
 
 mod automation;
 mod commands;
@@ -55,6 +60,64 @@ layers:
   - name: cert-manager
     version: 1.21.1
 ";
+
+/// The manifest of the pack `log-shipper` of `observability@1.0.0`.
+const LOG_SHIPPER: &str = "\
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: log-shipper
+  namespace: observability
+data:
+  endpoint: logs.example.com:443";
+
+/// The manifest of the pack `payments-quota` of `payments-apps@1.0.0`.
+const PAYMENTS_QUOTA: &str = "\
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: payments-quota
+  namespace: payments
+spec:
+  hard:
+    pods: \"50\"";
+
+/// The add-on profiles that the cluster `payments` of dev runs beside its release:
+/// `platform-addons`, `observability`, and `payments-apps`. A field test found many clusters with
+/// many profiles (#615).
+const PAYMENTS_ADDONS: [&str; 3] = [ADDONS_DEV, OBSERVABILITY, PAYMENTS_APPS];
+
+/// Publish the add-on profiles of [`PAYMENTS_ADDONS`] in dev, each at 1.0.0. Palette refuses one
+/// pack name in two profiles of a cluster, so each profile has a pack of its own name.
+fn payments_addons(r: &mut Runner) {
+    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
+    r.tenant(|t| {
+        let profile = (OBSERVABILITY, "observability", "1.0.0");
+        t.manifest_addon(
+            DEV,
+            profile,
+            ("log-shipper", OBSERVABILITY_PACK),
+            LOG_SHIPPER,
+        )
+    });
+    r.tenant(|t| {
+        let profile = (PAYMENTS_APPS, "payments-apps", "1.0.0");
+        t.manifest_addon(
+            DEV,
+            profile,
+            ("payments-quota", PAYMENTS_APPS_PACK),
+            PAYMENTS_QUOTA,
+        )
+    });
+}
+
+/// Create or update the cluster `payments` of dev: it runs the profile version `release`, then
+/// each add-on profile of [`PAYMENTS_ADDONS`].
+fn payments_cluster(r: &mut Runner, release: &str) {
+    let [platform, observability, apps] = PAYMENTS_ADDONS;
+    let profiles = [release, platform, observability, apps];
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &profiles, &[]));
+}
 
 /// Run every chapter against `r`.
 pub fn run(r: &mut Runner) {

@@ -32,6 +32,43 @@ fn a_document_applies_the_profile_of_a_uid_with_the_version_that_its_template_na
 }
 
 #[test]
+fn a_move_replaces_the_profile_of_its_uid_then_of_its_name_then_the_one_that_builds_the_cluster() {
+    let doc = json!({"spec": {"clusterProfileTemplates": [
+        {"uid": "p1", "name": "stack", "profileVersion": "1.0.0", "type": "infra"},
+        {"uid": "p2", "name": "addons", "profileVersion": "2.0.0", "type": "add-on"},
+    ]}});
+    let running = AppliedProfile::of_cluster(&doc);
+    let replaced = |uid: &str, name: &str, kind: &str| {
+        let target: Source = serde_json::from_value(json!({
+            "ref": "", "uid": uid, "name": name, "version": "", "cloudType": "aws",
+            "type": kind, "template": "published", "fetchedAt": "t0",
+        }))
+        .expect("a source");
+        AppliedProfile::replaced_by(&running, &target).map(|p| p.uid.clone())
+    };
+    let cases = [
+        // the uid first, also under another name
+        (("p2", "renamed", "add-on"), Some("p2")),
+        // another version of a profile that the cluster runs
+        (("p9", "addons", "add-on"), Some("p2")),
+        (("p9", "stack", "cluster"), Some("p1")),
+        // a profile of another name that builds a cluster: the cluster runs one such profile
+        (("p9", "other-stack", "cluster"), Some("p1")),
+        // an add-on that the cluster does not run: the move adds it
+        (("p9", "other-addons", "add-on"), None),
+        // a candidate has no uid
+        (("", "addons", "add-on"), Some("p2")),
+    ];
+    for ((uid, name, kind), want) in cases {
+        assert_eq!(
+            replaced(uid, name, kind).as_deref(),
+            want,
+            "{uid} {name} {kind}"
+        );
+    }
+}
+
+#[test]
 fn a_pack_of_a_template_is_an_entry_of_pack_values_with_empty_text_for_a_missing_field() {
     let doc = json!({"spec": {"clusterProfileTemplates": [
         {"uid": "p1", "packs": [

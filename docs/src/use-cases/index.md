@@ -88,7 +88,8 @@ identity. The uid is, in the project that holds it.
 cluster has. The two can differ.
 
 - [A cluster does not run its release](./cluster-release.md): a cluster must run
-  a recorded release, and you need to know if it does.
+  a recorded release, and you need to know if it does, also when it runs many
+  profiles.
 - [Clusters give variables different values](./cluster-values.md): two clusters
   on one release show `cluster values CHANGED`, or a person changes a value on
   one cluster.

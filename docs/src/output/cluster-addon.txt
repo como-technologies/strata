@@ -1,0 +1,8 @@
+$ strata compare platform-addons@1.0.0 cluster:payments
+platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 on cluster payments (uid 64f1000000000000000000e1)
+root       b49f91f9df85 -> b49f91f9df85   IDENTICAL
+consumers  platform-addons@1.0.0 has 1 consumer; payments is one of them
+
+  variables unchanged
+
+  [addon] namespace-policy           1.0.0              unchanged
