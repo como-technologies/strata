@@ -218,6 +218,9 @@ impl Tenant {
     /// the packs of the draft, with their values, and the published content of each manifest.
     /// Each manifest with a uid answers its own route, with its draft content and its published
     /// content. An edit of values leaves the draft content of a manifest empty.
+    ///
+    /// A new name does not wait for the publish. The PUT writes the name of its body to the
+    /// profile at once, and `packs/manifests` has the metadata of the profile.
     pub fn draft(&self, project: &str, uid: &str, edits: &[Edit]) {
         let (path, listed) = (profile_route(uid), manifests_route(uid));
         let mut doc = self.read(project, &path);
@@ -226,6 +229,7 @@ impl Tenant {
         let listing = |name: &str| self.listing_of(project, name);
         apply_edits(edits, &mut edited, &mut manifests, &listing);
         doc["spec"]["draft"] = edited["spec"]["published"].clone();
+        doc["metadata"]["name"] = edited["metadata"]["name"].clone();
         let at = self.log_write(project, "clusterprofile", uid, &doc);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
         self.write(project, &path, &doc);
@@ -336,4 +340,38 @@ pub(super) fn template_of(d: &Value) -> Value {
         "cloudType": d["spec"]["published"]["cloudType"],
         "packs": d["spec"]["published"]["packs"],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// A PUT of the profile writes the name of its body to the profile at once. Only the
+    /// template waits in the draft, and `packs/manifests` has the metadata of the profile.
+    #[test]
+    fn a_draft_with_a_new_name_gives_the_profile_and_its_answer_the_new_name_at_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), Path::new("/nowhere"));
+        let uid = "64ea00000000000000000a01";
+        let metadata = json!({"uid": uid, "name": "aws-stack"});
+        let published = json!({"cloudType": "aws", "type": "cluster",
+            "packs": [{"name": "csi-aws-ebs", "version": "1.65.0", "values": "a: 1\n"}]});
+        let doc =
+            json!({"metadata": metadata, "spec": {"version": "1.1.1", "published": published}});
+        let manifests = json!({"metadata": metadata, "spec": {"packs": [
+            {"metadata": {"name": "csi-aws-ebs"},
+                "spec": {"name": "csi-aws-ebs", "version": "1.65.0", "values": "a: 1\n"}}]}});
+        tenant.put("dev", &profile_route(uid), &doc);
+        tenant.put("dev", &manifests_route(uid), &manifests);
+        tenant.draft("dev", uid, &[Edit::Name("aws-stack-2")]);
+
+        let drafted = tenant.read("dev", &profile_route(uid));
+        let answer = tenant.read("dev", &manifests_route(uid));
+        assert_eq!(drafted["metadata"]["name"], "aws-stack-2");
+        assert_eq!(answer["metadata"]["name"], "aws-stack-2");
+        assert_eq!(drafted["spec"]["draft"], published);
+        assert_eq!(drafted["spec"]["published"], published);
+    }
 }

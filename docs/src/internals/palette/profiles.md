@@ -298,6 +298,12 @@ Palette serves the two templates as follows:
   content of neither template. A manifest that the draft adds has an empty
   content in it. Each manifest of a version that was never published has an
   empty content in it too.
+- The answer of `packs/manifests` has two names. Its `metadata` is the
+  metadata of the profile, so its `metadata.name` is the name of the profile.
+  Each pack summary takes its `metadata.name` and its `spec.name` from its pin.
+  The `PUT` writes the name of its body to the profile at once, and not to the
+  draft. So while a draft waits, the profile and the answer have the new name.
+  The code of Palette shows these facts, and no live check tests them.
 - `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
   gives one manifest with `spec.draft.content` and `spec.published.content`.
   A draft content is empty when the draft did not change the manifest.
