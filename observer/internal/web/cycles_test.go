@@ -83,7 +83,7 @@ func TestTheButtonWaitsTheSecondsOfA429AndSaysWhenARequestFailed(t *testing.T) {
 // records it at its next content check. With approved records only the pipeline can, and a check
 // cannot: the row says so.
 func TestARowOfNoRecordSaysWhatAddsTheRecordForEachBaseline(t *testing.T) {
-	row := `D.notChecked = [{cause: "no-record", profiles: ["ngp-f5@1.0.0"], packs: [], registry: ""}];`
+	row := `D.notChecked = [{cause: "no-record", profiles: ["fred-edge@1.0.0"], packs: [], registry: ""}];`
 	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "first-seen", firstSeenFrom: "c1"}`)
 	mustHold(t, "first-seen", firstSeen, "No record holds this profile version yet. The records are first-seen, so the observer records it at its next content check.")
 	approved := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row)

@@ -95,8 +95,9 @@ pub fn with_probes(probes: &[PathBuf]) -> Result<Catalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::jq::PALETTE_CURL;
     use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
-    use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
+    use strata::config::{DEFAULT_BASE_URL, KEY_VARS, URL_VARS};
 
     #[test]
     fn the_builtin_catalog_parses_and_each_id_is_unique() {
@@ -140,26 +141,33 @@ mod tests {
         assert!(found > 0, "no rule names the default URL");
     }
 
-    /// Nothing sets `PALETTE_HOST`, so a line that reads it asks `curl` for `/v1/...` with no host.
-    /// Each line that calls Palette sends the two headers. It reads the address, with the names
-    /// and the default that strata reads, as `curl_get` of the report does.
+    /// Each line that calls Palette starts its `curl` with the template of [`PALETTE_CURL`], as
+    /// the lines of the report do. So no rule holds its own copy of the headers, and no line has
+    /// the key in an argument of `curl` (#694). A line reads the address with the name and the
+    /// default that strata reads. Nothing sets `PALETTE_HOST`, so a line that reads it asks `curl`
+    /// for `/v1/...` with no host.
     #[test]
     fn each_reproduce_line_that_calls_palette_has_one_form() {
-        let parts = [
-            format!("{API_KEY_HEADER}: ${}", KEY_VARS[0]),
-            format!("{PROJECT_UID_HEADER}: ${}", PROJECT_VARS[0]),
-            format!("{}{DEFAULT_BASE_URL}}}", url_opening()),
+        let template = format!("{{{{ {PALETTE_CURL} }}}}");
+        let address = format!("{}{DEFAULT_BASE_URL}}}", url_opening());
+        // the start of the curl gives these names, so a line that names one holds a copy of it
+        let names = [
+            API_KEY_HEADER,
+            PROJECT_UID_HEADER,
+            KEY_VARS[0],
+            "PALETTE_HOST",
         ];
         let mut wrong = Vec::new();
         let mut calls = 0;
-        for (section, text) in SECTIONS {
-            for (n, line) in text.lines().enumerate() {
-                if !(line.contains(KEY_VARS[0]) || line.contains("PALETTE_HOST")) {
+        for rule in builtin().unwrap().rules() {
+            for line in rule.reproduce.lines() {
+                let named = names.iter().any(|name| line.contains(name));
+                if !(named || line.contains(&template) || line.contains(URL_VARS[0])) {
                     continue;
                 }
                 calls += 1;
-                if line.contains("PALETTE_HOST") || !parts.iter().all(|part| line.contains(part)) {
-                    wrong.push(format!("{section}.yaml:{}: {}", n + 1, line.trim()));
+                if named || !line.contains(&template) || !line.contains(&address) {
+                    wrong.push(format!("{}: {line}", rule.id));
                 }
             }
         }

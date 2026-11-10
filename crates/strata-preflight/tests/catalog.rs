@@ -6,10 +6,16 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+#[cfg(target_os = "linux")]
+use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
+use strata::api::API_KEY_HEADER;
+#[cfg(target_os = "linux")]
+use strata::config::{KEY_VARS, PROJECT_VARS, URL_VARS};
 use strata_preflight::catalog;
 use strata_preflight::fixture;
-use strata_preflight::jq::Jq;
+use strata_preflight::jq::{Jq, PALETTE_CURL};
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::report;
 use strata_preflight::rule::{
@@ -21,6 +27,10 @@ use strata_preflight::world;
 mod walk;
 
 use walk::walk;
+
+// the stand-in for Palette, which only a test on Linux uses
+#[cfg(target_os = "linux")]
+mod common;
 
 // The lock of the tests of strata: a process that a test starts takes it.
 #[path = "../../../tests/common/process.rs"]
@@ -1939,6 +1949,103 @@ fn each_jq_line_of_reproduce_in_the_catalog_compiles_in_the_jq_tool() {
     }
 }
 
+/// What the stand-in for Palette saw for one request: its `ApiKey` header, and the arguments of
+/// each process of the machine. It reads the processes while the request waits for its answer.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+struct Seen {
+    key: String,
+    arguments: Vec<String>,
+}
+
+/// The arguments of each process of the machine, as `/proc/<pid>/cmdline` shows them to each user.
+#[cfg(target_os = "linux")]
+fn arguments_of_each_process() -> Vec<String> {
+    let mut all = Vec::new();
+    for entry in std::fs::read_dir("/proc").unwrap().flatten() {
+        // an entry that is no process has no `cmdline`, and a process that ended has none to read
+        if let Ok(arguments) = std::fs::read(entry.path().join("cmdline")) {
+            all.push(String::from_utf8_lossy(&arguments).replace('\0', " "));
+        }
+    }
+    all
+}
+
+/// A stand-in for Palette on this machine, which answers each request with `body`. Before the
+/// answer, it keeps the `ApiKey` header and the arguments of each process. The `curl` of the
+/// request waits for the answer, so it is one of the processes.
+#[cfg(target_os = "linux")]
+fn palette_that_keeps_the_key(body: &str) -> (String, Arc<Mutex<Vec<Seen>>>) {
+    let header = format!("{API_KEY_HEADER}: ");
+    let answer = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    common::stand_in(answer, move |head| Seen {
+        key: head
+            .iter()
+            .find_map(|line| line.strip_prefix(&header))
+            .unwrap_or_default()
+            .to_string(),
+        arguments: arguments_of_each_process(),
+    })
+}
+
+/// A person runs a `reproduce` line by hand, also on a shared machine such as a runner of CI. A
+/// key in an argument of `curl` shows in the list of processes, and each user of the machine can
+/// read it there (#694). The test runs the two lines of `variables-in-use` that call Palette. One
+/// is the line of the rule, and one is the line that the report adds for its check. The stand-in
+/// reads the key in the header of each request, and no process shows the key in its arguments.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_reproduce_line_sends_the_key_to_palette_in_a_header_and_in_no_argument_of_a_process() {
+    const KEY: &str = "key-of-the-test-694";
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("variables-in-use").unwrap();
+    let fault = rule.tests.iter().find_map(|t| t.fault.as_ref()).unwrap();
+    let jq = Jq::new();
+    let dir = folder_for_reproduce();
+    let doc = fixture::load(fault).unwrap();
+    let lines: Vec<String> = reproduce_lines(&catalog, rule, doc, dir.path(), &jq)
+        .into_iter()
+        .filter(|line| line.contains("curl "))
+        .collect();
+    assert_eq!(lines.len(), 2, "{lines:#?}");
+    let (address, seen) = palette_that_keeps_the_key(r#"{"status": {"inUseClusters": []}}"#);
+    for line in &lines {
+        let ran = Command::new("bash")
+            .args(["-c", line])
+            .current_dir(dir.path())
+            .env_clear()
+            .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+            .env("HOME", dir.path())
+            .env(URL_VARS[0], &address)
+            .env(KEY_VARS[0], KEY)
+            .env(PROJECT_VARS[0], "p-1")
+            .output_locked()
+            .unwrap();
+        assert!(
+            ran.status.success(),
+            "{line}\n{}",
+            String::from_utf8_lossy(&ran.stderr)
+        );
+    }
+    let seen = seen.lock().unwrap();
+    let keys: Vec<&str> = seen.iter().map(|request| request.key.as_str()).collect();
+    assert_eq!(keys, [KEY, KEY], "the header of each request holds the key");
+    let arguments: Vec<&String> = seen.iter().flat_map(|request| &request.arguments).collect();
+    let curls: Vec<&&String> = arguments
+        .iter()
+        .filter(|each| each.starts_with("curl ") && each.contains(&address))
+        .collect();
+    assert_eq!(curls.len(), 2, "the stand-in sees each curl: {seen:#?}");
+    let shown: Vec<&&String> = arguments.iter().filter(|each| each.contains(KEY)).collect();
+    assert!(shown.is_empty(), "a process shows the key: {shown:#?}");
+    for each in curls {
+        assert!(each.contains(" --config /dev/fd/"), "{each}");
+    }
+}
+
 /// Run the program `expr` in the engine and in the `jq` tool, over each input. The tool runs the
 /// line that a report prints for a static rule: the definitions of the filters in front, then the
 /// program. The line starts with `start`. The two give the same answer, or both fail.
@@ -2809,9 +2916,20 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
     let catalog = catalog::builtin().unwrap();
     let jq = Jq::new();
     let dir = folder_for_reproduce();
+    // a line of a rule starts its `curl` with a template, and the words of a command skip a
+    // template. So the test fills it, and reads the `curl` and its options.
+    let template = format!("{{{{ {PALETTE_CURL} }}}}");
+    let start = jq
+        .first("t", PALETTE_CURL, &serde_json::Value::Null, None)
+        .unwrap();
+    let start = start.as_str().unwrap();
     let mut found = Vec::new();
     for rule in catalog.rules() {
-        let mut lines: Vec<String> = rule.reproduce.lines().map(str::to_string).collect();
+        let mut lines: Vec<String> = rule
+            .reproduce
+            .lines()
+            .map(|line| line.replace(&template, start))
+            .collect();
         if let Some(fault) = rule.tests.iter().find_map(|t| t.fault.as_ref()) {
             let doc = fixture::load(fault).unwrap();
             lines.extend(reproduce_lines(&catalog, rule, doc, dir.path(), &jq));
