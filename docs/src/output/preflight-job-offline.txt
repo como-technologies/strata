@@ -1,0 +1,5 @@
+$ PALETTE_API_KEY= STRATA_PREFLIGHT_SOURCE=cluster.json STRATA_PREFLIGHT_CLOUD=aws scripts/ci/preflight.sh 2>&1 | sed -n '1,4p'
+preflight: the run is offline, so it reads nothing from Palette: no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env
+## strata-preflight: aws cluster `payments`
+
+**OK: each counted check passed** — source `cluster.json`, Palette release not given, tiers static, offline. 4 ran: 4 passed, 0 failed, no probes failed; 16 did not run, 24 not checked; readiness **20%** (4 of 20 checks passed).

@@ -749,7 +749,8 @@ what it answered.
 - `subject`: `cloud`, `release` when given, `source` (a file, `cluster:<uid>`,
   or both with a change), `name` of the cluster, and `clusterUid` for an
   existing cluster.
-- `options`: `tiers` that ran, `strict`, and `ready` when given.
+- `options`: `tiers` that ran, `strict`, `offline`, and `ready` when given.
+  `offline` is true when the run read nothing from Palette, as with `--offline`.
 - `checks[]`: one entry for each rule, in the order of the catalog.
   - `id`, `title`, `section`, `tier`, `level`, `severity`, `status`.
   - `verdict`: `passed`, `failed`, `not-checked`, `not-run`, `skipped`, or
@@ -784,7 +785,7 @@ what it answered.
   `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
-- `options`: `tiers`, `strict`, `ready`, and `outDir` when `--out` was given.
+- `options`: `tiers`, `strict`, `offline`, `ready`, and `outDir` when `--out` was given.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

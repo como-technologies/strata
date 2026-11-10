@@ -280,6 +280,7 @@ mod tests {
             options: Options {
                 tiers: vec![Tier::Static],
                 strict: false,
+                offline: false,
                 ready: None,
                 out_dir: None,
             },
@@ -348,6 +349,29 @@ mod tests {
         );
         assert!(!html.contains('–'), "one mark for no percent");
         let _ = BTreeMap::<String, String>::new();
+    }
+
+    #[test]
+    fn the_three_forms_write_offline_after_the_tiers_of_a_run_that_read_nothing_from_palette() {
+        let mut report = report();
+        for (offline, tiers) in [(true, "tiers static, offline"), (false, "tiers static")] {
+            report.options.offline = offline;
+            for (form, text) in [
+                (
+                    "terminal",
+                    terminal(&report, &strata::term::color::Paint::off()),
+                ),
+                ("markdown", markdown(&report)),
+                ("html", page(&report)),
+            ] {
+                assert!(text.contains(tiers), "{form}: {text}");
+                assert_eq!(
+                    text.contains("tiers static, offline"),
+                    offline,
+                    "{form}: {text}"
+                );
+            }
+        }
     }
 
     #[test]

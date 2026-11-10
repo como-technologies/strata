@@ -2,9 +2,10 @@
 //!
 //! `just fuzz-seed` writes the seeds into `src/__fuzz__/<module>__<test>/corpus/`, where bolero
 //! reads them. Each seed is a real input of the target. It is a file of `examples/`, a file of the
-//! catalog of strata-preflight, or a file or an output of the book. A seed can also be a document
-//! that the library builds from them. A file has the name `fingerprint` gives its bytes, so a
-//! second run changes no file.
+//! catalog of strata-preflight, or a file or an output of the book. It can also be a report that
+//! the contract test of the observer writes. A seed can also be a document that the library
+//! builds from them. A file has the name `fingerprint` gives its bytes, so a second run changes
+//! no file.
 //!
 //! A seed makes a fuzzer start in the code, and not at the first byte that a parser refuses. The
 //! check at the end of this file fails when the seeds of a target no longer reach its code. A
@@ -24,10 +25,14 @@ use strata::ops;
 use strata::snapshot::Snapshot;
 
 use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
-use crate::{candidate, canon, config, mask, palette, preflight, record, reference, report};
+use crate::{
+    behind, candidate, canon, config, mask, palette, preflight, record, reference, report, unknown,
+};
 
 mod catalog;
 mod regressions;
+mod since;
+mod state;
 
 /// The most bytes of a seed that a file gives. A longer file is a poor start for a fuzzer: each
 /// input of it costs more, and libFuzzer keeps its inputs short.
@@ -44,7 +49,7 @@ struct Target {
 }
 
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
-const TARGETS: [Target; 17] = [
+const TARGETS: [Target; 20] = [
     Target {
         test: "candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind",
         run: candidate::file,
@@ -113,7 +118,22 @@ const TARGETS: [Target; 17] = [
     Target {
         test: "report::a_request_body_is_refused_with_a_status_or_is_a_report_that_writes_as_itself",
         run: report::body,
-        seeds: report_bodies,
+        seeds: state::report_bodies,
+    },
+    Target {
+        test: "behind::a_behind_report_is_the_since_of_a_run_or_is_refused_with_a_kind",
+        run: behind::since,
+        seeds: since::reports,
+    },
+    Target {
+        test: "unknown::a_log_of_unknown_values_gives_a_report_that_the_endpoint_takes_or_is_refused_with_a_kind",
+        run: unknown::log,
+        seeds: state::logs,
+    },
+    Target {
+        test: "unknown::an_answer_file_gives_a_choice_that_it_keeps_and_only_the_yes_sends",
+        run: unknown::answer_file,
+        seeds: state::answers,
     },
     Target {
         test: "preflight::a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind",
@@ -616,36 +636,6 @@ fn settings() -> Vec<Vec<u8>> {
         .iter()
         .map(|t| t.as_bytes().to_vec())
         .collect()
-}
-
-// ---- the report ------------------------------------------------------------------------------
-
-/// A report as `strata report --json` writes it, and the bodies that the endpoint refuses. The
-/// fields `palette`, `status`, and `errorCode` were in the report of release 0.27.0, and the check
-/// refuses them now.
-const REPORT_CASES: [&str; 17] = [
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs","count":1},{"strata":"0.27.0","set":"PackState","value":"retired","route":"/v1/packs","count":3}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","count":1},{"strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata","count":7}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.27.0-rc.1","set":"PackState","value":"x","route":"/v1/packs","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.28.0","set":"PackState","value":"two-words","route":"/v1/packs","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.28.0","set":"PackState","value":"retired","route":"/v1/packs","count":2},{"strata":"0.28.0","set":"OciProvider","value":"retired","route":"/v1/registries/oci/summary","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","status":404,"errorCode":"RegistryNotFound","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"pending\u200b","route":"/v1/packs","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.28.0","set":"PackState","value":" pending ","route":"/v1/packs","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[]}"#,
-    r#"{"schema":"strata-report/2","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"64f0a1b2c3d4e5f6a7b8c9d0"}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/clusterprofiles/64f0a1b2c3d4e5f6a7b8c9d0","count":1}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"a\nb","route":"/v1/packs","count":0}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":1}],"host":"h"}"#,
-    "not json",
-];
-
-/// The seeds of the body of a request: the cases above.
-fn report_bodies() -> Vec<Vec<u8>> {
-    REPORT_CASES.iter().map(|t| t.as_bytes().to_vec()).collect()
 }
 
 // ---- the files of the corpus ----------------------------------------------------------------

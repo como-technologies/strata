@@ -12,12 +12,13 @@ use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
-const SHIPPED: [&str; 8] = [
+const SHIPPED: [&str; 9] = [
     "pr-comment.sh",
     "merge-gate.sh",
     "verify-report.sh",
     "upstream-report.sh",
     "preflight.sh",
+    "palette-key.sh",
     "observer-records.sh",
     "observer-propose.sh",
     "install-strata.sh",
@@ -2265,6 +2266,7 @@ fn release() -> tempfile::TempDir {
         ("10", "preflight.sh", "#!/bin/sh\necho preflight\n"),
         ("11", "observer-records.sh", "#!/bin/sh\necho records\n"),
         ("12", "observer-propose.sh", "#!/bin/sh\necho propose\n"),
+        ("13", "palette-key.sh", "#!/bin/sh\necho key\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -2346,6 +2348,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "merge-gate.sh",
         "verify-report.sh",
         "upstream-report.sh",
+        "palette-key.sh",
         "observer-records.sh",
         "observer-propose.sh",
         "SHA256SUMS",
@@ -2361,6 +2364,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
             "merge-gate.sh",
             "verify-report.sh",
             "upstream-report.sh",
+            "palette-key.sh",
             "observer-records.sh",
             "observer-propose.sh",
         ] {
@@ -2453,6 +2457,7 @@ fn install_strata_bin_only_installs_the_binary_and_nothing_beside_it() {
         "merge-gate.sh",
         "verify-report.sh",
         "upstream-report.sh",
+        "palette-key.sh",
         "observer-records.sh",
         "observer-propose.sh",
         "SHA256SUMS",
@@ -3272,9 +3277,7 @@ fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does()
     let o = g.run(&["releases/*.json", "--base", "main"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(
-        text(&o.stderr).contains(
-            "not verified: no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env"
-        ),
+        text(&o.stderr).contains(&format!("not verified: {NO_KEY}")),
         "{}",
         text(&o.stderr)
     );
@@ -4831,6 +4834,8 @@ fn preflight_job() -> PreflightJob {
 impl PreflightJob {
     /// Run `preflight.sh` with the variables `envs` and the arguments `args`, and no key. A runner
     /// sets `GITHUB_REPOSITORY`, which `pr-comment.sh` reads: the stand-in `gh` must give the repo.
+    /// The home is the job directory, so a key in the `~/.palette.env` of the machine does not
+    /// reach the script.
     fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
         let d = self.dir.path();
         std::fs::write(d.join("strata.log"), "").unwrap();
@@ -4840,12 +4845,14 @@ impl PreflightJob {
             .args(args)
             .current_dir(d)
             .env("PATH", path_with(&self.bin))
+            .env("HOME", d)
             .env("STRATA_BIN", self.bin.join("strata"))
             .env("FAKE_LOG", d.join("strata.log"))
             .env("FAKE_GH_LOG", d.join("gh.log"))
             .env("FAKE_GH_SAVED_BODY", d.join("saved-body.md"))
             .env_remove("GITHUB_REPOSITORY")
-            .env_remove("PALETTE_API_KEY");
+            .env_remove("PALETTE_API_KEY")
+            .env_remove("SPECTROCLOUD_APIKEY");
         for (k, v) in envs {
             c.env(k, v);
         }
@@ -4948,28 +4955,92 @@ fn preflight_sh_gives_no_option_for_an_empty_variable_and_a_value_other_than_tru
     );
 }
 
+/// The line of the log of a run that reads nothing from Palette, before its reason.
+const PREFLIGHT_OFFLINE: &str = "preflight: the run is offline, so it reads nothing from Palette: ";
+
+/// Strata reads the key from `PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`. A
+/// script that looks in the first place alone runs a job with a key on the static tier. That job
+/// passes with most of its checks off.
 #[test]
-fn preflight_sh_reads_nothing_from_palette_without_a_key_or_with_the_option_offline() {
+fn preflight_sh_finds_the_key_where_strata_does_and_says_in_the_log_when_the_run_is_offline() {
     let job = preflight_job();
     let source = ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json");
-    for (args, envs, offline) in [
-        (vec![], vec![source], true),
-        (vec![], vec![source, ("PALETTE_API_KEY", "a-key")], false),
+    let file = job.dir.path().join(".palette.env");
+    for (args, key, palette_env, offline) in [
+        (vec![], Some(("PALETTE_API_KEY", "a-key")), "", None),
+        (vec![], Some(("SPECTROCLOUD_APIKEY", "a-key")), "", None),
+        (vec![], None, "PALETTE_API_KEY=a-key\n", None),
+        (vec![], None, "export SPECTROCLOUD_APIKEY=\"a-key\"\n", None),
+        (vec![], None, "", Some(NO_KEY)),
+        (
+            vec![],
+            None,
+            "# PALETTE_API_KEY=a-key\nPALETTE_API_KEY=''\n",
+            Some(NO_KEY),
+        ),
         (
             vec!["--offline"],
-            vec![source, ("PALETTE_API_KEY", "a-key")],
-            true,
+            Some(("PALETTE_API_KEY", "a-key")),
+            "",
+            Some("--offline"),
         ),
     ] {
+        std::fs::write(&file, palette_env).unwrap();
+        let mut envs = vec![source];
+        envs.extend(key);
         let o = job.run(&args, &envs);
-        assert!(o.status.success(), "{}", text(&o.stderr));
+        let case = format!("{args:?} {key:?} {palette_env:?}");
+        assert!(o.status.success(), "{case}: {}", text(&o.stderr));
         let calls = job.strata_calls();
         assert_eq!(
             calls[0].contains(" --offline "),
-            offline,
-            "{args:?} {envs:?}: {calls:?}"
+            offline.is_some(),
+            "{case}: {calls:?}"
+        );
+        let log = text(&o.stderr);
+        match offline {
+            Some(why) => assert!(
+                log.contains(&format!("{PREFLIGHT_OFFLINE}{why}\n")),
+                "{case}: {log}"
+            ),
+            None => assert!(!log.contains(PREFLIGHT_OFFLINE), "{case}: {log}"),
+        }
+        assert!(
+            !log.contains("a-key"),
+            "{case}: the log holds no key: {log}"
         );
     }
+}
+
+/// The script needs `palette-key.sh` beside it. A copy of the script alone stops with exit 2
+/// before strata runs, and does not read a missing script as no key.
+#[test]
+fn preflight_sh_stops_with_exit_2_when_palette_key_sh_is_not_beside_it() {
+    let job = preflight_job();
+    let alone = job.dir.path().join("alone");
+    copy_scripts(&alone, &["scripts/ci/preflight.sh"]);
+    let o = Command::new("bash")
+        .arg(alone.join("scripts/ci/preflight.sh"))
+        .current_dir(job.dir.path())
+        .env("HOME", job.dir.path())
+        .env("STRATA_BIN", job.bin.join("strata"))
+        .env("FAKE_LOG", job.dir.path().join("strata.log"))
+        .env("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json")
+        .env_remove("PALETTE_API_KEY")
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("palette-key.sh beside this script did not answer"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!text(&o.stderr).contains(PREFLIGHT_OFFLINE));
+    assert!(
+        !job.dir.path().join("strata.log").exists(),
+        "strata does not run"
+    );
 }
 
 #[test]
@@ -5090,6 +5161,112 @@ fn preflight_sh_turns_a_failed_comment_into_exit_2_and_keeps_a_failed_status_of_
             text(&o.stderr).contains("missing or empty"),
             "{}",
             text(&o.stderr)
+        );
+    }
+}
+
+// ---- palette-key.sh ----------------------------------------------------------------------------
+
+/// What `palette-key.sh` prints when it finds no key: the places where strata looks for one.
+/// `merge-gate.sh` and `preflight.sh` give it as their reason.
+const NO_KEY: &str = "no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or ~/.palette.env";
+
+/// Run `palette-key.sh` with the home `home` and the variables `envs`, and no other key.
+fn palette_key(home: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    Command::new("bash")
+        .arg(script("ci/palette-key.sh"))
+        .args(args)
+        .env("HOME", home)
+        .env_remove("PALETTE_API_KEY")
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .envs(envs.iter().copied())
+        .output_locked()
+        .unwrap()
+}
+
+/// True when strata finds a key with the home `home` and no key in the environment. The address
+/// refuses a connection. So a run with a key fails at the request, and a run with no key fails
+/// before it, with `missing-credential`.
+fn strata_finds_a_key(home: &Path) -> bool {
+    let mut c = strata_command();
+    isolate_palette(&mut c, home).env_remove("PALETTE_API_KEY");
+    let o = c
+        .args(["list", "--json", "projects"])
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    !text(&o.stderr).contains("\"missing-credential\"")
+}
+
+#[test]
+fn palette_key_sh_finds_a_key_in_each_place_that_strata_reads_and_names_the_places_without_one() {
+    let home = tempfile::tempdir().unwrap();
+    let file = home.path().join(".palette.env");
+    for (envs, palette_env) in [
+        (vec![("PALETTE_API_KEY", "k")], ""),
+        (vec![("SPECTROCLOUD_APIKEY", "k")], ""),
+        (vec![], "PALETTE_API_KEY=k\n"),
+        (vec![], "SPECTROCLOUD_APIKEY=k\n"),
+    ] {
+        std::fs::write(&file, palette_env).unwrap();
+        let o = palette_key(home.path(), &[], &envs);
+        assert_eq!(o.status.code(), Some(0), "{envs:?} {palette_env:?}");
+        assert!(
+            o.stdout.is_empty() && o.stderr.is_empty(),
+            "a key gives no line, and never the key: {}{}",
+            text(&o.stdout),
+            text(&o.stderr)
+        );
+    }
+
+    // an empty variable is no key, as for strata, and no file is no key either
+    std::fs::remove_file(&file).unwrap();
+    let o = palette_key(
+        home.path(),
+        &[],
+        &[("PALETTE_API_KEY", ""), ("SPECTROCLOUD_APIKEY", "")],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), format!("{NO_KEY}\n"));
+
+    let o = palette_key(home.path(), &["--nope"], &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("unknown option --nope"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// The script reads `~/.palette.env` in the same way as strata. Each line here gives strata a key
+/// or no key, and the script must give the same answer.
+#[test]
+fn palette_key_sh_reads_the_file_as_strata_reads_it() {
+    let home = tempfile::tempdir().unwrap();
+    for (palette_env, key) in [
+        ("PALETTE_API_KEY=k\n", true),
+        ("export SPECTROCLOUD_APIKEY=\"k\"\n", true),
+        ("  PALETTE_API_KEY = 'k'  \r\n", true),
+        ("PALETTE_API_KEY=\nSPECTROCLOUD_APIKEY=k", true),
+        ("PALETTE_API_KEY=\"\"\nPALETTE_API_KEY=k\n", true),
+        ("PALETTE_API_KEY=\"\"\n", false),
+        ("SPECTROCLOUD_APIKEY=''\n", false),
+        ("# PALETTE_API_KEY=k\n", false),
+        ("export\tPALETTE_API_KEY=k\n", false),
+        ("PALETTE_API_KEY_OLD=k\nPALETTE_API=k\n", false),
+        ("", false),
+    ] {
+        std::fs::write(home.path().join(".palette.env"), palette_env).unwrap();
+        assert_eq!(
+            strata_finds_a_key(home.path()),
+            key,
+            "strata: {palette_env:?}"
+        );
+        let o = palette_key(home.path(), &[], &[]);
+        assert_eq!(
+            o.status.code(),
+            Some(if key { 0 } else { 1 }),
+            "palette-key.sh: {palette_env:?}"
         );
     }
 }

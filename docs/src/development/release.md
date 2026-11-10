@@ -11,7 +11,7 @@
    install command, the install page, the CI drop-ins, the chart of the observer
    and its `helm install` command, and the pages that show them. The recipe rewrites the version only where the version
    follows this repository. Prose that names a release for a reason keeps it:
-   "use v0.5.2 or later, the first release with all four scripts" is a fact
+   "use v0.5.2 or later, the first release with `merge-gate.sh`" is a fact
    about v0.5.2. The recipe leaves the recorded live runs alone for the same
    reason, because each one says which build produced it. It refuses when a file
    it must rewrite already holds uncommitted changes, so the commit is the

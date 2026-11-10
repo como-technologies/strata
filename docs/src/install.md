@@ -34,7 +34,7 @@ Each release has these files:
 `install-strata.sh` is in every release. It reads the release and finds the
 binary for this machine. It checks the signature of `SHA256SUMS` when `cosign` 3 or
 later is on the `PATH`. It checks each file against `SHA256SUMS`. It puts the two
-binaries and the five CI scripts in the directory. Then it prints the path of
+binaries and the CI scripts in the directory. Then it prints the path of
 the strata binary:
 
 ```bash
