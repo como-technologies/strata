@@ -365,15 +365,23 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
     }
 }
 
+/// The values that the generated help of `strata <command>` lists for one argument or option.
+/// The line of that argument or option starts with `name`, such as `<KIND>` or `--allow `.
+fn possible_values(command: &str, name: &str) -> Vec<String> {
+    let help = read(&docs().join(format!("output/help-{command}.txt")));
+    help.lines()
+        .find(|line| line.trim_start().starts_with(name))
+        .and_then(|line| line.split("[possible values: ").nth(1))
+        .and_then(|rest| rest.split(']').next())
+        .unwrap_or_else(|| panic!("the help of {command} lists no values of {name:?}"))
+        .split(", ")
+        .map(str::to_string)
+        .collect()
+}
+
 /// The kinds that `strata schema` takes, from its generated help.
 fn schema_kinds() -> Vec<String> {
-    let help = read(&docs().join("output/help-schema.txt"));
-    let list = help
-        .split("[possible values: ")
-        .nth(1)
-        .and_then(|rest| rest.split(']').next())
-        .expect("the help of schema lists its kinds");
-    list.split(", ").map(str::to_string).collect()
+    possible_values("schema", "<KIND>")
 }
 
 /// The rename of the two read errors reached `strata-diff/1` and `strata-verify-summary/1`, which
@@ -6211,4 +6219,170 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
         documents.contains("(./preflight-rules.md#the-reproduce-lines)"),
         "documents.md does not link the reproduce lines"
     );
+}
+
+// ---- the page of the pipeline of a team (#492) ---------------------------------------------------
+
+/// The page for a team that brings its own pipeline, with the sample pipeline as one example.
+const PIPELINE_PAGE: &str = "internals/sample-pipeline.md";
+
+/// The page of the pipeline keeps to the limits and the words of "The style rules".
+#[test]
+fn the_page_of_your_own_pipeline_keeps_to_the_style_rules() {
+    let text = read(&docs().join(PIPELINE_PAGE));
+    let mut faults = Vec::new();
+    for block in blocks_of(&text) {
+        faults.extend(block_faults(PIPELINE_PAGE, &block));
+        faults.extend(wording_faults(PIPELINE_PAGE, &block));
+    }
+    assert_no_faults(&faults);
+}
+
+/// The navigation lists the page under How it works, and the everyday loop and the boundary link
+/// to it.
+#[test]
+fn the_loop_and_the_boundary_link_to_the_page_of_your_own_pipeline() {
+    let summary = read(&docs().join("SUMMARY.md"));
+    let how_it_works = section(&summary, "\n# How it works\n", Some("\n# Development"));
+    assert!(
+        how_it_works.contains("(./internals/sample-pipeline.md)"),
+        "How it works does not list the page of your own pipeline"
+    );
+    for page in ["loop.md", "boundary.md"] {
+        assert!(
+            read(&docs().join(page)).contains("(./internals/sample-pipeline.md"),
+            "{page} does not link the page of your own pipeline"
+        );
+    }
+}
+
+/// The section for a pipeline of the team comes before the sample pipeline. Its table gives a
+/// command for each event, its list gives each idea to add, and the page calls the sample one
+/// opinionated example.
+#[test]
+fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
+    let text = read(&docs().join(PIPELINE_PAGE));
+    let at = |heading: &str| {
+        text.find(&format!("\n{heading}\n"))
+            .unwrap_or_else(|| panic!("the page has no {heading:?}"))
+    };
+    let fits = at("## Where strata fits");
+    let ideas = at("## Add the ideas of strata to your pipeline");
+    let sample = at("## A sample pipeline and its versions");
+    assert!(
+        fits < ideas && ideas < sample,
+        "the section for your own pipeline does not come before the sample pipeline"
+    );
+    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")));
+    for (event, command) in [
+        ("A publish", "strata snapshot"),
+        ("A promotion", "strata same-release"),
+        ("A renumber", "strata same-release"),
+        ("A bump", "strata behind"),
+        ("A delete", "strata consumers"),
+        ("Drift", "strata verify"),
+        ("Drift", "the observer"),
+    ] {
+        assert!(
+            rows.iter()
+                .any(|row| row[0] == event && row[1].contains(command)),
+            "the row {event:?} does not give {command:?}"
+        );
+    }
+    let ideas = one_line(section(
+        &text,
+        "## Add the ideas of strata to your pipeline",
+        Some("\n## "),
+    ));
+    for idea in [
+        "**A record.**",
+        "**A root.**",
+        "**First-seen records, then approved records.**",
+    ] {
+        assert!(
+            ideas.contains(idea),
+            "the page does not add the idea {idea:?}"
+        );
+    }
+    let sample = one_line(section(
+        &text,
+        "## A sample pipeline and its versions",
+        None,
+    ));
+    assert!(
+        sample.contains("It is one opinionated example, and not a rule."),
+        "the page does not name the sample pipeline as one opinionated example"
+    );
+}
+
+/// The page names `--allow renumber` and its item as open while `same-release` does not take the
+/// value. The item that adds the value changes the page in the same pull request, or this test
+/// fails.
+#[test]
+fn the_page_names_the_renumber_as_open_while_same_release_does_not_take_it() {
+    let text = one_line(&read(&docs().join(PIPELINE_PAGE)));
+    let open = !possible_values("same-release", "--allow ")
+        .iter()
+        .any(|v| v == "renumber");
+    for needle in [
+        "`same-release --allow renumber` is an open item",
+        "**A pre-release and its final version.** Open:",
+    ] {
+        assert_eq!(
+            text.contains(needle),
+            open,
+            "the page and the help of same-release disagree on {needle:?}"
+        );
+    }
+    if open {
+        assert!(
+            text.contains("[#730](https://github.com/como-technologies/strata/issues/730)"),
+            "the page does not name the item of the renumber"
+        );
+    }
+}
+
+/// The page states that the gap of the order of versions is closed, and its outputs show it.
+/// `@latest` takes no pre-release, and a pre-release is below its version.
+#[test]
+fn the_page_states_the_order_of_versions_that_its_outputs_show() {
+    let text = one_line(&read(&docs().join(PIPELINE_PAGE)));
+    assert!(
+        text.contains("**The order of versions.** No gap now."),
+        "the page does not state the gap of the order of versions as closed"
+    );
+    let latest = read(&docs().join("output/pipeline-latest.txt"));
+    assert_eq!(latest.lines().last(), Some("aws-stack@1.1.1"));
+    let versions = read(&docs().join("output/pipeline-versions.txt"));
+    let order: Vec<&str> = versions
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("aws-stack@"))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .collect();
+    assert_eq!(
+        order,
+        [
+            "1.1.1",
+            "1.1.2-g0123456789ab",
+            "1.1.2-mr12.345",
+            "1.1.2",
+            "1.1.3-g8e2d1c0b9a7f",
+            "1.1.3"
+        ]
+    );
+}
+
+/// The page gives no internal host and no ticket: each link out of the book goes to the
+/// repository of strata.
+#[test]
+fn the_page_of_your_own_pipeline_links_out_only_to_the_repository_of_strata() {
+    let text = read(&docs().join(PIPELINE_PAGE));
+    for (at, _) in text.match_indices("://") {
+        let start = text[..at].rfind(['(', ' ', '<']).map_or(0, |i| i + 1);
+        assert!(
+            text[start..].starts_with("https://github.com/como-technologies/strata/"),
+            "the page links out of the book to {}",
+            &text[start..text.len().min(at + 40)]
+        );
+    }
 }

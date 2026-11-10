@@ -1,0 +1,3 @@
+$ strata same-release aws-stack@1.1.2-g0123456789ab aws-stack@1.1.2
+IDENTICAL      aws-stack@1.1.2-g0123456789ab -> aws-stack@1.1.2   root 78a86f401545
+SAME RELEASE: 1 pair passed

@@ -88,3 +88,12 @@ pub(super) const A1117: &str = "64e000000000000000000105";
 pub(super) const DEVELOP_118: &str = "64e000000000000000000106";
 pub(super) const DEVELOP_BUILD: &str = "64e000000000000000000107";
 pub(super) const DEVELOP_1110: &str = "64e000000000000000000108";
+// aws-stack@1.1.2 of the sample pipeline: the content of 1.1.1 with the reclaim policy Retain, as
+// the candidate of a merge request, the pre-release of the merge, and the final version
+pub(super) const SAMPLE_CANDIDATE: &str = "64e000000000000000000109";
+pub(super) const SAMPLE_PRE: &str = "64e00000000000000000010a";
+pub(super) const SAMPLE_FINAL: &str = "64e00000000000000000010b";
+// aws-stack@1.1.3 of the sample pipeline: the content of 1.1.1 with a new build of the CSI pack, as
+// the pre-release that pins the pre-release of the pack, and the final version that pins its final
+pub(super) const SAMPLE_PIN_PRE: &str = "64e00000000000000000010c";
+pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";

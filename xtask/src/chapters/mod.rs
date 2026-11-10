@@ -4,7 +4,8 @@
 //! where the page describes one. `serve_here` marks a state the playground can hand over.
 //!
 //! One file holds the chapters of one group of pages: the first pages, the everyday loop, the
-//! command pages, and each group of use cases. `ids.rs` and `edits.rs` hold what the files share.
+//! command pages, each group of use cases, and the pages of How it works. `ids.rs` and `edits.rs`
+//! hold what the files share.
 
 use crate::book::Runner;
 
@@ -18,6 +19,7 @@ mod fleet;
 mod ids;
 mod objects;
 mod observer;
+mod pipeline;
 mod preflight;
 mod release;
 mod repave;
@@ -65,6 +67,7 @@ pub fn run(r: &mut Runner) {
     repave::run(r);
     objects::run(r);
     fleet::run(r);
+    pipeline::run(r);
     observer::run(r);
     automation::run(r);
     preflight::run(r);

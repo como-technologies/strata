@@ -108,6 +108,7 @@
 
 # How it works
 
+- [Bring your own pipeline](./internals/sample-pipeline.md)
 - [The hashes and the root](./internals/hashes.md)
 - [How preflight works](./internals/preflight.md)
 - [What Palette does](./internals/palette.md)
