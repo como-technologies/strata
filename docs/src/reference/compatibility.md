@@ -1081,8 +1081,9 @@ field, a value, an input, or an option is in the sections above.
     `cluster:<cluster>/<profile>` ref give what they gave before.
   - To compare each profile of a cluster with a release, compare a record of the cluster.
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
-  `HOME` read the file of the working folder. A relative `HOME` read a file below
-  that folder. So a file of a checkout could give the address that got the key.
+  `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
+  read the file of a folder from the working folder. So a file of a checkout could
+  give the address that got the key.
   Now strata reads no file then, and the environment gives each setting. A job with
   a relative `HOME` must set an absolute path, or give the settings in the
   environment. See [Settings](./settings.md).
@@ -1132,9 +1133,9 @@ field, a value, an input, or an option is in the sections above.
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
 - **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
-  does.** Before, a relative `HOME` read a file below the working folder. Now, when
-  no variable gives a key, `merge-gate.sh` omits the verify and `preflight.sh` runs
-  offline.
+  does.** Before, a relative `HOME` read the file of a folder from the working
+  folder. Now, when no variable gives a key, `merge-gate.sh` omits the verify and
+  `preflight.sh` runs offline.
 
 ### For a user of the library of strata
 
@@ -1147,7 +1148,8 @@ field, a value, an input, or an option is in the sections above.
   `profile` gives a cluster record of the profile that the version replaces. Its
   `source.reference` names that profile. The signature stays.
 - `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
-  Before, it read the file below the working folder.
+  Before, it read the file of the working folder, or of a folder from the working
+  folder.
 - `ops::same_release_with` takes `ops::SameReleaseOptions` in place of a `Policy` and a `bool`.
   `SameReleaseOptions { policy, allow_no_digest, ..SameReleaseOptions::default() }` gives the
   result of 0.32.2. The new field `allow_renumber` is `--allow renumber`.
