@@ -132,12 +132,17 @@ A pack version that a chapter adds, such as a pre-release, gets a uid and a
 digest of its own in its registry. An upgrade of a pin takes the uid and the
 digest of the new version from the listing of the registry of the pin. A version
 that the listing does not hold gets a uid and a digest of its own in that
-registry. Each edit changes the pin and its pack summary in `packs/manifests`
-together, at a publish, at an edit in place, and in a draft. As in Palette, the
-summary takes the uid, the registry, and the digest of the pinned version, and
-the values of the pin. See
+registry. See
 [The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest) and
 [A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
+
+Each edit changes the pin and its pack summary in `packs/manifests` together, at
+a publish, at an edit in place, and in a draft. As in Palette, the summary takes
+the uid, the registry, and the digest of the pinned version. It takes the name
+and the values of the pin. The answer has the metadata of the profile, so a new
+name of the profile also changes the answer. A test of
+`xtask/src/tenant/edit.rs` applies one edit of each variant of `Edit`. Its build
+fails on a new variant until the test holds an edit of it.
 
 1. Find the chapter of the page in `xtask/src/chapters/`. To add one, put
    `r.chapter("name", env)` in the file of its group of pages.

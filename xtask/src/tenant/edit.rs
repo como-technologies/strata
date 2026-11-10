@@ -27,7 +27,7 @@ pub enum Edit {
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
     /// Give the profile another name, as `PATCH /v1/clusterprofiles/{uid}/metadata` does: the
-    /// uid and the version stay.
+    /// uid and the version stay. The answer of `packs/manifests` takes the new name too.
     Name(&'static str),
     /// Give the profile another cloud type, such as `gcp` for a profile that the body of an AWS
     /// create names. `spec.published.cloudType` changes, and the packs stay.
@@ -105,7 +105,7 @@ pub(super) type Listing<'a> = &'a dyn Fn(&str) -> Value;
 /// Apply each edit of `edits`, in order, to the profile document `doc` and to its pack summaries
 /// `manifests`. `listing` gives the pack listing that an upgrade reads.
 ///
-/// Palette builds the answer of `packs/manifests` from the pins of the profile at each read. So
+/// Palette builds the answer of `packs/manifests` from the profile and its pins at each read. So
 /// each edit changes the two documents together: at a publish, at an edit in place, and in a
 /// draft.
 pub(super) fn apply_edits(
@@ -146,9 +146,11 @@ impl Edit {
     /// `listing` gives the pack listing that an upgrade reads.
     ///
     /// Palette gives the summary of a pack from the record of the version that the profile pins:
-    /// its uid, its version, its registry, and its digest.
+    /// its uid, its version, its registry, and its digest. The answer has the metadata of the
+    /// profile, so it takes the name of the profile.
     fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
         match self {
+            Edit::Name(name) => manifests["metadata"]["name"] = json!(name),
             Edit::OciCsi => summaries_named(manifests, "csi-aws-ebs").for_each(with_oci_csi_build),
             Edit::NoDigest(name) => {
                 for summary in summaries_named(manifests, name) {
@@ -606,7 +608,8 @@ mod tests {
     }
 
     /// A published profile with a pin of each pack that [`each_kind_of_edit`] names, from the
-    /// Public Repo. Also the pack summary of each pin, with the build and the values of the pin.
+    /// Public Repo. Also its answer of `packs/manifests`, with the name of the profile and a pack
+    /// summary of each pin. A summary has the name, the build, and the values of its pin.
     fn pinned_profile() -> (Value, Value) {
         let kubernetes = "kubeadmconfig:\n  postKubeadmCommands:\n    \
             - 'chmod 600 /var/lib/kubelet/config.yaml'\npack:\n  content:\n    images:\n      \
@@ -635,15 +638,35 @@ mod tests {
                         "values": p["values"], "manifests": []}})
             })
             .collect();
-        let doc = json!({"metadata": {"name": "aws-stack"}, "spec": {"version": "1.1.1",
+        let metadata = json!({"name": "aws-stack"});
+        let manifests = json!({"metadata": metadata, "spec": {"packs": summaries}});
+        let doc = json!({"metadata": metadata, "spec": {"version": "1.1.1",
             "published": {"cloudType": "aws", "type": "cluster", "packs": pins}}});
-        (doc, json!({"spec": {"packs": summaries}}))
+        (doc, manifests)
+    }
+
+    /// Make the `Vec` of the edits of the list, in order, and tie the list to each variant of
+    /// [`Edit`].
+    ///
+    /// Write each edit with the path of its variant, as `Edit::Reclaim("Retain")`. A `match` names
+    /// the variant of each edit, and has no `_` arm. So the build fails on a new variant until the
+    /// list holds an edit of it. A variant that the list holds two times gives an unreachable arm,
+    /// and `just lint` fails.
+    macro_rules! one_of_each {
+        ($(Edit::$variant:ident $(($($tuple:tt)*))? $({$($fields:tt)*})?),+ $(,)?) => {{
+            fn _the_list_holds_each_variant(edit: &Edit) {
+                match edit {
+                    $(Edit::$variant { .. } => {})+
+                }
+            }
+            vec![$(Edit::$variant $(($($tuple)*))? $({$($fields)*})?),+]
+        }};
     }
 
     /// One edit of each kind, on the packs of [`pinned_profile`]. The CSI upgrade comes after the
     /// OCI edit, so in this order the upgrade reads the registry of the move.
     fn each_kind_of_edit() -> Vec<Edit> {
-        vec![
+        one_of_each![
             Edit::Reclaim("Retain"),
             Edit::Tag {
                 pack: "ubuntu-aws",
@@ -683,9 +706,14 @@ mod tests {
         ]
     }
 
-    /// Fail when a pin of `doc` and its pack summary in `manifests` differ in the build or in the
-    /// values. `after` names the edits in the message.
+    /// Fail when the profile `doc` and its answer `manifests` differ in the name. Also fail when a
+    /// pin and its pack summary differ in the name, the build, or the values. `after` names the
+    /// edits in the message.
     fn assert_summaries_follow_pins(doc: &Value, manifests: &Value, after: &str) {
+        assert_eq!(
+            doc["metadata"]["name"], manifests["metadata"]["name"],
+            "{after}: the answer"
+        );
         let summaries = manifests["spec"]["packs"].as_array().expect("summaries");
         for pin in doc["spec"]["published"]["packs"].as_array().expect("pins") {
             let summary = summaries
@@ -693,6 +721,7 @@ mod tests {
                 .find(|s| s["spec"]["name"] == pin["name"])
                 .expect("a summary of each pin");
             let of_pin = [
+                &pin["name"],
                 &pin["packUid"],
                 &pin["registryUid"],
                 &pin["version"],
@@ -700,6 +729,7 @@ mod tests {
                 &pin["values"],
             ];
             let of_summary = [
+                &summary["metadata"]["name"],
                 &summary["metadata"]["uid"],
                 &summary["spec"]["registryUid"],
                 &summary["spec"]["version"],
