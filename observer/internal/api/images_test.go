@@ -92,12 +92,12 @@ func TestAReadThatFailsShowsTheKindAndTheStatusAndNothingElse(t *testing.T) {
 
 func TestNoRouteCarriesAValueOfAPodThatTheAPIServerSends(t *testing.T) {
 	r := newRig(t)
-	api := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+	kubeAPI := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@"+imageDigest))))
 	})
-	r.pods = kube.New(kube.Config{Host: api.Host, TokenFile: api.TokenFile, CAFile: api.CAFile})
+	r.pods = kube.New(kube.Config{Host: kubeAPI.Host, TokenFile: kubeAPI.TokenFile, CAFile: kubeAPI.CAFile})
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	if len(api.Requests()) == 0 {
+	if len(kubeAPI.Requests()) == 0 {
 		t.Fatal("the observer did not read the pods")
 	}
 	for pattern, path := range summaryRoutes {
