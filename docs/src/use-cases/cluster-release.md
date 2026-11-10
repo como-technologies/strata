@@ -12,7 +12,7 @@ In this example, `dev` has three clusters:
 
 | Cluster | Runs |
 | --- | --- |
-| `payments` | `aws-stack@1.1.0`, then the add-on profile `platform-addons@1.0.0` |
+| `payments` | `aws-stack@1.1.0`, then three add-on profiles at 1.0.0: `observability`, `payments-apps`, and `platform-addons` |
 | `search` | `aws-stack@1.1.1` |
 | `ledger` | `aws-stack@1.1.0`, with one value edited on the cluster |
 
@@ -52,11 +52,10 @@ need.
 cluster, and the steps below use the names because they read better.
 
 **Which clusters run more than one profile.** The list puts each profile under
-its cluster, with the type in the last column. `payments` runs two: the cluster
-profile `aws-stack@1.1.0` and the add-on profile `platform-addons@1.0.0`. A ref
-that names only the cluster covers every profile it runs, which step 3 shows. To
-compare one of them, add the profile name to the ref after a slash:
-`cluster:payments/aws-stack`. [Refs](../reference/refs.md) gives every form.
+its cluster, with the type in the last column. `payments` runs four: the cluster
+profile `aws-stack@1.1.0` and three add-on profiles. Many clusters run more
+profiles than the release. Step 3 shows what the comparison does with them.
+[Refs](../reference/refs.md) gives every form of a cluster ref.
 
 ## 2. A cluster that runs the release
 
@@ -64,21 +63,39 @@ compare one of them, add the profile name to the ref after a slash:
 {{#include ../output/cluster-identical.txt}}
 ```
 
-`IDENTICAL` and exit `0`: this cluster runs the recorded release. The `/aws-stack`
-of the ref kept the add-on profile out of the comparison.
+`IDENTICAL` and exit `0`: this cluster runs the recorded release. The three
+add-on profiles of `payments` are not in the comparison.
 
-## 3. A cluster that runs two profiles
+## 3. A cluster that runs many profiles
 
-Without the selection, the cluster side covers each profile that the cluster runs.
-The cluster side then holds the packs of both profiles:
+The record holds one profile version. So the cluster side holds only the
+profile that the version replaces: here `aws-stack`, the profile with the same
+name. `--json` names the ref that the comparison reads:
 
 ```text
-{{#include ../output/cluster-all-profiles.txt}}
+{{#include ../output/cluster-many-profiles.txt}}
 ```
 
-`CHANGED` and exit `1`, with the add-on pack `ADDED` and its impact. The release
-itself did not change: each of its five packs is `unchanged`. Select the
-profile, unless the record covers each profile of the cluster.
+`cluster:payments/aws-stack` is that ref. It selects the profile after the
+slash. A version of an add-on profile answers for that profile in the same
+way:
+
+```text
+{{#include ../output/cluster-addon.txt}}
+```
+
+A move to the next version changes only the packs of `aws-stack`. `--repave`
+and `--validate` ask Palette about the same move. The add-on profiles give no
+`ADDED` and no `REMOVED` line:
+
+```text
+{{#include ../output/cluster-move-asks.txt}}
+```
+
+Exit `1`, because the roots differ. The two `palette` lines are the answers of
+Palette. To compare each profile of the cluster, compare two records of the
+cluster. See
+[Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
 
 ## 4. A cluster on another version
 
@@ -123,8 +140,8 @@ selection. `OK` and exit `0`.
 
 ## What to do
 
-- Select the profile with `cluster:<cluster>/<profile>`, unless the record
-  covers each profile of the cluster.
+- Compare the record of the release with `cluster:<cluster>`. The cluster side
+  holds the profile of the record, and not the other profiles of the cluster.
 - Before you move a cluster that does not match its record, find why. Then move
   it to a recorded version.
 - To see what a move changes on a cluster, compare the new record with the

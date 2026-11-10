@@ -1,0 +1,2 @@
+$ strata compare releases/1.1.0/dev.json cluster:payments --json | jq -c '.b | {ref, profiles: [.cluster.profiles[].name]}'
+{"ref":"cluster:payments/aws-stack","profiles":["aws-stack"]}
