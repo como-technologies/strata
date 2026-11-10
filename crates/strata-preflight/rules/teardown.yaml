@@ -179,7 +179,7 @@ rules:
       records them for a cluster. The world has no project uid, so strata-preflight cannot call
       `GET /v1/projects/{uid}/macros` here; the first reproduce line calls it.
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros\" | jq -r '.macros[].name'   # the macros of the project"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros\" | jq -r '.macros[].name'   # the macros of the project"
       - "strata snapshot cluster:{{ .clusterUid // \"<cluster uid>\" }} --macros --json | jq '.macros'   # the macros the cluster reads"
     fix:
       owner: none

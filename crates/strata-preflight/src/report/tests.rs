@@ -277,7 +277,10 @@ rules:
     let lines = auto_reproduce(rule, &outcome(Some(call)), &subject, Some("out"));
     assert_eq!(lines.len(), 3, "{lines:#?}");
     assert!(
-        lines[0].starts_with("code=$(curl -s -o body.json"),
+        lines[0].starts_with(&format!(
+            "code=$({} -o body.json",
+            crate::curl::palette_curl()
+        )),
         "{}",
         lines[0]
     );

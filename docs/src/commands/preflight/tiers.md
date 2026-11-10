@@ -50,6 +50,11 @@ create through the provider or the API goes to the create route, so the same
 fault shows after a full apply. See
 [The validate routes](../../internals/palette/validate-routes.md).
 
+Each `reproduce:` line that reads Palette starts with the same `curl`. The key
+goes to `curl` in a config that `printf` writes into `<( )`, so no argument of a
+process holds it. Run the line in a shell with `<( )`, such as bash or zsh. See
+[The reproduce lines](../../reference/preflight-rules.md#the-reproduce-lines).
+
 A run sends each request one time. The backend keeps the answer of each request,
 by its method, its path, and its body. A 4xx is an answer, and the backend keeps
 it. A 401, a 403, and a 429 are errors of the key or of the rate, so they are not
