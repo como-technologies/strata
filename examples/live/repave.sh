@@ -177,20 +177,18 @@ fi
 vmo_pack=virtual-machine-orchestrator
 vmo_mark=https://strata-live-check.invalid
 
-# forward_status URL: the HTTP status of the console address URL. The request sends no key: the
-# console forwards it to the address that Palette saved.
+# forward_status URL: the HTTP status of the console address URL. The request sends no key,
+# because the console forwards each header to the address that Palette saved.
 forward_status() { curl -sk -m30 -o /dev/null -w '%{http_code}' "$1/"; }
 
 # forwards URL: true when the console address URL reaches a host. The forward finds its record (no
-# 404), the host answers (no 502), and the answer comes in 30 seconds (no 000). A forward to the
-# console address itself goes round until curl stops it.
+# 404), the host answers (no 502), and the answer comes in 30 seconds (no 000).
 forwards() { case "$(forward_status "$1")" in 404|502|000) return 1 ;; esac; }
 
 # vmo_body MARK: the body of a question about the cluster in vmo-cluster.out. Each profile goes by
 # its uid, and the profile of the pack names each of its packs with the values of the cluster. A
-# profile with pack values keeps only the packs that it names. A profile by its uid alone can give
-# the target the values that the build of the cluster wrote, and Palette then saves the console
-# address as the address to forward to. A MARK goes into consoleBaseAddress of the pack.
+# profile with pack values keeps only the packs that it names. A profile by its uid alone can move
+# the address that the console forwards to. A MARK goes into consoleBaseAddress of the pack.
 vmo_body() {
   jq --arg p "$vmo_pack" --arg mark "$1" '{profiles: [.spec.clusterProfileTemplates[]
     | {uid} + (if any(.packs[]; .name == $p) then {packValues: [.packs[] | {name, tag, type, values: (if .name == $p and $mark != ""

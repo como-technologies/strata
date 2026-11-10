@@ -233,8 +233,7 @@ console of `virtual-machine-orchestrator`, or of its older name
 The console reaches the service of the pack at an address of its own,
 `/v1/tenantApps/<key>` under the address of Palette. Palette makes the key from
 the service and the cluster uid. The record holds the address that the console
-forwards to. A request to the console address needs no key of Palette. A
-cluster and a body with none of the three packs get no record.
+forwards to. A cluster and a body with none of the three packs get no record.
 
 - The address is the value `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`
   of the pack. With no such value, Palette makes the address from the
@@ -251,22 +250,17 @@ cluster and a body with none of the three packs get no record.
 - When the cluster runs the pack, a body without its values does not stop the
   save: the build of the cluster saves the record.
 - A body can name the profile of the pack by its uid alone, with no
-  `packValues`. Then the two builds share the packs of that profile, unless
-  Palette adds a dependency pack to it. When the values of the cluster hold no
-  `consoleBaseAddress`, the build of the cluster writes the console address
-  into them. The build of the target reads it, and saves the console address as
-  the address to forward to. So the console forwards to itself until the agent
-  reads the cluster again.
+  `packValues`. Such a body can also move the address that the console forwards
+  to, until the agent reads the cluster again.
 - Palette answers a cluster that a cluster template governs with no reasons, and
   saves no record. `compare --repave` asks the route of the template for such a
   cluster.
 
 `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` asks the same
 question about one cluster of the template, with each profile by its uid alone.
-So it saves the same records for that cluster, and it can save the console
-address itself, as above. With more than one cluster, the cluster can change
-from one request to the next. A template with no cluster gets no record.
-`POST /v1/spectroclusters/{cloudType}/validate` saves no record.
+So it saves the same records for that cluster, and it can move the address
+that the console forwards to, as above. A template with no cluster gets no
+record. `POST /v1/spectroclusters/{cloudType}/validate` saves no record.
 
 The forward of the console keeps the address that it read for up to 15
 minutes. So a new record shows at the console address only after that time.

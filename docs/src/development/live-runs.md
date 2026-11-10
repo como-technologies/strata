@@ -786,8 +786,8 @@ through OpenTofu, and puts it back.
 Stage 9 runs only with `VMO_CLUSTER=<uid>` of a cluster with the pack
 `virtual-machine-orchestrator` and no cluster template. It moves the console of
 the pack to a mark, and back. The question that moves it back sends the values
-of the cluster in the profile of the pack. A profile by its uid alone can save
-the console address itself: see
+of the cluster in the profile of the pack. A profile by its uid alone can move
+the address that the console forwards to: see
 [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 The forward of the console keeps the address that it read for up to 15 minutes.
 So the stage waits `VMO_WAIT` seconds (default 960) before each read that must

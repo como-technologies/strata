@@ -36,7 +36,7 @@ impl Saves {
     pub fn comment(self) -> &'static str {
         match self {
             Saves::ConsoleAddress => {
-                "   # for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette saves the address of the console of that pack"
+                "   # for a cluster or a change with the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant, Palette saves the address that the console of that pack forwards to, and the request can move it"
             }
         }
     }
