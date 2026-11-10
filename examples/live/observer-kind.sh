@@ -411,7 +411,7 @@ alert_apply() {
 alert_set() { page /v1/alerts > alerts-page.json 2> /dev/null && jq -e '.set == true and (.rules | length) == 5' alerts-page.json > /dev/null; }
 # alert_route: open the port-forward, wait for the route, and show it. The route names the channels, and it shows no address.
 alert_route() {
-  pf_start || { cat port-forward.log; return 1; }
+  pf_start || return 1
   poll "$tries" alert_set || { cat alerts-page.json 2> /dev/null; return 1; }
   jq '{set, channels, digestEvery, waiting, rules: [.rules[] | {level, match, news, send, to, state}]}' alerts-page.json
   case "$(cat alerts-page.json)" in

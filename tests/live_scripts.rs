@@ -2924,6 +2924,10 @@ fn tofu_output_json(outputs: &serde_json::Value) -> String {
 
 /// One run of a stage of a live script against the stand-ins. A test gives the OpenTofu outputs,
 /// the answers of strata, and the routes of Palette.
+///
+/// The stage puts two stand-ins on the `PATH`: a `sleep` that returns at once, and
+/// [`FAKE_PORT_FORWARD`]. So a wait that counts its looks ends in less than a second. A wait for a
+/// process that runs in the background limits its time, as `pf_start` of `lib.sh` does.
 struct Stage {
     root: tempfile::TempDir,
     answers: usize,
@@ -2940,6 +2944,7 @@ impl Stage {
                 ("tofu", FAKE_TOFU_STAGE),
                 ("fake-strata", FAKE_STRATA_STAGE),
                 ("sleep", "#!/usr/bin/env bash\nexit 0\n"),
+                ("fake-port-forward", FAKE_PORT_FORWARD),
             ],
         );
         for d in ["routes", "strata", "aws"] {
@@ -3080,6 +3085,9 @@ fi
             .unwrap();
         let o = run_live(script, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
+        // the harness shows the standard output of a test that fails, so its log holds the output
+        // of each step that failed
+        print!("{}", failed_outputs(&root.join("out"), &steps));
         (o, steps)
     }
 
@@ -3108,11 +3116,86 @@ fi
     }
 }
 
-/// True when `steps` has a line of the check `id` that starts with `verdict`: `PASS` or `FAIL`.
+/// The output and the errors of each check that failed in `steps`, a `steps.log`. They are the
+/// files `<id>.out` and `<id>.err` that `check` of `lib.sh` writes in `out`.
+fn failed_outputs(out: &Path, steps: &str) -> String {
+    let mut shown = String::new();
+    for id in ids_with(steps, &["FAIL"]) {
+        for file in [format!("{id}.out"), format!("{id}.err")] {
+            let body = std::fs::read_to_string(out.join(&file)).unwrap_or_default();
+            shown.push_str(&format!("---- the failed check {id}: {file}\n{body}"));
+            if !body.is_empty() && !body.ends_with('\n') {
+                shown.push('\n');
+            }
+        }
+    }
+    shown
+}
+
+#[test]
+fn the_log_of_a_test_shows_the_output_and_the_errors_of_each_check_that_failed() {
+    let out = tempfile::tempdir().unwrap();
+    for (file, body) in [
+        ("alert-route.out", "the port-forward ended"),
+        ("alert-route.err", "error: lost connection to pod\n"),
+        ("alert-edit.out", "the output of a check that passed\n"),
+    ] {
+        std::fs::write(out.path().join(file), body).unwrap();
+    }
+    let steps = "== stage 8: the alerts\n\
+        FAIL  alert-route                      expected 0, got 1\n\
+        PASS  alert-edit                       expected 0, got 0\n\
+        FAIL  alert-open                       expected 0, got 1\n";
+    assert_eq!(
+        failed_outputs(out.path(), steps),
+        "---- the failed check alert-route: alert-route.out\n\
+         the port-forward ended\n\
+         ---- the failed check alert-route: alert-route.err\n\
+         error: lost connection to pod\n\
+         ---- the failed check alert-open: alert-open.out\n\
+         ---- the failed check alert-open: alert-open.err\n"
+    );
+    assert_eq!(
+        failed_outputs(out.path(), "PASS  alert-edit  expected 0, got 0\n"),
+        ""
+    );
+}
+
+/// The words that `check` of `lib.sh` writes at the start of the line of a check in `steps.log`.
+const VERDICTS: [&str; 3] = ["PASS", "FAIL", "SEEN"];
+
+/// The verdict and the id of `line` of a `steps.log`, or `None` when it is not the line of a check.
+fn verdict_and_id(line: &str) -> Option<(&str, &str)> {
+    let mut words = line.split_whitespace();
+    let verdict = words.next().filter(|w| VERDICTS.contains(w))?;
+    Some((verdict, words.next()?))
+}
+
+/// True when `steps` has a line of the check `id` with `verdict`, one of [`VERDICTS`].
 fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
+    ids_with(steps, &[verdict]).any(|i| i == id)
+}
+
+/// The id of each check in `steps` with one of `verdicts`, in the order of the lines.
+fn ids_with<'a>(steps: &'a str, verdicts: &'a [&str]) -> impl Iterator<Item = &'a str> {
     steps
         .lines()
-        .any(|l| l.starts_with(verdict) && l.split_whitespace().nth(1) == Some(id))
+        .filter_map(verdict_and_id)
+        .filter(move |(verdict, _)| verdicts.contains(verdict))
+        .map(|(_, id)| id)
+}
+
+/// The ids of the checks in `steps`, in the order that they ran.
+fn check_ids(steps: &str) -> Vec<&str> {
+    ids_with(steps, &VERDICTS).collect()
+}
+
+/// The line of `steps` for the check `id`.
+fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
+    steps
+        .lines()
+        .find(|l| verdict_and_id(l).is_some_and(|(_, i)| i == id))
+        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
 }
 
 /// Each check of `ids` passed.
@@ -3137,6 +3220,15 @@ fn a_verdict_line_matches_its_verdict_and_the_whole_id_of_the_check() {
     assert!(!has_verdict(steps, "PASS", "a"));
     assert!(!has_verdict(steps, "FAIL", "a-b"));
     assert!(!has_verdict(steps, "FAIL", "a-"));
+    // the heading of a stage is not the line of a check, also when its second word is an id
+    let steps = "== stage 1: the checks\n\
+        PASS  a-b      expected 0, got 0\n\
+        SEEN  stage    expected ?, got 2\n";
+    assert_eq!(check_ids(steps), ["a-b", "stage"]);
+    assert_eq!(
+        step_line(steps, "stage"),
+        "SEEN  stage    expected ?, got 2"
+    );
 }
 
 /// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
@@ -3346,8 +3438,8 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
             "limited-message",
         ],
     );
-    for seen in ["limited-code ", "limited-record ", "limited-record-errors "] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["limited-code", "limited-record", "limited-record-errors"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
@@ -3892,13 +3984,8 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
             "sync-del-4",
         ],
     );
-    for seen in [
-        "del-flag ",
-        "del-doc-fields ",
-        "del-verify ",
-        "del-cleared ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["del-flag", "del-doc-fields", "del-verify", "del-cleared"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
     assert!(
@@ -4347,13 +4434,8 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "var-undone",
         ],
     );
-    for seen in [
-        "var-strata ",
-        "var-strata-answer ",
-        "var-none ",
-        "var-default ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["var-strata", "var-strata-answer", "var-none", "var-default"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let variables: Vec<_> = stage
         .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
@@ -5538,14 +5620,14 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         ],
     );
     for seen in [
-        "move-compare ",
-        "move-impact ",
-        "move-palette ",
-        "move-reasons ",
-        "replaced ",
-        "waits ",
+        "move-compare",
+        "move-impact",
+        "move-palette",
+        "move-reasons",
+        "replaced",
+        "waits",
     ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let applies: Vec<&str> = stage
         .tofu_calls()
@@ -7772,7 +7854,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         "repeat-2",
         "repeat-count",
     ] {
-        assert!(steps.contains(&format!("PASS  {id} ")), "{id}:\n{steps}");
+        assert!(has_verdict(&steps, "PASS", id), "{id}:\n{steps}");
     }
     assert!(steps.contains("the issue is o/r#7"), "{steps}");
     // the repeat posts one report twice with one key of 64 hex characters
@@ -7900,8 +7982,7 @@ fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
     );
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
     let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
-    assert!(steps.contains("FAIL  send-1-says "), "{steps}");
-    assert!(steps.contains("FAIL  issue "), "{steps}");
+    failed(&steps, &["send-1-says", "issue"]);
 }
 
 #[test]
@@ -8136,9 +8217,7 @@ fn image_digest_sh_deletes_the_deployment_that_stays_after_the_content_drops_it(
         "the check records its result:\n{steps}"
     );
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("undo-gone") && l.ends_with("got 1")),
+        step_line(&steps, "undo-gone").ends_with("got 1"),
         "the Deployment stayed, so the wait ended with 1:\n{steps}"
     );
     passed(&steps, &["undo-delete", "undo-clean", "undo-baseline"]);
@@ -8267,7 +8346,8 @@ fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() 
 ///
 /// The reader can open a port-forward and nothing else. `FAKE_READER_SECRETS` lets the reader read
 /// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page. A pod of the mirror prints
-/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away.
+/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away. A port-forward
+/// runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -8307,7 +8387,7 @@ case "$*" in
       *"get secrets"*) [ -z "${FAKE_READER_SECRETS-}" ] || { echo yes; exit 0; } ;;
     esac
     echo no; exit 1 ;;
-  *"port-forward"*) echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080" ;;
+  *"port-forward"*) exec fake-port-forward ;;
   *" run "*) if [ -n "${FAKE_REACHED-}" ]; then echo reached; else echo refused; fi ;;
 esac
 exit 0
@@ -8899,6 +8979,39 @@ fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_th
     failed(&steps, &["other-pod-refused"]);
 }
 
+/// The checks of observer-kind.sh that open a port-forward with `pf_start` of `lib.sh`.
+const OBSERVER_KIND_FORWARDS: [&str; 3] = ["reader-forward", "component-read", "alert-route"];
+
+#[test]
+fn observer_kind_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &OBSERVER_KIND_CHECKS);
+}
+
+#[test]
+fn observer_kind_sh_fails_each_port_forward_that_ends_with_no_line_and_says_why() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_FAILS", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &OBSERVER_KIND_FORWARDS);
+    passed(&steps, &["reader-health", "alert-edit", "kind-delete"]);
+    for check in OBSERVER_KIND_FORWARDS {
+        let said = std::fs::read_to_string(stage.path(&format!("out/{check}.err"))).unwrap();
+        for line in [
+            "the port-forward ended with no line \"Forwarding from\". Its log:",
+            "error: lost connection to pod",
+        ] {
+            assert!(said.contains(line), "{check}: {line}\n{said}");
+        }
+    }
+}
+
 #[test]
 fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_the_image() {
     let mut stage = observer_kind_stage();
@@ -8918,14 +9031,6 @@ fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_t
         text(&o.stderr)
     );
     assert_eq!(observer_log(&stage, "kind.log"), "", "no cluster was made");
-}
-
-/// The line of `steps` for the check `id`.
-fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
-    steps
-        .lines()
-        .find(|l| l.split_whitespace().nth(1) == Some(id))
-        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
 }
 
 #[test]
@@ -8991,7 +9096,7 @@ fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in
     stage.env("FAKE_DIE_AT_NODES", "1");
     let (o, steps) = run_kind(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  mirror-registry"), "{steps}");
+    passed(&steps, &["mirror-registry"]);
     assert!(
         !steps.contains("mirror-clean"),
         "the script ended first:\n{steps}"
@@ -9184,7 +9289,7 @@ esac
 ///
 /// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
 /// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
-/// `IfNotPresent`.
+/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -9255,7 +9360,7 @@ case "$*" in
     [ -f "$obs/ns.$n" ] || notfound namespaces "$n"
     echo "$n Active" ;;
   *"get clusterrole"*) [ -f "$obs/role.exists" ] || notfound clusterroles strata-observer-pods; echo found ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -9837,7 +9942,7 @@ fn observer_images_sh_undoes_the_run_when_the_script_ends_in_stage_1() {
     stage.env("FAKE_DIE_AFTER_EDIT", "1");
     let (o, steps) = run_images(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  tag-first"), "{steps}");
+    passed(&steps, &["tag-first"]);
     assert!(
         !steps.contains("namespaces"),
         "the script ended first:\n{steps}"
@@ -10144,7 +10249,8 @@ fi
 /// The `kubectl` of observer.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`: `ns.exists`, `deploy.exists`, `restarts`, and
 /// `first-load-pending`. The key goes to `key.current`, and the pull Secret to `pull.seen`.
-/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults.
+/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults. A port-forward runs
+/// [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -10196,7 +10302,7 @@ case "$*" in
   *" logs "*)
     echo 'time=2026-11-04T10:00:00Z level=INFO msg=strata command=verify exit=0 duration=2s'
     [ -z "${FAKE_LOG_LEAK-}" ] || echo "value strata live example" ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -10598,15 +10704,6 @@ const OBSERVER_CHECKS: [&str; 61] = [
     "undo-baseline",
 ];
 
-/// The ids of the checks in `steps`, in the order that they ran.
-fn check_ids(steps: &str) -> Vec<&str> {
-    steps
-        .lines()
-        .filter(|l| l.starts_with("PASS") || l.starts_with("FAIL") || l.starts_with("SEEN"))
-        .filter_map(|l| l.split_whitespace().nth(1))
-        .collect()
-}
-
 #[test]
 fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     let stage = observer_stage();
@@ -10622,6 +10719,18 @@ fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     ] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
+}
+
+#[test]
+fn observer_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once. ask-words opens one port-forward.
+    let mut stage = observer_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_observer(&stage, &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    assert_eq!(check_ids(&steps), OBSERVER_CHECKS, "{steps}");
 }
 
 /// What the files of `dir` hold, joined, for a search of a secret
@@ -11077,11 +11186,10 @@ fn observer_sh_records_what_palette_did_to_the_machines_without_judging_it() {
     stage.env("FAKE_REPAVE", "1");
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "no-repave");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("no-repave") && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     let said = std::fs::read_to_string(stage.path("out/no-repave.out")).unwrap();
     assert!(
@@ -11097,11 +11205,10 @@ fn observer_sh_records_a_counter_that_does_not_build_fails_the_count_of_the_clic
     let (o, steps) = run_observer(&stage, &[]);
     // the count of a cycle only records a result, but the count of a click judges one
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "requests-counted");
     assert!(
-        steps.lines().any(|l| l.starts_with("SEEN")
-            && l.contains("requests-counted ")
-            && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     failed(&steps, &["ask-one-post"]);
     passed(
@@ -11749,10 +11856,9 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
     assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
+    let line = step_line(&steps, "role-audits");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("role-audits") && l.ends_with("got 1")),
+        line.starts_with("SEEN") && line.ends_with("got 1"),
         "a refusal is recorded as a failed request:\n{steps}"
     );
     passed(
@@ -11859,10 +11965,9 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
         let (o, steps) = stage.run("observer-role.sh", &[]);
         assert_eq!(o.status.code(), Some(0), "{status}:\n{steps}");
         passed(&steps, &["control-validate-packs"]);
+        let line = step_line(&steps, "role-validate-packs");
         assert!(
-            steps.lines().any(|l| l.starts_with("SEEN")
-                && l.contains("role-validate-packs")
-                && l.ends_with("got 1")),
+            line.starts_with("SEEN") && line.ends_with("got 1"),
             "a refusal is recorded as a failed request:\n{steps}"
         );
         let said = std::fs::read_to_string(stage.path("out/role-validate-packs.out")).unwrap();

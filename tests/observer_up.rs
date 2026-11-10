@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{
-    CommandExt, copy_scripts, executable, fake_bin, on_path, path_with, repo_file, text, walk,
+    CommandExt, FAKE_PORT_FORWARD, copy_scripts, executable, fake_bin, on_path, path_with,
+    repo_file, text, walk,
 };
 
 /// The key of Palette and the pull token of a run. A run must show neither in an argument of
@@ -63,6 +64,8 @@ esac
 /// is in the files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A delete of a
 /// name that is absent fails with `NotFound` unless `--ignore-not-found` is there. A delete with a
 /// selector never fails, as `kubectl` does.
+///
+/// A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL: &str = r##"#!/usr/bin/env bash
 fake=$FAKE
 echo "[${KUBECONFIG-}] $*" >> "$fake/args.log"
@@ -110,7 +113,7 @@ case "$*" in
   *"get deploy/strata-observer -o name"*)
     [ -f "$fake/deploy" ] || notfound deployments.apps strata-observer
     echo deployment.apps/strata-observer ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
   *) echo "unexpected kubectl call: $*" >&2; exit 3 ;;
 esac
 "##;
@@ -157,6 +160,7 @@ impl Up {
                 ("kubectl", FAKE_KUBECTL),
                 ("strata", FAKE_STRATA),
                 ("gh", FAKE_GH),
+                ("fake-port-forward", FAKE_PORT_FORWARD),
             ],
         );
         for d in ["home", "tmp", "fake", "secrets"] {
