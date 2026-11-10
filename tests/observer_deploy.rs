@@ -9,8 +9,8 @@ use serde_yaml::Value;
 
 use crate::common::{
     CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, on_path, page_section,
-    path_with, recipe, repo_file, run_with_kubectl, script, steps, text, walk, workflow,
-    workflow_text,
+    path_with, recipe, repo_file, run_with_kubectl, script, steps, text, toml_value, walk,
+    workflow, workflow_text,
 };
 
 /// A file of `deploy/observer/`, parsed as one YAML document.
@@ -480,10 +480,8 @@ fn the_reader_role_gives_the_page_and_no_secret_and_no_exec() {
 #[test]
 fn the_deployment_runs_the_image_that_the_workflow_pushes() {
     let cargo = repo_file("Cargo.toml");
-    let repository = cargo
-        .lines()
-        .find_map(|l| l.strip_prefix("repository = \"https://github.com/"))
-        .and_then(|l| l.strip_suffix('"'))
+    let repository = toml_value(cargo.lines(), "repository")
+        .and_then(|url| url.strip_prefix("https://github.com/"))
         .expect("Cargo.toml names the repository");
     let image = format!("ghcr.io/{}-observer", repository.to_lowercase());
     assert_eq!(

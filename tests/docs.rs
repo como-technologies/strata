@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, gitlab_drop_in, one_line, recipe, repo_file, schema,
-    script, version_of, walk,
+    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
+    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
 };
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
@@ -2150,18 +2150,13 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
-    let lines: Vec<&str> = riff.lines().collect();
-    let volumes = lines
-        .iter()
-        .position(|line| *line == "[session.volumes]")
-        .expect("riff.toml has no [session.volumes] table");
-    let mount = lines
+    let volumes = toml_table(&riff, "[session.volumes]");
+    let mount = volumes
         .iter()
         .position(|line| *line == "strata-palette = \"$HOME/palette\"")
-        .expect("riff.toml does not mount strata-palette at $HOME/palette");
-    assert!(volumes < mount, "the mount is outside [session.volumes]");
+        .expect("[session.volumes] of riff.toml does not mount strata-palette at $HOME/palette");
     assert!(
-        lines[volumes..mount]
+        volumes[..mount]
             .iter()
             .rev()
             .take_while(|line| line.starts_with('#'))
@@ -2181,6 +2176,53 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "A session on the host runs it first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
+    }
+}
+
+/// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
+/// `riff.toml` without its comment lines.
+fn riff_value<'a>(riff: &'a str, table: &str, key: &str) -> &'a str {
+    toml_value(toml_table(riff, table), key)
+        .unwrap_or_else(|| panic!("{table} of riff.toml sets no {key}"))
+}
+
+/// The container runtime makes each absent folder above a mount of `riff.toml`, and root owns it:
+/// `$HOME/.cache` for the mount of sccache. Go and `gh` keep their caches in
+/// `XDG_CACHE_HOME`. When it is in such a folder, `go vet` and `gh run view --log-failed` fail in
+/// each session. The book states where each cache goes.
+#[test]
+fn each_cache_of_a_session_is_in_a_folder_that_the_session_can_write() {
+    let riff = code_of("riff.toml");
+    let (env, volumes) = ("[session.env]", "[session.volumes]");
+    let cargo = riff_value(&riff, env, "CARGO_HOME");
+    let sccache = riff_value(&riff, env, "SCCACHE_DIR");
+    let cache = riff_value(&riff, env, "XDG_CACHE_HOME");
+    assert_eq!(cargo, riff_value(&riff, volumes, "strata-cargo"));
+    assert_eq!(sccache, riff_value(&riff, volumes, "strata-sccache"));
+
+    let home = Path::new("$HOME");
+    for (name, mount) in toml_entries(toml_table(&riff, volumes)) {
+        for folder in Path::new(mount).ancestors().skip(1) {
+            let made = folder.starts_with(home) && folder != home;
+            assert!(
+                !(made && Path::new(cache).starts_with(folder)),
+                "XDG_CACHE_HOME is in {}, which root owns for the mount of {name}",
+                folder.display()
+            );
+        }
+    }
+
+    let page = read(&docs().join("development/changes.md"));
+    let page = one_line(section(&page, "### Where each cache goes", Some("\n## ")));
+    for needle in [
+        format!("`{cargo}`, the volume `strata-cargo`"),
+        format!("`{sccache}`, the volume `strata-sccache`"),
+        format!("The build cache of Go | `{cache}/go-build`"),
+        format!("The cache of `gh`, with the logs of `gh run view` | `{cache}/gh`"),
+        format!("So `riff.toml` sets `XDG_CACHE_HOME` to `{cache}`"),
+        "A session sets no `GOCACHE` and no `GOPATH`.".to_string(),
+    ] {
+        assert!(page.contains(&needle), "changes.md lacks {needle:?}");
     }
 }
 

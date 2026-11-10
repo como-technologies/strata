@@ -126,6 +126,25 @@ The image has the latest stable Go. When Go releases a new stable version, chang
 `GOTOOLCHAIN=local` and `GOPROXY=off`. A build then fails when code needs another
 Go, or a module outside the standard library.
 
+### Where each cache goes
+
+`riff.toml` puts each cache of a session in a folder that the session can
+write:
+
+| Cache | Folder | Users |
+| --- | --- | --- |
+| The cargo home, with the crates from crates.io | `$HOME/.cargo`, the volume `strata-cargo` | The sessions of a host |
+| The build cache of Rust, from sccache | `$HOME/.cache/sccache`, the volume `strata-sccache` | The sessions of a host |
+| The build cache of Go | `/tmp/cache/go-build` | One session |
+| The cache of `gh`, with the logs of `gh run view` | `/tmp/cache/gh` | One session |
+
+The container runtime makes `$HOME/.cache` for the mount of sccache, and root
+owns it. So `riff.toml` sets `XDG_CACHE_HOME` to `/tmp/cache`, and Go and `gh`
+use that folder. A session sets no `GOCACHE` and no `GOPATH`. Go writes nothing
+to its `GOPATH`, `$HOME/go`, because `GOPROXY=off` stops each download of a
+module. Each session has a container of its own, so its `/tmp/cache` starts
+empty.
+
 ## The code of Palette
 
 A session reads the code of Palette at `$HOME/palette`. `riff.toml` mounts it

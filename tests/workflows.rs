@@ -7,7 +7,8 @@ use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    recipe, repo_file, runs_of, script, steps, text, workflow, workflow_files, workflow_text,
+    recipe, repo_file, runs_of, script, steps, text, toml_value, workflow, workflow_files,
+    workflow_text,
 };
 
 #[test]
@@ -681,10 +682,7 @@ fn the_fuzz_workflow_runs_each_target_on_nightly_on_a_schedule_and_keeps_the_new
 #[test]
 fn the_version_of_cargo_bolero_matches_the_crate_and_the_book() {
     let manifest = repo_file("fuzz/Cargo.toml");
-    let krate = manifest
-        .lines()
-        .find_map(|line| line.strip_prefix("bolero = \""))
-        .and_then(|rest| rest.strip_suffix('"'))
+    let krate = toml_value(manifest.lines(), "bolero")
         .expect("fuzz/Cargo.toml names the version of bolero");
     let workflow = workflow_text("fuzz.yml");
     let tool = workflow

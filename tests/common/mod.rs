@@ -41,6 +41,7 @@ mod git;
 mod palette;
 mod process;
 mod stand_in;
+mod toml;
 mod walk;
 
 pub use answer::*;
@@ -49,6 +50,7 @@ pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
+pub use toml::*;
 pub use walk::walk;
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
@@ -707,10 +709,8 @@ exit "${FAKE_EXIT:-0}"
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `crates/strata-preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
-    repo_file(manifest)
-        .lines()
-        .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
-        .and_then(|l| l.strip_suffix('"').map(str::to_owned))
+    toml_value(repo_file(manifest).lines(), "version")
+        .map(str::to_owned)
         .unwrap_or_else(|| panic!("{manifest} has a version line"))
 }
 

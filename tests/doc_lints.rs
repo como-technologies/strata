@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use crate::common::walk;
+use crate::common::{repo_file, toml_table, walk};
 
 /// The lints, by their names in the table `[lints.clippy]`.
 const DOC_LINTS: [&str; 4] = [
@@ -25,12 +25,8 @@ const MANIFESTS: [&str; 3] = [
 
 /// The lines of the table `[lints.clippy]` of the manifest `manifest`, in the root of the repository.
 fn clippy_lints(manifest: &str) -> Vec<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(manifest);
-    let text = std::fs::read_to_string(&path).unwrap();
-    text.lines()
-        .skip_while(|line| line.trim() != "[lints.clippy]")
-        .skip(1)
-        .take_while(|line| !line.trim_start().starts_with('['))
+    toml_table(&repo_file(manifest), "[lints.clippy]")
+        .into_iter()
         .map(|line| line.trim().to_string())
         .collect()
 }
