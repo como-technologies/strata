@@ -57,7 +57,7 @@ rules:
 | `when` | a jq program | When the rule applies: `.before != null` for a change, `.clusterUid != null` for an existing cluster, `.account != null` for the cloud account. A rule that does not apply is `SKIP`. |
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
 | `fix` | `owner`, `text` | The fix for good. `owner` is one of six values, and the loader refuses another: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
-| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. |
+| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. A line reads and changes nothing: see [The reproduce lines](#the-reproduce-lines). |
 | `evidence` | `kind`, `ref`, `note` | `kind` is one of four values, and the loader refuses another. `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. |
 | `evidence` of `kind` `source` | `ref`, `note` | A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
@@ -79,6 +79,30 @@ itself: a `cloud` rule runs the tool of the cloud (`aws`, `gcloud`) when it is
 on the machine and authenticated, and prints `NOT CHECKED` with the command
 when it is not. Each call of a cloud is a fact of the list: see [The facts of the
 clouds](../internals/preflight.md#the-facts-of-the-clouds).
+
+## The reproduce lines
+
+A person runs a `reproduce` line of a report by hand, to see what a check saw.
+So each line reads, and changes nothing:
+
+- A line reads Palette, the cloud, the cluster, or a file. It deletes nothing,
+  makes nothing, and changes no setting.
+- A `POST` goes only to a validate route of Palette, which checks the body: see
+  [The validate routes](../internals/palette/validate-routes.md).
+- A line writes no file outside the current directory. The lines that the report
+  adds for a check write `request.json` and `body.json` there.
+- A line makes no login to a registry or a cloud. A login writes the credentials
+  to a file in the home directory.
+- A line names no path of the live example, `examples/live`. No machine outside
+  the lab has the scripts of the live example.
+- A line that starts with `#` is words. It says what to read by hand when no
+  command of the rule reads it, such as on a cloud with no line of its own.
+
+A rule that only the lab can reproduce says so in such a line, as
+`inventory-managed` does. A command that fixes the fault is no reproduce line,
+because the operator decides when it runs. Write the lines of a file of custom
+probes the same way. A test of the catalog fails on a line that changes
+something, and on a text of a rule that names `examples/live`.
 
 ## The checks
 

@@ -828,8 +828,8 @@ rules:
       text: Wait for each registry name to answer over HTTPS before the registry resource.
     evidence:
       - kind: run
-        ref: lab examples/live/terraform/registry-kinds.tf kinds_ready
-        note: a loop of up to 90 tries on https://<name>/v2/ before each spectrocloud_registry resource
+        ref: registry-kinds lab
+        note: the live example runs a loop of up to 90 tries on https://<name>/v2/ before each spectrocloud_registry resource
 
   - id: igw-detach
     title: The destroy removes each mapped address before the internet gateway detaches
@@ -847,8 +847,8 @@ rules:
       text: "`depends_on` from the instance to the gateway, so the destroy runs in the reverse order."
     evidence:
       - kind: run
-        ref: lab examples/live/terraform/registry-kinds.tf aws_instance.kinds
-        note: depends_on the gateway, with the reason in the comment
+        ref: registry-kinds lab
+        note: the instance of the live example has depends_on the gateway, with the reason in its comment
 
   - id: azure-subnets-in-vnet
     title: The subnets of a static Azure network are inside the vnet CIDR
