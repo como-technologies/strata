@@ -44,6 +44,7 @@ fn options() -> Options {
         offline: false,
         ready: None,
         out_dir: None,
+        out_world: false,
     }
 }
 
@@ -209,8 +210,23 @@ rules:
         &subject,
         Some("out"),
     );
-    assert_eq!(lines[0], "jq '.account.spec' out/world.json > request.json");
-    assert!(lines[1].contains("--data @request.json"), "{}", lines[1]);
+    // the body holds the values of the variables, so it goes beside world.json, and not into the
+    // current directory; so does the answer, which strata does not read for a value
+    assert_eq!(
+        lines[0],
+        "jq '.account.spec' out/world.json > out/request.json"
+    );
+    assert!(
+        lines[1].contains("--data @out/request.json"),
+        "{}",
+        lines[1]
+    );
+    assert!(lines[1].contains(" -o out/body.json "), "{}", lines[1]);
+    assert!(
+        lines[2].contains("--slurpfile body out/body.json "),
+        "{}",
+        lines[2]
+    );
     assert!(
         lines[1].contains("/v1/clouds/aws/account/validate"),
         "{}",
@@ -278,7 +294,7 @@ rules:
     assert_eq!(lines.len(), 3, "{lines:#?}");
     assert!(
         lines[0].starts_with(&format!(
-            "code=$({} -o body.json",
+            "code=$({} -o out/body.json",
             crate::curl::palette_curl()
         )),
         "{}",
@@ -291,7 +307,7 @@ rules:
     );
     assert_eq!(lines[1], "aws service-quotas get-service-quota");
     assert!(
-        lines[2].contains("--slurpfile body body.json"),
+        lines[2].contains("--slurpfile body out/body.json"),
         "{}",
         lines[2]
     );
@@ -792,6 +808,7 @@ rules:
             },
             options: Options {
                 out_dir: Some("runs/x".into()),
+                out_world: true,
                 ..options()
             },
             cluster_gone: false,
@@ -1011,4 +1028,43 @@ fn the_summary_of_a_run_of_one_rule_agrees_each_noun_with_its_count() {
     let text = render(&many, Format::Terminal, false, &Paint::off());
     assert!(text.contains("\n2 rules apply; 2 ran: "), "{text}");
     assert!(text.contains("2 of 2 checks passed"), "{text}");
+}
+
+/// `world.json` and `entity.json` hold the values of the variables, so `--out` alone writes the
+/// reports and no world. The reproduce lines then name `$OUT`, and the line of the files says how
+/// to write the world (#614).
+#[test]
+fn the_report_names_the_folder_of_the_world_only_when_world_wrote_it_there() {
+    let reports = Options {
+        out_dir: Some("out".into()),
+        ..options()
+    };
+    assert_eq!(reports.world_dir(), None);
+    let text = scorecard::written_text(&reports);
+    assert!(
+        text.starts_with("Written to out: report.html, report.md, report.json. "),
+        "{text}"
+    );
+    assert!(
+        text.contains("world.json and entity.json there ($OUT): run again with --world"),
+        "{text}"
+    );
+    let world = Options {
+        out_world: true,
+        ..reports.clone()
+    };
+    assert_eq!(world.world_dir(), Some("out"));
+    assert!(
+        scorecard::written_text(&world)
+            .contains("report.json, world.json, entity.json. The last two hold the values"),
+        "{}",
+        scorecard::written_text(&world)
+    );
+    // with no --out, nothing is on disk
+    let nowhere = Options {
+        out_world: true,
+        ..options()
+    };
+    assert_eq!(nowhere.world_dir(), None);
+    assert!(scorecard::written_text(&nowhere).starts_with("No file written; "));
 }

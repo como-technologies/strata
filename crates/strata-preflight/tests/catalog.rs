@@ -1899,6 +1899,7 @@ fn reproduce_lines(
                 offline: false,
                 ready: None,
                 out_dir: Some(out.display().to_string()),
+                out_world: true,
             },
             cluster_gone: false,
             generated_at: "2026-01-01T00:00:00Z".into(),
@@ -2883,9 +2884,10 @@ fn written_files(text: &str) -> Vec<&str> {
 
 /// What `line` changes, when it changes something. A change is a word of [`CHANGES`], or a
 /// `POST` to a route that is not a validate route. A write of a file outside the current
-/// directory is a change too. A validate route of Palette checks a body. `request.json` and
-/// `body.json` of the lines that a report adds are files of the current directory.
-fn change_in(line: &str) -> Option<String> {
+/// directory and outside `world_dir` is a change too. A validate route of Palette checks a body.
+/// The lines that a report adds write `request.json` and `body.json` into `world_dir`, the folder
+/// of `world.json`, beside the values of the variables.
+fn change_in(line: &str, world_dir: &str) -> Option<String> {
     let text = command_text(line);
     let words: Vec<&str> = text
         .split(|c: char| c.is_whitespace() || "|;&()$`<>".contains(c))
@@ -2901,9 +2903,15 @@ fn change_in(line: &str) -> Option<String> {
     if curl_posts(&words) && !line.contains("/validate") {
         return Some("a POST to a route that is not a validate route".to_string());
     }
+    // a file of the folder of the world is `<world_dir>/<name>`, with no other slash in the name
+    let in_world_dir = |file: &str| {
+        file.strip_prefix(world_dir)
+            .and_then(|rest| rest.strip_prefix('/'))
+            .is_some_and(|name| !name.contains('/'))
+    };
     written_files(&text)
         .into_iter()
-        .find(|file| *file != "/dev/null" && file.contains('/'))
+        .find(|file| *file != "/dev/null" && file.contains('/') && !in_world_dir(file))
         .map(|file| format!("a write of {file}"))
 }
 
@@ -2917,6 +2925,7 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
     let catalog = catalog::builtin().unwrap();
     let jq = Jq::new();
     let dir = folder_for_reproduce();
+    let world_dir = dir.path().display().to_string();
     // a line of a rule starts its `curl` with a template, and the words of a command skip a
     // template. So the test fills it, and reads the `curl` and its options.
     let template = format!("{{{{ {PALETTE_CURL} }}}}");
@@ -2936,7 +2945,7 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
             lines.extend(reproduce_lines(&catalog, rule, doc, dir.path(), &jq));
         }
         for line in lines {
-            if let Some(change) = change_in(&line) {
+            if let Some(change) = change_in(&line, &world_dir) {
                 found.push(format!("{}: {change}: {line}", rule.id));
             }
         }
@@ -2962,6 +2971,8 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         r#"curl -s -X POST -d '{"spectroComponents":"unlock"}' "https://h/v1/spectroclusters/u/upgrade/settings"   # resume"#,
         r#"code=$(curl -s -d @body.json "https://h/v1/x")"#,
         "jq . world.json > ~/.kube/config",
+        "jq '.validateBody' out/world.json > out/sub/request.json",
+        "jq '.validateBody' out/world.json > ../request.json",
         "rm -rf out",
         "aws ecr get-login-password --region r | crane auth login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
         "aws ecr get-login-password --region r | docker login -u AWS --password-stdin <account>.dkr.ecr.r.amazonaws.com",
@@ -2970,7 +2981,7 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "gcloud container clusters get-credentials c --region r",
         "kubectl config use-context c",
     ] {
-        assert!(change_in(bad).is_some(), "{bad}");
+        assert!(change_in(bad, "out").is_some(), "{bad}");
     }
     for good in [
         "aws ec2 describe-vpcs --filters Name=tag-key,Values=x --query 'Vpcs[].VpcId' --output text   # no id before a force delete",
@@ -2978,6 +2989,8 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "maas $PROFILE tag machines palette | jq -r '.[] | .hostname'",
         r#"curl -s -X POST -H 'Content-Type: application/json' --data @request.json "https://h/v1/spectroclusters/aws/validate""#,
         "jq '.validateBody' out/world.json > request.json",
+        "jq '.validateBody' out/world.json > out/request.json",
+        r#"code=$(curl -s -o out/body.json -w '%{http_code}' -X POST --data @out/request.json "https://h/v1/spectroclusters/aws/validate")"#,
         r#"for t in tofu jq; do command -v $t >/dev/null || echo "$t is missing"; done"#,
         "aws iam simulate-principal-policy --action-names eks:CreateCluster ec2:RunInstances --output json",
         r#"gcloud logging read 'protoPayload.methodName="CreateCluster" severity>=WARNING' --limit 3"#,
@@ -2989,7 +3002,7 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "gcloud auth print-access-token",
         r#"strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // "<name>" }} '.profiles[] | .version'"#,
     ] {
-        assert_eq!(change_in(good), None, "{good}");
+        assert_eq!(change_in(good, "out"), None, "{good}");
     }
 }
 

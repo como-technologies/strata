@@ -346,15 +346,77 @@ fn out_names_the_path_in_the_error_when_it_cannot_write_and_makes_the_directory_
         dir.path(),
     );
     assert_eq!(code, 0, "{err}");
-    for file in [
-        "report.md",
-        "report.json",
-        "report.html",
-        "world.json",
-        "entity.json",
-    ] {
+    for file in ["report.md", "report.json", "report.html"] {
         assert!(dir.path().join("a/b/run").join(file).is_file(), "{file}");
     }
+}
+
+/// The value of a variable that is not sensitive is in the body of the create, so it is in the
+/// world. A job keeps the folder of `--out` as an artifact, and each reader of the job can get it.
+/// So `--out` writes the three reports, which hold no value. Only `--world` adds `world.json` and
+/// `entity.json`, which hold it (#614). Before, `--out` wrote the two files each time.
+#[test]
+fn the_folder_of_out_holds_the_value_of_a_variable_only_in_the_two_files_that_world_adds() {
+    const VALUE: &str = "team-payments";
+    let dir = tempfile::tempdir().unwrap();
+    let variable = format!(r#""variables": [{{"name": "platform_owner", "value": "{VALUE}"}}]"#);
+    std::fs::write(
+        dir.path().join("cluster.json"),
+        ENTITY.replace(r#""variables": []"#, &variable),
+    )
+    .unwrap();
+    let run_out = |extra: &[&str]| {
+        let args = [&["cluster.json", "--cloud", "aws", "--offline"], extra].concat();
+        let (code, _, err) = run(&args, dir.path());
+        assert_eq!(code, 0, "{extra:?}: {err}");
+    };
+    // the count of the value in each file of a folder, by the name of the file
+    let counts = |out: &str| -> std::collections::BTreeMap<String, usize> {
+        std::fs::read_dir(dir.path().join(out))
+            .unwrap()
+            .map(|entry| {
+                let path = entry.unwrap().path();
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                let text = std::fs::read_to_string(&path).unwrap();
+                (name, text.matches(VALUE).count())
+            })
+            .collect()
+    };
+    let none = [("report.html", 0), ("report.json", 0), ("report.md", 0)];
+    run_out(&["--out", "out"]);
+    assert_eq!(counts("out"), none.map(|(f, n)| (f.to_string(), n)).into());
+    run_out(&["--out", "world", "--world"]);
+    // world.json holds the entity, and the body of the validate route that it gives
+    let world = [("entity.json", 1), ("world.json", 2)];
+    let expected = none.iter().chain(&world).map(|(f, n)| (f.to_string(), *n));
+    assert_eq!(counts("world"), expected.collect());
+    // the reproduce lines read the folder of the world, or $OUT when the run wrote none there
+    let reproduce = |out: &str| -> Vec<String> {
+        let text = std::fs::read_to_string(dir.path().join(out).join("report.json")).unwrap();
+        let report: serde_json::Value = serde_json::from_str(&text).unwrap();
+        report["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|c| c["reproduce"].as_array())
+            .flatten()
+            .filter_map(|line| line.as_str())
+            .filter(|line| line.contains("world.json"))
+            .map(str::to_string)
+            .collect()
+    };
+    for (out, world) in [("out", "$OUT/world.json"), ("world", "world/world.json")] {
+        let lines = reproduce(out);
+        assert!(!lines.is_empty(), "{out}");
+        assert!(lines.iter().all(|l| l.contains(world)), "{out}: {lines:#?}");
+    }
+    // --world names the folder of --out, so it needs one
+    let (code, _, err) = run(
+        &["cluster.json", "--cloud", "aws", "--offline", "--world"],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("--out"), "{err}");
 }
 
 #[test]

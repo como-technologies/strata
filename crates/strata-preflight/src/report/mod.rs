@@ -107,9 +107,15 @@ pub struct Options {
     /// The readiness the run needs, as a share, when `--ready` was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready: Option<f64>,
-    /// The directory `--out` wrote the reports and the world into, when it was given.
+    /// The directory `--out` wrote the reports into, when it was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_dir: Option<String>,
+    /// True when `--world` wrote `world.json` and `entity.json` into `outDir` too.
+    ///
+    /// The two files hold the value of each variable that is not sensitive. A report from before
+    /// 0.33.0 has no such field, and it reads as false.
+    #[serde(default)]
+    pub out_world: bool,
 }
 
 /// The readiness that the page of a run marks on each bar when the run gave no `--ready`.
@@ -124,6 +130,12 @@ impl Options {
         let strict = if self.strict { ", strict" } else { "" };
         let offline = if self.offline { ", offline" } else { "" };
         format!("{}{strict}{offline}", tiers.join(", "))
+    }
+
+    /// The directory that holds `world.json` and `entity.json`: `outDir` when `--world` wrote
+    /// them there, else none.
+    pub(crate) fn world_dir(&self) -> Option<&str> {
+        self.out_dir.as_deref().filter(|_| self.out_world)
     }
 }
 
@@ -471,7 +483,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
                 rule,
                 outcome,
                 &a.subject,
-                a.options.out_dir.as_deref(),
+                a.options.world_dir(),
             ));
         }
         checks.push(CheckResult {

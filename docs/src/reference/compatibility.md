@@ -1041,6 +1041,21 @@ field, a value, an input, or an option is in the sections above.
   reports use the same words. A script that reads that line gets a new word.
   `strata-preflight/1` has the new field `options.offline`. Read the field: the
   text forms can change in any release.
+- **`strata preflight --out` writes no `world.json` and no `entity.json`.** The
+  two files hold the values of the variables. Give `--world` beside `--out` to
+  write them. See [The report on disk](../commands/preflight/report.md#the-report-on-disk).
+  - `--out` writes `report.md`, `report.json`, and `report.html` alone. A script
+    that reads one of the two files after `--out` must give `--world`.
+  - `--world` without `--out` is a usage error with exit `2`.
+  - When the run writes no world, the reproduce lines name `$OUT` in place of the
+    directory of `--out`. The last line of each form of the report says how to
+    write the two files.
+  - A line that the report adds writes `request.json` and `body.json` into the
+    folder of `world.json`, not into the current directory. So it holds
+    `> $OUT/request.json`, `--data @$OUT/request.json`, `-o $OUT/body.json`, and
+    `--slurpfile body $OUT/body.json`.
+  - `strata-preflight/1` has the new field `options.outWorld`: `true` when
+    `--world` wrote the two files into `outDir`.
 
 ### For a user of the CI drop-ins
 
@@ -1068,6 +1083,15 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **The artifact of the preflight job holds no `world.json` and no
+  `entity.json`.** This holds for `preflight.yml`, for the GitLab job
+  `strata-preflight`, and for `preflight.sh`. The two files hold the values of
+  the variables, and each reader of a run can download the artifact.
+  - To keep them, give the input `world: true` to `preflight.yml`, or set
+    `STRATA_PREFLIGHT_WORLD` to `true`. See
+    [The files of the job](../automation/preflight.md#the-files-of-the-job).
+  - A later step that reads `world.json` or `entity.json` from the directory of
+    the job must set that input.
 
 ### For a user of the library of strata
 
@@ -1082,6 +1106,12 @@ field, a value, an input, or an option is in the sections above.
 - `report::Options` has the new field `offline: bool`. A literal must set it.
   With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
   `Backend::has_palette` gives `false`.
+- `report::Options`, `run::RunInputs`, and `run::WatchInputs` have the new field
+  `out_world: bool`. A literal must set it. With `false`, the reproduce lines name
+  `$OUT`, and not `out_dir`. Give `true` only when the program writes `world.json`
+  and `entity.json` into `out_dir`.
+- A reproduce line that the report adds writes `request.json` and `body.json` into
+  the folder of `world.json`, not into the current directory.
 
 ## Release 0.28.0: changes that need action
 

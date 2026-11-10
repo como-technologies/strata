@@ -157,7 +157,7 @@ fn scorecard_section(r: &Report) -> String {
     }
     h.push_str(&format!(
         "<p class=\"legend\">{}</p>",
-        esc(&written_text(r.options.out_dir.as_deref()))
+        esc(&written_text(&r.options))
     ));
     h
 }
@@ -283,6 +283,7 @@ mod tests {
                 offline: false,
                 ready: None,
                 out_dir: None,
+                out_world: false,
             },
             checks: vec![check],
             sections: vec![SectionScore {

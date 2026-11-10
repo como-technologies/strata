@@ -8,8 +8,8 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '.chec
     "pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes"
   ],
   "reproduce": [
-    "jq '.validateBody' $OUT/world.json > request.json",
-    "code=$(curl -s --config <(printf 'header = \"ApiKey: %s\"\\n' \"$PALETTE_API_KEY\") -H \"ProjectUid: $PALETTE_PROJECT_UID\" -o body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @request.json \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate\")",
-    "jq --arg code \"$code\" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // \"\") | test(\"CPU|memory|cores\"; \"i\")) | \"pool \\($n): \\(.message)\" ] end' $OUT/world.json"
+    "jq '.validateBody' $OUT/world.json > $OUT/request.json",
+    "code=$(curl -s --config <(printf 'header = \"ApiKey: %s\"\\n' \"$PALETTE_API_KEY\") -H \"ProjectUid: $PALETTE_PROJECT_UID\" -o $OUT/body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @$OUT/request.json \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate\")",
+    "jq --arg code \"$code\" --slurpfile body $OUT/body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // \"\") | test(\"CPU|memory|cores\"; \"i\")) | \"pool \\($n): \\(.message)\" ] end' $OUT/world.json"
   ]
 }

@@ -785,7 +785,8 @@ what it answered.
   `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
-- `options`: `tiers`, `strict`, `offline`, `ready`, and `outDir` when `--out` was given.
+- `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
+  `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

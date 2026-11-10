@@ -151,5 +151,5 @@ runs: the rules of the section with a run in the ledger on this engine; weakest:
 
 104 rules apply; 4 ran: 4 passed, 0 failed, no probes failed, no warnings, 1 note; 16 did not run, 24 not checked, 55 do not apply, no errors; readiness 20%: 4 of 20 checks passed
 16 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (8)
-No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
+No file written; --out DIR writes report.html, report.md, and report.json, and --world adds world.json and entity.json, which the reproduce lines read there ($OUT).
 OK: each counted check passed

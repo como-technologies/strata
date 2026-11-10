@@ -92,7 +92,7 @@ Start the watch now. It reads the cluster, its summary, and its events every
 stuck state with its evidence, or after 90 minutes.
 
 ```bash
-$P cluster:$U --watch --verbose --out /tmp/pf-watch
+$P cluster:$U --watch --verbose --out /tmp/pf-watch --world
 ```
 
 Before the first reading, one line per rule with the program it evaluates.

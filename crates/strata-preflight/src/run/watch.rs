@@ -103,6 +103,8 @@ pub struct WatchInputs<'a, A: PaletteApi> {
     pub sleep: &'a dyn Fn(Duration),
     /// The directory of `--out`, for the reproduce lines and the report.
     pub out_dir: Option<&'a str>,
+    /// True when `out_dir` gets `world.json` and `entity.json` too: `--world`.
+    pub out_world: bool,
     /// Print, at each reading, the verdict of each rule.
     pub verbose: bool,
     /// The color of the lines of `verbose`, which go to standard error.
@@ -128,7 +130,7 @@ struct Ended {
 /// The watch ends at the first counted failure (severity `fail` at the preflight level, or any
 /// failed probe with `--strict`). It also ends when the cluster is `Running` with each counted
 /// rule passed, or at the limit. A failed probe or a warning is in the report, and the watch reads
-/// on. The second value is the world with the last reading in it, for `--out world.json`.
+/// on. The second value is the world with the last reading in it, for `world.json` of `--world`.
 ///
 /// # Errors
 ///
@@ -188,6 +190,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
                 offline: false,
                 ready: None,
                 out_dir: inputs.out_dir.map(str::to_string),
+                out_world: inputs.out_world,
             },
             cluster_gone: ended.gone,
             generated_at: inputs.now.to_string(),
