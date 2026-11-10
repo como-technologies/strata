@@ -108,6 +108,7 @@ fn a_palette_check_reads_a_4xx_as_an_answer() {
             body: None,
             each: None,
             refusal_codes: Vec::new(),
+            saves: None,
             expr: r#"[select(.response.ok | not) | "Palette: \(.response.body.code): \(.response.body.message)"]"#.into(),
         }));
     let out = run_check(&r, &w, &b, &jq);
@@ -129,6 +130,7 @@ fn each_check(each: &str, path: &str, expr: &str) -> Rule {
         body: None,
         each: Some(each.into()),
         refusal_codes: Vec::new(),
+        saves: None,
         expr: expr.into(),
     }))
 }
@@ -197,6 +199,7 @@ fn a_post_with_each_fills_its_body_from_the_item() {
         body: Some("{arn: $item.arn, size: ($item.size + 1)}".into()),
         each: Some("[.pools[] | select(.arn != null)]".into()),
         refusal_codes: Vec::new(),
+        saves: None,
         expr: "[.responses[] | select(.response.ok | not) | .item.arn]".into(),
     }));
     let world = json!({"pools": [{"arn": "a1", "size": 1}, {"size": 9}, {"arn": "a2", "size": 2}]});
@@ -470,6 +473,7 @@ fn properties_check(refusal_codes: &[&str]) -> Rule {
         body: Some("{}".into()),
         each: None,
         refusal_codes: codes(refusal_codes),
+        saves: None,
         expr: r#"[select(.response.ok | not) | "refused: \(.response.body.code)"]"#.into(),
     }))
 }
@@ -681,6 +685,7 @@ fn a_palette_check_with_no_key_is_not_run() {
         body: None,
         each: None,
         refusal_codes: Vec::new(),
+        saves: None,
         expr: "true".into(),
     }));
     assert_eq!(run_check(&r, &w, &b, &jq).verdict, Verdict::NotRun);

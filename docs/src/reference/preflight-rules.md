@@ -57,7 +57,7 @@ rules:
 | `when` | a jq program | When the rule applies: `.before != null` for a change, `.clusterUid != null` for an existing cluster, `.account != null` for the cloud account. A rule that does not apply is `SKIP`. |
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
 | `fix` | `owner`, `text` | The fix for good. `owner` is one of six values, and the loader refuses another: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
-| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. A line reads and changes nothing: see [The reproduce lines](#the-reproduce-lines). |
+| `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. A line reads and changes nothing, with one exception that the line names: see [The reproduce lines](#the-reproduce-lines). |
 | `evidence` | `kind`, `ref`, `note` | `kind` is one of four values, and the loader refuses another. `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. |
 | `evidence` of `kind` `source` | `ref`, `note` | A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
@@ -83,12 +83,21 @@ clouds](../internals/preflight.md#the-facts-of-the-clouds).
 ## The reproduce lines
 
 A person runs a `reproduce` line of a report by hand, to see what a check saw.
-So each line reads, and changes nothing:
+So each line reads, and changes nothing. One route of Palette is an exception,
+and its line says so. The rules of a line:
 
 - A line reads Palette, the cloud, the cluster, or a file. It deletes nothing,
   makes nothing, and changes no setting.
-- A `POST` goes only to a validate route of Palette, which checks the body: see
-  [The validate routes](../internals/palette/validate-routes.md).
+- A `POST` goes to a validate route of Palette, which checks the body: see
+  [The validate routes](../internals/palette/validate-routes.md). The test of
+  the catalog names each such route that saves nothing.
+- One route can save a record, `validate/repave`: for a pack of virtual
+  machines, Palette can save the address of its console. A line can send it only for a check
+  that names `console-address` in `saves`. The line ends with
+  `{{ saves_comment("console-address") }}`. The report fills it with a comment
+  that says what Palette saves, and the line that the report adds for the check
+  ends with the same comment. See
+  [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 - A line writes no file outside the current directory. The lines that the report
   adds for a check write `request.json` and `body.json` there.
 - A line makes no login to a registry or a cloud. A login writes the credentials
@@ -106,14 +115,20 @@ because the operator decides when it runs. Write the lines of a file of custom
 probes the same way. A test of the catalog fails on a line that changes
 something, and on a text of a rule that names `examples/live`. It also fails on
 a line that reads Palette with no `{{ palette_curl }}`, or that names a header.
+It fails on a line that sends `validate/repave` with no
+`{{ saves_comment("console-address") }}` at its end.
 
 The report fills `{{ palette_curl }}` with the `curl` that its own lines start
 with. That `curl` sends the key in a config that `printf` writes into `<( )`.
 `printf` is a builtin of the shell, so no process gets the key as an argument.
 The list of processes does not show it, also on a shared runner of CI. The
-`curl` sends the project in the header `ProjectUid`, and the line gives the
-address as `"${PALETTE_API:-https://api.spectrocloud.com}/v1/..."`. Run the line
-in a shell with `<( )`, such as bash or zsh.
+config reads a `\` and a `"` in the key as an escape, so the line puts a `\`
+before each one. A line break in the key can add a line to the config. So a key
+with a line break stops the line before `curl`, with the message
+`the key of Palette holds a line break`. The `curl` sends the project in the
+header `ProjectUid`, and the line gives the address as
+`"${PALETTE_API:-https://api.spectrocloud.com}/v1/..."`. Run the line in bash or
+zsh, which have `[[ ]]` and `<( )`.
 
 ## The checks
 
@@ -125,7 +140,7 @@ each message is one failure; or an object `{pass, message}`.
 | Kind | Fields | Adds to the world |
 | --- | --- | --- |
 | `static` | `expr` | nothing |
-| `palette` | `method`, `path`, `body`, `each`, `refusal_codes`, `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
+| `palette` | `method`, `path`, `body`, `each`, `refusal_codes`, `saves`, `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
 | `exec` | `argv`, `needs`, `timeout`, `palette`, `also`, `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
@@ -137,6 +152,13 @@ The fields of a check of kind `palette`:
 - `each` is a jq program that gives a list: see [A request for each item](#a-request-for-each-item).
 - `refusal_codes` lists the codes of a 5xx that are an answer: see
   [A refusal at a 5xx](#a-refusal-at-a-5xx).
+- `saves` names what Palette saves at the request, when the route saves
+  something. The one value is `console-address`: at `validate/repave`, Palette
+  can save the address of the console of a pack of virtual machines. The line of
+  the report for the request ends with a comment that says it. Each
+  `reproduce` line that sends the request ends with
+  `{{ saves_comment("console-address") }}`: see
+  [The reproduce lines](#the-reproduce-lines).
 
 The fields of a check of kind `exec`:
 
@@ -155,7 +177,8 @@ does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
 
-strata-preflight adds three filters to jq: `semver_numbers`, `count_of`, and `palette_curl`.
+strata-preflight adds four filters to jq: `semver_numbers`, `count_of`, `palette_curl`, and
+`saves_comment`.
 
 `semver_numbers` reads the input text as a version, as `strata` does, and gives the numbers
 that the version writes. `"4.10.3-rc.1"` gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A
@@ -179,8 +202,10 @@ A program with `semver_numbers` or `count_of` does not run in the `jq` tool. The
 `reproduce` line for such a program with a definition of each filter in front. So the line runs
 in the tool.
 
-`palette_curl` gives the start of a `curl` to Palette, for a `reproduce` line: see
-[The reproduce lines](#the-reproduce-lines).
+`palette_curl` gives the start of a `curl` to Palette, for a `reproduce` line.
+`saves_comment("console-address")` gives the end of a line that sends a request at which
+Palette saves something: a comment that says what it saves. A name that is not a value of
+`saves` is an error. See [The reproduce lines](#the-reproduce-lines).
 
 ## A request for each item
 

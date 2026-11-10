@@ -292,7 +292,7 @@ pub(crate) fn profile_validation_in<A: PaletteApi>(
 
 /// Ask Palette whether it accepts the packs of the profile side on the cluster side.
 ///
-/// The question is `POST validate/packs` with the body of `--repave`, which changes nothing. `a`
+/// The question is `POST validate/packs`, which changes nothing, with the body of `--repave`. `a`
 /// and `b` are the two sides, and they follow the rules of
 /// [`palette_repave`](super::palette_repave). Palette answers `200` with
 /// an error for each pack it refuses. It refuses the whole request with an HTTP error and a code

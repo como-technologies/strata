@@ -414,7 +414,8 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 ///
 /// One side must be a cluster. The other is a profile version with a uid, or the record of the
 /// update that waits for that cluster, `cluster:<c>@pending`, in either order. It reads the
-/// cluster document for the profiles it runs now, and sends one POST, which changes nothing.
+/// cluster document for the profiles it runs now, and sends one POST. The POST changes no setting,
+/// and it can save the address of the console of a pack: see [`Palette::validate_repave`].
 /// `a` and `b` are the two sides of the comparison. `level` is the most severe level of the impact
 /// table, for `agrees`.
 ///

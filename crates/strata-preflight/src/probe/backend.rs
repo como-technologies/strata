@@ -137,7 +137,8 @@ fn http_error(method: Method, path: &str, status: u16, body: &str) -> strata::Er
 }
 
 /// What the backend keeps of the answer to one request. An answer is the same for the rest of
-/// the run, because a run changes nothing in Palette.
+/// the run, because a run changes no setting in Palette. At `validate/repave`, Palette can save
+/// the address of the console of a pack, but no request of a check reads that address.
 #[derive(Debug, Clone)]
 enum Kept {
     /// A 2xx: the body, as JSON. A 204 has a `null` body.
