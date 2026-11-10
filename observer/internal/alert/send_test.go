@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // receiver is a webhook that keeps each request that it gets.
@@ -134,10 +136,8 @@ func TestAStatusThatIsNotSuccessIsAFailureThatNamesTheChannelAndTheStatus(t *tes
 }
 
 func TestAFailedSendNamesNoAddress(t *testing.T) {
-	r := newReceiver(t, true, http.StatusOK)
-	addr := r.URL + "/services/TOKEN-SECRET"
-	r.Close()
-	w, _ := hook(t, addr, false, r.Server)
+	// The send goes to testkit.PortZero, because another process can take the port of a closed receiver.
+	w, _ := hook(t, "https://"+testkit.PortZero+"/services/TOKEN-SECRET", false, nil)
 	err := w.Send(context.Background(), "platform-oncall", "x")
 	var se *SendError
 	if !errors.As(err, &se) || se.Kind != KindTransport {

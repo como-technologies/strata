@@ -60,7 +60,8 @@ The script also builds `strata-observer` and runs `once` with the real binary of
 
 After each run, the script makes sure that the work directory is empty.
 
-The script then starts `serve` on a free port, and checks the status of some
+The script then starts `serve` on port 0, so the kernel gives it a free port. It
+reads that port from the line `listening` of the log, and checks the status of some
 requests. A `POST` to a summary route gets 405. A `Host` that is not loopback gets
 421, and an unknown profile gets 404.
 

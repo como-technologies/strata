@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -169,13 +170,9 @@ func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnl
 		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", "internal/alert/send.go", "internal/testkit/"}},
 		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", "internal/alert/send.go"}},
 	}
-	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return err
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return err
+	for path, raw := range goFiles(t) {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
 		for _, r := range rules {
 			if slices.ContainsFunc(r.allowed, func(prefix string) bool { return strings.HasPrefix(filepath.ToSlash(path), prefix) }) {
@@ -187,12 +184,173 @@ func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnl
 				}
 			}
 		}
-		return nil
+	}
+}
+
+// goFiles gives the text of each Go file of the observer, by its path.
+func goFiles(t *testing.T) map[string][]byte {
+	t.Helper()
+	files := map[string][]byte{}
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		files[path], err = os.ReadFile(path)
+		return err
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	return files
 }
+
+// parsedFiles parses each Go file of the observer, and gives each file by its path.
+func parsedFiles(t *testing.T) (*token.FileSet, map[string]*ast.File) {
+	t.Helper()
+	fset, parsed := token.NewFileSet(), map[string]*ast.File{}
+	for path, raw := range goFiles(t) {
+		f, err := parser.ParseFile(fset, path, raw, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsed[path] = f
+	}
+	return fset, parsed
+}
+
+// A test that closes a free port and gives it to a server can lose the port. Another process can bind
+// it first, and answer in place of the server. So no test of the observer calls net.Listen. A test
+// starts its server on testkit.PortZero and reads the port from the log, or it uses httptest.
+func TestNoTestGivesAServerAPortThatItClosed(t *testing.T) {
+	fset, files := parsedFiles(t)
+	for path, f := range files {
+		if !strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if s, ok := n.(*ast.SelectorExpr); ok && s.Sel.Name == "Listen" {
+				if x, ok := s.X.(*ast.Ident); ok && x.Name == "net" {
+					t.Errorf("%s calls net.Listen", fset.Position(s.Pos()))
+				}
+			}
+			return true
+		})
+	}
+}
+
+// The kernel can give the port of a closed server to another process at once, and a server there can
+// answer. So no test uses a name after a statement that closes it, such as srv.Close(). A test of "no
+// server" asks testkit.PortZero.
+func TestNoTestAsksAServerThatItClosed(t *testing.T) {
+	fset, files := parsedFiles(t)
+	for path, f := range files {
+		if !strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			var body *ast.BlockStmt
+			switch n := n.(type) {
+			case *ast.FuncDecl:
+				body = n.Body
+			case *ast.FuncLit:
+				body = n.Body
+			}
+			if body == nil {
+				return true
+			}
+			// A close in a nested function runs later, so only the statements of this body count.
+			closed := map[string]token.Pos{}
+			ast.Inspect(body, func(n ast.Node) bool {
+				if _, ok := n.(*ast.FuncLit); ok {
+					return false
+				}
+				if s, ok := n.(*ast.ExprStmt); ok {
+					if c, ok := s.X.(*ast.CallExpr); ok {
+						if sel, ok := c.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "Close" {
+							if x, ok := sel.X.(*ast.Ident); ok {
+								if _, seen := closed[x.Name]; !seen {
+									closed[x.Name] = s.End()
+								}
+							}
+						}
+					}
+				}
+				return true
+			})
+			ast.Inspect(body, func(n ast.Node) bool {
+				if id, ok := n.(*ast.Ident); ok {
+					if end, ok := closed[id.Name]; ok && id.Pos() > end {
+						t.Errorf("%s uses %s after it closes it", fset.Position(id.Pos()), id.Name)
+					}
+				}
+				return true
+			})
+			return true
+		})
+	}
+}
+
+// A local name hides a package in its scope when the file imports a package of that name. An example is
+// a variable api in a file that imports internal/api. No file of the observer declares such a name.
+func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
+	fset, files := parsedFiles(t)
+	for _, f := range files {
+		imported := map[string]bool{}
+		for _, imp := range f.Imports {
+			name := strings.Trim(imp.Path.Value, `"`)
+			name = name[strings.LastIndex(name, "/")+1:]
+			if imp.Name != nil {
+				name = imp.Name.Name
+			}
+			imported[name] = true
+		}
+		check := func(ids ...*ast.Ident) {
+			for _, id := range ids {
+				if imported[id.Name] {
+					t.Errorf("%s: the name %s hides the package", fset.Position(id.Pos()), id.Name)
+				}
+			}
+		}
+		fields := func(l *ast.FieldList) {
+			for _, field := range l.List {
+				check(field.Names...)
+			}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			switch n := n.(type) {
+			case *ast.AssignStmt:
+				if n.Tok == token.DEFINE {
+					for _, e := range n.Lhs {
+						if id, ok := e.(*ast.Ident); ok {
+							check(id)
+						}
+					}
+				}
+			case *ast.RangeStmt:
+				if n.Tok == token.DEFINE {
+					for _, e := range []ast.Expr{n.Key, n.Value} {
+						if id, ok := e.(*ast.Ident); ok {
+							check(id)
+						}
+					}
+				}
+			case *ast.ValueSpec:
+				check(n.Names...)
+			case *ast.FuncDecl:
+				if n.Recv != nil {
+					fields(n.Recv)
+				}
+			case *ast.FuncType:
+				fields(n.Params)
+				if n.Results != nil {
+					fields(n.Results)
+				}
+			}
+			return true
+		})
+	}
+}
+
 func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 	var out, errs bytes.Buffer
 	code := run(onceArgs(t, fakeStrata(t, `{"same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`, 0, true)), &out, &errs)
@@ -205,72 +363,21 @@ func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 	}
 }
 
-// serveArgs turns the arguments of `once` into the arguments of `serve` on a free loopback port.
-func serveArgs(t *testing.T, bin string) (args []string, addr string) {
+// serveArgs changes the arguments of `once` to the arguments of `serve` on testkit.PortZero. So the
+// kernel gives the server a free port.
+func serveArgs(t *testing.T, bin string) []string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	addr = ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatal(err)
-	}
-	args = append([]string{"serve"}, onceArgs(t, bin)[1:]...)
-	return append(args, "--listen", addr), addr
+	args := append([]string{"serve"}, onceArgs(t, bin)[1:]...)
+	return append(args, "--listen", testkit.PortZero)
 }
 
-// syncBuffer is a buffer that the goroutine of `serve` and the test share.
-type syncBuffer struct {
-	mu sync.Mutex
-	b  bytes.Buffer
-}
-
-func (s *syncBuffer) Write(p []byte) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.Write(p)
-}
-
-func (s *syncBuffer) String() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.b.String()
-}
-
-// startServe runs `serve` until the test stops it. It gives the function that stops it and gives its exit code.
-func startServe(t *testing.T, args []string, addr string) (stop func() int, stderr *syncBuffer) {
+// startServe runs `serve` until the test stops it. It gives the address of the server, the function that
+// stops it and gives its exit code, and its log.
+func startServe(t *testing.T, args []string) (addr string, stop func() int, stderr *testkit.Log) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	stderr = &syncBuffer{}
-	code := make(chan int, 1)
-	go func() { code <- runContext(ctx, args, io.Discard, stderr) }()
-	t.Cleanup(cancel)
-	deadline := time.Now().Add(testkit.WaitLimit)
-	for {
-		if run([]string{"health", "--listen", addr}, io.Discard, io.Discard) == 0 {
-			break
-		}
-		select {
-		case c := <-code:
-			t.Fatalf("serve exited %d: %s", c, stderr.String())
-		default:
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the server did not start: %s", stderr.String())
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return func() int {
-		cancel()
-		select {
-		case c := <-code:
-			return c
-		case <-time.After(testkit.WaitLimit):
-			t.Fatal("serve did not stop")
-			return -1
-		}
-	}, stderr
+	return testkit.StartServer(t, func(ctx context.Context, log io.Writer) int {
+		return runContext(ctx, args, io.Discard, log)
+	})
 }
 
 func TestServeRefusesAnAddressThatIsNotLoopbackWithExitTwo(t *testing.T) {
@@ -288,14 +395,14 @@ func TestServeRefusesAnAddressThatIsNotLoopbackWithExitTwo(t *testing.T) {
 
 func TestServeRefusesAMissingFlagLikeOnce(t *testing.T) {
 	var out, errs bytes.Buffer
-	if code := run([]string{"serve", "--listen", "127.0.0.1:0"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "--cluster-uid is required") {
+	if code := run([]string{"serve", "--listen", testkit.PortZero}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "--cluster-uid is required") {
 		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}
 }
 
 func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
-	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, stderr := startServe(t, args, addr)
+	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	addr, stop, stderr := startServe(t, args)
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(method, path, host string) *http.Response {
 		t.Helper()
@@ -332,14 +439,14 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 	if code := stop(); code != 0 {
 		t.Errorf("exit %d, stderr %s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "listening") || strings.Contains(stderr.String(), "SENTINEL") {
+	if strings.Contains(stderr.String(), "SENTINEL") {
 		t.Errorf("stderr %s", stderr.String())
 	}
 }
 
 func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
-	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, _ := startServe(t, args, addr)
+	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	addr, stop, _ := startServe(t, args)
 	defer stop()
 	// The state of the page reads the content cycle only, so the wait also reads the versions cycle.
 	testkit.WaitFor(t, "the first cycle of each timer", func() bool {
@@ -349,15 +456,16 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 }
 
 func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
-	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, _ := startServe(t, args, addr)
+	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	addr, stop, _ := startServe(t, args)
 	var errs bytes.Buffer
 	if code := run([]string{"health", "--listen", addr}, io.Discard, &errs); code != 0 {
 		t.Errorf("with the server up: exit %d, stderr %q", code, errs.String())
 	}
 	stop()
+	// The check asks testkit.PortZero, because another process can take the port of the stopped server.
 	errs.Reset()
-	if code := run([]string{"health", "--listen", addr}, io.Discard, &errs); code != 1 || errs.Len() == 0 {
+	if code := run([]string{"health", "--listen", testkit.PortZero}, io.Discard, &errs); code != 1 || errs.Len() == 0 {
 		t.Errorf("with no server: exit %d, stderr %q", code, errs.String())
 	}
 }
@@ -425,20 +533,21 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	const subject = "aws-stack@1.1.0"
 	dir := t.TempDir()
 	hold, pids := filepath.Join(dir, "hold"), filepath.Join(dir, "pids")
-	args, addr := serveArgs(t, holdingStrata(t, hold, pids))
-	first, _ := startServe(t, args, addr)
+	args := serveArgs(t, holdingStrata(t, hold, pids))
+	firstAddr, first, _ := startServe(t, args)
 	// The observer keeps the answer of a cycle and writes the state while it holds one lock. So a row
 	// shows that the state holds the counts of the move.
-	testkit.WaitFor(t, "the first versions cycle", func() bool { return newerRows(addr) == 1 })
+	testkit.WaitFor(t, "the first versions cycle", func() bool { return newerRows(firstAddr) == 1 })
 	if code := first(); code != 0 {
 		t.Fatalf("the first server exited %d", code)
 	}
 
-	// The restart: the state holds the counts of the move, and the compare waits.
+	// The restart: the state holds the counts of the move, and the compare waits. The server gets a
+	// new port.
 	if err := os.WriteFile(hold, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stop, stderr := startServe(t, args, addr)
+	addr, stop, stderr := startServe(t, args)
 	// The detail route finds the pin in the versions cycle and the profile in the content cycle. The
 	// two cycles end in either order, so the wait reads both.
 	testkit.WaitFor(t, "the two cycles after the restart", func() bool {
@@ -509,13 +618,13 @@ func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
 // of the kubelet at it. The pod holds a marker in its environment.
 func podsAPI(t *testing.T) *testkit.KubeAPI {
 	t.Helper()
-	api := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+	kubeAPI := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@sha256:"+strings.Repeat("1", 64)))))
 	})
-	for name, value := range api.Env() {
+	for name, value := range kubeAPI.Env() {
 		t.Setenv(name, value)
 	}
-	return api
+	return kubeAPI
 }
 
 func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
@@ -528,8 +637,8 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf("%d requests went to the API server", n)
 	}
-	serve, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()), addr)
+	serve := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	addr, stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()))
 	// With --read-pods, the content cycle reads the pods. So the count of the requests waits for its end.
 	testkit.WaitFor(t, "the first content cycle", func() bool {
 		var got api.ClusterView
@@ -546,13 +655,13 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 }
 
 func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *testing.T) {
-	api := podsAPI(t)
+	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--read-pods", "--kube-dir", api.Dir())
+	args := append(onceArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
-	seen := api.Requests()
+	seen := kubeAPI.Requests()
 	if len(seen) != 1 || seen[0].Method != http.MethodGet || seen[0].Path != "/api/v1/pods" || seen[0].Auth != "Bearer token-1" {
 		t.Errorf("requests %+v", seen)
 	}
@@ -562,9 +671,9 @@ func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *te
 }
 
 func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
-	api := podsAPI(t)
-	args, addr := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
-	stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", api.Dir()), addr)
+	kubeAPI := podsAPI(t)
+	args := serveArgs(t, fakeStrata(t, `{"same":true,"sameContent":true}`, 0, false))
+	addr, stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", kubeAPI.Dir()))
 	var doc model.Observed
 	testkit.WaitFor(t, "the first read of the pods", func() bool {
 		doc = model.Observed{}
