@@ -1058,6 +1058,9 @@ field, a value, an input, or an option is in the sections above.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
   numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It was false for each text that does not
   parse.
+- `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
+  `profile` gives a cluster record of the profile that the version replaces. Its
+  `source.reference` names that profile. The signature stays.
 
 ## Release 0.28.0: changes that need action
 
