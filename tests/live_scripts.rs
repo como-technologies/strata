@@ -5669,8 +5669,8 @@ fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval
     );
 }
 
-/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits: the metadata of
-/// the profile, and one pack summary with the name `summary` and the manifest `m-1`.
+/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits. It has the
+/// metadata of the profile, and one pack summary with the name `summary` and the manifest `m-1`.
 fn draft_manifests(summary: &str) -> String {
     serde_json::json!({"metadata": {"name": "strata-live-addon", "uid": "ad-1"},
         "spec": {"packs": [{"metadata": {"name": summary, "uid": "pk-1"},

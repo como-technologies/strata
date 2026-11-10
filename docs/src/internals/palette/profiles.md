@@ -309,7 +309,7 @@ Palette serves the two templates as follows:
   metadata of the profile, so its `metadata.name` is the name of the profile.
   Each pack summary takes its `metadata.name` and its `spec.name` from its pin.
   So while a draft waits, the profile and the answer have the new name. The
-  code of Palette shows these facts. The check `route-names` of
+  code of Palette shows these facts, and the check `route-names` of
   [draft.sh](../../development/live-runs.md#draftsh) tests the two names. No
   result yet: the live window of wave 16 runs it.
 - `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
