@@ -85,14 +85,14 @@ way:
 ```
 
 A move to the next version changes only the packs of `aws-stack`. `--repave`
-asks Palette about the same move. The add-on profiles give no `ADDED` and no
-`REMOVED` line:
+and `--validate` ask Palette about the same move. The add-on profiles give no
+`ADDED` and no `REMOVED` line:
 
 ```text
-{{#include ../output/cluster-move-repave.txt}}
+{{#include ../output/cluster-move-asks.txt}}
 ```
 
-Exit `1`, because the roots differ. `palette    no repave` is the answer of
+Exit `1`, because the roots differ. The two `palette` lines are the answers of
 Palette. To compare each profile of the cluster, compare two records of the
 cluster. See
 [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
