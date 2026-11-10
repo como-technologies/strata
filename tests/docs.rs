@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
-    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
+    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, first_cells, gitlab_drop_in, one_line, recipe,
+    repo_file, schema, script, toml_entries, toml_table, toml_value, version_of, walk,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -186,16 +186,7 @@ fn codes_after(text: &str, anchor: &str) -> Vec<String> {
     let at = text
         .find(anchor)
         .unwrap_or_else(|| panic!("errors.md does not name {anchor}"));
-    let mut codes: Vec<String> = text[at..]
-        .lines()
-        .skip_while(|line| !line.starts_with("| Code |"))
-        .skip(2) // the header and the line under it
-        .take_while(|line| line.starts_with('|'))
-        .map(|row| {
-            let cell = row.split('|').nth(1).expect("a row has a first cell");
-            cell.trim().trim_matches('`').to_string()
-        })
-        .collect();
+    let mut codes = first_cells(&text[at..], "| Code |");
     codes.sort();
     codes
 }

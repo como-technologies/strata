@@ -3,12 +3,17 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+// The read of a table of the book. The tests of the book read the tables of the codes with it, so
+// the two tests read a table in one way.
+#[path = "../../tests/common/table.rs"]
+mod table;
 // The macro that ties the list of a test to each variant of an enum. The test of each edit of the
 // stand-in of `xtask` uses it too, so the two lists keep one rule.
 #[path = "../../tests/common/variants.rs"]
 mod variants;
 
 use super::*;
+use table::first_cells;
 use variants::one_of_each;
 
 fn bad_json() -> serde_json::Error {
@@ -659,29 +664,14 @@ fn the_schema_of_an_error_document_names_the_keys_that_to_json_writes_for_every_
     }
 }
 
-/// The kind of each row of the table of the kinds in `reference/errors.md`, in the order of the
-/// page. The kind is the first cell of the row, in backticks.
-fn kinds_of_the_book() -> Vec<String> {
+#[test]
+fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_kind() {
+    let kinds: BTreeSet<&str> = each_kind_of_error().iter().map(Error::kind).collect();
     let page = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src/reference/errors.md"),
     )
     .unwrap();
-    page.lines()
-        .skip_while(|line| !line.starts_with("| Kind |"))
-        // the head of the table and the line under it
-        .skip(2)
-        .take_while(|line| line.starts_with('|'))
-        .map(|row| {
-            let cell = row.split('|').nth(1).unwrap_or_default();
-            cell.trim().trim_matches('`').to_string()
-        })
-        .collect()
-}
-
-#[test]
-fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_kind() {
-    let kinds: BTreeSet<&str> = each_kind_of_error().iter().map(Error::kind).collect();
-    let rows = kinds_of_the_book();
+    let rows = first_cells(&page, "| Kind |");
     for kind in &kinds {
         assert!(
             rows.iter().any(|row| row == kind),
