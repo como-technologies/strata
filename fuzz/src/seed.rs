@@ -61,6 +61,9 @@ struct Target {
     seeds: fn() -> Vec<Vec<u8>>,
 }
 
+/// A regression case: the target, the name of the file in `crashes/`, and the input.
+type Case = (&'static str, &'static str, Vec<u8>);
+
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
 const TARGETS: [Target; 20] = [
     Target {
