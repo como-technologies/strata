@@ -5,19 +5,20 @@
 
 use std::path::Path;
 
+// The readers of a TOML file of the tests of strata, so that the tests of the endpoint keep no copy.
+#[path = "../../../../tests/common/toml.rs"]
+pub mod toml;
+
 /// The text of the file `path`, which is relative to the directory of the package.
 pub fn read(path: &str) -> String {
     std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap()
 }
 
-/// The text that a line `name=text` of a script, or `name = text` of a manifest, assigns, without the
-/// quotes. The name starts the line.
+/// The text that a line `name=text` of a script assigns, without the quotes. The name starts the
+/// line. [`toml::toml_value`] reads an entry of a manifest.
 pub fn assigned(file: &str, name: &str) -> String {
     file.lines()
-        .find_map(|line| {
-            line.strip_prefix(&format!("{name}="))
-                .or_else(|| line.strip_prefix(&format!("{name} = ")))
-        })
+        .find_map(|line| line.strip_prefix(&format!("{name}=")))
         .unwrap_or_else(|| panic!("the file has no line {name}=..."))
         .trim_matches(['"', '\''])
         .to_string()

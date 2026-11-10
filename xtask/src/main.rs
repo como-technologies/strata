@@ -36,6 +36,11 @@ mod process;
 #[cfg(test)]
 mod size;
 mod tenant;
+// The readers of a TOML file of the tests of strata. The checks read the version of `Cargo.toml`
+// with them, so the tests and the checks keep one reader. The checks read no table.
+#[path = "../../tests/common/toml.rs"]
+#[allow(dead_code)]
+mod toml;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

@@ -10,6 +10,7 @@ use regex::Regex;
 
 use crate::contract::StandIn;
 use crate::files::{book, output_dir, pages};
+use crate::toml::toml_value;
 
 /// The use cases of the book, from the root of the repository.
 const USE_CASES: &str = "use-cases";
@@ -93,11 +94,7 @@ fn release_tags(repo: &Path) -> Vec<String> {
     let Some(manifest) = read(repo, &repo.join("Cargo.toml"), &mut bad) else {
         return bad;
     };
-    let Some(version) = manifest
-        .lines()
-        .find_map(|l| l.strip_prefix("version = "))
-        .map(|v| format!("v{}", v.trim_matches(['"', ' '])))
-    else {
+    let Some(version) = toml_value(manifest.lines(), "version").map(|v| format!("v{v}")) else {
         return vec!["Cargo.toml has no version line".to_string()];
     };
     let copyable = Regex::new(

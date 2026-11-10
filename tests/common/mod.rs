@@ -41,6 +41,7 @@ mod git;
 mod palette;
 mod process;
 mod stand_in;
+mod toml;
 mod walk;
 
 pub use answer::*;
@@ -49,6 +50,7 @@ pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
+pub use toml::*;
 pub use walk::walk;
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
@@ -786,35 +788,6 @@ pub fn without_comments(text: &str) -> String {
 /// The text of a file of the repository, by its path from the root, without its comment lines.
 pub fn code_of(path: &str) -> String {
     without_comments(&repo_file(path))
-}
-
-/// The lines of the table `table` of the TOML text `text`, such as `[lints.clippy]`: each line
-/// after its header, up to the next header. The lines keep their comments and their indent.
-pub fn toml_table<'a>(text: &'a str, table: &str) -> Vec<&'a str> {
-    let mut lines = text.lines().skip_while(|line| line.trim() != table);
-    assert!(lines.next().is_some(), "the TOML text has no table {table}");
-    lines
-        .take_while(|line| !line.trim_start().starts_with('['))
-        .collect()
-}
-
-/// The entries `key = "value"` among `lines`, such as the lines of a table of a TOML file. A line
-/// with another form of value, such as a number or a list, is not an entry here.
-pub fn toml_entries<'a>(lines: impl IntoIterator<Item = &'a str>) -> Vec<(&'a str, &'a str)> {
-    lines
-        .into_iter()
-        .filter_map(|line| {
-            let (key, value) = line.split_once(" = ")?;
-            Some((key, value.strip_prefix('"')?.strip_suffix('"')?))
-        })
-        .collect()
-}
-
-/// The value of the first entry `key = "value"` among `lines`.
-pub fn toml_value<'a>(lines: impl IntoIterator<Item = &'a str>, key: &str) -> Option<&'a str> {
-    toml_entries(lines)
-        .into_iter()
-        .find_map(|(name, value)| (name == key).then_some(value))
 }
 
 /// `text` with each run of white space as one space, as a line break can fall inside a sentence.

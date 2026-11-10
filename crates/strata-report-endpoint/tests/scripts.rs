@@ -10,6 +10,7 @@ use strata_report_endpoint::tracker::{Issue, Tracker, TrackerError};
 
 mod common;
 
+use common::toml::toml_value;
 use common::{assigned, contract_label, read};
 
 /// The lines of `script` that are not comments.
@@ -41,7 +42,7 @@ fn the_contract_run_has_a_label_of_its_own_and_the_milestone_of_the_service() {
 #[test]
 fn the_repository_has_one_text_in_the_workspace_and_the_deploy_and_the_live_send_do_not_copy_it() {
     let manifest = read("../../Cargo.toml");
-    let url = assigned(&manifest, "repository");
+    let url = toml_value(manifest.lines(), "repository").expect("Cargo.toml names the repository");
     let name = url.strip_prefix("https://github.com/").unwrap();
     let settings = Settings::from_lookup(|var| (var == "GITHUB_TOKEN").then(|| "t".to_string()));
     assert_eq!(settings.unwrap().repository, name);
