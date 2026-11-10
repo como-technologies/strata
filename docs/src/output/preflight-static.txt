@@ -98,7 +98,8 @@ The Palette platform
                 no check in strata-preflight; the reproduce lines say what to run by hand
   NOT CHECKED   conditions-not-cloud         The cloud inventory is the truth of a delete                     1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line: the cloud is empty
+                reproduce: aws ec2 describe-instances --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query 'Reservations[].Instances[].InstanceId' --output text   # no id: the instances are gone
+                reproduce: aws ec2 describe-vpcs --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Vpcs[].VpcId' --output text   # no id: the network, which goes last, is gone
   NOT CHECKED   api-quirks                   The client keeps to the limits of the API                        1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/<cluster uid>?limit=101"   # 500; 100 answers 200
@@ -116,16 +117,19 @@ Teardown and leftovers
   NOT RUN       2 checks did not run: tier cloud was not asked for (2)
   NOT CHECKED   force-delete-leaves-cloud    A force delete removes the records of Palette alone              1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: examples/live/aws-inventory.sh payments us-east-2   # 0 on every line before a force delete
+                reproduce: aws ec2 describe-instances --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments Name=instance-state-name,Values=pending,running,stopping,stopped,shutting-down --query 'Reservations[].Instances[].InstanceId' --output text   # no id before a force delete
+                reproduce: aws ec2 describe-volumes --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Volumes[].VolumeId' --output text   # no id before a force delete
+                reproduce: aws elb describe-load-balancers --region us-east-2 --query "LoadBalancerDescriptions[?LoadBalancerName=='payments-apiserver'].LoadBalancerName" --output text   # no name before a force delete
+                reproduce: aws ec2 describe-vpcs --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/cluster/payments --query 'Vpcs[].VpcId' --output text   # the network goes last, minutes after the instances
   NOT CHECKED   macro-undeletable            No cluster reads a macro before its delete                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
-                reproduce: examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r '.macros[].name'   # the macros of the project
+                reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/projects/$PALETTE_PROJECT_UID/macros" | jq -r '.macros[].name'   # the macros of the project
                 reproduce: strata snapshot cluster:<cluster uid> --macros --json | jq '.macros'   # the macros the cluster reads
   NOT CHECKED   versions-outside-state       Palette holds no version outside the state                       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: strata list profiles --json | jq -r --arg n <profile name> '.profiles[] | select(.name == $n) | .version'   # every version of the name in Palette
                 reproduce: tofu state list | grep spectrocloud_cluster_profile   # the versions the state holds
-                reproduce: examples/live/api.sh delete-named <profile name>   # the fix of the lab: every version of the name
+                reproduce: strata consumers <profile name>@<version>   # the clusters that run the version: keep each version that a cluster runs
   PROBE PASS    name-prefix                  No pool name is a prefix of another                              1 ms
 
 Section scorecard

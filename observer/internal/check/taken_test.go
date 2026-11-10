@@ -13,13 +13,13 @@ import (
 )
 
 // firstSeenWithANewProfile makes a world with first-seen records of aws-stack@1.1.0, and a cluster
-// that also runs ngp-f5@1.0.0, which no record holds: the pipeline of the team added it after the seed.
+// that also runs fred-edge@1.0.0, which no record holds: the pipeline of the team added it after the seed.
 func firstSeenWithANewProfile(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, unchanged())
 	r.meta(`{"baseline":"first-seen","firstSeenFrom":"c1"}`)
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "ngp-f5@1.0.0")
+	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "fred-edge@1.0.0")
 	return r, w
 }
 
@@ -53,11 +53,11 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if s := o.Summary(); profileStatus(s, "ngp-f5@1.0.0") != model.StatusNoRecord {
-		t.Fatalf("the first cycle: %q", profileStatus(s, "ngp-f5@1.0.0"))
+	if s := o.Summary(); profileStatus(s, "fred-edge@1.0.0") != model.StatusNoRecord {
+		t.Fatalf("the first cycle: %q", profileStatus(s, "fred-edge@1.0.0"))
 	}
-	if snapshotsOf(w, "ngp-f5@1.0.0") != 1 || len(o.kicks[cycleContent]) != 1 {
-		t.Fatalf("snapshots %d, tokens %d", snapshotsOf(w, "ngp-f5@1.0.0"), len(o.kicks[cycleContent]))
+	if snapshotsOf(w, "fred-edge@1.0.0") != 1 || len(o.kicks[cycleContent]) != 1 {
+		t.Fatalf("snapshots %d, tokens %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]))
 	}
 	if !strings.Contains(r.log.String(), "verdict=taken records=1") {
 		t.Errorf("the log:\n%s", r.log.String())
@@ -66,13 +66,13 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 		t.Fatal(err)
 	}
 	s := o.Summary()
-	if st := profileStatus(s, "ngp-f5@1.0.0"); st == model.StatusNoRecord || st == "" {
+	if st := profileStatus(s, "fred-edge@1.0.0"); st == model.StatusNoRecord || st == "" {
 		t.Errorf("the second cycle: %q", st)
 	}
 	if slices.ContainsFunc(s.NotChecked, func(n model.NotChecked) bool { return n.Cause == model.NoRecord }) {
 		t.Errorf("not checked: %+v", s.NotChecked)
 	}
-	if snapshotsOf(w, "ngp-f5@1.0.0") != 1 {
+	if snapshotsOf(w, "fred-edge@1.0.0") != 1 {
 		t.Errorf("the second cycle took a second snapshot")
 	}
 	if s.Records.Baseline != "first-seen" {
@@ -91,10 +91,10 @@ func TestApprovedRecordsGetNoRecordFromTheObserver(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if snapshotsOf(w, "ngp-f5@1.0.0") != 0 || len(o.kicks[cycleContent]) != 0 {
-		t.Errorf("snapshots %d, tokens %d", snapshotsOf(w, "ngp-f5@1.0.0"), len(o.kicks[cycleContent]))
+	if snapshotsOf(w, "fred-edge@1.0.0") != 0 || len(o.kicks[cycleContent]) != 0 {
+		t.Errorf("snapshots %d, tokens %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.kicks[cycleContent]))
 	}
-	if st := profileStatus(o.Summary(), "ngp-f5@1.0.0"); st != model.StatusNoRecord {
+	if st := profileStatus(o.Summary(), "fred-edge@1.0.0"); st != model.StatusNoRecord {
 		t.Errorf("status %q", st)
 	}
 }
@@ -115,11 +115,11 @@ func TestAFailedSnapshotKeepsTheCycleGoodAndARecordOfTheSecretsWins(t *testing.T
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if snapshotsOf(w, "ngp-f5@1.0.0") != 2 || len(o.taken) != 1 {
-		t.Fatalf("snapshots %d, taken %d", snapshotsOf(w, "ngp-f5@1.0.0"), len(o.taken))
+	if snapshotsOf(w, "fred-edge@1.0.0") != 2 || len(o.taken) != 1 {
+		t.Fatalf("snapshots %d, taken %d", snapshotsOf(w, "fred-edge@1.0.0"), len(o.taken))
 	}
 	// the pipeline, or a new seed, writes the record into the Secrets
-	r.record("ngp-f5", "1.0.0", "addon/f5")
+	r.record("fred-edge", "1.0.0", "addon/edge")
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
