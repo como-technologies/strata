@@ -7,11 +7,13 @@ set them. A line of that file is `KEY=VALUE`. Strata accepts `export ` before th
 value. A line that starts with `#` is a comment. An empty value counts as no
 line.
 
-Strata reads `~/.palette.env` only when `HOME` is an absolute path. An empty or a
-relative `HOME` names a folder below the working folder, such as the checkout of a
-job. A file there can come from the repository, so strata reads no file. The
-environment then gives each setting. The state folder follows the same rule: with
-no absolute `HOME` and no `XDG_STATE_HOME`, strata keeps no state.
+Strata reads `~/.palette.env` only when `HOME` is an absolute path. An empty
+`HOME` names the working folder. A relative `HOME`, such as `home` or `../home`,
+names a folder from the working folder. So the folder depends on the working
+folder, not on the user, and it can be in the checkout of a job. A file there can
+come from the repository, so strata reads no file, and the environment gives each
+setting. The state folder follows the same rule: with no absolute `HOME` and no
+`XDG_STATE_HOME`, strata keeps no state.
 
 | Variable | Default | Function |
 | --- | --- | --- |
