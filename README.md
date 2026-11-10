@@ -6,7 +6,7 @@
 # strata
 
 [![version](https://img.shields.io/badge/version-0.32.2-blue)](Cargo.toml)
-[![the book](https://github.com/como-technologies/strata/actions/workflows/ci.yml/badge.svg)](https://legendary-train-pzq9ojj.pages.github.io/)
+[![the book](https://github.com/como-technologies/strata/actions/workflows/ci.yml/badge.svg)](https://como-technologies.github.io/strata/)
 
 Record, compare, and check what Spectro Cloud Palette holds: cluster profile
 versions, the clusters, edge hosts, cluster groups, and app profiles that run
@@ -56,8 +56,8 @@ Run `strata --help` for the list, and `strata <command> --help` for the options.
 ## Install
 
 ```bash
-gh release download --repo como-technologies/strata --pattern install-strata.sh -O - \
-  | GH_TOKEN=$(gh auth token) bash -s -- --dir ~/.local/bin
+curl -fsSL https://github.com/como-technologies/strata/releases/latest/download/install-strata.sh \
+  | bash -s -- --bin-only --dir ~/.local/bin
 ```
 
 [Install](docs/src/install.md) gives the options, the other platforms, the
@@ -65,8 +65,7 @@ signature check, and the source build.
 
 ## Documentation
 
-The book is at <https://legendary-train-pzq9ojj.pages.github.io/>. It opens for the members of the
-organization, as this repository does.
+The book is at <https://como-technologies.github.io/strata/>.
 
 ```bash
 just docs-serve   # build the book and open it at http://localhost:3000

@@ -88,7 +88,6 @@ status of strata.
 | `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
 | secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
-| secret `strata-token` | Reads this repository while it is private. The access setting of this repository must also allow the caller: see [While this repository is private](./pr-comments.md#while-this-repository-is-private). |
 
 The workflow sets `--format markdown`. It sets `--quiet` too, except when
 `verbose` is `true`: `--quiet` has priority over `--verbose`. The options `--rules`,
@@ -137,10 +136,9 @@ that permission to the second job. A caller that wants no comment grants less,
 and `preflight.yml` still runs. A run with no pull request, such as a build job
 on the default branch, posts nothing.
 
-| Input or secret | Meaning |
+| Input | Meaning |
 | --- | --- |
 | `strata-version` | The release of strata. Give the tag that the first job uses. |
-| secret `strata-token` | Reads this repository while it is private. The access setting of this repository must also allow the caller: see [While this repository is private](./pr-comments.md#while-this-repository-is-private). |
 
 The workflow runs `scripts/ci/pr-comment.sh --preflight preflight/report.md`. A
 pipeline on another host runs the same command: see

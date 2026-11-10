@@ -10,8 +10,9 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "preflight", "validation"]
 categories = ["command-line-utilities", "development-tools"]
-# As strata: a private repository publishes no crate. Another repository depends on this package by
-# its git address and its name, which `automation/library.md` in the book shows.
+# Only the package strata goes to crates.io. This package depends on strata by its path, so a
+# publish of it needs strata on crates.io first. Another repository depends on this package by its
+# git address and its name, which `automation/library.md` in the book shows.
 publish = false
 
 [lib]

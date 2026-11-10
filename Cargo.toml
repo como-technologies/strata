@@ -35,14 +35,14 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "drift", "diff"]
 categories = ["command-line-utilities", "development-tools"]
-# The book and the examples belong to this repository, and a package a consumer builds needs
-# neither. `.cargo/` goes with them: its alias names the xtask package, which a published package
-# does not carry, so the alias would fail for whoever unpacks one.
-exclude = ["docs/", "examples/", ".github/", ".cargo/"]
-# crates.io carries no private crate, and this repository is private, so a publish would make the
-# sources public. Two things must happen before this line goes: the repository becomes public, and
-# the package takes another name, because `strata` on crates.io belongs to another crate.
-publish = false
+# A package carries the sources of the library and of the binary, the license, and the README.
+# Cargo adds the manifest and Cargo.lock. The book, the examples, the tests, the observer, and the
+# tools of the development need the rest of this repository, so a package carries none of them.
+# A list of what goes in keeps a new folder of the repository out of the package.
+include = ["/src/", "/LICENSE", "/README.md"]
+# crates.io refuses a publish under this name: `strata` there belongs to another crate. So the
+# first publish gives the package another name (#65). `[[bin]]` keeps the name of the command,
+# `strata`, whatever the name of the package is.
 # The tests under tests/ are one crate, tests/main.rs: each file is a module of it. So a helper of
 # tests/common/mod.rs with no caller in any test warns as dead code. 14 crates with a copy of the
 # module each could not show that.

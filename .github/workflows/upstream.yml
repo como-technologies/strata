@@ -35,7 +35,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
+        description: Optional. A token that reads como-technologies/strata. When it is empty, the workflow reads that public repository with the token of the caller.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY, which strata needs to read the registries

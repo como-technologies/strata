@@ -77,20 +77,12 @@ digests to another tool, behind a trait of that tool.
 
 ## Add the dependency
 
-Pin a release tag. The repository is private, so Cargo must fetch it with the
-git command line, which uses your SSH configuration:
+Pin a release tag:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
 ```
-
-```bash
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build
-```
-
-`git-fetch-with-cli = true` under `[net]` in `.cargo/config.toml` does the same.
-Without it, the git of Cargo fails with "no authentication methods succeeded".
 
 The crate is not on crates.io. The name `strata` there belongs to another crate,
 so `cargo add strata` gets the wrong one.
@@ -106,15 +98,14 @@ Give `strata-preflight` and `strata` the same git address and the same tag:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
-strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata-preflight = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
 ```
 
 The package is `strata-preflight`, and Rust code names the crate
 `strata_preflight`. A run takes a `strata::term::progress::Progress`, so the
 program needs `strata` too. With one tag, Cargo builds one copy of `strata`.
-[Add the dependency](#add-the-dependency) says how Cargo fetches the private
-repository. The crate is not on crates.io.
+The crate is not on crates.io.
 
 A program starts from these items:
 

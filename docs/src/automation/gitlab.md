@@ -58,7 +58,7 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, and a ref that is not a file | Mask it. |
 | `PALETTE_PROJECT_UID` | a ref in a project | |
 | `STRATA_REPAVE` | the comment | `true` asks Palette if the change repaves the cluster, and its answer decides the label. `false` by default. See [Pull request comments](./pr-comments.md#ask-palette-if-the-change-repaves). |
-| `STRATA_TOKEN` | the download | A token that can read the strata releases, while that repository is private. |
+| `STRATA_TOKEN` | the download | Optional: a GitHub token for the installer. See [Install](../install.md#one-command). Mask it. |
 | `STRATA_PROMOTE` | the promotion gate | The records, in promotion order. Give it on the pipeline run, not as a project variable: the job appears only in a pipeline that carries it. |
 | `STRATA_RETIRE` | the retire gate | The version to retire, as `name@version`. Give it on the pipeline run, as above. |
 | `STRATA_BEHIND_LABEL` | the upstream report | The label of its issues, `strata-behind` by default. |
@@ -101,9 +101,7 @@ the first release with all four. `v0.5.1` carries three of them and no
 `merge-gate.sh`, and `v0.5.0` carries none. An older pipeline clones this
 repository at the tag and runs what `scripts/` holds there: at `v0.5.0`, the
 comment and the report alone. The installer
-itself is a release file: the pipeline downloads it first. A token in `STRATA_TOKEN`,
-`GITHUB_TOKEN` or `GH_TOKEN` reads a private repository; a public one needs
-none.
+itself is a release file: the pipeline downloads it first.
 
 [Install](../install.md#one-command) lists the options of the installer.
 [Check the signature](../install.md#check-the-signature) gives the identity that

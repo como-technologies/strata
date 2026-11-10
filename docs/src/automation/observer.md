@@ -189,17 +189,7 @@ tenant role.
          strata-observer-key --from-file=api-key=/dev/stdin
    ```
 
-3. **Make the pull Secret.** The image is in a private registry. Use a classic token
-   of GitHub with only the scope `read:packages`.
-
-   ```bash
-   printf 'GHCR token: '; read -rs GHCR_TOKEN; echo
-   kubectl -n strata-observer create secret docker-registry ghcr-pull \
-     --docker-server=ghcr.io --docker-username=<github user> \
-     --docker-password="$GHCR_TOKEN"
-   ```
-
-4. **Install the chart.** The address of the page of the cluster in Palette holds
+3. **Install the chart.** The address of the page of the cluster in Palette holds
    the uid of the cluster and the uid of its project.
 
    ```bash
@@ -207,11 +197,10 @@ tenant role.
      oci://ghcr.io/como-technologies/charts/strata-observer \
      --version 0.32.2 -n strata-observer \
      --set cluster.uid=<cluster uid> \
-     --set palette.projectUid=<project uid> \
-     --set image.pullSecret=ghcr-pull
+     --set palette.projectUid=<project uid>
    ```
 
-5. **Open the page.** Then open `http://127.0.0.1:18080`.
+4. **Open the page.** Then open `http://127.0.0.1:18080`.
 
    ```bash
    kubectl -n strata-observer port-forward deploy/strata-observer 18080:8080
@@ -227,7 +216,7 @@ shows what it did.
 | `cluster.uid`, `palette.projectUid` | none, required | The cluster and its project. |
 | `palette.api` | `https://api.spectrocloud.com` | The Palette address. |
 | `palette.keySecret` | `strata-observer-key` | The Secret with the key `api-key`. |
-| `image.pullSecret` | empty | The Secret that pulls the image. |
+| `image.pullSecret` | empty | A Secret that pulls the image. The image is public, so set it only for a copy in a registry with a login. |
 | `image.tag` | the version of the chart | The tag of the image. |
 | `contentEvery`, `versionsEvery` | `15m`, `6h` | The period of each cycle. |
 | `readPods` | `false` | The read of the pods: see [The pods of the cluster](#the-pods-of-the-cluster). |
@@ -236,15 +225,16 @@ shows what it did.
 | `readerGroup` | empty | A group that gets the role that opens the page. |
 | `publisher.enabled` | `false` | A service account for a pipeline, which can get and update the Secrets of the records. See [Approve the records with a pipeline](#approve-the-records-with-a-pipeline). |
 
-The chart sets no value of a key or a token. The key and the pull Secret stay
-Secrets that you make with `kubectl`, so that no release and no profile holds them.
+The chart sets no value of a key or a token. The key stays a Secret that you make
+with `kubectl`, so that no release and no profile holds it.
 
 ## Install
 
 This section installs the same objects with `kubectl` and the manifests of
-`deploy/observer/`, for a team that does not use Helm. The observer needs a namespace, a pull Secret, a ConfigMap with three settings, a
-Secret of the key, the records, and the manifests. Make the settings first,
-because the pod does not start without the pull Secret, the ConfigMap, and the key.
+`deploy/observer/`, for a team that does not use Helm. The observer needs a
+namespace, a ConfigMap with three settings, a Secret of the key, the records, and
+the manifests. Make the settings first, because the pod does not start without the
+ConfigMap and the key.
 
 Get `deploy/observer/` and `scripts/ci/observer-records.sh` from the repository of
 strata, at the tag of your release. Copy both into the repository of your team. The
@@ -259,18 +249,7 @@ cluster](../development/live-example.md#a-test-cluster).
    kubectl apply -f deploy/observer/namespace.yaml
    ```
 
-2. **Make the pull Secret.** The image is in a private repository. The token needs
-   only the scope `read:packages`. Send it on standard input, as for the key.
-
-   ```bash
-   printf %s "$GHCR_PULL_TOKEN" \
-     | jq -Rs --arg user "<github user>" \
-         '{auths: {"ghcr.io": {username: $user, password: ., auth: ("\($user):\(.)" | @base64)}}}' \
-     | kubectl -n strata-observer create secret generic ghcr-pull \
-         --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
-   ```
-
-3. **Make the ConfigMap.** It names the cluster, the API of Palette, and the project.
+2. **Make the ConfigMap.** It names the cluster, the API of Palette, and the project.
 
    ```bash
    kubectl -n strata-observer create configmap strata-observer \
@@ -279,7 +258,7 @@ cluster](../development/live-example.md#a-test-cluster).
      --from-literal=project-uid=<project uid>
    ```
 
-4. **Make the Secret of the key.** Send the key on standard input. It then never
+3. **Make the Secret of the key.** Send the key on standard input. It then never
    appears in an argument or in a file.
 
    ```bash
@@ -288,7 +267,7 @@ cluster](../development/live-example.md#a-test-cluster).
          --from-file=api-key=/dev/stdin
    ```
 
-5. **Write the records.** The folder `releases/` holds one record for each profile
+4. **Write the records.** The folder `releases/` holds one record for each profile
    version that the cluster runs. The records script writes four Secrets on standard
    output. It refuses a record of a cluster and two records of one profile version.
    Use `--server-side`: a client-side apply copies each Secret to an annotation that
@@ -304,9 +283,8 @@ cluster](../development/live-example.md#a-test-cluster).
    with the records of `dev` and of `prod` in it. Its glob is `releases/*/dev.json`, so it
    differs from the glob above.
 
-6. **Apply the manifests.** Write a `kustomization.yaml` that names the namespace, the
-   folder, the tag of the image, and the pull Secret. The tag is the tag of the release
-   of strata. The line `namespace` is part of the step. An object that your file makes,
+5. **Apply the manifests.** Write a `kustomization.yaml` that names the namespace, the
+   folder, and the tag of the image. The tag is the tag of the release of strata. The line `namespace` is part of the step. An object that your file makes,
    such as the ConfigMap of the alerts, gets no namespace without it. `kubectl apply -k .`
    then puts that object in the namespace of your context, and the pod does not start.
 
@@ -319,22 +297,13 @@ cluster](../development/live-example.md#a-test-cluster).
    images:
      - name: ghcr.io/como-technologies/strata-observer
        newTag: <release tag>
-   patches:
-     - target:
-         kind: Deployment
-         name: strata-observer
-       patch: |-
-         - op: add
-           path: /spec/template/spec/imagePullSecrets
-           value:
-             - name: ghcr-pull
    ```
 
    ```bash
    kubectl apply -k .
    ```
 
-7. **Let your team open the page.** The role `strata-observer-reader` gives `create`
+6. **Let your team open the page.** The role `strata-observer-reader` gives `create`
    on `pods/portforward`. It gives no Secret and no `exec`. Bind it to a group of
    your team.
 
@@ -344,7 +313,7 @@ cluster](../development/live-example.md#a-test-cluster).
      --role=strata-observer-reader --group=<group of your team>
    ```
 
-8. **Open the page.** The service listens on the loopback address of the pod. A
+7. **Open the page.** The service listens on the loopback address of the pod. A
    person with the role reaches it with a port-forward, then opens
    `http://127.0.0.1:8080`.
 
@@ -390,12 +359,12 @@ yet.
    `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`. It uses a
    classic token with the scope `read:packages`. Palette lets only a role at tenant
    scope add a registry. A project role can then use it.
-2. **Make the Secret of the key and the pull Secret with `kubectl`**, as in steps 1
-   to 3 of [Install with Helm](#install-with-helm). A value of a layer reaches the
+2. **Make the Secret of the key with `kubectl`**, as in steps 1 and 2 of
+   [Install with Helm](#install-with-helm). A value of a layer reaches the
    cluster in clear, so the profile holds no key and no token.
 3. **Make the profile.** Add a Helm layer: the chart `strata-observer` of that
-   registry, at the version of your release. In its values, set `cluster.uid`,
-   `palette.projectUid`, and `image.pullSecret`. The block `pack` of the values names
+   registry, at the version of your release. In its values, set `cluster.uid` and
+   `palette.projectUid`. The block `pack` of the values names
    the namespace and its label `restricted`, and Palette makes the namespace with it.
 4. **Attach the profile to the cluster.**
 
@@ -610,7 +579,7 @@ The base of `deploy/observer` has no role and no token. The component
 
 The read costs a role and a token: see [The role for the read of the
 pods](#the-role-for-the-read-of-the-pods). To add the read, name the component in the
-kustomization of step 6 of [Install](#install):
+kustomization of step 5 of [Install](#install):
 
 ```yaml
 components:
@@ -901,7 +870,7 @@ object. These steps run from the repository of your team, after [Install](#insta
    ```
 
 3. **Add the component and the ConfigMap.** Add these lines to the `kustomization.yaml`
-   of step 6 of [Install](#install). Copy `deploy/observer/alerts` with the other
+   of step 5 of [Install](#install). Copy `deploy/observer/alerts` with the other
    manifests. Keep the line `namespace: strata-observer` of that file: it puts the
    generated ConfigMap in the namespace of the pod. The volume `alert-rules` is not
    optional, so the pod does not start without the ConfigMap in its namespace.

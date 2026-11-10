@@ -1036,9 +1036,21 @@ field, a value, an input, or an option is in the sections above.
   - `rules[].reproduce` of `--rules --json` holds the template `{{ palette_curl }}`
     in place of the headers. The report fills it.
   - A script that reads the headers of a `curl` line must read the new form.
+- **`strata --help` and `strata-preflight --help` name the book at its public
+  address.** It is `https://como-technologies.github.io/strata/`, and it opens with
+  no login. A script that reads the last line of the help reads the new address.
 
 ### For a user of the CI drop-ins
 
+- **The reusable workflows read this repository with the token of the caller.** The
+  repository is public, so the secret `strata-token` is optional. A caller that gives
+  it keeps working. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
+  repository.
+- **The GitLab drop-in downloads `install-strata.sh` from the page of the release.**
+  The variable `STRATA_TOKEN` is optional: the installer sends it to the API of GitHub.
+- **The steps of the observer make no pull Secret.** The image and the chart are
+  public. An install that has the Secret `ghcr-pull` keeps working. Delete the Secret
+  to remove the token from the cluster.
 - **`merge-gate.sh` reads a version that does not parse by its first three numbers.** The
   script reads `versionMove`, so it follows the new order.
   - A move from `1.2.3.4` to `1.3.0` passes the gate now. Before, it failed with `BEHIND`.
@@ -1048,6 +1060,7 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata
 
+- `BOOK_URL` is `https://como-technologies.github.io/strata/`, the public address of the book.
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
