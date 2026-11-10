@@ -5,15 +5,24 @@
 use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
 use strata::config::{KEY_VARS, PROJECT_VARS};
 
-/// The start of a `curl` to Palette: the command, and the headers of the key and of the project.
+/// What the start of a `curl` prints when the key holds a line break, and it then runs no `curl`.
+/// `examples/live/palette-curl.sh` stops with the same words.
+pub const KEY_LINE_BREAK: &str = "the key of Palette holds a line break";
+
+/// The start of a `curl` to Palette: a check of the key, the command, and the headers of the key
+/// and of the project.
 ///
 /// The key goes to `curl` in a config that `printf` writes into `<( )`. `printf` is a builtin of
 /// the shell, and the shell runs it in a copy of itself. So no process gets the key as an
-/// argument, and the list of processes does not show it. The names of the headers and of the
-/// variables are the ones that strata reads. The line needs a shell with `<( )`, such as bash.
+/// argument, and the list of processes does not show it. The config reads a `\` and a `"` in a
+/// quoted value as an escape, so the line puts a `\` before each one. A line break in the key can
+/// add a line to the config. So a key with a line break stops the line before `curl`, with
+/// [`KEY_LINE_BREAK`]. `examples/live/palette-curl.sh` does the same. The names of the headers and
+/// of the variables are the ones that strata reads. The line needs bash or zsh, for `[[ ]]` and
+/// `<( )`.
 pub(crate) fn palette_curl() -> String {
     format!(
-        "curl -s --config <(printf 'header = \"{API_KEY_HEADER}: %s\"\\n' \"${key}\") -H \"{PROJECT_UID_HEADER}: ${project}\"",
+        "{{ [[ ${key} != *[$'\\r\\n']* ]] || ! echo '{KEY_LINE_BREAK}' >&2; }} && curl -s --config <(k=${{{key}//\\\\/\\\\\\\\}}; k=${{k//\\\"/\\\\\\\"}}; printf 'header = \"{API_KEY_HEADER}: %s\"\\n' \"$k\") -H \"{PROJECT_UID_HEADER}: ${project}\"",
         key = KEY_VARS[0],
         project = PROJECT_VARS[0]
     )
@@ -26,12 +35,13 @@ mod tests {
     #[test]
     fn the_start_of_a_curl_sends_the_key_in_a_config_and_the_project_in_a_header() {
         let start = palette_curl();
-        assert!(start.starts_with("curl -s --config <(printf "), "{start}");
+        assert!(
+            start.starts_with(&format!("{{ [[ ${} != *[$'\\r\\n']* ]]", KEY_VARS[0])),
+            "{start}"
+        );
         for part in [
-            format!(
-                "'header = \"{API_KEY_HEADER}: %s\"\\n' \"${}\")",
-                KEY_VARS[0]
-            ),
+            format!("|| ! echo '{KEY_LINE_BREAK}' >&2; }} && curl -s --config <("),
+            format!("printf 'header = \"{API_KEY_HEADER}: %s\"\\n' \"$k\")",),
             format!(" -H \"{PROJECT_UID_HEADER}: ${}\"", PROJECT_VARS[0]),
         ] {
             assert!(start.contains(&part), "{part} is not in {start}");

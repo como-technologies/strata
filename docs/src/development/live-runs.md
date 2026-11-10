@@ -781,7 +781,11 @@ cluster A, and `AWS_PROFILE` to read the EC2 instances. It edits the release
 version and the add-on version in place, asks Palette with `compare --repave`,
 and puts each edit back. Cluster A takes no update. Stage 7 asks Palette with
 `compare --validate`. Stage 8 changes version 1.0.1, which nothing runs,
-through OpenTofu, and puts it back.
+through OpenTofu, and puts it back. Stage 9 runs only with
+`VMO_CLUSTER=<uid>` of a cluster with the pack `virtual-machine-orchestrator`.
+It moves the console of the pack to a mark, and back. For up to 15 minutes
+after each read, Palette can forward to the address that it read, so the stage
+waits `VMO_WAIT` seconds (default 960) before the reads after the first.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -807,6 +811,12 @@ through OpenTofu, and puts it back.
 | `var-none`, `var-default` | ? | #132: `tenant.sh repave` sends the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
 | `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands` |
 | `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
+| `vmo-cluster`, `vmo-runs` | 0 | #717: the cluster runs `virtual-machine-orchestrator`, and the values of the pack hold `consoleBaseAddress`. No result yet. |
+| `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet. |
+| `vmo-mark-body`, `vmo-before` | 0 | #717: the body holds the mark `https://strata-live-check.invalid` in `consoleBaseAddress`, and before the question the console address does not answer 502. No result yet. |
+| `vmo-ask`, `vmo-ask-ok` | 0 | #717: `validate/repave` with the mark answers HTTP 200. No result yet. |
+| `vmo-saved` | 0 | #717: at once, the console address answers 502: Palette saved the mark at the question, and the mark has no host. No result yet. |
+| `vmo-own`, `vmo-back` | 0 | #717: `validate/repave` with the profiles of the cluster by uid saves the address of the cluster again, and the console address does not answer 502. No result yet. |
 
 Each answer agrees with the impact table, on AWS and on GCP: the two clouds run
 the kubeadm engine alone. The edit in place also opens an update notification for cluster A, and

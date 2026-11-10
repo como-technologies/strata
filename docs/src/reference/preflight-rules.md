@@ -87,8 +87,15 @@ So each line reads, and changes nothing:
 
 - A line reads Palette, the cloud, the cluster, or a file. It deletes nothing,
   makes nothing, and changes no setting.
-- A `POST` goes only to a validate route of Palette, which checks the body: see
-  [The validate routes](../internals/palette/validate-routes.md).
+- A `POST` goes to a validate route of Palette, which checks the body: see
+  [The validate routes](../internals/palette/validate-routes.md). The test of
+  the catalog names each such route that saves nothing.
+- One route saves a record, `validate/repave`: for a pack of virtual machines,
+  Palette saves the address of its console. A line can send it only for a check
+  that names `console-address` in `saves`. The line ends with a comment that
+  says what Palette saves, and so does the line that the report adds for the
+  check. See
+  [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 - A line writes no file outside the current directory. The lines that the report
   adds for a check write `request.json` and `body.json` there.
 - A line makes no login to a registry or a cloud. A login writes the credentials
@@ -111,9 +118,13 @@ The report fills `{{ palette_curl }}` with the `curl` that its own lines start
 with. That `curl` sends the key in a config that `printf` writes into `<( )`.
 `printf` is a builtin of the shell, so no process gets the key as an argument.
 The list of processes does not show it, also on a shared runner of CI. The
-`curl` sends the project in the header `ProjectUid`, and the line gives the
-address as `"${PALETTE_API:-https://api.spectrocloud.com}/v1/..."`. Run the line
-in a shell with `<( )`, such as bash or zsh.
+config reads a `\` and a `"` in the key as an escape, so the line puts a `\`
+before each one. A line break in the key can add a line to the config. So a key
+with a line break stops the line before `curl`, with the message
+`the key of Palette holds a line break`. The `curl` sends the project in the
+header `ProjectUid`, and the line gives the address as
+`"${PALETTE_API:-https://api.spectrocloud.com}/v1/..."`. Run the line in bash or
+zsh, which have `[[ ]]` and `<( )`.
 
 ## The checks
 
@@ -125,7 +136,7 @@ each message is one failure; or an object `{pass, message}`.
 | Kind | Fields | Adds to the world |
 | --- | --- | --- |
 | `static` | `expr` | nothing |
-| `palette` | `method`, `path`, `body`, `each`, `refusal_codes`, `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
+| `palette` | `method`, `path`, `body`, `each`, `refusal_codes`, `saves`, `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
 | `exec` | `argv`, `needs`, `timeout`, `palette`, `also`, `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
@@ -137,6 +148,11 @@ The fields of a check of kind `palette`:
 - `each` is a jq program that gives a list: see [A request for each item](#a-request-for-each-item).
 - `refusal_codes` lists the codes of a 5xx that are an answer: see
   [A refusal at a 5xx](#a-refusal-at-a-5xx).
+- `saves` names what Palette saves at the request, when the route saves
+  something. The one value is `console-address`: at `validate/repave`, Palette
+  saves the address of the console of a pack of virtual machines. The line of
+  the report for the request ends with a comment that says it: see
+  [The reproduce lines](#the-reproduce-lines).
 
 The fields of a check of kind `exec`:
 

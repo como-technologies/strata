@@ -10,6 +10,7 @@
 //!   and a file of custom probes share the format.
 //! - [`catalog`]: the rules the binary carries, one file per section.
 //! - [`jq`]: the jq engine that runs the programs of the rules.
+//! - [`curl`]: the start of the `curl` to Palette of a `reproduce` line.
 //! - [`world`]: the one document each program reads: the cloud, the release, the entity, the
 //!   change, the records, and what a check adds (the answer of Palette, the output of a command).
 //! - [`probe`]: how each kind of check runs, and what it can answer.
@@ -22,7 +23,7 @@
 
 pub mod catalog;
 pub mod confidence;
-mod curl;
+pub mod curl;
 pub mod error;
 pub mod fixture;
 pub mod html;

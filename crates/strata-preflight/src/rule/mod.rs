@@ -62,7 +62,7 @@ mod validate;
 
 use validate::{check_section, check_section_programs};
 
-pub use check::{Check, CheckKind, ExecCheck, PaletteCheck, PaletteRead};
+pub use check::{Check, CheckKind, ExecCheck, PaletteCheck, PaletteRead, Saves};
 
 /// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
 /// counts the clouds alone.

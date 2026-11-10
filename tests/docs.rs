@@ -6257,7 +6257,7 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
 ///
 /// A page sends the header to `curl` as a config on standard input, as
 /// `examples/live/palette-curl.sh` does. A line of a report sends it as a config that `printf`
-/// writes into `<( )` (#694).
+/// writes into `<( )` (#694), after the escape of the key (#717).
 #[test]
 fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
     let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/strata-preflight/rules");
@@ -6285,8 +6285,7 @@ fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
                 n + 1
             );
         }
-        if file.starts_with(docs().join("output")) && text.contains("--config <(printf 'header = ")
-        {
+        if file.starts_with(docs().join("output")) && text.contains("&& curl -s --config <(k=") {
             outputs += 1;
         }
         for block in crate::common::code_blocks(&text, "bash") {

@@ -197,7 +197,10 @@ see [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 This route says whether a change of the profiles of a cluster replaces its
 nodes. The body is the `v1SpectroClusterPacksEntity` of `validate/packs`.
-`compare --repave` sends it. The request changes nothing.
+`compare --repave` sends it, and so do the checks of `engine-repave-rules`,
+`eks-repave-answers`, and `gke-repave-answers`. The request changes no setting
+of the cluster. For a pack of virtual machines, Palette saves one record: see
+[What the route saves](#what-the-route-saves).
 
 Palette builds the target cluster from the body. These facts come from the
 code of Palette, not from a live run:
@@ -217,6 +220,41 @@ code of Palette, not from a live run:
 
 Then Palette compares the cluster with the target, and gives a reason for each
 pack that repaves the cluster.
+
+### What the route saves
+
+These facts come from the code of Palette, not from a live run. Palette builds
+the cluster as it is now, and the target, in the form that it gives to the
+agent of the cluster. When a build holds one of three packs, it saves one record
+for each such pack: `virtual-machine-orchestrator`, its older name
+`spectro-vm-dashboard`, and `vm-migration-assistant`. The console reaches the
+service of the pack at an address of its own, and the record holds the address
+that it forwards to. A cluster and a body with none of the three packs get no
+record.
+
+- The address is the value `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`
+  of the pack. With no such value, Palette makes the address from the
+  `serviceType` of the pack: the address of its load balancer, or an address
+  under the proxy of Palette.
+- The build of the cluster saves the address from the values that the cluster
+  holds. The agent of the cluster reads the cluster in the same form, so it
+  saves the same address.
+- The build of the target saves the address from the values of the body. So a
+  body with other values of the pack moves the address of the console, until
+  the agent reads the cluster again.
+- A body that adds one of the packs saves a record for a cluster that does not
+  run it.
+- When the cluster runs the pack, a body without its values does not stop the
+  save: the build of the cluster saves the record.
+
+`POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` asks the same
+question about one cluster of the template, so it saves the same record for that
+cluster. `POST /v1/spectroclusters/{cloudType}/validate` saves no record.
+
+A line of a report that sends this route says what Palette saves, in a comment:
+see [The reproduce lines](../../reference/preflight-rules.md#the-reproduce-lines).
+Stage 9 of `repave.sh` is the live check: see
+[repave.sh](../../development/live-runs.md#repavesh).
 
 ## POST /v1/clusterprofiles/validate/packs
 

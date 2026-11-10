@@ -51,7 +51,7 @@ pub use retry::{Retry, RetryPolicy};
 pub enum Method {
     /// A read of a document: [`PaletteApi::get_json`].
     Get,
-    /// A question that changes nothing: [`PaletteApi::post_json`].
+    /// A question to a route that checks a body: [`PaletteApi::post_json`].
     Post,
 }
 
@@ -77,8 +77,9 @@ pub trait PaletteApi {
     fn get_json(&self, path: &str) -> Result<Value>;
 
     /// POST `body` to `path` and parse the answer as JSON. Strata sends a POST only to ask
-    /// Palette a question that changes nothing, such as `validate/repave`. An API that cannot
-    /// POST says so.
+    /// Palette a question, at a route that checks the body. Such a route changes no setting. At
+    /// `validate/repave`, Palette saves the address of the console of a pack of virtual machines:
+    /// see [`Palette::validate_repave`]. An API that cannot POST says so.
     ///
     /// # Errors
     ///

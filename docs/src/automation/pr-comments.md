@@ -77,7 +77,10 @@ the script says that the table decides:
 
 `--repave` needs the key of Palette, because Palette answers for a cluster. The
 script asks once for each of the two reports that it writes, so Palette gets the
-question twice. The question changes nothing in Palette.
+question twice. The question changes no setting in Palette. For a cluster with a
+pack of virtual machines, Palette saves the address of its console at each
+question: see
+[What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 
 ## Post a preflight report
 

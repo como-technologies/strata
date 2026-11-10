@@ -66,8 +66,13 @@ See
 [Compare a profile version with a cluster](clusters.md#compare-a-profile-version-with-a-cluster).
 
 `--repave` costs two requests, the cluster document and one `POST` to
-`/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
-changes nothing: the cluster keeps its instances.
+`/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question, and
+the cluster keeps its instances. For a cluster or a change with the pack
+`virtual-machine-orchestrator`, `spectro-vm-dashboard`, or
+`vm-migration-assistant`, Palette also saves the address of the console of that
+pack. Other values of the pack move that address until the agent of the cluster
+reads the cluster again: see
+[What the route saves](../../internals/palette/validate-routes.md#what-the-route-saves).
 
 The comment of a pull request asks the same question. See
 [Ask Palette if the change repaves](../../automation/pr-comments.md#ask-palette-if-the-change-repaves).

@@ -281,6 +281,11 @@ each new field, and a pattern with no `..` must name it:
 - `diff::ManifestChange` has the field `unified: Option<String>`. The type has no `Default`, so a
   struct literal must set the field to `None`.
 
+After 0.32.2, the module `curl` of `strata-preflight` is public. `curl::KEY_LINE_BREAK` is the
+message of a `reproduce` line that runs no `curl`, because the key of Palette holds a line break.
+`rule::Saves` is a new closed set, and `rule::PaletteCheck` has its field `saves`: see
+[Release 0.33.0](#release-0330-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -343,6 +348,10 @@ of older releases that the counts omit. `strata-preflight-promotion/1` has
 the run names no `--release`. `strata-preflight-rules/1` has the new keys `refusal_codes` in a
 check of kind `palette`, and `palette` and `also` in a check of kind `exec`. A reader that ignores
 unknown fields reads all three.
+
+After 0.32.2, `strata-preflight-rules/1` has the new key `saves` in a check of kind `palette`,
+with the one value `console-address`. The id stays, and a reader that ignores unknown fields
+reads it. The JSON Schema of `preflight --schema rules` has the new key.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1036,6 +1045,15 @@ field, a value, an input, or an option is in the sections above.
   - `rules[].reproduce` of `--rules --json` holds the template `{{ palette_curl }}`
     in place of the headers. The report fills it.
   - A script that reads the headers of a `curl` line must read the new form.
+  - The line checks the key first, with `[[ ]]`. A key with a line break stops the line before
+    `curl`, with `the key of Palette holds a line break`, and the line exits `1`. In the config,
+    the line puts a `\` before each `\` and each `"` of the key.
+- **`strata preflight`: a line that sends `validate/repave` says what Palette saves.** At that
+  route, Palette saves the address of the console of a pack of virtual machines. See
+  [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
+  - The lines of `engine-repave-rules`, `eks-repave-answers`, and `gke-repave-answers` end
+    with a comment that says it. So does the line that the report adds for the check of each.
+  - The check of each of the three rules has `saves: console-address` in `--rules --json`.
 - **The report of an offline run says `offline` after the tiers.** The first line
   of the terminal report reads `tiers static, offline`. The markdown and the HTML
   reports use the same words. A script that reads that line gets a new word.
@@ -1098,6 +1116,9 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata-preflight
 
+- `rule::PaletteCheck` has the new field `saves: Option<rule::Saves>`, what Palette saves at the
+  request of the check. A struct literal must set it to `None`, and a pattern with no `..` must
+  name it. A rule file takes `saves: console-address` in a check of kind `palette`.
 - `report::Options` has the new field `offline: bool`. A literal must set it.
   With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
   `Backend::has_palette` gives `false`.

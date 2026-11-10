@@ -4393,6 +4393,102 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     );
 }
 
+/// The forward of the console address of the VM Orchestrator pack in stage 9 of `repave.sh`. It
+/// answers 502 after a question whose body holds the mark: Palette saved the mark, and it has no
+/// host. It answers 200 before such a question, and after a question with the values of the cluster.
+const FAKE_CONSOLE_FORWARD: &str = r#"#!/usr/bin/env bash
+sent="$FAKE_ROUTES/sent/POST_v1_spectroclusters_v-1_validate_repave"
+status=200
+[ -f "$sent" ] && grep -q 'consoleBaseAddress: https://strata-live-check.invalid' "$sent" && status=502
+echo "$status" > "$FAKE_ROUTES/v1_tenantApps_f-1_.status"
+echo console
+"#;
+
+#[test]
+fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_a_mark() {
+    let mut stage = Stage::new(baseline_outputs());
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.contains("== stage 9 skipped: give VMO_CLUSTER="),
+        "no cluster, no question: {steps}"
+    );
+
+    stage.env("VMO_CLUSTER", "v-1");
+    stage.env("VMO_WAIT", "0");
+    stage.route(
+        &cluster_route("v-1"),
+        r#"{"spec":{"clusterProfileTemplates":[
+            {"uid":"p-k8s","packs":[{"name":"kubernetes","tag":"1.36.2","type":"spectro","values":"a: 1\n"}]},
+            {"uid":"p-vmo","packs":[
+                {"name":"virtual-machine-orchestrator","tag":"4.6.0","type":"spectro",
+                 "values":"charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \"\"\n"},
+                {"name":"cert-manager","tag":"1.17.0","type":"oci","values":"b: 2\n"}]}]}}"#,
+    );
+    stage.route(
+        "/v1/dashboard/spectroclusters/v-1",
+        r#"{"status":{"addOnServices":[{"name":"vm-dashboard","endpoint":"https://console.example/v1/tenantApps/f-1"}]}}"#,
+    );
+    stage.route(
+        "/v1/spectroclusters/v-1/validate/repave",
+        r#"{"isRepaveRequired":false,"reasons":[]}"#,
+    );
+    executable(
+        &stage.path("routes/v1_tenantApps_f-1_.sh"),
+        FAKE_CONSOLE_FORWARD,
+    );
+    let (o, steps) = stage.run("repave.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "vmo-cluster",
+            "vmo-runs",
+            "vmo-summary",
+            "vmo-mark-body",
+            "vmo-before",
+            "vmo-ask",
+            "vmo-ask-ok",
+            "vmo-saved",
+            "vmo-own",
+            "vmo-back",
+        ],
+    );
+    let sent = stage.sent("POST", "/v1/spectroclusters/v-1/validate/repave");
+    assert_eq!(
+        sent[0],
+        serde_json::json!({"profiles": [
+            {"uid": "p-k8s"},
+            {"uid": "p-vmo", "packValues": [
+                {"name": "virtual-machine-orchestrator", "tag": "4.6.0", "type": "spectro",
+                 "values": "charts:\n  virtual-machine-orchestrator:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: https://strata-live-check.invalid\n"},
+                {"name": "cert-manager", "tag": "1.17.0", "type": "oci", "values": "b: 2\n"},
+            ]},
+        ]}),
+        "the profile of the pack names each of its packs, so the target keeps them"
+    );
+    assert_eq!(
+        sent[1],
+        serde_json::json!({"profiles": [{"uid": "p-k8s"}, {"uid": "p-vmo"}]}),
+        "the second question sends the values of the cluster"
+    );
+    assert_eq!(sent.len(), 2);
+    let forwards = std::fs::read_to_string(stage.path("routes/sent/curl.args")).unwrap();
+    let forwards: Vec<&str> = forwards
+        .lines()
+        .filter(|l| l.contains("tenantApps"))
+        .collect();
+    assert_eq!(
+        forwards.len(),
+        3,
+        "a read before and after each question: {forwards:?}"
+    );
+    assert!(
+        forwards.iter().all(|l| !l.contains("--config")),
+        "a read of the console sends no key: {forwards:?}"
+    );
+}
+
 /// A `strata` for pending.sh. An update waits for cluster A while the log of the stand-in curl
 /// holds an odd number of PUTs of a profile. An edit in place opens an update. The edit that
 /// undoes it closes the update. A call it does not answer goes to the answers of the stage.
