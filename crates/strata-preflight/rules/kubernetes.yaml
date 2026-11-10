@@ -328,7 +328,7 @@ rules:
           then ["Palette repaves the \($c) cluster for this change, and its answer is the truth on \($c), not the impact table of strata: \(reasons)"]
           else [] end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     fix:
       owner: strata
       text: Scope the impact table to the kubeadm engine, and print the answer of Palette on the others.
@@ -371,7 +371,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     evidence:
       - kind: run
         ref: "#89"
@@ -412,7 +412,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     evidence:
       - kind: run
         ref: "#90"

@@ -102,7 +102,7 @@ rules:
                  | "the cluster is \($s) and CloudInfrastructureReady is False with the reason \(.reason // "?") after \($e)s, and the status shows no error: read the events of the cluster and the audit log of the cloud" ]
           end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=50\" | jq '.items[] | {reason, severity, message: .message[:160]}'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=50\" | jq '.items[] | {reason, severity, message: .message[:160]}'"
     fix:
       owner: palette
       text: Copy an error the provider gets from the cloud into the condition, and fail the build after a limit.
@@ -221,8 +221,8 @@ rules:
           elif $s == "Provisioning" and .elapsed > 1800 then ["WorkerNodeAdditionDone is False (\($c[0].reason // ""): \($c[0].message // "")) after \(.elapsed) s of Provisioning: read the machines of the pool; with the machines Running and the nodes Ready, the condition is stale, and Palette does not check the workers again"]
           else [] end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudconfigs/aws/<cloudConfigUid>/machinePools/worker-pool/machines\" | jq -r '.items[] | \"\\(.metadata.name) \\(.status.instanceState // .status.state)\"'   # the machines of the pool"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq -r '.status.state as $s | .status.conditions[] | select(.type == \"WorkerNodeAdditionDone\") | \"state=\\($s) \\(.status) \\(.reason) \\(.message)\"'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudconfigs/aws/<cloudConfigUid>/machinePools/worker-pool/machines\" | jq -r '.items[] | \"\\(.metadata.name) \\(.status.instanceState // .status.state)\"'   # the machines of the pool"
     fix:
       owner: palette
       text: Check the workers again when the machines are Running and the nodes are Ready.
@@ -324,8 +324,8 @@ rules:
       uid sends that text to Palette. The answer of Palette itself is JSON, `ResourceNotFound` for a
       uid that does not exist (eks, run 20260929T142534Z).
     reproduce:
-      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=101\"   # 500; 100 answers 200"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
+      - "{{ palette_curl }} -o /dev/null -w '%{http_code}\\n' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // \"<cluster uid>\" }}?limit=101\"   # 500; 100 answers 200"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
     evidence:
       - kind: source
         ref: strata src/api/palette/ CLUSTER_SEARCH, audits, cluster_notifications
@@ -350,7 +350,7 @@ rules:
       scripts run the provider with `-parallelism=1`, and run an `OperationForbidden` apply again.
       The watch has no check for it: the errors are answers to the client, not events.
     reproduce:
-      - "curl -s -o /dev/null -w '%{http_code} %{content_type}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\"   # a 404 must be application/json with code ResourceNotFound"
+      - "{{ palette_curl }} -o /dev/null -w '%{http_code} %{content_type}\\n' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\"   # a 404 must be application/json with code ResourceNotFound"
     evidence:
       - kind: run
         ref: teardown lab
@@ -412,7 +412,7 @@ rules:
               end
           end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}\" | jq '{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'"
+      - "{{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}\" | jq '{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'"
     fix:
       owner: palette
       text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.
@@ -463,7 +463,7 @@ rules:
                 end
             end ]
     reproduce:
-      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do {{ palette_curl }} \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
     fix:
       owner: palette
       text: Warn in the validate route when the agent is older than the release, with the matrix as the source.

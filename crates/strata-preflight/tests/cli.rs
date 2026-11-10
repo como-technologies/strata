@@ -1,10 +1,11 @@
 //! The binary, end to end: a custom probes file, the static tier offline, the exit codes, and the
 //! JSON document. No network.
 
-use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+
+mod common;
 
 // The lock of the tests of strata: a process that a test starts takes it. These tests write no
 // script, so they do not call `executable`.
@@ -486,20 +487,10 @@ fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
 /// A server on this machine that refuses each request. Gives its address and the first line of each
 /// request that it got, such as `GET /v1/projects HTTP/1.1`.
 fn refusing_server() -> (String, Arc<Mutex<Vec<String>>>) {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let host = format!("http://{}", listener.local_addr().unwrap());
-    let requests = Arc::new(Mutex::new(Vec::new()));
-    let seen = Arc::clone(&requests);
-    std::thread::spawn(move || {
-        for mut stream in listener.incoming().flatten() {
-            let mut line = String::new();
-            let _ = BufReader::new(&stream).read_line(&mut line);
-            seen.lock().unwrap().push(line.trim_end().to_string());
-            let _ = stream
-                .write_all(b"HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        }
-    });
-    (host, requests)
+    common::stand_in(
+        "HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_string(),
+        |head| head.first().cloned().unwrap_or_default(),
+    )
 }
 
 /// The binary, set to run against the server `host` with the project `payments` and, when given, a
