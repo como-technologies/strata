@@ -164,6 +164,11 @@ pipeline:
 | The removal of an old version | Does a cluster still use it? | `consumers` |
 | A schedule | Did Palette change under a record? Does the registry have newer versions? | `verify-report.sh`, `upstream-report.sh` |
 
+[Bring your own pipeline](./internals/sample-pipeline.md) gives the command for
+each event of any pipeline, and how to add the ideas of strata to a pipeline that
+exists. It also maps strata to each step of one sample pipeline, with its
+versions and its gaps.
+
 The reconcile step shows why the two halves differ. A pipeline that compares
 the version string that a cluster holds with the version it pins finds a cluster
 that is behind. It cannot find a cluster that holds the right version string and

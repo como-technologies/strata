@@ -28,7 +28,9 @@ Start from the question that you have.
 | Can Palette build this cluster? | `strata preflight`. It checks the body of the create and asks Palette, before the build starts. |
 
 [Where each part belongs](./boundary.md) gives each feature of Palette, and what
-strata adds beside it.
+strata adds beside it. [Bring your own pipeline](./internals/sample-pipeline.md)
+says where strata fits in the pipeline that your team has, with one sample
+pipeline and its versions.
 
 **Your own tooling stays.** Your pipeline still publishes, and your scripts still
 decide what happens next. Strata gives them an exit code: `0` for the same, `1`
@@ -91,7 +93,9 @@ Palette and writes one comment, and it blocks nothing.
 2. Keep the job `comment`, and delete the other jobs. Each step below puts a job back.
 3. Set `a` to the record of your default branch, and `b` to what the pull request
    proposes. `b` is a candidate file. It is a version in Palette when your pipeline
-   publishes each pull request as a version.
+   publishes each pull request as a version, as
+   [the sample pipeline](./internals/sample-pipeline.md#the-candidate-merge-request)
+   does.
 4. Set the secrets that the top of the file names, such as `PALETTE_API_KEY`.
 
 To see the comment first, run the script with `--dry-run`. It reads Palette and
