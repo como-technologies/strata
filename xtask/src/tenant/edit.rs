@@ -25,6 +25,9 @@ pub enum Edit {
     /// pack. The pack summary takes the same registry, uid, and digest.
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
+    ///
+    /// In a draft, the profile also takes the new number at once, as a PUT of the profile does:
+    /// see [`Tenant::draft`](super::Tenant::draft).
     Version(&'static str),
     /// Give the profile another name, as `PATCH /v1/clusterprofiles/{uid}/metadata` does: the
     /// uid and the version stay. The answer of `packs/manifests` takes the new name too.

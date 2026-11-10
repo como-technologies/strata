@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -5669,8 +5669,19 @@ fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval
     );
 }
 
+/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits: the metadata of
+/// the profile, and one pack summary with the name `summary` and the manifest `m-1`.
+fn draft_manifests(summary: &str) -> String {
+    serde_json::json!({"metadata": {"name": "strata-live-addon", "uid": "ad-1"},
+        "spec": {"packs": [{"metadata": {"name": summary, "uid": "pk-1"},
+            "spec": {"name": summary, "manifests": [
+                {"name": "config", "uid": "m-1", "digest": "d", "content": "edited: \"no\"\n"}]}}]}})
+    .to_string()
+}
+
 /// A stage of draft.sh where Palette has the add-on `ad-1`, and the create of the copy with no
 /// publish answers the uid `un-1`. strata says `published` for `un-1` in the JSON of the list.
+/// The add-on has a draft with the pin `config`, and `packs/manifests` gives its two names.
 fn unpublished_stage(un_published: bool) -> Stage {
     let mut stage = baseline_stage();
     stage.strata(
@@ -5693,16 +5704,19 @@ fn unpublished_stage(un_published: bool) -> Stage {
         "  strata-live-addon@1.0.0        ad-1  all  add-on  no consumers\n  \
          strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
     );
+    let pins = r#"[{"name":"config","tag":"1.0.0","type":"manifest","layer":"addon",
+        "packUid":"pk-1","values":""}]"#;
     stage.route(
         &profile_route("ad-1"),
-        r#"{"metadata":{"name":"strata-live-addon","uid":"ad-1"},"spec":{"version":"1.0.0",
-            "published":{"type":"add-on","cloudType":"all","packs":[{"name":"config",
-            "tag":"1.0.0","type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
+        &format!(
+            r#"{{"metadata":{{"name":"strata-live-addon","uid":"ad-1"}},"spec":{{"version":"1.0.0",
+                "published":{{"type":"add-on","cloudType":"all","packs":{pins}}},
+                "draft":{{"type":"add-on","cloudType":"all","packs":{pins}}}}}}}"#
+        ),
     );
     stage.route(
         "/v1/clusterprofiles/ad-1/packs/manifests",
-        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
-            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
+        &draft_manifests("config"),
     );
     stage.route("/v1/clusterprofiles", r#"{"uid":"un-1"}"#);
     stage.route(
@@ -5756,6 +5770,38 @@ fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
     let stage = unpublished_stage(true);
     let (o, steps) = stage.run("draft.sh", &[]);
     failed(&steps, &["unpublished-listed"]);
+    assert_ne!(o.status.code(), Some(0));
+}
+
+#[test]
+fn draft_sh_reads_the_two_names_of_packs_manifests_while_the_draft_waits() {
+    let stage = unpublished_stage(false);
+    let (_, steps) = stage.run("draft.sh", &[]);
+    passed(&steps, &["route-list", "route-names"]);
+    // the checks only read while the draft waits: each request between the PUT of the draft and
+    // the publish is a GET
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let waits: Vec<&str> = calls
+        .lines()
+        .skip_while(|l| *l != "PUT /v1/clusterprofiles/ad-1")
+        .skip(1)
+        .take_while(|l| *l != "PATCH /v1/clusterprofiles/ad-1/publish")
+        .collect();
+    assert!(
+        waits.contains(&"GET /v1/clusterprofiles/ad-1/packs/manifests"),
+        "{calls}"
+    );
+    assert!(waits.iter().all(|l| l.starts_with("GET ")), "{calls}");
+
+    // a pack summary with a name that is not the name of its pin
+    let stage = unpublished_stage(false);
+    stage.route(
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+        &draft_manifests("config-pack"),
+    );
+    let (o, steps) = stage.run("draft.sh", &[]);
+    failed(&steps, &["route-names"]);
+    passed(&steps, &["route-list"]);
     assert_ne!(o.status.code(), Some(0));
 }
 
@@ -6135,8 +6181,10 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     stage.strata_err(
         "snapshot --from-candidate exists.yaml --validate *",
         2,
-        "palette    refuses: ClusterProfileAlreadyExists: Cluster Profile with name \
-         'strata-live-profile' and version '1.0.0' already exists\n",
+        &format!(
+            "palette    refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
+             'strata-live-profile' and version '1.0.0' already exists\n"
+        ),
     );
 
     let (o, steps) = stage.run("validate-packs.sh", &["3"]);
