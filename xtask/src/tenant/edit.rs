@@ -3,7 +3,9 @@
 use serde_json::{Value, json};
 
 use super::macros::user_macro;
-use super::registries::{OCI_CSI_DIGEST, OCI_CSI_PACK, PALETTE_REGISTRY, listed_version};
+use super::registries::{
+    OCI_CSI_DIGEST, OCI_CSI_PACK, PALETTE_REGISTRY, listed_version, with_oci_csi_build,
+};
 
 /// One change to a published profile document, as a person makes it through the API.
 #[derive(Clone, Debug)]
@@ -18,6 +20,9 @@ pub enum Edit {
         tag: &'static str,
     },
     /// Take the CSI pack from the OCI registry, as a team that promotes a pack does.
+    ///
+    /// The type, the registry, the `packUid`, and the digest become those of the OCI copy of the
+    /// pack. The pack summary takes the same registry, uid, and digest.
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
     Version(&'static str),
@@ -113,16 +118,38 @@ pub(super) fn apply_edits(
         edit.apply(doc, listing);
         edit.apply_manifests(manifests, listing);
     }
+    summary_values_from_pins(doc, manifests);
+}
+
+/// Give each pack summary of `manifests` the values of the pin of its name in the profile `doc`.
+///
+/// Palette takes the uid, the registry, and the digest of a summary from the record of the version
+/// that the pin names. It takes the values from the pin. So the summary gets each edit of the
+/// values of its pin.
+fn summary_values_from_pins(doc: &Value, manifests: &mut Value) {
+    for pin in doc["spec"]["published"]["packs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+    {
+        let (Some(name), Some(values)) = (pin["name"].as_str(), pin["values"].as_str()) else {
+            continue;
+        };
+        for summary in summaries_named(manifests, name) {
+            summary["spec"]["values"] = json!(values);
+        }
+    }
 }
 
 impl Edit {
-    /// The part of an edit that lands in the pack summaries of `packs/manifests`. `listing` gives
-    /// the pack listing that an upgrade reads.
+    /// The part of an edit that lands in the build of the pack summaries of `packs/manifests`.
+    /// `listing` gives the pack listing that an upgrade reads.
     ///
     /// Palette gives the summary of a pack from the record of the version that the profile pins:
-    /// its uid, its version, and its digest.
+    /// its uid, its version, its registry, and its digest.
     fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
         match self {
+            Edit::OciCsi => summaries_named(manifests, "csi-aws-ebs").for_each(with_oci_csi_build),
             Edit::NoDigest(name) => {
                 for summary in summaries_named(manifests, name) {
                     summary["spec"]["digest"] = json!("");
@@ -513,8 +540,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn an_upgrade_in_an_edit_in_place_moves_the_pin_and_its_pack_summary() {
+    /// The pin and the pack summary of `csi-aws-ebs` after an edit in place with `edits`, on the
+    /// profile of [`csi_profile`] at 1.65.0 in the project `dev`. Also the pack listing of the pack.
+    fn csi_after_edit_in_place(edits: &[Edit]) -> (Value, Value, Value) {
         let dir = tempfile::tempdir().unwrap();
         let tenant = Tenant::new(dir.path(), &crate::repository());
         tenant.registries("dev");
@@ -524,30 +552,181 @@ mod tests {
         let (doc, manifests) = csi_profile(uid, &csi, "1.65.0");
         tenant.put("dev", &profile_route(uid), &doc);
         tenant.put("dev", &manifests_route(uid), &manifests);
+        tenant.edit("dev", uid, edits);
+
+        let mut doc = tenant.read("dev", &profile_route(uid));
+        let pin = packs_named(&mut doc, "csi-aws-ebs")
+            .next()
+            .expect("a csi pin")
+            .clone();
+        let mut manifests = tenant.read("dev", &manifests_route(uid));
+        let summary = summaries_named(&mut manifests, "csi-aws-ebs")
+            .next()
+            .expect("a csi summary")
+            .clone();
+        (pin, summary, csi)
+    }
+
+    #[test]
+    fn an_upgrade_in_an_edit_in_place_moves_the_pin_and_its_pack_summary() {
         let upgrade = Edit::Upgrade {
             pack: "csi-aws-ebs",
             version: "1.63.1",
         };
-        tenant.edit("dev", uid, &[upgrade]);
+        let (pin, summary, csi) = csi_after_edit_in_place(&[upgrade]);
 
         let listed = listed_version(&csi, "csi-aws-ebs", PUBLIC_REPO, "1.63.1");
         let build = (&listed["metadata"]["uid"], &listed["spec"]["digest"]);
-        let mut doc = tenant.read("dev", &profile_route(uid));
-        let pin = packs_named(&mut doc, "csi-aws-ebs")
-            .next()
-            .expect("a csi pin");
         assert_eq!((&pin["packUid"], &pin["digest"]), build);
         assert_eq!(
             (&pin["tag"], &pin["version"]),
             (&json!("1.63.1"), &json!("1.63.1"))
         );
-        let mut manifests = tenant.read("dev", &manifests_route(uid));
-        let summary = summaries_named(&mut manifests, "csi-aws-ebs")
-            .next()
-            .expect("a csi summary");
         let summary_build = (&summary["metadata"]["uid"], &summary["spec"]["digest"]);
         assert_eq!(summary_build, build);
         assert_eq!(summary["spec"]["version"], "1.63.1");
+    }
+
+    #[test]
+    fn an_oci_edit_in_place_moves_the_pin_and_its_pack_summary() {
+        let (pin, summary, _) = csi_after_edit_in_place(&[Edit::OciCsi]);
+
+        let oci = (
+            &json!(OCI_CSI_PACK),
+            &json!(PALETTE_REGISTRY),
+            &json!(OCI_CSI_DIGEST),
+        );
+        assert_eq!((&pin["packUid"], &pin["registryUid"], &pin["digest"]), oci);
+        let summary_build = (
+            &summary["metadata"]["uid"],
+            &summary["spec"]["registryUid"],
+            &summary["spec"]["digest"],
+        );
+        assert_eq!(summary_build, oci);
+    }
+
+    /// A published profile with a pin of each pack that [`each_kind_of_edit`] names, from the
+    /// Public Repo. Also the pack summary of each pin, with the build and the values of the pin.
+    fn pinned_profile() -> (Value, Value) {
+        let kubernetes = "kubeadmconfig:\n  postKubeadmCommands:\n    \
+            - 'chmod 600 /var/lib/kubelet/config.yaml'\npack:\n  content:\n    images:\n      \
+            - image: a:1\n";
+        let values = [
+            ("csi-aws-ebs", "reclaimPolicy: Delete\n"),
+            ("kubernetes", kubernetes),
+            ("cert-manager", "a: 1\n"),
+            ("ubuntu-aws", "b: 2\n"),
+        ];
+        let pins: Vec<Value> = values
+            .iter()
+            .enumerate()
+            .map(|(n, (name, values))| {
+                json!({"name": name, "tag": "1.0.0", "version": "1.0.0",
+                    "packUid": format!("64ea0000000000000000000{n}"), "registryUid": PUBLIC_REPO,
+                    "digest": format!("sha256:{n}"), "values": values})
+            })
+            .collect();
+        let summaries: Vec<Value> = pins
+            .iter()
+            .map(|p| {
+                json!({"metadata": {"name": p["name"], "uid": p["packUid"]},
+                    "spec": {"name": p["name"], "version": p["version"],
+                        "registryUid": p["registryUid"], "digest": p["digest"],
+                        "values": p["values"], "manifests": []}})
+            })
+            .collect();
+        let doc = json!({"metadata": {"name": "aws-stack"}, "spec": {"version": "1.1.1",
+            "published": {"cloudType": "aws", "type": "cluster", "packs": pins}}});
+        (doc, json!({"spec": {"packs": summaries}}))
+    }
+
+    /// One edit of each kind, on the packs of [`pinned_profile`]. The CSI upgrade comes after the
+    /// OCI edit, so in this order the upgrade reads the registry of the move.
+    fn each_kind_of_edit() -> Vec<Edit> {
+        vec![
+            Edit::Reclaim("Retain"),
+            Edit::Tag {
+                pack: "ubuntu-aws",
+                tag: "24.04",
+            },
+            Edit::OciCsi,
+            Edit::Version("1.1.2"),
+            Edit::Name("aws-stack-2"),
+            Edit::CloudType("gcp"),
+            Edit::ProfileType("later-type"),
+            Edit::KubeadmCommand("echo one"),
+            Edit::Upgrade {
+                pack: "csi-aws-ebs",
+                version: "1.63.1",
+            },
+            Edit::NoDigest("cert-manager"),
+            Edit::Macro {
+                pack: "csi-aws-ebs",
+                name: "region",
+            },
+            Edit::ImageId {
+                pack: "ubuntu-aws",
+                id: "ami-0a1b2c3d4e5f60001",
+            },
+            Edit::Invalid {
+                pack: "cert-manager",
+                reason: "Cert Manager 1.0.0 tag is deleted",
+            },
+            Edit::Image {
+                pack: "kubernetes",
+                image: "a:2",
+            },
+            Edit::Masked {
+                pack: "cert-manager",
+                key: "registryPassword",
+            },
+        ]
+    }
+
+    /// Fail when a pin of `doc` and its pack summary in `manifests` differ in the build or in the
+    /// values. `after` names the edits in the message.
+    fn assert_summaries_follow_pins(doc: &Value, manifests: &Value, after: &str) {
+        let summaries = manifests["spec"]["packs"].as_array().expect("summaries");
+        for pin in doc["spec"]["published"]["packs"].as_array().expect("pins") {
+            let summary = summaries
+                .iter()
+                .find(|s| s["spec"]["name"] == pin["name"])
+                .expect("a summary of each pin");
+            let of_pin = [
+                &pin["packUid"],
+                &pin["registryUid"],
+                &pin["version"],
+                &pin["digest"],
+                &pin["values"],
+            ];
+            let of_summary = [
+                &summary["metadata"]["uid"],
+                &summary["spec"]["registryUid"],
+                &summary["spec"]["version"],
+                &summary["spec"]["digest"],
+                &summary["spec"]["values"],
+            ];
+            assert_eq!(of_pin, of_summary, "{after}: {}", pin["name"]);
+        }
+    }
+
+    #[test]
+    fn each_edit_changes_the_pin_and_its_pack_summary_together() {
+        let edits = each_kind_of_edit();
+        for edit in &edits {
+            let (mut doc, mut manifests) = pinned_profile();
+            apply_edits(
+                std::slice::from_ref(edit),
+                &mut doc,
+                &mut manifests,
+                &no_listing,
+            );
+            assert_summaries_follow_pins(&doc, &manifests, &format!("{edit:?}"));
+        }
+        // a chapter composes edits, as `OCI_CSI | RETAIN` does
+        let (mut doc, mut manifests) = pinned_profile();
+        apply_edits(&edits, &mut doc, &mut manifests, &no_listing);
+        assert_summaries_follow_pins(&doc, &manifests, "each edit in order");
     }
 
     #[test]

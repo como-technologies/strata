@@ -133,7 +133,9 @@ digest of its own in its registry. An upgrade of a pin takes the uid and the
 digest of the new version from the listing of the registry of the pin. A version
 that the listing does not hold gets a uid and a digest of its own in that
 registry. Each edit changes the pin and its pack summary in `packs/manifests`
-together, at a publish and at an edit in place. See
+together, at a publish, at an edit in place, and in a draft. As in Palette, the
+summary takes the uid, the registry, and the digest of the pinned version, and
+the values of the pin. See
 [The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest) and
 [A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
