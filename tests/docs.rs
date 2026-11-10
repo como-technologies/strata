@@ -6367,6 +6367,16 @@ fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_s
             "reference/palette-api.md",
             "Eight of the ten `POST` requests change nothing",
         ),
+        // the sentence above the table of the checks of strata-preflight, and the row of the
+        // three checks that send `validate/repave` (#756)
+        (
+            "reference/palette-api.md",
+            "Each request below changes nothing, except `validate/repave`",
+        ),
+        (
+            "reference/palette-api.md",
+            "`engine-repave-rules`, `eks-repave-answers`, `gke-repave-answers`",
+        ),
         (
             "reference/documents.md",
             "Each line reads, and changes nothing",

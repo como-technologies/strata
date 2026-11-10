@@ -20,6 +20,10 @@ use crate::files::{book, files_with_ext, pages};
 /// The page that lists the requests of strata, under `docs/src/`.
 pub const API_PAGE: &str = "reference/palette-api.md";
 
+/// The heading of the section of [`API_PAGE`] whose table lists each request of the rules of
+/// strata-preflight, with the rules that send it.
+pub(super) const RULES_HEADING: &str = "## The checks of `strata preflight`";
+
 /// The directory of the pages that state the facts of Palette, under `docs/src/`.
 pub const FACT_PAGES: &str = "internals/palette";
 
@@ -62,6 +66,9 @@ pub struct Sources {
     pub rule_ids: BTreeSet<String>,
     /// The rules that send each request of Palette, by the shape of the request.
     pub rule_requests: BTreeMap<String, BTreeSet<String>>,
+    /// The rules that the row of each request names, in the table of [`RULES_HEADING`], by the
+    /// shape of the request.
+    pub rule_rows: BTreeMap<String, BTreeSet<String>>,
     /// The names of the query that each rule sends in its path, by the id of the rule.
     pub rule_queries: BTreeMap<String, BTreeSet<String>>,
     /// The rules of the cloud tier and the code of strata, for the facts of the clouds.
@@ -78,9 +85,11 @@ impl Sources {
     pub fn read(repo: &Path, served: Option<BTreeSet<String>>) -> (Sources, Vec<String>) {
         let (facts, mut bad) = load(&repo.join(DIRECTORY));
         let docs = book(repo);
+        let api = read_text(&docs.join(API_PAGE));
         let mut sources = Sources {
             served,
-            requests: api_requests(&read_text(&docs.join(API_PAGE))),
+            requests: api_requests(&api),
+            rule_rows: rule_rows(&api),
             ..Sources::default()
         };
         for page in pages(&docs) {
@@ -174,19 +183,63 @@ pub(super) fn method_pattern() -> String {
     methods.join("|")
 }
 
+/// The cells of the table row `line`, from the first column, with no `|`.
+fn cells(line: &str) -> std::str::Split<'_, char> {
+    line.trim_start_matches('|').split('|')
+}
+
+/// The text of each code span in `cell`.
+fn spans_in(cell: &str) -> impl Iterator<Item = String> + '_ {
+    static SPAN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").expect("a pattern"));
+    SPAN.captures_iter(cell).map(|c| c[1].to_string())
+}
+
+/// The shape of each request in `cell`: a code span that starts with a method and a space.
+fn requests_in(cell: &str) -> Vec<String> {
+    static REQUEST: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(&format!(r"`((?:{}) /[^`]*)`", method_pattern())).expect("a pattern")
+    });
+    REQUEST.captures_iter(cell).map(|c| shape(&c[1])).collect()
+}
+
+/// The table rows of the section `heading` of `page`, up to the next `##` heading.
+fn section_lines<'a>(page: &'a str, heading: &'a str) -> impl Iterator<Item = &'a str> {
+    let mut inside = false;
+    page.lines().filter(move |line| {
+        if line.starts_with("## ") {
+            inside = line.trim_end() == heading;
+        }
+        inside && line.starts_with('|')
+    })
+}
+
 /// The shape of each request in the first column of the tables of `page`: a code span that
 /// starts with a method and a space.
 pub(super) fn api_requests(page: &str) -> BTreeSet<String> {
-    let span = Regex::new(&format!(r"`((?:{}) /[^`]*)`", method_pattern())).expect("a pattern");
     page.lines()
         .filter(|line| line.starts_with('|'))
-        .filter_map(|line| line.trim_start_matches('|').split('|').next())
-        .flat_map(|cell| {
-            span.captures_iter(cell)
-                .map(|c| shape(&c[1]))
-                .collect::<Vec<_>>()
-        })
+        .filter_map(|line| cells(line).next())
+        .flat_map(requests_in)
         .collect()
+}
+
+/// The rules that each row of the table of [`RULES_HEADING`] on `page` names, by the shape of
+/// each request of the row.
+///
+/// The first column of a row holds the requests, and the code spans of its second column are the
+/// rules.
+pub(super) fn rule_rows(page: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut rows: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for line in section_lines(page, RULES_HEADING) {
+        let mut row = cells(line);
+        let (Some(requests), Some(rules)) = (row.next(), row.next()) else {
+            continue;
+        };
+        for request in requests_in(requests) {
+            rows.entry(request).or_default().extend(spans_in(rules));
+        }
+    }
+    rows
 }
 
 /// The anchor of each `##` heading of `page`.
@@ -222,22 +275,10 @@ fn live_checks(repo: &Path) -> BTreeMap<String, BTreeSet<String>> {
 /// The check names in the first column of the tables of the section `heading` of `page`, up to
 /// the next `##` heading.
 pub(super) fn section_rows(page: &str, heading: &str) -> BTreeSet<String> {
-    let name = Regex::new(r"`([^`]+)`").expect("a pattern");
-    let mut inside = false;
-    let mut rows = BTreeSet::new();
-    for line in page.lines() {
-        if line.starts_with("## ") {
-            inside = line.trim_end() == heading;
-        } else if inside && line.starts_with('|') {
-            let cell = line
-                .trim_start_matches('|')
-                .split('|')
-                .next()
-                .unwrap_or_default();
-            rows.extend(name.captures_iter(cell).map(|c| c[1].to_string()));
-        }
-    }
-    rows
+    section_lines(page, heading)
+        .filter_map(|line| cells(line).next())
+        .flat_map(spans_in)
+        .collect()
 }
 
 /// The rows of the book for each script: the section of the script in `development/live-runs.md`,
