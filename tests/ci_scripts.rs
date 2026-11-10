@@ -3034,6 +3034,7 @@ fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_versi
 }
 
 /// Issue #616. A version that does not parse reads as its first three numbers, as in Palette.
+/// Issue #714: a text with no three numbers holds no version, and it is below each version.
 #[test]
 fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_rest_as_a_move_back()
 {
@@ -3054,9 +3055,15 @@ fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_r
         Some(1),
         "1.1.8.develop is below 1.1.10:\n{out}"
     );
-    // a version with no three numbers is still above each version
+    // a text with no three numbers is below each version
     let (o, out) = gate_for_pin_move("1.2.x", "1.3.0");
-    assert_eq!(o.status.code(), Some(1), "1.3.0 is below 1.2.x:\n{out}");
+    assert!(o.status.success(), "1.3.0 is above 1.2.x:\n{out}");
+    let (o, out) = gate_for_pin_move("1.10.0", "1.2.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.2.develop is below 1.10.0:\n{out}"
+    );
 }
 
 /// A branch that deliberately returns the record to the release that main pinned before.

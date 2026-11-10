@@ -40,12 +40,18 @@ A ref names the thing that a command reads.
   - A text that does not parse reads as its first three numbers, as Palette
     reads it: see [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
   - A tail of text puts a version below its numbers, and makes it a
-    pre-release. So `1.1.8.develop` is below `1.1.8`, and `@latest` gives
-    `1.1.10` over `1.2.0.develop`.
+    pre-release. Text before the numbers does the same, as in `chart-1.2.3`.
+    So `1.1.8.develop` is below `1.1.8`, and `@latest` gives `1.1.10` over
+    `1.2.0.develop`.
   - A tail of numbers puts a version above its numbers: `10.4.0.1` is above
-    `10.4.0` and below `10.5.0`.
-  - For a text with no three numbers, digit runs compare as numbers and other
-    text as text. Such a text is above each version.
+    `10.4.0` and below `10.5.0`. A `v` in front does not count, so `v1.1.8.1`
+    equals `1.1.8.1`, as `v1.1.8` equals `1.1.8`.
+  - A text with no three numbers, such as `1.2.develop`, holds no version. It
+    is below each version, also below a pre-release. So `@latest` on
+    `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. `@latest` gives such a
+    text only when the name has no version.
+  - Of two texts with no three numbers, digit runs compare as numbers and
+    other text as text. So `LTS__24.x` is above `LTS__22.04`.
 - **`@draft`.** The draft template of a profile version, and not its published
   template. A person who edits a published version and does not publish makes
   a draft. The record holds the values and the manifests of the draft, and

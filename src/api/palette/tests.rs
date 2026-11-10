@@ -314,6 +314,37 @@ fn latest_reads_a_version_that_does_not_parse_by_its_three_numbers_and_ties_two_
     assert_eq!(err.kind(), "profile-name-ambiguous", "{err}");
 }
 
+/// Issue #714. `1.2.develop` holds no three numbers, so Palette reads no version in it. Strata put
+/// it above each version, and `@latest` took it over `1.10.0`. Now it is below each version.
+#[test]
+fn latest_skips_a_text_with_no_three_numbers_while_the_name_has_a_version() {
+    let listing = json!({"items": [
+        {"metadata": {"name": "short", "uid": "u1"}, "spec": {"version": "1.2.develop"}},
+        {"metadata": {"name": "short", "uid": "u2"}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "short", "uid": "u3"}, "spec": {"version": "1.9.0"}},
+        {"metadata": {"name": "rc", "uid": "u4"}, "spec": {"version": "1.2.develop"}},
+        {"metadata": {"name": "rc", "uid": "u5"}, "spec": {"version": "1.0.0-rc.1"}},
+        {"metadata": {"name": "texts", "uid": "u6"}, "spec": {"version": "1.2.develop"}},
+        {"metadata": {"name": "texts", "uid": "u7"}, "spec": {"version": "1.10.develop"}},
+        {"metadata": {"name": "vee", "uid": "u8"}, "spec": {"version": "v1.1.8.1"}},
+        {"metadata": {"name": "vee", "uid": "u9"}, "spec": {"version": "1.1.8.1"}},
+    ]});
+    let api = MemoryApi::new()
+        .with("/v1/dashboard/clusterprofiles/metadata", listing)
+        .with("/v1/clusterprofiles/u8", json!({"metadata": {"uid": "u8"}}))
+        .with("/v1/clusterprofiles/u9", json!({"metadata": {"uid": "u9"}}));
+    let p = Palette::new(api);
+    assert_eq!(p.resolve_latest("short").unwrap(), "u2");
+    // a pre-release holds a version, so `@latest` takes it first
+    assert_eq!(p.resolve_latest("rc").unwrap(), "u5");
+    // with no version, the natural order decides
+    assert_eq!(p.resolve_latest("texts").unwrap(), "u7");
+    // a `v` in front does not count, so `v1.1.8.1` and `1.1.8.1` are one version, as `v1.1.8` and
+    // `1.1.8` are
+    let err = p.resolve_latest("vee").unwrap_err();
+    assert_eq!(err.kind(), "profile-name-ambiguous", "{err}");
+}
+
 #[test]
 fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
     // the one parse keeps each item of the listing. A resolve skips an item with no version or

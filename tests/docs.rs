@@ -1836,8 +1836,9 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
         (
             "src/reference/version.rs",
-            "A string with no three numbers keeps",
+            "Two strings with no three numbers keep",
         ),
+        ("src/reference/version.rs", "Three forms are a pre-release:"),
         ("src/candidate/resolve.rs", "The documents are those that"),
         (
             "src/candidate/resolve.rs",
@@ -4250,6 +4251,69 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
     assert!(
         picked.ends_with("\naws-stack@1.1.10\n"),
         "the playground records another version: {picked}"
+    );
+}
+
+/// Issue #714. The book stated that a text with no three numbers, such as `1.2.develop`, is above
+/// each version. Release 0.33.0 puts it below each version, and a `v` in front does not count in a
+/// tie. The rule of `@latest`, the pages of Palette, and the section of the release state it.
+#[test]
+fn the_book_states_that_a_text_with_no_three_numbers_is_below_each_version() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = release_section(&page, "0.33.0");
+    for needle in [
+        "**A text with no three numbers is below each version.**",
+        "`<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "`behind` names no such text as newer than a version.",
+        "**A `v` in front of the three numbers does not count in a tie.**",
+        "A move from `1.2.develop` to `1.10.0` passes the gate now.",
+        "`compare` puts a text with no three numbers, such as `1.2.develop`, below each version.",
+        "It is also true for a text with other text before its three numbers, such as `chart-1.2.3`.",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of 0.33.0 lacks {needle:?}"
+        );
+    }
+    assert!(
+        !release.contains("A text with no three numbers, such as `LTS__24.x`, keeps its order."),
+        "the section of 0.33.0 still states the old rank"
+    );
+
+    let refs = one_line(&read(&docs().join("reference/refs.md")));
+    for needle in [
+        "A text with no three numbers, such as `1.2.develop`, holds no version. It is below each version, also below a pre-release.",
+        "So `@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`",
+        "Text before the numbers does the same, as in `chart-1.2.3`.",
+    ] {
+        assert!(refs.contains(needle), "refs.md lacks {needle:?}");
+    }
+    assert!(
+        !refs.contains("Such a text is above each version."),
+        "refs.md still states the old rank"
+    );
+    for (path, needle) in [
+        (
+            "internals/palette/profiles.md",
+            "It puts a text with no three numbers below each version: see",
+        ),
+        (
+            "internals/palette/limits.md",
+            "it puts such a text below each version: see",
+        ),
+        (
+            "commands/behind.md",
+            "so `behind` never names it as newer than a version.",
+        ),
+    ] {
+        let text = one_line(&read(&docs().join(path)));
+        assert!(text.contains(needle), "{path} lacks {needle:?}");
+    }
+    let listed = read(&docs().join("output/latest-develop-list.txt"));
+    assert!(
+        listed.contains("4 profiles\n  aws-stack@1.2.develop "),
+        "the playground does not list 1.2.develop first: {listed}"
     );
 }
 

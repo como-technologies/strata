@@ -106,10 +106,11 @@ where each module goes. The Go code of the observer follows
   `version::numbers`, and `version::is_pre_release`. `xtask/` and
   `strata-preflight` use them too. Do not write a second parse.
 - A string that does not parse reads as its first three numbers, as Palette
-  reads it. `version::has_three_numbers` finds them. The natural order of the
-  text is only the fallback for a string with no three numbers, such as
-  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
-  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
+  reads it. `version::has_three_numbers` finds them. A string with no three
+  numbers, such as `LTS__24.x`, is below each version. The natural order of the
+  text orders only such strings. No script uses `sort -V` for a version. A
+  script reads the direction of a move from strata, such as `versionMove` in
+  `strata-diff/1`.
 - One order of a version lives outside strata: `oldest_first` in
   `examples/fetch-examples.sh`. The script runs offline, so it cannot ask
   strata. It keeps only a version of plain numbers and orders it by the

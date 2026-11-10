@@ -972,6 +972,8 @@ Three more results follow from the order:
 Release 0.33.0 follows the order of Palette for a version that does not parse.
 The code of Palette gives that order, and no live run shows it: see
 [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
+Release 0.33.0 also puts a text with no three numbers, such as `1.2.develop`,
+below each version.
 
 `strata-diff/1` has the new field `versionMove`, in the document and in each
 entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
@@ -1006,9 +1008,28 @@ field, a value, an input, or an option is in the sections above.
     pre-release.
   - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.3.4` to `1.3.0` is
     `forward` now.
-  - A text with no three numbers, such as `LTS__24.x`, keeps its order.
   - A record that `@latest` wrote before can name a develop build. Take the record again to
     pin the version that `@latest` gives now.
+- **A text with no three numbers is below each version.** An example is `1.2.develop`. Palette
+  reads no version in such a text. Before, strata put it above each version. See
+  [the rule of `@latest`](./refs.md#rules).
+  - `<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. Before, it recorded
+    `1.2.develop`. `@latest` gives such a text only when the name has no version. This holds
+    for `pack:<name>@latest` too.
+  - `strata list` and `strata packs` list such a text below each version. `latest` of
+    `strata packs` marks the version that `@latest` records.
+  - `behind` names no such text as newer than a version. Each version is above a pin of such a
+    text, and `--pre-release` still decides for a pre-release.
+  - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.develop` to
+    `1.10.0` is `forward` now.
+  - Two such texts keep the natural order: `LTS__24.x` is above `LTS__22.04`.
+  - A record that `@latest` wrote before can name such a text. Take the record again.
+- **A `v` in front of the three numbers does not count in a tie.** Palette reads `v1.1.8.1`,
+  `1.1.8.1`, `v1.1.8`, and `1.1.8` as `1.1.8`. Now `v1.1.8.1` equals `1.1.8.1`, as `v1.1.8`
+  equals `1.1.8`. Before, `v1.1.8.1` was above `1.1.8.1`.
+  - When both are the highest versions of a name, `<name>@latest` gives
+    `profile-name-ambiguous`. Before, it recorded `v1.1.8.1`.
+  - `versionMove` is absent for such a pair.
 - **`strata preflight`: no `reproduce` line deletes or changes anything, and none
   names `examples/live`.** Each line reads. See
   [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
@@ -1045,14 +1066,22 @@ field, a value, an input, or an option is in the sections above.
   - A move from `1.3.0` to `1.2.3.4`, or from `1.1.10` to `1.1.8.develop`, fails the gate
     with `BEHIND` now. Add the line `Rollback: <record> to <name>@<version>` to a commit, or pin
     a final version.
+  - A move from `1.2.develop` to `1.10.0` passes the gate now. A move from `1.10.0` to
+    `1.2.develop` fails with `BEHIND` now. Before, the two verdicts were the other way.
 
 ### For a user of the library of strata
 
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.
+  - `compare` puts a text with no three numbers, such as `1.2.develop`, below each version.
+    Before, it put such a text above each version.
+  - A `v` in front of the three numbers does not count in a tie, so `v1.1.8.1` equals `1.1.8.1`.
+  - For `latest`, `pick` gives a text with no three numbers only when no item holds a version.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
-  numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It was false for each text that does not
-  parse.
+  numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It is also true for a text with other
+  text before its three numbers, such as `chart-1.2.3`. One `v` in front is no such text. A
+  tail of numbers, as in `10.4.0.1`, makes no pre-release. It was false for each text that does
+  not parse, and it stays false for a text with no three numbers.
 
 ## Release 0.28.0: changes that need action
 

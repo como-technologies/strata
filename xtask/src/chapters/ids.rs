@@ -97,3 +97,5 @@ pub(super) const SAMPLE_FINAL: &str = "64e00000000000000000010b";
 // the pre-release that pins the pre-release of the pack, and the final version that pins its final
 pub(super) const SAMPLE_PIN_PRE: &str = "64e00000000000000000010c";
 pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
+// aws-stack@1.2.develop: a develop build with no three numbers, beside the versions of #616 (#714)
+pub(super) const DEVELOP_SHORT: &str = "64e00000000000000000010e";

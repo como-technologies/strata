@@ -119,7 +119,9 @@ text of a hash, not the time of the build, orders `1.0.1-g0123456789ab` and
 
 A develop build such as `1.66.0.develop` is a pre-release too: it is below
 `1.66.0`. A version with four numbers is not: `1.65.0.1` is above `1.65.0`, and
-below `1.66.0`. See [the rule of `@latest`](../reference/refs.md#rules).
+below `1.66.0`. A text with no three numbers, such as `1.66.develop`, holds no
+version. It is below each version, so `behind` never names it as newer than a
+version. See [the rule of `@latest`](../reference/refs.md#rules).
 
 ## Palette accepts the move, or refuses it
 

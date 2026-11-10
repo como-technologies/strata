@@ -178,6 +178,8 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
 
 /// Issue #616. A field test recorded a develop build, such as `1.2.0.develop`, for `@latest`, with
 /// exit 0. Palette reads it as `1.2.0`. Strata puts it below `1.2.0`, and `@latest` skips it.
+/// Issue #714: `1.4.develop` holds no three numbers. Strata put it above each version, and now
+/// below each version.
 #[test]
 fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_text() {
     let dir = tempfile::tempdir().unwrap();
@@ -187,6 +189,7 @@ fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_tex
         {"metadata": {"name": "lab-profile", "uid": "uid-dev-2"}, "spec": {"version": "1.2.0.develop"}},
         {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.3.0"}},
         {"metadata": {"name": "lab-profile", "uid": "uid-dev-4"}, "spec": {"version": "1.4.0.develop"}},
+        {"metadata": {"name": "lab-profile", "uid": "uid-dev-5"}, "spec": {"version": "1.4.develop"}},
     ]});
     let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
     let api = serve_fixture(api, dir.path(), "b", UID_B).with(PROFILE_LISTING, listing);
@@ -3673,12 +3676,14 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
 }
 
 /// Issue #616. `list` reads a version that does not parse by its first three numbers, as
-/// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`.
+/// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`. Issue #714:
+/// `1.2.develop` holds no three numbers, so it is below each version.
 #[test]
 fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
     let listing = serde_json::json!({"items": [
         listed_profile("barney", "1.1.10", "u1"),
         listed_profile("barney", "1.1.8.develop", "u2"),
+        listed_profile("barney", "1.2.develop", "u7"),
         listed_profile("barney", "1.1.8", "u3"),
         listed_profile("four", "10.5.0", "u4"),
         listed_profile("four", "10.4.0.1", "u5"),
@@ -3701,6 +3706,7 @@ fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
     assert_eq!(
         refs,
         [
+            "barney@1.2.develop",
             "barney@1.1.8.develop",
             "barney@1.1.8",
             "barney@1.1.10",
@@ -14117,10 +14123,16 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     );
 }
 
-/// A registry with 1.63.1 and 1.65.0, and three versions that do not parse: 1.63.1.1, with a tail
-/// of numbers, and the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text.
+/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
+/// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
+/// 1.66.develop, with no three numbers.
 fn serve_develop_builds() -> MemoryApi {
-    let more = ["1.63.1.1", "1.65.0.develop", "1.66.0.develop"];
+    let more = [
+        "1.63.1.1",
+        "1.65.0.develop",
+        "1.66.0.develop",
+        "1.66.develop",
+    ];
     let mut entity = public_entity();
     for v in more {
         entity = with_tag(entity, v, &format!("pk-{v}"));
@@ -14148,7 +14160,8 @@ fn newer_than_in_develop_builds(pin: &str, pre_release: bool) -> Vec<String> {
 }
 
 /// Issue #616. `pack:<name>@latest` and `packs` read a version that does not parse by its first
-/// three numbers. A tail of text is a pre-release, so neither picks a develop build.
+/// three numbers. A tail of text is a pre-release, so neither picks a develop build. Issue #714: a
+/// text with no three numbers is below each version, so neither picks it.
 #[test]
 fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_below_the_next_version()
 {
@@ -14169,12 +14182,15 @@ fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_belo
             ("1.65.0.develop", false),
             ("1.63.1.1", false),
             ("1.63.1", false),
+            ("1.66.develop", false),
         ]
     );
 }
 
 /// Issue #616. With `10.4.0.1` and `10.5.0`, `behind` said nothing. Now `1.65.0` is newer than the
-/// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release.
+/// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release. Issue
+/// #714: `1.66.develop` is newer than no version, and each version that is no pre-release is newer
+/// than it.
 #[test]
 fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop_build_as_a_pre_release()
  {
@@ -14191,6 +14207,10 @@ fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop
     assert_eq!(
         newer_than_in_develop_builds("1.65.0.develop", false),
         ["1.66.0.develop", "1.65.0"]
+    );
+    assert_eq!(
+        newer_than_in_develop_builds("1.66.develop", false),
+        ["1.65.0", "1.63.1.1", "1.63.1"]
     );
 }
 

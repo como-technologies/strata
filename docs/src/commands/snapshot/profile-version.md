@@ -49,13 +49,16 @@ pre-releases gives its highest one. See
 
 A develop build such as `1.1.8.develop` does not parse as a semantic version.
 Palette reads it as `1.1.8`. Strata puts it below `1.1.8`, and `@latest` skips
-it as a pre-release. Here the name has `1.1.8`, `1.1.8.develop`, and `1.1.10`:
+it as a pre-release. A develop build such as `1.2.develop` holds no three
+numbers, so Palette reads no version in it. Strata puts it below each version.
+Here the name has `1.1.8`, `1.1.8.develop`, `1.1.10`, and `1.2.develop`:
 
 ```text
 {{#include ../../output/latest-develop-list.txt}}
 ```
 
-The record takes `1.1.10`:
+`strata list` gives `1.2.develop` first, because it is the lowest. The record
+takes `1.1.10`:
 
 ```text
 {{#include ../../output/latest-develop.txt}}
