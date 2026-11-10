@@ -1,7 +1,7 @@
 //! The chapters of the first pages of the book: the help text, and the quick start.
 
-use super::DEV_ENV;
-use super::ids::{A100, A110, A111, DEV, PAYMENTS, PROD};
+use super::ids::{A100, A110, A111, DEV, PROD};
+use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 
 /// Run the chapters of the first pages.
@@ -44,7 +44,10 @@ fn quickstart(r: &mut Runner) {
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
+    payments_addons(r);
+    // the cluster runs the release and three add-on profiles, and the compare answers for the
+    // release (#615)
+    payments_cluster(r, A110);
     r.step("quickstart-offline", 1, false, "strata compare examples/profiles/aws-stack@1.1.0.json examples/profiles/aws-stack@1.1.1.json");
     r.step("quickstart-list", 0, false, "strata list");
     r.step(

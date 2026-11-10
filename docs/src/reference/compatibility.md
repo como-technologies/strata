@@ -1041,9 +1041,25 @@ field, a value, an input, or an option is in the sections above.
   reports use the same words. A script that reads that line gets a new word.
   `strata-preflight/1` has the new field `options.offline`. Read the field: the
   text forms can change in any release.
+- **`compare` of a profile version with `cluster:<cluster>` answers for that profile.** The
+  cluster side holds only the profile that the version replaces, as
+  `cluster:<cluster>/<profile>` does. Before, it held each profile of the cluster. See
+  [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+  - On a cluster that runs the version and other profiles, `compare` exits `0` now. Before, it
+    exited `1`, with a line `ADDED` or `REMOVED` for each pack of the other profiles.
+  - With `--repave` and `--validate`, the report has no line for a profile that the move does
+    not change. The question to Palette is the same.
+  - In `--json`, `ref` of the cluster side names the profile, such as
+    `cluster:payments/aws-stack`, and `cluster.profiles` holds that one profile.
+  - A version of an add-on that the cluster does not run, two clusters, and a
+    `cluster:<cluster>/<profile>` ref give what they gave before.
+  - To compare each profile of a cluster with a release, compare a record of the cluster.
 
 ### For a user of the CI drop-ins
 
+- **`pr-comment.sh cluster:<cluster> <version>` comments on one profile of the cluster.** The
+  script runs `compare`. So the comment names only the packs of the profile that the version
+  replaces. The maximum impact and the label come from those packs.
 - **`merge-gate.sh` reads a version that does not parse by its first three numbers.** The
   script reads `versionMove`, so it follows the new order.
   - A move from `1.2.3.4` to `1.3.0` passes the gate now. Before, it failed with `BEHIND`.

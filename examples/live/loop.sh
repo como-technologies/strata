@@ -10,7 +10,7 @@
 #   3  the publish: the published next version is the candidate that the reviewer read. The stage
 #      asks Palette if the move of cluster A to the next version repaves, and if Palette accepts
 #      the packs. pr-comment.sh --repave puts the answer in the comment of the pull request of the
-#      move
+#      move. A cluster ref that selects no profile holds the release alone (#615)
 #   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
 #      of a create on the release. The comment of the pull request holds the static report. The
 #      stage creates nothing
@@ -126,6 +126,15 @@ if stage 3 "the publish"; then
     "$strata" compare "cluster:$C/$REL" "$NEXT" --validate --json
   check ask-validate-answer 0 '#385: the report holds the answer of Palette: paletteValidation.accepts' -- \
     jq -e '.paletteValidation | (.accepts | type) == "boolean"' ask-validate.out
+  # cluster A runs the release and the add-on. A cluster ref that selects no profile holds only the
+  # profile of the other side
+  check cluster-plain 0 '#615: compare of the release with cluster:<uid> holds the release alone, so cluster A runs it' -- \
+    "$strata" compare repo/releases/1.0.0.json "cluster:$C"
+  check ask-repave-plain 1 '#615: compare --repave with cluster:<uid> asks Palette about the move of the release' -- \
+    "$strata" compare "cluster:$C" "$NEXT" --repave --json
+  check ask-repave-plain-says 0 '#615: the cluster side is cluster:<uid>/<release>, and the report names no pack of the add-on' -- \
+    jq -e --arg ref "cluster:$C/$NAME" --slurpfile addon repo/releases/addon.json \
+      '([$addon[0].packs[].name] as $ad | .a.ref == $ref and ([.packs[].name] - $ad == [.packs[].name]))' ask-repave-plain.out
   # the pull request that moves cluster A asks the same question: its comment holds the answer
   # of Palette, and the label follows it
   check ask-repave-comment 0 '#157: pr-comment.sh --repave asks Palette about the move of cluster A, in the comment of the pull request' -- \

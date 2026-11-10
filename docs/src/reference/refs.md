@@ -12,7 +12,7 @@ A ref names the thing that a command reads.
 | `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack that the registry serves and that is not a pre-release | `pack:kubernetes@latest` |
-| `cluster:<cluster>` | each profile that the cluster runs | `cluster:payments` |
+| `cluster:<cluster>` | each profile that the cluster runs; beside a profile version in `compare`, the profile that the version replaces | `cluster:payments` |
 | `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |
 | `cluster:<cluster>/<profile>+<profile>` | some of the profiles that the cluster runs | `cluster:payments/aws-stack+platform-addons` |
 | `cluster:<cluster>@pending` | the profiles that the cluster runs after it takes the update that waits | `cluster:payments@pending` |
@@ -74,6 +74,11 @@ A ref names the thing that a command reads.
 - **`<profile>`.** The name or the uid of a profile that the cluster runs. An
   unknown one is `cluster-profile-not-found`, which lists the profiles of the
   cluster. `+` joins two or more: the record holds those profiles.
+  - `compare` selects the profile when the ref names none. Beside a profile
+    version, `cluster:<cluster>` holds only the profile that the version
+    replaces, as `cluster:<cluster>/<profile>` does. Beside a cluster group, it
+    holds the profiles that the group pins. See
+    [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
 - **`@pending`.** The profiles that Palette gives for the update that waits for
   the cluster, and not the copies that the cluster runs. When no update waits,
   they are the same. Put it last: `cluster:payments/aws-stack@pending`. See

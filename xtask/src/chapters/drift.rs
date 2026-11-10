@@ -1,8 +1,8 @@
 //! The chapters of the drift of a version, and of the clusters that run one.
 
-use super::DEV_ENV;
 use super::edits::RETAIN;
-use super::ids::{A110, A111, A112, A120, ADDONS_DEV, ADDONS_PACK, DEV, LEDGER, PAYMENTS, SEARCH};
+use super::ids::{A110, A111, A112, A120, DEV, LEDGER, PAYMENTS, SEARCH};
+use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::Edit;
 
@@ -389,8 +389,10 @@ fn cluster_release(r: &mut Runner) {
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| t.addons(DEV, ADDONS_DEV, ADDONS_PACK, "restricted", "1.0.0"));
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110, ADDONS_DEV], &[]));
+    payments_addons(r);
+    payments_cluster(r, A110);
+    // Palette says that the move of payments to 1.1.1 does not repave it
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
     r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.tenant(|t| t.cluster(DEV, LEDGER, "ledger", &[A110], &[]));
     r.tenant(|t| t.on_cluster_reclaim(DEV, LEDGER, "Retain"));
@@ -406,17 +408,31 @@ fn cluster_release(r: &mut Runner) {
         false,
         "strata list clusters --applied",
     );
+    // payments runs four profiles, and the cluster side holds the one of the record (#615)
     r.step(
         "cluster-identical",
         0,
         false,
-        "strata compare releases/1.1.0/dev.json cluster:payments/aws-stack",
+        "strata compare releases/1.1.0/dev.json cluster:payments",
     );
     r.step(
-        "cluster-all-profiles",
+        "cluster-many-profiles",
+        0,
+        false,
+        "strata compare releases/1.1.0/dev.json cluster:payments --json | jq -c '.b | {ref, profiles: [.cluster.profiles[].name]}'",
+    );
+    r.step(
+        "cluster-addon",
+        0,
+        false,
+        "strata compare platform-addons@1.0.0 cluster:payments",
+    );
+    // a move of the release: the add-on profiles give no ADDED and no REMOVED line
+    r.step(
+        "cluster-move-repave",
         1,
         false,
-        "strata compare releases/1.1.0/dev.json cluster:payments",
+        "strata compare cluster:payments aws-stack@1.1.1 --repave",
     );
     r.step(
         "cluster-moved",
