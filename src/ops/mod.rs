@@ -494,10 +494,10 @@ fn held_snapshot<A: PaletteApi>(
 ///
 /// A cluster ref that selects no profile holds only the profiles that the other side asks about.
 /// Beside a cluster group, it holds the profiles that the group pins. Beside one version of a
-/// cluster profile, it holds the profile that the version replaces, as [`validate_body`] does:
-/// the profile with the uid of the version, else with its name, else the profile that builds the
-/// cluster when the version builds one. The question is whether the cluster runs the pin or the
-/// version, and not what else it runs. So the function reads the other side first. Two clusters
+/// cluster profile, it holds the profile that the version replaces, as [`validate_body`] does.
+/// That is the profile with the uid of the version, else with its name. Else, for a version that
+/// builds a cluster, it is the profile that builds the cluster. The question is whether the
+/// cluster runs the pin or the version, and not what else it runs. So the function reads the other side first. Two clusters
 /// stay whole. `connect` gives the [`Palette`] for each side that a request answers, and
 /// `fetched_at` is the time of the read, in RFC 3339.
 ///
@@ -559,8 +559,8 @@ where
     }
 }
 
-/// The record of the cluster `uid` beside the profile version `target`: it holds only the profile
-/// that `target` replaces, and the record names the ref as `cluster:<uid>/<profile>`.
+/// The record of the cluster `uid` beside the profile version `target`. It holds only the profile
+/// that `target` replaces, and it names the ref as `cluster:<uid>/<profile>`.
 ///
 /// The cluster document shows the profile, so the selection comes after the read. A cluster that
 /// runs no profile that `target` replaces stays whole, because the move adds `target`. With

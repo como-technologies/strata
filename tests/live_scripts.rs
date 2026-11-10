@@ -7208,7 +7208,7 @@ fn loop_sh_stage_9_reads_the_log_of_the_unknown_values_from_a_state_folder_in_th
 }
 
 /// Cluster A runs the release and the add-on. A strata that holds each profile on the cluster side
-/// fails the checks of #615, and a strata that holds the release alone passes them.
+/// fails the checks of #615. A strata that holds the release alone passes them.
 #[test]
 fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_alone() {
     for whole in [false, true] {
