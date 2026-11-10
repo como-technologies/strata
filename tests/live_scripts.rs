@@ -3118,7 +3118,7 @@ fi
 /// files `<id>.out` and `<id>.err` that `check` of `lib.sh` writes in `out`.
 fn failed_outputs(out: &Path, steps: &str) -> String {
     let mut shown = String::new();
-    for id in ids_with(steps, "FAIL") {
+    for id in ids_with(steps, &["FAIL"]) {
         for file in [format!("{id}.out"), format!("{id}.err")] {
             let body = std::fs::read_to_string(out.join(&file)).unwrap_or_default();
             shown.push_str(&format!("---- the failed check {id}: {file}\n{body}"));
@@ -3159,17 +3159,41 @@ fn the_log_of_a_test_shows_the_output_and_the_errors_of_each_check_that_failed()
     );
 }
 
-/// True when `steps` has a line of the check `id` that starts with `verdict`: `PASS` or `FAIL`.
-fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
-    ids_with(steps, verdict).any(|i| i == id)
+/// The words that `check` of `lib.sh` writes at the start of the line of a check in `steps.log`.
+const VERDICTS: [&str; 3] = ["PASS", "FAIL", "SEEN"];
+
+/// The verdict and the id of `line` of a `steps.log`, or `None` when it is not the line of a check.
+fn verdict_and_id(line: &str) -> Option<(&str, &str)> {
+    let mut words = line.split_whitespace();
+    let verdict = words.next().filter(|w| VERDICTS.contains(w))?;
+    Some((verdict, words.next()?))
 }
 
-/// The id of each check in `steps` whose line starts with `verdict`, in the order of the lines.
-fn ids_with<'a>(steps: &'a str, verdict: &'a str) -> impl Iterator<Item = &'a str> {
+/// True when `steps` has a line of the check `id` with `verdict`, one of [`VERDICTS`].
+fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
+    ids_with(steps, &[verdict]).any(|i| i == id)
+}
+
+/// The id of each check in `steps` with one of `verdicts`, in the order of the lines.
+fn ids_with<'a>(steps: &'a str, verdicts: &'a [&str]) -> impl Iterator<Item = &'a str> {
     steps
         .lines()
-        .filter(move |l| l.starts_with(verdict))
-        .filter_map(|l| l.split_whitespace().nth(1))
+        .filter_map(verdict_and_id)
+        .filter(move |(verdict, _)| verdicts.contains(verdict))
+        .map(|(_, id)| id)
+}
+
+/// The ids of the checks in `steps`, in the order that they ran.
+fn check_ids(steps: &str) -> Vec<&str> {
+    ids_with(steps, &VERDICTS).collect()
+}
+
+/// The line of `steps` for the check `id`.
+fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
+    steps
+        .lines()
+        .find(|l| verdict_and_id(l).is_some_and(|(_, i)| i == id))
+        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
 }
 
 /// Each check of `ids` passed.
@@ -3194,6 +3218,15 @@ fn a_verdict_line_matches_its_verdict_and_the_whole_id_of_the_check() {
     assert!(!has_verdict(steps, "PASS", "a"));
     assert!(!has_verdict(steps, "FAIL", "a-b"));
     assert!(!has_verdict(steps, "FAIL", "a-"));
+    // the heading of a stage is not the line of a check, also when its second word is an id
+    let steps = "== stage 1: the checks\n\
+        PASS  a-b      expected 0, got 0\n\
+        SEEN  stage    expected ?, got 2\n";
+    assert_eq!(check_ids(steps), ["a-b", "stage"]);
+    assert_eq!(
+        step_line(steps, "stage"),
+        "SEEN  stage    expected ?, got 2"
+    );
 }
 
 /// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
@@ -3403,8 +3436,8 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
             "limited-message",
         ],
     );
-    for seen in ["limited-code ", "limited-record ", "limited-record-errors "] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["limited-code", "limited-record", "limited-record-errors"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
@@ -3949,13 +3982,8 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
             "sync-del-4",
         ],
     );
-    for seen in [
-        "del-flag ",
-        "del-doc-fields ",
-        "del-verify ",
-        "del-cleared ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["del-flag", "del-doc-fields", "del-verify", "del-cleared"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
     assert!(
@@ -4394,13 +4422,8 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "var-undone",
         ],
     );
-    for seen in [
-        "var-strata ",
-        "var-strata-answer ",
-        "var-none ",
-        "var-default ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["var-strata", "var-strata-answer", "var-none", "var-default"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let variables: Vec<_> = stage
         .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
@@ -5358,14 +5381,14 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         ],
     );
     for seen in [
-        "move-compare ",
-        "move-impact ",
-        "move-palette ",
-        "move-reasons ",
-        "replaced ",
-        "waits ",
+        "move-compare",
+        "move-impact",
+        "move-palette",
+        "move-reasons",
+        "replaced",
+        "waits",
     ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let applies: Vec<&str> = stage
         .tofu_calls()
@@ -7618,7 +7641,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         "repeat-2",
         "repeat-count",
     ] {
-        assert!(steps.contains(&format!("PASS  {id} ")), "{id}:\n{steps}");
+        assert!(has_verdict(&steps, "PASS", id), "{id}:\n{steps}");
     }
     assert!(steps.contains("the issue is o/r#7"), "{steps}");
     // the repeat posts one report twice with one key of 64 hex characters
@@ -7746,8 +7769,7 @@ fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
     );
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
     let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
-    assert!(steps.contains("FAIL  send-1-says "), "{steps}");
-    assert!(steps.contains("FAIL  issue "), "{steps}");
+    failed(&steps, &["send-1-says", "issue"]);
 }
 
 #[test]
@@ -7982,9 +8004,7 @@ fn image_digest_sh_deletes_the_deployment_that_stays_after_the_content_drops_it(
         "the check records its result:\n{steps}"
     );
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("undo-gone") && l.ends_with("got 1")),
+        step_line(&steps, "undo-gone").ends_with("got 1"),
         "the Deployment stayed, so the wait ended with 1:\n{steps}"
     );
     passed(&steps, &["undo-delete", "undo-clean", "undo-baseline"]);
@@ -8800,14 +8820,6 @@ fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_t
     assert_eq!(observer_log(&stage, "kind.log"), "", "no cluster was made");
 }
 
-/// The line of `steps` for the check `id`.
-fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
-    steps
-        .lines()
-        .find(|l| l.split_whitespace().nth(1) == Some(id))
-        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
-}
-
 #[test]
 fn observer_kind_sh_records_what_the_mirror_checks_find_and_judges_none_of_it() {
     // the row holds no digest: the check records 1 and the run still ends with 0
@@ -8871,7 +8883,7 @@ fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in
     stage.env("FAKE_DIE_AT_NODES", "1");
     let (o, steps) = run_kind(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  mirror-registry"), "{steps}");
+    passed(&steps, &["mirror-registry"]);
     assert!(
         !steps.contains("mirror-clean"),
         "the script ended first:\n{steps}"
@@ -9717,7 +9729,7 @@ fn observer_images_sh_undoes_the_run_when_the_script_ends_in_stage_1() {
     stage.env("FAKE_DIE_AFTER_EDIT", "1");
     let (o, steps) = run_images(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  tag-first"), "{steps}");
+    passed(&steps, &["tag-first"]);
     assert!(
         !steps.contains("namespaces"),
         "the script ended first:\n{steps}"
@@ -10479,15 +10491,6 @@ const OBSERVER_CHECKS: [&str; 61] = [
     "undo-baseline",
 ];
 
-/// The ids of the checks in `steps`, in the order that they ran.
-fn check_ids(steps: &str) -> Vec<&str> {
-    steps
-        .lines()
-        .filter(|l| l.starts_with("PASS") || l.starts_with("FAIL") || l.starts_with("SEEN"))
-        .filter_map(|l| l.split_whitespace().nth(1))
-        .collect()
-}
-
 #[test]
 fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     let stage = observer_stage();
@@ -10970,11 +10973,10 @@ fn observer_sh_records_what_palette_did_to_the_machines_without_judging_it() {
     stage.env("FAKE_REPAVE", "1");
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "no-repave");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("no-repave") && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     let said = std::fs::read_to_string(stage.path("out/no-repave.out")).unwrap();
     assert!(
@@ -10990,11 +10992,10 @@ fn observer_sh_records_a_counter_that_does_not_build_fails_the_count_of_the_clic
     let (o, steps) = run_observer(&stage, &[]);
     // the count of a cycle only records a result, but the count of a click judges one
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "requests-counted");
     assert!(
-        steps.lines().any(|l| l.starts_with("SEEN")
-            && l.contains("requests-counted ")
-            && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     failed(&steps, &["ask-one-post"]);
     passed(
@@ -11642,10 +11643,9 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
     assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
+    let line = step_line(&steps, "role-audits");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("role-audits") && l.ends_with("got 1")),
+        line.starts_with("SEEN") && line.ends_with("got 1"),
         "a refusal is recorded as a failed request:\n{steps}"
     );
     passed(
@@ -11752,10 +11752,9 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
         let (o, steps) = stage.run("observer-role.sh", &[]);
         assert_eq!(o.status.code(), Some(0), "{status}:\n{steps}");
         passed(&steps, &["control-validate-packs"]);
+        let line = step_line(&steps, "role-validate-packs");
         assert!(
-            steps.lines().any(|l| l.starts_with("SEEN")
-                && l.contains("role-validate-packs")
-                && l.ends_with("got 1")),
+            line.starts_with("SEEN") && line.ends_with("got 1"),
             "a refusal is recorded as a failed request:\n{steps}"
         );
         let said = std::fs::read_to_string(stage.path("out/role-validate-packs.out")).unwrap();
