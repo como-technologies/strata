@@ -7254,7 +7254,12 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         r#"{"paletteValidation":{"accepts":true,"errors":[]}}"#,
     );
     // the comment of the pull request snapshots each ref once, and compares the files with the
-    // question for Palette
+    // question for Palette. Strata first names the ref that a comparison reads for the cluster
+    stage.strata(
+        "compare */ref1.json cluster:c-a/r-1 --format json",
+        1,
+        r#"{"b":{"ref":"cluster:c-a/r-1"}}"#,
+    );
     stage.strata(
         "snapshot cluster:c-a/r-1 -o *",
         0,
@@ -7351,6 +7356,16 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
         "{note}"
     );
+    // the comment records the cluster side by the ref that strata names for it
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    let at = |start: &str, end: &str| {
+        calls
+            .lines()
+            .position(|l| l.starts_with(start) && l.ends_with(end))
+    };
+    let side = at("compare ", " cluster:c-a/r-1 --format json");
+    let record = at("snapshot cluster:c-a/r-1 -o ", "ref0.json");
+    assert!(side.zip(record).is_some_and(|(s, r)| s < r), "{calls}");
     // the pull request gets the report under the marker of its own
     let report = std::fs::read_to_string(stage.path("out/preflight-comment.md")).unwrap();
     assert!(

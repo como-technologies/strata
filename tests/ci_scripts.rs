@@ -1092,6 +1092,9 @@ esac
 /// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot.
 /// A live ref needs no Palette. Everything else goes to the real binary.
 ///
+/// A `compare` of a file and a live cluster ref answers with the cluster side alone: its `ref` is
+/// `FAKE_CLUSTER_SIDE`, the ref that the comparison reads.
+///
 /// `compare --repave` is the one question that needs Palette. The real binary decides which pair
 /// the question applies to, and it does so before any request. The stand-in asks it with a Palette
 /// that nothing listens at, and passes on its refusal of the pair as strata prints it. For any
@@ -1105,6 +1108,10 @@ echo "$*" >> "$FAKE_STRATA_LOG"
 if [ "$1" = snapshot ]; then
   cp "$FAKE_STRATA_SNAPSHOT" "$4"
   exit 0
+fi
+if [ "$1" = compare ] && [[ $3 == cluster:* ]]; then
+  echo "{\"b\":{\"ref\":\"$FAKE_CLUSTER_SIDE\"}}"
+  exit 1
 fi
 if [ "$1" = compare ] && [[ " $* " == *" --repave "* ]]; then
   if [ -n "${FAKE_REPAVE_FAIL:-}" ]; then echo "strata: Palette gave no answer" >&2; exit 2; fi
@@ -1531,6 +1538,69 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
     assert!(
         h.saved_body()
             .contains("### lab-profile@1.3.0 → lab-profile@1.2.0")
+    );
+}
+
+/// A live cluster ref with no profile holds only the profile of the other side in `compare`
+/// (#615). The record of the whole cluster would give a line for each pack of the other profiles,
+/// so the script records the ref that strata names for the cluster side.
+#[test]
+fn pr_comment_records_a_live_cluster_ref_as_compare_reads_it_beside_the_other_side() {
+    let h = host();
+    let log = h.strata_log();
+    for (a, b) in [
+        ("cluster:payments", "lab-profile@1.3.0"),
+        ("lab-profile@1.3.0", "cluster:payments"),
+    ] {
+        std::fs::write(&log, "").unwrap();
+        let o = h.run_with(
+            &[a, b, "--dry-run"],
+            &[
+                ("STRATA_BIN", h.bin.join("fake-strata").to_str().unwrap()),
+                ("FAKE_STRATA_SNAPSHOT", &h.a),
+                ("FAKE_STRATA_LOG", log.to_str().unwrap()),
+                ("FAKE_CLUSTER_SIDE", "cluster:payments/lab-profile"),
+            ],
+        );
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        let calls = lines_of(&log);
+        let reads: Vec<&str> = calls
+            .iter()
+            .filter(|c| c.starts_with("snapshot ") || c.contains(" cluster:payments "))
+            .map(|c| c.split(" -o ").next().unwrap_or(c))
+            .collect();
+        // the other side first, then the question of the cluster side, then its record
+        assert_eq!(reads.len(), 3, "{calls:?}");
+        assert_eq!(reads[0], "snapshot lab-profile@1.3.0", "{calls:?}");
+        assert!(
+            reads[1].starts_with("compare ")
+                && reads[1].ends_with(" cluster:payments --format json"),
+            "{calls:?}"
+        );
+        assert_eq!(
+            reads[2], "snapshot cluster:payments/lab-profile",
+            "{calls:?}"
+        );
+    }
+    // two clusters stay whole, so the script asks nothing more
+    std::fs::write(&log, "").unwrap();
+    let o = h.run_with(
+        &["cluster:payments", "cluster:search", "--dry-run"],
+        &[
+            ("STRATA_BIN", h.bin.join("fake-strata").to_str().unwrap()),
+            ("FAKE_STRATA_SNAPSHOT", &h.a),
+            ("FAKE_STRATA_LOG", log.to_str().unwrap()),
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let snapshots: Vec<String> = lines_of(&log)
+        .into_iter()
+        .filter(|c| c.starts_with("snapshot "))
+        .collect();
+    assert_eq!(snapshots.len(), 2, "{snapshots:?}");
+    assert!(
+        snapshots[0].starts_with("snapshot cluster:payments -o "),
+        "{snapshots:?}"
     );
 }
 
