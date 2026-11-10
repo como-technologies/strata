@@ -260,7 +260,9 @@ func TestTheWaitAddsZeroToTenPercent(t *testing.T) {
 // keeps the processes at its size.
 func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *testing.T) {
 	r, w := withBehind(t)
-	w.delay = 5 * time.Millisecond
+	// The first process waits for a second one, so the two cycles overlap with no race against the delay.
+	// The delay lets more processes run together than the pool lets, when the pool is wrong.
+	w.overlap = &testkit.Overlap{Delay: 5 * time.Millisecond, Hold: 2}
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = time.Hour, time.Hour
 	o := New(r.cfg, w, slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -274,13 +276,14 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *t
 	if w.count(runner.CmdVerify) != 1 || w.count(runner.CmdBehind) != 1 {
 		t.Errorf("verify %d, behind %d", w.count(runner.CmdVerify), w.count(runner.CmdBehind))
 	}
-	if w.maxActive < 2 || w.maxActive > defaultProcesses {
-		t.Errorf("%d processes ran at once, want from 2 to %d", w.maxActive, defaultProcesses)
+	if most := w.overlap.Most(); most < 2 || most > defaultProcesses {
+		t.Errorf("%d processes ran at once, want from 2 to %d", most, defaultProcesses)
 	}
 }
 
 func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	r, w := withBehind(t)
+	w.overlap = &testkit.Overlap{}
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = 20*time.Millisecond, 30*time.Millisecond
 	o := New(r.cfg, w, slog.New(slog.DiscardHandler))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -289,8 +292,8 @@ func TestTheTimersRunAgainAfterTheirWait(t *testing.T) {
 	testkit.WaitFor(t, "three cycles of each timer", func() bool { return w.count(runner.CmdVerify) >= 3 && w.count(runner.CmdBehind) >= 3 })
 	cancel()
 	<-done
-	if w.maxActive > defaultProcesses {
-		t.Errorf("%d processes ran at once, and the pool has %d", w.maxActive, defaultProcesses)
+	if most := w.overlap.Most(); most > defaultProcesses {
+		t.Errorf("%d processes ran at once, and the pool has %d", most, defaultProcesses)
 	}
 }
 
@@ -331,16 +334,26 @@ func TestASnapshotWritesOnlyIntoTheDirectoryOfTheCycle(t *testing.T) {
 	}
 }
 
-// gatedStrata holds each `behind` until the test opens the gate, and lets each other command run.
+// gatedStrata holds each `behind` at the gate, and lets each other command run. A send on gate lets one
+// `behind` go, and a close of gate lets each one go. So a test can hold a versions cycle while it runs.
+// waiting gets a token when a `behind` comes to the gate. A token that waits there already is enough.
 type gatedStrata struct {
 	Strata
 	gate    chan struct{}
 	waiting chan struct{}
 }
 
+// gated makes a gatedStrata in front of s, with its gate shut.
+func gated(s Strata) *gatedStrata {
+	return &gatedStrata{Strata: s, gate: make(chan struct{}), waiting: make(chan struct{}, 1)}
+}
+
 func (g *gatedStrata) Run(ctx context.Context, dir string, args ...string) (runner.Result, error) {
 	if args[0] == runner.CmdBehind {
-		g.waiting <- struct{}{}
+		select {
+		case g.waiting <- struct{}{}:
+		default:
+		}
 		select {
 		case <-g.gate:
 		case <-ctx.Done():
@@ -355,7 +368,7 @@ func (g *gatedStrata) Run(ctx context.Context, dir string, args ...string) (runn
 // a line for the start and the end of each cycle, with the number of processes.
 func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.T) {
 	r, w := withBehind(t)
-	g := &gatedStrata{Strata: w, gate: make(chan struct{}), waiting: make(chan struct{}, 1)}
+	g := gated(w)
 	o := r.observer(g)
 	ctx := context.Background()
 	versions := make(chan error, 1)

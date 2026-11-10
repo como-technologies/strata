@@ -89,7 +89,7 @@ func StartServer(t *testing.T, serve func(ctx context.Context, log io.Writer) in
 		select {
 		case c := <-code:
 			return c
-		case <-time.After(10 * time.Second):
+		case <-time.After(WaitLimit):
 			t.Fatal("the server did not stop")
 			return -1
 		}

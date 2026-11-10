@@ -580,7 +580,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	}
 	select {
 	case <-answered:
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.WaitLimit):
 		t.Error("the detail request did not end")
 	}
 }

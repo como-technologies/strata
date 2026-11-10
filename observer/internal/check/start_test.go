@@ -47,9 +47,11 @@ func running(t *testing.T, o *Observer) (advance func(time.Duration), stop func(
 func TestStartCycleWaitsAMinuteAfterAnEndThenStartsACycleAndJoinsARunningOne(t *testing.T) {
 	r, w := withBehind(t)
 	r.cfg.ContentEvery, r.cfg.VersionsEvery = time.Hour, time.Hour
-	w.delay = 20 * time.Millisecond
-	o := r.observer(w)
+	g := gated(w)
+	o := r.observer(g)
 	advance, _ := running(t, o)
+	<-g.waiting
+	g.gate <- struct{}{} // the `behind` of the first versions cycle
 	testkit.WaitFor(t, "the first cycle of each kind", func() bool {
 		s := o.Summary()
 		return s.Content.CheckedAt != nil && s.Versions.ReadAt != nil
@@ -71,13 +73,13 @@ func TestStartCycleWaitsAMinuteAfterAnEndThenStartsACycleAndJoinsARunningOne(t *
 	if start, _ := o.StartCycle(cycleVersions); start.State != model.StartStarted {
 		t.Fatalf("versions: %+v", start)
 	}
-	testkit.WaitFor(t, "the versions cycle of the click", func() bool { return o.Summary().Versions.Running != nil })
+	// The gate holds the versions cycle of the click at its `behind`, so the cycle runs until the end of
+	// the test. A wait for its progress can miss a cycle that ends between two reads.
+	<-g.waiting
 	if start, _ := o.StartCycle(cycleVersions); start.State != model.StartRunning {
 		t.Fatalf("a click while the cycle runs: %+v", start)
 	}
-	testkit.WaitFor(t, "the end of the versions cycle", func() bool {
-		return w.count(runner.CmdBehind) == 2 && o.Summary().Versions.Running == nil
-	})
+	// The loop takes a token only before a cycle and after it, so a token of the click stays here.
 	if n := len(o.kicks[cycleVersions]); n != 0 {
 		t.Errorf("the click that joined left %d tokens", n)
 	}

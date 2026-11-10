@@ -1,6 +1,6 @@
 // Package testkit holds the helpers that the tests of more than one package of the observer use:
-// a script that stands for the strata binary, a gzip file, a cluster read, and the documents that
-// the commands promise. Only test files import it.
+// a script that stands for the strata binary, a gzip file, a cluster read, the documents that the
+// commands promise, a wait, and a count of the calls that run at one time. Only test files import it.
 package testkit
 
 import (
@@ -97,11 +97,14 @@ func OutFile(args []string) (string, error) {
 	return args[i+1], nil
 }
 
-// WaitFor calls ready every 20 ms until it is true, and fails the test after 10 seconds. what names
+// WaitLimit is the longest time that a test waits for an event.
+const WaitLimit = 10 * time.Second
+
+// WaitFor calls ready every 20 ms until it is true, and fails the test after WaitLimit. what names
 // the event for the message of the failure.
 func WaitFor(t *testing.T, what string, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(WaitLimit)
 	for !ready() {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s did not happen", what)
