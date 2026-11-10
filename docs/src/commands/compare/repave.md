@@ -59,6 +59,12 @@ its nodes. The table takes that result: a new pack reference at one version
 does not repave. See
 [A pack that moves between registries](../../internals/palette/packs.md#a-pack-that-moves-between-registries).
 
+The report compares the version with the profile of the cluster that the version
+replaces, and not with each profile of the cluster. The request to Palette names
+each profile that the cluster runs, and the version in the place of that one.
+See
+[Compare a profile version with a cluster](clusters.md#compare-a-profile-version-with-a-cluster).
+
 `--repave` costs two requests, the cluster document and one `POST` to
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
 changes nothing: the cluster keeps its instances.

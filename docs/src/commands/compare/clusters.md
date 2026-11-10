@@ -1,8 +1,9 @@
 # Two clusters
 
-Two cluster records, a cluster against the update that waits for it, or a
-cluster group against a member. [strata compare](../compare.md) gives the
-other questions, the notes, what to expect, and the options.
+Two cluster records, a cluster against the update that waits for it, a profile
+version against a cluster that runs many profiles, or a cluster group against a
+member. [strata compare](../compare.md) gives the other questions, the notes,
+what to expect, and the options.
 
 ## Compare two clusters by more than the release
 
@@ -41,6 +42,44 @@ update:
 
 See [Ask about the update that waits](repave.md#ask-about-the-update-that-waits).
 
+## Compare a profile version with a cluster
+
+A cluster can run many profiles, such as a cluster profile and the add-on
+profiles of each team. One side can be one version of a cluster profile, and
+the other a `cluster:` ref that selects no profile. Then the cluster side holds
+only the profile that the version replaces. The question is whether the cluster
+runs the version, and not what else it runs. Here `payments` runs four
+profiles, and the record holds `aws-stack@1.1.0`:
+
+```text
+{{#include ../../output/cluster-identical.txt}}
+```
+
+Exit `0`: the cluster runs the release. The comparison reads `cluster:payments`
+as `cluster:payments/aws-stack`. `--json` names that ref in `source.ref` of the
+cluster side, here `b.ref`:
+
+```text
+{{#include ../../output/cluster-many-profiles.txt}}
+```
+
+The version replaces the profile that has its uid, else the profile that has its
+name. A version of another name that builds a cluster replaces the profile that
+builds the cluster. `--repave` and `--validate` send this move to Palette. So
+the report and the answer of Palette are about the same profile. The other
+profiles give no `ADDED` and no `REMOVED` line:
+
+```text
+{{#include ../../output/cluster-move-asks.txt}}
+```
+
+The version of an add-on that the cluster does not run replaces no profile,
+because the move adds it. Then the cluster side holds each profile of the
+cluster. A `cluster:<cluster>/<profile>` ref keeps its own selection, and two
+clusters stay whole. To compare each profile of a cluster, compare two records
+of the cluster. See
+[A cluster does not run its release](../../use-cases/cluster-release.md).
+
 ## Compare a cluster group with a member
 
 When one side is a cluster group and the other is a `cluster:` ref that selects
@@ -52,7 +91,7 @@ question is whether the member runs the pin, and not what else it runs:
 ```
 
 `tenant-a` runs one more profile of its own, and the comparison omits it.
-A `cluster:<cluster>/<profile>` ref is not narrowed. See
+A `cluster:<cluster>/<profile>` ref keeps its own selection. See
 [A cluster group pins a profile](../../use-cases/cluster-groups.md).
 
 The tiers of a group hold what the group gives its virtual clusters, so

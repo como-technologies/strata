@@ -254,7 +254,10 @@ A comparison of two sides, `a` and `b`.
 - `legend`: the flags, each `status`, each `op`, and each impact level, in
   words.
 - `a` and `b`: the `source` block of each side, as
-  [strata-snapshot/1](#strata-snapshot1) gives it.
+  [strata-snapshot/1](#strata-snapshot1) gives it. A `cluster:` ref that selects
+  no profile can hold only the profiles that the other side asks about. Then
+  `ref` names them, as `cluster:<cluster>/<profile>`: see
+  [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
   manifest packs and the tag names of the same builds. The variables and the
