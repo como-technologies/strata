@@ -97,14 +97,14 @@ func OutFile(args []string) (string, error) {
 	return args[i+1], nil
 }
 
-// waitLimit is the longest time that a test waits for an event.
-const waitLimit = 10 * time.Second
+// WaitLimit is the longest time that a test waits for an event.
+const WaitLimit = 10 * time.Second
 
-// WaitFor calls ready every 20 ms until it is true, and fails the test after 10 seconds. what names
+// WaitFor calls ready every 20 ms until it is true, and fails the test after WaitLimit. what names
 // the event for the message of the failure.
 func WaitFor(t *testing.T, what string, ready func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(waitLimit)
+	deadline := time.Now().Add(WaitLimit)
 	for !ready() {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s did not happen", what)

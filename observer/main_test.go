@@ -246,7 +246,7 @@ func startServe(t *testing.T, args []string, addr string) (stop func() int, stde
 	code := make(chan int, 1)
 	go func() { code <- runContext(ctx, args, io.Discard, stderr) }()
 	t.Cleanup(cancel)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(testkit.WaitLimit)
 	for {
 		if run([]string{"health", "--listen", addr}, io.Discard, io.Discard) == 0 {
 			break
@@ -266,7 +266,7 @@ func startServe(t *testing.T, args []string, addr string) (stop func() int, stde
 		select {
 		case c := <-code:
 			return c
-		case <-time.After(10 * time.Second):
+		case <-time.After(testkit.WaitLimit):
 			t.Fatal("serve did not stop")
 			return -1
 		}
@@ -471,7 +471,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	}
 	select {
 	case <-answered:
-	case <-time.After(10 * time.Second):
+	case <-time.After(testkit.WaitLimit):
 		t.Error("the detail request did not end")
 	}
 }

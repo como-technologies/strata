@@ -11,7 +11,7 @@ import (
 type Overlap struct {
 	// Delay makes each call take this time, so that calls that can run together do.
 	Delay time.Duration
-	// Hold makes each call wait until this many calls ran at one time, for 10 seconds at most. A test
+	// Hold makes each call wait until this many calls ran at one time, for WaitLimit at most. A test
 	// that must see calls run together sets it, so that its count does not depend on a delay.
 	Hold int
 
@@ -26,7 +26,7 @@ func (o *Overlap) Start(ctx context.Context) (end func()) {
 	o.active++
 	o.most = max(o.most, o.active)
 	o.mu.Unlock()
-	deadline := time.Now().Add(waitLimit)
+	deadline := time.Now().Add(WaitLimit)
 	for o.Most() < o.Hold && ctx.Err() == nil && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
