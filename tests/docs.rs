@@ -1450,6 +1450,10 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
         "record-a-project",
         "record-b-project",
         "same-release-projects",
+        "versions-tenant",
+        "versions-project",
+        "behind-profile",
+        "behind-profile-names",
     ] {
         let row = page
             .lines()
