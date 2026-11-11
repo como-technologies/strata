@@ -1705,8 +1705,8 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 /// The names that build the adapter: its recipe and its package.
 const ADAPTER_NAMES: [&str; 2] = ["adapter-test", "strata-knurl"];
 
-/// A job of knurl tests the adapter, so no workflow or action of strata runs it. A failure of it
-/// blocks no merge and no release of strata.
+/// No job of CI builds or tests the adapter, so no workflow or action of strata runs it. A failure
+/// of it blocks no merge and no release of strata.
 ///
 /// No recipe of a job that `Gate` needs builds the adapter. The test reads the `just` commands of
 /// each such job, of each workflow that the job calls, and of each action that a step uses. Then
@@ -1759,27 +1759,35 @@ fn no_workflow_or_action_of_strata_and_no_recipe_of_a_job_that_the_gate_needs_ru
     }
 }
 
-/// The page of the adapter names the job of knurl, the events that start it, and what a failure
-/// of it means. It names no secret of strata, because strata has none for knurl.
+/// The page of the adapter says that no job of CI builds or tests the adapter. It names no job of
+/// knurl, no workflow, and no schedule. It names no secret of strata, because strata has none for
+/// knurl.
 #[test]
-fn the_page_of_the_adapter_names_the_job_of_knurl_and_what_a_failure_means() {
-    let page = repo_file("docs/src/automation/knurl.md");
-    let (_, job) = page
-        .split_once("\n### The job of knurl\n")
-        .expect("the page has the section The job of knurl");
+fn the_page_of_the_adapter_says_that_no_job_of_ci_tests_it_and_names_no_job_of_knurl() {
+    let page = one_line(&repo_file("docs/src/automation/knurl.md"));
+    let (_, test) = page
+        .split_once(" ## Test it ")
+        .expect("the page has the section Test it");
     for words in [
-        "`strata adapter`",
-        "`.github/workflows/strata-adapter.yml`",
-        "06:17 UTC",
-        "`strata-ref`",
-        "no credential",
-        "blocks no merge",
+        "No job of CI builds or tests the adapter.",
+        "`just adapter-test` runs on a machine that can read knurl.",
     ] {
-        assert!(
-            one_line(job).contains(words),
-            "the section does not say {words}"
-        );
+        assert!(test.contains(words), "the section does not say {words}");
     }
+    let lower = page.to_lowercase();
+    for words in [
+        "strata-adapter.yml",
+        "workflow",
+        "job of knurl",
+        "schedule",
+        "each day",
+    ] {
+        assert!(!lower.contains(words), "the page names {words}");
+    }
+    assert!(
+        !page.contains("UTC"),
+        "the page names the time of a schedule"
+    );
     assert!(
         !page.contains("KNURL_"),
         "the page names a secret of strata"
