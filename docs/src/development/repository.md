@@ -26,6 +26,7 @@ own.
 | `scripts/ci/` | The scripts that a pipeline runs. |
 | `scripts/dev/` | The scripts that a maintainer runs. |
 | `.github/workflows/` | CI, the release, and the workflows that other repositories call. |
+| `.github/ISSUE_TEMPLATE/` | The issue template for [a finding from a real pipeline](./real-pipelines.md). |
 
 A release carries the binaries `strata` and `strata-preflight`, the image of
 the observer, and the scripts for a pipeline from `scripts/ci/`. The other

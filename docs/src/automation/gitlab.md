@@ -104,6 +104,9 @@ repository at the tag and runs what `scripts/` holds there: at `v0.5.0`, the
 comment and the report alone. The installer
 itself is a release file: the pipeline downloads it first.
 
+The drop-in downloads the installer from the page of the release. The
+repository is public, so the job needs no token of strata.
+
 [Install](../install.md#one-command) lists the options of the installer.
 [Check the signature](../install.md#check-the-signature) gives the identity that
 the signature must have. The image of the drop-in has no `cosign`, so its job

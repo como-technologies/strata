@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The public repository (#65): a reader with no login opens the book, installs a release, and pulls
-# the image and the chart of the observer. The repository shows a description, topics, and the
-# private advisory form.
+# the image and the chart of the observer. A job of the GitLab drop-in installs its release with no
+# token (#483). The repository shows a description, topics, and the private advisory form.
 #
 #   examples/live/public.sh
 #
@@ -57,6 +57,28 @@ install_no_token() {
 $command"
 }
 
+# gitlab_install_no_token: the lines of the template .strata of the GitLab drop-in, as a job runs
+# them, with no token (#483). They install the STRATA_VERSION of the drop-in from REPO. The lines of
+# apt-get need the image of the job, so the check omits them. Then the job runs STRATA_BIN.
+gitlab_install_no_token() {
+  local drop_in=$live/../ci/gitlab/strata.yml lines version
+  version=$(sed -n 's/^  STRATA_VERSION: //p' "$drop_in")
+  lines=$(awk '/^\.strata:$/ { job = 1; next }
+    job && /^[^ ]/ { exit }
+    job && /^  before_script:$/ { steps = 1; next }
+    steps && /^  [^ ]/ { exit }
+    steps && /^    - \|$/ { next }
+    steps && /^    - / { sub(/^    - /, ""); if ($0 !~ /^apt-get /) print; next }
+    steps { sub(/^      /, ""); print }' "$drop_in")
+  [ -n "$version" ] && [ -n "$lines" ] || { echo "the drop-in has no STRATA_VERSION or no .strata" >&2; return 1; }
+  echo "$lines"
+  mkdir -p "$run/gitlab"
+  (cd "$run/gitlab" && env -u STRATA_TOKEN -u GITHUB_TOKEN -u GH_TOKEN \
+    STRATA_REPO="$repo" STRATA_VERSION="$version" CI_PROJECT_DIR="$run/gitlab" \
+    bash -eo pipefail -c "$lines
+\"\$STRATA_BIN\" --version")
+}
+
 # anonymous_manifest NAME TAG: the registry gives the manifest of NAME:TAG for an anonymous token,
 # as a pull with no login asks for it. A private package refuses the read.
 anonymous_manifest() {
@@ -74,6 +96,8 @@ check install-no-token 0 '#65: the install command of the README, as it is, inst
   install_no_token
 check install-runs 0 '#65: the two binaries of the install run' -- \
   bash -c "'$run/bin/strata' --version && '$run/bin/strata-preflight' --version"
+check gitlab-install-no-token 0 '#483: the install lines of the GitLab drop-in install its STRATA_VERSION with no token, and the binary runs' -- \
+  gitlab_install_no_token
 tag=$(sed -n 's/^strata \(.*\)$/v\1/p' install-runs.out | head -n 1)
 check image-no-login 0 '#65: the registry gives the image of the observer of that release with no login' -- \
   anonymous_manifest "$owner/strata-observer" "$tag"
