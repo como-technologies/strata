@@ -6254,12 +6254,16 @@ fn projects_sh_copies_the_release_into_the_second_project_and_checks_each_side()
             "copy-delete",
         ],
     );
+    assert!(has_verdict(&steps, "SEEN", "other-project-read"), "{steps}");
     assert_eq!(o.status.code(), Some(0), "{steps}");
 
     // the source is read in the lab project, and the copy goes to the second project
     let sent = |request: &str| std::fs::read_to_string(stage.path(request)).unwrap();
     let read = sent("routes/sent/GET_v1_clusterprofiles_r-1.request");
     assert!(read.contains("ProjectUid: p-1"), "{read}");
+    // the read that the check records asks for the copy in the lab project
+    let other = sent("routes/sent/GET_v1_clusterprofiles_c-1.request");
+    assert!(other.contains("ProjectUid: p-1"), "{other}");
     for request in [
         "routes/sent/POST_v1_clusterprofiles.request",
         "routes/sent/PATCH_v1_clusterprofiles_c-1_publish.request",

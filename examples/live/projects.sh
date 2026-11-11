@@ -90,6 +90,11 @@ check compare-projects 0 '#486: compare with a project for each side names each 
 check records-same 0 '#486: same-release of the two records passes, with no request' -- \
   "$strata" same-release a.json b.json
 
+echo "== what Palette answers in the other project" | tee -a steps.log
+# the status and the error code of the answer go to other-project-read.out; the check records them
+check other-project-read ? '#486: a GET of the copy with the ProjectUid of the lab project: the status and the error code' -- \
+  "$live/api.sh" get-status "/v1/clusterprofiles/$T"
+
 echo "== the copy goes" | tee -a steps.log
 check copy-delete 0 "#486: delete the copy $T in the second project" -- \
   env PALETTE_PROJECT_UID="$B" "$live/api.sh" delete "$T"

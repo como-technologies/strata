@@ -560,6 +560,7 @@ it deletes the copy at its end. It deletes no project. This is the source for
 | `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. No result yet: the live window of wave 16 runs it. |
 | `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. No result yet: the live window of wave 16 runs it. |
 | `records-same` | 0 | #486: `same-release` of the two record files passes. No result yet: the live window of wave 16 runs it. |
+| `other-project-read` | ? | #486: what Palette answers to a `GET` of the copy with the `ProjectUid` of the lab project. `other-project-read.out` holds the status and the error code, and the check records them. No result yet: the live window of wave 16 runs it. |
 | `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. No result yet: the live window of wave 16 runs it. |
 
 ## release.sh
