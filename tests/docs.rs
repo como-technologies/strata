@@ -1460,6 +1460,22 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
         "download-archive-<name>",
         "download-no-archive",
         "download-accepts-json",
+        "cidr-overlap",
+        "cidr-overlap-says",
+        "cidr-overlap-body",
+        "cidr-overlap-status",
+        "cidr-overlap-code",
+        "download-chart-reason",
+        "download-limit",
+        "behind-carrier",
+        "behind-profile-move",
+        "compare-profile-move",
+        "behind-profile-move-says",
+        "no-pull-secret",
+        "registry-no-login",
+        "sync-no-login",
+        "chart-no-login",
+        "registry-gone",
     ] {
         let row = page
             .lines()
