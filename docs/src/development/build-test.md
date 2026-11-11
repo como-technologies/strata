@@ -649,9 +649,9 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-CI does not run `just adapter-test`. The adapter needs knurl, a private
-repository, and CI has no key for it: see
-[The knurl adapter](../automation/knurl.md#test-it).
+The checks do not run `just adapter-test`. The adapter needs knurl, a private
+repository. A job of knurl runs the recipe each day on the strata of `main`: see
+[The job of knurl](../automation/knurl.md#the-job-of-knurl).
 
 `ci` adds three jobs of its own. `deny list` scans each tracked file and its
 path for the names that the public tree must not hold: see
@@ -702,10 +702,11 @@ When the shared `target/` already holds such a build, `cargo clean` removes it.
 
 ### The deny list
 
-The repository is public, so a name in a tracked file or in its path is public.
-The job `deny list` of the `ci` workflow scans the text and the path of each
-tracked file for each entry of a deny list. The list holds the names that the
-tree must not hold. The notes of the lead give its classes. The job runs on each
+The repository is public, so a name in a tracked file, in its path, or in the
+target of a tracked symlink is public. The job `deny list` of the `ci` workflow
+scans the text and the path of each tracked file for each entry of a deny list.
+It also scans the target of each tracked symlink. The list holds the names that
+the tree must not hold. The notes of the lead give its classes. The job runs on each
 push to `main` and on each pull request.
 
 The list is the secret `STEP14_DENY` of the repository, with one entry on each
@@ -722,10 +723,14 @@ The recipe runs `scripts/dev/deny-list.sh`. The script:
 - removes the spaces at the two ends of an entry, also a carriage return;
 - matches each entry as a fixed string, with no difference of case, in the text
   and in the path of each tracked file;
+- reads the target of each tracked symlink, which `git grep` does not read, and
+  matches it with the same rules;
+- counts a symlink whose target holds an entry as a path that holds one;
 - prints the number of tracked files that it scans;
 - prints the path and the line number of each hit in a text, or the path alone
   for a hit in a binary file;
-- prints the number of tracked paths that hold an entry, and no such path.
+- prints the number of tracked paths that hold an entry, and no such path or
+  target.
 
 A path that holds an entry is a hit, and the log must not show it. For a hit in
 the text of such a file, the script prints `<a path that holds an entry>` in
@@ -737,7 +742,8 @@ line. It does not read the commit messages or the body of a pull request.
 | --- | --- |
 | An entry in the text of a tracked file | Fails. GitHub skips `Gate`, so the verify of a pull request cannot pass. On `main`, `publish the book` does not run. |
 | An entry in a tracked path | Fails in the same way, and gives the number of such paths. |
-| No entry in a tracked file or path | Passes. |
+| An entry in the target of a tracked symlink | Fails in the same way, and counts the symlink as a path that holds an entry. |
+| No entry in a tracked file, a tracked path, or the target of a tracked symlink | Passes. |
 | A list with no entry | Gives a notice that it did not scan, and passes. |
 
 The list has no entry before the owner sets the secret. It also has no entry on
@@ -753,6 +759,15 @@ finds each such path with the same match:
 
 ```bash
 git ls-files -z | grep --null-data -F -i -f <file of the list> | tr '\0' '\n'
+```
+
+That match does not read the target of a symlink. This loop finds each tracked
+symlink whose target holds an entry:
+
+```bash
+git ls-files -s | grep '^120000' | cut -f2- | while IFS= read -r link; do
+  git cat-file blob ":$link" | grep -q -F -i -f <file of the list> && echo "$link"
+done
 ```
 
 When the job finds a hit, replace the name with a made-up name, in the text or
