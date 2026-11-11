@@ -47,7 +47,7 @@ func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *test
 	r := newRig(t)
 	strata := &fakeStrata{dir: r.fixtures}
 	r.cycled(strata)
-	// Each process takes 20 ms, so that two processes that are allowed to overlap do overlap.
+	// Each process takes 20 ms. So when the code lets two processes run together, they overlap.
 	slow := &countingStrata{fakeStrata: strata, overlap: testkit.Overlap{Delay: 20 * time.Millisecond}}
 	h := handlerOf(r.cycled(slow))
 	var wg sync.WaitGroup
