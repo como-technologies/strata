@@ -111,6 +111,22 @@ fn one_or_two_numbers_and_a_tail_of_text_are_a_pre_release_below_each_pre_releas
     ascending(&["1.develop", "1.0.develop", "1.0.0.develop"]);
     ascending(&["1.2.beta", "1.2.develop", "1.2.x", "1.2.0.develop"]);
     ascending(&["1.2.develop", "1.2.develop.2", "1.2.0.1"]);
+    // text right after the last number is below a tail after a dot, as the crate orders it
+    ascending(&["1rc1", "1.develop", "1.0rc1", "1.0.develop"]);
+    ascending(&[
+        "1.1.10",
+        "1.2beta1",
+        "1.2rc1",
+        "1.2rc2",
+        "1.2rc10",
+        "1.2.beta",
+        "1.2.develop",
+    ]);
+    ascending(&["1.2rc1", "1.2rc1-1", "1.2.rc1"]);
+    eq("1.2rc1+5", "1.2rc1");
+    // a part of digits and other text is a text, so `1.2a1b` holds one number, and `1a1b` none
+    ascending(&["0.9.0", "1.2a1b", "1.develop", "1.0.0"]);
+    ascending(&["1a1b", "develop", "0.0.1"]);
     // the rules of Palette stay: a missing number is `0`, and a `v` in front does not count
     gt("1.2", "1.2.develop");
     gt("1", "1.develop");
@@ -166,15 +182,31 @@ fn a_tail_of_text_after_three_numbers_is_below_each_pre_release_of_them() {
         "1.1.8.develop.10",
     ]);
     eq("1.1.8.develop", "1.1.8.develop");
+    // a tail drops its build data, and its pre-release starts at the first `-`
+    eq("1.1.8.develop+5", "1.1.8.develop");
+    ascending(&["1.1.8.develop", "1.1.8.develop-rc1", "1.1.8.develop.1"]);
+    // a part of digits and other text is a text
+    ascending(&["1.2.2", "1.2.3.4a1b", "1.2.3.develop", "1.2.3-0"]);
     // text right after the numbers is a tail of text too. The crate gives these no total order.
     ascending(&["1.2.2", "1.2.3rc1", "1.2.3-0", "1.2.3"]);
     ascending(&["0.9.9", "1.0.0-a_b", "1.0.0-0", "1.0.0"]);
 }
 
 /// Text before the three numbers, as in `chart-1.2.3`: Palette finds the numbers at any place,
-/// so strata orders the string by them. It is below each other form with these numbers.
+/// so strata orders the string by them. It is below each other form with these numbers. Issue
+/// #714: the natural order of the text before the numbers decides, and then the rest. Strata
+/// ordered the whole text by the natural order.
 #[test]
 fn text_before_three_numbers_reads_as_the_numbers_as_in_palette() {
+    ascending(&[
+        "chart-1.2.3.develop",
+        "chart-1.2.3-alpha",
+        "chart-1.2.3-rc.1",
+        "chart-1.2.3",
+        "chart-1.2.3.1",
+    ]);
+    eq("chart-1.2.3+5", "chart-1.2.3");
+    ascending(&["app-1.2.3.1", "chart-1.2.3.develop"]);
     ascending(&[
         "1.2.2",
         "app-1.2.3",
@@ -217,6 +249,21 @@ fn a_fourth_number_is_above_three_and_a_tail_after_it_orders_as_the_crate_orders
         "10.4.0.1.1",
     ]);
     gt("1.1.8.1.develop", "1.1.8.develop");
+    // text right after a fourth number in the last part puts the string below the fourth number
+    ascending(&[
+        "1.2.3",
+        "1.2.3.3",
+        "1.2.3.4beta1",
+        "1.2.3.4rc",
+        "1.2.3.4rc1",
+        "1.2.3.4rc2",
+        "1.2.3.4rc10",
+        "1.2.3.4",
+        "1.2.3.4-rc1",
+        "1.2.3.4.develop",
+    ]);
+    ascending(&["10.4.0", "10.4.0.0", "10.4.0.1rc1", "10.4.0.1"]);
+    ascending(&["1.2.3.4", "1.2.3.4.5rc1", "1.2.3.4.5"]);
     // build data has no precedence
     eq("10.4.0.1+5", "10.4.0.1");
     // a fourth number is above a tail of text on the same three numbers
@@ -252,6 +299,21 @@ fn the_order_of_all_strings_is_total() {
         "1.2.3.4-rc1",
         "1.2.3.4.develop",
         "1.2.3.4.1",
+        "1.2.3.4rc",
+        "1.2.3.4rc1",
+        "1.2.3.4rc1.x",
+        "10.4.0.1rc1",
+        "1.2rc",
+        "1.2rc1",
+        "1.2rc1.x",
+        "1rc1",
+        "1.2a1b",
+        "1a1b",
+        "1.2.develop-rc1",
+        "1.2.develop+5",
+        "chart-1.2.3-alpha",
+        "chart-1.2.3.develop",
+        "app-1.2.3",
         "develop",
         "LTS__22.04",
         "LTS__24.x",
@@ -318,6 +380,11 @@ fn only_a_version_with_a_pre_release_is_one() {
     assert!(is_pre_release("1.2.develop"));
     assert!(is_pre_release("1.develop"));
     assert!(is_pre_release("v1.2.x"));
+    assert!(is_pre_release("1.2rc1"));
+    assert!(is_pre_release("1rc1"));
+    assert!(is_pre_release("1.2a1b"));
+    // a part of digits and other text is no number, so `1a1b` holds no version
+    assert!(!is_pre_release("1a1b"));
     // a tail of text after the three numbers is a pre-release, and a tail of numbers is not
     assert!(is_pre_release("1.1.8.develop"));
     assert!(is_pre_release("v1.1.8.develop"));
@@ -328,9 +395,11 @@ fn only_a_version_with_a_pre_release_is_one() {
     // text after a fourth number is a pre-release, also above its four numbers
     assert!(is_pre_release("1.2.3.4-rc1"));
     assert!(is_pre_release("1.1.8.1.develop"));
+    assert!(is_pre_release("10.4.0.1rc1"));
     // text before the three numbers is a pre-release, also with a tail of numbers
     assert!(is_pre_release("chart-1.2.3"));
     assert!(is_pre_release("chart-1.2.3.4"));
+    assert!(is_pre_release("chart-1.2.3+5"));
     assert!(is_pre_release("vv1.2.3"));
 }
 
@@ -432,6 +501,11 @@ fn latest_skips_a_pre_release_after_a_fourth_number_also_above_its_four_numbers(
         pick(["1.2.3", "1.1.8.1.develop"], |v| *v, LATEST),
         Some("1.2.3")
     );
+    // text right after a fourth number is a pre-release too, above its three numbers
+    let rc = ["10.4.0", "10.4.0.1rc1"];
+    assert_eq!(compare(rc[1], rc[0]), Ordering::Greater);
+    assert_eq!(pick(rc, |v| *v, LATEST), Some("10.4.0"));
+    assert_eq!(pick(["1.1.10", "1.2rc1"], |v| *v, LATEST), Some("1.1.10"));
 }
 
 #[test]

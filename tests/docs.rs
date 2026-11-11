@@ -4416,7 +4416,9 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
 /// Issue #714. The book stated that a text with no three numbers, such as `1.2.develop`, is above
 /// each version. brett changed the answer: where Palette gives no order or reads no version, strata
 /// follows the crate `versions`, and the rules of Palette stay. The rule of `@latest`, the pages of
-/// Palette and of `behind`, the rules of the code, and the section of the release state it.
+/// Palette and of `behind`, the rules of the code, and the section of the release state it. They
+/// also state text right after a number, as in `1.2rc1` and `1.2.3.4rc1`, and the rest after one
+/// text before the numbers.
 #[test]
 fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
     let page = read(&docs().join("reference/compatibility.md"));
@@ -4432,7 +4434,10 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "**A `v` in front of the three numbers does not count in a tie.**",
         "A move from `1.2.develop` to `1.10.0` passes the gate now.",
         "Where Palette gives no order or reads no version, `compare` follows the order of the crate `versions` 8.0.1.",
-        "It is true for one or two numbers and a tail of text, such as `1.2.develop`.",
+        "It is true for one or two numbers and a tail of text, such as `1.2.develop` and `1.2rc1`.",
+        "`1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`.",
+        "So `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`.",
+        "the rest decides: `chart-1.2.3.develop` is below `chart-1.2.3-alpha`",
     ] {
         assert!(
             release.contains(needle),
@@ -4452,7 +4457,12 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
     let refs = one_line(&read(&docs().join("reference/refs.md")));
     for needle in [
         "There, strata follows the order of the Rust crate `versions` 8.0.1.",
-        "2. One or two numbers and a tail of text, as in `1.2.develop`.",
+        "2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.",
+        "Text right after the fourth number puts the version below it: `1.2.0.1rc1` is below `1.2.0.1`.",
+        "So `1.2rc1` holds two numbers, and `1.2a1b` holds one number and the tail `2a1b`.",
+        "Palette also ignores the text before the numbers.",
+        "The crate gives no total order to digits and text in a part that is not the last",
+        "Strata puts letters with no number after them below the same letters with a number",
         "6. A fourth number, as in `1.2.0.1`.",
         "`@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
         "Strata puts it below `1.1.8-alpha`, as the crate does.",

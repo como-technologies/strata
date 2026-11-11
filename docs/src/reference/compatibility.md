@@ -1014,11 +1014,15 @@ field, a value, an input, or an option is in the sections above.
     Before, it recorded the develop build. `pack:<name>@latest` skips such a version too.
   - A tail of numbers puts the version above its numbers. `10.4.0.1` is above `10.4.0` and
     below `10.5.0`. So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.
-  - A tail after a fourth number puts the version above its four numbers, as the crate
-    `versions` orders it. `1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below `1.2.4`.
-    Text after the fourth number still makes a pre-release.
+  - A tail after `-` or a dot after a fourth number puts the version above its four numbers, as
+    the crate `versions` orders it. `1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below
+    `1.2.4`. Text right after the fourth number puts the version below its four numbers and above
+    its three: `1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`. Text after the fourth number
+    still makes a pre-release.
   - Text before the numbers reads as the numbers too, as Palette reads it. `chart-1.2.3` is
-    above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release.
+    above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release. Of two versions with the
+    same text before the numbers, the rest decides: `chart-1.2.3.develop` is below
+    `chart-1.2.3-alpha`, and `chart-1.2.3+5` equals `chart-1.2.3`.
   - `strata list` and `strata packs` list such a version in the new order. `latest` of
     `strata packs` marks the version that `@latest` records.
   - `behind` names `10.5.0` as newer than the pin `10.4.0.1`. Before, it named nothing. It
@@ -1033,6 +1037,10 @@ field, a value, an input, or an option is in the sections above.
   `1.2.0-0`. Palette reads no version in such a text, and strata follows the order of the crate
   `versions`. Before, strata put it above each version. See
   [the rule of `@latest`](./refs.md#rules).
+  - Text right after the last number is below a tail after a dot, as the crate orders it. So
+    `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`. The crate reads such a
+    number only in the last part. So `1.2a1b` holds one number and the tail `2a1b`, and `1a1b`
+    holds no version.
   - `<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. Before, it recorded
     `1.2.develop`. `@latest` skips such a text while the name has a version that is no
     pre-release. This holds for `pack:<name>@latest` too.
@@ -1175,16 +1183,18 @@ field, a value, an input, or an option is in the sections above.
   `reference::version::pick` follows that order.
   - Where Palette gives no order or reads no version, `compare` follows the order of the crate
     `versions` 8.0.1. It puts `1.2.develop` above `1.1.10` and below `1.2.0-0`, and
-    `1.1.8.develop` below `1.1.8-0`. Before, it put each such text above each version.
+    `1.1.8.develop` below `1.1.8-0`. It puts `1.2rc1` below `1.2.develop`, and `1.2.3.4rc1`
+    above `1.2.3` and below `1.2.3.4`. Before, it put each such text above each version.
   - `compare` puts a text with no number at its start and no three numbers, such as `develop`,
     below each version.
   - A `v` in front of the three numbers does not count in a tie, so `v1.1.8.1` equals `1.1.8.1`.
   - For `latest`, `pick` skips a pre-release while an item has a version that is no pre-release.
     It gives a text with no version only when no item holds a version.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
-  numbers, such as `1.1.8.develop`, `1.2.3rc1`, and `1.2.3.4-rc1`. It is also true for a text
-  with other text before its three numbers, such as `chart-1.2.3`. One `v` in front is no such
-  text. It is true for one or two numbers and a tail of text, such as `1.2.develop`. A tail of
+  numbers, such as `1.1.8.develop`, `1.2.3rc1`, `1.2.3.4-rc1`, and `1.2.3.4rc1`. It is also true
+  for a text with other text before its three numbers, such as `chart-1.2.3`. One `v` in front
+  is no such text. It is true for one or two numbers and a tail of text, such as `1.2.develop`
+  and `1.2rc1`. A tail of
   numbers, as in `10.4.0.1`, makes no pre-release. It was false for each text that does not
   parse, and it stays false for a text with no version, such as `develop`.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
