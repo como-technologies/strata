@@ -12751,7 +12751,7 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
 /// Stage 4 reads the layout of the download of each version, and the archive of each pack. A
 /// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the packs
 /// with no archive and two downloads at once. A list or an archive that names another version
-/// fails its check, and so does the file as the answer to a request that accepts JSON.
+/// fails its check. The file as the answer to a request that accepts JSON fails its check too.
 #[test]
 fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
     let stage = download_stage(&downloaded("1.36.2"));

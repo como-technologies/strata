@@ -1,10 +1,11 @@
 //! The answer of a route of a file to a request that accepts JSON.
 //!
-//! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, and its download route,
-//! `GET /v1/clusterprofiles/{uid}/spc/download`, send the file only to a request that accepts a
-//! file, such as `Accept: application/octet-stream`. To `Accept: application/json` the answer is
-//! HTTP 200 with `{"Reader":{}}`, as a live run of the export shows (#156). Palette builds the two
-//! routes in the same way. The server of [`super`] answers such a request before it reads a file.
+//! The routes are the export of a profile, `GET /v1/clusterprofiles/{uid}/export`, and its
+//! download, `GET /v1/clusterprofiles/{uid}/spc/download`. They send the file only to a request
+//! that accepts a file, such as `Accept: application/octet-stream`. To `Accept: application/json`
+//! the answer is HTTP 200 with `{"Reader":{}}`, as a live run of the export shows (#156). Palette
+//! builds the two routes in the same way. The server of [`super`] answers such a request before it
+//! reads a file.
 
 use std::path::Path;
 
@@ -23,8 +24,8 @@ pub(super) fn accepts_json(request: &Request) -> bool {
         .is_some_and(|accept| accept.trim().eq_ignore_ascii_case("application/json"))
 }
 
-/// The body of the answer to a request for the export or the download of a profile that exists,
-/// when the request accepts JSON: [`FILE_FOR_JSON`], for each query. `None` when `request` is
+/// The answer to a request for the export or the download of a profile that exists, when the
+/// request accepts JSON: [`FILE_FOR_JSON`]. The query does not change it. `None` when `request` is
 /// another request, or when it accepts a file: the file answers it.
 pub(super) fn file_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
     if !accepts_json(request) {

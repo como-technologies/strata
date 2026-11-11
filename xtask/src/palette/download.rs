@@ -47,7 +47,7 @@ pub(super) fn is_download(target: &str) -> bool {
 /// The status and the body of the answer to `request`, when it asks for the download of a profile
 /// version that the tenant holds. `None` for another request, and for a version that the tenant
 /// does not hold: the server then answers 404. The server answers a request that accepts JSON
-/// before it asks for the file.
+/// before it calls this function.
 pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)> {
     let path = request
         .target
