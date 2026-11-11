@@ -21,7 +21,15 @@ case "$*" in
 esac
 "#;
 
+/// The made-up project that a run of [`deploy`] sets in `STRATA_REPORT_PROJECT`.
+const PROJECT: &str = "example-project";
+
 fn deploy(dir: &Path, args: &[&str]) -> Run {
+    deploy_with_project(dir, args, Some(PROJECT))
+}
+
+/// A run of the script with `project` in `STRATA_REPORT_PROJECT`, or with no such variable.
+fn deploy_with_project(dir: &Path, args: &[&str], project: Option<&str>) -> Run {
     let bin = fake_bin(dir, &[("gcloud", FAKE_GCLOUD)]);
     let mut command = Command::new("bash");
     command
@@ -31,6 +39,9 @@ fn deploy(dir: &Path, args: &[&str]) -> Run {
         .env("FAKE_GCLOUD", dir)
         .env_remove("STRATA_REPORT_PROJECT")
         .env_remove("STRATA_REPORT_REGION");
+    if let Some(project) = project {
+        command.env("STRATA_REPORT_PROJECT", project);
+    }
     Run::of(&mut command)
 }
 
@@ -153,15 +164,15 @@ fn a_dry_run_prints_each_gcloud_command_and_runs_none() {
         "a dry run calls no gcloud"
     );
     for part in [
-        "gcloud secrets describe strata-report-token --project como-strata-test",
-        "gcloud iam service-accounts describe strata-report@como-strata-test.iam.gserviceaccount.com --project como-strata-test",
-        "gcloud iam service-accounts describe strata-report-build@como-strata-test.iam.gserviceaccount.com --project como-strata-test",
-        "gcloud artifacts repositories describe strata --project como-strata-test",
-        "gcloud logging sinks describe _Default --project como-strata-test",
-        "gcloud run services describe strata-report --project como-strata-test",
+        "gcloud secrets describe strata-report-token --project example-project",
+        "gcloud iam service-accounts describe strata-report@example-project.iam.gserviceaccount.com --project example-project",
+        "gcloud iam service-accounts describe strata-report-build@example-project.iam.gserviceaccount.com --project example-project",
+        "gcloud artifacts repositories describe strata --project example-project",
+        "gcloud logging sinks describe _Default --project example-project",
+        "gcloud run services describe strata-report --project example-project",
         "--no-cpu-throttling",
-        "gcloud builds submit --project como-strata-test --config deploy/report/cloudbuild.yaml",
-        "gcloud run deploy strata-report --project como-strata-test --region us-central1",
+        "gcloud builds submit --project example-project --config deploy/report/cloudbuild.yaml",
+        "gcloud run deploy strata-report --project example-project --region us-central1",
         "--set-secrets GITHUB_TOKEN=strata-report-token:latest",
         "--max-instances 1",
         "--set-env-vars TRUST_FORWARDED_FOR=1",
@@ -262,14 +273,14 @@ fn a_missing_registry_is_made_and_a_missing_secret_stops_the_deploy_before_the_b
     assert_eq!(run.code, 2, "{}", run.err);
     assert!(
         run.err.contains(
-            "the secret strata-report-token does not exist in the project como-strata-test"
+            "the secret strata-report-token does not exist in the project example-project"
         ),
         "{}",
         run.err
     );
     assert_eq!(
         calls(missing.path()),
-        ["secrets describe strata-report-token --project como-strata-test"]
+        ["secrets describe strata-report-token --project example-project"]
     );
 }
 
@@ -304,11 +315,11 @@ fn a_missing_account_stops_the_deploy_before_the_build_and_names_the_account_and
     for (marker, account) in [
         (
             "no-service-account",
-            "strata-report@como-strata-test.iam.gserviceaccount.com",
+            "strata-report@example-project.iam.gserviceaccount.com",
         ),
         (
             "no-build-account",
-            "strata-report-build@como-strata-test.iam.gserviceaccount.com",
+            "strata-report-build@example-project.iam.gserviceaccount.com",
         ),
     ] {
         let dir = tempfile::tempdir().unwrap();
@@ -317,7 +328,7 @@ fn a_missing_account_stops_the_deploy_before_the_build_and_names_the_account_and
         assert_eq!(run.code, 2, "{marker}: {}", run.err);
         assert!(
             run.err.contains(&format!(
-                "the service account {account} does not exist in the project como-strata-test"
+                "the service account {account} does not exist in the project example-project"
             )),
             "{marker}: {}",
             run.err
@@ -332,7 +343,7 @@ fn a_missing_account_stops_the_deploy_before_the_build_and_names_the_account_and
         assert_eq!(
             sent.last().map(String::as_str),
             Some(
-                format!("iam service-accounts describe {account} --project como-strata-test")
+                format!("iam service-accounts describe {account} --project example-project")
                     .as_str()
             ),
             "{marker}: {sent:?}"
@@ -441,6 +452,43 @@ fn the_request_log_is_excluded_once_and_only_for_the_service() {
         !calls(again.path())
             .iter()
             .any(|c| c.starts_with("logging sinks update"))
+    );
+}
+
+/// The repository is public, so the script names no project of the lab, and it has no default
+/// project (#65). With no project, it stops before the first call of `gcloud`, also in a dry run.
+#[test]
+fn the_script_stops_before_a_call_of_gcloud_when_no_project_is_set() {
+    let dir = tempfile::tempdir().unwrap();
+    for (project, args) in [
+        (None, &[][..]),
+        (None, &["--dry-run"][..]),
+        (Some(""), &["--region", "europe-west1"][..]),
+    ] {
+        let run = deploy_with_project(dir.path(), args, project);
+        assert_eq!(run.code, 2, "{project:?} {args:?}: {}", run.err);
+        assert!(
+            run.err
+                .contains("no project: give --project ID, or set STRATA_REPORT_PROJECT"),
+            "{project:?} {args:?}: {}",
+            run.err
+        );
+        assert_eq!(
+            printed(&run.err),
+            Vec::<String>::new(),
+            "{project:?} {args:?}"
+        );
+    }
+    assert_eq!(calls(dir.path()), Vec::<String>::new());
+
+    let run = deploy_with_project(dir.path(), &["--project", "lab-1", "--dry-run"], None);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        printed(&run.err)
+            .iter()
+            .all(|c| c.contains("--project lab-1")),
+        "{}",
+        run.err
     );
 }
 

@@ -1478,6 +1478,191 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     );
 }
 
+/// A `curl` for `public.sh`. It answers each address that a line `<glob> <status> <file>` of
+/// `$FAKE_WEB/routes` names, and any other address with 404. It logs each address, with the header
+/// `Authorization` when the request has one. `-w` prints the status, and `-f` fails on a status of
+/// 400 or more.
+const FAKE_WEB_CURL: &str = r#"#!/usr/bin/env bash
+out=""; url=""; write=""; fail=""; auth=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -w) write=$2; shift 2 ;;
+    -H) case "$2" in Authorization:*) auth=" ($2)" ;; esac; shift 2 ;;
+    -*f*) fail=1; shift ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url$auth" >> "$FAKE_WEB/curl.log"
+status=404; body=/dev/null
+while read -r glob code file; do
+  [[ "$url" == $glob ]] || continue
+  status=$code; body="$FAKE_WEB/$file"; break
+done < "$FAKE_WEB/routes"
+if [ -n "$out" ]; then cat "$body" > "$out"; else cat "$body"; fi
+[ -z "$write" ] || printf '%s' "$status"
+[ -z "$fail" ] || [ "$status" -lt 400 ] || exit 22
+"#;
+
+/// The installer of a release, for `public.sh`. It writes the tokens that it got to
+/// `install.tokens`, and two binaries that print their versions into `--dir`.
+const FAKE_PUBLIC_INSTALLER: &str = r#"#!/usr/bin/env bash
+dir=""
+while [ $# -gt 0 ]; do case "$1" in --dir) dir=$2; shift 2 ;; *) shift ;; esac; done
+mkdir -p "$dir"
+echo "${STRATA_TOKEN-}${GITHUB_TOKEN-}${GH_TOKEN-}" > "$FAKE_WEB/install.tokens"
+printf '#!/bin/sh\necho strata 9.9.9\n' > "$dir/strata"
+printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
+chmod +x "$dir/strata" "$dir/strata-preflight"
+"#;
+
+/// The answers of GitHub and of its registry for the repository `o/r` to a reader with no login.
+/// The repository and its packages are public. `book` is the status of the book.
+fn public_web(dir: &Path, book: u16) {
+    let web = dir.join("web");
+    std::fs::create_dir_all(&web).unwrap();
+    let files = [
+        ("book.html", "<html>the book</html>".to_string()),
+        ("installer.sh", FAKE_PUBLIC_INSTALLER.to_string()),
+        ("token.json", r#"{"token":"anonymous"}"#.to_string()),
+        ("manifest.json", r#"{"schemaVersion":2}"#.to_string()),
+        (
+            "repo.json",
+            r#"{"private":false,"description":"d","topics":["palette"]}"#.to_string(),
+        ),
+        ("advisories.json", r#"{"enabled":true}"#.to_string()),
+    ];
+    for (name, body) in files {
+        std::fs::write(web.join(name), body).unwrap();
+    }
+    let routes = [
+        format!("https://o.github.io/r/ {book} book.html"),
+        format!(
+            "{}/releases/latest/download/install-strata.sh 200 installer.sh",
+            env!("CARGO_PKG_REPOSITORY")
+        ),
+        "https://ghcr.io/token* 200 token.json".into(),
+        "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
+        "https://ghcr.io/v2/o/charts/strata-observer/manifests/9.9.9 200 manifest.json".into(),
+        "https://api.github.com/repos/o/r 200 repo.json".into(),
+    ];
+    std::fs::write(web.join("routes"), routes.join("\n") + "\n").unwrap();
+}
+
+/// Run `public.sh` with `args` for the repository `o/r`, against the answers of `public_web`, with a
+/// token of GitHub in the environment. Gives the output and steps.log.
+fn run_public(dir: &Path, args: &[&str]) -> (Output, String) {
+    let bin = fake_bin(
+        dir,
+        &[
+            ("curl", FAKE_WEB_CURL),
+            (
+                "gh",
+                "#!/usr/bin/env bash\ncat \"$FAKE_WEB/advisories.json\"\n",
+            ),
+            (
+                "fake-strata",
+                "#!/usr/bin/env bash\ncase \"$1\" in --help) echo 'The book: https://o.github.io/r/' ;; *) echo strata 9.9.9 ;; esac\n",
+            ),
+        ],
+    );
+    let o = Command::new("bash")
+        .arg(live_script("public.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("HOME", dir)
+        .env("STRATA_BIN", bin.join("fake-strata"))
+        .env("OUT", dir.join("out"))
+        .env("REPO", "o/r")
+        .env("FAKE_WEB", dir.join("web"))
+        .env("GH_TOKEN", "the-token-of-gh")
+        .output_locked()
+        .unwrap();
+    let steps = std::fs::read_to_string(dir.join("out/steps.log")).unwrap_or_default();
+    (o, steps)
+}
+
+#[test]
+fn public_sh_shows_what_a_reader_with_no_login_gets_from_the_public_repository() {
+    let ids = [
+        "book-opens",
+        "install-no-token",
+        "install-runs",
+        "image-no-login",
+        "chart-no-login",
+        "repository-public",
+        "advisory-form",
+    ];
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 200);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &ids);
+
+    // the install gets no token, and the registry gets the anonymous token alone
+    let web = dir.path().join("web");
+    let tokens = std::fs::read_to_string(web.join("install.tokens")).unwrap();
+    assert_eq!(tokens.trim(), "", "the installer got a token");
+    let log = std::fs::read_to_string(web.join("curl.log")).unwrap();
+    assert!(!log.contains("the-token-of-gh"), "{log}");
+    for line in log.lines().filter(|l| l.contains("Authorization")) {
+        assert!(
+            line.ends_with("(Authorization: Bearer anonymous)"),
+            "{line}"
+        );
+    }
+}
+
+/// The routes of `public_web` in `dir` without each route whose line holds one of `gone`. GitHub
+/// answers such an address with 404.
+fn drop_routes(dir: &Path, gone: &[&str]) {
+    let file = dir.join("web/routes");
+    let routes = std::fs::read_to_string(&file).unwrap();
+    let kept: Vec<&str> = routes
+        .lines()
+        .filter(|l| !gone.iter().any(|g| l.contains(g)))
+        .collect();
+    std::fs::write(file, kept.join("\n") + "\n").unwrap();
+}
+
+#[test]
+fn public_sh_fails_the_checks_of_a_reader_while_the_repository_or_its_packages_are_private() {
+    // a private repository: the book sends a reader to a login, and the release and the API
+    // answer 404
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 302);
+    drop_routes(dir.path(), &["/releases/", "https://api.github.com/"]);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(
+        &steps,
+        &[
+            "book-opens",
+            "install-no-token",
+            "install-runs",
+            "repository-public",
+        ],
+    );
+
+    // a public repository with private packages: the registry refuses the anonymous token
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 200);
+    drop_routes(dir.path(), &["/manifests/"]);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["image-no-login", "chart-no-login"]);
+    passed(&steps, &["book-opens", "install-runs", "repository-public"]);
+
+    let (o, _) = run_public(dir.path(), &["--help"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("The public repository (#65)"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
 /// A `kubectl` that logs its arguments and the kubeconfig it was given, and answers only when
 /// that kubeconfig is the one the fake Palette serves. With `$FAKE_KUBE_PUT`, it answers as a
 /// cluster that runs the Deployment in the body of that PUT of a profile. The image field is the

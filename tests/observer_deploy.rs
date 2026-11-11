@@ -1148,7 +1148,7 @@ fn the_recipe_observer_manifests_alerts_passes_for_five_objects_and_the_flag_and
 
 const BOOK_ALERT_KEYS: [&str; 3] = ["components", "configMapGenerator", "generatorOptions"];
 
-/// The kustomization that the book gives for the alerts: the file of step 6 of "Install", with the
+/// The kustomization that the book gives for the alerts: the file of step 5 of "Install", with the
 /// lines of step 3 of "Turn them on" added to it, as that step says.
 fn book_alerts_kustomization() -> Value {
     let mut file: Value =
@@ -1219,7 +1219,7 @@ fn rules_map(objects: &[Value]) -> &Value {
 fn the_kustomization_that_the_book_gives_for_the_alerts_names_the_namespace_of_the_pod() {
     let book = book_alerts_kustomization();
     let namespace = &deploy_doc("kustomization.yaml")["namespace"];
-    assert_eq!(&book["namespace"], namespace, "step 6 of the install");
+    assert_eq!(&book["namespace"], namespace, "step 5 of the install");
 
     let use_case: Value = serde_yaml::from_str(&block_with(
         &repo_file("docs/src/use-cases/observer.md"),
@@ -1287,49 +1287,47 @@ fn word_after<'a>(block: &'a str, before: &str) -> &'a str {
     words.next().expect("a word follows")
 }
 
-/// Step 2 of the install makes the Secret that the image pull needs. The token goes on standard
-/// input, as the key does, and no argument holds it.
+/// Step 3 of the install makes the Secret of the key that the Deployment reads. The key goes on
+/// standard input, and no argument holds it.
 #[test]
-fn step_2_of_the_install_makes_the_pull_secret_from_a_token_on_standard_input() {
-    let block = block_with(&install_steps(), "bash", "create secret generic ghcr-pull");
-    let dir = tempfile::tempdir().unwrap();
-    let token = "s3cr3t-token";
-    let o = run_with_kubectl(
-        dir.path(),
-        &block.replace("<github user>", "octo"),
-        &[("GHCR_PULL_TOKEN", token)],
+fn step_3_of_the_install_makes_the_secret_of_the_key_from_standard_input() {
+    let key_ref = container()["env"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|env| env["name"] == "PALETTE_API_KEY")
+        .expect("the container reads the key")["valueFrom"]["secretKeyRef"]
+        .clone();
+    let secret = key_ref["name"].as_str().unwrap();
+    let block = block_with(
+        &install_steps(),
+        "bash",
+        &format!("create secret generic {secret}"),
     );
+    let dir = tempfile::tempdir().unwrap();
+    let key = "s3cr3t-key";
+    let o = run_with_kubectl(dir.path(), &block, &[("PALETTE_API_KEY", key)]);
     assert!(o.status.success(), "{}", text(&o.stderr));
 
     let namespace = deploy_doc("kustomization.yaml")["namespace"]
         .as_str()
         .unwrap()
         .to_string();
-    let args = kubectl_args(dir.path());
     assert_eq!(
-        args.trim(),
+        kubectl_args(dir.path()).trim(),
         format!(
-            "-n {namespace} create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin"
+            "-n {namespace} create secret generic {secret} --from-file={}=/dev/stdin",
+            key_ref["key"].as_str().unwrap()
         )
     );
-    let config: serde_json::Value = serde_json::from_str(&kubectl_input(dir.path())).unwrap();
-    let entry = &config["auths"]["ghcr.io"];
-    assert_eq!(entry["username"], "octo");
-    assert_eq!(entry["password"], token);
-    // base64 of "octo:s3cr3t-token"
-    assert_eq!(entry["auth"], "b2N0bzpzM2NyM3QtdG9rZW4=");
+    assert_eq!(kubectl_input(dir.path()), key);
 }
 
-/// Step 6 names the folder, the image, and a patch. The patch adds the pull Secret of step 2 to the
-/// Deployment of the folder, which has none.
+/// Step 5 names the folder and the image, and nothing more. The image is public, so neither the
+/// manifest nor a step of the install names a pull Secret (#65).
 #[test]
-fn step_6_of_the_install_patches_the_deployment_of_the_folder_with_the_pull_secret_of_step_2() {
+fn step_5_of_the_install_names_the_folder_and_the_image_and_no_step_names_a_pull_secret() {
     let steps = install_steps();
-    let secret = word_after(
-        &block_with(&steps, "bash", "create secret generic ghcr-pull"),
-        "generic",
-    )
-    .to_string();
     let yaml = block_with(&steps, "yaml", "kind: Kustomization");
     let kustomization: Value = serde_yaml::from_str(&yaml).unwrap();
     assert_eq!(strings(&kustomization["resources"]), ["deploy/observer"]);
@@ -1337,26 +1335,25 @@ fn step_6_of_the_install_patches_the_deployment_of_the_folder_with_the_pull_secr
     let image = container()["image"].as_str().unwrap().to_string();
     let (name, _) = image.rsplit_once(':').expect("the image names a tag");
     assert_eq!(kustomization["images"][0]["name"], name);
+    assert!(kustomization.get("patches").is_none(), "{yaml}");
 
-    let deployment = deploy_doc("deployment.yaml");
-    let patch = &kustomization["patches"][0];
-    assert_eq!(patch["target"]["kind"], deployment["kind"]);
-    assert_eq!(patch["target"]["name"], deployment["metadata"]["name"]);
-    let ops: Value = serde_yaml::from_str(patch["patch"].as_str().unwrap()).unwrap();
-    let ops = ops.as_sequence().unwrap();
-    assert_eq!(ops.len(), 1);
-    assert_eq!(ops[0]["op"], "add");
-    assert_eq!(ops[0]["path"], "/spec/template/spec/imagePullSecrets");
-    assert_eq!(ops[0]["value"][0]["name"], secret.as_str());
-    assert!(
-        pod().get("imagePullSecrets").is_none(),
-        "the manifest has no pull Secret, so the patch is the only source"
-    );
+    assert!(pod().get("imagePullSecrets").is_none());
+    let helm = page_section("docs/src/automation/observer.md", "## Install with Helm");
+    for text in [&steps, &helm] {
+        for pull in [
+            "imagePullSecrets",
+            "pullSecret=",
+            "docker-registry",
+            "read:packages",
+        ] {
+            assert!(!text.contains(pull), "a step of the install names {pull}");
+        }
+    }
 }
 
-/// Step 7 applies the reader role, which the kustomization omits, and binds it in its namespace.
+/// Step 6 applies the reader role, which the kustomization omits, and binds it in its namespace.
 #[test]
-fn step_7_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() {
+fn step_6_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() {
     let block = block_with(&install_steps(), "bash", "create rolebinding");
     let role = deploy_doc("reader-role.yaml");
     assert!(block.contains("kubectl apply -f deploy/observer/reader-role.yaml"));
@@ -1375,21 +1372,16 @@ fn step_7_of_the_install_binds_the_reader_role_of_the_folder_in_its_namespace() 
     );
 }
 
-/// The live run makes the same Secret, patch, and binding. So a person who follows the steps
-/// meets what the run checked. The Secret and the patch are in `lib.sh`, which `observer.sh` sources.
-/// `create_apply` runs `kubectl create` with the arguments of the step, and sends the result with `apply`.
+/// The live run makes the same binding as step 6. So a person who follows the steps meets what the
+/// run checked. The run also makes a pull Secret for the image, which the steps no longer have.
+/// #732 removes it from the live example after the packages are public. `create_apply` runs
+/// `kubectl create` with the arguments of the step, and sends the result with `apply`.
 #[test]
-fn the_live_run_makes_the_pull_secret_the_patch_and_the_binding_of_the_install_steps() {
+fn the_live_run_makes_the_binding_of_the_install_steps() {
     let live = repo_file("examples/live/observer.sh") + &repo_file("examples/live/lib.sh");
-    for needle in [
-        "create_apply secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin",
-        "path: /spec/template/spec/imagePullSecrets",
-        "- name: ghcr-pull",
-        "create rolebinding reader --role=strata-observer-reader",
-    ] {
-        assert!(
-            live.contains(needle),
-            "observer.sh and lib.sh lack {needle:?}"
-        );
-    }
+    let needle = "create rolebinding reader --role=strata-observer-reader";
+    assert!(
+        live.contains(needle),
+        "observer.sh and lib.sh lack {needle:?}"
+    );
 }

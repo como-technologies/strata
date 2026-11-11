@@ -2,10 +2,10 @@
   "_base": "clean.json",
   "_note": "a watch reading 15 minutes in: Running, Healthy, and the CSI pack healthy",
   "_patch": {
-    "clusterUid": "6aba747adb74c300c31dd404",
+    "clusterUid": "6aba744444444444444444d4",
     "elapsed": 900,
     "cluster": {
-      "metadata": { "uid": "6aba747adb74c300c31dd404", "name": "fred" },
+      "metadata": { "uid": "6aba744444444444444444d4", "name": "fred" },
       "status": {
         "state": "Running",
         "conditions": [
@@ -19,7 +19,7 @@
       }
     },
     "summary": {
-      "metadata": { "uid": "6aba747adb74c300c31dd404" },
+      "metadata": { "uid": "6aba744444444444444444d4" },
       "status": { "state": "Running", "health": { "state": "Healthy", "conditions": [] } }
     },
     "events": [

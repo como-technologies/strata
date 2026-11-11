@@ -96,7 +96,7 @@ not edit them by hand. `go test` reads them, so it needs neither the binary nor
 the network, and the contract tests skip. The job `check` of CI runs
 `just observer-contract` after `just examples`.
 
-`just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
+`just lint` builds the rustdoc of `strata-palette`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build
 documents the public items, and it warns when a public item links to a private
 item. The second build documents all items, so it reads the comments of the

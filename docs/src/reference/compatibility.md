@@ -11,7 +11,8 @@ it. A patch release removes nothing from it, and changes nothing in it. Code
 inside the crate, such as the mask of a secret, is not part of the API.
 
 Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
-The crate is not on crates.io, so a dependency names the tag: see
+The package is `strata-palette`, and Rust code names the crate `strata`. A
+dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
 Six sections list the changes that need action:
@@ -1057,6 +1058,9 @@ field, a value, an input, or an option is in the sections above.
   - `rules[].reproduce` of `--rules --json` holds the template
     `{{ saves_comment("console-address") }}` in place of the comment. The report fills it.
   - The check of each of the three rules has `saves: console-address` in `--rules --json`.
+- **`strata --help` and `strata-preflight --help` name the book at its public
+  address.** It is `https://como-technologies.github.io/strata/`, and it opens with
+  no login. A script that reads the last line of the help reads the new address.
 - **The report of an offline run says `offline` after the tiers.** The first line
   of the terminal report reads `tiers static, offline`. The markdown and the HTML
   reports use the same words. A script that reads that line gets a new word.
@@ -1085,6 +1089,15 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **The reusable workflows read this repository with the token of the caller.** The
+  repository is public, so the secret `strata-token` is optional. A call that gives
+  it still works. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
+  repository.
+- **The GitLab drop-in downloads `install-strata.sh` from the page of the release.**
+  The variable `STRATA_TOKEN` is optional: the installer sends it to the API of GitHub.
+- **The steps of the observer make no pull Secret.** The image and the chart are
+  public. An install that has the Secret `ghcr-pull` still works. Delete the Secret
+  to remove the token from the cluster.
 - **`pr-comment.sh cluster:<cluster> <version>` comments on one profile of the cluster.** The
   script runs `compare`. So the comment names only the packs of the profile that the version
   replaces. The maximum impact and the label come from those packs.
@@ -1119,6 +1132,10 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the library of strata
 
+- **The package is `strata-palette`.** Rust code names the crate `strata`, as before. A git
+  dependency on a tag adds `package = "strata-palette"`, and the package goes to crates.io under
+  that name. See [Add the dependency](../automation/library.md#add-the-dependency).
+- `BOOK_URL` is `https://como-technologies.github.io/strata/`, the public address of the book.
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
