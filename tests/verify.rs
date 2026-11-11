@@ -476,12 +476,12 @@ fn a_503_twice_then_success_yields_a_snapshot() {
 #[test]
 fn a_429_of_the_download_of_a_profile_version_waits_10_seconds_before_the_retry() {
     let download = common::download_route(UID_A);
-    let refused = r#"{"code":"TooManyRequests"}"#;
+    let refused = common::DOWNLOAD_LIMIT_REFUSAL;
     let api = MemoryApi::new()
         .with_file(download.as_str(), b"file".to_vec())
         .failing_n_times(download.as_str(), 1, 429, refused)
         .with(profile_path(), Value::Null)
-        .failing_n_times(profile_path(), 1, 429, refused);
+        .failing_n_times(profile_path(), 1, 429, r#"{"code":"TooManyRequests"}"#);
     let (retry, slept) = retrying(&api, 3);
     assert_eq!(retry.get_file(&download).unwrap(), b"file");
     assert_eq!(retry.get_json(&profile_path()).unwrap(), Value::Null);
