@@ -180,6 +180,13 @@ const BODY_VARIABLES: Check = &["InvalidDropDownVariable", "InvalidVariable"];
 /// Palette shows it; no live run shows it yet.
 const VPC_CIDRS: Check = &["K8SCidrOverlap", "CidrParseError"];
 
+/// For AWS with a VPC, each machine pool names a subnet.
+///
+/// Only the cluster validate route runs it. A pool with no subnet is `RequiredParam`, with the
+/// message `Parameter 'Subnets' is required`. A live run shows that the route refuses it with HTTP
+/// 500. The code of Palette shows that the route gives the code for no other cause.
+const POOL_SUBNETS: Check = &["RequiredParam"];
+
 /// A validate route of Palette.
 ///
 /// Each refuses the whole request with an HTTP error and a code before it checks each pack. Strata
@@ -256,7 +263,9 @@ impl ValidateRoute {
                 NAME_AND_VERSION,
                 CREATE_VALIDATION,
             ],
-            ValidateRoute::ClusterCreate => &[PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS],
+            ValidateRoute::ClusterCreate => {
+                &[PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS, POOL_SUBNETS]
+            }
         }
     }
 
@@ -403,7 +412,7 @@ mod tests {
     ];
 
     /// Each table of one check.
-    const CHECKS: [Check; 15] = [
+    const CHECKS: [Check; 16] = [
         PACK_YAML,
         DASHBOARD_PACKS,
         PACK_METADATA,
@@ -419,6 +428,7 @@ mod tests {
         PROFILE_CLOUD,
         BODY_VARIABLES,
         VPC_CIDRS,
+        POOL_SUBNETS,
     ];
 
     #[test]
@@ -527,9 +537,9 @@ mod tests {
     }
 
     #[test]
-    fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type_a_variable_or_a_cidr()
+    fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type_a_variable_a_cidr_or_a_pool_with_no_subnet()
      {
-        for code in [PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS].concat() {
+        for code in [PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS, POOL_SUBNETS].concat() {
             assert!(ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
             assert!(!ValidateRoute::ClusterCreate.refuses(503, code), "{code}");
             for route in [

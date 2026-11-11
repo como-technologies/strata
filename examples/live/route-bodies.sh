@@ -33,12 +33,15 @@
 # PACK_CLOUD_SUPPORT=<pack>@<version> names that pack instead.
 #
 # One more case makes no profile (#816). cidr-overlap.json is the clean body with the first VPC
-# of the region that has a CIDR. It also holds the values of the Kubernetes pack of the release
-# profile, with that CIDR as the pod CIDR. The script sends it to the route with api.sh
-# post-status, and records the status and the code. The route refuses it with HTTP 500 and
-# K8SCidrOverlap: the code of Palette shows it; no live run shows it yet. cidr-overlap.json stays,
-# as aws-clean.json does. The script skips the case
-# when Palette lists no VPC with a CIDR, or the Kubernetes pack has no podCIDR.
+# of the region with a CIDR and a subnet in each zone of the pools. Each pool names the subnet of
+# that VPC in each of its zones. For a body with a VPC, the route refuses a pool with no subnet
+# with HTTP 500 and RequiredParam, as a live run shows (#824). The body also holds the values of
+# the Kubernetes pack of the release profile, with the CIDR of the VPC as the pod CIDR. The script
+# sends it to the route with api.sh post-status, and records the status and the code. The route
+# refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run shows it
+# yet. cidr-overlap.json stays, as aws-clean.json does. The script skips the case when Palette
+# lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. It also skips the case
+# when no VPC with a CIDR has a subnet in each zone of the pools.
 #
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
@@ -99,22 +102,35 @@ refused() {
 }
 
 # cidr_body: write BODIES/cidr-overlap.json, send it to the route, and record the answer. Skip the
-# case when Palette lists no VPC with a CIDR, or the Kubernetes pack has no podCIDR.
+# case when Palette lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. Also skip
+# it when no VPC with a CIDR has a subnet in each zone of the pools.
 cidr_body() {
-  local vpc cidr
+  local zones vpc cidr
   echo "== cidr-overlap: the pod CIDR of the Kubernetes pack is the CIDR of the VPC (#816)" | tee -a steps.log
   rm -f "$bodies/cidr-overlap.json"
   if ! "$live/api.sh" get "/v1/clouds/aws/regions/$region/vpcs?cloudAccountUid=$A" > vpcs.json 2> vpcs.err; then
     echo "skipped cidr-overlap: Palette lists no VPC of $region: $(head -n 1 vpcs.err)" | tee -a steps.log
     return
   fi
-  vpc=$(jq -r '[.vpcs[]? | select((.cidrBlock // "") != "")][0].vpcId // empty' vpcs.json)
-  [ -n "$vpc" ] || { echo "skipped cidr-overlap: the region $region lists no VPC with a CIDR" | tee -a steps.log; return; }
+  jq -e '[.vpcs[]? | select((.cidrBlock // "") != "")] | length > 0' vpcs.json > /dev/null ||
+    { echo "skipped cidr-overlap: the region $region lists no VPC with a CIDR" | tee -a steps.log; return; }
+  # the route refuses a pool with no subnet for a body with a VPC, with RequiredParam (#824)
+  zones=$(jq -c '[.spec.machinepoolconfig[].cloudConfig.azs[]?] | unique' "$bodies/aws-clean.json")
+  vpc=$(jq -r --argjson z "$zones" '[.vpcs[]? | select((.cidrBlock // "") != "")
+      | select([.subnets[]?.az] as $s | all($z[]; IN($s[])))][0].vpcId // empty' vpcs.json)
+  [ -n "$vpc" ] || {
+    echo "skipped cidr-overlap: no VPC of $region with a CIDR has a subnet in each zone of the pools: $(jq -r 'join(", ")' <<<"$zones")" |
+      tee -a steps.log
+    return
+  }
   cidr=$(jq -r --arg v "$vpc" '[.vpcs[] | select(.vpcId == $v)][0].cidrBlock' vpcs.json)
-  if ! jq --arg v "$vpc" --arg c "$cidr" --slurpfile p release.json '
+  if ! jq --arg v "$vpc" --arg c "$cidr" --slurpfile p release.json --slurpfile n vpcs.json '
       [$p[0].spec.published.packs[]? | select(.layer == "k8s" and ((.values // "") | test("podCIDR:")))][0] as $k
       | if $k == null then error("the Kubernetes pack of the release profile has no podCIDR") else . end
+      | [$n[0].vpcs[] | select(.vpcId == $v)][0].subnets as $s
       | .spec.cloudConfig.vpcId = $v
+      | .spec.machinepoolconfig[].cloudConfig |= (.subnets = [.azs[]? as $a
+          | [$s[] | select(.az == $a)][0] | {id: .subnetId, az: $a}])
       | .spec.profiles[0].packValues = [{name: $k.name, tag: $k.tag,
           values: ($k.values | sub("podCIDR:[^\n]*"; "podCIDR: \"\($c)\""))}]' \
       "$bodies/aws-clean.json" > "$bodies/cidr-overlap.json" 2> cidr-overlap.err; then
@@ -122,9 +138,14 @@ cidr_body() {
     echo "skipped cidr-overlap: $(head -n 1 cidr-overlap.err)" | tee -a steps.log
     return
   fi
-  check cidr-overlap-body 0 "#816: cidr-overlap.json names the VPC $vpc, and its Kubernetes pack has the pod CIDR $cidr" -- \
-    jq -e --arg v "$vpc" --arg c "$cidr" \
-      '.spec.cloudConfig.vpcId == $v and (.spec.profiles[0].packValues[0].values | contains("podCIDR: \"\($c)\""))' \
+  check cidr-overlap-body 0 "#816, #824: cidr-overlap.json names the VPC $vpc, and each pool names a subnet of $vpc in each of its zones. Its Kubernetes pack has the pod CIDR $cidr" -- \
+    jq -e --arg v "$vpc" --arg c "$cidr" --slurpfile n vpcs.json '
+      [$n[0].vpcs[] | select(.vpcId == $v)][0].subnets as $s
+      | .spec.cloudConfig.vpcId == $v
+        and (.spec.profiles[0].packValues[0].values | contains("podCIDR: \"\($c)\""))
+        and all(.spec.machinepoolconfig[].cloudConfig;
+          (.subnets | length > 0) and [.subnets[].az] == .azs
+            and all(.subnets[]; . as $u | any($s[]; .subnetId == $u.id and .az == $u.az)))' \
       "$bodies/cidr-overlap.json"
   check cidr-overlap-status 0 "#816: the route answers the body of cidr-overlap; the output holds the status and the answer" -- \
     "$live/api.sh" post-status /v1/spectroclusters/aws/validate "$bodies/cidr-overlap.json"
