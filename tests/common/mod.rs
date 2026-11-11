@@ -947,11 +947,13 @@ pub fn gitlab_drop_in() -> serde_yaml::Value {
 
 /// The value of the variable `name` in the `variables` of the GitLab drop-in, such as the release
 /// of `STRATA_VERSION` that its jobs install.
-pub fn gitlab_drop_in_variable(name: &str) -> String {
-    gitlab_drop_in()["variables"][name]
+///
+/// `gitlab` is the drop-in from [`gitlab_drop_in`]. A caller that reads many variables parses
+/// the file one time.
+pub fn gitlab_drop_in_variable<'a>(gitlab: &'a serde_yaml::Value, name: &str) -> &'a str {
+    gitlab["variables"][name]
         .as_str()
         .unwrap_or_else(|| panic!("{GITLAB_DROP_IN} gives {name} no text value"))
-        .to_string()
 }
 
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,

@@ -1026,8 +1026,8 @@ fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
 fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_file() {
     let gitlab = gitlab_drop_in();
     assert_eq!(
-        gitlab["variables"]["STRATA_SAVE"].as_str(),
-        Some(""),
+        gitlab_drop_in_variable(&gitlab, "STRATA_SAVE"),
+        "",
         "the default saves no file"
     );
     let plain = &gitlab["strata-upstream"];
@@ -2370,31 +2370,42 @@ fn release() -> tempfile::TempDir {
     dir
 }
 
+/// The variables that the installer reads a token from. A test of the installer removes each one,
+/// so that no request gets a token of the machine.
+const INSTALLER_TOKENS: [&str; 3] = ["STRATA_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"];
+
+/// A `bash` with the environment that each install in the release `d` of [`release`] gets. The
+/// `PATH` has only the folders `bin` and `tools` of `d`, and `FAKE_REL` names `d`. The command
+/// removes `STRATA_QUIET` and each variable of [`INSTALLER_TOKENS`].
+fn bash_for_install(d: &Path) -> Command {
+    let mut c = Command::new("bash");
+    c.env(
+        "PATH",
+        format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
+    )
+    .env("FAKE_REL", d)
+    .env_remove("STRATA_QUIET");
+    for name in INSTALLER_TOKENS {
+        c.env_remove(name);
+    }
+    c
+}
+
 fn install(d: &Path, args: &[&str]) -> Output {
     install_with(d, args, &[])
 }
 
 /// The installer with the variables `envs` set after the others of the test.
 fn install_with(d: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut c = Command::new("bash");
-    c.arg(script("ci/install-strata.sh"))
+    bash_for_install(d)
+        .arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
-        .env(
-            "PATH",
-            format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
-        )
-        .env("FAKE_REL", d)
         .env("STRATA_API", "https://host.example/api")
         .env("STRATA_REPO", "o/r")
-        .env_remove("STRATA_QUIET")
-        .env_remove("STRATA_TOKEN")
-        .env_remove("GITHUB_TOKEN")
-        .env_remove("GH_TOKEN");
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    c.output_locked().unwrap()
+        .envs(envs.iter().copied())
+        .output_locked()
+        .unwrap()
 }
 
 #[test]
@@ -2910,33 +2921,21 @@ fn gitlab_install(d: &Path, envs: &[(&str, &str)]) -> Output {
     fake_bin(d, &[("apt-get", "#!/bin/sh\n"), ("uname", FAKE_UNAME)]);
     let project = d.join("project");
     std::fs::create_dir_all(&project).unwrap();
-    let mut c = Command::new("bash");
+    let mut c = bash_for_install(d);
     c.args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
         .arg(lines.join("\n"))
         .current_dir(&project)
-        .env(
-            "PATH",
-            format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
-        )
-        .env("FAKE_REL", d)
         .env("CI_PROJECT_DIR", &project)
-        .env_remove("STRATA_API")
-        .env_remove("STRATA_QUIET")
-        .env_remove("STRATA_TOKEN")
-        .env_remove("GITHUB_TOKEN")
-        .env_remove("GH_TOKEN");
+        .env_remove("STRATA_API");
     for name in gitlab["variables"]
         .as_mapping()
         .expect("the drop-in has variables")
         .keys()
     {
         let name = name.as_str().unwrap();
-        c.env(name, gitlab_drop_in_variable(name));
+        c.env(name, gitlab_drop_in_variable(&gitlab, name));
     }
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    c.output_locked().unwrap()
+    c.envs(envs.iter().copied()).output_locked().unwrap()
 }
 
 /// The repository is public, so a job of the GitLab drop-in installs strata with no token of strata
@@ -2955,9 +2954,10 @@ fn the_gitlab_drop_in_installs_strata_with_no_token() {
     );
     assert!(d.join("project/.strata/merge-gate.sh").exists());
 
+    let gitlab = gitlab_drop_in();
     let (repo, version) = (
-        gitlab_drop_in_variable("STRATA_REPO"),
-        gitlab_drop_in_variable("STRATA_VERSION"),
+        gitlab_drop_in_variable(&gitlab, "STRATA_REPO"),
+        gitlab_drop_in_variable(&gitlab, "STRATA_VERSION"),
     );
     let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
     let calls: Vec<&str> = calls.lines().collect();

@@ -1544,7 +1544,7 @@ fn public_web(dir: &Path, book: u16) {
         ),
         format!(
             "https://github.com/o/r/releases/download/{}/install-strata.sh 200 installer.sh",
-            gitlab_drop_in_variable("STRATA_VERSION")
+            gitlab_drop_in_variable(&gitlab_drop_in(), "STRATA_VERSION")
         ),
         "https://ghcr.io/token* 200 token.json".into(),
         "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
