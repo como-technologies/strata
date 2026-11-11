@@ -419,7 +419,7 @@ fn projects_records(r: &mut Runner) {
     );
     r.step(
         "projects-behind",
-        0,
+        1,
         false,
         "strata behind 'releases/*/*.json' --no-impact",
     );

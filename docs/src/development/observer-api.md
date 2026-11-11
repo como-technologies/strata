@@ -461,8 +461,9 @@ them:
   versions](../internals/palette/profiles.md#the-order-of-versions). The page keeps a
   copy of the order in `versionCmp` of `app.js`, because it cannot ask strata to order
   the versions of two packs. The file `testdata/versions.json` of `internal/web`
-  holds the cases. A test of strata and a test of the page sort them. So a change of
-  one order fails a test until the other order is the same.
+  holds a case for each form of the order. A test of strata and a test of the page
+  sort them, and the test of the page also compares each pair. So a change of one
+  order fails a test until the other order is the same.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
 - The page of the newer versions opens with four tiles: packs behind, moves that

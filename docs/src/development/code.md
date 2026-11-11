@@ -131,10 +131,11 @@ where each module goes. The Go code of the observer follows
   - `versionCmp` in `observer/internal/web/assets/app.js`, the sort of a column of
     versions on the page of the observer. A column holds the versions of many
     packs, and no answer of strata orders them. The file
-    `observer/internal/web/testdata/versions.json` holds the cases.
+    `observer/internal/web/testdata/versions.json` holds a case for each form.
     `the_cases_of_the_version_sort_of_the_observer_page_are_in_the_order_of_strata`
     sorts them with `version::compare`, and
-    `TestTheVersionSortOfThePageGivesTheOrderOfStrata` with `versionCmp`.
+    `TestTheVersionSortOfThePageGivesTheOrderOfStrata` with `versionCmp`. The test
+    of the page also compares each pair of cases. Add a case for each new form.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).
