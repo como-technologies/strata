@@ -233,14 +233,6 @@ function eventFrom(q) {
   }
 }
 
-// newerCell never says "current" for a pack that was not checked, or before the versions were read.
-function newerCell(p) {
-  if (p.newer) return h`${ARROW}${p.newer}`;
-  if (p.status === STATUS.NOT_CHECKED) return mut("not checked");
-  if (!D.cluster.versions.readAt) return mut("-");
-  return mut("current");
-}
-
 /* ---- The stack of the packs ----
    A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
    the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
