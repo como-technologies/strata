@@ -7808,6 +7808,60 @@ fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_a
     }
 }
 
+/// No pack of the publish moves its version. So `same-release --allow renumber` of the candidate
+/// and the published version passes, and its pair names no renumber. A pair with a renumber, a
+/// pair that fails, and a run without the option fail the check.
+#[test]
+fn loop_sh_stage_3_passes_the_publish_with_allow_renumber_only_when_the_pair_names_no_renumber() {
+    let renumber =
+        r#"{"key":"k8s/kubernetes","name":"kubernetes","old":"1.35.3-rc.1","new":"1.35.3"}"#;
+    for (exit, report, passes) in [
+        (
+            0,
+            r#"{"same":true,"allowRenumber":true,"pairs":[{"status":"identical"}]}"#.to_string(),
+            true,
+        ),
+        (
+            0,
+            format!(
+                r#"{{"same":true,"allowRenumber":true,"pairs":[{{"status":"renumber","renumbers":[{renumber}]}}]}}"#
+            ),
+            false,
+        ),
+        (
+            1,
+            r#"{"same":false,"allowRenumber":true,"pairs":[{"status":"different"}]}"#.to_string(),
+            false,
+        ),
+        (
+            0,
+            r#"{"same":true,"pairs":[{"status":"identical"}]}"#.to_string(),
+            false,
+        ),
+    ] {
+        let mut stage = lab_stage();
+        stage.strata(
+            "same-release --allow renumber candidate.json releases/1.0.1.json --json",
+            exit,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        if passes {
+            passed(&steps, &["same-release-renumber"]);
+        } else {
+            failed(&steps, &["same-release-renumber"]);
+        }
+        let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+        assert!(
+            calls
+                .lines()
+                .any(|l| l
+                    == "same-release --allow renumber candidate.json releases/1.0.1.json --json"),
+            "{calls}"
+        );
+    }
+}
+
 #[test]
 fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
     let mut stage = lab_stage();

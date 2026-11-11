@@ -9554,7 +9554,7 @@ fn same_release_refuses_a_pair_with_no_digest_unless_allowed() {
         "{:?}",
         c.pairs[0].reasons
     );
-    let allowed = ops::same_release_with(&records, common::no_digest_allowed(), "t1");
+    let allowed = common::same_release_offline(&records, common::no_digest_allowed(), "t1");
     assert_eq!(allowed.pairs[0].status, PairStatus::Identical);
     assert_eq!(allowed.pairs[0].upstream_unknown, ["os/ubuntu-aws"]);
     assert!(allowed.same);
@@ -10855,7 +10855,7 @@ fn same_release_refuses_two_records_whose_os_pack_names_two_machine_images() {
             ("a.json".to_string(), x.clone()),
             ("b.json".to_string(), y.clone()),
         ];
-        ops::same_release_with(
+        common::same_release_offline(
             &records,
             SameReleaseOptions {
                 policy,

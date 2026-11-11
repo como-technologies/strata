@@ -103,9 +103,9 @@ fn is_transient(e: &Error) -> bool {
 
 impl<A: PaletteApi> Retry<A> {
     /// Run `call` until it succeeds, fails for a reason that does not pass, or runs out of
-    /// retries. A GET and a POST of a question retry the same way. A POST to `validate/repave`
-    /// again saves the same address again.
-    fn attempts(&self, path: &str, call: impl Fn() -> Result<Value>) -> Result<Value> {
+    /// retries. A GET, a GET of a file, and a POST of a question retry the same way. A POST to
+    /// `validate/repave` again saves the same address again.
+    fn attempts<T>(&self, path: &str, call: impl Fn() -> Result<T>) -> Result<T> {
         let mut attempt = 0;
         loop {
             match call() {
@@ -148,6 +148,10 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
         self.attempts(path, || self.inner.post_json(path, body))
+    }
+
+    fn get_file(&self, path: &str) -> Result<Vec<u8>> {
+        self.attempts(path, || self.inner.get_file(path))
     }
 
     fn project_uid(&self) -> Option<&str> {

@@ -89,14 +89,16 @@ pub fn is_pre_release(v: &str) -> bool {
     Version::read(v).is_some_and(|s| !s.pre.is_empty() || s.tail == Tail::Text)
 }
 
-/// True when `a` and `b` both parse and write the same numbers: see [`numbers`].
+/// True when `a` and `b` both parse and have the same three numbers.
 ///
-/// Only the pre-release or the build data can differ. So `1.66.0-g0123456789ab` and `1.66.0` keep
-/// their numbers, and so do `1.2.0+build.5` and `1.2.0`. `20.04` and `24.04` do not, and neither do
-/// `1.2.0-build5` and `2026.11.0`. A string that does not parse keeps no numbers.
+/// A number that a version omits is `0`, as in [`is_final_of`] and as Palette reads it. So `1.2`
+/// and `1.2.0` keep their numbers. Only the pre-release or the build data can differ. So
+/// `1.66.0-g0123456789ab` and `1.66.0` keep their numbers, and so do `1.2.0+build.5` and `1.2.0`.
+/// `20.04` and `24.04` do not, and neither do `1.2.0-build5` and `2026.11.0`. A string that does
+/// not parse keeps no numbers.
 pub(crate) fn keeps_numbers(a: &str, b: &str) -> bool {
-    match (numbers(a), numbers(b)) {
-        (Some(x), Some(y)) => x == y,
+    match (Version::parse(a), Version::parse(b)) {
+        (Some(x), Some(y)) => x.numbers == y.numbers,
         _ => false,
     }
 }
@@ -590,13 +592,16 @@ mod tests {
             ("1.2.0-mr12.345", "1.2.0"),
             ("1.2.0+build.5", "1.2.0"),
             ("v1.2.0", "1.2.0"),
+            ("1.2", "1.2.0"),
+            ("1.2-rc.1", "1.2.0"),
+            ("1", "1.0.0+build.5"),
         ] {
             assert!(keeps_numbers(a, b), "{a} and {b}");
         }
         for (a, b) in [
             ("20.04", "24.04"),
             ("1.2.0-build5", "2026.11.0"),
-            ("1.2", "1.2.0"),
+            ("1.2", "1.2.1"),
             ("1.1.8.develop", "1.1.8"),
             ("LTS__24.x", "LTS__24.x"),
             ("", ""),

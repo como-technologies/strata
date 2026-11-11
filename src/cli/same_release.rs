@@ -34,7 +34,13 @@ pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
         allow_no_digest: a.allow.contains(&Allow::NoDigest),
         allow_renumber: a.allow.contains(&Allow::Renumber),
     };
-    let c = ops::same_release_with(&records, options, &now);
+    let c = ops::same_release_with(
+        &records,
+        options,
+        |scope| connect(progress, scope),
+        &now,
+        &progress,
+    )?;
     print!("{}", a.out.renderer().render_chain(&c)?);
     Ok(ExitCode::from(c.exit_code()))
 }

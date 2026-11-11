@@ -82,11 +82,24 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
     }
 }
 
+/// The fact of a renumber whose two archives hold the same files, but for the version in
+/// `pack.json`.
+const ARCHIVE_SAME: &str = "archive: same files";
+
+/// The fact of a renumber whose two archives differ in another file. A reason names the file.
+const ARCHIVE_CHANGED: &str = "archive: other files";
+
+/// The fact of a renumber whose two archives strata did not compare.
+const ARCHIVE_NOT_COMPARED: &str = "archive: not compared";
+
 /// One line for each renumber of a pair: `<name>  <old> -> <new>`, with its facts in brackets.
 ///
-/// The facts are a move from a pre-release to its final version, and an archive that strata does
-/// not compare: see [`Pair::archives_not_compared`].
+/// The facts are a move from a pre-release to its final version, and what strata found in the two
+/// archives: the same files, another file, or no compare. See [`Pair::archives_compared`],
+/// [`Pair::archives_changed`], and [`Pair::archives_not_compared`].
 pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
+    let compared: BTreeSet<&str> = p.archives_compared.iter().map(String::as_str).collect();
+    let changed: BTreeSet<&str> = p.archives_changed.iter().map(|c| c.key.as_str()).collect();
     let not_compared: BTreeSet<&str> = p.archives_not_compared.iter().map(String::as_str).collect();
     p.renumbers
         .iter()
@@ -95,8 +108,12 @@ pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
             if r.pre_release_to_final {
                 facts.push("pre-release to final");
             }
-            if not_compared.contains(r.key.as_str()) {
-                facts.push("archive: not compared");
+            if compared.contains(r.key.as_str()) {
+                facts.push(ARCHIVE_SAME);
+            } else if changed.contains(r.key.as_str()) {
+                facts.push(ARCHIVE_CHANGED);
+            } else if not_compared.contains(r.key.as_str()) {
+                facts.push(ARCHIVE_NOT_COMPARED);
             }
             let line = format!("{}  {} -> {}", r.name, r.old, r.new);
             if facts.is_empty() {

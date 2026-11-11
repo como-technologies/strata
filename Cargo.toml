@@ -65,6 +65,7 @@ path = "tests/main.rs"
 
 [dependencies]
 chrono = "0.4"
+flate2 = "1"
 clap = { version = "4", features = ["derive"] }
 glob = "0.3"
 hex = "0.4"
@@ -76,6 +77,7 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 similar = "2"
 thiserror = "2"
+tar = { version = "0.4", default-features = false }
 ureq = { version = "3", features = ["json"] }
 
 [dev-dependencies]

@@ -38,6 +38,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 mod answer;
 pub mod closed_set;
 mod code_span;
+mod download;
 mod git;
 mod palette;
 mod process;
@@ -49,6 +50,7 @@ mod walk;
 pub use answer::*;
 pub use closed_set::schema_values;
 pub use code_span::*;
+pub use download::*;
 pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
@@ -1499,3 +1501,79 @@ case "$*" in
   "repo view"*) echo '{"nameWithOwner":"o/r"}' ;;
 esac
 "#;
+
+/// The chain of `records` under `options`, with a Palette that serves nothing: for a chain that
+/// compares no archive. A download makes the test fail.
+pub fn same_release_offline(
+    records: &[(String, strata::snapshot::Snapshot)],
+    options: strata::ops::SameReleaseOptions,
+    generated_at: &str,
+) -> strata::ops::Chain {
+    let api = strata::api::MemoryApi::new();
+    same_release_served(records, options, &api, generated_at)
+}
+
+/// The chain of `records` under `options`, with the downloads that `api` serves in each project.
+pub fn same_release_served(
+    records: &[(String, strata::snapshot::Snapshot)],
+    options: strata::ops::SameReleaseOptions,
+    api: &strata::api::MemoryApi,
+    generated_at: &str,
+) -> strata::ops::Chain {
+    strata::ops::same_release_with(
+        records,
+        options,
+        |_| Ok(strata::api::Palette::new(api)),
+        generated_at,
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap()
+}
+
+/// The files of the archive of the build of a pack, beside `pack.json`: the path and the content of
+/// each. None for a pack whose download holds no archive.
+pub type BuildFiles<'a> =
+    dyn Fn(&strata::snapshot::Pack) -> Option<Vec<(&'static str, String)>> + 'a;
+
+/// `api`, which also serves the download of the profile version of each of `records`, as Palette
+/// writes it: see [`profile_download`].
+///
+/// The download names each pack of a record that has a registry. The archive of the pack holds
+/// `pack.json` and each file that `files` gives for the pack: its path and its content. A pack
+/// for which `files` gives None has no archive in the download, as a pack of a private registry.
+pub fn serve_downloads(
+    api: strata::api::MemoryApi,
+    records: &[(String, strata::snapshot::Snapshot)],
+    files: &BuildFiles,
+) -> strata::api::MemoryApi {
+    records.iter().fold(api, |api, (_, s)| {
+        let archives: Vec<Option<Vec<u8>>> = s
+            .packs
+            .iter()
+            .map(|p| {
+                let files = files(p)?;
+                let files: Vec<(&str, &str)> = files
+                    .iter()
+                    .map(|(path, text)| (*path, text.as_str()))
+                    .collect();
+                let top = pack_top(&p.name, &p.ref_digest);
+                Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
+            })
+            .collect();
+        let packs: Vec<DownloadPack> = s
+            .packs
+            .iter()
+            .zip(archives)
+            .map(|(p, archive)| DownloadPack {
+                name: &p.name,
+                version: &p.version,
+                kind: &p.kind,
+                private: archive.is_none(),
+                archive,
+                manifests: &[],
+            })
+            .collect();
+        let bytes = profile_download(&s.source.uid, &s.source.name, &packs);
+        api.with_file(download_route(&s.source.uid), bytes)
+    })
+}

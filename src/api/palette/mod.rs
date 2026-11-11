@@ -18,6 +18,8 @@ mod clusters;
 mod listings;
 mod profiles;
 
+pub(crate) use profiles::{DOWNLOAD_INTERVAL_SECONDS, is_download_path};
+
 pub use clusters::{
     cloud_account_path, cloud_config_path, cluster_events_path, cluster_summary_path, subject_path,
 };
