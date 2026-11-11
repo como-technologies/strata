@@ -435,7 +435,8 @@ pub(crate) struct BehindArgs {
     /// The JSON of a previous run: each pin names the versions that arrived since
     #[arg(long, value_name = "FILE")]
     pub(crate) since: Option<PathBuf>,
-    /// Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
+    /// Do not compare each pin or profile version that is behind with the newest version, and do
+    /// not ask Palette about the move of a pin
     #[arg(long)]
     pub(crate) no_impact: bool,
     /// Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask

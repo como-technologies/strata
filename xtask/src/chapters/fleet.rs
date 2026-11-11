@@ -164,6 +164,8 @@ fn behind_profiles(r: &mut Runner) {
     r.profile(PROD, A130_PROD, "1.3.0", "aws-stack@1.1.1", &[]);
     r.tenant_profile(A200_TENANT, "2.0.0", "aws-stack@1.1.1", &[]);
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
+    // Palette accepts the move of each pin of 1.0.0 that is behind: the run with the impact asks it
+    r.tenant(|t| t.profile_upgrade_answer(DEV, A100, None));
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json");
     r.step(
         "behind-profile",
@@ -193,6 +195,7 @@ fn behind_profiles(r: &mut Runner) {
         false,
         "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.profiles[] | {name, version, scope, newer: [.newer[].version], behind}'",
     );
+    behind_profile_move(r);
     // the record of a cluster holds each profile that the cluster runs
     r.quiet("strata snapshot cluster:payments -o payments.json");
     r.step(
@@ -205,6 +208,34 @@ fn behind_profiles(r: &mut Runner) {
         "behind-profile-cluster-lines",
         "behind-profile-cluster",
         r"^(\$|\d+ pins|. \[profile\])",
+    );
+}
+
+/// The steps of the chapter `behind-profiles` with the impact: `behind` compares the version with
+/// the newest one, as `compare` of the two versions does (#708).
+fn behind_profile_move(r: &mut Runner) {
+    r.step(
+        "behind-profile-move",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json",
+    );
+    r.excerpt(
+        "behind-profile-move-lines",
+        "behind-profile-move",
+        r"^(\$|\d+ pins|. \[profile\]|      1\.1\.0 created|      bump to 1\.1\.0:)",
+    );
+    r.step(
+        "behind-profile-move-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --json | jq -c '.profiles[].bump.packs[]'",
+    );
+    r.step(
+        "behind-profile-move-compare",
+        1,
+        false,
+        "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown | grep '^\\*\\*Result'",
     );
 }
 

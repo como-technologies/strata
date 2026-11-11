@@ -8103,6 +8103,43 @@ fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_
     }
 }
 
+/// Issue #708. With the impact, `behind` gives the bump of the release to the next version. Its level,
+/// its flags, and its packs are those of `compare` of the two versions. A bump whose level, flags,
+/// or packs differ from the compare fails.
+#[test]
+fn loop_sh_stage_3_checks_that_the_bump_of_the_release_is_the_compare_of_the_two_versions() {
+    let good = (r#""in-place""#, r#"["UPSTREAM","AUTHORED"]"#, "addon/a");
+    for (impact, flags, pack) in [
+        good,
+        (r#""repave""#, good.1, good.2),
+        (good.0, r#"["AUTHORED"]"#, good.2),
+        (good.0, good.1, "addon/b"),
+    ] {
+        let mut stage = lab_stage();
+        let report = format!(
+            r#"{{"schema":"{schema}","pins":[],"profiles":[{{"name":"strata-live-profile","version":"1.0.0",
+                "pinnedBy":[{{}}],"newer":[{{"version":"1.0.1"}}],
+                "bump":{{"to":"1.0.1","impact":{impact},"flags":{flags},"packs":[{{"key":"{pack}","status":"changed"}}]}}}}]}}"#,
+            schema = strata::ops::BEHIND_SCHEMA
+        );
+        stage.strata("behind repo/releases/1.0.0.json --json", 1, &report);
+        stage.strata(
+            "compare r-1 n-1 --json",
+            1,
+            r#"{"summary":{"maxImpact":"in-place"},"packs":[
+                {"key":"addon/a","status":"changed","identity":false,"upstream":true,"authored":true,"images":false,"charts":false},
+                {"key":"addon/b","status":"unchanged","identity":false,"upstream":false,"authored":false,"images":false,"charts":false}]}"#,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        passed(&steps, &["behind-profile-move", "compare-profile-move"]);
+        if (impact, flags, pack) == good {
+            passed(&steps, &["behind-profile-move-says"]);
+        } else {
+            failed(&steps, &["behind-profile-move-says"]);
+        }
+    }
+}
+
 #[test]
 fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
     let mut stage = lab_stage();
