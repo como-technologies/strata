@@ -16,10 +16,9 @@ use std::collections::BTreeMap;
 use std::io::Read;
 
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use super::Method;
-use crate::content::canon::canonical_json;
+use crate::content::canon::{canonical_json, sha256_digest};
 use crate::error::{Error, Result};
 use crate::json::{arr, object_at, opt_str, str_at};
 
@@ -235,7 +234,7 @@ fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchi
             let digest = if path == PACK_FILE {
                 pack_file_digest(&bytes)
             } else {
-                sha256(&bytes)
+                sha256_digest(&bytes)
             };
             (path, digest)
         })
@@ -249,15 +248,10 @@ fn pack_file_digest(bytes: &[u8]) -> String {
     match serde_json::from_slice::<Value>(bytes) {
         Ok(Value::Object(mut fields)) => {
             fields.remove(PACK_VERSION);
-            sha256(canonical_json(&Value::Object(fields)).as_bytes())
+            sha256_digest(canonical_json(&Value::Object(fields)))
         }
-        _ => sha256(bytes),
+        _ => sha256_digest(bytes),
     }
-}
-
-/// `sha256:` and the hex digest of `bytes`.
-fn sha256(bytes: &[u8]) -> String {
-    format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
 }
 
 /// Each regular file of the tar archive that gzip compresses in `gz`, whose path `keep` takes, by
@@ -374,11 +368,25 @@ mod tests {
             ("1.36.2-rc.1", "1.36.2")
         );
         let (a, b) = (a.archive.as_ref().unwrap(), b.archive.as_ref().unwrap());
-        // the top folder names the digest, so the paths are those under it
+        // the top folder differs between the two builds, so the paths are those under it
         let paths: Vec<&str> = a.files().map(|(path, _)| path).collect();
         assert_eq!(paths, ["README.md", "pack.json", "values.yaml"]);
         assert!(a.changed_files(b).is_empty(), "{a:?} {b:?}");
         assert_eq!(a, b);
+        // an OCI registry of packs names the top folder by the name and the version of the pack
+        let oci = |version: &str| {
+            let top = format!("kubernetes-{version}");
+            let download = read(&[built("kubernetes", version, &top, &values)]);
+            download
+                .pack("kubernetes")
+                .unwrap()
+                .archive
+                .clone()
+                .unwrap()
+        };
+        let (c, d) = (oci("1.36.2-rc.1"), oci("1.36.2"));
+        assert!(c.changed_files(&d).is_empty(), "{c:?} {d:?}");
+        assert_eq!(&c, a);
     }
 
     #[test]
@@ -492,13 +500,6 @@ mod tests {
             "metadata.json names 0 lists of packs, and not one"
         );
         // the list names an archive that the download does not hold
-        let mut good = read(&[built(
-            "kubernetes",
-            "1.36.2",
-            "kubernetes-0123456789ab",
-            &[],
-        )]);
-        good.packs.clear();
         let list = format!("profiles/{UID}/packs-metadata.json");
         let missing = tgz(&[
             (
