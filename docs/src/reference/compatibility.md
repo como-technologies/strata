@@ -1119,9 +1119,9 @@ field, a value, an input, or an option is in the sections above.
     `pairs[].archivesCompared` names the pack.
   - The command connects to Palette, also for two record files. Without a key, it stops with
     `missing-credential` and exit `2` when a renumber has a new digest. Give the key to the job.
-  - Palette takes one download of a version in 10 seconds. A second run in that time can stop
-    with the error `api`, HTTP 429, and the code `TooManyRequests`. Run it again after 10
-    seconds.
+  - Palette takes one download of a version in 10 seconds, and refuses the next with HTTP 429
+    and the code `TooManyRequests`. Strata then waits 10 seconds before the next download, for
+    each retry of `STRATA_RETRIES`. After the last retry, it stops with the error `api`.
 - **`compare` gives the impact `none` to `1.2-rc.1` to `1.2.0`.** A number that a version omits
   is `0`, as Palette reads it. So such a renumber keeps its numbers, and the impact is
   `none (renumber only)`. Before, the move had the level of its layer.

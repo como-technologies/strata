@@ -469,6 +469,34 @@ fn a_503_twice_then_success_yields_a_snapshot() {
     );
 }
 
+/// Palette takes one download of a profile version in 10 seconds.
+#[test]
+fn a_429_of_the_download_of_a_profile_version_waits_10_seconds_before_the_retry() {
+    let download = common::download_route(UID_A);
+    let refused = r#"{"code":"TooManyRequests"}"#;
+    let api = MemoryApi::new()
+        .with_file(download.as_str(), b"file".to_vec())
+        .failing_n_times(download.as_str(), 1, 429, refused)
+        .with(profile_path(), Value::Null)
+        .failing_n_times(profile_path(), 1, 429, refused);
+    let (retry, slept) = retrying(&api, 3);
+    assert_eq!(retry.get_file(&download).unwrap(), b"file");
+    assert_eq!(retry.get_json(&profile_path()).unwrap(), Value::Null);
+    // the first wait of another route is one second
+    assert_eq!(
+        *slept.borrow(),
+        vec![Duration::from_secs(10), Duration::from_secs(1)]
+    );
+    // a Retry-After gives the wait of the download too
+    let api = MemoryApi::new()
+        .with_file(download.as_str(), b"file".to_vec())
+        .failing_n_times(download.as_str(), 1, 429, refused)
+        .with_retry_after(download.as_str(), 3);
+    let (retry, slept) = retrying(&api, 3);
+    assert_eq!(retry.get_file(&download).unwrap(), b"file");
+    assert_eq!(*slept.borrow(), vec![Duration::from_secs(3)]);
+}
+
 #[test]
 fn a_permanent_500_fails_with_the_last_error_after_the_configured_attempts() {
     let dir = tempfile::tempdir().unwrap();

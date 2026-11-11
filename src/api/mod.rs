@@ -37,7 +37,7 @@ pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
     PROFILE_TEMPLATE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
-    is_download_path, named_entries, profile_versions, search_condition, search_filter,
+    is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
 // the unit tests build the route of a download with the one function that builds it

@@ -1073,8 +1073,9 @@ reads the export and the download of three versions of the example:
 
 Give other versions as `PROFILES="<name>@<version> ..."`.
 [The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
-and [The download of a version](../internals/palette/profiles.md#the-download-of-a-version)
-state what it shows.
+states what it shows.
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version)
+states what stage 4 checks.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1085,12 +1086,12 @@ state what it shows.
 | `export-json-<name>`, `export-json-record-<name>`, `export-json-root-<name>` | 0 | #156: the export with `format=json` gives the same root |
 | `export-accepts-json`, `export-accepts-json-no-file` | 0 | #156: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file |
 | `export-limit` | ? | #156: three exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
-| `download-<name>` | 0 | #751: `GET /v1/clusterprofiles/{uid}/spc/download` gives the file of the version to a request that accepts a file. No result yet: the next live window runs it. |
-| `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. No result yet: the next live window runs it. |
-| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. No result yet: the next live window runs it. |
-| `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. No result yet: the next live window runs it. |
-| `download-accepts-json` | ? | #751: the status of the answer to a request that accepts JSON alone. No result yet: the next live window runs it. |
-| `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. No result yet: the next live window runs it. |
+| `download-<name>` | 0 | #751: `GET /v1/clusterprofiles/{uid}/spc/download` gives the file of the version to a request that accepts a file. No result yet: no live window ran stage 4. |
+| `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. No result yet: no live window ran stage 4. |
+| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. No result yet: no live window ran stage 4. |
+| `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. No result yet: no live window ran stage 4. |
+| `download-accepts-json` | ? | #751: the status of the answer to a request that accepts JSON alone. No result yet: no live window ran stage 4. |
+| `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. No result yet: no live window ran stage 4. |
 
 ## registry-kinds.sh
 

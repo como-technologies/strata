@@ -140,8 +140,9 @@ records hold them.
 
 Palette takes one download of a version in 10 seconds. When another client
 read the version less than 10 seconds before, Palette refuses with HTTP 429 and
-the code `TooManyRequests`. Strata tries again as for each 429, and then stops
-with the error `api`. Run the command again after 10 seconds.
+the code `TooManyRequests`. Strata then waits 10 seconds before the next
+download of the version, for each retry of `STRATA_RETRIES`. After the last
+retry, it stops with the error `api`. Run the command again after 10 seconds.
 
 `compare` reads no archive. It gives such a pack the impact `none` when its
 version keeps its numbers: see [A renumber](../reference/impact.md#a-renumber).

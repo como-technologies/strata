@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::PaletteApi;
+use super::{DOWNLOAD_INTERVAL_SECONDS, PaletteApi, is_download_limit};
 use crate::config::Config;
 use crate::error::{Error, FailureClass, Result};
 use crate::term::progress::Progress;
@@ -60,7 +60,8 @@ impl RetryPolicy {
 /// Retries transient failures of any [`PaletteApi`]: HTTP 5xx, 429, and transport errors.
 ///
 /// A 5xx that is a refusal of Palette (see [`Error::class`]) and other errors return at once.
-/// [`Progress`] announces each retry.
+/// [`Progress`] announces each retry. After a 429 of the download of a profile version with no
+/// `Retry-After`, the wait is 10 seconds: Palette takes one download of a version in that time.
 pub struct Retry<A> {
     inner: A,
     policy: RetryPolicy,
@@ -127,7 +128,15 @@ impl<A: PaletteApi> Retry<A> {
                             limit,
                         });
                     }
-                    let delay = self.policy.delay(attempt, retry_after);
+                    let wait = match &e {
+                        Error::Api { status, .. }
+                            if retry_after.is_none() && is_download_limit(*status, path) =>
+                        {
+                            Some(DOWNLOAD_INTERVAL_SECONDS)
+                        }
+                        _ => retry_after,
+                    };
+                    let delay = self.policy.delay(attempt, wait);
                     attempt += 1;
                     self.progress.note(&format!(
                         "{e}; retry {attempt} of {} in {delay:?}",
