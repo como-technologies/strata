@@ -208,3 +208,35 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path crates/strata-knurl
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-core.path='$K/knurl-core'" \
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-ports.path='$K/knurl-ports'"
 ```
+
+### The job of knurl
+
+The workflow `strata adapter` of knurl runs `just adapter-test` on the strata of
+`main`. It is `.github/workflows/strata-adapter.yml` in the repository of knurl.
+These events start it:
+
+| Event | When the job runs |
+| --- | --- |
+| The schedule | Each day at 06:17 UTC. |
+| On demand | When a person with write access to knurl starts it. The input `strata-ref` names the ref of strata to test. Its default is `main`. |
+| A pull request of knurl | When it changes the workflow. |
+
+The job reads strata with no credential, because strata is public. It gives
+the fetch of knurl its own token, which reads only knurl. The adapter has no
+lock file in the repository. So each run takes the newest commit of the branch
+of knurl that `crates/strata-knurl/Cargo.toml` names.
+
+A failure tells that a change of strata on `main`, or a change of knurl, breaks
+the adapter. It shows at the next run of the schedule, not on the pull request
+of strata. No workflow of strata runs the job. So a failure blocks no merge of
+strata, and it makes no work item. No release carries the adapter. The log of
+the run is in knurl, which is private.
+
+To fix the adapter, change `crates/strata-knurl/` in a pull request of strata.
+To test its branch before the merge, start the job on demand with the branch in
+`strata-ref`.
+
+| What fails | What it means |
+| --- | --- |
+| Cargo cannot fetch knurl | knurl has no such branch. When knurl merges the branch, name `main` or a tag of knurl in `crates/strata-knurl/Cargo.toml`. |
+| The format, clippy, or a test | A change of strata or of knurl breaks the adapter. Change `crates/strata-knurl/` in a pull request of strata. |

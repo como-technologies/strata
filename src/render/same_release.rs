@@ -1,7 +1,10 @@
 //! The lines of `same-release`: the word and the detail of each pair, and the verdict of the
 //! chain.
 
+use std::collections::BTreeSet;
+
 use super::changes::status_word;
+use super::list::side_projects;
 use super::notes::{macros_changed_note, macros_not_compared_note, masked_sentence};
 use super::{count_of, short};
 use crate::diff::{Diff, Status};
@@ -13,6 +16,7 @@ pub(crate) fn pair_word(status: PairStatus) -> &'static str {
         PairStatus::Identical => "IDENTICAL",
         PairStatus::SameContent => "SAME CONTENT",
         PairStatus::RegistryMove => "REGISTRY MOVE",
+        PairStatus::Renumber => "RENUMBER",
         PairStatus::Different => "DIFFERENT",
         PairStatus::UnknownUpstream => "NO DIGEST",
     }
@@ -64,10 +68,53 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
                 count_of(p.packs_repinned, "pack")
             )
         }
+        PairStatus::Renumber if p.packs_repinned > 0 => format!(
+            "{} renumbered, {} re-pinned, same configuration",
+            count_of(p.renumbers.len(), "pack"),
+            count_of(p.packs_repinned, "pack")
+        ),
+        PairStatus::Renumber => format!(
+            "{} renumbered, same configuration",
+            count_of(p.renumbers.len(), "pack")
+        ),
         PairStatus::Different | PairStatus::UnknownUpstream => {
             format!("root {} -> {}", short(&p.root_a), short(&p.root_b))
         }
     }
+}
+
+/// `project <a> -> <b>`: the projects of the two records of the pair at `index` of `c`, when
+/// the two differ. See [`side_projects`]. The pair at `index` compares the record at `index`
+/// with the record after it.
+pub(crate) fn pair_projects(c: &Chain, index: usize) -> Option<String> {
+    let (a, b) = (c.records.get(index)?, c.records.get(index + 1)?);
+    side_projects(&a.project_uid, &b.project_uid).map(|(a, b)| format!("project {a} -> {b}"))
+}
+
+/// One line for each renumber of a pair: `<name>  <old> -> <new>`, with its facts in brackets.
+///
+/// The facts are a move from a pre-release to its final version, and an archive that strata does
+/// not compare: see [`Pair::archives_not_compared`].
+pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
+    let not_compared: BTreeSet<&str> = p.archives_not_compared.iter().map(String::as_str).collect();
+    p.renumbers
+        .iter()
+        .map(|r| {
+            let mut facts = Vec::new();
+            if r.pre_release_to_final {
+                facts.push("pre-release to final");
+            }
+            if not_compared.contains(r.key.as_str()) {
+                facts.push("archive: not compared");
+            }
+            let line = format!("{}  {} -> {}", r.name, r.old, r.new);
+            if facts.is_empty() {
+                line
+            } else {
+                format!("{line} ({})", facts.join("; "))
+            }
+        })
+        .collect()
 }
 
 /// The notes under a pair that do not change its status.

@@ -12,8 +12,9 @@ The examples use the projects `dev` and `prod`, which each hold a copy of
 {{#include ../output/promote-same.txt}}
 ```
 
-Exit `0`: dev and prod have the same release. Give the records in promotion
-order, for example `dev.json test.json prod.json`.
+Exit `0`: dev and prod have the same release. The line `project` names the
+project of each record, by uid, when the two differ. Give the records in
+promotion order, for example `dev.json test.json prod.json`.
 
 ## A pair that fails
 
@@ -27,6 +28,21 @@ of `compare`, for example `manifest extra-rules changed` or `values changed (not
 parseable as YAML on one side)`. See
 [Promote a release to another project](../use-cases/promote.md).
 
+## Two projects in one run
+
+Give a project for each side, and strata reads each ref in its own project:
+
+```text
+{{#include ../output/projects-same.txt}}
+```
+
+`--project-a` or `--project-name-a` gives the project of the first ref.
+`--project-b` or `--project-name-b` gives the project of the second ref. The
+flag of a side has priority over `--project`. These flags take two refs. For a
+chain of three projects, give a record file for each ref, which
+`strata snapshot --project-name` writes. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
 ## Which pairs pass
 
 | Result | Cause | Passes |
@@ -34,6 +50,7 @@ parseable as YAML on one side)`. See
 | `IDENTICAL` | The roots are equal, and no pack names another machine image. | yes |
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints. Palette mints the uid of each manifest pack, and the uid of a pack from a registry that it does not sync. A candidate does not have these uids. `mintedUidOnly` in the JSON names each such pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
+| `RENUMBER` | The roots differ only by the versions of packs, with the same values, manifests, params, and images. The tag, the pack uid, and the digest of each such pack can differ. | only with `--allow renumber` |
 | `DIFFERENT` | Any other difference. | no |
 | `NO DIGEST` | The pair passes on its roots. A pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |
 
@@ -54,6 +71,60 @@ what the root can show. A pair that differs for another reason stays
 `DIFFERENT`, and its reasons name each pack with no digest too. `--allow` takes
 more than one value: `--allow registry-move --allow no-digest`. See
 [The content digest](../internals/hashes.md#the-content-digest).
+
+## A release under new version numbers
+
+A pipeline can publish a candidate, test it, and then publish the same content
+under its final numbers. Each team names the candidate in its own way, such as
+`-g<sha12>`, `-rc.1`, `-mr<iid>.<pipeline>`, or `+build.5`. Strata reads no
+suffix. It asks one question: do the two releases hold the same content, when
+only the version numbers differ?
+
+Without an option, the pair fails, because the version of each pack is in the
+root:
+
+```text
+{{#include ../output/renumber-exact.txt}}
+```
+
+`--allow renumber` passes it:
+
+```text
+{{#include ../output/renumber-allow.txt}}
+```
+
+Exit `0`. Strata pairs the packs of the two records by name and layer. Two
+packs are a renumber when their versions differ, and their type, registry,
+values, manifests, params, image list, and `imageId` are the same. The tag, the
+pack uid, and the digest of the archive follow the version. The two profile
+versions can differ too. Any other difference gives the result of the table
+above, and the reason names it:
+
+```text
+{{#include ../output/renumber-edited.txt}}
+```
+
+The verdict lists each renumber as `<name>  <old> -> <new>`. It says
+`pre-release to final` when the move is from a pre-release to its final version
+in Semantic Versioning. That is a fact and not a condition, so a scheme of
+names that is not Semantic Versioning passes too, such as `1.2.0-build5` to
+`2026.11.0`. `pairs[].renumbers` in the JSON gives each renumber:
+
+```text
+{{#include ../output/renumber-json.txt}}
+```
+
+**Check the archive of each new build in your pipeline.** Its `pack.json`
+holds the new version, so it has a new digest. Strata does not read the
+archive. So from the digest alone, it cannot show that only
+`pack.json` changed. Each such pack has `archive: not compared` on its line,
+and `pairs[].archivesNotCompared` names it.
+[#751](https://github.com/como-technologies/strata/issues/751) adds the
+compare of the archives. A manifest pack has no archive.
+
+`compare` gives such a pack the impact `none` when its version keeps its
+numbers: see [A renumber](../reference/impact.md#a-renumber). See
+[A release gets new version numbers](../use-cases/renumber.md).
 
 ## A pack names another machine image
 
@@ -116,8 +187,9 @@ fact. See [A secret changes in a pack value](../use-cases/masked-value.md).
 
 Each side is a ref: a snapshot file, a profile uid, `<name>@<version>`,
 `<name>@latest`, a cluster, or `pack:<name>@<version>`. Strata reads a uid, a
-name, or a cluster in the configured project. To compare two projects, give two
-files. [Refs](../reference/refs.md) lists each form.
+name, or a cluster in the configured project, or in the project of a flag. To
+compare two projects, give a project for each side, or two files.
+[Refs](../reference/refs.md) lists each form.
 
 ## What to expect
 
@@ -134,6 +206,12 @@ files. [Refs](../reference/refs.md) lists each form.
 ```text
 {{#include ../output/help-same-release.txt}}
 ```
+
+`--project <uid>` or `--project-name <name>` reads each ref in that project, in
+place of the configured project. `--project ''` is tenant scope. A record file
+sends no request. `--project-a`, `--project-name-a`, `--project-b`, and
+`--project-name-b` give the project of one side: see
+[Two projects in one run](#two-projects-in-one-run).
 
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see

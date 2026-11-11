@@ -152,6 +152,14 @@ library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
     cargo run --quiet --manifest-path examples/library-preflight/Cargo.toml --target-dir target/library-example
 
+# The job `deny list` of CI runs this recipe with the secret STEP14_DENY. See "The deny list" in
+# docs/src/development/build-test.md.
+
+# Scan the text and the path of each tracked file for each entry of STEP14_DENY, and print no entry
+[group('check')]
+deny-list:
+    scripts/dev/deny-list.sh
+
 # knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
 # its own package: `cargo build` and `cargo test` at the root never build it, and no release
 # carries it.
@@ -496,6 +504,11 @@ live-draft: build
 [group('live checks')]
 live-scope: build
     examples/live/scope.sh
+
+# The projects test: a copy of the release profile in a second project, and same-release and compare with a project for each side (#486). Needs live-profiles, STRATA_LIVE_SECOND_PROJECT, and no cluster. Deletes the copy.
+[group('live checks')]
+live-projects: build
+    examples/live/projects.sh
 
 # The release test: the route that gives the release of Palette answers a call with no key, and refuses a call with the key (#146). Needs only the key; writes nothing.
 [group('live checks')]

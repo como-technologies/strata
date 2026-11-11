@@ -108,10 +108,20 @@ where each module goes. The Go code of the observer follows
   `version::numbers`, and `version::is_pre_release`. `xtask/` and
   `strata-preflight` use them too. Do not write a second parse.
 - A string that does not parse reads as its first three numbers, as Palette
-  reads it. `version::has_three_numbers` finds them. The natural order of the
-  text is only the fallback for a string with no three numbers, such as
-  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
-  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
+  reads it. `version::has_three_numbers` finds them. Where Palette gives no
+  order or reads no version, `version::compare` follows the order of the crate
+  `versions` 8.0.1. A string with no number at its start and no three numbers,
+  such as `LTS__24.x`, is below each version. The natural order of the text
+  orders such strings.
+- `tests/version_order.rs` compares the order with the crate, row by row. A row
+  where strata keeps a rule of Palette names the rule. Add a row for each new
+  form. The crate is a dev-dependency only, and its version is pinned.
+- The same file also makes a probe of strings with each form, and compares the
+  two orders on each pair. Each difference needs a rule that names it, and the
+  test holds the count of differences for each rule. Add each new form to the
+  probe.
+- No script uses `sort -V` for a version. A script reads the direction of a
+  move from strata, such as `versionMove` in `strata-diff/1`.
 - Two orders of a version live outside strata, and each has a test against
   `version::compare`. Add no other exception.
   - `oldest_first` in `examples/fetch-examples.sh`. The script runs offline, so it

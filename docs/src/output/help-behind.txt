@@ -1,5 +1,5 @@
 $ strata behind --help
-Report the pack versions and the profile versions that records hold, and the newer versions of each
+Report the pack versions that records pin, and the newer versions the registries offer
 
 Usage: strata behind [OPTIONS] <RECORDS>...
 
@@ -7,14 +7,16 @@ Arguments:
   <RECORDS>...  Record files; quote a pattern such as 'releases/**/*.json'
 
 Options:
-      --since <FILE>      The JSON of a previous run: each pin names the versions that arrived since
-      --no-impact         Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
-      --pin <LAYER/NAME>  Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask Palette about it, and read no other pack and no profile version
-      --pre-release       Name a pre-release as a newer version of a pin or a profile version that is not a pre-release
-      --format <FORMAT>   The report format: terminal, markdown, or json [default: terminal]
-      --json              The same as --format json
-      --color [<COLOR>]   Color the report: auto, always, or never [default: auto]
-      --no-color          The same as --color=never
-      --compact           Write the JSON on one line
-  -q, --quiet             No progress messages, no note of an unknown value, and no warning of the send
-  -h, --help              Print help
+      --since <FILE>                 The JSON of a previous run: each pin names the versions that arrived since
+      --no-impact                    Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
+      --pin <LAYER/NAME>             Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask Palette about it, and read no other pack
+      --pre-release                  Name a pre-release as a newer version of a pin that is not a pre-release
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>  The same, by project name
+      --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
+      --json                         The same as --format json
+      --color [<COLOR>]              Color the report: auto, always, or never [default: auto]
+      --no-color                     The same as --color=never
+      --compact                      Write the JSON on one line
+  -q, --quiet                        No progress messages, no note of an unknown value, and no warning of the send
+  -h, --help                         Print help

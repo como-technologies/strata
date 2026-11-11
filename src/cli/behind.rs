@@ -6,7 +6,7 @@ use strata::error::Result;
 use strata::ops;
 
 use super::args::BehindArgs;
-use super::{connect, now_utc};
+use super::{connect_in, now_utc};
 
 pub(crate) fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -23,7 +23,7 @@ pub(crate) fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
             pin: a.pin.clone(),
             pre_release: a.pre_release,
         },
-        |scope| connect(progress, scope),
+        |scope| connect_in(progress, Some(&a.project), scope),
         &now_utc(),
         &progress,
     )?;

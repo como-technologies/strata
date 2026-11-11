@@ -1,0 +1,4 @@
+$ strata same-release aws-stack@1.1.0 aws-stack@1.1.0 --project-name-a dev --project-name-b prod
+IDENTICAL      aws-stack@1.1.0 -> aws-stack@1.1.0   root 8a8a64d3f95d
+               project 64f20000000000000000a0d1 -> 64f20000000000000000a0f1
+SAME RELEASE: 1 pair passed

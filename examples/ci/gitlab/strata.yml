@@ -54,7 +54,8 @@ variables:
   # a file for the report of the upstream job; the job strata-upstream-save keeps it as an artifact.
   # Empty keeps none.
   STRATA_SAVE: ""
-  # the differences that the promotion gate accepts, separated by spaces: registry-move no-digest
+  # the differences that the promotion gate accepts, separated by spaces: registry-move renumber
+  # no-digest
   STRATA_PROMOTE_ALLOW: ""
   # the preflight job: the source, the cloud, the tiers, the records, and the options of the
   # command by the same names. The default tier is static, with no request to Palette.

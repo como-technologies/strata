@@ -141,6 +141,35 @@ fn connect(progress: Progress, project: Option<&str>) -> Result<Palette<Retry<Ht
     }
 }
 
+/// A client for `project`, the flags of one project, as [`project_arg`] reads them. With no flag,
+/// the configured project.
+///
+/// Strata finds the uid of a name here, at the connect. So a command that reads only record files
+/// sends no request.
+fn connect_to(
+    progress: Progress,
+    project: Option<&ProjectArgs>,
+) -> Result<Palette<Retry<HttpApi>>> {
+    let uid = match project {
+        Some(p) => project_arg(progress, p)?,
+        None => None,
+    };
+    connect(progress, uid.as_deref())
+}
+
+/// A client for `scope`, the scope that an operation asks for. `None` is the scope of the
+/// command: the project of `project`, else the configured project.
+fn connect_in(
+    progress: Progress,
+    project: Option<&ProjectArgs>,
+    scope: Option<&str>,
+) -> Result<Palette<Retry<HttpApi>>> {
+    match scope {
+        Some(_) => connect(progress, scope),
+        None => connect_to(progress, project),
+    }
+}
+
 /// `--project`, or the uid of the project `--project-name` names.
 fn project_arg(progress: Progress, project: &ProjectArgs) -> Result<Option<String>> {
     match &project.project_name {

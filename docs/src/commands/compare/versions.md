@@ -103,3 +103,18 @@ describes one upgrade engine: see
 [Ask Palette if the change repaves](repave.md). `IDENTITY` with the same pack
 uid and another tag name replaces no node: see
 [One pack build under two tag names](../../use-cases/tag-name.md).
+
+## A version that only changes its numbers
+
+A pipeline can build a pre-release again under its final number, with the same
+content. Then `compare` gives the pack the impact `none (renumber only)`, also
+on the OS and the Kubernetes layers. The version must keep its numbers, and the
+values, manifests, params, and images must stay:
+
+```text
+{{#include ../../output/renumber-compare-json.txt}}
+```
+
+A move to other numbers keeps the level of its layer, also with the same values.
+Strata does not compare the archives of the two builds. See
+[A renumber](../../reference/impact.md#a-renumber).

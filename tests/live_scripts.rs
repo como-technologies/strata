@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
+use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -1368,7 +1369,7 @@ fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     );
     let sent = request();
     assert!(!sent.contains("ApiKey"), "no key: {sent}");
-    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+    assert!(!sent.contains(PROJECT_UID_HEADER), "no project: {sent}");
 
     let o = run_live("api.sh", &["app-version"], root.path(), &[]);
     assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
@@ -1379,7 +1380,7 @@ fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     );
     let sent = request();
     assert!(sent.contains("ApiKey: (hidden)"), "the key: {sent}");
-    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+    assert!(!sent.contains(PROJECT_UID_HEADER), "no project: {sent}");
 
     let o = run_live("api.sh", &["app-version", "--key"], root.path(), &[]);
     assert_eq!(o.status.code(), Some(2));
@@ -1507,11 +1508,13 @@ if [ -n "$out" ]; then cat "$body" > "$out"; else cat "$body"; fi
 
 /// The installer of a release, for `public.sh`. It adds a line with the tokens that it got to
 /// `install.tokens`, and writes two binaries that print their versions into `--dir`.
+///
+/// [`public_web`] puts the variables of [`INSTALLER_TOKENS`] in the place of `@TOKENS@`.
 const FAKE_PUBLIC_INSTALLER: &str = r#"#!/usr/bin/env bash
 dir=""
 while [ $# -gt 0 ]; do case "$1" in --dir) dir=$2; shift 2 ;; *) shift ;; esac; done
 mkdir -p "$dir"
-echo "${STRATA_TOKEN-}${GITHUB_TOKEN-}${GH_TOKEN-}" >> "$FAKE_WEB/install.tokens"
+echo "@TOKENS@" >> "$FAKE_WEB/install.tokens"
 printf '#!/bin/sh\necho strata 9.9.9\n' > "$dir/strata"
 printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
 chmod +x "$dir/strata" "$dir/strata-preflight"
@@ -1522,9 +1525,15 @@ chmod +x "$dir/strata" "$dir/strata-preflight"
 fn public_web(dir: &Path, book: u16) {
     let web = dir.join("web");
     std::fs::create_dir_all(&web).unwrap();
+    let tokens = INSTALLER_TOKENS
+        .map(|name| format!("${{{name}-}}"))
+        .concat();
     let files = [
         ("book.html", "<html>the book</html>".to_string()),
-        ("installer.sh", FAKE_PUBLIC_INSTALLER.to_string()),
+        (
+            "installer.sh",
+            FAKE_PUBLIC_INSTALLER.replace("@TOKENS@", &tokens),
+        ),
         ("token.json", r#"{"token":"anonymous"}"#.to_string()),
         ("manifest.json", r#"{"schemaVersion":2}"#.to_string()),
         (
@@ -1544,7 +1553,7 @@ fn public_web(dir: &Path, book: u16) {
         ),
         format!(
             "https://github.com/o/r/releases/download/{}/install-strata.sh 200 installer.sh",
-            gitlab_drop_in_variable("STRATA_VERSION")
+            gitlab_drop_in_variable(&gitlab_drop_in(), "STRATA_VERSION")
         ),
         "https://ghcr.io/token* 200 token.json".into(),
         "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
@@ -6128,7 +6137,7 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
         "routes/sent/PATCH_v1_clusterprofiles_t-1_publish.request",
     ] {
         let sent = std::fs::read_to_string(stage.path(request)).unwrap();
-        assert!(!sent.contains("ProjectUid"), "{request}: {sent}");
+        assert!(!sent.contains(PROJECT_UID_HEADER), "{request}: {sent}");
     }
     let posts = stage.sent("POST", "/v1/clusterprofiles");
     assert_eq!(posts.len(), 1, "one create: {posts:?}");
@@ -6145,7 +6154,10 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
         stage.path("routes/sent/POST_v1_dashboard_clusterprofiles.request"),
     )
     .unwrap();
-    assert!(request.contains("ProjectUid: p-1"), "{request}");
+    assert!(
+        request.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{request}"
+    );
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     assert!(
         calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
@@ -6180,6 +6192,168 @@ fn scope_sh_fails_the_annotation_check_when_the_document_of_the_copy_says_projec
         calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
         "the tenant profile goes also after a failed check: {calls}"
     );
+}
+
+/// A stage of `projects.sh`: the release profile `r-1` of the lab project `lab` (`p-1`), and the
+/// second project `prod` (`p-2`). Palette gives the copy the uid `c-1`. strata answers as a
+/// release with a project for each side does, and its chain names the projects `chain`.
+fn projects_stage(chain: [&str; 2]) -> Stage {
+    let mut stage = Stage::new(baseline_outputs());
+    let tfvars = stage.path("terraform.tfvars");
+    std::fs::write(&tfvars, "palette_project = \"lab\"\n").unwrap();
+    stage.env("TFVARS", tfvars.to_str().unwrap());
+    stage.env("STRATA_LIVE_SECOND_PROJECT", "prod");
+    stage.route(
+        &profile_route("r-1"),
+        r#"{"metadata":{"name":"strata-live-profile","uid":"r-1"},
+            "spec":{"version":"1.0.0","published":{"type":"cluster","cloudType":"aws","packs":[
+            {"name":"kubernetes","tag":"1.33.0","type":"spectro","layer":"k8s","packUid":"pk-1",
+             "registryUid":"reg-1","values":""}]}}}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/r-1/packs/manifests",
+        r#"{"metadata":{},"spec":{"packs":[]}}"#,
+    );
+    stage.route("/v1/clusterprofiles", r#"{"uid":"c-1"}"#);
+    stage.route("/v1/clusterprofiles/c-1/publish", "{}");
+    stage.route("/v1/clusterprofiles/c-1", "{}");
+    stage.strata(
+        "list projects --json",
+        0,
+        r#"{"projects":[{"name":"lab","uid":"p-1"},{"name":"prod","uid":"p-2"}]}"#,
+    );
+    let version = "strata-live-profile@1.0.0";
+    stage.strata(
+        &format!("snapshot {version} --project-name lab -o a.json"),
+        0,
+        r#"{"source":{"uid":"r-1","projectUid":"p-1"}}"#,
+    );
+    stage.strata(
+        &format!("snapshot {version} --project-name prod -o b.json"),
+        0,
+        r#"{"source":{"uid":"c-1","projectUid":"p-2"}}"#,
+    );
+    let sides = format!("{version} {version} --project-name-a lab --project-name-b prod");
+    let [a, b] = chain;
+    stage.strata(
+        &format!("same-release {sides} --json"),
+        0,
+        &format!(r#"{{"same":true,"records":[{{"projectUid":"{a}"}},{{"projectUid":"{b}"}}]}}"#),
+    );
+    stage.strata(
+        &format!("same-release {sides} --no-color"),
+        0,
+        &format!(
+            "IDENTICAL      {version} -> {version}   root 0123456789ab\n               \
+             project {a} -> {b}\nSAME RELEASE: 1 pair passed\n"
+        ),
+    );
+    stage.strata(
+        &format!("compare {sides} --json"),
+        0,
+        r#"{"a":{"uid":"r-1","projectUid":"p-1"},"b":{"uid":"c-1","projectUid":"p-2"},"sameContent":true}"#,
+    );
+    stage
+}
+
+#[test]
+fn projects_sh_copies_the_release_into_the_second_project_and_checks_each_side() {
+    let stage = projects_stage(["p-1", "p-2"]);
+    let (o, steps) = stage.run("projects.sh", &[]);
+    passed(
+        &steps,
+        &[
+            "copy-create",
+            "record-a",
+            "record-a-project",
+            "record-b",
+            "record-b-project",
+            "verify-both",
+            "same-release",
+            "same-release-projects",
+            "same-release-line",
+            "compare-projects",
+            "records-same",
+            "copy-delete",
+        ],
+    );
+    assert!(has_verdict(&steps, "SEEN", "other-project-read"), "{steps}");
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+
+    // the source is read in the lab project, and the copy goes to the second project
+    let sent = |request: &str| std::fs::read_to_string(stage.path(request)).unwrap();
+    let read = sent("routes/sent/GET_v1_clusterprofiles_r-1.request");
+    assert!(
+        read.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{read}"
+    );
+    // the read that the check records asks for the copy in the lab project
+    let other = sent("routes/sent/GET_v1_clusterprofiles_c-1.request");
+    assert!(
+        other.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{other}"
+    );
+    for request in [
+        "routes/sent/POST_v1_clusterprofiles.request",
+        "routes/sent/PATCH_v1_clusterprofiles_c-1_publish.request",
+        "routes/sent/DELETE_v1_clusterprofiles_c-1.request",
+    ] {
+        assert!(
+            sent(request).contains(&format!("{PROJECT_UID_HEADER}: p-2")),
+            "{request}: {}",
+            sent(request)
+        );
+    }
+    let posts = stage.sent("POST", "/v1/clusterprofiles");
+    assert_eq!(posts.len(), 1, "one create: {posts:?}");
+    assert_eq!(
+        posts[0]["metadata"],
+        serde_json::json!({"name": "strata-live-profile"})
+    );
+    assert_eq!(posts[0]["spec"]["version"], "1.0.0");
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls.ends_with("DELETE /v1/clusterprofiles/c-1\n"),
+        "the last request deletes the copy: {calls}"
+    );
+    assert!(
+        !calls.contains("projects"),
+        "no request touches a project: {calls}"
+    );
+}
+
+#[test]
+fn projects_sh_fails_the_checks_of_the_sides_when_the_chain_names_one_project_twice() {
+    let stage = projects_stage(["p-1", "p-1"]);
+    let (o, steps) = stage.run("projects.sh", &[]);
+    failed(&steps, &["same-release-projects", "same-release-line"]);
+    passed(&steps, &["same-release", "compare-projects"]);
+    assert_ne!(o.status.code(), Some(0));
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls.ends_with("DELETE /v1/clusterprofiles/c-1\n"),
+        "the copy goes also after a failed check: {calls}"
+    );
+}
+
+#[test]
+fn projects_sh_makes_no_copy_without_a_second_project_other_than_the_lab_project() {
+    for second in [None, Some("lab")] {
+        let mut stage = projects_stage(["p-1", "p-2"]);
+        stage.env.retain(|(k, _)| k != "STRATA_LIVE_SECOND_PROJECT");
+        if let Some(name) = second {
+            stage.env("STRATA_LIVE_SECOND_PROJECT", name);
+        }
+        let (o, _) = stage.run("projects.sh", &[]);
+        assert_eq!(o.status.code(), Some(2), "{second:?}");
+        let err = String::from_utf8_lossy(&o.stderr);
+        assert!(
+            err.contains("STRATA_LIVE_SECOND_PROJECT"),
+            "{second:?}: {err}"
+        );
+        let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
+        assert!(!calls.contains("POST"), "{second:?}: no copy: {calls}");
+    }
 }
 
 /// Stage 7 of `packs.sh` against a listing of `loki` whose 2.10.2 names `amd64,arm64` and whose

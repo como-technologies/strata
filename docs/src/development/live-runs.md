@@ -543,6 +543,27 @@ source for
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
+## projects.sh
+
+Read-write. It needs the profiles, a second project of the tenant, and no
+cluster. The name of the second project is in `STRATA_LIVE_SECOND_PROJECT`. The
+script creates and publishes a copy of the release profile in that project, and
+it deletes the copy at its end. It deletes no project. This is the source for
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `copy-create` | 0 | #486: a `POST /v1/clusterprofiles` with the `ProjectUid` of the second project, and its publish, make a copy of the release in that project. The copy has the name and the version of the release. No result yet: the live window of wave 16 runs it. |
+| `record-a`, `record-a-project` | 0 | #486: `snapshot <name>@<version> --project-name <lab project>` records the release, and `source.projectUid` names the lab project. No result yet: the live window of wave 16 runs it. |
+| `record-b`, `record-b-project` | 0 | #486: the same ref with `--project-name <second project>` records the copy, and `source.projectUid` names the second project. No result yet: the live window of wave 16 runs it. |
+| `verify-both` | 0 | #486: one `verify` of the two records reads each record in the project that it names. No result yet: the live window of wave 16 runs it. |
+| `same-release`, `same-release-projects` | 0 | #486: `same-release` of the ref twice, with `--project-name-a` and `--project-name-b`, passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. No result yet: the live window of wave 16 runs it. |
+| `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. No result yet: the live window of wave 16 runs it. |
+| `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. No result yet: the live window of wave 16 runs it. |
+| `records-same` | 0 | #486: `same-release` of the two record files passes. No result yet: the live window of wave 16 runs it. |
+| `other-project-read` | ? | #486: what Palette answers to a `GET` of the copy with the `ProjectUid` of the lab project. `other-project-read.out` holds the status and the error code, and the check records them. No result yet: the live window of wave 16 runs it. |
+| `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. No result yet: the live window of wave 16 runs it. |
+
 ## release.sh
 
 Read-only. It needs the key and nothing else: no profile and no cluster. It
@@ -565,12 +586,12 @@ maintainer only.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `book-opens` | 0 | #65: the address of the book that `strata --help` prints answers 200 with no login. No result yet: the repository is private. |
-| `install-no-token`, `install-runs` | 0 | #65: the install command of the README, as it is, installs the latest release with no token, and both binaries run. No result yet: the repository is private. |
-| `gitlab-install-no-token` | 0 | #483: the install lines of the template `.strata` of the GitLab drop-in install the release of its `STRATA_VERSION` with no token, and the binary runs. The check omits the lines of `apt-get`, which need the image of the job. No result yet: the repository is private. |
-| `image-no-login`, `chart-no-login` | 0 | #65: the registry gives the image and the chart of the observer of that release for an anonymous token. No result yet: the packages are private. |
-| `repository-public` | 0 | #65: the API of GitHub shows the repository with no token, with a description and topics. No result yet: the repository is private. |
-| `advisory-form` | 0 | #65: private vulnerability reporting is on. No result yet: GitHub gives it to a public repository only. |
+| `book-opens` | 0 | #65: the address of the book that `strata --help` prints answers 200 with no login. |
+| `install-no-token`, `install-runs` | 0 | #65: the install command of the README, as it is, installs the latest release with no token, and both binaries run. |
+| `gitlab-install-no-token` | 0 | #483: the install lines of the template `.strata` of the GitLab drop-in install the release of its `STRATA_VERSION` with no token, and the binary runs. The check omits the lines of `apt-get`, which need the image of the job. |
+| `image-no-login`, `chart-no-login` | 0 | #65: the registry gives the image and the chart of the observer of that release for an anonymous token. |
+| `repository-public` | 0 | #65: the API of GitHub shows the repository with no token, with a description and topics. |
+| `advisory-form` | 0 | #65: private vulnerability reporting is on. |
 
 ## contract.sh
 
@@ -1358,6 +1379,7 @@ needs the example at its baseline with cluster A.
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
 | `behind-profile`, `behind-profile-names` | 1, 0 | #707: after the publish of the next version, `behind` on the records of the release and of cluster A exits `1`. One entry of `profiles` holds the release for the two records, and its newer versions hold the next version. No result yet: the live window of wave 16 runs it. |
+| `same-release-renumber` | 0 | #730: `same-release --allow renumber` passes the same publish, and the pair names no renumber: no pack moved its version. No result yet: the next live window runs it. |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. No result yet: the live window of wave 16 runs it. |

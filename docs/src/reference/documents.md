@@ -258,6 +258,11 @@ A comparison of two sides, `a` and `b`.
   no profile can hold only the profiles that the other side asks about. Then
   `ref` names them, as `cluster:<cluster>/<profile>`: see
   [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+  - `a.projectUid` and `b.projectUid`: the project of each side. Strata reads
+    a side in the project of `--project-a` or `--project-b`, else of
+    `--project`, else of the configuration. A side from a record file keeps
+    the project of the record. Empty is tenant scope. See
+    [Two sides in two projects](../commands/compare.md#two-sides-in-two-projects).
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
   manifest packs and the tag names of the same builds. The variables and the
@@ -292,6 +297,9 @@ A comparison of two sides, `a` and `b`.
   - `status`: `unchanged`, `changed`, `added`, or `removed`.
   - `identity`, `upstream`, `authored`, and `paramsChanged`.
   - `tagRenamed`: only the tag name differs, for the same build.
+  - `renumbered`, only when true: only the version changed, and it kept its
+    numbers. The impact is then `none (renumber only)`. See
+    [A renumber](./impact.md#a-renumber).
   - `versionMove`: `forward` or `back`, as at the top of the document, for the
     versions of the pack. Absent when a side has no pack, and when the two
     versions have the same precedence.
@@ -476,15 +484,31 @@ of the secret does not show, because the two sides hold the mask: see
 ## strata-chain/1
 
 - `legend`, and `policy`: `exact` or `registry-move`. `allowNoDigest`, only
-  when true: `--allow no-digest` was given.
+  when true: `--allow no-digest` was given. `allowRenumber`, only when true:
+  `--allow renumber` was given.
 - `same`: each pair passed.
 - `summary`: `pairs`, `passed`, and `failed`.
 - `records[]`: `label`, `name`, `version`, `uid`, `projectUid`, and `root`.
+  `projectUid` is the project of the record, and empty is tenant scope. The
+  first ref is side A of `--project-a`, and the second is side B of
+  `--project-b`. The pair `pairs[n]` compares `records[n]` with
+  `records[n+1]`, so these two give the project of each side of the pair. See
+  [Two projects in one run](../commands/same-release.md#two-projects-in-one-run).
 - `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`,
-  `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
-  `packsRetagged`, and `reasons[]`. A pack that names another image in
-  `imageId` on each side makes the pair `different`, also when the roots are
-  equal.
+  `renumber`, `different`, or `unknown-upstream`), `rootA`, `rootB`,
+  `packsRepinned`, `packsRetagged`, and `reasons[]`. A pack that names another
+  image in `imageId` on each side makes the pair `different`, also when the
+  roots are equal.
+  - `renumbers[]`, only with `--allow renumber` and when it is not empty: each
+    pack whose version alone changed, with `key`, `name`, `old`, and `new`.
+    `preReleaseToFinal`, only when true: `new` is the final version of the
+    pre-release `old`, in Semantic Versioning. A pair that fails for another
+    reason lists its renumbers too. See
+    [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+  - `archivesNotCompared`, only when it is not empty: the key of each pack of
+    `renumbers[]` whose archive can differ. Its digest changed, or Palette gives
+    none. Strata does not compare the files of the two archives.
+    A manifest pack has no archive, so it is never in the list.
   - `upstreamUnknown`, only when it is not empty: the packs with no upstream
     digest, also when `--allow no-digest` accepts them.
   - `mintedUidOnly`, only when it is not empty: the packs whose only difference

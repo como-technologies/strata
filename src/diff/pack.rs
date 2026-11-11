@@ -9,11 +9,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::leaf::{Leaf, Op, leaf_diff};
+use super::renumber;
 use super::{Diff, zip_by_key};
 use crate::closed_set::legend::Described;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::canonical_json;
-use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact, renumber_impact};
 use crate::model::layer::Layer;
 use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, UpstreamSource};
@@ -183,6 +184,13 @@ pub struct PackDiff {
     /// rename. `AUTHORED` and `UPSTREAM` still count.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tag_renamed: bool,
+    /// True when the version alone changed, and it keeps its numbers: a renumber, see
+    /// [`Renumber`](super::Renumber), from a pre-release to its final version, to another pre-release, or to other
+    /// build data. The impact is then `none` with `renumber only`, and `IDENTITY` and `UPSTREAM`
+    /// still count. A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
+    /// layer. Strata does not compare the archives, and the values do not always name the content.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub renumbered: bool,
     /// Which way the version of the pack moves from side A to side B. Absent when a side has no
     /// pack, and when the two versions have the same precedence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -596,6 +604,20 @@ pub(super) fn pack_diffs(a: &Snapshot, b: &Snapshot) -> Vec<PackDiff> {
     packs
 }
 
+/// Each image of the two sides of one pack that moved, by repository.
+///
+/// A path segment that is the version reads as `<version>`. Two equal lists hold no change, also
+/// when the versions differ and only one side has a segment of its version.
+fn image_changes(x: &Pack, y: &Pack) -> Vec<ArtifactChange> {
+    if x.images == y.images {
+        return Vec::new();
+    }
+    artifact_changes(
+        &image_pairs(&x.images, &x.version),
+        &image_pairs(&y.images, &y.version),
+    )
+}
+
 /// The diff of a pack that both sides hold: its status, its flags, its impact, and its changes.
 fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
     let identity = x.hash.identity != y.hash.identity;
@@ -623,22 +645,24 @@ fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
             &y.pack_uid,
             &y.registry_uid,
         );
-    let mut imp = impact(
-        Layer::parse(&x.layer),
-        Flags {
-            identity: identity && !tag_renamed,
-            version: x.version != y.version,
-            upstream,
-            authored,
-        },
-    );
+    let renumbered = renumber::renumber_only(x, y);
+    let mut imp = if renumbered {
+        renumber_impact()
+    } else {
+        impact(
+            Layer::parse(&x.layer),
+            Flags {
+                identity: identity && !tag_renamed,
+                version: x.version != y.version,
+                upstream,
+                authored,
+            },
+        )
+    };
     if tag_renamed && imp.level == ImpactLevel::None {
         imp.text = "none (tag renamed, same pack build)".to_string();
     }
-    let image_changes = artifact_changes(
-        &image_pairs(&x.images, &x.version),
-        &image_pairs(&y.images, &y.version),
-    );
+    let image_changes = image_changes(x, y);
     let chart_changes = artifact_changes(&chart_pairs(&x.charts), &chart_pairs(&y.charts));
     PackDiff {
         key: key.to_string(),
@@ -653,6 +677,7 @@ fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
         params_changed: canonical_json(&x.params) != canonical_json(&y.params),
         minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
         tag_renamed,
+        renumbered,
         version_move: VersionMove::of(&x.version, &y.version),
         impact: imp,
         values: values_diff(x, y),
@@ -692,6 +717,7 @@ pub(super) fn presence_pack_diff(key: &str, pack: &Pack, added: bool) -> PackDif
         params_changed: false,
         minted_uid_only: false,
         tag_renamed: false,
+        renumbered: false,
         version_move: None,
         impact: presence_impact(&pack.layer, added),
         values: ValuesDiff::default(),

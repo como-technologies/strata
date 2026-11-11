@@ -6,7 +6,7 @@ use strata::error::Result;
 use strata::ops;
 
 use super::args::PacksArgs;
-use super::{connect, now_utc};
+use super::{connect_in, now_utc};
 
 pub(crate) fn cmd_packs(a: &PacksArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -18,7 +18,7 @@ pub(crate) fn cmd_packs(a: &PacksArgs) -> Result<ExitCode> {
     let listing = ops::registry_packs(
         &a.name,
         &options,
-        |scope| connect(progress, scope),
+        |scope| connect_in(progress, Some(&a.project), scope),
         &now_utc(),
         &progress,
     )?;

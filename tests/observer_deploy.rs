@@ -9,7 +9,7 @@ use serde_yaml::Value;
 
 use crate::common::{
     CommandExt, block_with, fake_bin, kubectl_args, kubectl_input, on_path, page_section,
-    path_with, recipe, repo_file, run_with_kubectl, script, steps, text, toml_value, walk,
+    path_with, recipe, repo_file, run_with_kubectl, script, steps, strings, text, toml_value, walk,
     workflow, workflow_text,
 };
 
@@ -26,16 +26,6 @@ const RENDERED: [(&str, &str); 4] = [
     ("networkpolicy.yaml", "NetworkPolicy"),
     ("deployment.yaml", "Deployment"),
 ];
-
-/// The names of the strings in a YAML sequence.
-fn strings(value: &Value) -> Vec<&str> {
-    value
-        .as_sequence()
-        .unwrap_or_else(|| panic!("not a sequence: {value:?}"))
-        .iter()
-        .map(|v| v.as_str().unwrap_or_else(|| panic!("not a string: {v:?}")))
-        .collect()
-}
 
 /// The name and the value of an argument that is a flag: `--read-pods` has no value, and
 /// `--state=/state` has one.

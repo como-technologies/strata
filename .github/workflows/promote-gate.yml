@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       allow:
-        description: 'The differences to accept, as a list separated by spaces or new lines: registry-move, for a promotion that moves packs to another registry, and no-digest. Empty accepts none.'
+        description: 'The differences to accept, as a list separated by spaces or new lines: registry-move, for a promotion that moves packs to another registry, renumber, for a release under new version numbers, and no-digest. Empty accepts none.'
         default: ""
         type: string
       project:

@@ -3,12 +3,13 @@
 //! it cannot parse; the reusable workflows never run here, so nothing else shows it. A
 //! colon and a space inside an unquoted description is the fault this found.
 
+use std::collections::BTreeSet;
 use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    recipe, repo_file, runs_of, script, steps, text, toml_value, workflow, workflow_files,
-    workflow_text,
+    just_dry_run, on_path, one_line, recipe, repo_file, runs_of, script, steps, strings, text,
+    toml_value, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -40,27 +41,123 @@ fn the_steps_of_a_workflow_are_the_steps_of_each_job_in_order_and_a_job_with_no_
     assert_eq!(names, ["one", "two", "three"]);
 }
 
-/// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
-/// success while that run has none. The job needs `checks` and has no `if`, so GitHub runs it only
-/// when each check passed, and skips it when one failed. A renamed job, a lost `needs`, or an
-/// `if: always()` lets a verify pass a commit that a check refused.
-#[test]
-fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
-    let doc = workflow("ci.yml");
-    let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
-    let gate = jobs
+/// The keys of the jobs that the job `job` of a workflow needs: one key, or a list of keys.
+fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
+    match &job["needs"] {
+        serde_yaml::Value::String(one) => vec![one.as_str()],
+        serde_yaml::Value::Sequence(many) => many
+            .iter()
+            .map(|need| need.as_str().expect("a need is the key of a job"))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The job named `Gate` of the parsed `ci.yml` in `ci`: the one check run that the verify reads.
+fn gate_of(ci: &serde_yaml::Value) -> &serde_yaml::Value {
+    ci["jobs"]
+        .as_mapping()
+        .expect("ci.yml has jobs")
         .values()
         .find(|job| job["name"].as_str() == Some("Gate"))
-        .expect("ci.yml has a job named Gate");
-    let needs = gate["needs"].as_str().expect("the Gate needs one job");
+        .expect("ci.yml has a job named Gate")
+}
+
+/// The arguments of each `just` command in the `run` steps of the job `job`, in order.
+///
+/// A job that calls a workflow of this repository with `uses` gives the commands of each job of
+/// that workflow. The function also reads each workflow that such a job calls in turn.
+fn just_runs_of(job: &serde_yaml::Value) -> Vec<String> {
+    if let Some(called) = job["uses"].as_str() {
+        let file = called
+            .strip_prefix("./.github/workflows/")
+            .unwrap_or_else(|| {
+                panic!("the job calls {called}, which is not a workflow of this repository")
+            });
+        let doc = workflow(file);
+        return doc["jobs"]
+            .as_mapping()
+            .unwrap_or_else(|| panic!("{file} has no jobs"))
+            .values()
+            .flat_map(just_runs_of)
+            .collect();
+    }
+    job["steps"]
+        .as_sequence()
+        .into_iter()
+        .flatten()
+        .filter_map(|step| step["run"].as_str())
+        .flat_map(str::lines)
+        .filter_map(|line| line.trim().strip_prefix("just "))
+        .map(str::to_string)
+        .collect()
+}
+
+/// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
+/// success while that run has none. The job needs `checks` and `deny-list`, and has no `if`. So
+/// GitHub runs it only when each check passed, and skips it when one failed. A renamed job, a lost
+/// `needs`, or an `if: always()` lets a verify pass a commit that a check refused.
+#[test]
+fn the_gate_job_of_ci_needs_the_checks_and_the_deny_list_and_has_no_condition() {
+    let doc = workflow("ci.yml");
+    let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
+    let gate = gate_of(&doc);
+    let needs = needs_of(gate);
+    assert_eq!(needs.len(), 2, "the Gate needs {needs:?}");
     assert!(
-        jobs.get(needs).is_some_and(|job| job.get("uses").is_some()),
-        "the Gate needs `{needs}`, which is not the job that calls the checks workflow"
+        needs
+            .iter()
+            .any(|need| jobs.get(*need).is_some_and(|job| job.get("uses").is_some())),
+        "the Gate needs {needs:?}, and none is the job that calls the checks workflow"
+    );
+    assert!(
+        needs.contains(&"deny-list"),
+        "the Gate needs {needs:?}, and not the scan of the deny list"
     );
     assert!(
         gate.get("if").is_none(),
         "the Gate has a condition: GitHub must skip it when a check fails"
     );
+}
+
+/// The job `deny list` gives the secret `STEP14_DENY` to the one step that runs the recipe, and no
+/// other step of `ci.yml` gets a secret. The job has no `if`, so it runs on each event. The Gate
+/// and the publish of the book need it, so a hit stops the verify and the book of `main`. A trace
+/// prints the list, so no line of the job turns one on.
+#[test]
+fn the_deny_list_job_scans_with_the_secret_on_each_event_and_the_gate_and_the_book_need_it() {
+    let doc = workflow("ci.yml");
+    let job = &doc["jobs"]["deny-list"];
+    assert_eq!(job["name"].as_str(), Some("deny list"));
+    assert!(job.get("if").is_none(), "the scan has a condition");
+    let runs = runs_of("ci.yml", "deny-list");
+    assert_eq!(runs, ["just deny-list"]);
+    let step = job["steps"]
+        .as_sequence()
+        .expect("the job has steps")
+        .iter()
+        .find(|step| step["run"].as_str() == Some("just deny-list"))
+        .unwrap();
+    assert_eq!(
+        step["env"]["STEP14_DENY"].as_str(),
+        Some("${{ secrets.STEP14_DENY }}")
+    );
+    assert_eq!(
+        workflow_text("ci.yml").matches("secrets.").count(),
+        1,
+        "a step of ci.yml other than the scan gets a secret"
+    );
+    for key in ["gate", "publish-docs"] {
+        assert!(
+            needs_of(&doc["jobs"][key]).contains(&"deny-list"),
+            "the job {key} of ci.yml does not need the scan of the deny list"
+        );
+    }
+    assert_eq!(recipe("deny-list"), ["scripts/dev/deny-list.sh"]);
+    let job_text = serde_yaml::to_string(job).unwrap();
+    for trace in ["set -x", "bash -x", "xtrace"] {
+        assert!(!job_text.contains(trace), "the job turns on a trace");
+    }
 }
 
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
@@ -1183,7 +1280,7 @@ fn permissions_asked(doc: &serde_yaml::Value) -> Vec<(String, String)> {
 fn the_observer_image_job_of_the_release_grants_what_the_called_workflow_needs() {
     let release = workflow("release.yml");
     let job = &release["jobs"]["observer-image"];
-    assert_eq!(job["needs"].as_str(), Some("release"));
+    assert_eq!(needs_of(job), ["release"]);
     assert_eq!(
         job["uses"].as_str(),
         Some("./.github/workflows/observer-image.yml")
@@ -1247,14 +1344,8 @@ fn the_observer_image_workflow_runs_on_a_call_a_dispatch_and_a_pull_request_that
         "latest"
     );
     assert_eq!(on["workflow_call"]["inputs"]["version"]["required"], true);
-    let paths: Vec<&str> = on["pull_request"]["paths"]
-        .as_sequence()
-        .expect("the pull request has paths")
-        .iter()
-        .filter_map(|p| p.as_str())
-        .collect();
     assert_eq!(
-        paths,
+        strings(&on["pull_request"]["paths"]),
         [
             "observer/**",
             "deploy/observer/**",
@@ -1541,4 +1632,82 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
             "{machine:?}"
         );
     }
+}
+
+// ---- the knurl adapter (#705) -------------------------------------------------------------------
+
+/// The names that build the adapter: its recipe and its package.
+const ADAPTER_NAMES: [&str; 2] = ["adapter-test", "strata-knurl"];
+
+/// A job of knurl tests the adapter, so no workflow of strata runs it. A failure of it blocks no
+/// merge and no release of strata.
+///
+/// No recipe of a job that `Gate` needs builds the adapter. The test reads the `just` commands of
+/// each such job, and of each workflow that the job calls. Then it reads the commands that
+/// `just --dry-run` prints for each recipe, with the commands of its dependencies. It also reads
+/// each recipe that a `just` command in them runs.
+#[test]
+fn no_workflow_of_strata_and_no_recipe_of_a_job_that_the_gate_needs_runs_the_adapter() {
+    for file in workflow_files() {
+        let text = workflow_text(&file);
+        for name in ADAPTER_NAMES {
+            assert!(!text.contains(name), "{file} names {name}");
+        }
+    }
+    let ci = workflow("ci.yml");
+    let mut recipes: Vec<String> = needs_of(gate_of(&ci))
+        .into_iter()
+        .flat_map(|need| just_runs_of(&ci["jobs"][need]))
+        .collect();
+    for needed in ["test", "deny-list"] {
+        assert!(recipes.iter().any(|r| r == needed), "{recipes:?}");
+    }
+    let Some(just) = on_path("just") else {
+        eprintln!("skipped: this machine has no just; CI reads the recipes");
+        return;
+    };
+    let mut read = BTreeSet::new();
+    while let Some(run) = recipes.pop() {
+        if !read.insert(run.clone()) {
+            continue;
+        }
+        let args: Vec<&str> = run.split_whitespace().collect();
+        let commands = just_dry_run(&just, &args);
+        for line in commands.lines() {
+            for name in ADAPTER_NAMES {
+                assert!(
+                    !line.contains(name),
+                    "the recipe {run} builds the adapter: {line}"
+                );
+            }
+            recipes.extend(line.trim().strip_prefix("just ").map(str::to_string));
+        }
+    }
+}
+
+/// The page of the adapter names the job of knurl, the events that start it, and what a failure
+/// of it means. It names no secret of strata, because strata has none for knurl.
+#[test]
+fn the_page_of_the_adapter_names_the_job_of_knurl_and_what_a_failure_means() {
+    let page = repo_file("docs/src/automation/knurl.md");
+    let (_, job) = page
+        .split_once("\n### The job of knurl\n")
+        .expect("the page has the section The job of knurl");
+    for words in [
+        "`strata adapter`",
+        "`.github/workflows/strata-adapter.yml`",
+        "06:17 UTC",
+        "`strata-ref`",
+        "no credential",
+        "blocks no merge",
+    ] {
+        assert!(
+            one_line(job).contains(words),
+            "the section does not say {words}"
+        );
+    }
+    assert!(
+        !page.contains("KNURL_"),
+        "the page names a secret of strata"
+    );
 }
