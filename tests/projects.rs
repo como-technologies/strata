@@ -179,6 +179,8 @@ fn compare_reads_each_side_in_its_own_project_and_names_each_project() {
     let asked = stand.asked();
     assert_eq!(projects_of(&asked, UID_A), vec![Some(DEV.to_string()); 3]);
     assert_eq!(projects_of(&asked, UID_B), vec![Some(PROD.to_string()); 3]);
+    let lookups = asked.iter().filter(|(path, _)| path == PROJECT_LISTING);
+    assert_eq!(lookups.count(), 2, "one lookup for each name: {asked:?}");
     let d: Value = serde_json::from_str(&r.out).unwrap();
     assert_eq!(
         (&d["a"]["projectUid"], &d["b"]["projectUid"]),

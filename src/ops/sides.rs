@@ -20,16 +20,6 @@ pub struct SideProjects<T> {
     pub b: Option<T>,
 }
 
-impl<T> Default for SideProjects<T> {
-    fn default() -> Self {
-        SideProjects {
-            both: None,
-            a: None,
-            b: None,
-        }
-    }
-}
-
 impl<T> SideProjects<T> {
     /// The project of `side`: the flag of the side, else the flag of both sides.
     pub fn of(&self, side: Side) -> Option<&T> {

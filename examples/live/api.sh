@@ -326,16 +326,13 @@ create_unpublished() {
   call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid' || exit 2
 }
 
-# copy_into SCOPE UID NAME: the create of create_unpublished with the ProjectUid header SCOPE,
-# and then its publish. An empty SCOPE sends no header, so the profile is of the tenant. Print the
-# uid of the new profile.
+# copy_into SCOPE UID NAME: copy_body of UID, then create_published with the ProjectUid header
+# SCOPE. An empty SCOPE sends no header, so the profile is of the tenant.
 copy_into() {
-  local scope=$1 uid=$2 name=$3 tmp new
+  local scope=$1 tmp
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  copy_body "$uid" "$name" "$tmp"
-  new=$(PROJECT=$scope call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid') || exit 2
-  PROJECT=$scope call PATCH "/v1/clusterprofiles/$new/publish" > /dev/null || exit 2
-  echo "$new"
+  copy_body "$2" "$3" "$tmp"
+  PROJECT=$scope create_published "$tmp/body" || exit 2
 }
 
 # create_tenant_copy UID NAME: copy_into with no ProjectUid header. Palette lists a profile of the

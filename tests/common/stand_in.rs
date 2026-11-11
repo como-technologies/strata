@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 use strata::TOOL_VERSION;
+use strata::api::PROJECT_UID_HEADER;
 use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
 use strata::closed_set::unknown::sighting::Sighting;
 
@@ -299,7 +300,7 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<Request> {
         body: String::from_utf8_lossy(&data[head_end..]).into_owned(),
         project: head.lines().find_map(|l| {
             let (name, value) = l.split_once(':')?;
-            name.eq_ignore_ascii_case("ProjectUid")
+            name.eq_ignore_ascii_case(PROJECT_UID_HEADER)
                 .then(|| value.trim().to_string())
         }),
     })
