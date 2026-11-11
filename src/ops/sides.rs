@@ -63,9 +63,9 @@ impl<T> SideProjects<T> {
         }
         Err(Error::Usage {
             message: format!(
-                "--project-a and --project-b take two refs, and the command has {refs}: record \
-                 each ref with `strata snapshot <ref> --project-name <name> -o <file>`, and give \
-                 the files"
+                "--project-a and --project-b take two refs, and the command has {refs}: give a \
+                 record file for each ref, which `strata snapshot <ref> --project-name <name> -o \
+                 <file>` writes"
             ),
         })
     }

@@ -505,6 +505,11 @@ live-draft: build
 live-scope: build
     examples/live/scope.sh
 
+# The projects test: a copy of the release profile in a second project, and same-release and compare with a project for each side (#486). Needs live-profiles, STRATA_LIVE_SECOND_PROJECT, and no cluster. Deletes the copy.
+[group('live checks')]
+live-projects: build
+    examples/live/projects.sh
+
 # The release test: the route that gives the release of Palette answers a call with no key, and refuses a call with the key (#146). Needs only the key; writes nothing.
 [group('live checks')]
 live-release: build

@@ -542,6 +542,26 @@ source for
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
+## projects.sh
+
+Read-write. It needs the profiles, a second project of the tenant, and no
+cluster. The name of the second project is in `STRATA_LIVE_SECOND_PROJECT`. The
+script creates and publishes a copy of the release profile in that project, and
+it deletes the copy at its end. It deletes no project. This is the source for
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `copy-create` | 0 | #486: a `POST /v1/clusterprofiles` with the `ProjectUid` of the second project, and its publish, make a copy of the release in that project. The copy has the name and the version of the release. No result yet: the live window of wave 16 runs it. |
+| `record-a`, `record-a-project` | 0 | #486: `snapshot <name>@<version> --project-name <lab project>` records the release, and `source.projectUid` names the lab project. No result yet: the live window of wave 16 runs it. |
+| `record-b`, `record-b-project` | 0 | #486: the same ref with `--project-name <second project>` records the copy, and `source.projectUid` names the second project. No result yet: the live window of wave 16 runs it. |
+| `verify-both` | 0 | #486: one `verify` of the two records reads each record in the project that it names. No result yet: the live window of wave 16 runs it. |
+| `same-release`, `same-release-projects` | 0 | #486: `same-release` of the ref twice, with `--project-name-a` and `--project-name-b`, passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. No result yet: the live window of wave 16 runs it. |
+| `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. No result yet: the live window of wave 16 runs it. |
+| `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. No result yet: the live window of wave 16 runs it. |
+| `records-same` | 0 | #486: `same-release` of the two record files passes. No result yet: the live window of wave 16 runs it. |
+| `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. No result yet: the live window of wave 16 runs it. |
+
 ## release.sh
 
 Read-only. It needs the key and nothing else: no profile and no cluster. It

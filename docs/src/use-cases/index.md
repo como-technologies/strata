@@ -81,6 +81,9 @@ identity. The uid is, in the project that holds it.
 
 - [The same names in two projects](./same-names.md): `cluster:payments` names
   two clusters, or `name@version` is not found.
+- [Environments in the projects of one tenant](./projects.md): each environment
+  is a project of one tenant, and a question about dev and prod reads two
+  projects.
 - [Find the profiles that carry a pack](./find-a-pack.md): a pack version has a
   security problem, and you need every profile and cluster that carries it.
 

@@ -482,7 +482,7 @@ const WRAPPERS: [Wrapper; 9] = [
         job: "strata-promote-gate",
         tool: Listed::Command("same-release"),
         reaches: &[reach("--allow", "allow", "STRATA_PROMOTE_ALLOW")],
-        left: &[PRINTING],
+        left: &[PRINTING, PROJECT, SIDES],
     },
     Wrapper {
         workflow: "observer-propose.yml",
@@ -523,6 +523,7 @@ const WRAPPERS: [Wrapper; 9] = [
         reaches: &[],
         left: &[
             PRINTING,
+            PROJECT,
             Left {
                 flags: &["--list-only"],
                 why: "the gate reads each cluster, because the list of Palette can omit a consumer",
@@ -704,6 +705,16 @@ const PROJECT: Left = Left {
     why: "the project comes from PALETTE_PROJECT_UID or PALETTE_PROJECT",
 };
 
+const SIDES: Left = Left {
+    flags: &[
+        "--project-a",
+        "--project-name-a",
+        "--project-b",
+        "--project-name-b",
+    ],
+    why: "a record names its project, so a gate over two projects reads a record of each",
+};
+
 const FORMATS: Left = Left {
     flags: &["--json", "--color", "--no-color", "--compact"],
     why: "the script asks for the format that it reads",
@@ -793,6 +804,7 @@ const PASSES: [Passes; 4] = [
         ],
         left: &[
             FORMATS,
+            PROJECT,
             Left {
                 flags: &["--pin"],
                 why: "the report covers each pin, and this option limits the run to one pack",

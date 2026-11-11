@@ -8,13 +8,35 @@ Arguments:
   <B>  The second side, in the same forms as the first. Beside a profile version, cluster:<cluster> holds only the profile that the version replaces, as cluster:<cluster>/<profile> does. Beside a cluster group, it holds the profiles of the group
 
 Options:
-      --full             Also print the unified diffs of the values and the manifests
-      --repave           Ask Palette if the change repaves the cluster side. One side must be a cluster. The other side is a profile version, or the update that waits for the cluster (cluster:<c>@pending). With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant on either side, Palette can save the address that the console of that pack forwards to, and the question can move it
-      --validate         Ask Palette if it accepts the packs of the change on the cluster side; one side must be a cluster
-      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
-      --json             The same as --format json
-      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
-      --no-color         The same as --color=never
-      --compact          Write the JSON on one line
-  -q, --quiet            No progress messages, no note of an unknown value, and no warning of the send
-  -h, --help             Print help
+      --full
+          Also print the unified diffs of the values and the manifests
+      --repave
+          Ask Palette if the change repaves the cluster side. One side must be a cluster. The other side is a profile version, or the update that waits for the cluster (cluster:<c>@pending). With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or vm-migration-assistant on either side, Palette can save the address that the console of that pack forwards to, and the question can move it
+      --validate
+          Ask Palette if it accepts the packs of the change on the cluster side; one side must be a cluster
+      --project <PROJECT>
+          Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>
+          The same, by project name
+      --project-a <PROJECT_A>
+          Read side A, the first ref, in this project, by uid; '' is tenant scope
+      --project-name-a <PROJECT_NAME_A>
+          The same, by project name
+      --project-b <PROJECT_B>
+          Read side B, the second ref, in this project, by uid; '' is tenant scope
+      --project-name-b <PROJECT_NAME_B>
+          The same, by project name
+      --format <FORMAT>
+          The report format: terminal, markdown, or json [default: terminal]
+      --json
+          The same as --format json
+      --color [<COLOR>]
+          Color the report: auto, always, or never [default: auto]
+      --no-color
+          The same as --color=never
+      --compact
+          Write the JSON on one line
+  -q, --quiet
+          No progress messages, no note of an unknown value, and no warning of the send
+  -h, --help
+          Print help

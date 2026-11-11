@@ -1,0 +1,4 @@
+$ strata verify 'releases/*/*.json'
+OK     releases/1.1.0/dev.json  aws-stack@1.1.0  is unchanged since 2026-09-17T09:30:00Z
+OK     releases/1.1.0/prod.json  aws-stack@1.1.0  is unchanged since 2026-09-17T09:30:00Z
+2 records: 2 unchanged, 0 drifted, no errors

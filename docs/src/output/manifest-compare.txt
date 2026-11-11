@@ -1,6 +1,7 @@
 $ strata compare addons/1.0.0/dev.json addons/1.0.0/prod.json
 platform-addons@1.0.0 (uid 64e2000000000000000000a1)  ->  platform-addons@1.0.0 (uid 64e3000000000000000000a1)
 root       b49f91f9df85 -> 24c6d1b1de2e   SAME CONTENT
+project    64f20000000000000000a0d1 -> 64f20000000000000000a0f1
 note       the roots differ only by the packUid that Palette mints: the same content
 consumers  0 -> 0 clusters
 

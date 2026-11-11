@@ -288,6 +288,11 @@ message of a `reproduce` line that runs no `curl`, because the key of Palette ho
 has the filter `saves_comment`, named by `jq::SAVES_COMMENT`: see
 [Release 0.33.0](#release-0330-changes-that-need-action).
 
+After 0.32.2, `ops::SideProjects` is new. It gives the project of each side of `compare` and
+`same-release`. `SideProjects::check` refuses a flag of one side for a count of refs other than
+two. `ops::snapshot_pair` gives its `connect` the side that it reads: see
+[Release 0.33.0](#release-0330-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -936,6 +941,13 @@ After 0.29.0, two options are new, and both only add:
   pins from a registry gives the error `usage` and exit `2`, before any request. `--pin` with
   `--no-impact` gives a usage error of the command line and exit `2`.
 
+After 0.32.2, each command that reads Palette takes `--project <uid>` and `--project-name
+<name>`, and each one only adds. Before, `list` and `verify` alone took them. `compare` and
+`same-release` also take `--project-a`, `--project-name-a`, `--project-b`, and
+`--project-name-b`, the project of each side. Each side flag of `same-release` takes two refs:
+with three refs or more, it gives the error `usage` and exit `2`, before any request. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -1092,6 +1104,14 @@ field, a value, an input, or an option is in the sections above.
   Now strata reads no file then, and the environment gives each setting. A job with
   a relative `HOME` must set an absolute path, or give the settings in the
   environment. See [Settings](./settings.md).
+- **`compare` and `same-release` name the project of each side in two projects.** The terminal
+  report of `compare` has the line `project <a> -> <b>` after `root`. The markdown table has the
+  row `project`. Under a pair of `same-release`, the line `project <a> -> <b>` comes first. Each
+  project is a uid, or `tenant scope`. See
+  [Two sides in two projects](../commands/compare.md#two-sides-in-two-projects).
+  - A script that reads the line after `root`, or the line after a pair, must skip the new
+    line. Read `a.projectUid`, `b.projectUid`, and `records[].projectUid` of the JSON in its
+    place: the JSON does not change.
 - **`compare` gives a renumber the impact `none`.** A renumber keeps the values, the
   manifests, the params, and the images of a pack. Its version keeps its numbers, such as
   `1.66.0-g4f1c2a9b7d30` to `1.66.0`. The impact is `none (renumber only)` on each layer, and
@@ -1164,7 +1184,10 @@ field, a value, an input, or an option is in the sections above.
   parse.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
   `profile` gives a cluster record of the profile that the version replaces. Its
-  `source.reference` names that profile. The signature stays.
+  `source.reference` names that profile.
+- `ops::snapshot_pair` gives `connect` the `diff::Side` that it reads, so that each side can
+  read its own project. Its `connect` is `FnMut(Side) -> Result<Palette<A>>`, not
+  `FnMut() -> Result<Palette<A>>`. Give `|_| connect()` to get the result of 0.32.2.
 - `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
   Before, it read the file of the working folder, or of a folder from the working
   folder.
