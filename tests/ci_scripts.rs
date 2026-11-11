@@ -2246,21 +2246,26 @@ fn pr_comment_preflight_posts_and_updates_one_marked_note_on_gitlab() {
 // ---- install-strata.sh -------------------------------------------------------------------------
 
 /// A `curl` for the release API of a code host: the release document, and each asset by its id.
+/// The page of the release gives each asset by its name. The log has each address, with the header
+/// `Authorization` when the request has one.
 const FAKE_RELEASE_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
-out=""; url=""
+out=""; url=""; auth=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift 2 ;;
-    -H) shift 2 ;;
+    -H) case "$2" in Authorization:*) auth=" ($2)" ;; esac; shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
 done
-echo "$url" >> "$FAKE_REL/curl.log"
+echo "$url$auth" >> "$FAKE_REL/curl.log"
 case "$url" in
   */releases/tags/*|*/releases/latest) cp "$FAKE_REL/release.json" "$out" ;;
   */releases/assets/*) cp "$FAKE_REL/assets/${url##*/}" "$out" ;;
+  */releases/download/*)
+    id=$(jq -r --arg n "${url##*/}" '.assets[] | select(.name == $n) | .id' "$FAKE_REL/release.json")
+    cp "$FAKE_REL/assets/$id" "$out" ;;
   *) echo "no such URL: $url" >&2; exit 22 ;;
 esac
 "#;
@@ -2312,11 +2317,13 @@ fn tools_without_cosign(d: &Path) -> PathBuf {
 
 /// A release with the four files a job downloads, the checksums over them, and the bundle that
 /// signs the checksums. The bundle of the stand-in `cosign` is the digest of the file it signs.
+/// The installer of the release is the installer of this tree.
 fn release() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     let assets = d.join("assets");
     std::fs::create_dir(&assets).unwrap();
+    let installer = std::fs::read_to_string(script("ci/install-strata.sh")).unwrap();
     let files = [
         (
             "1",
@@ -2325,7 +2332,7 @@ fn release() -> tempfile::TempDir {
         ),
         ("2", "pr-comment.sh", "#!/bin/sh\necho comment\n"),
         ("3", "verify-report.sh", "#!/bin/sh\necho report\n"),
-        ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
+        ("4", "install-strata.sh", installer.as_str()),
         ("6", "merge-gate.sh", "#!/bin/sh\necho gate\n"),
         ("7", "upstream-report.sh", "#!/bin/sh\necho upstream\n"),
         (
@@ -2882,6 +2889,109 @@ fn install_strata_requires_a_bundle_in_the_release_when_asked_to() {
         text(&o.stderr).contains("signature not verified: the release v9.9.9 has no"),
         "{}",
         text(&o.stderr)
+    );
+}
+
+/// A `uname` for a runner of GitLab on Linux and x86-64, the target of the binary of [`release`].
+const FAKE_UNAME: &str = "#!/bin/sh\ncase \"$1\" in -s) echo Linux ;; -m) echo x86_64 ;; esac\n";
+
+/// Run the lines of the template `.strata` of the GitLab drop-in, then `"$STRATA_BIN" --version`,
+/// as a job of the drop-in runs them. The job gets each variable of the drop-in, then `envs`, and
+/// no token. Its project folder is `project` in the release `d`. `apt-get` is a stand-in.
+fn gitlab_install(d: &Path, envs: &[(&str, &str)]) -> Output {
+    let gitlab = gitlab_drop_in();
+    let mut lines: Vec<&str> = gitlab[".strata"]["before_script"]
+        .as_sequence()
+        .expect("the template .strata has before_script lines")
+        .iter()
+        .map(|l| l.as_str().unwrap())
+        .collect();
+    lines.push(r#""$STRATA_BIN" --version"#);
+    fake_bin(d, &[("apt-get", "#!/bin/sh\n"), ("uname", FAKE_UNAME)]);
+    let project = d.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let mut c = Command::new("bash");
+    c.args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
+        .arg(lines.join("\n"))
+        .current_dir(&project)
+        .env(
+            "PATH",
+            format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
+        )
+        .env("FAKE_REL", d)
+        .env("CI_PROJECT_DIR", &project)
+        .env_remove("STRATA_API")
+        .env_remove("STRATA_QUIET")
+        .env_remove("STRATA_TOKEN")
+        .env_remove("GITHUB_TOKEN")
+        .env_remove("GH_TOKEN");
+    for name in gitlab["variables"]
+        .as_mapping()
+        .expect("the drop-in has variables")
+        .keys()
+    {
+        let name = name.as_str().unwrap();
+        c.env(name, gitlab_drop_in_variable(name));
+    }
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    c.output_locked().unwrap()
+}
+
+/// The repository is public, so a job of the GitLab drop-in installs strata with no token of strata
+/// (#483). The page of the release gives the installer, and the API of GitHub gives the release, to
+/// a request with no token. With `STRATA_TOKEN`, the log shows the token, so the log can show one.
+#[test]
+fn the_gitlab_drop_in_installs_strata_with_no_token() {
+    let r = release();
+    let d = r.path();
+    let o = gitlab_install(d, &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout).lines().last(),
+        Some("strata 9.9.9"),
+        "the job runs the binary of STRATA_BIN"
+    );
+    assert!(d.join("project/.strata/merge-gate.sh").exists());
+
+    let (repo, version) = (
+        gitlab_drop_in_variable("STRATA_REPO"),
+        gitlab_drop_in_variable("STRATA_VERSION"),
+    );
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    let calls: Vec<&str> = calls.lines().collect();
+    assert_eq!(
+        calls.first().copied(),
+        Some(
+            format!("https://github.com/{repo}/releases/download/{version}/install-strata.sh")
+                .as_str()
+        ),
+        "the job downloads the installer from the page of the release"
+    );
+    assert_eq!(
+        calls.get(1).copied(),
+        Some(format!("https://api.github.com/repos/{repo}/releases/tags/{version}").as_str()),
+        "the installer reads the release of STRATA_VERSION"
+    );
+    let with_token: Vec<&&str> = calls
+        .iter()
+        .filter(|l| l.contains("Authorization"))
+        .collect();
+    assert!(
+        with_token.is_empty(),
+        "a request has a token: {with_token:?}"
+    );
+
+    std::fs::remove_file(d.join("curl.log")).unwrap();
+    let o = gitlab_install(d, &[("STRATA_TOKEN", "a-token")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    assert!(
+        calls.contains(&format!(
+            "/releases/tags/{version} (Authorization: Bearer a-token)"
+        )),
+        "{calls}"
     );
 }
 
