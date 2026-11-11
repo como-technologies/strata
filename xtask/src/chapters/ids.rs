@@ -109,3 +109,5 @@ pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
 pub(super) const RENUMBER_PRE: &str = "64e00000000000000000010e";
 pub(super) const RENUMBER_FINAL: &str = "64e00000000000000000010f";
 pub(super) const RENUMBER_EDITED: &str = "64e000000000000000000110";
+// aws-stack@1.2.develop: a develop build with no three numbers, beside the versions of #616 (#714)
+pub(super) const DEVELOP_SHORT: &str = "64e000000000000000000111";

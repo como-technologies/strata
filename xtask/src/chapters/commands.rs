@@ -4,7 +4,7 @@ use super::DEV_ENV;
 use super::edits::{LATER_PROFILE_TYPE, RETAIN};
 use super::ids::{
     A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, A1112, AWS_STANDARD, DEV, DEVELOP_118,
-    DEVELOP_1110, DEVELOP_BUILD, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
+    DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
 use crate::tenant::{Edit, profile_exists_message};
@@ -296,13 +296,15 @@ fn snapshot(r: &mut Runner) {
 
 /// The chapter `latest-develop`: a develop build beside two releases, as a field test found it
 /// (#616). Palette reads `1.1.8.develop` as `1.1.8`. Strata puts it below `1.1.8`, and `@latest`
-/// skips it.
+/// skips it. `1.2.develop` holds no three numbers. Strata reads it as a pre-release of `1.2.0`,
+/// above `1.1.10`, and `@latest` skips it too (#714).
 fn latest_develop(r: &mut Runner) {
     r.chapter("latest-develop", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, DEVELOP_118, "1.1.8", "aws-stack@1.1.1", &[]);
     r.profile(DEV, DEVELOP_BUILD, "1.1.8.develop", "aws-stack@1.1.1", &[]);
     r.profile(DEV, DEVELOP_1110, "1.1.10", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, DEVELOP_SHORT, "1.2.develop", "aws-stack@1.1.1", &[]);
     r.step("latest-develop-list", 0, false, "strata list profiles");
     r.step(
         "latest-develop",

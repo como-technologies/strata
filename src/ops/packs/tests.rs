@@ -152,7 +152,9 @@ fn a_pre_release_is_below_its_version_so_latest_keeps_one_version() {
 }
 
 /// The order of `packs` for a version that does not parse, from issue #616. `1.1.8.develop` reads
-/// as `1.1.8`, below it, and `latest` skips it. `10.4.0.1` reads as `10.4.0`, above it.
+/// as `1.1.8`, below it, and `latest` skips it. `10.4.0.1` reads as `10.4.0`, above it. Issue #714:
+/// `1.2.develop` is a pre-release of `1.2.0`. It is below `1.9.0`, and `latest` skips it because it
+/// is a pre-release.
 #[test]
 fn packs_orders_a_version_that_does_not_parse_by_its_three_numbers_and_latest_skips_a_tail_of_text()
 {
@@ -183,6 +185,10 @@ fn packs_orders_a_version_that_does_not_parse_by_its_three_numbers_and_latest_sk
     assert_eq!(
         order(&["1.1.10", "1.2.0.develop"]),
         owned(&[("1.2.0.develop", false), ("1.1.10", true)])
+    );
+    assert_eq!(
+        order(&["1.2.develop", "1.10.0", "1.9.0"]),
+        owned(&[("1.10.0", true), ("1.9.0", false), ("1.2.develop", false)])
     );
 }
 
