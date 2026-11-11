@@ -7,14 +7,14 @@
 #
 # Not read here: crates/strata-knurl (it needs knurl, a private repository), examples/live/terraform
 # (the live example pins the Spectro Cloud provider, and a new one needs a live run; the contract
-# run watches its releases), and deploy/session (the image of the riff sessions follows riff).
+# run watches its releases), deploy/session (the image of the riff sessions follows riff), and
+# examples/library and examples/library-preflight (each depends on the root package by its path, so
+# Dependabot edits the manifests of the root there, and each update opens a second pull request).
 version: 2
 updates:
   - package-ecosystem: cargo
     directories:
       - /
-      - /examples/library
-      - /examples/library-preflight
     schedule:
       interval: weekly
       day: monday
