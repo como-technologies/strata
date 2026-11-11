@@ -65,7 +65,7 @@ The last lines name the profile versions of the records: see
 `--no-impact` skips the comparison of each bump and the question to Palette. The
 comparison costs two pack reads for each pin that is behind. For a profile
 version that is behind, it reads the pack manifests and the variables of the two
-versions: see [The move to the newest profile version](#the-move-to-the-newest-profile-version).
+versions. See [The move to the newest profile version](#the-move-to-the-newest-profile-version).
 `--pre-release` names a pre-release as a newer version of a pin or of a profile
 version that is not a pre-release. `--pin` reports one pack: see [One pack](#one-pack).
 
@@ -127,9 +127,9 @@ The record of a cluster holds each profile that the cluster runs. The cluster
 ```
 
 Strata reads the document of each profile version one time in each project, and
-the document of its newest version. Each part of `behind` reads that one copy:
-the newer versions, the time of the create, the move to the newest version, and
-the names of the clusters in a refusal of Palette. The comparison of the move
+the document of its newest version. Each part of `behind` reads that one copy.
+The parts are the newer versions, the time of the create, the move, and the names
+of the clusters in a refusal. The comparison of the move
 also reads the pack manifests and the variables of the two versions.
 `--no-impact` skips the comparison, and not the other reads. With `--pin`, strata
 reads no profile version.

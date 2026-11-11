@@ -8026,9 +8026,9 @@ fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_
     }
 }
 
-/// Issue #708. With the impact, `behind` gives the bump of the release: the next version, with the
-/// impact level, the flags, and the changed packs of `compare` of the two versions. A bump whose
-/// level, flags, or packs differ from the compare fails.
+/// Issue #708. With the impact, `behind` gives the bump of the release to the next version. Its level,
+/// its flags, and its packs are those of `compare` of the two versions. A bump whose level, flags,
+/// or packs differ from the compare fails.
 #[test]
 fn loop_sh_stage_3_checks_that_the_bump_of_the_release_is_the_compare_of_the_two_versions() {
     let good = (r#""in-place""#, r#"["UPSTREAM","AUTHORED"]"#, "addon/a");

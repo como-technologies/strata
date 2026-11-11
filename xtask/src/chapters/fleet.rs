@@ -195,8 +195,25 @@ fn behind_profiles(r: &mut Runner) {
         false,
         "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.profiles[] | {name, version, scope, newer: [.newer[].version], behind}'",
     );
-    // with the impact, behind compares the version with the newest one, as compare of the two
-    // versions does (#708)
+    behind_profile_move(r);
+    // the record of a cluster holds each profile that the cluster runs
+    r.quiet("strata snapshot cluster:payments -o payments.json");
+    r.step(
+        "behind-profile-cluster",
+        1,
+        false,
+        "strata behind payments.json --no-impact",
+    );
+    r.excerpt(
+        "behind-profile-cluster-lines",
+        "behind-profile-cluster",
+        r"^(\$|\d+ pins|. \[profile\])",
+    );
+}
+
+/// The steps of the chapter `behind-profiles` with the impact: `behind` compares the version with
+/// the newest one, as `compare` of the two versions does (#708).
+fn behind_profile_move(r: &mut Runner) {
     r.step(
         "behind-profile-move",
         1,
@@ -219,19 +236,6 @@ fn behind_profiles(r: &mut Runner) {
         1,
         false,
         "strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown | grep '^\\*\\*Result'",
-    );
-    // the record of a cluster holds each profile that the cluster runs
-    r.quiet("strata snapshot cluster:payments -o payments.json");
-    r.step(
-        "behind-profile-cluster",
-        1,
-        false,
-        "strata behind payments.json --no-impact",
-    );
-    r.excerpt(
-        "behind-profile-cluster-lines",
-        "behind-profile-cluster",
-        r"^(\$|\d+ pins|. \[profile\])",
     );
 }
 

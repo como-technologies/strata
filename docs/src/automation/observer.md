@@ -33,7 +33,7 @@ alone, so that you can run the commands below.
 | Does this cluster run its release? | A finding `cluster-differs` or `image-id-changed`. The cluster copy of each profile. | `strata snapshot` and `strata compare` |
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
 | Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. | `strata behind`. The button runs `strata behind --pin`. |
-| Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". The card "Move to" on the page of the profile, and the choice "Record → Newest version" of the dropdown "Compare" on the page of a pack. | `strata behind`, and `strata compare` of the record and the newest version |
+| Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". The card "Move to" of the profile page, and the choice "Record → Newest version" of the dropdown "Compare" of a pack page. | `strata behind`, and `strata compare` of the record and the newest version |
 | What changed between two pack versions? | The detail of a newer version, with the text of the diff. | `strata compare pack:...` |
 | Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
 
