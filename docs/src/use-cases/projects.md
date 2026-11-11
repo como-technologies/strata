@@ -96,8 +96,11 @@ gives the project of the cluster side.
 {{#include ../output/projects-behind.txt}}
 ```
 
-One run reads the pins of both projects. Strata reads each pin in the project of
-the first record that pins it.
+One run reads the pins and the profile versions of both projects. Strata reads
+each pin in the project of the first record that pins it. Each record holds the
+version 1.1.0 of its project, and Palette gives the newer versions in that
+project. So `behind` gives one line `[profile]` for each project, and exits `1`.
+See [Newer versions of a profile](../commands/behind.md#newer-versions-of-a-profile).
 
 ## 7. Can I delete this version?
 

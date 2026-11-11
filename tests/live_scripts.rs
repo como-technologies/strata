@@ -6040,7 +6040,8 @@ fn scope_stage(tenant_scope: &str) -> Stage {
         r#"{"metadata":{"name":"strata-live-profile","uid":"r-1","annotations":{"scope":"project"}},
             "spec":{"version":"1.0.0","published":{"type":"cluster","cloudType":"aws","packs":[
             {"name":"kubernetes","tag":"1.33.0","type":"spectro","layer":"k8s","packUid":"pk-1",
-             "registryUid":"reg-1","values":""}]}}}"#,
+             "registryUid":"reg-1","values":""}]},
+            "versions":[{"uid":"r-1","version":"1.0.0"},{"uid":"n-1","version":"1.0.1"}]}}"#,
     );
     stage.route(
         "/v1/clusterprofiles/r-1/packs/manifests",
@@ -6052,7 +6053,7 @@ fn scope_stage(tenant_scope: &str) -> Stage {
         &profile_route("t-1"),
         &format!(
             r#"{{"metadata":{{"name":"strata-live-profile","uid":"t-1","annotations":{{"scope":"{tenant_scope}"}}}},
-                "spec":{{"version":"1.0.0"}}}}"#
+                "spec":{{"version":"1.0.0","versions":[{{"uid":"t-1","version":"1.0.0"}}]}}}}"#
         ),
     );
     stage.route(
@@ -6115,6 +6116,8 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
             "search-tenant",
             "annotation-tenant",
             "annotation-project",
+            "versions-tenant",
+            "versions-project",
             "list-scope",
             "list-mark",
             "list-packs-mark",
@@ -6160,6 +6163,22 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
         calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
         "the last request deletes the tenant profile: {calls}"
     );
+}
+
+/// Issue #707. The check of the versions fails when the document of the tenant version also lists
+/// the version of the project.
+#[test]
+fn scope_sh_fails_the_versions_check_when_the_tenant_version_lists_the_project_version() {
+    let stage = scope_stage("tenant");
+    stage.route(
+        &profile_route("t-1"),
+        r#"{"metadata":{"name":"strata-live-profile","uid":"t-1","annotations":{"scope":"tenant"}},
+            "spec":{"version":"1.0.0","versions":[{"uid":"t-1","version":"1.0.0"},{"uid":"r-1","version":"1.0.0"}]}}"#,
+    );
+    let (o, steps) = stage.run("scope.sh", &[]);
+    failed(&steps, &["versions-tenant"]);
+    passed(&steps, &["versions-project", "annotation-tenant"]);
+    assert_ne!(o.status.code(), Some(0));
 }
 
 #[test]
@@ -7967,6 +7986,39 @@ fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_a
         passed(&steps, &["ask-repave-plain"]);
         let checks = ["cluster-plain", "ask-repave-plain-says"];
         if whole {
+            failed(&steps, &checks);
+        } else {
+            passed(&steps, &checks);
+        }
+    }
+}
+
+/// Issue #707. After the publish of the next version, `behind` names it as a newer version of the
+/// release, in one entry that both records hold. A report that names no newer version fails.
+#[test]
+fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_of_the_release() {
+    for newer in ["1.0.1", ""] {
+        let mut stage = lab_stage();
+        let versions = if newer.is_empty() {
+            String::new()
+        } else {
+            format!(r#"{{"version":"{newer}"}}"#)
+        };
+        let report = format!(
+            r#"{{"schema":"{schema}","pins":[],"profiles":[
+                {{"name":"strata-live-profile","version":"1.0.0","pinnedBy":[{{}},{{}}],"newer":[{versions}]}},
+                {{"name":"strata-live-addon","version":"1.0.0","pinnedBy":[{{}}],"newer":[]}}]}}"#,
+            schema = strata::ops::BEHIND_SCHEMA
+        );
+        let exit = if newer.is_empty() { 0 } else { 1 };
+        stage.strata(
+            "behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json",
+            exit,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        let checks = ["behind-profile", "behind-profile-names"];
+        if newer.is_empty() {
             failed(&steps, &checks);
         } else {
             passed(&steps, &checks);

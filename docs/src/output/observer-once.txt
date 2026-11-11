@@ -6,6 +6,7 @@ $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records 
     "drift": 1,
     "newer": 4,
     "newerProfiles": 1,
+    "newerProfileVersions": 1,
     "notChecked": 0,
     "packs": 6,
     "packsInFull": 6,

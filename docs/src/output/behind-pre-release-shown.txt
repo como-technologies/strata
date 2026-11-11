@@ -1,5 +1,5 @@
 $ strata behind releases/1.1.1/dev.json --no-impact --pre-release
-5 pins from 1 record: 1 behind, 1 floating
+5 pins from 1 record: 1 behind, 1 floating; 1 profile version: 0 behind
   [addon] cert-manager    1.21.1  Public Repo  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
   [cni  ] cni-cilium-oss  1.20.1  Public Repo  current
@@ -10,4 +10,6 @@ $ strata behind releases/1.1.1/dev.json --no-impact --pre-release
   [k8s  ] kubernetes      1.36.2  Public Repo  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
   [os   ] ubuntu-aws      24.04   Public Repo  current (floating tag LTS__24.x, now 24.04)
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+  [profile] aws-stack  1.1.1  project  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)

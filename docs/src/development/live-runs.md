@@ -535,6 +535,7 @@ source for
 | `listing-both` | 0 | #113: the profile listing of the project gives two versions with that name and that version: the tenant version and the project version |
 | `search-tenant` | 0 | #113: the profile search of the project, with the filter `scope` `tenant`, names the tenant uid and not the project uid |
 | `annotation-tenant`, `annotation-project` | 0 | #113: in the project, the document of the tenant version gives `metadata.annotations.scope` `tenant`, and the document of the release version gives `project` |
+| `versions-tenant`, `versions-project` | 0 | #707: `spec.versions[]` of each document names the versions of its own scope. The tenant version lists its own uid and not the uid of the release. The release lists its own uid and not the uid of the tenant version. No result yet: the live window of wave 16 runs it. |
 | `list-scope` | 0 | #113: `list --json` gives `scope` `tenant` for the tenant version and `project` for the release version |
 | `list-mark`, `list-packs-mark` | 0 | #113: the row of the tenant version ends with `tenant`, with and without `--packs` |
 | `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`. The error names each uid with its scope, and tells you to give the uid |
@@ -1377,6 +1378,7 @@ needs the example at its baseline with cluster A.
 | `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
+| `behind-profile`, `behind-profile-names` | 1, 0 | #707: after the publish of the next version, `behind` on the records of the release and of cluster A exits `1`. One entry of `profiles` holds the release for the two records, and its newer versions hold the next version. No result yet: the live window of wave 16 runs it. |
 | `same-release-renumber` | 0 | #730: `same-release --allow renumber` passes the same publish, and the pair names no renumber: no pack moved its version. |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |

@@ -114,6 +114,12 @@ pub(super) const RENUMBER_FINAL: &str = "64e00000000000000000010f";
 pub(super) const RENUMBER_EDITED: &str = "64e000000000000000000110";
 // aws-stack@1.2.develop: a develop build with no three numbers, beside the versions of #616 (#714)
 pub(super) const DEVELOP_SHORT: &str = "64e000000000000000000111";
+// aws-stack in the chapter behind-profiles (#707): the pre-release 1.2.0-rc.1 in dev, 1.3.0 in
+// prod, and 2.0.0 at tenant scope, each with the content of 1.1.1. Only 1.1.0 of dev is a newer
+// version of 1.0.0 of dev
+pub(super) const A120_RC: &str = "64e000000000000000000112";
+pub(super) const A130_PROD: &str = "64e100000000000000000110";
+pub(super) const A200_TENANT: &str = "64e400000000000000000111";
 
 #[cfg(test)]
 mod tests {

@@ -63,6 +63,7 @@
 - [Promote a release to another project](./use-cases/promote.md)
 - [Retire a version](./use-cases/retire.md)
 - [The registry has newer versions](./use-cases/behind.md)
+- [A newer version of the profile exists](./use-cases/newer-profile.md)
 - [A registry deletes the tag of a pack](./use-cases/invalid-pack.md)
 - [A published version is edited in place](./use-cases/edited-in-place.md)
 - [Review a draft before its publish](./use-cases/draft.md)

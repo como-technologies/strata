@@ -123,6 +123,10 @@ and of each wave, checks them.
    - The read of the pods answers a question that no route of Palette answers.
      When a route of Palette gives the digest that a pod runs, strata removes
      the read and the news `image`.
+   - No route says that a newer version of a profile exists. `behind` reads the
+     versions that Palette lists for the profile, and orders them. When a route
+     of Palette names the newer versions, strata removes its order. See
+     [A newer version of a profile](./internals/palette/profiles.md#a-newer-version-of-a-profile).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds
    one of them only when `compare`, `verify`, or `same-release` needs it to

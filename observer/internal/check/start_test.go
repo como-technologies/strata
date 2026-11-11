@@ -219,3 +219,31 @@ func TestMergeBehindKeepsOnePinForEachKeyWithEachRecordThatPinsIt(t *testing.T) 
 		t.Errorf("the read that failed stays: %+v", got.Pins[2].Error)
 	}
 }
+
+// The merge keeps one profile version for each name@version, in the order of the answers, with each
+// record that holds it once. A read with no error takes the place of a read that failed (#707).
+func TestMergeBehindKeepsOneProfileVersionForEachSubjectWithEachRecordThatHoldsIt(t *testing.T) {
+	held := func(name, version, by string, failed bool) docs.ProfilePin {
+		p := docs.ProfilePin{Name: name, Version: version, PinnedBy: []docs.PinnedBy{{Subject: by}}}
+		if failed {
+			p.Error = &docs.Error{Kind: docs.KindAPI, Status: 429}
+		} else {
+			p.Behind, p.Newer = true, []docs.NewerProfile{{Version: "9.0.0"}}
+		}
+		return p
+	}
+	a := docs.Behind{Schema: docs.BehindSchema, Profiles: []docs.ProfilePin{
+		held("barney-addons", "1.3.1", "barney-addons@1.3.1", true),
+	}}
+	b := docs.Behind{Schema: docs.BehindSchema, Profiles: []docs.ProfilePin{
+		held("barney-base", "1.5.0", "barney-base@1.5.0", false),
+		held("barney-addons", "1.3.1", "barney-addons@1.3.1", false),
+	}}
+	got := mergeBehind([]docs.Behind{a, b}).Profiles
+	if len(got) != 2 || got[0].Name != "barney-addons" || got[1].Name != "barney-base" {
+		t.Fatalf("%+v", got)
+	}
+	if got[0].Error != nil || !got[0].Behind || len(got[0].PinnedBy) != 1 {
+		t.Errorf("the read with no error takes the place of the one that failed: %+v", got[0])
+	}
+}

@@ -1,5 +1,5 @@
 $ strata behind --help
-Report the pack versions that records pin, and the newer versions the registries offer
+Report the pack versions and the profile versions that records hold, and the newer versions of each
 
 Usage: strata behind [OPTIONS] <RECORDS>...
 
@@ -9,8 +9,8 @@ Arguments:
 Options:
       --since <FILE>                 The JSON of a previous run: each pin names the versions that arrived since
       --no-impact                    Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
-      --pin <LAYER/NAME>             Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask Palette about it, and read no other pack
-      --pre-release                  Name a pre-release as a newer version of a pin that is not a pre-release
+      --pin <LAYER/NAME>             Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask Palette about it, and read no other pack and no profile version
+      --pre-release                  Name a pre-release as a newer version of a pin or a profile version that is not a pre-release
       --project <PROJECT>            Use this project, by uid; '' is tenant scope
       --project-name <PROJECT_NAME>  The same, by project name
       --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]

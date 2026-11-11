@@ -105,7 +105,7 @@ pub trait Renderer {
     /// The errors of [`Renderer::render`].
     fn render_packs(&self, l: &PackListing) -> Result<String>;
 
-    /// The pack versions that records pin, against the newer versions the registries offer.
+    /// The pack versions and the profile versions that records hold, against their newer versions.
     ///
     /// # Errors
     ///

@@ -108,6 +108,14 @@ fn answers(r: &mut Runner) {
         "state",
         "-c '.newer[] | {name, version, newest, impact}'",
     );
+    // the tenant holds aws-stack 1.1.0, a newer published version of the profile aws-stack@1.0.0
+    summary(
+        r,
+        "observer-profile-version",
+        PAYMENTS,
+        "state",
+        "-c '.profiles[] | select(.newerVersion) | {name, version, status, newerVersion}'",
+    );
     summary(
         r,
         "observer-limits",

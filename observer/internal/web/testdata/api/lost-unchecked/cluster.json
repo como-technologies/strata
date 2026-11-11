@@ -5,5 +5,5 @@
   "records": {"count":0,"baseline":"unknown","startedAt":"2026-11-03T11:30:00Z"},
   "content": {"checkedAt":null,"every":"15m","failedRuns":3,"lastError":{"kind":"api","status":401}},
   "versions": {"readAt":null,"every":"6h","failedRuns":1,"lastError":{"kind":"api","status":401}},
-  "counts": {"findings":0,"drift":0,"newer":0,"newerProfiles":0,"notChecked":0,"packs":0,"packsInFull":0,"profiles":0}
+  "counts": {"findings":0,"drift":0,"newer":0,"newerProfiles":0,"newerProfileVersions":0,"notChecked":0,"packs":0,"packsInFull":0,"profiles":0}
 }

@@ -126,6 +126,8 @@ can give different roots, and how strata says so.
 - [Retire a version](./retire.md): you want to delete an old version.
 - [The registry has newer versions](./behind.md): every record verifies, and the registry
   offers newer versions of the packs that they pin.
+- [A newer version of the profile exists](./newer-profile.md): `verify` passes on each
+  record, and the pipeline published a newer version of the profile that a record holds.
 - [A registry deletes the tag of a pack](./invalid-pack.md): a record verifies,
   and Palette marks a pack of the version invalid.
 
