@@ -6,9 +6,11 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 
+use strata::api::MemoryApi;
 use strata::diff::{self, ImpactLevel, Renumber};
-use strata::ops::{self, PairStatus, Policy, SameReleaseOptions};
-use strata::snapshot::Snapshot;
+use strata::model::pack_type::PackType;
+use strata::ops::{self, ArchiveChange, Chain, PairStatus, Policy, SameReleaseOptions};
+use strata::snapshot::{Pack, Snapshot, Template};
 
 use crate::common;
 
@@ -23,6 +25,19 @@ fn renumber_allowed() -> SameReleaseOptions {
         allow_renumber: true,
         ..SameReleaseOptions::default()
     }
+}
+
+/// The values of the pack `p`, as the file `values.yaml` of the archive of its build. Two builds of
+/// one content hold the same file.
+fn values_file(p: &Pack) -> Option<Vec<(&'static str, String)>> {
+    Some(vec![("values.yaml", p.values.clone())])
+}
+
+/// The chain of `--allow renumber` of `records`, with a Palette that serves the download of each
+/// record. The archive of each pack holds `pack.json` and the files that `files` gives.
+fn renumber_chain(records: &[(String, Snapshot)], files: &common::BuildFiles) -> Chain {
+    let api = common::serve_downloads(MemoryApi::new(), records, files);
+    common::same_release_served(records, renumber_allowed(), &api, "t1")
 }
 
 /// Each pack of the published template of the profile document `profile` with the name `name`.
@@ -165,7 +180,7 @@ fn allow_renumber_passes_each_scheme_of_names_and_lists_each_renumber() {
             &no_edit,
         );
         assert_ne!(old.root, new.root, "{k8s}: the versions are in the root");
-        let c = ops::same_release_with(&pair(old, new), renumber_allowed(), "t1");
+        let c = renumber_chain(&pair(old, new), &values_file);
         let p = &c.pairs[0];
         assert_eq!(p.status, PairStatus::Renumber, "{k8s}: {:?}", p.reasons);
         assert!(c.same && c.allow_renumber, "{k8s}");
@@ -187,15 +202,16 @@ fn allow_renumber_passes_each_scheme_of_names_and_lists_each_renumber() {
             "{k8s}"
         );
         assert_eq!(
-            p.archives_not_compared,
+            p.archives_compared,
             ["k8s/kubernetes", "csi/csi-aws-ebs"],
-            "{k8s}: the digest of each new build changed"
+            "{k8s}: the digest of each new build changed, and the archives hold the same files"
         );
+        assert!(p.archives_not_compared.is_empty() && p.archives_changed.is_empty());
         let text = common::terminal().render_chain(&c).unwrap();
         let fact = if final_of_pre {
-            "pre-release to final; archive: not compared"
+            "pre-release to final; archive: same files"
         } else {
-            "archive: not compared"
+            "archive: same files"
         };
         for line in [
             "RENUMBER       old.json -> new.json   2 packs renumbered, same configuration"
@@ -252,7 +268,7 @@ fn without_allow_renumber_the_verdict_of_a_renumber_is_the_one_that_it_was() {
         allow_no_digest: true,
         allow_renumber: false,
     };
-    let c = ops::same_release_with(&records(), options, "t1");
+    let c = common::same_release_offline(&records(), options, "t1");
     assert_eq!(c.pairs[0].status, PairStatus::Different);
     assert_eq!(c.pairs[0].reasons, p.reasons);
 }
@@ -367,7 +383,7 @@ fn allow_renumber_fails_a_pair_that_changes_more_than_the_numbers_and_names_the_
             &machine_image("ami-0aaa"),
         );
         let new = release(dir.path(), UID_NEW, "1.4.0", &[(pack, to)], edit);
-        let c = ops::same_release_with(&pair(old.clone(), new.clone()), renumber_allowed(), "t1");
+        let c = renumber_chain(&pair(old.clone(), new.clone()), &values_file);
         let p = &c.pairs[0];
         assert_eq!(p.status, PairStatus::Different, "{pack}");
         assert!(
@@ -430,9 +446,59 @@ fn compare_gives_a_renumber_that_keeps_its_numbers_no_impact_also_on_the_os_and_
     assert!(!text.contains("repave"), "{text}");
 }
 
+/// A number that a version omits is `0`, as Palette reads it: `1.29-rc.1` and `1.29.0` keep their
+/// numbers. `same-release` says `pre-release to final` for the move, and `compare` gives it no
+/// impact.
 #[test]
-fn an_os_pack_with_new_numbers_and_the_same_values_keeps_its_repave_and_same_release_can_accept_it()
-{
+fn compare_gives_no_impact_to_a_renumber_that_omits_a_number_that_is_zero() {
+    let dir = fixtures();
+    let old = release(
+        dir.path(),
+        UID_OLD,
+        "1.4-rc.1",
+        &[("kubernetes", "1.29-rc.1")],
+        &no_edit,
+    );
+    let new = release(
+        dir.path(),
+        UID_NEW,
+        "1.4.0",
+        &[("kubernetes", "1.29.0")],
+        &no_edit,
+    );
+    let d = diff::compute(&old, &new, "t1", None);
+    let pd = d.packs.iter().find(|p| p.key == "k8s/kubernetes").unwrap();
+    assert!(pd.renumbered);
+    assert_eq!(pd.impact.level, ImpactLevel::None);
+    assert_eq!(pd.impact.text, "none (renumber only)");
+    let c = renumber_chain(&pair(old, new), &values_file);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
+    assert!(p.renumbers[0].pre_release_to_final);
+    // one more number moves the version: the impact of the layer stays
+    let old = release(
+        dir.path(),
+        UID_OLD,
+        "1.4-rc.1",
+        &[("kubernetes", "1.29-rc.1")],
+        &no_edit,
+    );
+    let new = release(
+        dir.path(),
+        UID_NEW,
+        "1.4.1",
+        &[("kubernetes", "1.29.1")],
+        &no_edit,
+    );
+    let d = diff::compute(&old, &new, "t1", None);
+    let pd = d.packs.iter().find(|p| p.key == "k8s/kubernetes").unwrap();
+    assert!(!pd.renumbered);
+    assert_ne!(pd.impact.level, ImpactLevel::None);
+}
+
+#[test]
+fn an_os_pack_with_new_numbers_and_the_same_values_keeps_its_repave_and_same_release_reads_its_archive()
+ {
     let dir = fixtures();
     // an OS pack names its OS in its archive, not in its values: 20.04 and 24.04 have one set of
     // values and two digests
@@ -453,21 +519,283 @@ fn an_os_pack_with_new_numbers_and_the_same_values_keeps_its_repave_and_same_rel
     let d = diff::compute(&old, &new, "t1", None);
     let os = d.packs.iter().find(|p| p.key == "os/ubuntu-aws").unwrap();
     assert!(!os.authored && os.upstream, "the same values, a new digest");
-    assert!(!os.renumbered, "the numbers change");
+    assert!(
+        !os.renumbered,
+        "the numbers change: compare reads no archive"
+    );
     assert_eq!(os.impact.level, ImpactLevel::Repave);
     assert_eq!(os.impact.text, "node repave (OS image change)");
     assert_eq!(d.summary.max_impact, ImpactLevel::Repave);
-    // the person asks for the renumber: the archive is not compared
-    let c = ops::same_release_with(&pair(old, new), renumber_allowed(), "t1");
+    // the person asks for the renumber, and the archive of each build names its OS
+    let os_file = |p: &Pack| {
+        let mut files = values_file(p)?;
+        if p.name == "ubuntu-aws" {
+            files.push(("os-release", format!("VERSION_ID=\"{}\"\n", p.version)));
+        }
+        Some(files)
+    };
+    let c = renumber_chain(&pair(old.clone(), new.clone()), &os_file);
     let p = &c.pairs[0];
-    assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
-    assert_eq!(p.renumbers.len(), 1);
+    assert_eq!(p.status, PairStatus::Different, "{:?}", p.reasons);
     assert_eq!(
         (p.renumbers[0].old.as_str(), p.renumbers[0].new.as_str()),
         ("20.04", "24.04")
     );
     assert!(!p.renumbers[0].pre_release_to_final);
-    assert_eq!(p.archives_not_compared, ["os/ubuntu-aws"]);
+    assert_eq!(
+        p.reasons,
+        ["pack os/ubuntu-aws archive: os-release differs"]
+    );
+    assert_eq!(
+        p.archives_changed,
+        [ArchiveChange {
+            key: "os/ubuntu-aws".to_string(),
+            files: vec!["os-release".to_string()],
+        }]
+    );
+    // two builds that differ only by the version in pack.json are a renumber
+    let c = renumber_chain(&pair(old, new), &values_file);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
+    assert_eq!(p.archives_compared, ["os/ubuntu-aws"]);
+}
+
+/// The criterion of #751: a pair whose archives differ only in `version` of `pack.json` passes, and
+/// a pair whose archives differ in another file fails and names the file.
+#[test]
+fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_the_file() {
+    let dir = fixtures();
+    let old = release(
+        dir.path(),
+        UID_OLD,
+        "1.4.0-rc.1",
+        &[
+            ("kubernetes", "1.29.4-rc.1"),
+            ("csi-aws-ebs", "1.28.0-rc.1"),
+        ],
+        &no_edit,
+    );
+    let new = release(
+        dir.path(),
+        UID_NEW,
+        "1.4.0",
+        &[("kubernetes", "1.29.4"), ("csi-aws-ebs", "1.28.0")],
+        &no_edit,
+    );
+    // the final build of the CSI pack has another chart and one more preset
+    let rebuilt = |p: &Pack| {
+        let mut files = values_file(p)?;
+        if p.name == "csi-aws-ebs" {
+            let chart = if p.version == "1.28.0" { "two" } else { "one" };
+            files.push(("charts/aws-ebs-csi-driver.tgz", chart.to_string()));
+            if p.version == "1.28.0" {
+                files.push(("presets.yaml", "presets: []\n".to_string()));
+            }
+        }
+        Some(files)
+    };
+    let records = pair(old, new);
+    let c = renumber_chain(&records, &rebuilt);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Different);
+    assert!(!c.same);
+    assert_eq!(c.exit_code(), 1);
+    assert_eq!(
+        p.reasons,
+        ["pack csi/csi-aws-ebs archive: charts/aws-ebs-csi-driver.tgz and 1 more file differ"]
+    );
+    assert_eq!(
+        p.archives_changed,
+        [ArchiveChange {
+            key: "csi/csi-aws-ebs".to_string(),
+            files: vec![
+                "charts/aws-ebs-csi-driver.tgz".to_string(),
+                "presets.yaml".to_string()
+            ],
+        }]
+    );
+    assert_eq!(p.archives_compared, ["k8s/kubernetes"]);
+    assert_eq!(
+        p.renumbers.len(),
+        2,
+        "a pair that fails lists its renumbers too"
+    );
+    let text = common::terminal().render_chain(&c).unwrap();
+    for line in [
+        "               kubernetes  1.29.4-rc.1 -> 1.29.4 (pre-release to final; archive: same files)",
+        "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: other files)",
+        "               pack csi/csi-aws-ebs archive: charts/aws-ebs-csi-driver.tgz and 1 more file differ",
+        "NOT THE SAME RELEASE: 1 of 1 pair failed",
+    ] {
+        assert!(text.lines().any(|l| l == line), "{line:?} in\n{text}");
+    }
+    // one file that differs is named alone
+    let one = |p: &Pack| {
+        let mut files = values_file(p)?;
+        if p.name == "kubernetes" {
+            files[0].1.push_str(&format!("# {}\n", p.version));
+        }
+        Some(files)
+    };
+    let c = renumber_chain(&records, &one);
+    assert_eq!(
+        c.pairs[0].reasons,
+        ["pack k8s/kubernetes archive: values.yaml differs"]
+    );
+}
+
+/// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of
+/// Helm charts or of Zarf packages. The list of the download names such a pack with no file. Such
+/// a renumber keeps `archive: not compared`, and the pair passes. A manifest pack has no archive:
+/// its content is its manifests, which the records hold.
+#[test]
+fn a_renumber_whose_download_holds_no_archive_keeps_archive_not_compared_in_each_case_of_palette() {
+    let dir = fixtures();
+    let records = |kind: PackType| {
+        let edit = move |profile: &mut Value, _: &mut Value| {
+            for p in pack_refs(profile, "csi-aws-ebs") {
+                p["type"] = json!(kind);
+            }
+        };
+        pair(
+            release(
+                dir.path(),
+                UID_OLD,
+                "1.4.0-rc.1",
+                &[("csi-aws-ebs", "1.28.0-rc.1")],
+                &edit,
+            ),
+            release(
+                dir.path(),
+                UID_NEW,
+                "1.4.0",
+                &[("csi-aws-ebs", "1.28.0")],
+                &edit,
+            ),
+        )
+    };
+    // the CSI pack is of a private registry, or of an OCI registry of Helm charts or of Zarf
+    // packages. The download names it with an empty filePath
+    for kind in [PackType::Spectro, PackType::Helm, PackType::Oci] {
+        let records = records(kind);
+        let no_csi = |p: &Pack| (p.name != "csi-aws-ebs").then(|| values_file(p)).flatten();
+        let c = renumber_chain(&records, &no_csi);
+        let p = &c.pairs[0];
+        assert_eq!(p.status, PairStatus::Renumber, "{kind:?}: {:?}", p.reasons);
+        assert_eq!(p.archives_not_compared, ["csi/csi-aws-ebs"], "{kind:?}");
+        assert!(p.archives_compared.is_empty(), "{kind:?}");
+        let text = common::terminal().render_chain(&c).unwrap();
+        let line = "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not compared)";
+        assert!(
+            text.lines().any(|l| l == line),
+            "{kind:?}: {line:?} in\n{text}"
+        );
+    }
+}
+
+/// A record that is no published version of a cluster profile has no download: a candidate, a
+/// draft, or a cluster. Strata sends no request for it, and its renumbers keep `archive: not
+/// compared`. Each version has one download, also when two pairs read it.
+#[test]
+fn strata_reads_one_download_for_each_published_version_and_none_for_another_record() {
+    let dir = fixtures();
+    let old = release(
+        dir.path(),
+        UID_OLD,
+        "1.4.0-rc.1",
+        &[("csi-aws-ebs", "1.28.0-rc.1")],
+        &no_edit,
+    );
+    let new = release(
+        dir.path(),
+        UID_NEW,
+        "1.4.0",
+        &[("csi-aws-ebs", "1.28.0")],
+        &no_edit,
+    );
+    let records = vec![
+        ("old.json".to_string(), old.clone()),
+        ("new.json".to_string(), new.clone()),
+        ("again.json".to_string(), old.clone()),
+    ];
+    let api = common::serve_downloads(MemoryApi::new(), &records, &values_file);
+    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    assert!(c.same, "{:?}", c.pairs);
+    for p in &c.pairs {
+        assert_eq!(p.archives_compared, ["csi/csi-aws-ebs"]);
+    }
+    for (side, version) in [("old", UID_OLD), ("new", UID_NEW)] {
+        assert_eq!(api.calls(&common::download_route(version)), 1, "{side}");
+    }
+    // a candidate of the old version: no uid, no download
+    let mut candidate = old.clone();
+    candidate.source.uid = String::new();
+    let mut draft = old.clone();
+    draft.source.template = Template::Draft.into();
+    for side in [candidate, draft] {
+        let api = common::serve_downloads(MemoryApi::new(), &records, &values_file);
+        let c =
+            common::same_release_served(&pair(side, new.clone()), renumber_allowed(), &api, "t1");
+        assert_eq!(c.pairs[0].archives_not_compared, ["csi/csi-aws-ebs"]);
+        assert_eq!(api.calls(&common::download_route(UID_NEW)), 0);
+    }
+}
+
+/// Palette takes one download of a version in 10 seconds. The download of another client a moment
+/// before gives HTTP 429 with the code `TooManyRequests`: the error names the limit.
+#[test]
+fn a_download_that_palette_refuses_for_its_limit_is_an_error_that_names_the_limit() {
+    let dir = fixtures();
+    let old = release(
+        dir.path(),
+        UID_OLD,
+        "1.4.0-rc.1",
+        &[("csi-aws-ebs", "1.28.0-rc.1")],
+        &no_edit,
+    );
+    let new = release(
+        dir.path(),
+        UID_NEW,
+        "1.4.0",
+        &[("csi-aws-ebs", "1.28.0")],
+        &no_edit,
+    );
+    let records = pair(old, new);
+    let body = r#"{"code":"TooManyRequests","message":"Too Many Requests, only 1 request in 10 seconds is allowed"}"#;
+    let api = common::serve_downloads(MemoryApi::new(), &records, &values_file).failing(
+        common::download_route(UID_NEW),
+        429,
+        body,
+    );
+    let err = ops::same_release_with(
+        &records,
+        renumber_allowed(),
+        |_| Ok(strata::api::Palette::new(&api)),
+        "t1",
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "api");
+    let message = err.to_string();
+    assert!(message.contains("TooManyRequests"), "{message}");
+    assert!(
+        message.ends_with("Palette takes one download of a profile version in 10 seconds: run the command again later"),
+        "{message}"
+    );
+    // a download that is not the file of a download
+    let api = MemoryApi::new().with_file(
+        common::download_route(UID_OLD),
+        br#"{"Reader":{}}"#.to_vec(),
+    );
+    let err = ops::same_release_with(
+        &records,
+        renumber_allowed(),
+        |_| Ok(strata::api::Palette::new(&api)),
+        "t1",
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(err.kind(), "not-archive");
 }
 
 #[test]
@@ -487,7 +815,9 @@ fn the_json_of_same_release_holds_each_renumber_and_the_archives_that_it_does_no
         &[("csi-aws-ebs", "1.28.0")],
         &no_edit,
     );
-    let c = ops::same_release_with(&pair(old, new), renumber_allowed(), "t1");
+    // the download holds no archive of either build
+    let records = pair(old, new);
+    let c = renumber_chain(&records, &|_| None);
     let json: Value = serde_json::from_str(
         &strata::render::Renderer::render_chain(&*json_renderer(), &c).unwrap(),
     )
@@ -515,6 +845,29 @@ fn the_json_of_same_release_holds_each_renumber_and_the_archives_that_it_does_no
             "| RENUMBER | `old.json` | `new.json` | 1 pack renumbered, same configuration<br>csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not compared) |"
         ),
         "{markdown}"
+    );
+    // archives that hold the same files, and archives that differ in a file
+    let to_json = |c: &Chain| -> Value {
+        serde_json::from_str(&strata::render::Renderer::render_chain(&*json_renderer(), c).unwrap())
+            .unwrap()
+    };
+    let json = to_json(&renumber_chain(&records, &values_file));
+    assert_eq!(
+        json["pairs"][0]["archivesCompared"],
+        json!(["csi/csi-aws-ebs"])
+    );
+    assert!(json["pairs"][0].get("archivesNotCompared").is_none());
+    let other = |p: &Pack| {
+        Some(vec![(
+            "values.yaml",
+            format!("{}# {}\n", p.values, p.version),
+        )])
+    };
+    let json = to_json(&renumber_chain(&records, &other));
+    assert_eq!(json["pairs"][0]["status"], "different");
+    assert_eq!(
+        json["pairs"][0]["archivesChanged"],
+        json!([{"key": "csi/csi-aws-ebs", "files": ["values.yaml"]}])
     );
 }
 
@@ -557,7 +910,7 @@ fn a_manifest_pack_that_is_renumbered_has_no_archive_to_compare() {
         &manifest_pack("1.0.0-rc.1"),
     );
     let new = release(dir.path(), UID_NEW, "1.4.0", &[], &manifest_pack("1.0.0"));
-    let c = ops::same_release_with(&pair(old, new), renumber_allowed(), "t1");
+    let c = renumber_chain(&pair(old, new), &values_file);
     let p = &c.pairs[0];
     assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
     assert_eq!(p.renumbers.len(), 1);

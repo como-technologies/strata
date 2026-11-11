@@ -1,0 +1,9 @@
+$ strata preflight cluster:64f1000000000000000000e1 --tier static --quiet --out out > /dev/null; strata preflight cluster:64f1000000000000000000e1 --tier static --quiet --out out-world --world > /dev/null; grep -c team-payments out/* out-world/*
+out/report.html:0
+out/report.json:0
+out/report.md:0
+out-world/entity.json:1
+out-world/report.html:0
+out-world/report.json:0
+out-world/report.md:0
+out-world/world.json:2

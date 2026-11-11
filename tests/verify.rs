@@ -472,6 +472,34 @@ fn a_503_twice_then_success_yields_a_snapshot() {
     );
 }
 
+/// Palette takes one download of a profile version in 10 seconds.
+#[test]
+fn a_429_of_the_download_of_a_profile_version_waits_10_seconds_before_the_retry() {
+    let download = common::download_route(UID_A);
+    let refused = r#"{"code":"TooManyRequests"}"#;
+    let api = MemoryApi::new()
+        .with_file(download.as_str(), b"file".to_vec())
+        .failing_n_times(download.as_str(), 1, 429, refused)
+        .with(profile_path(), Value::Null)
+        .failing_n_times(profile_path(), 1, 429, refused);
+    let (retry, slept) = retrying(&api, 3);
+    assert_eq!(retry.get_file(&download).unwrap(), b"file");
+    assert_eq!(retry.get_json(&profile_path()).unwrap(), Value::Null);
+    // the first wait of another route is one second
+    assert_eq!(
+        *slept.borrow(),
+        vec![Duration::from_secs(10), Duration::from_secs(1)]
+    );
+    // a Retry-After gives the wait of the download too
+    let api = MemoryApi::new()
+        .with_file(download.as_str(), b"file".to_vec())
+        .failing_n_times(download.as_str(), 1, 429, refused)
+        .with_retry_after(download.as_str(), 3);
+    let (retry, slept) = retrying(&api, 3);
+    assert_eq!(retry.get_file(&download).unwrap(), b"file");
+    assert_eq!(*slept.borrow(), vec![Duration::from_secs(3)]);
+}
+
 #[test]
 fn a_permanent_500_fails_with_the_last_error_after_the_configured_attempts() {
     let dir = tempfile::tempdir().unwrap();
@@ -9560,7 +9588,7 @@ fn same_release_refuses_a_pair_with_no_digest_unless_allowed() {
         "{:?}",
         c.pairs[0].reasons
     );
-    let allowed = ops::same_release_with(&records, common::no_digest_allowed(), "t1");
+    let allowed = common::same_release_offline(&records, common::no_digest_allowed(), "t1");
     assert_eq!(allowed.pairs[0].status, PairStatus::Identical);
     assert_eq!(allowed.pairs[0].upstream_unknown, ["os/ubuntu-aws"]);
     assert!(allowed.same);
@@ -10861,7 +10889,7 @@ fn same_release_refuses_two_records_whose_os_pack_names_two_machine_images() {
             ("a.json".to_string(), x.clone()),
             ("b.json".to_string(), y.clone()),
         ];
-        ops::same_release_with(
+        common::same_release_offline(
             &records,
             SameReleaseOptions {
                 policy,

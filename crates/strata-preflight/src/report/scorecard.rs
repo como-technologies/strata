@@ -112,11 +112,18 @@ pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
     )
 }
 
-/// What `--out` wrote, or what it would write.
-pub(crate) fn written_text(out_dir: Option<&str>) -> String {
-    match out_dir {
-        Some(dir) => format!("Written to {dir}: report.html, report.md, report.json, world.json, entity.json."),
-        None => "No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).".to_string(),
+/// What `--out` wrote, or what it writes. The line names the two files that hold the values of the
+/// variables. When the run did not write them, the line says how to write them.
+pub(crate) fn written_text(options: &Options) -> String {
+    const REPORTS: &str = "report.html, report.md, report.json";
+    match (options.out_dir.as_deref(), options.out_world) {
+        (Some(dir), true) => format!(
+            "Written to {dir}: {REPORTS}, world.json, entity.json. The last two hold the values of the variables."
+        ),
+        (Some(dir), false) => format!(
+            "Written to {dir}: {REPORTS}. The reproduce lines read world.json and entity.json there ($OUT): run again with --world to write them. They hold the values of the variables."
+        ),
+        (None, _) => "No file written; --out DIR writes report.html, report.md, and report.json, and --world adds world.json and entity.json, which the reproduce lines read there ($OUT).".to_string(),
     }
 }
 

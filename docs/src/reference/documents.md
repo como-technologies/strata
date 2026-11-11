@@ -505,9 +505,17 @@ of the secret does not show, because the two sides hold the mask: see
     pre-release `old`, in Semantic Versioning. A pair that fails for another
     reason lists its renumbers too. See
     [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+  - `archivesCompared`, only when it is not empty: the key of each pack of
+    `renumbers[]` whose two archives strata compared. They hold the same files,
+    and `pack.json` differs only by its `version`. See
+    [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+  - `archivesChanged[]`, only when it is not empty: each pack of `renumbers[]`
+    whose two archives differ in another file, with `key` and `files[]`. The
+    pair is then `different`, and `reasons[]` names the files too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
-    `renumbers[]` whose archive can differ. Its digest changed, or Palette gives
-    none. Strata does not compare the files of the two archives.
+    `renumbers[]` whose archive can differ, and whose archives strata did not
+    compare. Its digest changed, or Palette gives none. Palette serves no
+    archive of the pack, or a record is no published version.
     A manifest pack has no archive, so it is never in the list.
   - `upstreamUnknown`, only when it is not empty: the packs with no upstream
     digest, also when `--allow no-digest` accepts them.
@@ -802,7 +810,10 @@ what it answered.
   - `verdict`: `passed`, `failed`, `not-checked`, `not-run`, `skipped`, or
     `error`. `not-run` is a check that applies and did not run: a tier not asked
     for, no key, or `--no-exec`; it counts against the readiness.
-  - `messages[]`: one for each failure, or the reason for another verdict.
+  - `messages[]`: one for each failure, or the reason for another verdict. A
+    message holds a mark in place of each value of a variable, such as
+    `[value of pod_cidr]`. See
+    [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code. A check with a second command shows
     both commands in `ran`, with `; ` between them. Then `answer` has the exit
@@ -833,7 +844,8 @@ what it answered.
   `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
-- `options`: `tiers`, `strict`, `offline`, `ready`, and `outDir` when `--out` was given.
+- `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
+  `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

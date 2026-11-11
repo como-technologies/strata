@@ -69,3 +69,9 @@ pub(super) const RC_PINS: &[Edit] = &[
         version: "1.65.0-rc.1",
     },
 ];
+// The pin of the CSI pack of aws-stack@1.1.1 at a final build from another commit: the chapter
+// rebuilds the version with one more replica of the controller in its default values.
+pub(super) const REBUILT_PIN: &[Edit] = &[Edit::Upgrade {
+    pack: "csi-aws-ebs",
+    version: "1.65.1",
+}];

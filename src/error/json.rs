@@ -120,7 +120,9 @@ impl Error {
                 put(m, "retryAfter", *retry_after);
                 put(m, "limit", *limit);
             }
-            Error::Transport { method, path, .. } | Error::NotJson { method, path, .. } => {
+            Error::Transport { method, path, .. }
+            | Error::NotJson { method, path, .. }
+            | Error::NotArchive { method, path, .. } => {
                 put_request(m, method.as_str(), path);
             }
             _ => {}

@@ -65,6 +65,11 @@ fn each_kind_of_error() -> Vec<Error> {
             path: "/v1/x".into(),
             source: bad_json(),
         },
+        Error::NotArchive {
+            method: Method::Get,
+            path: crate::api::download_path("u1"),
+            message: "no gzip".into(),
+        },
         Error::ProfileNotFound {
             name: "aws-stack".into(),
             version: "9.9.9".into(),

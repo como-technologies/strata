@@ -134,26 +134,30 @@ digest of the archive follow the version.
 
 A renumber whose version keeps its numbers gets the impact `none` on each
 layer, also on the OS and the Kubernetes layers. Only the pre-release or the
-build data of such a version changes, as from `1.65.0-rc.1` to `1.65.0`. The
-text is `none (renumber only)`, and `packs[].renumbered` in the JSON is `true`.
+build data of such a version changes, as from `1.65.0-rc.1` to `1.65.0`. A
+number that a version omits is `0`, as Palette reads it, so `1.2-rc.1` to
+`1.2.0` keeps its numbers too. The text is `none (renumber only)`, and `packs[].renumbered` in the JSON is `true`.
 The flags still show `IDENTITY`, and `UPSTREAM` for the new digest:
 
 ```text
 {{#include ../output/renumber-compare.txt}}
 ```
 
-**A renumber to other numbers keeps the level of its layer.** Strata does not
-read the archive of a pack. The values do not always name the content. In the
-Public Repo, `ubuntu-aws` `20.04` and `24.04` have the same values and two
-digests, and they are two releases of the OS. So such a move stays `repave`.
-`same-release --allow renumber` can accept such a move: see
-[A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+**A renumber to other numbers keeps the level of its layer.** `compare` and
+`behind` read no archive of a pack. The values do not always name the content.
+In the Public Repo, `ubuntu-aws` `20.04` and `24.04` have the same values and
+two digests, and they are two releases of the OS. So such a move stays
+`repave`. `same-release --allow renumber` reads the archives, and fails such a
+move when another file differs: see
+[The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
 
-**Check the archive of each new build in your pipeline.** The impact `none`
-covers what the profile holds. Strata does not compare the files of the two
+**Run `same-release --allow renumber` to check the archive of each new build.**
+The impact `none` covers what the profile holds. `compare` does not read the
 archives, so it cannot show that only `pack.json` changed in the new build.
-[#751](https://github.com/como-technologies/strata/issues/751) adds the
-compare of the archives.
+`compare` runs for each pull request, each night, and in the observer. A
+download of a version makes Palette read each pack from its registry, and
+Palette takes one download of a version in 10 seconds. So the one read of the
+archives is the check of the publish.
 
 ## Where to see it
 

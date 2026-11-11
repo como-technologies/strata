@@ -33,9 +33,9 @@ A cluster in the state `Error` ends the watch too. This run has no `--limit`:
 A failed rule or an error keeps its own words, also for a deleted cluster. A cluster that is not
 gone gives `OK: each counted check passed`.
 
-With `--out`, `world.json` holds the last reading: the conditions and the events
-the rules saw. A build that cannot finish stops in minutes, not at the timeout
-of the client.
+With `--out` and `--world`, `world.json` holds the last reading: the conditions
+and the events the rules saw. A build that cannot finish stops in minutes, not
+at the timeout of the client.
 
 At each reading, `--verbose` prints the three requests of the reading and what
 they gave. It also prints each condition that changed, each new event, and one

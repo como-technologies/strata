@@ -8,7 +8,7 @@ use strata::ops::{Policy, SameReleaseOptions};
 use strata::reference::Ref;
 
 use super::args::{Allow, SameReleaseArgs};
-use super::{connect_to, now_utc};
+use super::{connect_in, connect_to, now_utc};
 
 pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -36,7 +36,13 @@ pub(crate) fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
         allow_no_digest: a.allow.contains(&Allow::NoDigest),
         allow_renumber: a.allow.contains(&Allow::Renumber),
     };
-    let c = ops::same_release_with(&records, options, &now);
+    let c = ops::same_release_with(
+        &records,
+        options,
+        |scope| connect_in(progress, Some(&a.project), scope),
+        &now,
+        &progress,
+    )?;
     print!("{}", a.out.renderer().render_chain(&c)?);
     Ok(ExitCode::from(c.exit_code()))
 }

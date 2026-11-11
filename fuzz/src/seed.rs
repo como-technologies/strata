@@ -27,7 +27,8 @@ use strata::snapshot::{Snapshot, Tool};
 
 use crate::support::{AT, cluster_files, profile_files, raw_profile, scratch, utf8};
 use crate::{
-    behind, candidate, canon, config, mask, palette, preflight, record, reference, report, unknown,
+    behind, candidate, canon, config, download, mask, palette, preflight, record, reference,
+    report, unknown,
 };
 
 mod catalog;
@@ -65,7 +66,7 @@ struct Target {
 type Case = (&'static str, &'static str, Vec<u8>);
 
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
-const TARGETS: [Target; 20] = [
+const TARGETS: [Target; 21] = [
     Target {
         test: "candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind",
         run: candidate::file,
@@ -75,6 +76,11 @@ const TARGETS: [Target; 20] = [
         test: "canon::any_text_has_a_stable_canonical_form_as_values_and_as_a_manifest",
         run: canon::values,
         seeds: yaml_texts,
+    },
+    Target {
+        test: "download::a_download_of_a_profile_gives_the_archive_of_each_pack_or_is_refused_with_a_kind",
+        run: download::file,
+        seeds: downloads,
     },
     Target {
         test: "mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes",
@@ -277,6 +283,79 @@ fn candidate_files() -> Vec<Vec<u8>> {
         .map(book_output),
     );
     seeds
+}
+
+// ---- the download of a profile version ------------------------------------------------------
+
+/// Downloads of a profile version, as Palette writes them. The packs are a pack with its archive
+/// and a manifest, a pack of a private registry, and a manifest pack. The other seeds are a
+/// download with no list, an archive of a pack that is no gzip, and an answer that is JSON.
+fn downloads() -> Vec<Vec<u8>> {
+    use crate::archive::{DownloadPack, pack_archive, profile_download, tgz};
+    use strata::model::pack_type::PackType;
+    let uid = crate::support::UID;
+    let none = |name, kind, private| DownloadPack {
+        name,
+        version: "1.0.0",
+        kind,
+        private,
+        archive: None,
+        manifests: &[],
+    };
+    let archive = pack_archive(
+        "kubernetes",
+        "1.36.2",
+        "k8s",
+        "kubernetes-0123456789ab",
+        &[
+            ("values.yaml", "pack:\n  k8sHardening: true\n"),
+            ("README.md", "# k8s\n"),
+        ],
+    );
+    let packs = [
+        DownloadPack {
+            version: "1.36.2",
+            archive: Some(archive),
+            manifests: &[("extra", "kind: ConfigMap\n")],
+            ..none("kubernetes", PackType::Spectro, false)
+        },
+        none("private-pack", PackType::Spectro, true),
+        DownloadPack {
+            manifests: &[("rules", "kind: ConfigMap\n")],
+            ..none("platform-rules", PackType::Manifest, false)
+        },
+    ];
+    let not_gzip = [DownloadPack {
+        archive: Some(br#"{"code":"NotFound"}"#.to_vec()),
+        ..none("kubernetes", PackType::Spectro, false)
+    }];
+    // an archive with no top folder, and a pack whose name holds the label of a pack
+    let flat = [DownloadPack {
+        archive: Some(tgz(&[(
+            "pack.json".to_string(),
+            br#"{"name":"flat"}"#.to_vec(),
+        )])),
+        ..none("flat", PackType::Spectro, false)
+    }];
+    let labeled = [DownloadPack {
+        archive: Some(pack_archive(
+            "csi--aws",
+            "1.0.0",
+            "csi",
+            "csi--aws-0123456789ab",
+            &[],
+        )),
+        ..none("csi--aws", PackType::Spectro, false)
+    }];
+    vec![
+        profile_download(uid, "aws-stack", &packs),
+        profile_download(uid, "aws-stack", &packs[2..]),
+        profile_download(uid, "aws-stack", &flat),
+        profile_download(uid, "aws-stack", &labeled),
+        profile_download(uid, "aws-stack", &not_gzip),
+        tgz(&[(format!("{uid}/spc.json"), b"{}".to_vec())]),
+        br#"{"Reader":{}}"#.to_vec(),
+    ]
 }
 
 // ---- refs and versions ----------------------------------------------------------------------

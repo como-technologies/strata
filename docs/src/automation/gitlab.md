@@ -55,7 +55,7 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | Variable | Needed for | Note |
 | --- | --- | --- |
 | `GITLAB_TOKEN` | the note, the label, the issues | A project or group access token with the `api` scope. **The job token cannot write notes or issues.** Mask it. |
-| `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, and a ref that is not a file | Mask it. |
+| `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, a ref that is not a file, and `renumber` in `STRATA_PROMOTE_ALLOW` | Mask it. |
 | `PALETTE_PROJECT_UID` | a ref in a project | |
 | `STRATA_REPAVE` | the comment | `true` asks Palette if the change repaves the cluster, and its answer decides the label. `false` by default. See [Pull request comments](./pr-comments.md#ask-palette-if-the-change-repaves). |
 | `STRATA_TOKEN` | the download | Optional: a GitHub token for the installer. See [Install](../install.md#one-command). Mask it. |
@@ -73,6 +73,7 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `STRATA_PREFLIGHT_CHANGE`, `_PROBES`, `_RELEASE`, `_READY`, `_RULE`, `_EVERY`, `_LIMIT` | the preflight job | The change file, `--probes`, `--release`, `--ready`, `--rule`, `--every`, and `--limit`. Empty by default: the job does not give the option. `_RULE` is a list separated by spaces. |
 | `STRATA_PREFLIGHT_STRICT`, `_NO_EXEC`, `_VERBOSE`, `_WATCH` | the preflight job | `true` gives the option of the same name. `false` by default. |
 | `STRATA_PREFLIGHT_OUT` | the preflight job | The directory for `--out`. `preflight` by default. The job keeps it as an artifact. |
+| `STRATA_PREFLIGHT_WORLD` | the preflight job | `true` gives `--world`, so the artifact also keeps `world.json` and `entity.json`, which hold the values of the variables. `false` by default. See [The files of the job](./preflight.md#the-files-of-the-job). |
 | `STRATA_PREFLIGHT_COMMENT` | the preflight job | `true` posts `report.md` as one note on the merge request, with `pr-comment.sh --preflight`. `false` by default. It needs `GITLAB_TOKEN`. |
 | `STRATA_OBSERVER_KUBECONFIG` | the two jobs of the observer | A CI/CD variable of the type File: a kubeconfig of the publisher of the chart. Without it, the two jobs do not run. See [Approve the records with a pipeline](./observer.md#approve-the-records-with-a-pipeline). |
 | `STRATA_OBSERVER_DIR`, `_NAMESPACE` | `strata-observer-propose` | `--dir` and `--namespace` of `observer-propose.sh`. `releases/observer` and `strata-observer` by default. |

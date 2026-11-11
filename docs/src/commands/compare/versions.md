@@ -109,12 +109,14 @@ uid and another tag name replaces no node: see
 A pipeline can build a pre-release again under its final number, with the same
 content. Then `compare` gives the pack the impact `none (renumber only)`, also
 on the OS and the Kubernetes layers. The version must keep its numbers, and the
-values, manifests, params, and images must stay:
+values, manifests, params, and images must stay. A number that a version omits
+is `0`, so `1.2-rc.1` and `1.2.0` keep their numbers:
 
 ```text
 {{#include ../../output/renumber-compare-json.txt}}
 ```
 
 A move to other numbers keeps the level of its layer, also with the same values.
-Strata does not compare the archives of the two builds. See
+`compare` does not read the archives of the two builds.
+`same-release --allow renumber` reads them. See
 [A renumber](../../reference/impact.md#a-renumber).

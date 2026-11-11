@@ -105,6 +105,11 @@ pub fn pack_route(uid: &str) -> String {
     format!("/v1/packs/{uid}")
 }
 
+/// The download of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/spc/download`.
+pub fn download_route(uid: &str) -> String {
+    format!("/v1/clusterprofiles/{uid}/spc/download")
+}
+
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
 pub fn group_route(uid: &str) -> String {
     format!("/v1/clustergroups/{uid}")

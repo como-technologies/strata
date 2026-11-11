@@ -103,6 +103,20 @@ config unresolved. Palette masks the value of a sensitive variable in its
 answer. See [A cluster as Palette holds it](../../commands/preflight/tiers.md#a-cluster-as-palette-holds-it)
 for the variables that `strata preflight cluster:UID` sends.
 
+Some refusals quote a value after Palette puts it in place:
+
+- `K8SCidrOverlap` quotes the CIDR of the Kubernetes pack that overlaps the
+  VPC: `Kubernetes <field> '<CIDR>' is overlapping with vpc '<VPC>' cidr block
+  '<CIDR of the VPC>'`.
+- `CidrParseError` quotes a value that is not a CIDR two times:
+  `CIDR '<value> parse error; caused by: invalid CIDR address: <value>`.
+- `InvalidDropDownVariable` quotes a label that is not an option of a dropdown
+  variable: `... is invalid: label '<value>' is not a valid option`.
+
+When the text comes from a variable, the refusal holds the value of the
+variable. So the report of `strata preflight` writes a mark in place of each
+value: see [The values in a message](../../commands/preflight/report.md#the-values-in-a-message).
+
 ## POST /v1/spectroclusters/{uid}/validate/packs
 
 This route checks a cluster before an update of its profiles. The body is a

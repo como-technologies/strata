@@ -2,10 +2,10 @@
 //! under new version numbers, of the use cases.
 
 use super::DEV_ENV;
-use super::edits::{RC_PINS, RETAIN};
+use super::edits::{RC_PINS, REBUILT_PIN, RETAIN};
 use super::ids::{
-    A111, DEV, PAYMENTS, RENUMBER_EDITED, RENUMBER_FINAL, RENUMBER_PRE, SAMPLE_CANDIDATE,
-    SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE, SAMPLE_PRE,
+    A111, DEV, PAYMENTS, RENUMBER_EDITED, RENUMBER_FINAL, RENUMBER_PRE, RENUMBER_REBUILT,
+    SAMPLE_CANDIDATE, SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE, SAMPLE_PRE,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -200,7 +200,8 @@ fn the_sweep(r: &mut Runner) {
 }
 
 /// The chapter `renumber`: a pipeline publishes a pre-release, and then the same content under the
-/// final numbers. 1.2.1 is a final version with one more value.
+/// final numbers. 1.2.1 is a final version with one more value. 1.2.2 pins a final build of the CSI
+/// pack with another default value.
 fn renumber(r: &mut Runner) {
     r.chapter("renumber", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
@@ -215,6 +216,23 @@ fn renumber(r: &mut Runner) {
     r.profile(DEV, RENUMBER_PRE, "1.2.0-rc.1", "aws-stack@1.1.1", RC_PINS);
     r.profile(DEV, RENUMBER_FINAL, "1.2.0", "aws-stack@1.1.1", &[]);
     r.profile(DEV, RENUMBER_EDITED, "1.2.1", "aws-stack@1.1.1", RETAIN);
+    // the pipeline builds the final CSI pack from another commit, with one more replica in its
+    // default values
+    r.tenant(|t| {
+        t.rebuild_pack_version(
+            DEV,
+            "csi-aws-ebs",
+            ("1.65.0", "1.65.1"),
+            ("replicaCount: 2", "replicaCount: 3"),
+        );
+    });
+    r.profile(
+        DEV,
+        RENUMBER_REBUILT,
+        "1.2.2",
+        "aws-stack@1.1.1",
+        REBUILT_PIN,
+    );
     r.step(
         "renumber-exact",
         1,
@@ -231,7 +249,7 @@ fn renumber(r: &mut Runner) {
         "renumber-json",
         0,
         false,
-        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesNotCompared}'",
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesCompared}'",
     );
     r.step(
         "renumber-compare",
@@ -250,5 +268,17 @@ fn renumber(r: &mut Runner) {
         1,
         false,
         "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.1",
+    );
+    r.step(
+        "renumber-archive",
+        1,
+        false,
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.2",
+    );
+    r.step(
+        "renumber-archive-json",
+        1,
+        false,
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.2 --json | jq -c '.pairs[0] | .archivesCompared, .archivesChanged'",
     );
 }

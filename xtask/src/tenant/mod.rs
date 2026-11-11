@@ -44,14 +44,17 @@ pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;
 pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,
-    empty_audit_log, exported_profile, rbacs_route, validated_cloud,
+    downloaded_profile, empty_audit_log, exported_profile, rbacs_route, validated_cloud,
 };
 // the routes and the sync answers that the chapter `fields` writes: each document there has the
 // route and the answer of its kind
 pub(crate) use registries::{RegistrySync, registry_sync};
+#[cfg(test)]
+pub(crate) use routes::download_route;
 pub(crate) use routes::{
-    CLUSTER_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route, group_route,
-    pack_listing, profile_route, registry_summary_route, variables_route,
+    CLUSTER_LISTING, REGISTRY_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
+    group_route, manifests_route, pack_listing, profile_route, registry_summary_route,
+    variables_route,
 };
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.

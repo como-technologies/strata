@@ -34,10 +34,12 @@ impl Error {
             Error::Api { status, .. } if *status == 429 || (500..600).contains(status) => {
                 FailureClass::Transient
             }
-            // A 2xx that is not JSON can be a gateway page or a real fault. A file or a serializer
-            // that fails says nothing about the next try. A send of the report can fail for the
-            // network of the user or for the endpoint, and the error does not tell which.
+            // A 2xx that is not JSON, or not the file of a download, can be a gateway page or a real
+            // fault. A file or a serializer that fails says nothing about the next try. A send of
+            // the report can fail for the network of the user or for the endpoint, and the error
+            // does not tell which.
             Error::NotJson { .. }
+            | Error::NotArchive { .. }
             | Error::NoUid
             | Error::Io { .. }
             | Error::Serialize(_)
