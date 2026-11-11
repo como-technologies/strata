@@ -25,6 +25,7 @@ mod cluster;
 pub mod impact;
 pub(crate) mod leaf;
 pub(crate) mod pack;
+pub(crate) mod renumber;
 pub(crate) mod unified;
 mod variables;
 mod verify;
@@ -37,6 +38,7 @@ pub use pack::{
     ArtifactChange, ChangeFlag, ManifestChange, MaskedPack, PackDiff, PackSide, ParamChange,
     Status, ValuesDiff, VersionMove,
 };
+pub use renumber::Renumber;
 pub use variables::{
     VariableChange, VariableSummary, VariablesByName, VariablesDiff, group_variables,
 };

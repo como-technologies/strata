@@ -1070,7 +1070,7 @@ fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
 
 // ---- same release ----------------------------------------------------------------------------
 
-use strata::ops::{PairStatus, Policy};
+use strata::ops::{PairStatus, Policy, SameReleaseOptions};
 
 fn chain_input(dir: &Path, names: &[&str]) -> Vec<(String, Snapshot)> {
     names
@@ -9560,7 +9560,7 @@ fn same_release_refuses_a_pair_with_no_digest_unless_allowed() {
         "{:?}",
         c.pairs[0].reasons
     );
-    let allowed = ops::same_release_with(&records, Policy::Exact, true, "t1");
+    let allowed = ops::same_release_with(&records, common::no_digest_allowed(), "t1");
     assert_eq!(allowed.pairs[0].status, PairStatus::Identical);
     assert_eq!(allowed.pairs[0].upstream_unknown, ["os/ubuntu-aws"]);
     assert!(allowed.same);
@@ -10861,7 +10861,15 @@ fn same_release_refuses_two_records_whose_os_pack_names_two_machine_images() {
             ("a.json".to_string(), x.clone()),
             ("b.json".to_string(), y.clone()),
         ];
-        ops::same_release_with(&records, policy, allow_no_digest, "t1")
+        ops::same_release_with(
+            &records,
+            SameReleaseOptions {
+                policy,
+                allow_no_digest,
+                ..SameReleaseOptions::default()
+            },
+            "t1",
+        )
     };
     assert_eq!(a.root, b.root, "the root does not cover the annotations");
     let reason = "pack os/ubuntu-aws names image ami-0aaa on one side and ami-0bbb on the \

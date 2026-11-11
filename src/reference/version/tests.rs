@@ -404,6 +404,53 @@ fn only_a_version_with_a_pre_release_is_one() {
 }
 
 #[test]
+fn two_versions_keep_their_numbers_when_only_the_pre_release_or_the_build_data_differs() {
+    for (a, b) in [
+        ("1.66.0-g0123456789ab", "1.66.0"),
+        ("1.66.0-rc.1", "1.66.0-rc.2"),
+        ("1.2.0-mr12.345", "1.2.0"),
+        ("1.2.0+build.5", "1.2.0"),
+        ("v1.2.0", "1.2.0"),
+    ] {
+        assert!(keeps_numbers(a, b), "{a} and {b}");
+    }
+    for (a, b) in [
+        ("20.04", "24.04"),
+        ("1.2.0-build5", "2026.11.0"),
+        ("1.2", "1.2.0"),
+        ("1.1.8.develop", "1.1.8"),
+        ("LTS__24.x", "LTS__24.x"),
+        ("", ""),
+    ] {
+        assert!(!keeps_numbers(a, b), "{a} and {b}");
+    }
+}
+
+#[test]
+fn a_version_is_the_final_of_a_pre_release_with_its_numbers_in_semantic_versioning() {
+    for (version, pre) in [
+        ("1.2.0", "1.2.0-rc.1"),
+        ("1.2.0", "1.2.0-g0123456789ab"),
+        ("1.2.0", "1.2.0-mr12.345"),
+        ("1.2.0+build.6", "v1.2-rc.1+build.5"),
+    ] {
+        assert!(is_final_of(version, pre), "{version} of {pre}");
+    }
+    for (version, pre) in [
+        ("1.2.0-rc.2", "1.2.0-rc.1"),
+        ("1.2.1", "1.2.0-rc.1"),
+        ("2026.11.0", "1.2.0-build5"),
+        ("1.2.0+build.6", "1.2.0+build.5"),
+        ("1.2.0", "1.2.0"),
+        ("1.1.8", "1.1.8.develop"),
+        ("1.2.0-rc.1", "1.2.0"),
+        ("", "1.2.0-rc.1"),
+    ] {
+        assert!(!is_final_of(version, pre), "{version} of {pre}");
+    }
+}
+
+#[test]
 fn has_three_numbers_finds_them_at_any_place() {
     for text in [
         "1.2.3",

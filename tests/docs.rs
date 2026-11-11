@@ -6747,6 +6747,87 @@ fn the_page_names_the_renumber_as_open_while_same_release_does_not_take_it() {
     }
 }
 
+/// The text of a renumber: the use case, and its section in each page that says what a renumber
+/// is. Each one is a page, the heading of its text, and the heading after it.
+const RENUMBER_TEXT: [(&str, &str, Option<&str>); 4] = [
+    (
+        "use-cases/renumber.md",
+        "# A release gets new version numbers",
+        None,
+    ),
+    (
+        "commands/same-release.md",
+        "## A release under new version numbers",
+        Some("\n## "),
+    ),
+    (
+        "commands/compare/versions.md",
+        "## A version that only changes its numbers",
+        Some("\n## "),
+    ),
+    ("reference/impact.md", "## A renumber", Some("\n## ")),
+];
+
+/// The text of a renumber keeps to the limits and the words of "The style rules".
+#[test]
+fn the_text_of_a_renumber_keeps_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        for block in blocks_of(section(&text, from, to)) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// The book shows a renumber with the outputs of the chapter `renumber` of the runner. They are in
+/// the pages of `same-release`, of `compare`, and of the impact, and in a use case with its
+/// playground. Each one names the archive that strata does not compare.
+#[test]
+fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
+    assert!(
+        possible_values("same-release", "--allow ")
+            .iter()
+            .any(|v| v == "renumber"),
+        "the help of same-release does not name renumber"
+    );
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        let part = one_line(section(&text, from, to));
+        assert!(
+            part.contains("{{#include ../") && part.contains("output/renumber-"),
+            "{page}: the text includes no output of the chapter renumber"
+        );
+        assert!(
+            part.contains("renumber only") || part.contains("archive: not compared"),
+            "{page}: the text does not say what a renumber does not compare"
+        );
+        assert!(
+            part.contains("archive"),
+            "{page}: the text does not name the archive"
+        );
+    }
+    let use_case = read(&docs().join("use-cases/renumber.md"));
+    assert!(
+        use_case.contains("`just playground renumber`"),
+        "the use case has no playground"
+    );
+    let allow = read(&docs().join("output/renumber-allow.txt"));
+    assert!(
+        allow.contains("\nRENUMBER ")
+            && allow.contains("(pre-release to final; archive: not compared)"),
+        "{allow}"
+    );
+    let compare = read(&docs().join("output/renumber-compare.txt"));
+    assert_eq!(
+        compare.matches("impact: none (renumber only)").count(),
+        2,
+        "{compare}"
+    );
+}
+
 /// The page states that the gap of the order of versions is closed, and its outputs show it.
 /// `@latest` takes no pre-release, and a pre-release is below its version.
 #[test]

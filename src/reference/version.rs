@@ -114,6 +114,31 @@ pub fn is_pre_release(v: &str) -> bool {
     Version::read(v).is_some_and(|s| s.is_pre_release())
 }
 
+/// True when `a` and `b` both parse and write the same numbers: see [`numbers`].
+///
+/// Only the pre-release or the build data can differ. So `1.66.0-g0123456789ab` and `1.66.0` keep
+/// their numbers, and so do `1.2.0+build.5` and `1.2.0`. `20.04` and `24.04` do not, and neither do
+/// `1.2.0-build5` and `2026.11.0`. A string that does not parse keeps no numbers.
+pub(crate) fn keeps_numbers(a: &str, b: &str) -> bool {
+    match (numbers(a), numbers(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// True when `version` is the final version of the pre-release `pre`, in Semantic Versioning.
+///
+/// Both strings parse, `pre` has a pre-release and `version` has none, and the two have the same
+/// numbers. A number that a version omits is `0`, and build data does not count. So `1.2.0` is the
+/// final version of `1.2.0-rc.1` and of `v1.2-g0123456789ab+5`. A string that does not parse,
+/// such as `1.1.8.develop`, is the pre-release of no version.
+pub(crate) fn is_final_of(version: &str, pre: &str) -> bool {
+    match (Version::parse(version), Version::parse(pre)) {
+        (Some(v), Some(p)) => v.pre.is_empty() && !p.pre.is_empty() && v.numbers == p.numbers,
+        _ => false,
+    }
+}
+
 /// The item of `items` whose version is `wanted`, or the item with the highest version by
 /// [`compare`] when `wanted` is [`LATEST`].
 ///

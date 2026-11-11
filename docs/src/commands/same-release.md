@@ -34,6 +34,7 @@ parseable as YAML on one side)`. See
 | `IDENTICAL` | The roots are equal, and no pack names another machine image. | yes |
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints. Palette mints the uid of each manifest pack, and the uid of a pack from a registry that it does not sync. A candidate does not have these uids. `mintedUidOnly` in the JSON names each such pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
+| `RENUMBER` | The roots differ only by the versions of packs, with the same values, manifests, params, and images. The tag, the pack uid, and the digest of each such pack can differ. | only with `--allow renumber` |
 | `DIFFERENT` | Any other difference. | no |
 | `NO DIGEST` | The pair passes on its roots. A pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |
 
@@ -54,6 +55,60 @@ what the root can show. A pair that differs for another reason stays
 `DIFFERENT`, and its reasons name each pack with no digest too. `--allow` takes
 more than one value: `--allow registry-move --allow no-digest`. See
 [The content digest](../internals/hashes.md#the-content-digest).
+
+## A release under new version numbers
+
+A pipeline can publish a candidate, test it, and then publish the same content
+under its final numbers. Each team names the candidate in its own way, such as
+`-g<sha12>`, `-rc.1`, `-mr<iid>.<pipeline>`, or `+build.5`. Strata reads no
+suffix. It asks one question: do the two releases hold the same content, when
+only the version numbers differ?
+
+Without an option, the pair fails, because the version of each pack is in the
+root:
+
+```text
+{{#include ../output/renumber-exact.txt}}
+```
+
+`--allow renumber` passes it:
+
+```text
+{{#include ../output/renumber-allow.txt}}
+```
+
+Exit `0`. Strata pairs the packs of the two records by name and layer. Two
+packs are a renumber when their versions differ, and their type, registry,
+values, manifests, params, image list, and `imageId` are the same. The tag, the
+pack uid, and the digest of the archive follow the version. The two profile
+versions can differ too. Any other difference gives the result of the table
+above, and the reason names it:
+
+```text
+{{#include ../output/renumber-edited.txt}}
+```
+
+The verdict lists each renumber as `<name>  <old> -> <new>`. It says
+`pre-release to final` when the move is from a pre-release to its final version
+in Semantic Versioning. That is a fact and not a condition, so a scheme of
+names that is not Semantic Versioning passes too, such as `1.2.0-build5` to
+`2026.11.0`. `pairs[].renumbers` in the JSON gives each renumber:
+
+```text
+{{#include ../output/renumber-json.txt}}
+```
+
+**Check the archive of each new build in your pipeline.** Its `pack.json`
+holds the new version, so it has a new digest. Strata does not read the
+archive. So from the digest alone, it cannot show that only
+`pack.json` changed. Each such pack has `archive: not compared` on its line,
+and `pairs[].archivesNotCompared` names it.
+[#751](https://github.com/como-technologies/strata/issues/751) adds the
+compare of the archives. A manifest pack has no archive.
+
+`compare` gives such a pack the impact `none` when its version keeps its
+numbers: see [A renumber](../reference/impact.md#a-renumber). See
+[A release gets new version numbers](../use-cases/renumber.md).
 
 ## A pack names another machine image
 

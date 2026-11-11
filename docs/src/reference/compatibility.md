@@ -327,6 +327,12 @@ is as before. With `verify --summary --full --json`, the `diff` of each drifted 
 `strata-verify-summary/1` has the field. [The field unified](./documents.md#the-field-unified)
 says what the text holds.
 
+After 0.32.2, `strata-chain/1` has the new value `renumber` of `pairs[].status`, and the new
+fields `allowRenumber`, `pairs[].renumbers`, and `pairs[].archivesNotCompared`. Strata writes
+the fields only with `same-release --allow renumber`. Each document has the new key `renumber`
+in `legend.status`, because the legend names each status. `strata-diff/1` has the new field
+`packs[].renumbered`, and `legend.impact.none` has a new text. The ids stay.
+
 Four values change after 0.27.0 with no new id. A new id breaks each reader of the document
 for a case that is rare. [Release 0.28.0](#release-0280-changes-that-need-action) gives the
 action for each one.
@@ -1126,9 +1132,24 @@ field, a value, an input, or an option is in the sections above.
   Now strata reads no file then, and the environment gives each setting. A job with
   a relative `HOME` must set an absolute path, or give the settings in the
   environment. See [Settings](./settings.md).
+- **`compare` gives a renumber the impact `none`.** A renumber keeps the values, the
+  manifests, the params, and the images of a pack. Its version keeps its numbers, such as
+  `1.66.0-g4f1c2a9b7d30` to `1.66.0`. The impact is `none (renumber only)` on each layer, and
+  `packs[].renumbered` is `true`. See [A renumber](./impact.md#a-renumber).
+  - Before, such a pack had the level of a new pack version. That is `repave` on the OS or the
+    Kubernetes layer, and `cluster-wide` on the CNI or the CSI layer. Another layer had
+    `in-place`. `summary.maxImpact` follows the new level.
+  - `behind` gives the same level to a bump from a pin to such a version, in the line
+    `bump to <version>: <level>`. The observer shows it in `newer[].impact`.
+  - A move to other numbers keeps its level, also with the same values. `ubuntu-aws` `20.04` to
+    `24.04` stays `repave`.
 
 ### For a user of the CI drop-ins
 
+- **`pr-comment.sh` adds no label of an impact for a renumber.** The script reads
+  `summary.maxImpact` of `compare`. A change whose packs only move from a pre-release to its
+  final version has the maximum impact `none`, so the job adds no label `repave`. The report of
+  `upstream-report.sh` gives such a bump the level `none` too.
 - **The reusable workflows read this repository with the token of the caller.** The
   repository is public, so the secret `strata-token` is optional. A call that gives
   it still works. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
@@ -1203,6 +1224,13 @@ field, a value, an input, or an option is in the sections above.
 - `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
   Before, it read the file of the working folder, or of a folder from the working
   folder.
+- `ops::same_release_with` takes `ops::SameReleaseOptions` in place of a `Policy` and a `bool`.
+  `SameReleaseOptions { policy, allow_no_digest, ..SameReleaseOptions::default() }` gives the
+  result of 0.32.2. The new field `allow_renumber` is `--allow renumber`.
+- `ops::PairStatus` has the new value `Renumber`. A `match` with no wildcard arm must name it.
+- `ops::Pair` has the new fields `renumbers` and `archives_not_compared`, `ops::Chain` has
+  `allow_renumber`, and `diff::PackDiff` has `renumbered`. A struct literal must name them.
+  `diff::Renumber` is new.
 
 ### For a user of the library of strata-preflight
 

@@ -205,7 +205,7 @@ fn same_release_passes_the_candidate_and_the_published_version_with_the_minted_u
     assert_ne!(snap.root, published.root, "the candidate has no pack uid");
 
     let records = [("c.json".into(), snap), ("p.json".into(), published)];
-    let chain = ops::same_release_with(&records, Policy::Exact, true, "t2");
+    let chain = ops::same_release_with(&records, common::no_digest_allowed(), "t2");
     assert!(chain.same, "{:?}", chain.pairs[0].reasons);
     assert_eq!(chain.pairs[0].status, PairStatus::SameContent);
     assert_eq!(chain.pairs[0].minted_uid_only, ["addon/strata-live-chart"]);

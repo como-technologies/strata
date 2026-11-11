@@ -1,10 +1,11 @@
-//! The chapter of the pages of How it works: the sample pipeline and its versions.
+//! The chapters of a pipeline: the sample pipeline and its versions, of How it works, and a release
+//! under new version numbers, of the use cases.
 
 use super::DEV_ENV;
-use super::edits::RETAIN;
+use super::edits::{RC_PINS, RETAIN};
 use super::ids::{
-    A111, DEV, PAYMENTS, SAMPLE_CANDIDATE, SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE,
-    SAMPLE_PRE,
+    A111, DEV, PAYMENTS, RENUMBER_EDITED, RENUMBER_FINAL, RENUMBER_PRE, SAMPLE_CANDIDATE,
+    SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE, SAMPLE_PRE,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -14,9 +15,10 @@ const CSI_PRE: &str = "1.66.0-g4f1c2a9b7d30";
 /// The final version of the CSI pack, which the pipeline builds again when the graph passes.
 const CSI_FINAL: &str = "1.66.0";
 
-/// Run the chapter of the sample pipeline.
+/// Run the chapters of a pipeline.
 pub(super) fn run(r: &mut Runner) {
     sample_pipeline(r);
+    renumber(r);
 }
 
 /// The chapter `sample-pipeline`: a merge request publishes a candidate, a merge publishes a
@@ -117,6 +119,20 @@ fn the_final_numbers(r: &mut Runner) {
             version: CSI_FINAL,
         }],
     );
+    the_check_of_the_final(r);
+    r.quiet("strata snapshot aws-stack@1.1.3-g8e2d1c0b9a7f -o pre/dev.json");
+    r.step(
+        "pipeline-behind-pre-release",
+        1,
+        false,
+        "strata behind pre/dev.json --no-impact",
+    );
+    the_sweep(r);
+}
+
+/// The part of the chapter `sample-pipeline` that checks a final version against its pre-release:
+/// `same-release`, with and without `--allow renumber`, and the move of a CI cluster.
+fn the_check_of_the_final(r: &mut Runner) {
     r.step(
         "pipeline-final-same",
         0,
@@ -129,13 +145,29 @@ fn the_final_numbers(r: &mut Runner) {
         false,
         "strata same-release aws-stack@1.1.3-g8e2d1c0b9a7f aws-stack@1.1.3",
     );
-    r.quiet("strata snapshot aws-stack@1.1.3-g8e2d1c0b9a7f -o pre/dev.json");
     r.step(
-        "pipeline-behind-pre-release",
+        "pipeline-final-renumber",
+        0,
+        false,
+        "strata same-release --allow renumber aws-stack@1.1.3-g8e2d1c0b9a7f aws-stack@1.1.3",
+    );
+    // the CI cluster runs the pre-release: its move to the final version is a renumber
+    r.step(
+        "pipeline-move-cluster",
         1,
         false,
-        "strata behind pre/dev.json --no-impact",
+        "strata compare cluster:payments aws-stack@1.1.3",
     );
+    r.excerpt(
+        "pipeline-move-cluster-lines",
+        "pipeline-move-cluster",
+        r"^(aws-stack|root |~ \[csi|      impact)",
+    );
+}
+
+/// The part of the chapter `sample-pipeline` after the final versions: the pins that the final
+/// commit moves, the sweep, the record of a final version, and the order of the versions.
+fn the_sweep(r: &mut Runner) {
     // the page teaches the pin of the pre-release, and not the pins that are current
     r.excerpt(
         "pipeline-behind-pre-release-lines",
@@ -165,4 +197,58 @@ fn the_final_numbers(r: &mut Runner) {
     // the order of the versions: a pre-release is below its version, and two pre-releases of one
     // version compare by their text
     r.step("pipeline-versions", 0, false, "strata list profiles");
+}
+
+/// The chapter `renumber`: a pipeline publishes a pre-release, and then the same content under the
+/// final numbers. 1.2.1 is a final version with one more value.
+fn renumber(r: &mut Runner) {
+    r.chapter("renumber", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
+    // the pipeline builds the content of the Kubernetes and the CSI pack of aws-stack@1.1.1 as
+    // pre-releases. Each build has its own uid and digest, because its `pack.json` holds its
+    // version. The final builds are the versions of aws-stack@1.1.1
+    r.tenant(|t| {
+        t.copy_pack_version(DEV, "kubernetes", "1.36.2", "1.36.2-rc.1");
+        t.copy_pack_version(DEV, "csi-aws-ebs", "1.65.0", "1.65.0-rc.1");
+    });
+    r.profile(DEV, RENUMBER_PRE, "1.2.0-rc.1", "aws-stack@1.1.1", RC_PINS);
+    r.profile(DEV, RENUMBER_FINAL, "1.2.0", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, RENUMBER_EDITED, "1.2.1", "aws-stack@1.1.1", RETAIN);
+    r.step(
+        "renumber-exact",
+        1,
+        false,
+        "strata same-release aws-stack@1.2.0-rc.1 aws-stack@1.2.0",
+    );
+    r.step(
+        "renumber-allow",
+        0,
+        false,
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0",
+    );
+    r.step(
+        "renumber-json",
+        0,
+        false,
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesNotCompared}'",
+    );
+    r.step(
+        "renumber-compare",
+        1,
+        false,
+        "strata compare aws-stack@1.2.0-rc.1 aws-stack@1.2.0",
+    );
+    r.step(
+        "renumber-compare-json",
+        1,
+        false,
+        "strata compare aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq -c '.summary.maxImpact, (.packs[] | select(.renumbered) | {key, flags: [.identity, .upstream, .authored], impact})'",
+    );
+    r.step(
+        "renumber-edited",
+        1,
+        false,
+        "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.1",
+    );
 }
