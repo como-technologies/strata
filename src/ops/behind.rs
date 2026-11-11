@@ -14,25 +14,29 @@ use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, ErrorDocument, Result};
-use crate::model::cloud::supports;
+use crate::json::is_zero;
 use crate::model::pack_state::PackState;
 use crate::model::validation::ProfileValidation;
-use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
 use self::bump::{BumpQuestions, read_bump};
+use self::newer::newer_versions;
+use self::profiles::{Held, ProfileKey, check_profile, collect};
+pub use self::profiles::{NewerProfile, ProfilePin};
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
 mod bump;
+mod newer;
+mod profiles;
 
 /// The schema id of the document `behind` writes.
 pub const BEHIND_SCHEMA: &str = "strata-behind/1";
 
 /// The document `behind` writes: `strata-behind/1`. One entry for each pack version that the
-/// records pin from a registry.
+/// records pin from a registry, and one for each profile version that they hold.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BehindReport {
@@ -52,17 +56,23 @@ pub struct BehindReport {
     pub since: Option<String>,
     /// One entry for each pack, registry, pinned version, and tag, in the order of the pack name.
     pub pins: Vec<Pin>,
+    /// One entry for each profile version that the records hold, in the order of the profile name
+    /// and then of the version. Absent when the records hold none, and with `--pin`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub profiles: Vec<ProfilePin>,
     /// The counts.
     pub summary: BehindSummary,
 }
 
 impl BehindReport {
-    /// The exit status: 2 when a pin could not be checked, 1 when a pin is behind, else 0.
+    /// The exit status: 2 when a pin or a profile version could not be checked, 1 when one is
+    /// behind, else 0.
     pub fn exit_code(&self) -> u8 {
-        if self.summary.errors > 0 {
+        let s = &self.summary;
+        if s.errors > 0 || s.profile_errors > 0 {
             2
         } else {
-            u8::from(self.summary.behind > 0)
+            u8::from(s.behind > 0 || s.profiles_behind > 0)
         }
     }
 
@@ -100,6 +110,15 @@ pub struct BehindSummary {
     pub errors: usize,
     /// With `--since`: the versions that arrived since the previous report, across the pins.
     pub arrived: usize,
+    /// The profile versions that the records hold. Absent when they hold none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub profiles: usize,
+    /// The profile versions with a newer published version of their profile. Absent for none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub profiles_behind: usize,
+    /// The profile versions that strata could not check. Absent for none.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub profile_errors: usize,
 }
 
 /// One pack version that the records pin from one registry.
@@ -341,12 +360,21 @@ struct Pinned {
     holders: Vec<usize>,
 }
 
-/// The records that `behind` reads, and the pins in them.
+/// The records that `behind` reads, and the pins and the profile versions in them.
 struct Records {
     /// The records, in the order given.
     loaded: Vec<Snapshot>,
     /// The pins, by key.
     pins: BTreeMap<PinKey, Pinned>,
+    /// The profile versions, by key. Empty with `--pin`.
+    profiles: BTreeMap<ProfileKey, Held>,
+}
+
+/// What `behind` checks in one scope: the pins and the profile versions of the scope.
+#[derive(Default)]
+struct ScopeWork {
+    pins: Vec<(PinKey, Pinned)>,
+    profiles: Vec<(ProfileKey, ProfilePin)>,
 }
 
 /// What the check of each pin shares.
@@ -363,15 +391,18 @@ struct Check<'a> {
 }
 
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
+/// Also report the profile versions that `records` hold, and the newer published versions of each
+/// profile.
 ///
 /// `records` are the paths of the record files. `generated_at` is the time of the report, in
 /// RFC 3339.
 ///
-/// Strata reads each pin in the project of the first record that pins it. It calls `connect` one
-/// time for each project, and keeps one cache of the registry listings for each project. It reads
-/// each pack of a registry one time. A pin in a project that `connect` cannot reach has the error
-/// of `connect`. When strata cannot read a record, the whole run fails: strata cannot say what the
-/// record pins.
+/// Strata reads each pin and each profile version in the project of the first record that holds
+/// it. It calls `connect` one time for each project, and keeps one cache of the registry listings
+/// for each project. It reads each pack of a registry one time. A pin or a profile version in a
+/// project that `connect` cannot reach has the error of `connect`. When strata cannot read a
+/// record, the whole run fails: strata cannot say what the record pins. With `options.pin`,
+/// strata reads no profile version.
 ///
 /// With `options.impact`, strata asks Palette about the bump of a pin in the project of the pin.
 /// It does not ask a record of another project that pins the pack, and the bump says so.
@@ -392,15 +423,15 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let Records { loaded, pins } = read_records(records, options.pin.as_deref())?;
+    let read = read_records(records, options.pin.as_deref())?;
     let check = Check {
-        loaded: &loaded,
+        loaded: &read.loaded,
         impact: options.impact,
         pre_release: options.pre_release,
         generated_at,
         progress,
     };
-    let mut out = check_pins(&check, pins, connect)?;
+    let (mut out, profiles) = check_scopes(&check, read.pins, read.profiles, connect)?;
     let arrived = options
         .since
         .as_ref()
@@ -411,6 +442,9 @@ where
         floating: out.iter().filter(|p| p.floating).count(),
         errors: out.iter().filter(|p| p.error.is_some()).count(),
         arrived,
+        profiles: profiles.len(),
+        profiles_behind: profiles.iter().filter(|p| p.behind).count(),
+        profile_errors: profiles.iter().filter(|p| p.error.is_some()).count(),
     };
     Ok(BehindReport {
         schema: BEHIND_SCHEMA.to_string(),
@@ -419,12 +453,14 @@ where
         records: records.iter().map(|p| p.display().to_string()).collect(),
         since: options.since.as_ref().map(|p| p.generated_at.clone()),
         pins: out,
+        profiles,
         summary,
     })
 }
 
-/// Read each record of `records`, and collect the pins in them. A pin is in the project of the
-/// first record that pins it. With `only`, the key of a pack, the records give the pins of that pack alone.
+/// Read each record of `records`, and collect the pins and the profile versions in them. A pin
+/// is in the project of the first record that pins it. With `only`, the key of a pack, the
+/// records give the pins of that pack alone, and no profile version.
 ///
 /// # Errors
 ///
@@ -433,8 +469,12 @@ where
 fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
     let mut loaded: Vec<Snapshot> = Vec::with_capacity(records.len());
     let mut pins: BTreeMap<PinKey, Pinned> = BTreeMap::new();
+    let mut profiles: BTreeMap<ProfileKey, Held> = BTreeMap::new();
     for path in records {
         let snap = Snapshot::load(path)?;
+        if only.is_none() {
+            collect(&mut profiles, &snap, path);
+        }
         let subject = snap.source.title();
         let from_registry = snap.packs.iter().filter(|p| !p.registry_uid.is_empty());
         for p in from_registry.filter(|p| only.is_none_or(|key| p.key == key)) {
@@ -463,52 +503,72 @@ fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
             message: format!("--pin {key}: no record pins this pack from a registry"),
         });
     }
-    Ok(Records { loaded, pins })
+    Ok(Records {
+        loaded,
+        pins,
+        profiles,
+    })
 }
 
-/// Check each pin of `pins` in its scope, and give the pins in the order of their keys.
+/// Check each pin of `pins` and each profile version of `profiles` in its scope. Give the pins
+/// in the order of their keys, and the profile versions in the order of theirs.
 ///
-/// A cache of the registry listings borrows its client. So strata groups the pins by scope: each
-/// scope connects one time, and keeps its cache for all its pins.
-fn check_pins<A, F>(
+/// A cache of the registry listings borrows its client. So strata groups the pins and the profile
+/// versions by scope: each scope connects one time, and keeps its cache for all its pins.
+fn check_scopes<A, F>(
     check: &Check<'_>,
     pins: BTreeMap<PinKey, Pinned>,
+    profiles: BTreeMap<ProfileKey, Held>,
     mut connect: F,
-) -> Result<Vec<Pin>>
+) -> Result<(Vec<Pin>, Vec<ProfilePin>)>
 where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let mut scopes: BTreeMap<Option<String>, Vec<(PinKey, Pinned)>> = BTreeMap::new();
+    let mut scopes: BTreeMap<Option<String>, ScopeWork> = BTreeMap::new();
     for (key, pinned) in pins {
-        scopes
-            .entry(scope_of(&pinned.project).map(str::to_string))
-            .or_default()
-            .push((key, pinned));
+        let work = scopes.entry(scope_of(&pinned.project).map(str::to_string));
+        work.or_default().pins.push((key, pinned));
+    }
+    for (key, held) in profiles {
+        let work = scopes.entry(scope_of(&held.project).map(str::to_string));
+        work.or_default().profiles.push((key, held.profile));
     }
     let mut reads = Reads::default();
     let mut checked: BTreeMap<PinKey, Pin> = BTreeMap::new();
-    for (scope, group) in scopes {
+    let mut held: BTreeMap<ProfileKey, ProfilePin> = BTreeMap::new();
+    for (scope, work) in scopes {
         match connect(scope.as_deref()) {
             Ok(palette) => {
+                for (key, mut profile) in work.profiles {
+                    check_profile(&palette, &mut profile, check.pre_release, check.progress);
+                    held.insert(key, profile);
+                }
                 check_scope(
                     check,
                     &palette,
                     scope.as_deref(),
-                    group,
+                    work.pins,
                     &mut reads,
                     &mut checked,
                 )?;
             }
             Err(e) => {
-                for (key, mut pinned) in group {
+                for (key, mut pinned) in work.pins {
                     pinned.pin.error = Some(e.to_json());
                     checked.insert(key, pinned.pin);
+                }
+                for (key, mut profile) in work.profiles {
+                    profile.error = Some(e.to_json());
+                    held.insert(key, profile);
                 }
             }
         }
     }
-    Ok(checked.into_values().collect())
+    Ok((
+        checked.into_values().collect(),
+        held.into_values().collect(),
+    ))
 }
 
 /// Check the pins of `group`, the pins of one scope, with the connection `palette` to that scope.
@@ -686,67 +746,4 @@ fn offered_for<'r, A: PaletteApi>(
                 }
             })
         })
-}
-
-/// The versions above the version of `pin` that a move can go to, newest first. `pinned` is the
-/// build of the pinned version, when the registry still lists it. `pre_release` also names a
-/// pre-release above a pin that is not one: see [`is_newer`].
-fn newer_versions(
-    pin: &Pin,
-    offered: &Offered,
-    pinned: Option<&PackBuild>,
-    pre_release: bool,
-) -> Vec<Newer> {
-    let clouds: &[String] = pinned.map_or(&[], |b| b.cloud_types.as_slice());
-    let architectures_of = |version: &str| -> &[String] {
-        offered
-            .architectures
-            .get(version)
-            .map_or(&[], Vec::as_slice)
-    };
-    let architectures = pinned.map_or(&[][..], |b| architectures_of(&b.version));
-    // a newer version fits when it supports one cloud of the pinned version. A pinned version
-    // with no cloud type supports each cloud, so each newer version fits it
-    let fits =
-        |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
-    offered
-        .builds
-        .iter()
-        .filter(|b| is_newer(&b.version, &pin.version, pre_release))
-        .filter(|b| !b.retired())
-        .filter(|b| fits(b))
-        .map(|b| Newer {
-            version: b.version.clone(),
-            state: b.state.clone(),
-            palette_latest: b.palette_latest,
-            listed: b.listed.clone(),
-            drops: dropped(architectures, architectures_of(&b.version)),
-        })
-        .collect()
-}
-
-/// True when `candidate` is a newer version than `pin`: it is above `pin` by [`version::compare`].
-///
-/// A pre-release is below its version, so a pin of `1.0.1` has no newer version in `1.0.1-rc.1`.
-/// A pre-release above a pin that is not one is still not a version to move to, unless
-/// `pre_release` asks for it. A pin that is a pre-release follows the pre-releases: it has each
-/// version above it, and its final version is the first of them.
-fn is_newer(candidate: &str, pin: &str, pre_release: bool) -> bool {
-    version::compare(candidate, pin).is_gt()
-        && (pre_release || version::is_pre_release(pin) || !version::is_pre_release(candidate))
-}
-
-/// The architectures of `pinned` that `newer` does not support: what a move drops. When the
-/// listing names the architectures of only one of the two versions, strata cannot say what a
-/// move drops, and the answer is empty.
-fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
-    if pinned.is_empty() || newer.is_empty() {
-        return Vec::new();
-    }
-    let newer: BTreeSet<&String> = newer.iter().collect();
-    pinned
-        .iter()
-        .filter(|a| !newer.contains(a))
-        .cloned()
-        .collect()
 }

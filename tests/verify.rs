@@ -14740,8 +14740,9 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
         serde_json::to_value(&r).unwrap()["pins"][0]["bump"]["paletteValidation"],
         serde_json::json!({"accepts": true})
     );
-    // Palette gave no error, so strata read no document of the profile for the names
-    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    // Palette gave no error, so strata read no document of the profile for the names. It reads
+    // the document one time, for the versions of the profile
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
 }
 
 #[test]
@@ -14768,7 +14769,9 @@ fn behind_with_no_impact_makes_no_validate_request() {
     assert!(r.pins[0].behind && r.pins[0].bump.is_none());
     assert!(api.posted().is_empty(), "{:?}", api.posted());
     assert_eq!(api.calls(&cluster_route("c1")), 0);
-    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    // the one read of the document of the profile is for the versions of the profile, which the
+    // two records hold, and not for the bump
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(!text.contains("palette "), "{text}");
 }
@@ -14823,6 +14826,7 @@ fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
     let r = behind_of(&every, std::slice::from_ref(&path), &WITH_IMPACT);
     assert_eq!(r.pins.len(), 2);
     assert_eq!(every.posted().len(), 2, "one request for each pin");
+    assert_eq!(r.profiles.len(), 1, "the profile version of the record");
 
     let one = api.clone();
     let options = ops::BehindOptions {
@@ -14838,6 +14842,8 @@ fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
         (r.summary.pins, r.summary.behind, r.summary.errors),
         (1, 1, 0)
     );
+    // one pack alone: strata reads no profile version
+    assert!(r.profiles.is_empty() && r.summary.profiles == 0);
 }
 
 #[test]

@@ -1,5 +1,7 @@
 //! The pull request comment.
 
+mod behind;
+
 use super::changes::{
     OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
     status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
@@ -390,61 +392,7 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let mut o = format!(
-            "### behind: {}\n\n",
-            markdown_cell(&super::behind::behind_heading(r))
-        );
-        if r.pins.is_empty() {
-            return Ok(o);
-        }
-        o.push_str(
-            "| pack | pinned | registry | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
-        );
-        for pin in &r.pins {
-            let mut status = super::behind::pin_status(pin);
-            for line in [
-                super::behind::listed_since(pin),
-                super::behind::arrived_line(pin),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                status.push_str(&format!("; {line}"));
-            }
-            if let Some(msg) = entry_error(pin.error.as_ref()) {
-                status.push_str(&format!(" ({msg})"));
-            }
-            let by: Vec<String> = pin
-                .pinned_by
-                .iter()
-                .map(|b| {
-                    format!(
-                        "`{}` ({})",
-                        markdown_cell(&b.path),
-                        markdown_cell(&b.subject)
-                    )
-                })
-                .collect();
-            let bump: Vec<String> = super::behind::bump_line(pin)
-                .into_iter()
-                .chain(super::behind::palette_lines(pin))
-                .map(|l| markdown_cell(&l))
-                .collect();
-            o.push_str(&format!(
-                "| `{}` | `{}` | {} | {} | {} | {} |\n",
-                markdown_cell(&pin.name),
-                markdown_cell(&pin.version),
-                markdown_cell(dash(&pin.registry)),
-                markdown_cell(&status),
-                if bump.is_empty() {
-                    "-".to_string()
-                } else {
-                    bump.join("<br>")
-                },
-                by.join("<br>")
-            ));
-        }
-        Ok(o)
+        Ok(behind::markdown_behind(r))
     }
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {

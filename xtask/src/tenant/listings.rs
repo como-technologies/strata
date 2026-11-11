@@ -29,6 +29,11 @@ impl Tenant {
     pub fn listings(&self) {
         let mut every_cluster = Vec::new();
         let scopes = self.project_dirs();
+        // the versions of a profile first: the copy of a tenant profile below carries them
+        self.profile_versions(TENANT, ProfileScope::Tenant);
+        for project in &scopes {
+            self.profile_versions(project, ProfileScope::Project);
+        }
         // Palette lists a profile of the tenant in each project, and serves its document there.
         // So each project gets a copy of the documents of each tenant profile. Its listing and
         // its search name the tenant versions beside its own.
@@ -58,6 +63,49 @@ impl Tenant {
         }
         self.write_listings(TENANT, &tenant_profiles, &every_cluster);
         self.write_cluster_searches(&scopes, &every_cluster);
+    }
+
+    /// Give each profile document of the scope `scope` in the directory `dir` the versions of its
+    /// profile, as `GET /v1/clusterprofiles/{uid}` gives them in `spec.versions[]`. Also give a
+    /// document with no `metadata.creationTimestamp` the time of its create.
+    ///
+    /// As in Palette, the versions are the published versions of the same name in the same
+    /// scope, and the compare of the names ignores the case. A version that nobody published is
+    /// not one. Palette gives the list in no order. Here the list keeps the order of the files,
+    /// the order of the uids, so the order of the versions says nothing.
+    fn profile_versions(&self, dir: &str, scope: ProfileScope) {
+        let docs: Vec<Value> = self
+            .documents_in(dir, PROFILES)
+            .into_iter()
+            .filter(|d| d["metadata"]["annotations"]["scope"] == scope.as_str())
+            .collect();
+        let name_of = |d: &Value| {
+            d["metadata"]["name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase()
+        };
+        // each create takes the next minute, in the order of the publishes of the chapter
+        let mut created = docs
+            .iter()
+            .filter(|d| d["metadata"]["creationTimestamp"].is_string())
+            .count();
+        for doc in &docs {
+            let versions: Vec<Value> = docs
+                .iter()
+                .filter(|d| d["status"]["isPublished"] == true && name_of(d) == name_of(doc))
+                .map(|d| json!({"uid": d["metadata"]["uid"], "version": d["spec"]["version"]}))
+                .collect();
+            let mut doc = doc.clone();
+            doc["spec"]["versions"] = json!(versions);
+            if !doc["metadata"]["creationTimestamp"].is_string() {
+                doc["metadata"]["creationTimestamp"] =
+                    json!(format!("2026-09-15T08:{created:02}:00.000Z"));
+                created += 1;
+            }
+            let uid = doc["metadata"]["uid"].as_str().unwrap_or_default();
+            self.write(dir, &profile_route(uid), &doc);
+        }
     }
 
     /// The directory of each project, in name order. The directory of the tenant is no project.

@@ -5,7 +5,8 @@ use crate::model::validation::answer_lines;
 use crate::text::and_list;
 
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
-/// versions that arrived when there are any.
+/// versions that arrived when there are any. When the records hold a profile version, the line
+/// ends with `; 2 profile versions: 1 behind`, and the profile versions not checked.
 pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {
     let s = &r.summary;
     let mut line = format!(
@@ -26,7 +27,39 @@ pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {
             count_of(s.arrived, "version")
         ));
     }
+    if s.profiles > 0 {
+        line.push_str(&format!(
+            "; {}: {} behind",
+            count_of(s.profiles, "profile version"),
+            s.profiles_behind
+        ));
+    }
+    if s.profile_errors > 0 {
+        line.push_str(&format!(", {} not checked", s.profile_errors));
+    }
     line
+}
+
+/// What a profile version is: `behind: 1.4.0, 1.3.2`, `current`, `gone`, or `not checked`. The
+/// newer versions are newest first, as for a pin.
+pub(crate) fn profile_status(p: &crate::ops::ProfilePin) -> String {
+    if p.error.is_some() {
+        "not checked".to_string()
+    } else if p.gone {
+        "gone".to_string()
+    } else if p.behind {
+        let newer: Vec<&str> = p.newer.iter().map(|n| n.version.as_str()).collect();
+        format!("behind: {}", newer.join(", "))
+    } else {
+        "current".to_string()
+    }
+}
+
+/// `1.4.0 created 2026-09-17T09:30:00Z`: when Palette created the newest version of a profile
+/// version that is behind. None when it is current, or Palette gives no time.
+pub(crate) fn created_since(p: &crate::ops::ProfilePin) -> Option<String> {
+    let newest = p.newer.first().filter(|n| !n.created.is_empty())?;
+    Some(format!("{} created {}", newest.version, newest.created))
 }
 
 /// What a pin is: `behind: 1.65.0, 1.64.0`, `current`, or `not checked`, with its floating tag and
