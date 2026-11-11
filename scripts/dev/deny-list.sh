@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Scan the text and the path of each tracked file of the repository for each entry of the deny
-# list, and fail on a hit. The variable STEP14_DENY holds the list, with one entry on each line.
+# Scan the text and the path of each tracked file of the repository, and the target of each
+# tracked symlink, for each entry of the deny list, and fail on a hit. The variable STEP14_DENY
+# holds the list, with one entry on each line.
 # The job `deny list` of the ci workflow gives it the value of the secret of the same name. The
 # recipe `just deny-list` runs this script. "The deny list" in docs/src/development/build-test.md
 # says why the list is a secret.
 #
 # An entry is a fixed string, and the case does not matter. For each hit in the text of a file, the
 # script prints the path and the line number, or the path alone in a binary file. For the paths
-# that hold an entry, it prints only their number, and it prints no such path. It never prints an
+# that hold an entry, it prints only their number, and it prints no such path. A symlink whose
+# target holds an entry is such a path, and the script prints no such target. It never prints an
 # entry or the text of a line. When the list has no entry, it gives a notice that it did not scan,
 # and exits with 0.
 set -euo pipefail
@@ -20,7 +22,8 @@ cd "$top"
 temp=${RUNNER_TEMP:-${TMPDIR:-/tmp}}
 list=$(mktemp "$temp/deny-list.XXXXXX")
 found=$(mktemp "$temp/deny-list.XXXXXX")
-trap 'rm -f "$list" "$found"' EXIT
+names=$(mktemp "$temp/deny-list.XXXXXX")
+trap 'rm -f "$list" "$found" "$names"' EXIT
 
 # An empty pattern matches each line. So the script removes each empty line, and the spaces at the
 # two ends of an entry. The carriage return of a line from Windows is a space too.
@@ -41,10 +44,29 @@ match_paths() {
   grep --null-data -F -i -f "$list" "$@"
 }
 
-# A path is public too. So the script counts the tracked paths that hold an entry, and it prints
-# no such path. grep exits with 1 when no path matches, and with a higher code on an error.
+# Write each tracked path, and a NUL after it. For a symlink, write a newline and the target
+# before the NUL. The target is the text of the blob of the symlink, and git grep does not read it.
+# No entry holds a newline, so no match joins the end of a path to the start of its target.
+paths_and_targets() {
+  local entry object
+  # Each entry of `git ls-files -s -z` is "<mode> <object> <stage>", a tab, and the path.
+  while IFS= read -r -d '' entry; do
+    printf '%s' "${entry#*$'\t'}"
+    if [ "${entry%% *}" = 120000 ]; then
+      object=${entry#* }
+      printf '\n'
+      git cat-file blob "${object%% *}"
+    fi
+    printf '\0'
+  done
+}
+
+# A path and the target of a symlink are public too. So the script counts the tracked paths that
+# hold an entry, also in the target, and it prints no such path. Each path counts one time. grep
+# exits with 1 when no path matches, and with a higher code on an error.
+git ls-files -s -z | paths_and_targets > "$names"
 status=0
-named=$(git ls-files -z | match_paths -c) || status=$?
+named=$(match_paths -c "$names") || status=$?
 [ "$status" -le 1 ] || exit "$status"
 
 # git grep exits with 1 when no line matches, and with a higher code on an error.
