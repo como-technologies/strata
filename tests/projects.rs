@@ -7,9 +7,9 @@ use std::sync::{Arc, Mutex};
 use serde_json::{Value, json};
 
 use crate::common::{
-    PROJECT_LISTING, Request, Run, UID_A, UID_B, against_closed_port, isolate_palette,
-    manifests_route, no_manifests, no_variables, profile_document, profile_route, serve_recorded,
-    strata_command, template, variables_route,
+    PROJECT_LISTING, Request, Run, UID_A, UID_B, against_closed_port, command_names,
+    isolate_palette, manifests_route, no_manifests, no_variables, profile_document, profile_route,
+    serve_recorded, strata_command, template, variables_route,
 };
 
 /// The uids of the projects `dev` and `prod` of the stand-in.
@@ -104,6 +104,28 @@ fn commands(record: &str) -> Vec<Vec<&str>> {
         vec!["snapshot", UID_A],
         vec!["verify", record],
     ]
+}
+
+/// The commands that read no Palette, so they take no project and [`commands`] does not hold them.
+///
+/// `preflight` runs `strata-preflight`, which reads the project from the environment. clap adds
+/// `help`. The unit tests of `src/cli/args.rs` keep the same list, without `help`.
+const READS_NO_PALETTE: [&str; 4] = ["help", "preflight", "report", "schema"];
+
+#[test]
+fn each_command_of_strata_is_in_commands_or_is_a_command_that_reads_no_palette() {
+    let mut listed: Vec<&str> = commands("r.json")
+        .iter()
+        .map(|args| args[0])
+        .chain(READS_NO_PALETTE)
+        .collect();
+    listed.sort_unstable();
+    let mut names = command_names();
+    names.sort_unstable();
+    assert_eq!(
+        listed, names,
+        "put a command that reads Palette in `commands`, and the others in `READS_NO_PALETTE`"
+    );
 }
 
 #[test]
