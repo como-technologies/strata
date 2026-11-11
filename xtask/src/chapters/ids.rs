@@ -1,5 +1,8 @@
 //! The uids of the profiles, the clusters, and the other objects that the chapters build. Each uid
 //! names one object of the stand-in.
+//!
+//! A test reads each const of this file. It fails when two consts have the same value, and names
+//! the two consts.
 
 pub(super) const DEV: &str = "64f20000000000000000a0d1";
 pub(super) const PROD: &str = "64f20000000000000000a0f1";
@@ -117,3 +120,92 @@ pub(super) const DEVELOP_SHORT: &str = "64e000000000000000000111";
 pub(super) const A120_RC: &str = "64e000000000000000000112";
 pub(super) const A130_PROD: &str = "64e100000000000000000110";
 pub(super) const A200_TENANT: &str = "64e400000000000000000111";
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use syn::visit::Visit;
+    use syn::{Expr, ExprLit, ItemConst, Lit, parse_file};
+
+    use crate::files::code_without_tests;
+
+    /// The consts of a Rust file. `by_uid` holds the names of the consts for each value, in the
+    /// order of the file. `unread` holds each const whose value is no string literal.
+    #[derive(Default)]
+    struct Consts {
+        by_uid: BTreeMap<String, Vec<String>>,
+        unread: Vec<String>,
+    }
+
+    impl<'ast> Visit<'ast> for Consts {
+        fn visit_item_const(&mut self, item: &'ast ItemConst) {
+            let name = item.ident.to_string();
+            match &*item.expr {
+                Expr::Lit(ExprLit {
+                    lit: Lit::Str(uid), ..
+                }) => self.by_uid.entry(uid.value()).or_default().push(name),
+                _ => self.unread.push(name),
+            }
+        }
+    }
+
+    /// The consts of the Rust file `text`, at each depth, outside its test code.
+    fn consts(text: &str) -> Consts {
+        let code = code_without_tests(text).unwrap();
+        let mut consts = Consts::default();
+        consts.visit_file(&parse_file(&code).unwrap());
+        consts
+    }
+
+    /// One message for each value that two or more consts of `text` have, with the names of these
+    /// consts. Also one message for each const whose value the test cannot read.
+    fn faults(text: &str) -> Vec<String> {
+        let consts = consts(text);
+        let shared = consts
+            .by_uid
+            .iter()
+            .filter(|(_, names)| names.len() > 1)
+            .map(|(uid, names)| format!("{} have the same uid {uid}", names.join(" and ")));
+        let unread = consts
+            .unread
+            .iter()
+            .map(|name| format!("{name} has no string literal as its uid"));
+        shared.chain(unread).collect()
+    }
+
+    #[test]
+    fn two_consts_with_the_same_value_are_a_fault_that_names_the_two_consts() {
+        let text =
+            "const A: &str = \"64e0\";\nconst B: &str = \"64e1\";\nconst C: &str = \"64e0\";\n";
+        assert_eq!(faults(text), ["A and C have the same uid 64e0"]);
+    }
+
+    #[test]
+    fn a_const_whose_value_is_no_string_literal_is_a_fault() {
+        let text = "const A: &str = concat!(\"64e\", \"0\");\n";
+        assert_eq!(faults(text), ["A has no string literal as its uid"]);
+    }
+
+    #[test]
+    fn the_test_reads_the_consts_of_a_module_and_not_the_consts_of_the_tests() {
+        let text = "mod m {\n    const A: &str = \"64e0\";\n}\n#[cfg(test)]\nmod tests {\n    const B: &str = \"64e0\";\n}\n";
+        let consts = consts(text);
+        assert_eq!(
+            consts.by_uid,
+            BTreeMap::from([("64e0".to_string(), vec!["A".to_string()])])
+        );
+    }
+
+    #[test]
+    fn each_const_of_the_chapters_has_a_uid_of_its_own() {
+        let text = include_str!("ids.rs");
+        let faults = faults(text);
+        assert!(faults.is_empty(), "{}", faults.join("\n"));
+        // the scan reads this file: it finds the first const and the last const
+        let by_uid = consts(text).by_uid;
+        for (uid, name) in [(super::DEV, "DEV"), (super::DEVELOP_SHORT, "DEVELOP_SHORT")] {
+            assert_eq!(by_uid.get(uid), Some(&vec![name.to_string()]));
+        }
+    }
+}

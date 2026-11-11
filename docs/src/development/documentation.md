@@ -148,6 +148,11 @@ draft with the name and the version of another profile, as Palette does: see
 A test of `xtask/src/tenant/edit.rs` applies one edit of each variant of `Edit`.
 Its build fails on a new variant until the test holds an edit of it.
 
+`xtask/src/chapters/ids.rs` holds the uid of each object that a chapter builds,
+as a const. Give a new object a const with a uid of its own. A test of `xtask`
+reads each const of the file. It fails when two consts have the same uid, and
+names the two consts.
+
 1. Find the chapter of the page in `xtask/src/chapters/`. To add one, put
    `r.chapter("name", env)` in the file of its group of pages.
 2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,
