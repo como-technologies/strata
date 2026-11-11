@@ -36,6 +36,7 @@ facts:
       - reference/palette-api.md#a-cluster
       - internals/palette/clusters.md#cluster-tiers
       - internals/palette/clusters.md#a-deleted-cluster
+      - reference/palette-api.md#the-checks-of-strata-preflight
     code:
       - src/api/palette/clusters.rs
       - src/snapshot/cluster.rs
@@ -247,6 +248,7 @@ facts:
     unchecked: Only the runs of preflight-plan.sh read it, and their checks have names with a variable.
     pages:
       - reference/palette-api.md#a-cluster
+      - reference/palette-api.md#the-checks-of-strata-preflight
     code:
       - src/api/palette/clusters.rs
       - crates/strata-preflight/src/world/mod.rs
@@ -455,6 +457,7 @@ facts:
     pages:
       - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
       - internals/palette/other-objects.md#edge-hosts
+      - reference/palette-api.md#the-checks-of-strata-preflight
     code:
       - src/api/palette/clusters.rs
       - src/ops/live.rs

@@ -2,13 +2,9 @@ package main
 
 import (
 	"bytes"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
@@ -16,35 +12,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-// webhook is a receiver that keeps the body of each request.
-type webhook struct {
-	*httptest.Server
-	mu     sync.Mutex
-	bodies []string
-}
-
-func newWebhook(t *testing.T) *webhook {
-	t.Helper()
-	w := &webhook{}
-	w.Server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		raw, _ := io.ReadAll(req.Body)
-		w.mu.Lock()
-		w.bodies = append(w.bodies, string(raw))
-		w.mu.Unlock()
-	}))
-	t.Cleanup(w.Close)
-	return w
-}
-
-func (w *webhook) count() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return len(w.bodies)
-}
-
 // rulesFile writes a file of rules with one channel, oncall, whose address is that of the receiver, and
 // the rules for drift and for the loss of contact.
-func rulesFile(t *testing.T, w *webhook) string {
+func rulesFile(t *testing.T, w *testkit.Receiver) string {
 	t.Helper()
 	dir := t.TempDir()
 	address := filepath.Join(dir, "oncall")
@@ -64,14 +34,14 @@ func rulesFile(t *testing.T, w *webhook) string {
 const drifting = `{"same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`
 
 func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
-	w := newWebhook(t)
+	w := testkit.NewReceiver(t)
 	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, drifting, 0, false)), "--alerts", rulesFile(t, w), "--alerts-allow-http")
 	if code := run(args, &out, &errs); code != 1 {
 		t.Fatalf("exit %d, stderr %q", code, errs.String())
 	}
-	if w.count() != 0 {
-		t.Errorf("once sent %d messages", w.count())
+	if w.Count() != 0 {
+		t.Errorf("once sent %d messages", w.Count())
 	}
 }
 
@@ -134,7 +104,7 @@ func TestADigestPeriodThatIsNotPositiveStopsTheStart(t *testing.T) {
 }
 
 func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *testing.T) {
-	w := newWebhook(t)
+	w := testkit.NewReceiver(t)
 	args := serveArgs(t, fakeStrata(t, drifting, 0, false))
 	args = append(args, "--alerts", rulesFile(t, w), "--alerts-allow-http")
 	addr, stop, stderr := startServe(t, args)
@@ -144,10 +114,10 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 	})
 	// The observer sets the state of the rule before it sends the message. So the state does not show
 	// the send, and the count does.
-	testkit.WaitFor(t, "the message of the drift", func() bool { return w.count() > 0 })
+	testkit.WaitFor(t, "the message of the drift", func() bool { return w.Count() > 0 })
 	stop()
-	if w.count() != 1 || !strings.Contains(w.bodies[0], "Drift") || !strings.Contains(w.bodies[0], "payments") {
-		t.Errorf("the receiver got %d messages: %q", w.count(), w.bodies)
+	if got := w.Bodies(); len(got) != 1 || !strings.Contains(got[0], "Drift") || !strings.Contains(got[0], "payments") {
+		t.Errorf("the receiver got %d messages: %q", len(got), got)
 	}
 	if strings.Contains(stderr.String(), "TOKEN-SECRET") || !strings.Contains(stderr.String(), "channel=oncall") {
 		t.Errorf("stderr %s", stderr.String())

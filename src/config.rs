@@ -110,7 +110,8 @@ impl Config {
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
     ///
     /// Strata reads the file only when `HOME` is an absolute path. An empty or a relative `HOME`
-    /// names a folder below the working folder, so strata then reads the environment alone.
+    /// names a folder from the working folder, not the home of the user, so strata then reads the
+    /// environment alone.
     ///
     /// # Errors
     ///
@@ -230,9 +231,10 @@ const HOME_VAR: &str = "HOME";
 /// The folder that `value`, the value of a variable, names. `None` when the value is not set, or
 /// is not an absolute path.
 ///
-/// An empty or a relative value names a folder below the working folder, such as a checkout of a
-/// job, and not a folder of the person. So strata reads no `~/.palette.env` and keeps no state
-/// below such a `HOME`. This one rule gives the home for the key file and for the state folder.
+/// An empty or a relative value, such as `../home`, names a folder from the working folder, and
+/// not a folder of the person. That folder can be in the checkout of a job. So strata reads no
+/// `~/.palette.env` and keeps no state below such a `HOME`. This one rule gives the home for the
+/// key file and for the state folder.
 fn absolute_folder(value: Option<OsString>) -> Option<PathBuf> {
     value.map(PathBuf::from).filter(|p| p.is_absolute())
 }
@@ -533,8 +535,9 @@ mod home_tests {
         );
     }
 
-    /// An empty or a relative `HOME` names a folder below the working folder. A checkout can put
-    /// a `.palette.env` there, with an address that then gets the key of the environment.
+    /// An empty or a relative `HOME`, also `../home`, names a folder from the working folder. A
+    /// checkout can put a `.palette.env` there, with an address that then gets the key of the
+    /// environment.
     #[test]
     fn an_empty_or_a_relative_home_has_no_key_file() {
         assert_eq!(env_file_from(None), None);

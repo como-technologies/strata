@@ -4561,12 +4561,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))
             .unwrap();
-        let cell = row
-            .split(" | ")
-            .nth(4)
-            .unwrap()
-            .strip_prefix("bump to ")
-            .unwrap();
+        let cell = cells(row)[4].strip_prefix("bump to ").unwrap();
         let o = u.run(&["releases/*.json", "--dry-run"]);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
         let body = text(&o.stdout);
@@ -5317,7 +5312,7 @@ fn palette_key_sh_finds_a_key_in_each_place_that_strata_reads_and_names_the_plac
 /// no file, and the script must agree too.
 #[test]
 fn palette_key_sh_reads_the_file_as_strata_reads_it() {
-    // An empty or a relative home names a folder below the working folder, such as a checkout.
+    // An empty or a relative home names a folder from the working folder, such as a checkout.
     // Neither one reads the file there. The absolute path of the same folder reads it.
     let work = tempfile::tempdir().unwrap();
     std::fs::create_dir(work.path().join("home")).unwrap();

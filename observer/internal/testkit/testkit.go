@@ -1,6 +1,7 @@
 // Package testkit holds the helpers that the tests of more than one package of the observer use:
 // a script that stands for the strata binary, a gzip file, a cluster read, the documents that the
-// commands promise, a wait, and a count of the calls that run at one time. Only test files import it.
+// commands promise, a wait, a count of the calls that run at one time, and a webhook that keeps each
+// request. Only test files import it.
 package testkit
 
 import (

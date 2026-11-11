@@ -11,10 +11,7 @@ use std::path::{Path, PathBuf};
 
 use crate::support::fingerprint;
 
-use super::{SEED_LIMIT, TARGETS, Target, regressions};
-
-/// A regression case: the target, the name of the file in `crashes/`, and the input.
-type Case = (&'static str, &'static str, Vec<u8>);
+use super::{Case, SEED_LIMIT, TARGETS, Target, regressions};
 
 /// The directory of the targets in this package, which bolero reads.
 fn root() -> PathBuf {

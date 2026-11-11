@@ -68,6 +68,13 @@ check compare-names 0 '#155: the comparison names the manifest pack that the pub
 check route-list 0 '#155: packs/manifests gives the published content of the manifest while the draft waits' -- \
   bash -c "\"$live/api.sh\" get \"/v1/clusterprofiles/$AD/packs/manifests\" \
     | jq -e --arg from '$addon_from' '[.spec.packs[].spec.manifests[]?.content] | any(contains(\$from))'"
+check route-names 0 '#767: packs/manifests gives the name of the profile, and each pack summary the name of its pin in the draft' -- \
+  bash -c "\"$live/api.sh\" get \"/v1/clusterprofiles/$AD\" > route-names-profile.json \
+    && \"$live/api.sh\" get \"/v1/clusterprofiles/$AD/packs/manifests\" \
+    | jq -e --slurpfile p route-names-profile.json \
+      '(\$p[0].metadata.name | length) > 0 and .metadata.name == \$p[0].metadata.name \
+        and (.spec.packs | length) > 0 \
+        and ([.spec.packs[].metadata.name] | sort) == ([\$p[0].spec.draft.packs[].name] | sort)'"
 check route-entity 0 '#155: the route of one manifest gives the draft content beside the published content' -- \
   bash -c "pack=\$(jq -r '[.spec.draft.packs[] | select((.manifests // []) | length > 0)][0].name' \
       <(\"$live/api.sh\" get \"/v1/clusterprofiles/$AD\")); \
