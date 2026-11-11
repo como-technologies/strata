@@ -17,7 +17,9 @@ In this example, the pipeline published `aws-stack@1.2.0-rc.1`. It pins the
 pre-releases `kubernetes` `1.36.2-rc.1` and `csi-aws-ebs` `1.65.0-rc.1`. The
 final version `aws-stack@1.2.0` pins `1.36.2` and `1.65.0`, with the same
 values. `aws-stack@1.2.1` is the final version with one more change of a CSI
-value. The pack uids and the digests of the pre-releases are stand-ins.
+value. `aws-stack@1.2.2` pins `1.65.1`, a build of the CSI pack from another
+commit, with one more replica in its default values. The pack uids and the
+digests of the pre-releases are stand-ins.
 
 **Who runs this.** The job of the pipeline that publishes the final version, or
 a person at a terminal.
@@ -44,10 +46,12 @@ The reasons name the version of each pack. No value changed.
 ```
 
 `--allow renumber` passes a pair whose packs differ only by their versions. The
-values, the manifests, the params, and the images must be the same. Each line
-names a pack, its two versions, and two facts. `pre-release to final` says that
-the move is from a pre-release to its final version. `archive: not compared`
-says that strata did not read the archive of the new build.
+values, the manifests, the params, and the images must be the same. Strata
+reads the archive of each new build from Palette, and compares its files: see
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version).
+Each line names a pack, its two versions, and two facts. `pre-release to final` says
+that the move is from a pre-release to its final version. `archive: same files`
+says that the two archives differ only by the version in `pack.json`.
 
 ## 3. See the impact
 
@@ -68,14 +72,26 @@ the params of the profile stay the same.
 The Kubernetes pack is a renumber. The CSI pack also changed a value, so the
 pair fails, and the reason names the value.
 
+## 5. A new build with another file fails
+
+```text
+{{#include ../output/renumber-archive.txt}}
+```
+
+The profile gives the CSI pack the same values, so the record shows no change
+of a value. The archive of the new build holds another default value. So the
+pair fails, and the reason names the file of the archive.
+
 ## What to do
 
 - Run `same-release --allow renumber` when your pipeline publishes the final
   version. Give the record of the version that passed the tests first.
-- Make sure in the pipeline that the archive of each new build differs only by
-  `version` in `pack.json`. Strata does not compare the archives:
-  [#751](https://github.com/como-technologies/strata/issues/751) adds that
-  compare.
+- Give the key of Palette to the job. Strata reads the archives from the
+  download of each version, also for two record files.
+- When a line says `archive: not compared`, make sure in the pipeline that the
+  archive of the new build differs only by `version` in `pack.json`. Palette
+  serves no archive of a pack of a private registry: see
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
 - A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
   layer in `compare`, also with the same values. See
   [A renumber](../reference/impact.md#a-renumber).

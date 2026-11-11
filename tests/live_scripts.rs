@@ -9,6 +9,7 @@ use std::process::{Command, Output};
 use common::*;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
+use strata::model::pack_type::PackType;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -3185,6 +3186,28 @@ impl Stage {
             body,
         )
         .unwrap();
+    }
+
+    /// Palette answers the GET of `path`, a route of a file such as the download of a profile, with
+    /// status 200. A request with `Accept: application/json` gets `for_json`, and each other
+    /// request gets the bytes `file`.
+    fn route_file(&self, path: &str, file: &[u8], for_json: &[u8]) {
+        let routes = self.root.path().join("routes");
+        let key = Self::route_key(path);
+        std::fs::write(routes.join(format!("{key}.file")), file).unwrap();
+        std::fs::write(routes.join(format!("{key}.for-json")), for_json).unwrap();
+        executable(
+            &routes.join(format!("{key}.sh")),
+            &format!(
+                r#"#!/usr/bin/env bash
+if grep -qix 'Accept: application/json' "$FAKE_ROUTES/sent/GET_{key}.request"; then
+  cat "$FAKE_ROUTES/{key}.for-json"
+else
+  cat "$FAKE_ROUTES/{key}.file"
+fi
+"#
+            ),
+        );
     }
 
     /// Palette answers `path` with `status` and `body` to a request whose `ApiKey` is `key`.
@@ -7993,6 +8016,60 @@ fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_a
     }
 }
 
+/// No pack of the publish moves its version. So `same-release --allow renumber` of the candidate
+/// and the published version passes, and its pair names no renumber. A pair with a renumber, a
+/// pair that fails, and a run without the option fail the check.
+#[test]
+fn loop_sh_stage_3_passes_the_publish_with_allow_renumber_only_when_the_pair_names_no_renumber() {
+    let renumber =
+        r#"{"key":"k8s/kubernetes","name":"kubernetes","old":"1.35.3-rc.1","new":"1.35.3"}"#;
+    for (exit, report, passes) in [
+        (
+            0,
+            r#"{"same":true,"allowRenumber":true,"pairs":[{"status":"identical"}]}"#.to_string(),
+            true,
+        ),
+        (
+            0,
+            format!(
+                r#"{{"same":true,"allowRenumber":true,"pairs":[{{"status":"renumber","renumbers":[{renumber}]}}]}}"#
+            ),
+            false,
+        ),
+        (
+            1,
+            r#"{"same":false,"allowRenumber":true,"pairs":[{"status":"different"}]}"#.to_string(),
+            false,
+        ),
+        (
+            0,
+            r#"{"same":true,"pairs":[{"status":"identical"}]}"#.to_string(),
+            false,
+        ),
+    ] {
+        let mut stage = lab_stage();
+        stage.strata(
+            "same-release --allow renumber candidate.json releases/1.0.1.json --json",
+            exit,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        if passes {
+            passed(&steps, &["same-release-renumber"]);
+        } else {
+            failed(&steps, &["same-release-renumber"]);
+        }
+        let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+        assert!(
+            calls
+                .lines()
+                .any(|l| l
+                    == "same-release --allow renumber candidate.json releases/1.0.1.json --json"),
+            "{calls}"
+        );
+    }
+}
+
 /// Issue #707. After the publish of the next version, `behind` names it as a newer version of the
 /// release, in one entry that both records hold. A report that names no newer version fails.
 #[test]
@@ -12704,4 +12781,111 @@ fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git
         "a recipe runs these scripts, and Git does not record them as 100755 \
          (git update-index --chmod=+x <file>): {wrong:?}"
     );
+}
+
+// ---- export.sh -------------------------------------------------------------------------------------
+
+/// A stage of `export.sh` 4 for the version `aws-stack@1.2.0`, whose download holds `packs`. The
+/// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, and a manifest
+/// pack.
+fn download_stage(packs: &[DownloadPack]) -> Stage {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("PROFILES", "aws-stack@1.2.0");
+    stage.strata(
+        "snapshot aws-stack@1.2.0 -q -o aws-stack.version.json",
+        0,
+        r#"{"source":{"uid":"u-1"},"packs":[
+            {"name":"kubernetes","type":"spectro","version":"1.36.2"},
+            {"name":"csi-aws-ebs","type":"spectro","version":"1.65.0"},
+            {"name":"platform-rules","type":"manifest","version":"1.0.0"}]}"#,
+    );
+    let file = profile_download("u-1", "aws-stack", packs);
+    stage.route_file(&download_route("u-1"), &file, FILE_FOR_JSON);
+    stage
+}
+
+/// The answer of Palette to a request for a file that accepts JSON alone, as the export shows.
+const FILE_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
+
+/// The packs of the download of `aws-stack@1.2.0`. The `pack.json` of the archive of the Kubernetes
+/// pack names `built`. The CSI pack has no archive, and the manifest pack has none.
+fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
+    let none = |name, version, kind, private| DownloadPack {
+        name,
+        version,
+        kind,
+        private,
+        archive: None,
+        manifests: &[],
+    };
+    vec![
+        DownloadPack {
+            archive: Some(pack_archive(
+                "kubernetes",
+                built,
+                "k8s",
+                "kubernetes-0123456789ab",
+                &[("values.yaml", "pack: {}\n")],
+            )),
+            ..none("kubernetes", "1.36.2", PackType::Spectro, false)
+        },
+        none("csi-aws-ebs", "1.65.0", PackType::Spectro, true),
+        DownloadPack {
+            manifests: &[("extra-rules", "kind: ConfigMap\n")],
+            ..none("platform-rules", "1.0.0", PackType::Manifest, false)
+        },
+    ]
+}
+
+/// Stage 4 reads the layout of the download of each version, and the archive of each pack. A
+/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the packs
+/// with no archive and two downloads at once. A list or an archive that names another version
+/// fails its check. The file as the answer to a request that accepts JSON fails its check too.
+#[test]
+fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    passed(
+        &steps,
+        &[
+            "download-aws-stack",
+            "download-layout-aws-stack",
+            "download-archive-aws-stack",
+            "download-accepts-json",
+            "download-accepts-json-no-file",
+        ],
+    );
+    for id in ["download-no-archive", "download-limit"] {
+        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
+    }
+    let none = std::fs::read_to_string(stage.path("out/download-no-archive.out")).unwrap();
+    assert_eq!(none, "./aws-stack.list.json\tcsi-aws-ebs\tspectro\ttrue\n");
+    let request = std::fs::read_to_string(
+        stage.path("routes/sent/GET_v1_clusterprofiles_u-1_spc_download.request"),
+    )
+    .unwrap();
+    assert!(
+        request.contains("Accept: application/octet-stream"),
+        "{request}"
+    );
+    // a build whose pack.json names another version
+    let stage = download_stage(&downloaded("1.36.2-rc.1"));
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    passed(&steps, &["download-layout-aws-stack"]);
+    failed(&steps, &["download-archive-aws-stack"]);
+    // a list that names another version of a pack of the record
+    let mut packs = downloaded("1.36.3");
+    packs[0].version = "1.36.3";
+    let stage = download_stage(&packs);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    failed(&steps, &["download-layout-aws-stack"]);
+    // a route that gives the file also to a request that accepts JSON alone
+    let packs = downloaded("1.36.2");
+    let stage = download_stage(&packs);
+    let file = profile_download("u-1", "aws-stack", &packs);
+    stage.route_file(&download_route("u-1"), &file, &file);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    passed(&steps, &["download-accepts-json"]);
+    failed(&steps, &["download-accepts-json-no-file"]);
 }

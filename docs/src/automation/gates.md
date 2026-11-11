@@ -49,8 +49,11 @@ or the version as the input:
 | `strata-version` | both | The strata release, a tag of this repository. |
 
 The promotion gate reads records, which are files, so it needs
-`palette-api-key` only when a record is a ref. A ref such as `name@version`
-resolves in one project. The promotion gate takes `project`, or the secret
+`palette-api-key` only when a record is a ref, or when `allow` holds
+`renumber`. With `renumber`, strata reads the archive of each renumbered pack
+from Palette: see
+[The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+A ref such as `name@version` resolves in one project. The promotion gate takes `project`, or the secret
 `palette-project-uid`, which names the project by its uid and has priority over
 `project`. The retire gate reads the clusters, so it always needs the key.
 

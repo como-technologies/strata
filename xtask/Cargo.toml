@@ -24,6 +24,9 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 # The run reads the latest release of two repositories from GitHub, with the HTTP client of strata.
 ureq = { version = "3", features = ["json"] }
+# The stand-in serves the download of a profile version: a tar archive that gzip compresses.
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 # The size check and the scan of the code read the sources with a parser, and not with a pattern. A
 # line number of a token needs `span-locations`, which a parser outside a macro does not give by
 # default.

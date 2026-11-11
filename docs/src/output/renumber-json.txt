@@ -1,4 +1,4 @@
-$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesNotCompared}'
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesCompared}'
 {
   "status": "renumber",
   "renumbers": [
@@ -17,7 +17,7 @@ $ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --js
       "preReleaseToFinal": true
     }
   ],
-  "archivesNotCompared": [
+  "archivesCompared": [
     "k8s/kubernetes",
     "csi/csi-aws-ebs"
   ]

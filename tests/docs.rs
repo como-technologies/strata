@@ -1421,9 +1421,9 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
 }
 
-/// The checks that part 1 of the live window of Wave 16 ran have their result in the book: draft.sh,
-/// projects.sh, and loop.sh. A row that says "no result yet" for one of them tells a reader that
-/// nobody ran the check.
+/// The checks that the live window of Wave 16 ran have their result in the book: draft.sh,
+/// projects.sh, scope.sh, loop.sh, and stage 4 of export.sh. A row that says "no result yet" for one
+/// of them tells a reader that nobody ran the check.
 #[test]
 fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
     let page = read(&docs().join("development/live-runs.md"));
@@ -1454,6 +1454,12 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
         "versions-project",
         "behind-profile",
         "behind-profile-names",
+        "download-<name>",
+        "download-layout-<name>",
+        "download-archive-<name>",
+        "download-no-archive",
+        "download-accepts-json",
+        "download-limit",
     ] {
         let row = page
             .lines()
@@ -6869,8 +6875,8 @@ fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
             "{page}: the text includes no output of the chapter renumber"
         );
         assert!(
-            part.contains("renumber only") || part.contains("archive: not compared"),
-            "{page}: the text does not say what a renumber does not compare"
+            part.contains("renumber only") || part.contains("archive: same files"),
+            "{page}: the text does not say what strata compares of a renumber"
         );
         assert!(
             part.contains("archive"),
@@ -6885,8 +6891,16 @@ fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
     let allow = read(&docs().join("output/renumber-allow.txt"));
     assert!(
         allow.contains("\nRENUMBER ")
-            && allow.contains("(pre-release to final; archive: not compared)"),
+            && allow.contains("(pre-release to final; archive: same files)"),
         "{allow}"
+    );
+    // a new build with another file fails, and the reason names the file
+    let archive = read(&docs().join("output/renumber-archive.txt"));
+    assert!(
+        archive.contains("\nDIFFERENT ")
+            && archive.contains("(archive: other files)")
+            && archive.contains("pack csi/csi-aws-ebs archive: values.yaml differs"),
+        "{archive}"
     );
     let compare = read(&docs().join("output/renumber-compare.txt"));
     assert_eq!(

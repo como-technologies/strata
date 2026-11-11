@@ -10,12 +10,16 @@ use crate::error::{Error, Result};
 
 /// Canned responses keyed by path. A path that nobody registered answers 404.
 ///
+/// A GET of a file answers from the files that [`MemoryApi::with_file`] registered, and fails as a
+/// GET of the same path does.
+///
 /// A POST answers from the key `POST <path> <body>` when [`MemoryApi::with_post`] registered that
 /// body, else from the key `POST <path>`. The body that it was sent is kept for
 /// [`MemoryApi::posted`].
 #[derive(Debug, Default, Clone)]
 pub struct MemoryApi {
     ok: HashMap<String, Value>,
+    files: HashMap<String, Vec<u8>>,
     fail: HashMap<String, (u16, String)>,
     transient: RefCell<HashMap<String, Transient>>,
     calls: RefCell<HashMap<String, u32>>,
@@ -46,6 +50,12 @@ impl MemoryApi {
     /// Answer `path` with `value`.
     pub fn with(mut self, path: impl Into<String>, value: Value) -> Self {
         self.ok.insert(path.into(), value);
+        self
+    }
+
+    /// Answer a GET of the file at `path` with `bytes`.
+    pub fn with_file(mut self, path: impl Into<String>, bytes: Vec<u8>) -> Self {
+        self.files.insert(path.into(), bytes);
         self
     }
 
@@ -106,10 +116,17 @@ impl MemoryApi {
         self
     }
 
-    /// The answer to a request with `method` to `path`, from the canned responses of `key`.
+    /// The answer to a request with `method` to `path`, from the canned responses of `key` in
+    /// `canned`: the documents, or the files.
     ///
     /// A GET has its path as its key, and a POST has a key of its own: see [`MemoryApi`].
-    fn answer(&self, method: Method, path: &str, key: &str) -> Result<Value> {
+    fn answer<T: Clone>(
+        &self,
+        method: Method,
+        path: &str,
+        key: &str,
+        canned: &HashMap<String, T>,
+    ) -> Result<T> {
         *self.calls.borrow_mut().entry(key.to_string()).or_insert(0) += 1;
         let error = |status: u16, body: String, retry_after: Option<u64>| Error::Api {
             method,
@@ -127,7 +144,7 @@ impl MemoryApi {
         if let Some((status, body)) = self.fail.get(key) {
             return Err(error(*status, body.clone(), None));
         }
-        self.ok
+        canned
             .get(key)
             .cloned()
             .ok_or_else(|| error(404, r#"{"code":"ResourceNotFound"}"#.to_string(), None))
@@ -136,7 +153,7 @@ impl MemoryApi {
 
 impl PaletteApi for MemoryApi {
     fn get_json(&self, path: &str) -> Result<Value> {
-        self.answer(Method::Get, path, path)
+        self.answer(Method::Get, path, path, &self.ok)
     }
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
@@ -145,9 +162,13 @@ impl PaletteApi for MemoryApi {
             .push((path.to_string(), body.clone()));
         let keyed = format!("POST {path} {body}");
         if self.ok.contains_key(&keyed) {
-            return self.answer(Method::Post, path, &keyed);
+            return self.answer(Method::Post, path, &keyed, &self.ok);
         }
-        self.answer(Method::Post, path, &format!("POST {path}"))
+        self.answer(Method::Post, path, &format!("POST {path}"), &self.ok)
+    }
+
+    fn get_file(&self, path: &str) -> Result<Vec<u8>> {
+        self.answer(Method::Get, path, path, &self.files)
     }
 
     fn project_uid(&self) -> Option<&str> {

@@ -36,7 +36,7 @@ pub enum Error {
     /// message names where a key comes from. The body alone names nothing that the reader can set.
     /// A 403 with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the
     /// route is of the tenant scope and that the request named a project.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, body))]
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, path, body))]
     Api {
         /// The request method.
         method: Method,
@@ -104,6 +104,17 @@ pub enum Error {
         path: String,
         /// The parse error.
         source: serde_json::Error,
+    },
+    /// Palette answered 2xx to the download of a profile version with a file that strata cannot
+    /// read. The file is no gzip or no tar, or its list of the packs does not parse.
+    #[error("{method} {path}: the file is not the download of a profile version: {message}")]
+    NotArchive {
+        /// The request method.
+        method: Method,
+        /// Request path.
+        path: String,
+        /// What strata cannot read.
+        message: String,
     },
     /// `name@version` matched nothing in the current scope. The message points at `strata list`,
     /// because the name is often a pack's rather than a profile's. At tenant scope it says so
@@ -517,14 +528,20 @@ pub enum Error {
 /// The hint of a 401 or a 403: the key is almost always the cause, so the message names where a
 /// key comes from. A 403 with the code [`PROJECT_SCOPE_CODE`] is the exception. The key is right,
 /// and the message says that the route is of the tenant scope and that the request named a
-/// project. Empty for each other status.
-fn status_hint(status: u16, body: &str) -> String {
+/// project. A 429 of the download of a profile version at `path` names the limit of Palette.
+/// Empty for each other status.
+fn status_hint(status: u16, path: &str, body: &str) -> String {
     let names_project = status == 403
         && crate::model::validation::PaletteRefusal::from_error_body(body)
             .is_some_and(|refusal| refusal.code == PROJECT_SCOPE_CODE);
     if names_project {
         "; the route is of the tenant scope, and the request named a project: ask it with no project"
             .to_string()
+    } else if crate::api::is_download_limit(status, path) {
+        format!(
+            "; Palette takes one download of a profile version in {} seconds: run the command again later",
+            crate::api::DOWNLOAD_INTERVAL_SECONDS
+        )
     } else if status == 401 || status == 403 {
         format!(
             "; check {}, {}, or ~/{}: the key can be wrong, expired, or for another tenant",
@@ -715,6 +732,7 @@ impl Error {
             Error::Pattern { .. } => "pattern",
             Error::Transport { .. } => "transport",
             Error::NotJson { .. } => "not-json",
+            Error::NotArchive { .. } => "not-archive",
             Error::ProfileNotFound { .. } => "profile-not-found",
             Error::ProfileNameAmbiguous { .. } => "profile-name-ambiguous",
             Error::ClusterProfileNotFound { .. } => "cluster-profile-not-found",

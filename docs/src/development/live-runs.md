@@ -1087,7 +1087,7 @@ stays in the directory, and `validate-route.sh` skips it.
 ## export.sh
 
 No cluster, no profile of its own, and no cost. Each request is a `GET`. It
-reads the export of three versions of the example:
+reads the export and the download of three versions of the example:
 
 - the release version, with four packs from the Public Repo
 - the registries version, with a Helm pack and an OCI pack
@@ -1096,6 +1096,8 @@ reads the export of three versions of the example:
 Give other versions as `PROFILES="<name>@<version> ..."`.
 [The export of a version](../internals/palette/profiles.md#the-export-of-a-version)
 states what it shows.
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version)
+states what stage 4 checks.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1106,6 +1108,12 @@ states what it shows.
 | `export-json-<name>`, `export-json-record-<name>`, `export-json-root-<name>` | 0 | #156: the export with `format=json` gives the same root |
 | `export-accepts-json`, `export-accepts-json-no-file` | 0 | #156: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file |
 | `export-limit` | ? | #156: three exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
+| `download-<name>` | 0 | #751: `GET /v1/clusterprofiles/{uid}/spc/download` gives the file of the version to a request that accepts a file. |
+| `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. |
+| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. |
+| `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. The check records the entries, and judges none. |
+| `download-accepts-json`, `download-accepts-json-no-file` | 0 | #751: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file, as for the export. |
+| `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. In one run, Palette refused none (recorded 0). |
 
 ## registry-kinds.sh
 
@@ -1181,7 +1189,7 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
 | `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer. This is a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 | `pool-route`, `pool-before`, `pool-before-none` | 0 | #515: the route of the cloud config of cluster A, and a record of cluster A before the stage. The worker pool holds neither override, because Palette omits a field with no value. |
-| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier writes `entity.json` of cluster A. `pool-world` records its exit, which is 0, and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. |
+| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier and `--world` writes `entity.json` of cluster A. `pool-world` records its exit, which is 0, and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. |
 | `pool-set`, `pool-read`, `pool-in-cloud-config` | 0 | #515: the PUT of the worker pool to `/v1/cloudconfigs/<cloud type>/<config uid>/machinePools/worker-pool` takes both overrides. The cloud config then holds each as a field of the pool in `spec.machinePoolConfig`. |
 | `pool-cluster-level` | ? | #515: the values of `overrideClusterAPIConfig` and `overrideHealthCheckConfiguration` in `spec.clusterConfig` after the PUT. The check judges none, and records 0. Both values are `null`: an override of a pool does not reach the cloud part of the cluster. |
 | `pool-record`, `pool-in-record` | 0 | #515: the `shape` tier of a new record keeps both overrides on the worker pool. It keeps them on no other pool and not in the cloud part. |

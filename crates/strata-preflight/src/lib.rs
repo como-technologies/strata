@@ -28,6 +28,7 @@ pub mod error;
 pub mod fixture;
 pub mod html;
 pub mod jq;
+pub(crate) mod mask;
 pub mod probe;
 pub mod report;
 pub mod rule;

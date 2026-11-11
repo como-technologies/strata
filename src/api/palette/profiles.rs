@@ -12,7 +12,7 @@ use super::{
     Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, VariablesRead,
     install_order, listed_versions, no_variables, query_value, route, with_limit,
 };
-use crate::api::{PaletteApi, RawProfile, mask};
+use crate::api::{PaletteApi, ProfileDownload, RawProfile, mask};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, text};
@@ -500,6 +500,22 @@ impl<A: PaletteApi> Palette<A> {
             .get_json(&route(PROFILES, &[uid, "packs", "resolvedValues"]))
     }
 
+    /// The download of the published content of the profile version `uid`, with the archive of
+    /// each pack that Palette can download: `GET /v1/clusterprofiles/{uid}/spc/download`.
+    ///
+    /// Palette sends the file only to a request that accepts a file. Palette downloads each pack
+    /// from its registry at each request. It takes one download of a version in 10 seconds, and
+    /// refuses the next with HTTP 429 and the code `TooManyRequests`. See [`ProfileDownload`].
+    ///
+    /// # Errors
+    ///
+    /// An error of the request, such as a 404 for a version that Palette does not have, or the
+    /// 429 of the limit. [`Error::NotArchive`] when strata cannot read the file.
+    pub fn profile_download(&self, uid: &str) -> Result<ProfileDownload> {
+        let path = download_path(uid);
+        ProfileDownload::read(&path, &self.api.get_file(&path)?)
+    }
+
     /// Palette's answer to whether it takes the packs of a profile: `POST
     /// /v1/clusterprofiles/validate/packs` for a profile that Palette does not hold, or `POST
     /// /v1/clusterprofiles/{uid}/validate/packs` for an update of the version `uid`. The body is
@@ -560,4 +576,33 @@ impl<A: PaletteApi> Palette<A> {
         self.api
             .post_json(&route(PROFILES, &["import", "validate"]), body)
     }
+}
+
+/// The segments of the route of the download of a profile version, after its uid.
+const DOWNLOAD: [&str; 2] = ["spc", "download"];
+
+/// The seconds between two downloads of one profile version that Palette takes. It refuses a
+/// download in that time with HTTP 429 and the code `TooManyRequests`. After such a refusal,
+/// [`Retry`](crate::api::Retry) waits these seconds before the next download of the version.
+pub(crate) const DOWNLOAD_INTERVAL_SECONDS: u64 = 10;
+
+/// The route of the download of the profile version `uid`: see [`Palette::profile_download`].
+pub(crate) fn download_path(uid: &str) -> String {
+    let mut segments = vec![uid];
+    segments.extend(DOWNLOAD);
+    route(PROFILES, &segments)
+}
+
+/// True when HTTP `status` to `path` is the refusal of the limit of the download of a profile
+/// version: see [`DOWNLOAD_INTERVAL_SECONDS`].
+pub(crate) fn is_download_limit(status: u16, path: &str) -> bool {
+    status == 429 && is_download_path(path)
+}
+
+/// True when `path` is the route of the download of a profile version.
+fn is_download_path(path: &str) -> bool {
+    path.strip_prefix(PROFILES)
+        .and_then(|rest| rest.strip_prefix('/'))
+        .and_then(|rest| rest.split_once('/'))
+        .is_some_and(|(uid, rest)| !uid.is_empty() && rest == DOWNLOAD.join("/"))
 }

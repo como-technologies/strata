@@ -48,6 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         selection: &selection,
         now: AT,
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),

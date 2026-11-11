@@ -23,6 +23,10 @@ strata = { path = "..", package = "strata-palette" }
 strata-preflight = { path = "../crates/strata-preflight" }
 strata-report-endpoint = { path = "../crates/strata-report-endpoint" }
 tempfile = "3"
+# The seeds of the target of the download of a profile version are tar archives that gzip
+# compresses.
+flate2 = "1"
+tar = { version = "0.4", default-features = false }
 
 [lints.rust]
 unsafe_code = "forbid"

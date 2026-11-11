@@ -11,6 +11,7 @@
 mod audit;
 pub mod codes;
 mod connect;
+mod download;
 mod http;
 pub(crate) mod mask;
 mod memory;
@@ -30,13 +31,18 @@ use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
+pub use download::{DownloadedPack, PackArchive, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
-    CLUSTER_TEMPLATE, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS, PROFILE_TEMPLATE,
-    RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER, named_entries,
-    profile_versions, search_condition, search_filter, search_group,
+    CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
+    PROFILE_TEMPLATE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
+    is_download_limit, named_entries, profile_versions, search_condition, search_filter,
+    search_group,
 };
+// the unit tests build the route of a download with the one function that builds it
+#[cfg(test)]
+pub(crate) use palette::download_path;
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
@@ -92,6 +98,21 @@ pub trait PaletteApi {
         })
     }
 
+    /// GET `path` as a file, and give the bytes of the body. Palette sends a file, such as the
+    /// download of a profile version, only to a request that accepts a file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Api`] and [`Error::Transport`], as for [`PaletteApi::get_json`]. An API that reads
+    /// no file gives [`Error::Transport`].
+    fn get_file(&self, path: &str) -> Result<Vec<u8>> {
+        Err(Error::Transport {
+            method: Method::Get,
+            path: path.to_string(),
+            message: "this API reads no file".to_string(),
+        })
+    }
+
     /// The project the requests are scoped to, when they are; snapshots record it.
     fn project_uid(&self) -> Option<&str> {
         None
@@ -105,6 +126,10 @@ impl<A: PaletteApi + ?Sized> PaletteApi for &A {
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
         (**self).post_json(path, body)
+    }
+
+    fn get_file(&self, path: &str) -> Result<Vec<u8>> {
+        (**self).get_file(path)
     }
 
     fn project_uid(&self) -> Option<&str> {

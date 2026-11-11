@@ -93,9 +93,12 @@ struct Cli {
     /// Print the JSON Schema of a document, and run nothing
     #[arg(long, value_enum, value_name = "KIND")]
     schema: Option<SchemaKind>,
-    /// Write report.md, report.json, report.html, world.json, and entity.json into this directory
+    /// Write report.md, report.json, and report.html into this directory
     #[arg(long, value_name = "DIR")]
     out: Option<PathBuf>,
+    /// With --out: write world.json and entity.json too, for the reproduce lines; they hold the values of the variables
+    #[arg(long, requires = "out")]
+    world: bool,
     /// The report format: terminal, markdown, json, or html
     #[arg(
         long,
@@ -314,6 +317,7 @@ fn check_cluster(
             progress: &progress,
             sleep: &std::thread::sleep,
             out_dir: out_dir.as_deref(),
+            out_world: cli.world,
             verbose: cli.verbose,
             paint: paint_of(cli, Stream::Stderr),
         })
@@ -330,6 +334,7 @@ fn check_cluster(
             selection: &selection,
             now: &now,
             out_dir: out_dir.as_deref(),
+            out_world: cli.world,
             progress: &progress,
             verbose: cli.verbose,
             paint: paint_of(cli, Stream::Stderr),
@@ -397,9 +402,14 @@ fn print_report(
     progress: &Progress,
 ) -> Result<()> {
     if let Some(dir) = &cli.out {
-        write_out(dir, report, world, reading)?;
+        write_out(dir, report, cli.world.then_some(world), reading)?;
+        let world_files = if cli.world {
+            ", world.json, entity.json"
+        } else {
+            ""
+        };
         progress.note(&format!(
-            "wrote {}/report.md, report.json, report.html, world.json, entity.json",
+            "wrote {}/report.md, report.json, report.html{world_files}",
             dir.display()
         ));
     }
@@ -428,12 +438,13 @@ fn print_json(doc: &serde_json::Value, compact: bool) -> Result<()> {
     Ok(())
 }
 
-/// Write the reports and the world. With a watch, `reading` is the world with the last reading of
-/// the cluster in it, so `world.json` holds the conditions and the events the rules saw.
+/// Write the reports, and the world when `world` is given (`--world`). The reports hold no value of
+/// a variable, and the world and its entity do. With a watch, `reading` is the world with the last
+/// reading of the cluster in it, so `world.json` holds the conditions and the events the rules saw.
 fn write_out(
     dir: &std::path::Path,
     report: &Report,
-    world: &World,
+    world: Option<&World>,
     reading: Option<&serde_json::Value>,
 ) -> Result<()> {
     // the library of strata makes the directory, and names the file in its error
@@ -456,6 +467,9 @@ fn write_out(
         "report.html",
         report::render(report, Format::Html, false, &off),
     )?;
+    let Some(world) = world else {
+        return Ok(());
+    };
     let mut world_value = match reading {
         Some(read) => read.clone(),
         None => world.to_value()?,

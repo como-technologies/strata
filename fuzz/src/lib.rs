@@ -11,6 +11,8 @@
 //! A target calls the public API of the packages, as a program that uses them does. The
 //! directory of each target is `src/__fuzz__/<module>__<test>/`, which is where bolero looks.
 //!
+//! - [`archive`] writes the download of a profile version, as Palette writes it. It is the file
+//!   that the tests and the stand-in use, so no second writer of the layout exists.
 //! - [`answer`] checks an answer and a ref. It is the file that `tests/fuzz.rs` uses, so no second
 //!   check of an answer exists.
 //! - [`routes`] names the routes of Palette, and builds the documents of a profile. It is the file
@@ -21,6 +23,7 @@ mod behind;
 mod candidate;
 mod canon;
 mod config;
+mod download;
 mod mask;
 mod palette;
 mod preflight;
@@ -31,6 +34,12 @@ mod report;
 mod seed;
 mod support;
 mod unknown;
+
+// the type of a pack that `archive` names, as the crate of a test names it
+use strata::model::pack_type::PackType;
+
+#[path = "../../tests/common/download.rs"]
+pub mod archive;
 
 #[path = "../../tests/common/answer.rs"]
 pub mod answer;

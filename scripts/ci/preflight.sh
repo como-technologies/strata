@@ -25,6 +25,8 @@
 #   STRATA_PREFLIGHT_WATCH    true gives --watch
 #   STRATA_PREFLIGHT_VERBOSE  true gives --verbose; any other value gives --quiet
 #   STRATA_PREFLIGHT_OUT      the directory for --out; preflight by default
+#   STRATA_PREFLIGHT_WORLD    true gives --world: OUT gets world.json and entity.json too, which hold
+#                             the values of the variables
 #   STRATA_PREFLIGHT_COMMENT  true posts OUT/report.md with pr-comment.sh --preflight
 #
 # --offline reads nothing from Palette: the static tier alone. The script gives --offline too when
@@ -81,6 +83,7 @@ valued "${STRATA_PREFLIGHT_LIMIT:-}" --limit
 switch "${STRATA_PREFLIGHT_STRICT:-}" --strict
 switch "${STRATA_PREFLIGHT_NO_EXEC:-}" --no-exec
 switch "${STRATA_PREFLIGHT_WATCH:-}" --watch
+switch "${STRATA_PREFLIGHT_WORLD:-}" --world
 # --quiet has priority over --verbose, so a verbose run omits it
 if [ "${STRATA_PREFLIGHT_VERBOSE:-}" = true ]; then args+=(--verbose); else args+=(--quiet); fi
 # each rule id and each record pattern is one argument; read -ra splits and expands nothing
