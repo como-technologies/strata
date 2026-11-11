@@ -262,9 +262,7 @@ impl<'a> Version<'a> {
     /// The version in `v`, or None when `v` does not parse. A number that does not fit in a `u64`
     /// does not parse, as Palette refuses it.
     fn parse(v: &'a str) -> Option<Self> {
-        let v = v.strip_prefix('v').unwrap_or(v);
-        let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
-        let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
+        let (core, pre, build) = split(v.strip_prefix('v').unwrap_or(v));
         let mut numbers = [0; 3];
         let mut count = 0;
         for n in core.split('.') {
@@ -346,14 +344,24 @@ impl<'a> Version<'a> {
     }
 }
 
-/// The text of a tail and the identifiers of its pre-release, as the crate `versions` reads them.
-/// Build data after `+` does not count, and a pre-release starts at the first `-`.
+/// The text of `v` before its pre-release, the pre-release, and the build data, as Palette and
+/// the crate `versions` split a version.
+///
+/// The build data starts at the first `+`, and the pre-release at the first `-` before it.
+fn split(v: &str) -> (&str, Option<&str>, Option<&str>) {
+    let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
+    let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
+    (core, pre, build)
+}
+
+/// The text of a tail and the identifiers of its pre-release: see [`split`]. The build data does
+/// not count, as the crate `versions` reads it.
 fn split_pre(v: &str) -> (&str, Vec<&str>) {
-    let v = v.split_once('+').map_or(v, |(v, _)| v);
-    match v.split_once('-') {
-        Some((tail, pre)) => (tail, pre.split('.').collect()),
-        None => (v, Vec::new()),
-    }
+    let (tail, pre, _) = split(v);
+    (
+        tail,
+        pre.map_or_else(Vec::new, |pre| pre.split('.').collect()),
+    )
 }
 
 /// The order of two tails, part by part at their dots, as the crate `versions` orders them.
