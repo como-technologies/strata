@@ -458,6 +458,204 @@ fn fuzz_refuses_a_name_that_no_target_has_and_a_call_with_no_name() {
     }
 }
 
+// ---- the deny list -------------------------------------------------------------------------
+
+/// The made-up list of the tests of the deny list, with the names of the rule of the names in
+/// `docs/src/development/real-pipelines.md`. The second entry holds a slash.
+const DENIED: &str = "barney-corp\nfred/notes\n";
+
+/// The words that no output of the scan can hold. They are the two entries, a word of each line of
+/// a hit, and a word of each path that holds an entry. A word of a line shows that the script
+/// printed the text of that line. A word of a path shows that it printed the path.
+const SECRET_WORDS: [&str; 8] = [
+    "barney", "fred", "zebra", "yak", "gnu", "ibis", "walrus", "ocelot",
+];
+
+/// The files of most trees of the tests. Two text files and a binary file hold an entry, with
+/// another case than the list. No path holds an entry.
+const TRACKED: [(&str, &[u8]); 4] = [
+    ("notes/a.md", b"first\nThe Barney-Corp zebra\nlast\n"),
+    ("src/b.rs", b"// one\n// two\n// see FRED/notes yak\n"),
+    ("clean.txt", b"nothing to see\n"),
+    ("data.bin", b"bin\0ary barney-CORP gnu\n"),
+];
+
+/// A git repository that tracks `files`. Two files that git does not track hold an entry:
+/// `scratch.md` in its text, and `Barney-Corp.md` in its path.
+fn deny_tree(files: &[(&str, &[u8])]) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    git(d, &["init", "-q"]);
+    for (path, body) in files {
+        let at = d.join(path);
+        std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+        std::fs::write(at, body).unwrap();
+    }
+    git(d, &["add", "."]);
+    std::fs::write(d.join("scratch.md"), "barney-corp\n").unwrap();
+    std::fs::write(d.join("Barney-Corp.md"), "nothing\n").unwrap();
+    dir
+}
+
+/// Run `deny-list.sh` in `dir` with `list` as `STEP14_DENY`, or with no such variable.
+///
+/// The run has a trace on, as `bash -x` gives, so each test also shows that a trace prints no
+/// entry. Each run gets a `RUNNER_TEMP` of its own, where the script keeps the list. The function
+/// gives the output, and the names of the files that stay in `RUNNER_TEMP` after the run.
+fn deny_list(dir: &Path, list: Option<&str>) -> (Output, Vec<String>) {
+    let temp = tempfile::tempdir().unwrap();
+    let mut c = Command::new("bash");
+    c.arg("-x")
+        .arg(script("dev/deny-list.sh"))
+        .current_dir(dir)
+        .env("RUNNER_TEMP", temp.path())
+        .env_remove("STEP14_DENY");
+    if let Some(list) = list {
+        c.env("STEP14_DENY", list);
+    }
+    let o = isolate_git(&mut c).output_locked().unwrap();
+    let output = format!("{}{}", text(&o.stdout), text(&o.stderr)).to_lowercase();
+    for word in SECRET_WORDS {
+        assert!(
+            !output.contains(word),
+            "the scan printed {word:?}:\n{output}"
+        );
+    }
+    let left = std::fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    (o, left)
+}
+
+/// The lines of the output of the scan that name a hit.
+fn hits(o: &Output) -> Vec<String> {
+    text(&o.stdout)
+        .lines()
+        .filter(|line| !line.starts_with("deny-list:") && !line.starts_with("::"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn deny_list_names_the_path_from_the_root_and_the_line_of_each_hit_and_never_the_entry_or_the_text()
+{
+    let tree = deny_tree(&TRACKED);
+    let (o, left) = deny_list(&tree.path().join("src"), Some(DENIED));
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        hits(&o),
+        ["data.bin", "notes/a.md:2", "src/b.rs:3"],
+        "a binary file gives its path alone, and the untracked files give no hit"
+    );
+    let out = text(&o.stdout);
+    assert!(
+        out.starts_with("deny-list: scanned 4 tracked files\n"),
+        "{out}"
+    );
+    assert!(
+        out.ends_with(
+            "::error title=deny list::An entry of the deny list is in 3 of the tracked files. \
+             Remove it at each path and line above.\n"
+        ),
+        "{out}"
+    );
+    assert!(left.is_empty(), "the list stays in RUNNER_TEMP: {left:?}");
+}
+
+#[test]
+fn deny_list_with_no_entry_gives_a_notice_scans_nothing_and_exits_0() {
+    let tree = deny_tree(&TRACKED);
+    for list in [None, Some(""), Some("\n  \n\t\r\n")] {
+        let (o, left) = deny_list(tree.path(), list);
+        assert_eq!(o.status.code(), Some(0), "{list:?}: {}", text(&o.stderr));
+        assert_eq!(
+            text(&o.stdout),
+            "::notice title=deny list::STEP14_DENY holds no entry, so deny-list did not scan the \
+             tree.\n",
+            "{list:?}"
+        );
+        assert!(left.is_empty(), "{list:?}: {left:?}");
+    }
+}
+
+#[test]
+fn deny_list_drops_each_empty_line_and_the_spaces_and_the_carriage_return_at_the_ends_of_an_entry()
+{
+    let tree = deny_tree(&TRACKED);
+    let (o, _) = deny_list(tree.path(), Some("\n  barney-corp \r\n\r\n\t\n"));
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        hits(&o),
+        ["data.bin", "notes/a.md:2"],
+        "an empty pattern makes each line a hit"
+    );
+}
+
+#[test]
+fn deny_list_passes_a_tree_with_no_hit_and_names_the_number_of_files_that_it_scanned() {
+    let tree = deny_tree(&TRACKED);
+    let (o, _) = deny_list(tree.path(), Some("wilma-corp\n"));
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "deny-list: scanned 4 tracked files\ndeny-list: no hit\n"
+    );
+}
+
+#[test]
+fn deny_list_fails_on_a_tracked_path_that_holds_an_entry_and_prints_their_number_and_no_such_path()
+{
+    let tree = deny_tree(&[
+        ("clean.txt", b"nothing to see\n"),
+        ("FRED/Notes/walrus.txt", b"nothing\n"),
+    ]);
+    let (o, left) = deny_list(tree.path(), Some(DENIED));
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "deny-list: scanned 2 tracked files\n\
+         ::error title=deny list::An entry of the deny list is in 1 of the tracked paths. The \
+         scan prints no such path. Change each one.\n",
+        "the path that git does not track gives no hit"
+    );
+    assert!(left.is_empty(), "the list stays in RUNNER_TEMP: {left:?}");
+}
+
+#[test]
+fn deny_list_prints_no_path_that_holds_an_entry_for_a_hit_in_its_text_and_puts_such_hits_last() {
+    let mut files = TRACKED.to_vec();
+    files.extend([
+        // In the order of git, these two paths come first.
+        ("Barney-Corp/walrus.md", &b"one\nThe FRED/notes ibis\n"[..]),
+        ("Fred/notes/ocelot.bin", b"bin\0ary barney-corp\n"),
+    ]);
+    let tree = deny_tree(&files);
+    let (o, _) = deny_list(tree.path(), Some(DENIED));
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        hits(&o),
+        [
+            "data.bin",
+            "notes/a.md:2",
+            "src/b.rs:3",
+            "<a path that holds an entry>:2",
+            "<a path that holds an entry>",
+        ],
+        "the place of a hit in the output does not show the start of a hidden path"
+    );
+    let out = text(&o.stdout);
+    assert!(
+        out.ends_with(
+            "::error title=deny list::An entry of the deny list is in 5 of the tracked files. \
+             Remove it at each path and line above.\n\
+             ::error title=deny list::An entry of the deny list is in 2 of the tracked paths. The \
+             scan prints no such path. Change each one.\n"
+        ),
+        "{out}"
+    );
+}
+
 // ---- xtask playground ----------------------------------------------------------------------
 
 /// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and
