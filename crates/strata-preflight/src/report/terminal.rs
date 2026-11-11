@@ -106,10 +106,7 @@ fn summary_lines(r: &Report, paint: &Paint) -> String {
             paint.dim(&not_run_text(&s.not_run_reasons))
         ));
     }
-    out.push_str(&format!(
-        "{}\n",
-        paint.dim(&written_text(r.options.out_dir.as_deref()))
-    ));
+    out.push_str(&format!("{}\n", paint.dim(&written_text(&r.options))));
     let verdict = if s.exit_code == 0 {
         paint.green(&s.verdict)
     } else {

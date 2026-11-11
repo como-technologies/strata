@@ -95,6 +95,7 @@ fn the_report_of_a_run_with_no_client_of_palette_says_that_it_is_offline() {
             selection: &Selection::default(),
             now: "2026-09-30T00:00:00Z",
             out_dir: None,
+            out_world: false,
             progress: &Progress::silent(),
             verbose: false,
             paint: Paint::off(),
@@ -121,6 +122,7 @@ fn a_run_keeps_the_rules_of_the_engine_and_says_why_the_others_do_not_run() {
         selection: &Selection::default(),
         now: "2026-09-30T00:00:00Z",
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),
@@ -208,6 +210,7 @@ rules:
         selection: &Selection::default(),
         now: "2026-09-30T00:00:00Z",
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),
@@ -263,6 +266,7 @@ fn strict_counts_a_failed_probe_and_a_clean_entity_passes() {
             selection: &strict,
             now: "t",
             out_dir: None,
+            out_world: false,
             progress: &Progress::silent(),
             verbose: false,
             paint: Paint::off(),
@@ -300,6 +304,7 @@ runs:
             selection: &Selection::default(),
             now: "t",
             out_dir: None,
+            out_world: false,
             progress: &Progress::silent(),
             verbose: false,
             paint: Paint::off(),
@@ -356,6 +361,7 @@ fn a_tier_not_asked_for_is_not_run_and_ids_select() {
         selection: &sel,
         now: "t",
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),
@@ -380,6 +386,7 @@ fn a_tier_not_asked_for_is_not_run_and_ids_select() {
         selection: &sel,
         now: "t",
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),
@@ -468,6 +475,7 @@ rules:
         paint: Paint::off(),
         sleep: &|_| slept.set(slept.get() + 1),
         out_dir: None,
+        out_world: false,
     })
     .unwrap();
     assert_eq!(report.checks[0].verdict, Verdict::Failed);
@@ -572,6 +580,7 @@ rules:
         paint: Paint::off(),
         sleep: &|_| {},
         out_dir: None,
+        out_world: false,
     })
     .unwrap();
     assert_eq!(report.checks[0].verdict, Verdict::Passed);
@@ -624,6 +633,7 @@ rules:
         paint: Paint::off(),
         sleep: &|_| readings.set(readings.get() + 1),
         out_dir: None,
+        out_world: false,
     })
     .unwrap();
     assert_eq!(report.checks[0].verdict, Verdict::Failed);
@@ -699,6 +709,7 @@ rules:
             paint: Paint::off(),
             sleep: &|_| {},
             out_dir: None,
+            out_world: false,
         })
         .unwrap();
         assert_eq!(
@@ -756,6 +767,7 @@ rules:
         paint: Paint::off(),
         sleep: &|_| {},
         out_dir: None,
+        out_world: false,
     })
     .unwrap();
     assert_eq!(report.summary.exit_code, 0);
@@ -807,6 +819,7 @@ rules:
         paint: Paint::off(),
         sleep: &|_| {},
         out_dir: None,
+        out_world: false,
     })
     .unwrap();
     // the warning is in the report, the exit is 0, and the watch ended at Running
@@ -883,6 +896,7 @@ fn a_run_of_an_existing_cluster_whose_metadata_is_not_an_object_is_an_input_erro
         selection: &Selection::default(),
         now: "2026-09-30T00:00:00Z",
         out_dir: None,
+        out_world: false,
         progress: &Progress::silent(),
         verbose: false,
         paint: Paint::off(),

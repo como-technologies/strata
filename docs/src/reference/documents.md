@@ -810,7 +810,10 @@ what it answered.
   - `verdict`: `passed`, `failed`, `not-checked`, `not-run`, `skipped`, or
     `error`. `not-run` is a check that applies and did not run: a tier not asked
     for, no key, or `--no-exec`; it counts against the readiness.
-  - `messages[]`: one for each failure, or the reason for another verdict.
+  - `messages[]`: one for each failure, or the reason for another verdict. A
+    message holds a mark in place of each value of a variable, such as
+    `[value of pod_cidr]`. See
+    [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code. A check with a second command shows
     both commands in `ran`, with `; ` between them. Then `answer` has the exit
@@ -841,7 +844,8 @@ what it answered.
   `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
-- `options`: `tiers`, `strict`, `offline`, `ready`, and `outDir` when `--out` was given.
+- `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
+  `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

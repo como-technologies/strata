@@ -28,7 +28,8 @@ Options:
       --promotion          Compare the level of each rule with the runs of the ledger; exit 1 when they disagree
       --ledger <FILE>      A ledger of runs to read beside the one in the binary; give it again for more
       --schema <KIND>      Print the JSON Schema of a document, and run nothing [possible values: report, rules, ledger, promotion]
-      --out <DIR>          Write report.md, report.json, report.html, world.json, and entity.json into this directory
+      --out <DIR>          Write report.md, report.json, and report.html into this directory
+      --world              With --out: write world.json and entity.json too, for the reproduce lines; they hold the values of the variables
       --format <FORMAT>    The report format: terminal, markdown, json, or html [default: terminal]
       --json               The same as --format json
       --compact            Write the JSON on one line

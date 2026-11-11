@@ -98,8 +98,10 @@ and its line says so. The rules of a line:
   that says what Palette saves, and the line that the report adds for the check
   ends with the same comment. See
   [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
-- A line writes no file outside the current directory. The lines that the report
-  adds for a check write `request.json` and `body.json` there.
+- A line writes no file outside the current directory and the folder of
+  `world.json`. The lines that the report adds for a check write `request.json`
+  and `body.json` into that folder, beside the values of the variables. See
+  [The report on disk](../commands/preflight/report.md#the-report-on-disk).
 - A line makes no login to a registry or a cloud. A login writes the credentials
   to a file in the home directory.
 - A line names no path of the live example, `examples/live`. No machine outside
@@ -477,9 +479,11 @@ world is an `input` error. The name must not replace that value. A world with no
 A record is a `strata-snapshot/1` document: `source.{uid, name, version,
 cloudType}` and `packs[].{layer, name, version, tag, packUid, registryUid,
 values, valuesCanon, hash}`. `valuesCanon` is the values YAML as JSON, so a
-program reads a value of a pack with a path. The world never holds a secret:
-the fields of a cloud account that hold one are `<redacted>`. `--out` writes
-the world as `world.json`.
+program reads a value of a pack with a path. The fields of a cloud account that
+hold a secret are `<redacted>`. The entity of the world holds the value of each
+variable as the source gives it, and that value can be a secret. `--world`
+writes the world as `world.json`: see
+[The report on disk](../commands/preflight/report.md#the-report-on-disk).
 
 ## Fixtures
 

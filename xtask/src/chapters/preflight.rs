@@ -270,8 +270,30 @@ fn preflight_cluster(r: &mut Runner) {
         0,
         false,
         &format!(
-            "strata preflight cluster:{PAYMENTS} --tier static --quiet --out cluster-world > /dev/null; \
+            "strata preflight cluster:{PAYMENTS} --tier static --quiet --out cluster-world --world > /dev/null; \
              jq -c '.spec.profiles[] | {{uid, variables}}' cluster-world/entity.json"
+        ),
+    );
+    // The value of the variable is in the two files that --world adds, and in no report (#614)
+    r.step(
+        "preflight-out-values",
+        0,
+        false,
+        &format!(
+            "strata preflight cluster:{PAYMENTS} --tier static --quiet --out out > /dev/null; \
+             strata preflight cluster:{PAYMENTS} --tier static --quiet --out out-world --world > /dev/null; \
+             grep -c team-payments out/* out-world/*"
+        ),
+    );
+    // The job keeps the folder of --out as its artifact. With no input world, the folder holds
+    // the reports alone, so grep finds the value in no file and exits 1
+    r.step(
+        "preflight-job-files",
+        1,
+        false,
+        &format!(
+            "STRATA_PREFLIGHT_SOURCE=cluster:{PAYMENTS} STRATA_PREFLIGHT_TIER=static \
+             STRATA_PREFLIGHT_OUT=job scripts/ci/preflight.sh > /dev/null; grep -c team-payments job/*"
         ),
     );
     r.step(

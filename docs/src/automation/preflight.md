@@ -46,9 +46,10 @@ With a key, strata does these steps:
 A tool that is not there makes its rules `NOT CHECKED`, with the command to run
 by hand. `--no-exec` runs no tool at all.
 
-`--out preflight` writes `report.md`, `report.json`, `report.html`,
-`world.json`, and `entity.json`. Keep the directory as an artifact of the job:
-the reproduce lines of the report read the two JSON files.
+`--out preflight` writes `report.md`, `report.json`, and `report.html`. Keep the
+directory as an artifact of the job. `--world` adds `world.json` and
+`entity.json`, which the reproduce lines of the report read. They hold the
+values of the variables: see [The files of the job](#the-files-of-the-job).
 
 ## The watch during the build
 
@@ -85,7 +86,8 @@ status of strata.
 | `no-exec`, `verbose` | `--no-exec` and `--verbose`. |
 | `rule` | `--rule`: the ids of the rules, separated by spaces. Strata runs only these rules. |
 | `watch`, `every`, `limit` | `--watch`, `--every`, and `--limit`. Give `cluster:UID` as `source`. The job needs the key. |
-| `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
+| `out` | The directory for the three reports. Default `preflight`. The artifact `preflight` holds it. |
+| `world` | `true` gives `--world`: the artifact also keeps `world.json` and `entity.json`. Default `false`. See [The files of the job](#the-files-of-the-job). |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
 | secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone, and says so: see [The key of the job](#the-key-of-the-job). |
 
@@ -99,6 +101,36 @@ workflow has no input for them.
 static tier on each pull request, with the records of the repository. The job
 that builds runs the live tier with the key, and the watch after the create.
 The GitHub file also holds the job of the comment, in a comment of the file.
+
+### The files of the job
+
+The job keeps the directory of `out` as the artifact `preflight`, and each
+reader of the run can download it. By default, the directory holds the three
+reports, and no value of a variable. Palette can quote the value of a variable
+in a refusal. So each message of a report holds a mark in place of each value.
+See [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+Here the job checks the cluster `payments`, whose variable `platform_owner` has
+the value `team-payments`:
+
+```text
+{{#include ../output/preflight-job-files.txt}}
+```
+
+The input `world: true` adds `world.json` and `entity.json`, which the
+reproduce lines of the report read. The two files hold the value of each
+variable that is not sensitive. [The report on
+disk](../commands/preflight/report.md#the-report-on-disk) states what each file
+holds. Give the input only when each reader of the run can see these values.
+The GitLab job has a variable for the same choice: see
+[GitLab CI](./gitlab.md#the-variables).
+
+Without the two files, the reproduce lines name the directory `$OUT`, and the
+report says how to write them. Run the command again on your machine with
+`--out DIR --world`. Then run the lines with `OUT=DIR`.
+
+The input `verbose: true` writes more lines to the log of the job, and these
+lines can hold a value of a variable. Give it only when each reader of the run
+can see the values of the variables.
 
 ### The key of the job
 

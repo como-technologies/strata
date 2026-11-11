@@ -1137,6 +1137,31 @@ field, a value, an input, or an option is in the sections above.
   reports use the same words. A script that reads that line gets a new word.
   `strata-preflight/1` has the new field `options.offline`. Read the field: the
   text forms can change in any release.
+- **`strata preflight --out` writes no `world.json` and no `entity.json`.** The
+  two files hold the values of the variables. Give `--world` beside `--out` to
+  write them. See [The report on disk](../commands/preflight/report.md#the-report-on-disk).
+  - `--out` writes `report.md`, `report.json`, and `report.html` alone. A script
+    that reads one of the two files after `--out` must give `--world`.
+  - `--world` without `--out` is a usage error with exit `2`.
+  - When the run writes no world, the reproduce lines name `$OUT` in place of the
+    directory of `--out`. The last line of each form of the report says how to
+    write the two files.
+  - A line that the report adds writes `request.json` and `body.json` into the
+    folder of `world.json`, not into the current directory. So it holds
+    `> $OUT/request.json`, `--data @$OUT/request.json`, `-o $OUT/body.json`, and
+    `--slurpfile body $OUT/body.json`.
+  - `strata-preflight/1` has the new field `options.outWorld`: `true` when
+    `--world` wrote the two files into `outDir`.
+- **A preflight report holds a mark in place of each value of a variable.**
+  Palette can quote such a value in a refusal. The mark names the variable,
+  such as `[value of pod_cidr]`. See
+  [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+  - Each form of the report has the mark: the terminal, the markdown, the JSON,
+    and the HTML. So does `messages[]` of `strata-preflight/1`. A script that
+    reads a value of a variable from a message must read `entity.json` of
+    `--world`.
+  - The message of an error holds the marks in the start of the body of the
+    answer.
 - **`compare` of a profile version with `cluster:<cluster>` answers for that profile.** The
   cluster side holds only the profile that the version replaces, as
   `cluster:<cluster>/<profile>` does. Before, it held each profile of the cluster. See
@@ -1259,6 +1284,17 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **The artifact of the preflight job holds no `world.json` and no
+  `entity.json`.** This holds for `preflight.yml`, for the GitLab job
+  `strata-preflight`, and for `preflight.sh`. The two files hold the values of
+  the variables, and each reader of a run can download the artifact.
+  - To keep them, give the input `world: true` to `preflight.yml`, or set
+    `STRATA_PREFLIGHT_WORLD` to `true`. See
+    [The files of the job](../automation/preflight.md#the-files-of-the-job).
+  - A later step that reads `world.json` or `entity.json` from the directory of
+    the job must set that input.
+  - A message of the three reports, of the summary, and of the comment has a
+    mark in place of each value of a variable.
 - **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
   does.** Before, a relative `HOME` read the file of a folder from the working
   folder. Now, when no variable gives a key, `merge-gate.sh` omits the verify and
@@ -1331,6 +1367,16 @@ field, a value, an input, or an option is in the sections above.
 - `report::Options` has the new field `offline: bool`. A literal must set it.
   With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
   `Backend::has_palette` gives `false`.
+- `report::Options`, `run::RunInputs`, and `run::WatchInputs` have the new field
+  `out_world: bool`. A literal must set it. With `false`, the reproduce lines name
+  `$OUT`, and not `out_dir`. Give `true` only when the program writes `world.json`
+  and `entity.json` into `out_dir`.
+- A reproduce line that the report adds writes `request.json` and `body.json` into
+  the folder of `world.json`, not into the current directory.
+- `report::assemble` writes a mark, such as `[value of pod_cidr]`, in place of each
+  value of a variable in the `messages` of each `CheckResult`.
+  `probe::run_check` writes the marks into the body of an answer that failed,
+  before strata cuts the body in the message of the error.
 
 ## Release 0.28.0: changes that need action
 

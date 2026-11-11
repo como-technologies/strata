@@ -285,7 +285,7 @@ Palette. The evidence of the rule names the page.
 | # | Decision | Instead of | Consequence |
 | --- | --- | --- | --- |
 | P1 | Rules are data in YAML, with the check as a jq program. | Each check as Rust code. | A person reads a rule as the `jq` line that shows the fault by hand; the report prints that line. A company writes its own probes in the same form. A new rule needs no release of strata. |
-| P2 | One world document for every kind of check. | A shape for each kind. | One thing to learn, one fixture format, one `--out world.json` to reproduce from. |
+| P2 | One world document for every kind of check. | A shape for each kind. | One thing to learn, one fixture format, one `world.json` of `--world` to reproduce from. |
 | P3 | A 4xx of Palette is an answer, not an error. | Every non-2xx as `ERROR`. | The validate routes refuse a wrong entity with a 400 and a code: that is the result. A 5xx or a transport error stays `ERROR`, exit `2`, except a 5xx with a code that the check names in `refusal_codes`. |
 | P4 | Strata runs the tool of the cloud, and calls no cloud API. | A cloud SDK in strata. | No credential passes through strata. The command in the report is the command a person runs. A tool that is not there is `NOT CHECKED`, named. |
 | P5 | Two levels, and a failed probe does not change the exit code. | One level. | A young rule cannot stop a build by itself. `--strict` is the opt-in. |
