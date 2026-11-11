@@ -25,9 +25,15 @@ pub enum Edit {
     /// pack. The pack summary takes the same registry, uid, and digest.
     OciCsi,
     /// Give the version another number, which a bump without the immutability flag does.
+    ///
+    /// In a draft, the profile also takes the new number at once, as a PUT of the profile does:
+    /// see [`Tenant::draft`](super::Tenant::draft).
     Version(&'static str),
     /// Give the profile another name, as `PATCH /v1/clusterprofiles/{uid}/metadata` does: the
     /// uid and the version stay. The answer of `packs/manifests` takes the new name too.
+    ///
+    /// In a draft, the profile also takes the new name at once, as a PUT of the profile does: see
+    /// [`Tenant::draft`](super::Tenant::draft).
     Name(&'static str),
     /// Give the profile another cloud type, such as `gcp` for a profile that the body of an AWS
     /// create names. `spec.published.cloudType` changes, and the packs stay.
@@ -142,8 +148,8 @@ fn summary_values_from_pins(doc: &Value, manifests: &mut Value) {
 }
 
 impl Edit {
-    /// The part of an edit that lands in the build of the pack summaries of `packs/manifests`.
-    /// `listing` gives the pack listing that an upgrade reads.
+    /// The part of an edit that lands in the answer of `packs/manifests`: the name of the answer,
+    /// and the build of its pack summaries. `listing` gives the pack listing that an upgrade reads.
     ///
     /// Palette gives the summary of a pack from the record of the version that the profile pins:
     /// its uid, its version, its registry, and its digest. The answer has the metadata of the

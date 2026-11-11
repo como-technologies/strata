@@ -508,6 +508,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
 | `compare`, `compare-names` | 1, 0 | #155: `compare <uid> <uid>@draft` exits `1`, and names the manifest pack with `AUTHORED` |
 | `route-list` | 0 | #155: `packs/manifests` gives the published content of the manifest while the draft waits |
+| `route-names` | 0 | #767: while the draft waits, the `metadata.name` of the answer of `packs/manifests` is the name of the profile. The `metadata.name` of each pack summary is the name of its pin in the draft. The check only reads. No result yet: the live window of wave 16 runs it. |
 | `route-entity` | 0 | #155: the route of one manifest gives the draft content beside the published content |
 | `no-has-draft` | 0 | #155: the profile document gives no `status.hasDraft` |
 | `draft-before-publish` | 1 | #155: the record of the draft reports `DRIFT` against the version before the publish |
