@@ -1142,6 +1142,16 @@ field, a value, an input, or an option is in the sections above.
     `--slurpfile body $OUT/body.json`.
   - `strata-preflight/1` has the new field `options.outWorld`: `true` when
     `--world` wrote the two files into `outDir`.
+- **A preflight report holds a mark in place of each value of a variable.**
+  Palette can quote such a value in a refusal. The mark names the variable,
+  such as `[value of pod_cidr]`. See
+  [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+  - Each form of the report has the mark: the terminal, the markdown, the JSON,
+    and the HTML. So does `messages[]` of `strata-preflight/1`. A script that
+    reads a value of a variable from a message must read `entity.json` of
+    `--world`.
+  - The message of an error holds the marks in the start of the body of the
+    answer.
 - **`compare` of a profile version with `cluster:<cluster>` answers for that profile.** The
   cluster side holds only the profile that the version replaces, as
   `cluster:<cluster>/<profile>` does. Before, it held each profile of the cluster. See
@@ -1236,6 +1246,8 @@ field, a value, an input, or an option is in the sections above.
     [The files of the job](../automation/preflight.md#the-files-of-the-job).
   - A later step that reads `world.json` or `entity.json` from the directory of
     the job must set that input.
+  - A message of the three reports, of the summary, and of the comment has a
+    mark in place of each value of a variable.
 - **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
   does.** Before, a relative `HOME` read the file of a folder from the working
   folder. Now, when no variable gives a key, `merge-gate.sh` omits the verify and
@@ -1297,6 +1309,10 @@ field, a value, an input, or an option is in the sections above.
   and `entity.json` into `out_dir`.
 - A reproduce line that the report adds writes `request.json` and `body.json` into
   the folder of `world.json`, not into the current directory.
+- `report::assemble` writes a mark, such as `[value of pod_cidr]`, in place of each
+  value of a variable in the `messages` of each `CheckResult`.
+  `probe::run_check` writes the marks into the body of an answer that failed,
+  before strata cuts the body in the message of the error.
 
 ## Release 0.28.0: changes that need action
 

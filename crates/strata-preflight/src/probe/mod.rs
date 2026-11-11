@@ -26,6 +26,10 @@ pub use exec::{shell_words, tool_on_path};
 pub use outcome::{Call, Invocation, Outcome, Ran, Verdict};
 
 /// Run the check of `rule` on `world`, through `backend`. A rule with no check is `NOT CHECKED`.
+///
+/// The message of a request to Palette that failed shows the start of the body of the answer. It
+/// holds a mark in place of each value of a variable of the entity of `world`, such as
+/// `[value of pod_cidr]`.
 pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> Outcome {
     let started = Instant::now();
     let Some(check) = &rule.check else {

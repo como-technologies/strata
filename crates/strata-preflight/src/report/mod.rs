@@ -17,6 +17,7 @@ use strata::text::dash;
 
 use crate::confidence::{Confidence, NO_RUNS};
 use crate::jq::Jq;
+use crate::mask::Mask;
 use crate::probe::outcome::ran_line;
 use crate::probe::{Call, Outcome, Verdict};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
@@ -440,7 +441,8 @@ pub struct Assembly<'a> {
     pub outcomes: Vec<(&'a Rule, Outcome)>,
     /// The confidence of each rule from the ledger, by id.
     pub confidence: BTreeMap<String, Confidence>,
-    /// The world, for the reproduce templates.
+    /// The world, for the reproduce templates, and for the values of the variables that each
+    /// message hides.
     pub world: &'a Value,
     /// The subject.
     pub subject: Subject,
@@ -464,7 +466,11 @@ pub fn counts_as_failure(rule: &Rule, verdict: Verdict, strict: bool) -> bool {
 }
 
 /// Build the report from the outcomes.
+///
+/// Each message gets a mark in place of each value of a variable of the entity, because Palette
+/// can quote a value in a refusal. The mark names the variable, such as `[value of pod_cidr]`.
 pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
+    let mask = Mask::of(a.world);
     let mut checks = Vec::with_capacity(a.outcomes.len());
     for (rule, outcome) in &a.outcomes {
         let counts_as_failure = counts_as_failure(rule, outcome.verdict, a.options.strict);
@@ -495,7 +501,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             severity: rule.severity,
             status: rule.status,
             verdict: outcome.verdict,
-            messages: outcome.messages.clone(),
+            messages: outcome.messages.iter().map(|m| mask.apply(m)).collect(),
             elapsed_ms: outcome.elapsed.as_millis() as u64,
             ran: outcome.ran.text(),
             answer: outcome.ran.answer(),

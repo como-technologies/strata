@@ -106,8 +106,11 @@ The GitHub file also holds the job of the comment, in a comment of the file.
 
 The job keeps the directory of `out` as the artifact `preflight`, and each
 reader of the run can download it. By default, the directory holds the three
-reports, and no value of a variable. Here the job checks the cluster
-`payments`, whose variable `platform_owner` has the value `team-payments`:
+reports, and no value of a variable. Palette can quote the value of a variable
+in a refusal. So each message of a report holds a mark in place of each value.
+See [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+Here the job checks the cluster `payments`, whose variable `platform_owner` has
+the value `team-payments`:
 
 ```text
 {{#include ../output/preflight-job-files.txt}}
@@ -124,6 +127,10 @@ The GitLab job has a variable for the same choice: see
 Without the two files, the reproduce lines name the directory `$OUT`, and the
 report says how to write them. Run the command again on your machine with
 `--out DIR --world`. Then run the lines with `OUT=DIR`.
+
+The input `verbose: true` writes more lines to the log of the job, and these
+lines can hold a value of a variable. Give it only when each reader of the run
+can see the values of the variables.
 
 ### The key of the job
 
