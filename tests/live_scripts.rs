@@ -10387,7 +10387,7 @@ fn page_check_ids(script: &str) -> Vec<String> {
     let section = page_section("docs/src/development/live-runs.md", &format!("## {script}"));
     table_rows(&section, "| Check |")
         .iter()
-        .flat_map(|row| row[0].split('`').skip(1).step_by(2).map(str::to_string))
+        .flat_map(|row| code_spans(&row[0]).into_iter().map(str::to_string))
         .collect()
 }
 

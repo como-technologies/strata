@@ -19,6 +19,12 @@
 mod book;
 mod chapters;
 mod checks;
+// The read of the code spans of a text of the book. The check of the facts reads the code spans of
+// a cell with it, and so do the tests. So the check and the tests read a code span in one way. The
+// check uses no other helper of it.
+#[path = "../../tests/common/code_span.rs"]
+#[allow(dead_code)]
+mod code_span;
 mod contract;
 mod facts;
 mod files;

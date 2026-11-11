@@ -11,9 +11,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, first_cells, gitlab_drop_in,
-    one_line, recipe, repo_file, schema, script, table_rows, toml_entries, toml_table, toml_value,
-    version_of, walk,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, code_spans, first_cells,
+    gitlab_drop_in, one_line, recipe, repo_file, schema, script, table_rows, toml_entries,
+    toml_table, toml_value, version_of, walk, without_code,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -1511,11 +1511,6 @@ fn the_loop() -> String {
     read(&docs().join("loop.md")) + &read(&docs().join("walkthrough.md"))
 }
 
-/// The code spans of `text`: the text between a pair of backticks.
-fn code_spans(text: &str) -> Vec<&str> {
-    text.split('`').skip(1).step_by(2).collect()
-}
-
 /// The words that start the command of a person: the commands of strata and the scripts of
 /// `scripts/ci/`.
 fn command_words() -> Vec<String> {
@@ -1948,12 +1943,7 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         .split(". ")
         .find(|s| s.ends_with(" have such users"))
         .expect("code.md names the files that other packages include");
-    let named: BTreeSet<String> = rule
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(String::from)
-        .collect();
+    let named: BTreeSet<String> = code_spans(rule).into_iter().map(String::from).collect();
     assert_eq!(named, included, "the rule of Tests in code.md: {rule}");
 
     let page = read(&docs().join("development/build-test.md"));
@@ -2435,16 +2425,6 @@ fn has_phrase(text: &str, phrase: &str) -> bool {
     })
 }
 
-/// `text` without the code spans: the text between two backticks.
-fn without_code(text: &str) -> String {
-    text.split('`')
-        .enumerate()
-        .filter(|(n, _)| n % 2 == 0)
-        .map(|(_, part)| part)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 /// The page of the report states the address that the release names, so a person can read where
 /// a send goes. The page and the constant agree.
 #[test]
@@ -2660,6 +2640,18 @@ fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
     );
     assert_eq!(cells("| a | b"), ["a", "b"]);
     assert_eq!(cells("| a | |"), ["a", ""]);
+}
+
+/// A code span is the text between a pair of backticks. The two reads of a text give its code
+/// spans and the text outside them, from one rule. A backtick with no pair starts a code span that
+/// continues to the end of the text.
+#[test]
+fn the_read_of_a_text_gives_its_code_spans_and_the_text_outside_them() {
+    let text = "Use `strata diff` with `--full`, and read `the rest";
+    assert_eq!(code_spans(text), ["strata diff", "--full", "the rest"]);
+    assert_eq!(without_code(text), "Use   with  , and read ");
+    assert!(code_spans("no span").is_empty());
+    assert_eq!(without_code("no span"), "no span");
 }
 
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
@@ -5285,10 +5277,8 @@ fn the_rules_that_compatibility_names_for_the_new_nouns_are_rules_of_the_catalog
         "  - The rules are `aws-region-not-enabled`",
         Some("\n  - Six messages"),
     );
-    let ids: Vec<&str> = item
-        .split('`')
-        .skip(1)
-        .step_by(2)
+    let ids: Vec<&str> = code_spans(item)
+        .into_iter()
         .filter(|word| word.contains('-'))
         .collect();
     assert_eq!(ids.len(), 17, "{ids:?}");
