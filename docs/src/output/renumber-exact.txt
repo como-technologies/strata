@@ -1,5 +1,5 @@
 $ strata same-release aws-stack@1.2.0-rc.1 aws-stack@1.2.0
-DIFFERENT      aws-stack@1.2.0-rc.1 -> aws-stack@1.2.0   root c7a27ae9f54d -> 088136c929bd
+DIFFERENT      aws-stack@1.2.0-rc.1 -> aws-stack@1.2.0   root 5608b33990f7 -> 088136c929bd
                pack k8s/kubernetes IDENTITY: version 1.36.2-rc.1 -> 1.36.2
                pack csi/csi-aws-ebs IDENTITY: version 1.65.0-rc.1 -> 1.65.0
 NOT THE SAME RELEASE: 1 of 1 pair failed
