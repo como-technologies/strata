@@ -8378,6 +8378,50 @@ fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_
     }
 }
 
+/// Issue #709. The next version keeps the version of each pack. So `behind` says that no newer
+/// version of the release carries a newer version of a pin that is behind. A pin with a carrier,
+/// with no entry for the release, or with a failed read fails the check. A pin of another record
+/// does not count.
+#[test]
+fn loop_sh_stage_3_checks_that_no_newer_version_of_the_release_carries_a_newer_pack() {
+    let none = r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1"}]"#;
+    for (carriers, subject, passes) in [
+        (none, "strata-live-profile@1.0.0", true),
+        (
+            r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1",
+                "carrier":{"version":"1.0.1","uid":"n-1","packVersion":"1.33.0"}}]"#,
+            "strata-live-profile@1.0.0",
+            false,
+        ),
+        ("[]", "strata-live-profile@1.0.0", false),
+        (
+            r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1","error":{"kind":"api"}}]"#,
+            "strata-live-profile@1.0.0",
+            false,
+        ),
+        ("[]", "strata-live-addon@1.0.0", true),
+    ] {
+        let mut stage = lab_stage();
+        let report = format!(
+            r#"{{"schema":"{schema}","pins":[{{"name":"kubernetes","version":"1.32.0","behind":true,
+                "pinnedBy":[{{"subject":"{subject}"}}],"carriers":{carriers}}}],"profiles":[]}}"#,
+            schema = strata::ops::BEHIND_SCHEMA
+        );
+        stage.strata(
+            "behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json",
+            1,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        passed(&steps, &["behind-profile"]);
+        if passes {
+            passed(&steps, &["behind-carrier"]);
+        } else {
+            failed(&steps, &["behind-carrier"]);
+        }
+    }
+}
+
 /// Issue #708. With the impact, `behind` gives the bump of the release to the next version. Its level,
 /// its flags, and its packs are those of `compare` of the two versions. A bump whose level, flags,
 /// or packs differ from the compare fails.

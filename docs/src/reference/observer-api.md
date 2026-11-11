@@ -81,6 +81,14 @@ plain text. The route `/` serves the page of the dashboard.
   true. An observer of 0.32.2 and before gives neither.
 - `counts` of `/v1/cluster` holds `newerProfileVersions`, the profiles with a newer
   published version. An observer of 0.32.2 and before does not give it.
+- A pack that is behind holds `carried` when its profile has a newer published
+  version. `profile` is the profile version of the row. `version` is the newer
+  profile version that carries a newer version of the pack, and `pack` is that
+  version of the pack. `version` and `pack` are absent when no newer profile version
+  carries one. `unread` is true when strata could not read one. See
+  [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+- A row of `/v1/newer` holds the same in `carriers[]`, one for each profile of the
+  row with a newer version. An observer of 0.32.2 and before gives neither field.
 
 | Status | When |
 | --- | --- |

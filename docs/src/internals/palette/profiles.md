@@ -463,6 +463,11 @@ runs. The notifications of a cluster come from an edit of a version that the
 cluster runs, and from a change of a pack. A new version has a
 new uid that no cluster runs, so its publish notifies no cluster.
 
+No route names the profile versions that pin a version of a pack. Each entry of
+`spec.versions[]` gives only `uid` and `version`, and the filter of the profile
+search takes no pack. The template of a version, with the name and the version of
+each pack, is in the document of that version alone.
+
 The code of Palette shows these facts. On the live tenant, the checks
 `versions-tenant` and `versions-project` of
 [scope.sh](../../development/live-runs.md#scopesh) test the scope. The check
@@ -627,6 +632,14 @@ only of a pre-release, or with `--pre-release`.
 
 Palette is the owner of the rule. When a route or a status of Palette names the
 newer versions of a profile, strata removes its order and reads that answer.
+
+The same holds for the newer profile version that carries a newer pack. No route
+names the profile versions that pin a version of a pack. So `behind` reads the
+template of each newer version of a profile version that holds a pin that is
+behind. It compares the version of the pack with the order of the pins. See
+[The newer profile version that carries a newer pack](../../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+When a route of Palette names the profile versions that pin a pack, strata reads
+that answer.
 
 ### An event when a published version changes
 

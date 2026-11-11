@@ -529,3 +529,43 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 		t.Errorf("a current version: %+v", n)
 	}
 }
+
+// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709), as `behind`
+// names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed read says that
+// the carrier was not read. A profile that the pin does not name has no carrier on its row.
+func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
+	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
+	fred.Carriers = []docs.PinCarrier{
+		{Profile: "barney-addons", Version: "1.3.1", Carrier: &docs.Carrier{Version: "1.4.0", PackVersion: "0.1.5"}},
+		{Profile: "barney-addons", Version: "1.3.0"},
+		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: "api", Status: 500}},
+	}
+	records := []Record{
+		rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("barney-addons", "1.3.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("other", "1.0.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("wilma", "1.0.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+	}
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{fred}}
+	s := build(ptr(content(t, records...)), v)
+	want := map[string]*Carried{
+		"barney-addons@1.3.1": {Profile: "barney-addons@1.3.1", Version: "1.4.0", Pack: "0.1.5"},
+		"barney-addons@1.3.0": {Profile: "barney-addons@1.3.0"},
+		"other@1.0.0":         {Profile: "other@1.0.0", Unread: true},
+		"wilma@1.0.0":         nil,
+	}
+	for _, p := range s.Profiles {
+		got, w := p.Packs[0].Carried, want[Subject(p.Name, p.Version)]
+		if (got == nil) != (w == nil) || got != nil && *got != *w {
+			t.Errorf("%s@%s: the pack row carries %+v, want %+v", p.Name, p.Version, got, w)
+		}
+	}
+	rows := s.Newer
+	if len(rows) != 1 {
+		t.Fatalf("rows %+v", rows)
+	}
+	carriers := []Carried{*want["barney-addons@1.3.1"], *want["barney-addons@1.3.0"], *want["other@1.0.0"]}
+	if !slices.Equal(rows[0].Carriers, carriers) {
+		t.Errorf("the newer row carries %+v, want %+v", rows[0].Carriers, carriers)
+	}
+}

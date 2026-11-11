@@ -80,7 +80,8 @@ function newerTable(groups) {
       const unread = moveUnread(g.subject, k), same = !unread && buildOnly(r);
       const count = v => unread ? DASH : same ? mut(DASH) : v;
       const settings = same ? h`<span class="mut" title="Only the build of the pack changes: the values stay the same">same</span>` : h`<b>${count(r.fold.settings)}</b>`;
-      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${newChip(r.new)}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
+      const carried = carriedWords((r.carriers || []).find(c => c.profile === g.subject), r.newest);
+      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a>${carried ? h`<div class="mut small">${carried}</div>` : ""}</td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${newChip(r.new)}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
     })];
   }) : none}</tbody></table></div>`;
 }
@@ -232,14 +233,6 @@ function eventFrom(q) {
   }
 }
 
-// newerCell never says "current" for a pack that was not checked, or before the versions were read.
-function newerCell(p) {
-  if (p.newer) return h`${ARROW}${p.newer}`;
-  if (p.status === STATUS.NOT_CHECKED) return mut("not checked");
-  if (!D.cluster.versions.readAt) return mut("-");
-  return mut("current");
-}
-
 /* ---- The stack of the packs ----
    A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
    the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
@@ -252,9 +245,20 @@ function newerWords(p) {
 }
 const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<span title="${IMAGES_LISTED}">no image list</span>`;
 
+// carriedWords names the newer version of the profile that carries a newer version of a pack, as behind reads it for one profile
+// version: "carried by name@version", with the version of the pack before it when that is not the newest. It is "" when behind
+// names no carrier, such as for a profile with no newer version.
+function carriedWords(c, newest) {
+  if (!c) return "";
+  if (c.unread) return "carrier not read";
+  if (!c.version) return "carried by no newer profile version";
+  const by = ref((subjectParts(c.profile) || [c.profile])[0], c.version);
+  return c.pack === newest ? h`carried by <span class="m">${by}</span>` : h`<span class="m">${c.pack}</span> carried by <span class="m">${by}</span>`;
+}
+
 function packSlab(subject, p, compact, here) {
-  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0];
-  const sub = compact ? "" : h`<span class="sub">${newerWords(p)} · ${imagesWords(p.images)}</span>`;
+  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0], carried = carriedWords(p.carried, p.newer);
+  const sub = compact ? "" : h`<span class="sub">${newerWords(p)}${carried ? h` · ${carried}` : ""} · ${imagesWords(p.images)}</span>`;
   return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${ref(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
 }
 

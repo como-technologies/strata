@@ -389,7 +389,9 @@ function comparePack(subject, x, p, row) {
     inner = undisturbed(side, sideFacts(x, p, row, changed));
   } else {
     ({flags, inner} = comparePanel(tabId, d, packHash(subject, p), command));
-    state = d.state === "ok" ? badge("r", "Changed") : "";
+    // A newer version is no drift: its side keeps the neutral badge of a newer version, as each other level does.
+    const changedBadge = VERSION_SIDES.includes(side) ? statusBadge(STATUS.NEWER) : badge("r", "Changed");
+    state = d.state === "ok" ? changedBadge : "";
   }
   const head = h`<label for="side" class="small mut">Compare</label>${select}${roots}${state}`;
   return h`<section class="card"><div class="chead"><div class="tb">${head}</div>${flags}</div>${inner}</section>`;

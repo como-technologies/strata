@@ -205,8 +205,25 @@ type Pin struct {
 	Newer        []Newer       `json:"newer"`
 	Behind       bool          `json:"behind"`
 	Bump         *Bump         `json:"bump"`
+	Carriers     []PinCarrier  `json:"carriers"`
 	Error        *Error        `json:"error"`
 	RegistrySync *RegistrySync `json:"registrySync"`
+}
+
+// PinCarrier is one profile version that holds a pin that is behind, and has a newer version.
+// Carrier is the newest of those newer versions that pins a newer version of the pack. It is nil when
+// no newer version does, and when strata could not read one: Error then says so.
+type PinCarrier struct {
+	Profile string   `json:"profile"`
+	Version string   `json:"version"`
+	Carrier *Carrier `json:"carrier"`
+	Error   *Error   `json:"error"`
+}
+
+// Carrier is a newer version of a profile, and the version of the pack that it pins.
+type Carrier struct {
+	Version     string `json:"version"`
+	PackVersion string `json:"packVersion"`
 }
 
 // Bump is what a move to the newest version does, as `behind` reads it with a question to Palette.

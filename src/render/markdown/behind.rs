@@ -4,8 +4,8 @@
 use crate::closed_set::ClosedSet;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
 use crate::render::behind::{
-    arrived_line, behind_heading, bump_line, created_since, listed_since, palette_lines,
-    pin_status, profile_bump_line, profile_status,
+    arrived_line, behind_heading, bump_line, carrier_lines, created_since, listed_since,
+    palette_lines, pin_status, profile_bump_line, profile_status,
 };
 use crate::render::entry_error;
 use crate::text::{dash, markdown_cell};
@@ -43,6 +43,9 @@ fn pin_row(pin: &Pin) -> String {
     }
     if let Some(msg) = entry_error(pin.error.as_ref()) {
         status.push_str(&format!(" ({msg})"));
+    }
+    for line in carrier_lines(pin) {
+        status.push_str(&format!("; {line}"));
     }
     let bump: Vec<String> = bump_line(pin)
         .into_iter()

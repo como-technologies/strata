@@ -1,11 +1,11 @@
-//! The text of `behind` for the terminal: the heading, one line for each pin, and one line for
+//! The text of `behind` for the terminal: the heading, the lines of each pin, and one line for
 //! each profile version.
 
 use crate::closed_set::ClosedSet;
 use crate::ops::{BehindReport, PinnedBy, ProfilePin};
 use crate::render::behind::{
-    arrived_line, behind_heading, bump_line, created_since, listed_since, palette_lines,
-    pin_status, profile_bump_line, profile_status,
+    arrived_line, behind_heading, bump_line, carrier_lines, created_since, listed_since,
+    palette_lines, pin_status, profile_bump_line, profile_status,
 };
 use crate::render::entry_error;
 use crate::term::color::Paint;
@@ -53,6 +53,9 @@ pub(super) fn terminal_behind(r: &BehindReport, p: &Paint) -> String {
         }
         if let Some(msg) = entry_error(pin.error.as_ref()) {
             out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
+        }
+        for line in carrier_lines(pin) {
+            out.push_str(&format!("      {line}\n"));
         }
         out.push_str(&pinned_by_lines(&pin.pinned_by, p));
     }

@@ -1,7 +1,8 @@
-//! The lines of `behind`: the heading, the state of each pin, and its bump.
+//! The lines of `behind`: the heading, the state of each pin, its bump, and its carriers.
 
-use super::{count_of, registry_sync_suffix};
+use super::{count_of, entry_error, registry_sync_suffix};
 use crate::model::validation::answer_lines;
+use crate::reference::name_version;
 use crate::text::and_list;
 
 /// The status of a pin or of a profile version that strata could not check.
@@ -110,6 +111,31 @@ pub(crate) fn listed_since(pin: &crate::ops::Pin) -> Option<String> {
 pub(crate) fn arrived_line(pin: &crate::ops::Pin) -> Option<String> {
     let arrived = pin.arrived.as_ref().filter(|a| !a.is_empty())?;
     Some(format!("arrived: {}", arrived.join(", ")))
+}
+
+/// One line for each profile version that holds a pin that is behind, and has a newer version:
+/// `barney-addons@1.4.0 carries fred-compositions@0.2.0`, or `no newer version of
+/// barney-addons@1.3.1 carries a newer fred-compositions`. When strata could not read a version,
+/// the line gives the error.
+pub(crate) fn carrier_lines(pin: &crate::ops::Pin) -> Vec<String> {
+    pin.carriers
+        .iter()
+        .map(|c| {
+            let held = name_version(&c.profile, &c.version);
+            match (&c.carrier, entry_error(c.error.as_ref())) {
+                (Some(by), _) => format!(
+                    "{} carries {}",
+                    name_version(&c.profile, &by.version),
+                    name_version(&pin.name, &by.pack_version)
+                ),
+                (None, Some(msg)) => format!(
+                    "strata could not read which newer version of {held} carries a newer {} ({msg})",
+                    pin.name
+                ),
+                (None, None) => format!("no newer version of {held} carries a newer {}", pin.name),
+            }
+        })
+        .collect()
 }
 
 /// One newer version of a pin, with its notes in parentheses: `1.65.0`, `1.64.0 (deprecated)`,

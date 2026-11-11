@@ -124,6 +124,14 @@ fn answers(r: &mut Runner) {
         "state",
         "-c '.profiles[].newerVersion.move // empty | {impact, flags}, .packs[]'",
     );
+    // that version carries a newer version of each pack that is behind (#709)
+    summary(
+        r,
+        "observer-carried",
+        PAYMENTS,
+        "state",
+        "-c '.newer[] | {name, newest, carriers}'",
+    );
     summary(
         r,
         "observer-limits",

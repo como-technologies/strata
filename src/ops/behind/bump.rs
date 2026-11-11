@@ -72,17 +72,17 @@ impl<'r> Asked<'r> {
 
 /// The questions of `behind` to Palette in one scope. It reads the document of a cluster one time,
 /// and the document of a profile version through the documents of the scope.
-pub(super) struct BumpQuestions<'a, A: PaletteApi> {
+pub(super) struct BumpQuestions<'q, 'a, A: PaletteApi> {
     /// The documents of the profile versions of the scope, with the connection to it.
-    documents: ProfileDocuments<'a, A>,
+    documents: &'q mut ProfileDocuments<'a, A>,
     /// The project of the connection: `None` is the tenant scope.
-    scope: Option<&'a str>,
+    scope: Option<&'q str>,
     /// The documents of the clusters, by uid.
     clusters: BTreeMap<String, Value>,
 }
 
-impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
-    pub(super) fn new(documents: ProfileDocuments<'a, A>, scope: Option<&'a str>) -> Self {
+impl<'q, 'a, A: PaletteApi> BumpQuestions<'q, 'a, A> {
+    pub(super) fn new(documents: &'q mut ProfileDocuments<'a, A>, scope: Option<&'q str>) -> Self {
         BumpQuestions {
             documents,
             scope,
@@ -270,7 +270,7 @@ pub(super) fn read_bump<A: PaletteApi>(
     pin: &mut Pin,
     holding: &[&Snapshot],
     listings: &mut Registries<'_, A>,
-    questions: &mut BumpQuestions<'_, A>,
+    questions: &mut BumpQuestions<'_, '_, A>,
     at: &str,
     progress: &Progress,
 ) {

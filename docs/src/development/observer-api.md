@@ -121,6 +121,10 @@ holds these options:
   exists, and strata compared the record with it. It shows the full diff of the
   pack, as "Record → Published now" does.
 
+A side with a change shows the red badge "Changed". The two sides of a newer version,
+"Pack A → pack B" and "Record → Newest version", show the badge "Newer" in its place.
+A newer version is no drift, so it keeps the neutral color at each level of the page.
+
 The page opens on the first option that has a change, in this order, and on
 "Published now" when none has one. The page decides this from the findings, the
 newer versions, and the move of the profile, so it sends no request for a side with

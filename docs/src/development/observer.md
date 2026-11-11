@@ -440,6 +440,15 @@ finding makes it `drift`. `counts.newerProfileVersions` counts the rows that hol
 The observer orders no version: `behind` gives the newest one first. A profile
 version that strata could not check gives no `newerVersion` and no cause.
 
+Each pin that is behind also holds `carriers[]`: for each profile version of the
+record that has a newer version, the newer version that carries a newer version of
+the pack. The answer of `behind` on one record names the profile versions of that
+record. So the join of the pins keeps the carriers of each answer, one for each
+profile version, and a read with no error takes the place of a read that failed. The
+pack row of each profile version gets its carrier in `carried`, and the row of the
+newer versions gets each one in `carriers`. The observer adds no rule: a carrier with
+no version says that `behind` found none.
+
 ### The move to the newest version of a profile
 
 The cycle runs `behind` with `--no-impact`, so its answer holds no `bump` of a

@@ -206,8 +206,21 @@ type Pack struct {
 	UpstreamSource string   `json:"upstreamSource"`
 	Images         int      `json:"images"`
 	Newer          string   `json:"newer,omitempty"`
+	Carried        *Carried `json:"carried,omitempty"`
 	Flags          []string `json:"flags"`
 	Fold           *Fold    `json:"fold,omitempty"`
+}
+
+// Carried says which newer version of a profile carries a newer version of a pack that is behind.
+// Profile is the profile version that pins the pack, name@version. Version is the newest newer
+// version of that profile that pins a newer version of the pack, and Pack is that version of the
+// pack. Version is empty when no newer version of the profile does. Unread says that strata could not
+// read a newer version.
+type Carried struct {
+	Profile string `json:"profile"`
+	Version string `json:"version,omitempty"`
+	Pack    string `json:"pack,omitempty"`
+	Unread  bool   `json:"unread,omitempty"`
 }
 
 // Move is what the observer keeps of the comparison of a pinned version and the newest version. The
@@ -238,6 +251,9 @@ type Newer struct {
 	// Steps lists each newer version that the registry gives, from the oldest to the newest, with the
 	// time that the registry listed it. The page draws them as a timeline of the pack.
 	Steps []Step `json:"steps,omitempty"`
+	// Carriers names, for each profile of Profiles that has a newer version, the newer version that
+	// carries a newer version of the pack.
+	Carriers []Carried `json:"carriers,omitempty"`
 	Move
 }
 

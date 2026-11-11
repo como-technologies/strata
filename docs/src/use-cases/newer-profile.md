@@ -72,7 +72,36 @@ See [The move to the newest profile version](../commands/behind.md#the-move-to-t
 The record of `payments` holds each profile that the cluster runs. So the same
 line names the version that the cluster can move to.
 
-## 4. In a script
+## 4. How far the change of a pack went
+
+When `behind` says that a pin is behind, the next question is: did the change reach
+a profile version yet? Here the registry published `csi-aws-ebs` 1.66.0 and
+`cert-manager` 1.22.0 after the publish of 1.1.0.
+
+<div class="playground-demo">
+
+`just playground behind-profiles-2` serves this tenant on this machine, with no key
+and no cost.
+
+</div>
+
+```text
+{{#include ../output/behind-carrier-lines.txt}}
+```
+
+The line under each pin names the newest profile version that carries a newer
+version of the pack:
+
+- `aws-stack@1.1.0 carries csi-aws-ebs@1.65.0`: the change of 1.65.0 reached the
+  profile, and 1.66.0 did not yet. The definition of the cluster still pins 1.0.0,
+  so the move of the cluster is the step that waits.
+- `no newer version of aws-stack@1.0.0 carries a newer cert-manager`: the change
+  stopped at the registry. The pipeline of the profile is the step that waits.
+
+See
+[The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+
+## 5. In a script
 
 ```text
 {{#include ../output/behind-profile-json.txt}}
@@ -90,5 +119,7 @@ line names the version that the cluster can move to.
   [Ask Palette if the change repaves](../commands/compare/repave.md).
 - After the move, record the cluster again: see
   [The everyday loop](../loop.md#the-pipeline-publishes).
+- When no newer profile version carries a newer pack, publish a profile version
+  that pins it. Then move the definition of the cluster to that version.
 - Run `behind` on a schedule. The exit is `1` while a record holds a version that
   is behind.

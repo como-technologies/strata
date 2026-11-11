@@ -289,7 +289,9 @@ const at = (name, version) => `${name}@${version}`;
 // ref draws the same ref on the page: the name, then @version in a softer face, so the eye finds the name first. at stays for plain
 // text, such as an option of a select, a command, and a tip.
 const ref = (name, version) => h`${name}<span class="ver">@${version}</span>`;
-const subjectRef = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? ref(subject.slice(0, i), subject.slice(i + 1)) : subject; };
+// subjectParts splits a subject name@version at its last "@", or gives null for a subject with no "@" after its first letter.
+const subjectParts = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? [subject.slice(0, i), subject.slice(i + 1)] : null; };
+const subjectRef = subject => { const parts = subjectParts(subject); return parts ? ref(...parts) : subject; };
 const move = (name, from, to) => h`${ref(name, from)}${ARROW}${ref(name, to)}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;

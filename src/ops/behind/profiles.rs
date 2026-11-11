@@ -117,13 +117,12 @@ pub(super) struct Held {
     pub(super) project: String,
 }
 
-/// Add each profile version that the record `snap` holds to `held`. `path` is the path of the
-/// record.
+/// The profile versions that the record `snap` holds.
 ///
 /// A record of a profile version holds that version. A record of a cluster, an edge host, or a
 /// cluster group holds each profile that it runs. A candidate has no uid, and a pack record and
-/// an app profile hold no profile version, so they add none.
-pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, path: &Path) {
+/// an app profile hold no profile version, so they give none.
+pub(super) fn held_keys(snap: &Snapshot) -> impl Iterator<Item = ProfileKey> + '_ {
     let source = &snap.source;
     let own = source
         .is_profile_version()
@@ -133,20 +132,26 @@ pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, pa
         .iter()
         .flat_map(|c| &c.profiles)
         .map(|p| (&p.name, &p.version, &p.uid));
-    for (name, version, uid) in own.into_iter().chain(applied) {
-        if uid.is_empty() {
-            continue;
-        }
-        let key = ProfileKey {
+    own.into_iter()
+        .chain(applied)
+        .filter(|(_, _, uid)| !uid.is_empty())
+        .map(|(name, version, uid)| ProfileKey {
             name: name.clone(),
             version: version.clone(),
             uid: uid.clone(),
-        };
-        let entry = held.entry(key).or_insert_with(|| Held {
+        })
+}
+
+/// Add each profile version that the record `snap` holds to `held`: see [`held_keys`]. `path` is
+/// the path of the record.
+pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, path: &Path) {
+    let source = &snap.source;
+    for key in held_keys(snap) {
+        let entry = held.entry(key.clone()).or_insert_with(|| Held {
             profile: ProfilePin {
-                name: name.clone(),
-                version: version.clone(),
-                uid: uid.clone(),
+                name: key.name,
+                version: key.version,
+                uid: key.uid,
                 scope: None,
                 pinned_by: Vec::new(),
                 newer: Vec::new(),

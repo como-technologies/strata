@@ -1,0 +1,6 @@
+$ strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.pins[] | select(.behind) | {name, version, newest: .newer[0].version, carriers}'
+{"name":"cert-manager","version":"1.21.1","newest":"1.22.0","carriers":[{"profile":"aws-stack","version":"1.0.0","uid":"64e0000000000000000000a1"}]}
+{"name":"cni-cilium-oss","version":"1.19.6","newest":"1.20.1","carriers":[{"profile":"aws-stack","version":"1.0.0","uid":"64e0000000000000000000a1","carrier":{"version":"1.1.0","uid":"64e0000000000000000000b2","packVersion":"1.20.1"}}]}
+{"name":"csi-aws-ebs","version":"1.63.1","newest":"1.66.0","carriers":[{"profile":"aws-stack","version":"1.0.0","uid":"64e0000000000000000000a1","carrier":{"version":"1.1.0","uid":"64e0000000000000000000b2","packVersion":"1.65.0"}}]}
+{"name":"kubernetes","version":"1.35.3","newest":"1.36.2","carriers":[{"profile":"aws-stack","version":"1.0.0","uid":"64e0000000000000000000a1","carrier":{"version":"1.1.0","uid":"64e0000000000000000000b2","packVersion":"1.36.2"}}]}
+{"name":"ubuntu-aws","version":"20.04","newest":"24.04","carriers":[{"profile":"aws-stack","version":"1.0.0","uid":"64e0000000000000000000a1","carrier":{"version":"1.1.0","uid":"64e0000000000000000000b2","packVersion":"24.04"}}]}

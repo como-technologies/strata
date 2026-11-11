@@ -215,6 +215,15 @@ The record of the release that the clusters run now has a newer published versio
 ```
 
 See [Newer versions of a profile](./commands/behind.md#newer-versions-of-a-profile).
+Each pin of the release that is behind names the new version as the profile
+version that carries a newer version of its pack. So the change of each pack
+reached the profile, and the records of the clusters are the step that waits:
+
+```text
+{{#include output/loop-behind-carrier.txt}}
+```
+
+See [The newer profile version that carries a newer pack](./commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
 
 When your team runs [the observer](./automation/observer.md), the publish step also
 writes the records into the cluster. Name the records of the project of the cluster, one for each

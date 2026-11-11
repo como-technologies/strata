@@ -21,6 +21,8 @@ use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
 use self::bump::{BumpQuestions, read_bump};
+use self::carriers::read_carriers;
+pub use self::carriers::{Carrier, PinCarrier};
 pub use self::change::{Bump, BumpPack};
 use self::documents::ProfileDocuments;
 use self::newer::newer_versions;
@@ -30,6 +32,7 @@ use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
 mod bump;
+mod carriers;
 mod change;
 mod documents;
 mod newer;
@@ -169,6 +172,11 @@ pub struct Pin {
     /// could not compare them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bump: Option<Bump>,
+    /// For a pin that is behind: each profile version that a record of the pin holds, that has a
+    /// newer version, and whose template holds the pack. Each one names the newest of its newer
+    /// versions that pins a newer version of the pack. Absent when there is none, and with `--pin`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub carriers: Vec<PinCarrier>,
     /// With `--since`: the newer versions that the previous report did not know. Absent when the
     /// previous report had no pin of this pack in this registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -288,6 +296,7 @@ impl Pin {
             newer: Vec::new(),
             behind: false,
             bump: None,
+            carriers: Vec::new(),
             arrived: None,
             error: None,
             registry_sync: None,
@@ -352,7 +361,7 @@ struct Records {
 #[derive(Default)]
 struct ScopeWork {
     pins: Vec<(PinKey, Pinned)>,
-    profiles: Vec<(ProfileKey, ProfilePin)>,
+    profiles: Vec<(ProfileKey, Held)>,
 }
 
 /// What the check of each pin shares.
@@ -486,11 +495,14 @@ fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
     })
 }
 
-/// Check each pin of `pins` and each profile version of `profiles` in its scope. Give the pins
-/// in the order of their keys, and the profile versions in the order of theirs.
+/// Check each pin of `pins` and each profile version of `profiles` in its scope, and then give
+/// each pin that is behind its carriers. Give the pins in the order of their keys, and the profile
+/// versions in the order of theirs.
 ///
 /// A cache of the registry listings borrows its client. So strata groups the pins and the profile
-/// versions by scope: each scope connects one time, and keeps its cache for all its pins.
+/// versions by scope: each scope connects one time, and keeps its cache for all its pins. Each
+/// scope keeps its connection and its documents to the end, because the carriers of a pin read the
+/// profile versions of each scope: see [`read_carriers`].
 fn check_scopes<A, F>(
     check: &Check<'_>,
     pins: BTreeMap<PinKey, Pinned>,
@@ -501,6 +513,53 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
+    let (works, connections): (Vec<_>, Vec<_>) = by_scope(pins, profiles)
+        .into_iter()
+        .map(|(scope, work)| {
+            let connection = connect(scope.as_deref());
+            ((scope, work), connection)
+        })
+        .unzip();
+    let mut documents: BTreeMap<Option<String>, ProfileDocuments<'_, A>> = BTreeMap::new();
+    let mut reads = Reads::default();
+    let mut checked: BTreeMap<PinKey, Pinned> = BTreeMap::new();
+    let mut held: BTreeMap<ProfileKey, Held> = BTreeMap::new();
+    for ((scope, work), connection) in works.into_iter().zip(&connections) {
+        let palette = match connection {
+            Ok(palette) => palette,
+            Err(e) => {
+                fail_scope(work, &e.to_json(), &mut checked, &mut held);
+                continue;
+            }
+        };
+        let docs = documents
+            .entry(scope.clone())
+            .or_insert_with(|| ProfileDocuments::new(palette));
+        for (key, mut h) in work.profiles {
+            check_profile(docs, &mut h.profile, check);
+            held.insert(key, h);
+        }
+        check_scope(
+            check,
+            docs,
+            scope.as_deref(),
+            work.pins,
+            &mut reads,
+            &mut checked,
+        )?;
+    }
+    read_carriers(check, &mut checked, &held, &mut documents);
+    Ok((
+        checked.into_values().map(|p| p.pin).collect(),
+        held.into_values().map(|h| h.profile).collect(),
+    ))
+}
+
+/// The pins of `pins` and the profile versions of `profiles`, by the scope of their first record.
+fn by_scope(
+    pins: BTreeMap<PinKey, Pinned>,
+    profiles: BTreeMap<ProfileKey, Held>,
+) -> BTreeMap<Option<String>, ScopeWork> {
     let mut scopes: BTreeMap<Option<String>, ScopeWork> = BTreeMap::new();
     for (key, pinned) in pins {
         let work = scopes.entry(scope_of(&pinned.project).map(str::to_string));
@@ -508,55 +567,38 @@ where
     }
     for (key, held) in profiles {
         let work = scopes.entry(scope_of(&held.project).map(str::to_string));
-        work.or_default().profiles.push((key, held.profile));
+        work.or_default().profiles.push((key, held));
     }
-    let mut reads = Reads::default();
-    let mut checked: BTreeMap<PinKey, Pin> = BTreeMap::new();
-    let mut held: BTreeMap<ProfileKey, ProfilePin> = BTreeMap::new();
-    for (scope, work) in scopes {
-        match connect(scope.as_deref()) {
-            Ok(palette) => {
-                let mut documents = ProfileDocuments::new(&palette);
-                for (key, mut profile) in work.profiles {
-                    check_profile(&mut documents, &mut profile, check);
-                    held.insert(key, profile);
-                }
-                check_scope(
-                    check,
-                    documents,
-                    scope.as_deref(),
-                    work.pins,
-                    &mut reads,
-                    &mut checked,
-                )?;
-            }
-            Err(e) => {
-                for (key, mut pinned) in work.pins {
-                    pinned.pin.error = Some(e.to_json());
-                    checked.insert(key, pinned.pin);
-                }
-                for (key, mut profile) in work.profiles {
-                    profile.error = Some(e.to_json());
-                    held.insert(key, profile);
-                }
-            }
-        }
+    scopes
+}
+
+/// Give each pin and each profile version of `work` the error of the connection to their scope,
+/// `error`.
+fn fail_scope(
+    work: ScopeWork,
+    error: &Value,
+    checked: &mut BTreeMap<PinKey, Pinned>,
+    held: &mut BTreeMap<ProfileKey, Held>,
+) {
+    for (key, mut pinned) in work.pins {
+        pinned.pin.error = Some(error.clone());
+        checked.insert(key, pinned);
     }
-    Ok((
-        checked.into_values().collect(),
-        held.into_values().collect(),
-    ))
+    for (key, mut h) in work.profiles {
+        h.profile.error = Some(error.clone());
+        held.insert(key, h);
+    }
 }
 
 /// Check the pins of `group`, the pins of one scope. `documents` holds the connection to that
 /// scope, and the documents of the profile versions that the scope read.
 fn check_scope<A: PaletteApi>(
     check: &Check<'_>,
-    documents: ProfileDocuments<'_, A>,
+    documents: &mut ProfileDocuments<'_, A>,
     scope: Option<&str>,
     group: Vec<(PinKey, Pinned)>,
     reads: &mut Reads,
-    checked: &mut BTreeMap<PinKey, Pin>,
+    checked: &mut BTreeMap<PinKey, Pinned>,
 ) -> Result<()> {
     let Check {
         loaded,
@@ -567,15 +609,10 @@ fn check_scope<A: PaletteApi>(
     } = *check;
     let mut listings = Registries::new(documents.palette);
     let mut questions = BumpQuestions::new(documents, scope);
-    for (
-        key,
-        Pinned {
-            mut pin, holders, ..
-        },
-    ) in group
-    {
+    for (key, mut pinned) in group {
+        let pin = &mut pinned.pin;
         read_pin(
-            &mut pin,
+            pin,
             &mut listings,
             reads,
             pre_release,
@@ -583,9 +620,13 @@ fn check_scope<A: PaletteApi>(
             progress,
         )?;
         if impact && pin.behind {
-            let holding: Vec<&Snapshot> = holders.iter().filter_map(|&i| loaded.get(i)).collect();
+            let holding: Vec<&Snapshot> = pinned
+                .holders
+                .iter()
+                .filter_map(|&i| loaded.get(i))
+                .collect();
             read_bump(
-                &mut pin,
+                pin,
                 &holding,
                 &mut listings,
                 &mut questions,
@@ -593,7 +634,7 @@ fn check_scope<A: PaletteApi>(
                 progress,
             );
         }
-        checked.insert(key, pin);
+        checked.insert(key, pinned);
     }
     Ok(())
 }
