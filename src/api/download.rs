@@ -248,7 +248,7 @@ fn pack_file_digest(bytes: &[u8]) -> String {
     match serde_json::from_slice::<Value>(bytes) {
         Ok(Value::Object(mut fields)) => {
             fields.remove(PACK_VERSION);
-            sha256_digest(canonical_json(&Value::Object(fields)))
+            sha256_digest(&canonical_json(&Value::Object(fields)))
         }
         _ => sha256_digest(bytes),
     }

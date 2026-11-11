@@ -9,12 +9,12 @@ use sha2::{Digest, Sha256};
 use crate::text::cut;
 
 /// Lowercase hex SHA-256 of `bytes`: the bytes of a text or of a file.
-pub fn sha256_hex(bytes: impl AsRef<[u8]>) -> String {
-    hex::encode(Sha256::digest(bytes))
+pub fn sha256_hex<T: AsRef<[u8]> + ?Sized>(bytes: &T) -> String {
+    hex::encode(Sha256::digest(bytes.as_ref()))
 }
 
 /// `sha256:` and the lowercase hex SHA-256 of `bytes`: the form of a digest in a record.
-pub fn sha256_digest(bytes: impl AsRef<[u8]>) -> String {
+pub fn sha256_digest<T: AsRef<[u8]> + ?Sized>(bytes: &T) -> String {
     format!("sha256:{}", sha256_hex(bytes))
 }
 
