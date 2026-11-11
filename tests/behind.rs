@@ -1,18 +1,22 @@
 //! The profile versions of `strata behind` (#707): the newer published versions of each profile
 //! that a record holds. The document of a version gives the published versions of its profile in
-//! `spec.versions[]`, in no order, and strata orders them.
+//! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
+//! each profile version that is behind with the newest version (#708).
 
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
+use strata::closed_set::ClosedSet;
+use strata::diff::{ChangeFlag, Status};
 use strata::model::scope::ProfileScope;
 use strata::ops;
 use strata::snapshot::{AppliedProfile, ClusterSource, Snapshot};
 
 use crate::common::{
-    self, PROFILE_LISTING, behind_of, no_manifests, no_variables, profile_document, profile_route,
-    serve_profile, snapshot_of, template,
+    self, PROFILE_LISTING, PackFixture, WITH_IMPACT, behind_of, manifests_answer, manifests_route,
+    no_manifests, no_variables, profile_document, profile_route, serve_profile, snapshot_of,
+    template,
 };
 
 /// The uid of `barney-addons@1.3.1`, the version that the records hold.
@@ -357,8 +361,8 @@ fn the_json_and_the_markdown_of_behind_hold_the_profile_versions() {
     let markdown = common::markdown().render_behind(&r).unwrap();
     assert!(
         markdown.contains(&format!(
-            "| profile | version | scope | status | pinned by |\n|---|---|---|---|---|\n\
-             | `barney-addons` | `1.3.1` | project | behind: 1.4.0; 1.4.0 created {CREATED} | `{}` (barney-addons@1.3.1) |\n",
+            "| profile | version | scope | status | bump | pinned by |\n|---|---|---|---|---|---|\n\
+             | `barney-addons` | `1.3.1` | project | behind: 1.4.0; 1.4.0 created {CREATED} | - | `{}` (barney-addons@1.3.1) |\n",
             record.display()
         )),
         "{markdown}"
@@ -366,5 +370,257 @@ fn the_json_and_the_markdown_of_behind_hold_the_profile_versions() {
     assert!(
         !markdown.contains("| pack |"),
         "no pin, so no table of pins: {markdown}"
+    );
+}
+
+// ---- the move to the newest version (#708) ------------------------------------------------------
+
+/// The uid of `barney-addons@1.4.0`, the newest version of [`BARNEY`] that is no pre-release.
+const NEWEST: &str = BARNEY[0].0;
+
+/// The packs of `barney-addons@1.3.1`, from no registry, so that the record has no pin.
+fn packs_held() -> [PackFixture<'static>; 3] {
+    [
+        PackFixture::new(
+            "fred-compositions",
+            "addon",
+            "0.1.0",
+            "fc010",
+            "",
+            "sha256:f010",
+            "compositions: []\n",
+        ),
+        PackFixture::new(
+            "wilma-values",
+            "addon",
+            "1.0.0",
+            "wv100",
+            "",
+            "sha256:w100",
+            "replicas: 1\n",
+        ),
+        PackFixture::new(
+            "dino-logs",
+            "addon",
+            "2.0.0",
+            "dl200",
+            "",
+            "sha256:d200",
+            "level: info\n",
+        ),
+    ]
+}
+
+/// The packs of `barney-addons@1.4.0`: fred-compositions moves to 0.2.0, a value of wilma-values
+/// changes, the move adds pebbles-dns, and it removes dino-logs.
+fn packs_newest() -> [PackFixture<'static>; 3] {
+    [
+        PackFixture::new(
+            "fred-compositions",
+            "addon",
+            "0.2.0",
+            "fc020",
+            "",
+            "sha256:f020",
+            "compositions: []\n",
+        ),
+        PackFixture::new(
+            "wilma-values",
+            "addon",
+            "1.0.0",
+            "wv100",
+            "",
+            "sha256:w100",
+            "replicas: 2\n",
+        ),
+        PackFixture::new(
+            "pebbles-dns",
+            "addon",
+            "1.0.0",
+            "pd100",
+            "",
+            "sha256:p100",
+            "zone: quarry\n",
+        ),
+    ]
+}
+
+/// [`serve_versions`] of [`BARNEY`], where 1.3.1 holds [`packs_held`] and 1.4.0 holds
+/// [`packs_newest`].
+fn serve_move() -> MemoryApi {
+    let serve = |api: MemoryApi, uid: &str, version: &str, packs: &[PackFixture]| {
+        let mut doc = version_document(uid, "barney-addons", version, BARNEY);
+        doc["spec"]["published"]["packs"] = packs.iter().map(|p| p.pack_ref(&[])).collect();
+        let manifests = packs.iter().map(|p| p.pack_manifests(Vec::new())).collect();
+        serve_profile(api, uid, doc, manifests_answer(manifests), no_variables())
+    };
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    let api = serve(api, HELD, "1.3.1", &packs_held());
+    serve(api, NEWEST, "1.4.0", &packs_newest())
+}
+
+#[test]
+fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_gives_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_move();
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let reads = |uid: &str| api.calls(&profile_route(uid));
+    let before = (reads(HELD), reads(NEWEST));
+    let r = behind_of(&api, std::slice::from_ref(&record), &WITH_IMPACT);
+    let held = &r.profiles[0];
+    let bump = held.bump.as_ref().expect("the version is behind 1.4.0");
+    // one read of the document of each of the two versions: for the newer versions, the time of
+    // the create, and the move
+    assert_eq!((reads(HELD), reads(NEWEST)), (before.0 + 1, before.1 + 1));
+
+    // `compare barney-addons@1.3.1 barney-addons@1.4.0` names the same impact and the same flags
+    let d = ops::compare(
+        &snapshot_of(&api, HELD).unwrap(),
+        &snapshot_of(&api, NEWEST).unwrap(),
+        "t0",
+    );
+    assert_eq!(bump.to, "1.4.0");
+    assert_eq!(bump.impact, d.summary.max_impact);
+    let mut flags: Vec<ChangeFlag> = d.packs.iter().flat_map(|p| p.flags()).collect();
+    flags.sort_by_key(|f| ChangeFlag::ALL.iter().position(|x| x == f));
+    flags.dedup();
+    let named: Vec<&str> = bump.flags.iter().map(|f| f.as_str()).collect();
+    let flag_texts: Vec<&str> = flags.iter().map(|f| f.as_str()).collect();
+    assert_eq!(named, flag_texts);
+    assert_eq!(named, ["IDENTITY", "UPSTREAM", "AUTHORED"]);
+    assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
+    assert!(
+        api.posted().is_empty(),
+        "strata asks Palette nothing about the move of a profile"
+    );
+
+    // the packs of the move, in the order of compare: the version changes, the packs that it adds
+    // or removes, and the values that change
+    let packs: Vec<(&str, &str, Option<&str>, Option<&str>, bool)> = bump
+        .packs
+        .iter()
+        .map(|p| {
+            let (from, to) = (p.from.as_deref(), p.to.as_deref());
+            (
+                p.key.as_str(),
+                p.status.as_str(),
+                from,
+                to,
+                p.values_changed,
+            )
+        })
+        .collect();
+    assert_eq!(
+        packs,
+        [
+            ("addon/dino-logs", "removed", Some("2.0.0"), None, false),
+            (
+                "addon/fred-compositions",
+                "changed",
+                Some("0.1.0"),
+                Some("0.2.0"),
+                false
+            ),
+            ("addon/pebbles-dns", "added", None, Some("1.0.0"), false),
+            (
+                "addon/wilma-values",
+                "changed",
+                Some("1.0.0"),
+                Some("1.0.0"),
+                true
+            ),
+        ]
+    );
+    let compared: Vec<&str> = d
+        .packs
+        .iter()
+        .filter(|p| p.status != Status::Unchanged)
+        .map(|p| p.key.as_str())
+        .collect();
+    let keys: Vec<&str> = bump.packs.iter().map(|p| p.key.as_str()).collect();
+    assert_eq!(keys, compared);
+
+
+    let text = common::terminal().render_behind(&r).unwrap();
+    let line = format!(
+        "      bump to 1.4.0: {} IDENTITY UPSTREAM AUTHORED\n",
+        bump.impact
+    );
+    assert!(
+        text.contains(&format!("      1.4.0 created {CREATED}\n{line}")),
+        "the line comes under the time of the create: {text}"
+    );
+    let markdown = common::markdown().render_behind(&r).unwrap();
+    assert!(
+        markdown.contains(&format!(
+            "| bump to 1.4.0: {} IDENTITY UPSTREAM AUTHORED |",
+            bump.impact
+        )),
+        "{markdown}"
+    );
+
+    // the JSON holds the move, and `--since` reads it again
+    let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        doc["profiles"][0]["bump"]["packs"][1],
+        json!({"key": "addon/fred-compositions", "status": "changed", "from": "0.1.0", "to": "0.2.0",
+            "flags": ["IDENTITY", "UPSTREAM"]})
+    );
+    assert_eq!(
+        doc["profiles"][0]["bump"]["packs"][2],
+        json!({"key": "addon/pebbles-dns", "status": "added", "to": "1.0.0"})
+    );
+    assert_eq!(
+        doc["profiles"][0]["bump"]["packs"][3]["valuesChanged"],
+        true
+    );
+    let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
+    assert_eq!(back.profiles[0].bump.as_ref().unwrap().packs.len(), 4);
+}
+
+#[test]
+fn a_profile_version_with_no_newer_version_and_a_run_with_no_impact_show_no_move() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_move();
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let newest = record_of(&api, NEWEST, dir.path(), "newest.json");
+    let manifests = |uid: &str| api.calls(&manifests_route(uid));
+    let before = (manifests(HELD), manifests(NEWEST));
+
+    // the newest version is current, so it has no move, and strata compares nothing
+    let r = behind_of(&api, std::slice::from_ref(&newest), &WITH_IMPACT);
+    assert!(!r.profiles[0].behind && r.profiles[0].bump.is_none());
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(!text.contains("bump to"), "{text}");
+
+    // --no-impact names the newer version, and compares nothing
+    let r = behind_of(
+        &api,
+        std::slice::from_ref(&record),
+        &ops::BehindOptions::default(),
+    );
+    assert!(r.profiles[0].behind && r.profiles[0].bump.is_none());
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(!text.contains("bump to"), "{text}");
+    assert_eq!((manifests(HELD), manifests(NEWEST)), before);
+}
+
+#[test]
+fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_move();
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let api = api.failing(manifests_route(NEWEST), 500, "boom");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let held = &r.profiles[0];
+    assert!(
+        held.behind && held.bump.is_none() && held.error.is_some(),
+        "{held:?}"
+    );
+    assert_eq!(r.exit_code(), 2);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains("~ [profile] barney-addons  1.3.1  project  not checked\n"),
+        "{text}"
     );
 }

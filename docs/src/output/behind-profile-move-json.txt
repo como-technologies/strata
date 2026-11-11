@@ -1,0 +1,5 @@
+$ strata behind releases/1.0.0/dev.json --json | jq -c '.profiles[].bump.packs[]'
+{"key":"os/ubuntu-aws","status":"changed","from":"20.04","to":"24.04","flags":["IDENTITY","UPSTREAM"]}
+{"key":"k8s/kubernetes","status":"changed","from":"1.35.3","to":"1.36.2","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES"],"valuesChanged":true}
+{"key":"cni/cni-cilium-oss","status":"changed","from":"1.19.6","to":"1.20.1","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES"],"valuesChanged":true}
+{"key":"csi/csi-aws-ebs","status":"changed","from":"1.63.1","to":"1.65.0","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES","CHARTS"],"valuesChanged":true}

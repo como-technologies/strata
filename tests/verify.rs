@@ -28,14 +28,15 @@ use common::CommandExt;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
-    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, behind_of,
-    candidate_snapshot, cluster_manifests_route, cluster_ref, cluster_resolved_values_route,
-    cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
-    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
-    no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
-    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
-    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
+    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, app_profile_route,
+    behind_of, candidate_snapshot, cluster_manifests_route, cluster_ref,
+    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
+    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
+    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, read_json, resolved_values_route,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
+    write_yaml,
 };
 
 #[test]
@@ -13588,14 +13589,6 @@ fn serve_behind() -> MemoryApi {
     )
 }
 
-/// The options of `behind` that ask Palette about each bump.
-const WITH_IMPACT: ops::BehindOptions = ops::BehindOptions {
-    impact: true,
-    since: None,
-    pin: None,
-    pre_release: false,
-};
-
 /// What the three commands that ask if a pack supports a cloud say for the cloud `cloud`.
 /// The registry has csi-aws-ebs at 1.63.1 for the clouds `pinned` and at 1.65.0 for the
 /// clouds `newer`. The answers, in order: `packs --cloud` keeps 1.65.0; `behind` names 1.65.0
@@ -14685,6 +14678,9 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     let csi = dir.path().join("csi.json");
     common::write_snapshot(&csi, &record, false);
     let r = behind_of(&api, &[csi], &WITH_IMPACT);
+    // issue #708: the newer versions of the profile and the names of the clusters of the refusal
+    // read one document
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
 
     // one request to the route of the version, with its packs and the bumped pack in the place of
     // the pin: the version, the tag, the uids, and the values of 1.65.0

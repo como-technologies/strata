@@ -5,7 +5,7 @@ use crate::closed_set::ClosedSet;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
 use crate::render::behind::{
     arrived_line, behind_heading, bump_line, created_since, listed_since, palette_lines,
-    pin_status, profile_status,
+    pin_status, profile_bump_line, profile_status,
 };
 use crate::render::entry_error;
 use crate::text::{dash, markdown_cell};
@@ -25,7 +25,9 @@ pub(super) fn markdown_behind(r: &BehindReport) -> String {
         if !r.pins.is_empty() {
             o.push('\n');
         }
-        o.push_str("| profile | version | scope | status | pinned by |\n|---|---|---|---|---|\n");
+        o.push_str(
+            "| profile | version | scope | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
+        );
         for p in &r.profiles {
             o.push_str(&profile_row(p));
         }
@@ -72,12 +74,14 @@ fn profile_row(p: &ProfilePin) -> String {
         status.push_str(&format!(" ({msg})"));
     }
     let scope = p.scope.map(|s| s.as_str()).unwrap_or_default();
+    let bump = profile_bump_line(p).unwrap_or_default();
     format!(
-        "| `{}` | `{}` | {} | {} | {} |\n",
+        "| `{}` | `{}` | {} | {} | {} | {} |\n",
         markdown_cell(&p.name),
         markdown_cell(&p.version),
         markdown_cell(dash(scope)),
         markdown_cell(&status),
+        markdown_cell(dash(&bump)),
         pinned_by(&p.pinned_by)
     )
 }

@@ -1,0 +1,7 @@
+$ strata behind releases/1.0.0/dev.json
+5 pins from 1 record: 4 behind, 1 floating; 1 profile version: 1 behind
+...
+~ [profile] aws-stack  1.0.0  project  behind: 1.1.0
+      1.1.0 created 2026-09-15T08:01:00.000Z
+      bump to 1.1.0: repave IDENTITY UPSTREAM AUTHORED IMAGES CHARTS
+...

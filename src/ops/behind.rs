@@ -12,16 +12,17 @@ use serde_json::Value;
 use crate::api::registry::{Registries, RegistrySyncNote};
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
-use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
+use crate::diff::RegistrySync;
 use crate::error::{Error, ErrorDocument, Result};
 use crate::json::is_zero;
 use crate::model::pack_state::PackState;
-use crate::model::validation::ProfileValidation;
 use crate::snapshot::{Pack, Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
 use self::bump::{BumpQuestions, read_bump};
+pub use self::change::{Bump, BumpPack};
+use self::documents::ProfileDocuments;
 use self::newer::newer_versions;
 use self::profiles::{Held, ProfileKey, check_profile, collect};
 pub use self::profiles::{NewerProfile, ProfilePin};
@@ -29,6 +30,8 @@ use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
 mod bump;
+mod change;
+mod documents;
 mod newer;
 mod profiles;
 
@@ -233,53 +236,14 @@ pub struct Newer {
     pub drops: Vec<String>,
 }
 
-/// What a move from the pinned version to the newest one does.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Bump {
-    /// The version compared: the newest one.
-    pub to: String,
-    /// The impact level of the change.
-    pub impact: Open<ImpactLevel>,
-    /// The change flags of the pack, in the order of the legend.
-    pub flags: Vec<Open<ChangeFlag>>,
-    /// Whether Palette accepts the move, with the errors that it gives and the clusters that they
-    /// name. Palette checks the move against the packs of the clusters that run the profile of
-    /// each record. Strata asks the records that pin the pack in the project of the pin. Absent
-    /// when strata can ask no record of the pin. Also absent when a request failed or strata did
-    /// not ask a record, and no answer holds an error. Strata says that Palette accepts only when
-    /// it asked each record and each request answered.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub palette_validation: Option<ProfileValidation>,
-    /// Why a request to Palette failed, when one did. Also the records of another project that
-    /// strata did not ask, such as `1 record of project p2 was not asked`. The pin stays behind.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub palette_validation_error: Option<String>,
-}
-
-impl Bump {
-    /// What a move to the version `to` does to the pack `name`, from the comparison `d`. Palette
-    /// is not asked: the fields about its answer are empty.
-    ///
-    /// `d` compares the pinned version with `to`. None when `d` holds no pack of that name.
-    pub fn of(to: &str, d: &Diff, name: &str) -> Option<Bump> {
-        let pd = d.packs.iter().find(|p| p.name == name)?;
-        Some(Bump {
-            to: to.to_string(),
-            impact: d.summary.max_impact.into(),
-            flags: pd.flags().into_iter().map(Open::from).collect(),
-            palette_validation: None,
-            palette_validation_error: None,
-        })
-    }
-}
-
 /// What `behind` reads.
 #[derive(Debug, Clone, Default)]
 pub struct BehindOptions {
     /// Compare each pin that is behind with the newest version, for its impact: two pack reads
     /// for each such pin. Also ask Palette whether it accepts the move, with one request for each
     /// record that pins it. A record of a cluster also costs a read of the cluster document.
+    /// Compare each profile version that is behind with the newest version of its profile too.
+    /// That reads the pack manifests and the variables of the two versions.
     pub impact: bool,
     /// The report of the previous run: each pin names the versions that arrived since.
     pub since: Option<BehindReport>,
@@ -420,7 +384,9 @@ struct Check<'a> {
 /// strata reads no profile version.
 ///
 /// With `options.impact`, strata asks Palette about the bump of a pin in the project of the pin.
-/// It does not ask a record of another project that pins the pack, and the bump says so.
+/// It does not ask a record of another project that pins the pack, and the bump says so. It also
+/// compares each profile version that is behind with the newest version of its profile. Strata
+/// reads the document of each profile version one time.
 ///
 /// # Errors
 ///
@@ -549,13 +515,14 @@ where
     for (scope, work) in scopes {
         match connect(scope.as_deref()) {
             Ok(palette) => {
+                let mut documents = ProfileDocuments::new(&palette);
                 for (key, mut profile) in work.profiles {
-                    check_profile(&palette, &mut profile, check.pre_release, check.progress);
+                    check_profile(&mut documents, &mut profile, check);
                     held.insert(key, profile);
                 }
                 check_scope(
                     check,
-                    &palette,
+                    documents,
                     scope.as_deref(),
                     work.pins,
                     &mut reads,
@@ -580,10 +547,11 @@ where
     ))
 }
 
-/// Check the pins of `group`, the pins of one scope, with the connection `palette` to that scope.
+/// Check the pins of `group`, the pins of one scope. `documents` holds the connection to that
+/// scope, and the documents of the profile versions that the scope read.
 fn check_scope<A: PaletteApi>(
     check: &Check<'_>,
-    palette: &Palette<A>,
+    documents: ProfileDocuments<'_, A>,
     scope: Option<&str>,
     group: Vec<(PinKey, Pinned)>,
     reads: &mut Reads,
@@ -596,8 +564,8 @@ fn check_scope<A: PaletteApi>(
         generated_at,
         progress,
     } = *check;
-    let mut listings = Registries::new(palette);
-    let mut questions = BumpQuestions::new(palette, scope);
+    let mut listings = Registries::new(documents.palette);
+    let mut questions = BumpQuestions::new(documents, scope);
     for (
         key,
         Pinned {
