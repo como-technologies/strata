@@ -761,11 +761,10 @@ fn a_download_that_palette_refuses_for_its_limit_is_an_error_that_names_the_limi
         &no_edit,
     );
     let records = pair(old, new);
-    let body = r#"{"code":"TooManyRequests","message":"Too Many Requests, only 1 request in 10 seconds is allowed"}"#;
     let api = common::serve_downloads(MemoryApi::new(), &records, &values_file).failing(
         common::download_route(UID_NEW),
         429,
-        body,
+        common::DOWNLOAD_LIMIT_REFUSAL,
     );
     let err = ops::same_release_with(
         &records,

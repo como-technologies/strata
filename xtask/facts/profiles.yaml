@@ -536,6 +536,7 @@ facts:
       - export.sh:download-<name>
       - export.sh:download-layout-<name>
       - export.sh:download-archive-<name>
+      - export.sh:download-top-folders
       - export.sh:download-no-archive
     pages:
       - reference/palette-api.md#a-profile-version

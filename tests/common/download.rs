@@ -171,11 +171,14 @@ pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8
     tgz(&files)
 }
 
-/// The top folder of the archive of the pack `name` with the digest `digest`, as a pack registry
-/// names it. It holds the name and the first 12 hex digits of the digest. A pack with no digest
-/// gets 12 zeros. An OCI registry of packs names the folder by the name and the version of the
-/// pack.
-pub fn pack_top(name: &str, digest: &str) -> String {
+/// The top folder of the archive of the pack `name` of the type `kind`, at `version` and with the
+/// digest `digest`, as Palette names it. For a pack of a pack registry, it holds the name and the
+/// first 12 hex digits of the digest. A pack with no digest gets 12 zeros. For a pack of an OCI
+/// registry of packs, it holds the name and the version.
+pub fn archive_top(kind: PackType, name: &str, version: &str, digest: &str) -> String {
+    if kind == PackType::Oci {
+        return format!("{name}-{version}");
+    }
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
     let short: String = hex.chars().chain(std::iter::repeat('0')).take(12).collect();
     format!("{name}-{short}")

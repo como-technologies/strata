@@ -1575,7 +1575,8 @@ pub fn serve_downloads(
                     .iter()
                     .map(|(path, text)| (*path, text.as_str()))
                     .collect();
-                let top = pack_top(&p.name, &p.ref_digest);
+                let kind = PackType::parse(&p.kind)?;
+                let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
                 Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
             })
             .collect();

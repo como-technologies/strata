@@ -11,10 +11,10 @@
 #      that Palette mints.
 #   2  the export with format=json gives the same record as the export with format=yaml
 #   3  what the export route answers: a request that accepts JSON gets no file; and three
-#      exports at once, whose refusals the run records
-#   4  the download of each version: the layout of the file, the archive of each pack, the
-#      packs with no archive, and what the route answers to a request that accepts JSON and to
-#      two downloads at once
+#      exports with no wait between them, whose refusals the run records
+#   4  the download of each version: the layout of the file, the archive of each pack and its
+#      top folder, the packs with no archive, and what the route answers to a request that
+#      accepts JSON and to two downloads at once
 #
 # PROFILES holds the versions, by <name>@<version>, in the project of the key. The default is the
 # three versions that `just live-up` publishes. Palette can refuse an export with HTTP 429 and
@@ -59,6 +59,11 @@ download_layout() {
     | all(if .type == "manifest" then $list[.name] == null else $list[.name].version == .version end)' "$3"
 }
 
+# archive_tops FILE PATH: the top folders of the archive PATH in the download FILE, one on each line
+archive_tops() {
+  tar -xzOf "$1" "$2" | tar -tz | cut -d/ -f1 | sort -u
+}
+
 # download_archives FILE LIST: each archive of a pack that the list LIST of the download FILE names
 # has one top folder, and its pack.json names the version of its entry. A chart of a Helm registry
 # has no pack.json, so the check reads the archives of the other packs
@@ -66,13 +71,54 @@ download_archives() {
   local folder name path version top
   folder=$(dirname "$(cat "$2.path")")
   while IFS=$'\t' read -r name path version; do
-    top=$(tar -xzOf "$1" "$folder/$path" | tar -tz | cut -d/ -f1 | sort -u)
+    top=$(archive_tops "$1" "$folder/$path")
     [ "$(printf '%s\n' "$top" | grep -c .)" = 1 ] || { echo "$name: no one top folder" >&2; return 1; }
     [ "$(tar -xzOf "$1" "$folder/$path" | tar -xzO "$top/pack.json" | jq -r .version)" = "$version" ] \
       || { echo "$name: pack.json does not name $version" >&2; return 1; }
     echo "$name $version: $top/pack.json"
   done < <(jq -r '.packs[] | select(.filePath != "" and (.manifestName // "") == "" and .type != "helm")
     | [.name, .filePath, .version] | @tsv' "$2")
+}
+
+# download_tops LIST...: the top folders of each archive of a pack that each list LIST names, a Helm
+# chart too. One line for each archive: the list, the pack, its type, and its top folders. The
+# download of the list NAME.list.json is NAME.tgz
+download_tops() {
+  local list folder name type path
+  for list in "$@"; do
+    folder=$(dirname "$(cat "$list.path")")
+    while IFS=$'\t' read -r name type path; do
+      printf '%s\t%s\t%s\t%s\n' "$list" "$name" "$type" \
+        "$(archive_tops "${list%.list.json}.tgz" "$folder/$path" | paste -sd, -)"
+    done < <(jq -r '.packs[] | select(.filePath != "" and (.manifestName // "") == "")
+      | [.name, .type, .filePath] | @tsv' "$list")
+  done
+}
+
+# download_at_once UID: two downloads of the version UID at once. It starts the two before it waits
+# for either. It prints the HTTP status of each, and the code and the message of a refusal. Exit 2
+# when Palette refused one or both
+download_at_once() {
+  local i status reason refused=0 pids=()
+  for i in 1 2; do
+    SHOW_STATUS=1 "$live/api.sh" download "$1" > "download-limit.$i" &
+    pids+=("$!")
+  done
+  wait "${pids[@]}"
+  for i in 1 2; do
+    status=$(head -n 1 "download-limit.$i")
+    case "$status" in
+      "HTTP 2"*) echo "download $i: $status" ;;
+      *)
+        refused=2
+        reason=$(tail -n +2 "download-limit.$i" | jq -r '"\(.code): \(.message)"' 2>/dev/null) \
+          || reason=$(tail -n +2 "download-limit.$i" | head -c 300)
+        echo "download $i: ${status:-no answer} $reason"
+        ;;
+    esac
+    rm -f "download-limit.$i"
+  done
+  return "$refused"
 }
 
 # the record of each version gives its uid, and the root that the export must give
@@ -127,9 +173,9 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
   check export-accepts-json-no-file 0 '#156: the answer is {"Reader":{}}, and not the file' -- \
     grep -qx '{"Reader":{}}' export-accepts-json.out
   sleep 11
-  # three exports at once: some runs see HTTP 429 TooManyRequests, and some do not, so the check
-  # records the exit code and the answers, and does not judge them
-  check export-limit '?' '#156: three exports at once; exit 2 when Palette refused one or more' -- \
+  # three exports with no wait between them: some runs see HTTP 429 TooManyRequests, and some do
+  # not, so the check records the exit code and the answers, and does not judge them
+  check export-limit '?' '#156: three exports with no wait between them; exit 2 when Palette refused one or more' -- \
     bash -c 'refused=0; for i in 1 2 3; do "$1" export "$2" yaml > /dev/null || refused=2; done; exit $refused' _ \
     "$live/api.sh" "$uid"
 fi
@@ -148,6 +194,9 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
     check "download-archive-$name" 0 "#751: each archive of a pack of $ref has one top folder, and its pack.json names the version of its entry" -- \
       download_archives "$name.tgz" "$name.list.json"
   done
+  # the form of the top folder of each archive: the check records it, and does not judge it
+  check download-top-folders '?' '#815: the top folders of each archive of a pack in each download, a Helm chart too' -- \
+    download_tops ./*.list.json
   # which packs have no archive, and why: the records name the registry of each pack, and the
   # check records the entries and does not judge them
   check download-no-archive '?' '#751: the entry of each pack with no archive: its name, its type, and isRegistryPrivate' -- \
@@ -161,11 +210,11 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
   check download-accepts-json-no-file 0 '#751: the answer is {"Reader":{}}, and not the file, as for the export' -- \
     grep -qx '{"Reader":{}}' download-accepts-json.out
   sleep 11
-  # two downloads of one version at once: Palette takes one in 10 seconds, and can refuse the
-  # second with HTTP 429 TooManyRequests. The check records the exit code, and does not judge it
-  check download-limit '?' '#751: two downloads of one version at once; exit 2 when Palette refused the second' -- \
-    bash -c 'refused=0; for i in 1 2; do "$1" download "$2" > /dev/null || refused=2; done; exit $refused' _ \
-    "$live/api.sh" "$uid"
+  # two downloads of one version at once: Palette takes one in 10 seconds, and can refuse one with
+  # HTTP 429 TooManyRequests. A refusal depends on the server of the API that each request reaches,
+  # so a run can see none. The check records the status of each, and does not judge them
+  check download-limit '?' '#751, #815: two downloads of one version at once; the status of each, and exit 2 when Palette refused one or both' -- \
+    download_at_once "$uid"
 fi
 
 echo

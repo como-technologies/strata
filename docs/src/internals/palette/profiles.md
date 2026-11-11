@@ -165,6 +165,9 @@ The file holds no archive for these packs:
   an empty `filePath`.
 - A manifest pack. The list names only its manifests.
 
+A pack of an OCI registry of packs has an archive, also when the registry is
+private. Its entry has `isRegistryPrivate` false.
+
 When Palette cannot find the registry of a pack, it refuses the whole
 download. Strata then stops with the error `api`.
 
@@ -176,8 +179,10 @@ export. The route reads the version by its uid, in the project of the request.
 Palette takes one download of a version in 10 seconds. It refuses the next
 with HTTP 429, the code `TooManyRequests`, and the message "Too Many Requests,
 only 1 request in 10 seconds is allowed". After such a refusal, strata waits 10
-seconds before the next download of the version. Stage 4 of
-[export.sh](../../development/live-runs.md#exportsh) checks the facts of this
+seconds before the next download of the version. Each server of the API of
+Palette counts its own downloads. So a download that reaches another server in
+those 10 seconds passes, and Palette does not refuse each such download. Stage 4
+of [export.sh](../../development/live-runs.md#exportsh) checks the facts of this
 section.
 
 ## The audit log

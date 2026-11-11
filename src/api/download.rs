@@ -56,8 +56,8 @@ pub struct DownloadedPack {
     /// The version of the pack, as the list gives it.
     pub version: String,
     /// The archive of the pack. None when the download holds no archive of the pack. Palette serves
-    /// none for a pack of a private registry, or of an OCI registry of Helm charts or of Zarf
-    /// packages.
+    /// none for a pack of a private pack registry or Helm registry, or of an OCI registry of Helm
+    /// charts or of Zarf packages.
     pub archive: Option<PackArchive>,
 }
 
@@ -300,7 +300,7 @@ mod written;
 
 #[cfg(test)]
 mod tests {
-    use super::written::{DownloadPack, pack_archive, profile_download, tgz};
+    use super::written::{DownloadPack, archive_top, pack_archive, profile_download, tgz};
     use super::*;
     use crate::api::download_path;
 
@@ -375,7 +375,7 @@ mod tests {
         assert_eq!(a, b);
         // an OCI registry of packs names the top folder by the name and the version of the pack
         let oci = |version: &str| {
-            let top = format!("kubernetes-{version}");
+            let top = archive_top(PackType::Oci, "kubernetes", version, "");
             let download = read(&[built("kubernetes", version, &top, &values)]);
             download
                 .pack("kubernetes")
