@@ -185,6 +185,12 @@ A new read of Palette goes in `api/palette/`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot/`, outside the root unless it
 is content: see [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
+A new command that reads Palette takes `--project` and `--project-name`. Add it
+to `READS_PALETTE` in the unit tests of `src/cli/args.rs`, and to `commands` in
+`tests/projects.rs`. Add a command that reads no Palette to `READS_NO_PALETTE`
+in the two files. The tests of each file fail on a command that its two lists
+do not name.
+
 ## Where a script goes
 
 | Who runs it | Directory | Examples |
