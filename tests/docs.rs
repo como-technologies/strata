@@ -1421,9 +1421,9 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
 }
 
-/// The checks that part 1 of the live window of Wave 16 ran have their result in the book: draft.sh,
-/// projects.sh, and loop.sh. A row that says "no result yet" for one of them tells a reader that
-/// nobody ran the check.
+/// The checks that the live window of Wave 16 ran have their result in the book: draft.sh,
+/// projects.sh, scope.sh, loop.sh, and stage 4 of export.sh. A row that says "no result yet" for one
+/// of them tells a reader that nobody ran the check.
 #[test]
 fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
     let page = read(&docs().join("development/live-runs.md"));
@@ -1454,6 +1454,12 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
         "versions-project",
         "behind-profile",
         "behind-profile-names",
+        "download-<name>",
+        "download-layout-<name>",
+        "download-archive-<name>",
+        "download-no-archive",
+        "download-accepts-json",
+        "download-limit",
     ] {
         let row = page
             .lines()
