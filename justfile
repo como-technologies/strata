@@ -408,12 +408,12 @@ live-loop: build
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
 
-# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and a pull Secret from a token file with only read:packages (GHCR_PULL_TOKEN_FILE) gives it to the nodes. Needs live-up (billable until live-down), kubectl, gh, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
+# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and the nodes pull it from its public package with no pull Secret. Needs live-up (billable until live-down), kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
 [group('live checks')]
 live-observer-images: build
     examples/live/observer-images.sh
 
-# The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, gh, go, and a token file with only read:packages (GHCR_PULL_TOKEN_FILE). Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
+# The observer on the real cluster fred (#656): a plain kubectl apply and then a profile in Palette, with the image of OBSERVER_IMAGE. Needs live-up, kubectl, and go. The nodes pull the public image with no pull Secret. Makes a namespace and a profile, and removes both; the edit in place of the add-on version goes back.
 [group('live checks')]
 live-observer: build
     examples/live/observer.sh
@@ -423,11 +423,16 @@ live-observer: build
 live-observer-role: build
     examples/live/observer-role.sh
 
+# The chart of the observer in a registry of Palette with no login (#732): an OCI registry with the auth type noAuth, a sync, and the chart in the packs of the registry. Needs the key, with a role that adds a registry at tenant scope; needs no cluster. Makes one registry, and deletes it.
+[group('live checks')]
+live-observer-chart:
+    examples/live/observer-chart.sh
+
 # The three recipes below put the observer on a test cluster of the project. A team installs it with the steps of
 # automation/observer.md. CLUSTER is a cluster name. With no name, the project must hold one cluster. See
 # docs/src/development/live-example.md.
 
-# Install the observer on a test cluster, or repair the install (#681). TAG is the image tag (default: the newest release). Flags follow the tag, such as --read-pods. Needs the key of Palette, a token file with only read:packages, kubectl, and gh.
+# Install the observer on a test cluster, or repair the install (#681). TAG is the image tag (default: the newest release). Flags follow the tag, such as --read-pods. Needs the key of Palette and kubectl, and gh when no TAG is given.
 [group('observer')]
 observer-up cluster="" tag="" *flags: build
     examples/live/observer-up.sh up {{ if cluster == "" { "" } else { "--cluster " + quote(cluster) } }} {{ if tag == "" { "" } else { "--tag " + quote(tag) } }} {{flags}}

@@ -7,11 +7,10 @@
 #
 #   examples/live/observer-images.sh [FROM_STAGE]
 #
-#   1  the setup: the pull Secret of the image of the observer, the tag on ttl.sh holds its first
-#      image, and the values of the add-on list the tag. A record of each profile applies. The
-#      observer installs with the component, from the image of OBSERVER_IMAGE. It has the role of the
-#      component, and it reads the pods. When the token file fails, the run stops at the pull Secret,
-#      before it changes the cluster
+#   1  the setup: the tag on ttl.sh holds its first image, and the values of the add-on list the
+#      tag. A record of each profile applies. The observer installs with the component, from the
+#      image of OBSERVER_IMAGE, and its pod names no pull Secret. It has the role of the component,
+#      and it reads the pods
 #   2  the first sight: a pod runs the tag. The observer shows the first digest and no finding
 #   3  the tag moves to a second image, and a new pod runs it. The observer shows a split. Then the
 #      first pod is replaced, so each pod runs the second image. The observer shows a move
@@ -25,9 +24,9 @@
 # cluster A does. An image on ttl.sh lives for two hours from its push. The names of the images hold a
 # random suffix.
 #
-# The image of the observer is on a private package of GitHub, and the script never pushes it to
-# another registry. The nodes pull it with the Secret ghcr-pull, which comes from a token file. The
-# images on ttl.sh are copies of public images only.
+# The image of the observer is on a public package of GitHub. The nodes pull it with no pull Secret,
+# and the script never pushes it to another registry. The images on ttl.sh are copies of public
+# images only.
 #
 # The only write to the tenant is an edit in place of the values of the add-on. It lists the images
 # of the run, so that a pack names them. The undo puts the values back. The script applies no update
@@ -37,12 +36,11 @@
 # script deletes no cluster. KEEP=1 skips the undo, so that FROM_STAGE can resume the run.
 #
 # Needs the live example at its baseline with cluster A, the strata release binary, crane, kubectl,
-# curl, jq, gh, git, the key of verify.sh, and the token file. Run just live-up first. It is billable
-# until live-down. OBSERVER_IMAGE names the image of the observer, which must hold the code of this
-# commit (default: the image of the version in Cargo.toml). GHCR_PULL_TOKEN_FILE names the token file
-# (default: ~/.config/strata/ghcr-pull-token, mode 0600). It holds a token with only the scope
-# read:packages. PORT is the local port of the port-forward (default 18080). CYCLE_TRIES is the number
-# of looks, 5 seconds apart, in a wait for the observer (default 60).
+# curl, jq, git, and the key of verify.sh. Run just live-up first. It is billable until live-down.
+# OBSERVER_IMAGE names the image of the observer, which must hold the code of this commit (default:
+# the image of the version in Cargo.toml). PORT is the local port of the port-forward (default
+# 18080). CYCLE_TRIES is the number of looks, 5 seconds apart, in a wait for the observer (default
+# 60).
 #
 # Results go under runs/<UTC time>/observer-images/, or OUT. FROM_STAGE resumes a run in OUT. Exit 0
 # only when no check fails. A check with ? records a result without judging it.
@@ -52,7 +50,7 @@ from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$from" in 1|2|3|4|5|6) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
-for tool in crane kubectl curl jq gh git timeout; do
+for tool in crane kubectl curl jq git timeout; do
   command -v "$tool" > /dev/null || die "$tool is needed"
 done
 root=$(cd "$live/../.." && pwd)
@@ -147,9 +145,9 @@ values_edit() {
   edited=1 && save edited 1
   "$live/api.sh" set-values "$AD" "$pack" "$(images_values)"
 }
-# namespaces_make: the namespace of the pods. The pull Secret made the namespace of the observer, with the
-# restricted standard.
-namespaces_make() { kc create namespace "$tns"; }
+# namespaces_make: the namespace of the observer, with the restricted standard, and the namespace of the
+# pods
+namespaces_make() { observer_namespace && kc create namespace "$tns"; }
 observer_settings() { observer_config && observer_key "$palette_key"; }
 # records: a record of the release profile and of the add-on profile, after the edit. The add-on record
 # lists the tag in a pack. The records apply with --server-side.
@@ -350,15 +348,14 @@ trap finish EXIT
 
 if stage 1 "the setup"; then
   require_baseline
-  check pull-secret 0 '#646: the Secret ghcr-pull holds the token of the file, which has only read:packages and comes through standard input' -- pull_secret
-  [ "$failures" = 0 ] || pull_secret_stop
   check tag-first 0 '#646: the tag on ttl.sh holds its first image, and an image with a shell is there for the crash loop' -- tag_first
   check values-edit 0 "#646: the pack $pack of the add-on lists the three images of the run, in place" -- values_edit
-  check namespaces 0 '#646: the namespace of the pods' -- namespaces_make
+  check namespaces 0 '#646: the namespace of the observer, with the restricted standard, and the namespace of the pods' -- namespaces_make
   check settings 0 '#646: the ConfigMap holds the cluster, the address of Palette, and the project. The Secret holds the key' -- observer_settings
   check records 0 '#646: a record of each profile, with the tag in the add-on record, applies with --server-side' -- records_make
-  check observer-apply 0 '#646: the overlay lists the component, the image of OBSERVER_IMAGE, and the pull Secret, and it applies' -- observer_apply
+  check observer-apply 0 '#646: the overlay lists the component and the image of OBSERVER_IMAGE, and it applies' -- observer_apply
   check observer-ready 0 '#646: the Deployment becomes available' -- observer_ready
+  check no-pull-secret 0 '#732: the pod runs the image of OBSERVER_IMAGE and names no pull Secret: a node pulled the public image with no login' -- no_pull_secret
 fi
 
 if stage 2 "the read and the first sight"; then
