@@ -1507,11 +1507,13 @@ if [ -n "$out" ]; then cat "$body" > "$out"; else cat "$body"; fi
 
 /// The installer of a release, for `public.sh`. It adds a line with the tokens that it got to
 /// `install.tokens`, and writes two binaries that print their versions into `--dir`.
+///
+/// [`public_web`] puts the variables of [`INSTALLER_TOKENS`] in the place of `@TOKENS@`.
 const FAKE_PUBLIC_INSTALLER: &str = r#"#!/usr/bin/env bash
 dir=""
 while [ $# -gt 0 ]; do case "$1" in --dir) dir=$2; shift 2 ;; *) shift ;; esac; done
 mkdir -p "$dir"
-echo "${STRATA_TOKEN-}${GITHUB_TOKEN-}${GH_TOKEN-}" >> "$FAKE_WEB/install.tokens"
+echo "@TOKENS@" >> "$FAKE_WEB/install.tokens"
 printf '#!/bin/sh\necho strata 9.9.9\n' > "$dir/strata"
 printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
 chmod +x "$dir/strata" "$dir/strata-preflight"
@@ -1522,9 +1524,15 @@ chmod +x "$dir/strata" "$dir/strata-preflight"
 fn public_web(dir: &Path, book: u16) {
     let web = dir.join("web");
     std::fs::create_dir_all(&web).unwrap();
+    let tokens = INSTALLER_TOKENS
+        .map(|name| format!("${{{name}-}}"))
+        .concat();
     let files = [
         ("book.html", "<html>the book</html>".to_string()),
-        ("installer.sh", FAKE_PUBLIC_INSTALLER.to_string()),
+        (
+            "installer.sh",
+            FAKE_PUBLIC_INSTALLER.replace("@TOKENS@", &tokens),
+        ),
         ("token.json", r#"{"token":"anonymous"}"#.to_string()),
         ("manifest.json", r#"{"schemaVersion":2}"#.to_string()),
         (
@@ -1544,7 +1552,7 @@ fn public_web(dir: &Path, book: u16) {
         ),
         format!(
             "https://github.com/o/r/releases/download/{}/install-strata.sh 200 installer.sh",
-            gitlab_drop_in_variable("STRATA_VERSION")
+            gitlab_drop_in_variable(&gitlab_drop_in(), "STRATA_VERSION")
         ),
         "https://ghcr.io/token* 200 token.json".into(),
         "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
