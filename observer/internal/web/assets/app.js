@@ -331,13 +331,15 @@ const natural = (a, b) => String(a).localeCompare(String(b), undefined, {numeric
 /* versionCmp orders two versions as src/reference/version.rs does, and that file states each rule. The page cannot ask strata to
    order the newest versions of other packs, so it keeps this copy. The file testdata/versions.json holds the cases, and two tests,
    one of strata and one of this page, sort them. A change of one order fails the test of the other.
-   1. A version that parses as SemVer 2.0.0 orders by its precedence. A pre-release is below its version.
-   2. A text that does not parse reads as its first three numbers. A tail of numbers puts it above them, and other text below them.
-   3. A text with no three numbers sorts after the versions, in the natural order of its runs. The empty text is the lowest. */
+   1. A version reads as its three numbers, and the numbers decide first. A text that does not parse gives its first three numbers,
+      or the one or two numbers at its start. One "v" in front does not count.
+   2. For one set of numbers, the forms go up: text before the numbers, one or two numbers and a tail, a tail of text after the
+      three numbers, a pre-release, the version, and a fourth number. Then the tails decide, part by part.
+   3. A text with no version sorts below each version, in the natural order of its runs. The empty text is the lowest. */
 const SEMVER = /^v?(\d+(?:\.\d+){0,2})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const DIGITS = /^\d+$/;
-// The kinds of the text beside the three numbers of a version, from the lowest to the highest.
-const TAIL = {TEXT: 0, NONE: 1, NUMBERS: 2};
+// The forms of a version around its numbers, from the lowest to the highest for one set of numbers.
+const FORM = {BEFORE: 0, SHORT: 1, TEXT: 2, PARSED: 3, MORE: 4};
 const byText = (x, y) => x < y ? -1 : x > y ? 1 : 0;
 // byValue compares two runs of digits by their value, of any length.
 const byValue = (x, y) => { const a = x.replace(/^0+/, ""), b = y.replace(/^0+/, ""); return a.length - b.length || byText(a, b); };
@@ -350,34 +352,65 @@ function byRuns(a, b) {
   }
   return x.length - y.length;
 }
-// readVersion gives the numbers, the pre-release, and the tail of a version, or null for a text with no three numbers.
+// byIds compares two lists of identifiers from the left. number is the order of a number to a text, and the longer list is higher.
+function byIds(a, b, number) {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const an = DIGITS.test(a[i]), bn = DIGITS.test(b[i]);
+    const d = an && bn ? byValue(a[i], b[i]) : an ? number : bn ? -number : byText(a[i], b[i]);
+    if (d) return d;
+  }
+  return a.length - b.length;
+}
+// byTails compares two tails part by part, at their dots: a part of digits is above a text.
+const byTails = (a, b) => byIds(a.split("."), b.split("."), 1);
+const versionParts = (numbers, count, form, tail, pre) => ({numbers, count, form, tail, pre});
+// shortVersion reads the one or two numbers at the start of a text and the tail after them, or gives null.
+function shortVersion(text) {
+  let rest = text.startsWith("v") ? text.slice(1) : text, count = 0;
+  const numbers = ["0", "0", "0"];
+  for (;;) {
+    const run = /^\d*/.exec(rest)[0];
+    if (!run || count === 3) return null;
+    numbers[count++] = run;
+    rest = rest.slice(run.length);
+    if (!/^\.\d/.test(rest)) break;
+    rest = rest.slice(1);
+  }
+  return versionParts(numbers, count, FORM.SHORT, rest.startsWith(".") ? rest.slice(1) : rest, []);
+}
+// readVersion gives the numbers, the form, the tail, and the pre-release of a version, or null for a text with no version.
 function readVersion(text) {
   const m = SEMVER.exec(text);
   if (m) {
     const n = m[1].split(".");
-    return {numbers: [n[0], n[1] || "0", n[2] || "0"], pre: m[2] ? m[2].split(".") : [], tail: TAIL.NONE, text};
+    return versionParts([n[0], n[1] || "0", n[2] || "0"], n.length, FORM.PARSED, "", m[2] ? m[2].split(".") : []);
   }
-  const t = /(\d+)\.(\d+)\.(\d+)/.exec(text);
-  if (!t) return null;
-  const head = text.slice(0, t.index), rest = text.slice(t.index + t[0].length);
-  const numbersOnly = rest.startsWith(".") && rest.slice(1).split(".").every(p => DIGITS.test(p));
-  return {numbers: [t[1], t[2], t[3]], pre: [], tail: (head === "" || head === "v") && numbersOnly ? TAIL.NUMBERS : TAIL.TEXT, text};
+  const t = /\d+\.\d+\.\d+/.exec(text);
+  if (!t) return shortVersion(text);
+  const numbers = t[0].split("."), head = text.slice(0, t.index), rest = text.slice(t.index + t[0].length);
+  if (head !== "" && head !== "v") return versionParts(numbers, 3, FORM.BEFORE, text, []);
+  if (!rest.startsWith(".") || !DIGITS.test(rest.slice(1).split(/[.+-]/)[0])) {
+    return versionParts(numbers, 3, FORM.TEXT, rest.startsWith(".") ? rest.slice(1) : rest, []);
+  }
+  // a fourth number: build data after "+", and a pre-release after the first "-"
+  const more = rest.slice(1).split("+")[0], dash = more.indexOf("-");
+  return dash < 0 ? versionParts(numbers, 3, FORM.MORE, more, []) : versionParts(numbers, 3, FORM.MORE, more.slice(0, dash), more.slice(dash + 1).split("."));
 }
-// byPre compares two pre-releases by their identifiers from the left: a number is below a text, and the longer list is higher.
-function byPre(p, q) {
-  for (let i = 0; i < Math.min(p.length, q.length); i++) {
-    const pn = DIGITS.test(p[i]), qn = DIGITS.test(q[i]);
-    const d = pn && qn ? byValue(p[i], q[i]) : pn !== qn ? (pn ? -1 : 1) : byText(p[i], q[i]);
-    if (d) return d;
+// byForm orders two versions of one form, after their numbers.
+function byForm(x, y) {
+  switch (x.form) {
+    case FORM.BEFORE: return byRuns(x.tail, y.tail);
+    case FORM.SHORT: return x.count - y.count || byTails(x.tail, y.tail);
+    case FORM.TEXT: return byTails(x.tail, y.tail);
+    case FORM.PARSED: return (x.pre.length === 0) - (y.pre.length === 0);
+    default: return byTails(x.tail, y.tail) || (y.pre.length === 0) - (x.pre.length === 0);
   }
-  return p.length - q.length;
 }
 function versionCmp(a, b) {
   const s = String(a), t = String(b), x = readVersion(s), y = readVersion(t);
-  if (!x || !y) return x ? (t === "" ? 1 : -1) : y ? (s === "" ? -1 : 1) : byRuns(s, t);
+  if (!x || !y) return x ? 1 : y ? -1 : byRuns(s, t);
   for (let i = 0; i < 3; i++) { const d = byValue(x.numbers[i], y.numbers[i]); if (d) return d; }
-  if (!x.pre.length !== !y.pre.length) return x.pre.length ? -1 : 1;
-  return byPre(x.pre, y.pre) || x.tail - y.tail || (x.tail === TAIL.NONE ? 0 : byRuns(s, t));
+  return x.form - y.form || byForm(x, y) || byIds(x.pre, y.pre, -1);
 }
 const ORDERS = {num: (a, b) => a - b, text: natural, version: versionCmp};
 const rank = list => v => { const i = list.indexOf(v); return i < 0 ? list.length : i; };

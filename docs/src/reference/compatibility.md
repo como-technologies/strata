@@ -1096,8 +1096,8 @@ field, a value, an input, or an option is in the sections above.
     table. A script that reads the text must read the new lines, or read `--json`.
   - `behind` sends one more request for each profile version, and one for the newest version
     of each profile version that is behind. With `--pin`, it sends none of them.
-- **The observer: a profile with a newer published version has the status `newer`.** Before,
-  only a pack with a newer version gave it, and such a profile was `ok`. Its row holds the new
+- **The observer gives the status `newer` to a profile with a newer version.** Before, such
+  a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
   [Run it once](../automation/observer.md#run-it-once).
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty

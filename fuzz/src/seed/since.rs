@@ -16,8 +16,8 @@ const OBSERVER_REPORTS: [&str; 2] = [
     "observer/internal/docs/testdata/ask-behind.json",
 ];
 
-/// The report of the run of the target with `since` as `--since`. Each path of the record, under a
-/// pin and under a profile version, is the name of its file, so that the seed is the same on each
+/// The report of the run of the target with `since` as `--since`. Each path of the record is the
+/// name of its file, under a pin and under a profile version. So the seed is the same on each
 /// machine. The report names [`SEED_VERSION`](super::SEED_VERSION), so that it is the same in each
 /// release.
 fn report(since: Option<BehindReport>) -> BehindReport {

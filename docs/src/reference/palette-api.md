@@ -134,7 +134,7 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 A command reads the project listing of a scope one time. A record, a resolve
 with its validate, and `behind` read each registry listing of a scope one time.
 `verify` of many pack records reads the registry listings again for each record.
-`behind` connects one time for each project of its pins and its profile versions, and
+`behind` connects one time for each project of its pins and its profile versions. It
 keeps the registry listings of that project for all its pins.
 
 Palette serves `/v1/packs` 100 entries at a time. Strata raises `offset` by the

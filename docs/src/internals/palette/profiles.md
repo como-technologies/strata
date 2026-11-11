@@ -393,7 +393,7 @@ the publish.
 No route and no status of a cluster says that a newer version of a profile
 exists. The document of a cluster names the version of each profile that it
 runs. The notifications of a cluster come from an edit of a version that the
-cluster runs, and from a change of a pack in its registry. A new version has a
+cluster runs, and from a change of a pack. A new version has a
 new uid that no cluster runs, so its publish notifies no cluster.
 
 The code of Palette shows these facts. The check `behind-profile-names` of

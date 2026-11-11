@@ -115,8 +115,9 @@ the time that Palette created it. `new` is true for a version of the last 7 days
 The page shows the two kinds of newer version with different words. The row of a
 profile says "Newer profile version `aws-stack@1.1.0`" for a newer version of the
 profile itself. A pack with a newer version shows the badge "Newer", and the move
-of the pack. For both, the status of the profile is `newer`, unless it is `drift`. The tile
-"Newer versions" counts the packs, and its last line counts the profiles with a
+of the pack. For both, the status of the profile is `newer`, unless it is `drift`.
+
+The tile "Newer versions" counts the packs, and its last line counts the profiles with a
 newer version, as `counts.newerProfileVersions`. The filter "Newer" of the
 profiles holds both kinds. A newer profile version gives the event
 `NewProfileVersion` at the time of its create. When strata cannot read the versions
