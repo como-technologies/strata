@@ -37,6 +37,7 @@ use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
 use table::{column_widths, matched, painted_text, table_line};
 
+mod behind;
 mod lines;
 mod table;
 
@@ -343,52 +344,7 @@ impl Renderer for TerminalRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let p = &self.paint;
-        let mut out = format!("{}\n", super::behind::behind_heading(r));
-        let name_w = r.pins.iter().map(|x| x.name.len()).max().unwrap_or(0);
-        let ver_w = r.pins.iter().map(|x| x.version.len()).max().unwrap_or(0);
-        let reg_w = r
-            .pins
-            .iter()
-            .map(|x| dash(&x.registry).len())
-            .max()
-            .unwrap_or(0);
-        for pin in &r.pins {
-            let status = super::behind::pin_status(pin);
-            let status = if pin.error.is_some() {
-                p.byellow(&status)
-            } else if pin.behind {
-                p.yellow(&status)
-            } else {
-                p.dim(&status)
-            };
-            out.push_str(&format!(
-                "{} [{:<5}] {}  {}  {}  {status}\n",
-                if pin.behind { "~" } else { " " },
-                pin.layer,
-                p.bold(&format!("{:<name_w$}", pin.name)),
-                format_args!("{:<ver_w$}", pin.version),
-                format_args!("{:<reg_w$}", dash(&pin.registry)),
-            ));
-            if let Some(listed) = super::behind::listed_since(pin) {
-                out.push_str(&format!("      {}\n", p.dim(&listed)));
-            }
-            if let Some(line) = super::behind::bump_line(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            for line in super::behind::palette_lines(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            if let Some(arrived) = super::behind::arrived_line(pin) {
-                out.push_str(&format!("      {}\n", p.cyan(&arrived)));
-            }
-            if let Some(msg) = entry_error(pin.error.as_ref()) {
-                out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
-            }
-            out.push_str(&pinned_by_lines(&pin.pinned_by, p));
-        }
-        out.push_str(&profile_lines(&r.profiles, p));
-        Ok(out)
+        Ok(behind::terminal_behind(r, &self.paint))
     }
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {
@@ -637,54 +593,6 @@ fn list_filters(out: &mut String, p: &Paint, filters: &[SavedFilter]) {
             _ => cell.to_string(),
         }));
     }
-}
-
-/// `pinned by <path> (<subject>)`, dim, under a pin or a profile version: one line for each
-/// record.
-fn pinned_by_lines(by: &[crate::ops::PinnedBy], p: &Paint) -> String {
-    by.iter()
-        .map(|b| {
-            format!(
-                "      {}\n",
-                p.dim(&format!("pinned by {} ({})", b.path, b.subject))
-            )
-        })
-        .collect()
-}
-
-/// The lines of the profile versions of `behind`, after the pins: one line for each version, in
-/// the form of the line of a pin. The scope takes the place of the registry.
-fn profile_lines(profiles: &[crate::ops::ProfilePin], p: &Paint) -> String {
-    let scope = |x: &crate::ops::ProfilePin| x.scope.map_or("-", |s| s.as_str());
-    let name_w = profiles.iter().map(|x| x.name.len()).max().unwrap_or(0);
-    let ver_w = profiles.iter().map(|x| x.version.len()).max().unwrap_or(0);
-    let scope_w = profiles.iter().map(|x| scope(x).len()).max().unwrap_or(0);
-    let mut out = String::new();
-    for x in profiles {
-        let status = super::behind::profile_status(x);
-        let status = if x.error.is_some() {
-            p.byellow(&status)
-        } else if x.behind {
-            p.yellow(&status)
-        } else {
-            p.dim(&status)
-        };
-        out.push_str(&format!(
-            "{} [profile] {}  {}  {}  {status}\n",
-            if x.behind { "~" } else { " " },
-            p.bold(&format!("{:<name_w$}", x.name)),
-            format_args!("{:<ver_w$}", x.version),
-            format_args!("{:<scope_w$}", scope(x)),
-        ));
-        if let Some(created) = super::behind::created_since(x) {
-            out.push_str(&format!("      {}\n", p.dim(&created)));
-        }
-        if let Some(msg) = entry_error(x.error.as_ref()) {
-            out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
-        }
-        out.push_str(&pinned_by_lines(&x.pinned_by, p));
-    }
-    out
 }
 
 #[cfg(test)]
