@@ -329,8 +329,9 @@ says what the text holds.
 
 After 0.32.2, `strata-chain/1` has the new value `renumber` of `pairs[].status`, and the new
 fields `allowRenumber`, `pairs[].renumbers`, and `pairs[].archivesNotCompared`. Strata writes
-them only with `same-release --allow renumber`, so a document without that option is as before.
-`strata-diff/1` has the new field `packs[].renumbered`. The ids stay.
+the fields only with `same-release --allow renumber`. Each document has the new key `renumber`
+in `legend.status`, because the legend names each status. `strata-diff/1` has the new field
+`packs[].renumbered`, and `legend.impact.none` has a new text. The ids stay.
 
 Four values change after 0.27.0 with no new id. A new id breaks each reader of the document
 for a case that is rare. [Release 0.28.0](#release-0280-changes-that-need-action) gives the
@@ -1173,8 +1174,7 @@ field, a value, an input, or an option is in the sections above.
 - `ops::PairStatus` has the new value `Renumber`. A `match` with no wildcard arm must name it.
 - `ops::Pair` has the new fields `renumbers` and `archives_not_compared`, `ops::Chain` has
   `allow_renumber`, and `diff::PackDiff` has `renumbered`. A struct literal must name them.
-  `diff::Renumber`, `reference::version::keeps_numbers`, and `reference::version::is_final_of`
-  are new.
+  `diff::Renumber` is new.
 
 ### For a user of the library of strata-preflight
 

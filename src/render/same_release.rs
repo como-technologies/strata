@@ -1,6 +1,8 @@
 //! The lines of `same-release`: the word and the detail of each pair, and the verdict of the
 //! chain.
 
+use std::collections::BTreeSet;
+
 use super::changes::status_word;
 use super::notes::{macros_changed_note, macros_not_compared_note, masked_sentence};
 use super::{count_of, short};
@@ -85,6 +87,7 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
 /// The facts are a move from a pre-release to its final version, and an archive that strata does
 /// not compare: see [`Pair::archives_not_compared`].
 pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
+    let not_compared: BTreeSet<&str> = p.archives_not_compared.iter().map(String::as_str).collect();
     p.renumbers
         .iter()
         .map(|r| {
@@ -92,7 +95,7 @@ pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
             if r.pre_release_to_final {
                 facts.push("pre-release to final");
             }
-            if p.archives_not_compared.contains(&r.key) {
+            if not_compared.contains(r.key.as_str()) {
                 facts.push("archive: not compared");
             }
             let line = format!("{}  {} -> {}", r.name, r.old, r.new);

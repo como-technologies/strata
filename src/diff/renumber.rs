@@ -23,8 +23,9 @@ pub struct Renumber {
     pub old: String,
     /// The version of side B.
     pub new: String,
-    /// True when `new` is the final version of the pre-release `old`, in Semantic Versioning: see
-    /// [`version::is_final_of`]. It states a fact, and it is no condition of the renumber.
+    /// True when `new` is the final version of the pre-release `old`, in Semantic Versioning. The
+    /// two have the same numbers, and only `old` has a pre-release. It states a fact, and it is no
+    /// condition of the renumber.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pre_release_to_final: bool,
 }
