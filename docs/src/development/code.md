@@ -212,9 +212,9 @@ ASD-STE100.
   pins the text of a schema id on purpose can stay, with a comment that says so.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
-  uses. `answer.rs`, `closed_set.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`,
-  `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that uses some of
-  the helpers allows `dead_code` on the include.
+  uses. `answer.rs`, `closed_set.rs`, `code_span.rs`, `git.rs`, `palette.rs`, `process.rs`,
+  `route.rs`, `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that
+  uses some of the helpers allows `dead_code` on the include.
 - A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
   `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new
   variant until the list holds a value of it. The tests of `error/` and of
@@ -224,6 +224,9 @@ ASD-STE100.
   `tests/common/table.rs`. `table_rows` gives the rows of a table, and `first_cells` gives its
   first column. `cells` gives the cells of one row, and keeps a `\|` in its cell. Do not split a
   row by hand.
+- A test or a check that reads the code spans of a text uses `tests/common/code_span.rs`.
+  `code_spans` gives the text of each code span, and `without_code` gives the text outside them.
+  Do not split a text at its backticks by hand.
 - A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
   does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
   the two give the same route.
