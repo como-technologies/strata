@@ -132,7 +132,7 @@ beside the binary:
 
 ```bash
 # from a release of strata, into .strata/ of your checkout
-bash install-strata.sh --version v0.32.2 --dir .strata --require-signature
+bash install-strata.sh --version v0.33.0 --dir .strata --require-signature
 ```
 
 The installer makes sure that the release workflow of strata signed `SHA256SUMS`,

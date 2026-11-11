@@ -29,7 +29,7 @@ repository = "https://github.com/como-technologies/strata"
 # `[lib]` and `[[bin]]` keep the name `strata`: Rust code names the crate `strata`, and a person
 # types the command `strata`.
 name = "strata-palette"
-version = "0.32.2"
+version = "0.33.0"
 edition = "2024"
 rust-version.workspace = true
 description = "Record, compare, and check Spectro Cloud Palette profile versions, the clusters and other objects that run them, and pack versions"

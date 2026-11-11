@@ -85,7 +85,7 @@ the wrong one. A dependency pins a release tag and names the package:
 
 ```toml
 [dependencies]
-strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.33.0", package = "strata-palette" }
 ```
 
 ## Use strata-preflight as a library
@@ -99,8 +99,8 @@ Give `strata-preflight` and `strata` the same git address and the same tag:
 
 ```toml
 [dependencies]
-strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
-strata-preflight = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.33.0", package = "strata-palette" }
+strata-preflight = { git = "https://github.com/como-technologies/strata.git", tag = "v0.33.0" }
 ```
 
 The package is `strata-preflight`, and Rust code names the crate

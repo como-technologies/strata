@@ -5,7 +5,7 @@
 
 # strata
 
-[![version](https://img.shields.io/badge/version-0.32.2-blue)](Cargo.toml)
+[![version](https://img.shields.io/badge/version-0.33.0-blue)](Cargo.toml)
 [![the book](https://github.com/como-technologies/strata/actions/workflows/ci.yml/badge.svg)](https://como-technologies.github.io/strata/)
 
 Record, compare, and check what Spectro Cloud Palette holds: cluster profile

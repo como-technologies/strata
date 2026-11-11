@@ -174,10 +174,10 @@ permissions:
   contents: read
 jobs:
   gate:
-    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.32.2
+    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.33.0
     with:
       records: releases/**/*.json
-      strata-version: v0.32.2
+      strata-version: v0.33.0
       base: main              # the default branch, for a merge queue run
     secrets:
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}  # for the verify check

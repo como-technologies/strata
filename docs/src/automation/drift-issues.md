@@ -117,10 +117,10 @@ permissions:
   issues: write
 jobs:
   strata:
-    uses: como-technologies/strata/.github/workflows/verify.yml@v0.32.2
+    uses: como-technologies/strata/.github/workflows/verify.yml@v0.33.0
     with:
       records: releases/**/*.json
-      strata-version: v0.32.2
+      strata-version: v0.33.0
     secrets:
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 ```
