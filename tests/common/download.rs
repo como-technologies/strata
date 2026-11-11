@@ -20,12 +20,29 @@
 //! pack archive is a tar archive that gzip compresses, with one top folder. For a pack of a pack
 //! registry, the folder has the name of the pack and the first 12 hex digits of its digest. For a
 //! pack of an OCI registry of packs, it has the name and the version of the pack.
+//!
+//! The archive of a chart of a Helm registry is the file that the registry serves, and its name
+//! ends in `.tgz`. The top folder has the name of the chart. `Chart.yaml` names the version, and
+//! the archive holds no `pack.json`. When the host of the chart refuses the file, the download
+//! holds the answer of the host in place of the chart: see [`CHART_HOST_REFUSAL`].
 
 use serde_json::{Value, json};
 
 // The file that includes this one names `PackType` of the crate. A test of the crate names it as
 // `crate::model::pack_type::PackType`, and each other package as `strata::model::...`.
 use super::PackType;
+
+/// The answer of a host of charts that refuses the file of a chart: an XML error of 263 bytes.
+///
+/// Palette puts the answer in the download in place of the chart, with the name of the chart, and
+/// the route answers HTTP 200. The live run of stage 4 of `export.sh` shows such an answer of 263
+/// bytes, with the code `AccessDenied`, for the chart `nginx` of the registry Bitnami. The ids of
+/// the request are examples.
+pub const CHART_HOST_REFUSAL: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+<Error><Code>AccessDenied</Code><Message>Access Denied</Message>\
+<RequestId>4V6Q3ZKX8T2M9R1B</RequestId>\
+<HostId>Zx8Kq2mV7bT0nR4wC9yL1pF6hS3gD5jA0uE8iO2vB7mK1xX5wQ9rT4yU6aN0pZ3sD8fG2hJ7kL1cV5bN9mQ4wE6rTyUoI8a=</HostId>\
+</Error>";
 
 /// One pack of a download.
 pub struct DownloadPack<'a> {
@@ -37,8 +54,8 @@ pub struct DownloadPack<'a> {
     pub kind: PackType,
     /// True for a pack of a private registry.
     pub private: bool,
-    /// The bytes of the archive of the pack, from [`pack_archive`]. None when the download holds
-    /// no archive of the pack: its list entry has an empty `filePath`.
+    /// The bytes of the file of the pack, such as the archive from [`pack_archive`]. None when the
+    /// download holds no file of the pack: its list entry has an empty `filePath`.
     pub archive: Option<Vec<u8>>,
     /// The name and the content of each manifest of the pack.
     pub manifests: &'a [(&'a str, &'a str)],
@@ -82,6 +99,23 @@ pub fn pack_archive(
             .map(|(path, content)| (format!("{top}/{path}"), content.as_bytes().to_vec())),
     );
     tgz(&entries)
+}
+
+/// The archive of the chart `name`, as a Helm registry serves it: each of `files` under the top
+/// folder `name`, and no `pack.json`. Give it `Chart.yaml` from [`chart_file`].
+pub fn chart_archive(name: &str, files: &[(&str, &str)]) -> Vec<u8> {
+    let entries: Vec<(String, Vec<u8>)> = files
+        .iter()
+        .map(|(path, content)| (format!("{name}/{path}"), content.as_bytes().to_vec()))
+        .collect();
+    tgz(&entries)
+}
+
+/// The `Chart.yaml` of the chart `name` at `version`. `app_version` is the version of the app that
+/// the chart installs, when the chart names one.
+pub fn chart_file(name: &str, version: &str, app_version: Option<&str>) -> String {
+    let app = app_version.map_or(String::new(), |app| format!("appVersion: {app}\n"));
+    format!("apiVersion: v2\n{app}name: {name}\ntype: application\nversion: {version}\n")
 }
 
 /// The path of the archive of `pack` from the folder of the list of the packs, as Palette names it.
@@ -171,11 +205,14 @@ pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8
     tgz(&files)
 }
 
-/// The top folder of the archive of the pack `name` with the digest `digest`, as a pack registry
-/// names it. It holds the name and the first 12 hex digits of the digest. A pack with no digest
-/// gets 12 zeros. An OCI registry of packs names the folder by the name and the version of the
-/// pack.
-pub fn pack_top(name: &str, digest: &str) -> String {
+/// The top folder of the archive of the pack `name` of the type `kind`, at `version` and with the
+/// digest `digest`, as Palette names it. For a pack of a pack registry, it holds the name and the
+/// first 12 hex digits of the digest. A pack with no digest gets 12 zeros. For a pack of an OCI
+/// registry of packs, it holds the name and the version.
+pub fn archive_top(kind: PackType, name: &str, version: &str, digest: &str) -> String {
+    if kind == PackType::Oci {
+        return format!("{name}-{version}");
+    }
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
     let short: String = hex.chars().chain(std::iter::repeat('0')).take(12).collect();
     format!("{name}-{short}")

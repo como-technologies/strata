@@ -89,8 +89,8 @@ for the rule `pack-cloud-support`.
 
 `strata preflight cluster:UID` turns the cluster into the body of a create.
 Each profile of that body holds the variables of the cluster: the `name` of each
-variable and the `value` that the cluster gives it. `--out` writes the body to
-`entity.json`:
+variable and the `value` that the cluster gives it. `--out` with `--world`
+writes the body to `entity.json`:
 
 ```text
 {{#include ../../output/preflight-cluster-variables.txt}}

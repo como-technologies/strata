@@ -105,12 +105,21 @@ fn loop_publish(r: &mut Runner) {
         "strata same-release candidate.json releases/1.1.0/dev.json",
     );
     r.quiet("git add releases && git commit -qm \"record aws-stack@1.1.0 in dev\"");
-    // the release that the clusters run has a newer published version now (#707)
+    // the release that the clusters run has a newer published version now (#707), and the line
+    // under it says what the move to it does (#708)
     r.step(
         "loop-behind-profile",
         1,
         false,
-        "strata behind releases/1.0.0/dev.json --no-impact | grep -A1 '\\[profile\\]'",
+        "strata behind releases/1.0.0/dev.json | grep -A2 '\\[profile\\]'",
+    );
+    // each pin of the release that is behind names the newer profile version that carries a newer
+    // version of its pack (#709)
+    r.step(
+        "loop-behind-carrier",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact | grep -E '^~ \\[[a-z]|carries|no newer version'",
     );
     // before dev moves payments, the pipeline asks Palette about the move
     r.step(

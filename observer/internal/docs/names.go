@@ -76,6 +76,17 @@ func (p Pack) Flags() []string {
 	return out
 }
 
+// Flags lists each flag that a pack of the diff carries, in the order that strata uses. These are the
+// flags of the move of a profile, as `behind` names them.
+func (d Diff) Flags() []string {
+	var all Pack
+	for _, p := range d.Packs {
+		all.Identity, all.Upstream, all.Authored = all.Identity || p.Identity, all.Upstream || p.Upstream, all.Authored || p.Authored
+		all.Images, all.Charts = all.Images || p.Images, all.Charts || p.Charts
+	}
+	return all.Flags()
+}
+
 // PackHelm is the type of a pack that holds a Helm chart.
 const PackHelm = "helm"
 

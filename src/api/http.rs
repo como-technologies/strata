@@ -150,8 +150,16 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
     header.and_then(|h| h.trim().parse().ok())
 }
 
+// The routes and the answers of Palette that the tests of strata serve, in the file that they use.
+// A unit test here uses the refusal of a download, so the other items are dead code here.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../tests/common/palette.rs"]
+mod routes;
+
 #[cfg(test)]
 mod tests {
+    use super::routes::DOWNLOAD_LIMIT_REFUSAL;
     use super::*;
     use crate::api::download_path;
 
@@ -196,15 +204,12 @@ mod tests {
 
     #[test]
     fn a_file_that_palette_refuses_carries_its_status_and_body() {
-        let (url, _) = serve_bytes(
-            "429 Too Many Requests",
-            br#"{"code":"TooManyRequests","message":"only 1 request in 10 seconds is allowed"}"#,
-        );
+        let (url, _) = serve_bytes("429 Too Many Requests", DOWNLOAD_LIMIT_REFUSAL.as_bytes());
         let api = HttpApi::new(Config::new(url, "k"));
         match api.get_file(&download_path("u1")) {
             Err(Error::Api { status, body, .. }) => {
                 assert_eq!(status, 429);
-                assert!(body.contains("TooManyRequests"), "{body}");
+                assert_eq!(body, DOWNLOAD_LIMIT_REFUSAL);
             }
             other => panic!("{other:?}"),
         }

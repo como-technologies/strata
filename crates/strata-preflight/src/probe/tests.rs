@@ -1078,3 +1078,42 @@ fn a_fixture_gives_the_outputs_that_it_answers_a_command_with() {
     let (b, _) = fixture(json!({"_exec": {"aws x": {"exit": 0, "stdout": {}}}}));
     assert!(b.outputs().is_empty());
 }
+
+/// The message of an HTTP error shows the start of the body of the answer. The mask of the report
+/// cannot find a value that the cut divides. So the check puts the mask over the body before the
+/// cut, and the cut leaves no part of a value. The value comes at each place of the body in turn,
+/// so the cut falls in it at one place (#614).
+#[test]
+fn the_cut_of_the_body_of_an_error_leaves_no_part_of_a_value_of_a_variable() {
+    const VALUE: &str = "10.244.0.0/16";
+    let jq = Jq::new();
+    let world = json!({"cloud": "aws", "entity": {"spec": {"profiles": [
+        {"uid": "p1", "variables": [{"name": "pod_cidr", "value": VALUE}]}]}}});
+    let r = rule(Check::Palette(PaletteCheck {
+        method: Method::Get,
+        path: "/v1/x".into(),
+        body: None,
+        each: None,
+        refusal_codes: Vec::new(),
+        saves: None,
+        expr: "[]".into(),
+    }));
+    let mut cut_in_the_mark = 0;
+    for pad in 0..400 {
+        let message = format!("{} '{VALUE}'", "a".repeat(pad));
+        let body = json!({"code": "K8SCidrOverlap", "message": message}).to_string();
+        let api = strata::api::MemoryApi::new().failing("/v1/x", 500, body);
+        let out = run_check(&r, &world, &LiveBackend::new(Some(&api), false), &jq);
+        assert_eq!(out.verdict, Verdict::Error, "{pad}");
+        // the report puts the mask over each message again
+        let text = crate::mask::Mask::of(&world).apply(&out.messages[0]);
+        assert!(!text.contains("10.2"), "{pad}: {text}");
+        if text.contains("[value") && !text.contains("[value of pod_cidr]") {
+            cut_in_the_mark += 1;
+        }
+    }
+    assert!(
+        cut_in_the_mark > 0,
+        "the cut falls in the mark at one place"
+    );
+}

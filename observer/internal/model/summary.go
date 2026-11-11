@@ -150,11 +150,34 @@ type Profile struct {
 }
 
 // NewerVersion is the newest published version of a profile. Created is the time of its create in
-// Palette, and New says that it is in the last 7 days.
+// Palette, and New says that it is in the last 7 days. Move is what a move from the record to this
+// version changes. It is absent when the compare failed, and Unread then says so.
 type NewerVersion struct {
-	Version string `json:"version"`
-	Created string `json:"created"`
-	New     bool   `json:"new"`
+	Version string       `json:"version"`
+	Created string       `json:"created"`
+	New     bool         `json:"new"`
+	Move    *ProfileMove `json:"move,omitempty"`
+	Unread  bool         `json:"unread,omitempty"`
+}
+
+// ProfileMove is what the observer keeps of the compare of a record and the newest version of its
+// profile: the impact level, each flag of its packs, and each pack that changes. It holds no value.
+type ProfileMove struct {
+	Impact string     `json:"impact"`
+	Flags  []string   `json:"flags"`
+	Packs  []MovePack `json:"packs"`
+}
+
+// MovePack is one pack that the move of a profile changes, adds, or removes. From is absent for a
+// pack that the move adds, and To for a pack that it removes. ValuesChanged says that the values of
+// the pack differ.
+type MovePack struct {
+	Key           string   `json:"key"`
+	Status        string   `json:"status"`
+	From          string   `json:"from,omitempty"`
+	To            string   `json:"to,omitempty"`
+	Flags         []string `json:"flags"`
+	ValuesChanged bool     `json:"valuesChanged"`
 }
 
 // Published is the answer of `verify` for the record.
@@ -183,8 +206,21 @@ type Pack struct {
 	UpstreamSource string   `json:"upstreamSource"`
 	Images         int      `json:"images"`
 	Newer          string   `json:"newer,omitempty"`
+	Carried        *Carried `json:"carried,omitempty"`
 	Flags          []string `json:"flags"`
 	Fold           *Fold    `json:"fold,omitempty"`
+}
+
+// Carried says which newer version of a profile carries a newer version of a pack that is behind.
+// Profile is the profile version that pins the pack, name@version. Version is the newest newer
+// version of that profile that pins a newer version of the pack, and Pack is that version of the
+// pack. Version is empty when no newer version of the profile does. Unread says that strata could not
+// read a newer version.
+type Carried struct {
+	Profile string `json:"profile"`
+	Version string `json:"version,omitempty"`
+	Pack    string `json:"pack,omitempty"`
+	Unread  bool   `json:"unread,omitempty"`
 }
 
 // Move is what the observer keeps of the comparison of a pinned version and the newest version. The
@@ -215,6 +251,9 @@ type Newer struct {
 	// Steps lists each newer version that the registry gives, from the oldest to the newest, with the
 	// time that the registry listed it. The page draws them as a timeline of the pack.
 	Steps []Step `json:"steps,omitempty"`
+	// Carriers names, for each profile of Profiles that has a newer version, the newer version that
+	// carries a newer version of the pack.
+	Carriers []Carried `json:"carriers,omitempty"`
 	Move
 }
 

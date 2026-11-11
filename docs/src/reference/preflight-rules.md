@@ -98,8 +98,10 @@ and its line says so. The rules of a line:
   that says what Palette saves, and the line that the report adds for the check
   ends with the same comment. See
   [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
-- A line writes no file outside the current directory. The lines that the report
-  adds for a check write `request.json` and `body.json` there.
+- A line writes no file outside the current directory and the folder of
+  `world.json`. The lines that the report adds for a check write `request.json`
+  and `body.json` into that folder, beside the values of the variables. See
+  [The report on disk](../commands/preflight/report.md#the-report-on-disk).
 - A line makes no login to a registry or a cloud. A login writes the credentials
   to a file in the home directory.
 - A line names no path of the live example, `examples/live`. No machine outside
@@ -283,6 +285,15 @@ answers HTTP 500 with the first code for a key pair that the region does not hol
 HTTP 500 with the second code for a Pod Identity account. A live run shows the first answer. No
 live run shows the second answer. Without the codes, the rule was `ERROR` for these faults, and
 never `FAILED`.
+
+A check of `POST /v1/spectroclusters/{cloudType}/validate` names no `refusal_codes`. The library
+lists the codes of the refusals of that route, and the check reads a 5xx with one of them as an
+answer. See
+[Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+The codes are `ClusterProfilesNotSupported`, `InvalidDropDownVariable`, `InvalidVariable`,
+`K8SCidrOverlap`, `CidrParseError`, and `RequiredParam`. `palette-validate` gives each such refusal
+the verdict `FAILED`, with the message of Palette. Before release 0.33.0, a 500 with one of the
+last five codes was `ERROR`.
 
 The backend keeps the answer of a request for the run. A rule that does not name the code
 reads the same 500 as an error. A fixture follows the same rule for each status
@@ -477,9 +488,11 @@ world is an `input` error. The name must not replace that value. A world with no
 A record is a `strata-snapshot/1` document: `source.{uid, name, version,
 cloudType}` and `packs[].{layer, name, version, tag, packUid, registryUid,
 values, valuesCanon, hash}`. `valuesCanon` is the values YAML as JSON, so a
-program reads a value of a pack with a path. The world never holds a secret:
-the fields of a cloud account that hold one are `<redacted>`. `--out` writes
-the world as `world.json`.
+program reads a value of a pack with a path. The fields of a cloud account that
+hold a secret are `<redacted>`. The entity of the world holds the value of each
+variable as the source gives it, and that value can be a secret. `--world`
+writes the world as `world.json`: see
+[The report on disk](../commands/preflight/report.md#the-report-on-disk).
 
 ## Fixtures
 

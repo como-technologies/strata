@@ -1,0 +1,4 @@
+$ STRATA_PREFLIGHT_SOURCE=cluster:64f1000000000000000000e1 STRATA_PREFLIGHT_TIER=static STRATA_PREFLIGHT_OUT=job scripts/ci/preflight.sh > /dev/null; grep -c team-payments job/*
+job/report.html:0
+job/report.json:0
+job/report.md:0

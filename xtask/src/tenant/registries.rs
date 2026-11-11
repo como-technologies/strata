@@ -22,6 +22,11 @@ pub(super) const OCI_CSI_PACK: &str = "64ec000000000000000000b1";
 pub(super) const PRIVATE_CHARTS: &str = "64ed000000000000000000a1";
 /// The chart that a profile pins from it.
 pub(super) const CHART: &str = "podinfo";
+/// The uid of the public Helm registry Bitnami, which Palette syncs. The host of its charts refuses
+/// the file of a chart: the live run of stage 4 of `export.sh` shows it for `nginx` 25.1.5.
+pub(crate) const BITNAMI: &str = "64ee000000000000000000a1";
+/// The chart that a profile pins from Bitnami.
+pub(super) const BITNAMI_CHART: &str = "nginx";
 pub(super) const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
@@ -63,6 +68,24 @@ pub(super) fn listed_version(listing: &Value, name: &str, registry: &str, versio
 /// `registry`.
 fn is_listed(item: &Value, registry: &str, version: &str) -> bool {
     item["spec"]["version"] == version && item["spec"]["registryUid"] == registry
+}
+
+/// One chart that an add-on profile pins, as [`Tenant::publish_chart`] writes it.
+struct ChartPin<'a> {
+    /// The name of the profile.
+    profile: &'a str,
+    /// The version of the profile.
+    version: &'a str,
+    /// The name of the chart.
+    chart: &'a str,
+    /// The version of the chart, also its tag.
+    chart_version: &'a str,
+    /// The uid of the pack of the chart version.
+    pack: &'a str,
+    /// The uid of the registry of the chart.
+    registry: &'a str,
+    /// The digest of the chart version. Empty for a registry that Palette does not sync.
+    digest: &'a str,
 }
 
 /// The last sync of a registry, in the summary listing of its kind.
@@ -112,32 +135,16 @@ impl Tenant {
     /// [`Tenant::private_charts`] at `version`. Palette makes the pack at the create, with the uid
     /// `pack`, the layer addon, the tag as the version, and no digest. The listing then has it.
     pub fn chart_profile(&self, project: &str, uid: &str, pack: &str, version: &str) {
-        let values = "replicaCount: 2\n";
-        self.write(
-            project,
-            &profile_route(uid),
-            &json!({
-                "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": "charts-probe", "uid": uid},
-                "spec": {"version": "1.0.0", "published": {"cloudType": "all", "type": "add-on",
-                    "packs": [{"name": CHART, "layer": "addon", "type": "helm", "tag": version,
-                        "version": version, "packUid": pack, "registryUid": PRIVATE_CHARTS,
-                        "values": values, "presets": [], "schema": []}]}},
-                "status": {"isPublished": true, "inUseClusterUids": [], "inUseClusters": []}
-            }),
-        );
-        self.write(
-            project,
-            &manifests_route(uid),
-            &json!({
-                "metadata": {"name": "charts-probe", "uid": uid},
-                "spec": {"packs": [{"metadata": {"name": CHART, "uid": pack},
-                    "spec": {"name": CHART, "layer": "addon", "version": version,
-                        "registryUid": PRIVATE_CHARTS, "digest": "", "manifests": []},
-                    "status": {}}]}
-            }),
-        );
-        self.write(project, &variables_route(uid), &json!({"variables": []}));
+        let pin = ChartPin {
+            profile: "charts-probe",
+            version: "1.0.0",
+            chart: CHART,
+            chart_version: version,
+            pack,
+            registry: PRIVATE_CHARTS,
+            digest: "",
+        };
+        self.publish_chart(project, uid, &pin);
         let made = json!({"metadata": {"uid": pack, "name": CHART},
             "spec": {"name": CHART, "version": version, "registryUid": PRIVATE_CHARTS,
                 "layer": "addon", "type": "helm", "digest": ""}});
@@ -154,6 +161,93 @@ impl Tenant {
                 "packValues": [{"packUid": pack, "values": ""}]}),
         );
         self.listings();
+    }
+
+    /// The public Helm registry `Bitnami`, with the chart [`BITNAMI_CHART`] at each of `versions`.
+    ///
+    /// Palette syncs the registry, so the pack listing holds each version, with a uid and a digest
+    /// of its own: see [`made_version`]. The host of its charts refuses the file of each chart, so
+    /// a download holds the answer of the host: see `palette/download.rs`.
+    pub fn bitnami(&self, project: &str, versions: &[&str]) {
+        let path = REGISTRY_LISTING;
+        let mut listing = self.read(project, path);
+        if let Some(items) = listing["items"].as_array_mut() {
+            items.push(json!({"name": "Bitnami", "uid": BITNAMI, "kind": "helm",
+                "isPrivate": false}));
+        }
+        self.write(project, path, &listing);
+        let items: Vec<Value> = versions
+            .iter()
+            .map(|version| {
+                let mut item = made_version(BITNAMI_CHART, BITNAMI, version);
+                item["metadata"]["name"] = json!(BITNAMI_CHART);
+                item["spec"]["layer"] = json!("addon");
+                item["spec"]["type"] = json!("helm");
+                item
+            })
+            .collect();
+        let count = items.len();
+        self.write(
+            project,
+            &pack_listing(BITNAMI_CHART),
+            &json!({"items": items, "listmeta": {"count": count}}),
+        );
+    }
+
+    /// Create and publish the add-on profile `web-addons` at `version`, with the uid `uid`. It pins
+    /// the chart of [`Tenant::bitnami`] at `chart_version`, with the uid and the digest of the
+    /// listing.
+    pub fn bitnami_profile(&self, project: &str, uid: &str, version: &str, chart_version: &str) {
+        let listing = self.listing_of(project, BITNAMI_CHART);
+        let item = listed_version(&listing, BITNAMI_CHART, BITNAMI, chart_version);
+        let text = |pointer: &str| item.pointer(pointer).and_then(Value::as_str).unwrap_or("");
+        let pin = ChartPin {
+            profile: "web-addons",
+            version,
+            chart: BITNAMI_CHART,
+            chart_version,
+            pack: text("/metadata/uid"),
+            registry: BITNAMI,
+            digest: text("/spec/digest"),
+        };
+        self.publish_chart(project, uid, &pin);
+        self.listings();
+    }
+
+    /// Publish the add-on profile `uid` that pins the one chart `pin`: the profile, the summary of
+    /// its packs, and its variables. The pin has the layer addon, the tag as the version, and one
+    /// value.
+    fn publish_chart(&self, project: &str, uid: &str, pin: &ChartPin) {
+        let values = "replicaCount: 2\n";
+        let mut pack = json!({"name": pin.chart, "layer": "addon", "type": "helm",
+            "tag": pin.chart_version, "version": pin.chart_version, "packUid": pin.pack,
+            "registryUid": pin.registry, "values": values, "presets": [], "schema": []});
+        if !pin.digest.is_empty() {
+            pack["digest"] = json!(pin.digest);
+        }
+        self.write(
+            project,
+            &profile_route(uid),
+            &json!({
+                "apiVersion": "v1", "kind": "ClusterProfile",
+                "metadata": {"name": pin.profile, "uid": uid},
+                "spec": {"version": pin.version, "published": {"cloudType": "all",
+                    "type": "add-on", "packs": [pack]}},
+                "status": {"isPublished": true, "inUseClusterUids": [], "inUseClusters": []}
+            }),
+        );
+        self.write(
+            project,
+            &manifests_route(uid),
+            &json!({
+                "metadata": {"name": pin.profile, "uid": uid},
+                "spec": {"packs": [{"metadata": {"name": pin.chart, "uid": pin.pack},
+                    "spec": {"name": pin.chart, "layer": "addon", "version": pin.chart_version,
+                        "registryUid": pin.registry, "digest": pin.digest, "manifests": []},
+                    "status": {}}]}
+            }),
+        );
+        self.write(project, &variables_route(uid), &json!({"variables": []}));
     }
 
     /// The Public Repo registry and the versions of each pack in `examples/packs/`, as the

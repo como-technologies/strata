@@ -225,7 +225,7 @@ if [ "$from" = 7 ] && stage 7 "an override on a machine pool of cluster A"; then
   # the entity of the pool in the form of the create body: strata-preflight splits the pool of the
   # cloud config into poolConfig and cloudConfig. Its exit follows the rules, so no check judges it.
   check pool-world ? "the create body of cluster A, from strata-preflight with the static tier" -- \
-    "$strata" preflight "cluster:$C" --tier static --quiet --no-color --out pool-world
+    "$strata" preflight "cluster:$C" --tier static --quiet --no-color --out pool-world --world
   check pool-entity 0 "the entity of the worker pool: poolConfig and cloudConfig" -- \
     jq -e '.spec.machinepoolconfig[] | select(.poolConfig.name == "worker-pool")' pool-world/entity.json
   check pool-body 0 "the entity with both overrides in its poolConfig" -- \

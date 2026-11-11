@@ -1210,6 +1210,14 @@ fn the_schema_of_each_other_document_points_each_closed_set_field_at_the_definit
         "#/$defs/ImpactLevel"
     );
     assert_eq!(
+        open_set_ref(&v["$defs"]["BumpPack"]["properties"]["status"]),
+        "#/$defs/Status"
+    );
+    assert_eq!(
+        open_set_ref(&v["$defs"]["BumpPack"]["properties"]["flags"]["items"]),
+        "#/$defs/ChangeFlag"
+    );
+    assert_eq!(
         open_set_ref(&v["$defs"]["Pin"]["properties"]["pinnedState"]["anyOf"][0]),
         "#/$defs/PackState"
     );

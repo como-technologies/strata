@@ -27,7 +27,7 @@ The checks, in order:
    override, and for each pool a size over 0, min and max that agree, and a
    size inside them. For a GKE worker pool, a size that is not a multiple of 3
    is refused here, as a 400 `InvalidParam` "Node pool size should be multiple
-   of 3".
+   of 3". For AWS with a `vpcId`, each pool names a subnet: see below.
 2. The name: valid, and not in use. The cluster limit of the tenant: a trial
    tenant has a limit on its active clusters, and the route refuses a create
    over it with `FreemiumActiveClusterLimitExceeded`. The limit holds for a
@@ -68,6 +68,33 @@ the cloud type `all` fits each cloud. Strata does not send this refusal again.
 `failed` and the message of Palette: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
 
+A live run shows one more refusal with HTTP `500`: an AWS body with a `vpcId`
+and a machine pool with no subnet. The code is `RequiredParam`, and the message
+is `Parameter 'Subnets' is required`. The route gives it before the check of
+the CIDRs. The code of Palette shows that the route gives `RequiredParam` for no
+other cause. Strata does not send this refusal again. `palette-validate` reads
+it as the answer of the route, with the verdict `failed` and the message of
+Palette.
+
+The route also refuses the whole entity with HTTP `500` and one of these codes.
+The code of Palette shows it; no live run shows it yet.
+
+- `InvalidDropDownVariable`: a value of a dropdown variable that is not the
+  label of an option.
+- `InvalidVariable`: a value that the format or the pattern of its variable
+  refuses, or a required variable with no value.
+- `K8SCidrOverlap`: for AWS with a VPC, a pod CIDR or a service CIDR that
+  overlaps the CIDR of the VPC.
+- `CidrParseError`: for AWS with a VPC, a pod CIDR or a service CIDR that is not
+  a CIDR.
+
+The check `cidr-overlap-status` of
+[`route-bodies.sh`](../../development/live-runs.md#route-bodiessh) asks the
+route about a pod CIDR that overlaps. Its body names a subnet for each pool, so
+that the route reaches the check of the CIDRs. Strata does not send these refusals
+again either. `palette-validate` reads each one as the answer of the route, with
+the verdict `failed` and the message of Palette.
+
 The same live run shows what the route does not check. It takes a body with an
 add-on profile that holds a pack version that does not list the cloud type, and
 `palette-validate` passes. Palette refuses such a pack at the create. So no
@@ -97,11 +124,29 @@ variable. Palette then puts each value into the values of the packs, for the
 checks of the cloud config. One such check compares the CIDRs of the Kubernetes
 pack with the CIDR of the VPC.
 
+When the schema of a variable does not take its value, the route answers HTTP
+`500` and `InvalidVariable`, or `InvalidDropDownVariable` for a dropdown
+variable. The code of Palette shows it; no live run shows it yet.
+
 A body with no `variables[]` gives the route no value to check. A value of a
 pack that reads `{{.spectro.var.NAME}}` then reaches the checks of the cloud
 config unresolved. Palette masks the value of a sensitive variable in its
 answer. See [A cluster as Palette holds it](../../commands/preflight/tiers.md#a-cluster-as-palette-holds-it)
 for the variables that `strata preflight cluster:UID` sends.
+
+Some refusals quote a value after Palette puts it in place:
+
+- `K8SCidrOverlap` quotes the CIDR of the Kubernetes pack that overlaps the
+  VPC: `Kubernetes <field> '<CIDR>' is overlapping with vpc '<VPC>' cidr block
+  '<CIDR of the VPC>'`.
+- `CidrParseError` quotes a value that is not a CIDR two times:
+  `CIDR '<value> parse error; caused by: invalid CIDR address: <value>`.
+- `InvalidDropDownVariable` quotes a label that is not an option of a dropdown
+  variable: `... is invalid: label '<value>' is not a valid option`.
+
+When the text comes from a variable, the refusal holds the value of the
+variable. So the report of `strata preflight` writes a mark in place of each
+value: see [The values in a message](../../commands/preflight/report.md#the-values-in-a-message).
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 

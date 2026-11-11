@@ -2,6 +2,7 @@ package check
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -245,5 +246,43 @@ func TestMergeBehindKeepsOneProfileVersionForEachSubjectWithEachRecordThatHoldsI
 	}
 	if got[0].Error != nil || !got[0].Behind || len(got[0].PinnedBy) != 1 {
 		t.Errorf("the read with no error takes the place of the one that failed: %+v", got[0])
+	}
+}
+
+// Each answer of `behind` on one record names the carriers of the profile versions of that record (#709). The merge keeps the
+// carriers of each answer, one for each profile version, also when a later answer reads the pin again. A carrier with no error
+// takes the place of one that failed, and the pin keeps it when its own read takes the place of a read that failed.
+func TestMergeBehindKeepsTheCarriersOfEachAnswer(t *testing.T) {
+	failed := &docs.Error{Kind: docs.KindAPI, Status: 500}
+	carrier := func(profile, version, carries string, err *docs.Error) docs.PinCarrier {
+		c := docs.PinCarrier{Profile: profile, Version: version, Error: err}
+		if carries != "" {
+			c.Carrier = &docs.Carrier{Version: carries, PackVersion: "0.2.0"}
+		}
+		return c
+	}
+	pin := func(by string, err *docs.Error, carriers ...docs.PinCarrier) docs.Pin {
+		return docs.Pin{Name: "fred-compositions", RegistryUID: "reg1", Version: "0.1.0", PinnedBy: []docs.PinnedBy{{Subject: by}},
+			Behind: err == nil, Error: err, Carriers: carriers}
+	}
+	answers := []docs.Behind{
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.1", failed, carrier("barney-addons", "1.3.1", "", failed))}},
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.0", nil, carrier("barney-addons", "1.3.0", "", nil))}},
+		{Schema: docs.BehindSchema, Pins: []docs.Pin{pin("barney-addons@1.3.1", nil, carrier("barney-addons", "1.3.1", "1.4.0", nil))}},
+	}
+	got := mergeBehind(answers).Pins
+	if len(got) != 1 || got[0].Error != nil {
+		t.Fatalf("%+v", got)
+	}
+	var named []string
+	for _, c := range got[0].Carriers {
+		by := "none"
+		if c.Carrier != nil {
+			by = c.Carrier.Version
+		}
+		named = append(named, fmt.Sprintf("%s@%s:%s:%v", c.Profile, c.Version, by, c.Error != nil))
+	}
+	if want := []string{"barney-addons@1.3.1:1.4.0:false", "barney-addons@1.3.0:none:false"}; !slices.Equal(named, want) {
+		t.Errorf("carriers %v, want %v", named, want)
 	}
 }

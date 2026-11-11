@@ -506,12 +506,20 @@ of the secret does not show, because the two sides hold the mask: see
     reason lists its renumbers too. See
     [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
   - `archivesCompared`, only when it is not empty: the key of each pack of
-    `renumbers[]` whose two archives strata compared. They hold the same files,
-    and `pack.json` differs only by its `version`. See
+    `renumbers[]` whose two archives strata compared. They hold the same files.
+    `pack.json` differs only by its `version`, or the `Chart.yaml` of a Helm
+    chart only by its line `version`. See
     [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
   - `archivesChanged[]`, only when it is not empty: each pack of `renumbers[]`
     whose two archives differ in another file, with `key` and `files[]`. The
     pair is then `different`, and `reasons[]` names the files too.
+  - `archivesNotReadable[]`, only when it is not empty: each pack of
+    `renumbers[]` whose file in the download of a side is no archive. The list
+    names the pack once for each such side, with `key`, the `version` of that
+    side, and `reason`.
+    `reason` gives the size of the file, and the start of its text when it is
+    text. Else it gives the error of the read. The pair is then `different`, and
+    `reasons[]` names the pack too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
     `renumbers[]` whose archive can differ, and whose archives strata did not
     compare. Its digest changed, or Palette gives none. Palette serves no
@@ -722,6 +730,18 @@ of the secret does not show, because the two sides hold the mask: see
     - `paletteValidationError`: the message, when a request to Palette failed or
       strata did not ask a record of another project. An example is
       `1 record of project prod was not asked`. The pin stays behind.
+  - `carriers[]`, for a pin that is behind: one entry for each profile version that
+    holds the pin and has a newer version. A version holds the pin when a record of
+    the pin holds the version, and its template holds the pack. Absent when there is
+    none, and with `--pin`. See
+    [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+    Each entry has:
+    - `profile`, `version`, and `uid`: the profile version that holds the pin.
+    - `carrier`: the newest of its newer versions that pins a newer version of the
+      pack. It has `version` and `uid`, of the profile version, and `packVersion`,
+      the version of the pack that it pins. Absent when no newer version does.
+    - `error`, when strata could not read a newer version. `carrier` is then
+      absent, and the pin stays behind.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
     that registry.
@@ -750,8 +770,24 @@ of the secret does not show, because the two sides hold the mask: see
     of the version. Each has `version`, `uid`, and `created` on the newest one:
     when Palette created that version.
   - `behind`: `true` when `newer` is not empty.
+  - `bump`, for a version that is behind, unless `--no-impact`: what a move to
+    the newest version does, from `compare` of the two versions. See
+    [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+    - `to`, the newest version, and `impact`, the most severe impact level of the
+      comparison.
+    - `flags[]`: each flag that a pack of the comparison holds, in the order of
+      the legend.
+    - `packs[]`: each pack that the move changes, adds, or removes, in the order
+      of `compare`. Each has `key`, `status` (`changed`, `added`, or `removed`),
+      `from` and `to`, its versions on the two sides, and `flags[]` when it is not
+      empty. `from` is absent for a pack that the move adds, and `to` for a pack
+      that it removes.
+      `valuesChanged` is there, only when true, for a pack whose values change.
+    - A bump of a profile version has no `paletteValidation`: strata does not
+      ask Palette about the move of a profile.
   - `gone`, only when true: Palette no longer holds the version.
-  - `error`, when strata could not read the versions.
+  - `error`, when strata could not read the versions, or could not compare the
+    move.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`. Also
   `profiles`, `profilesBehind`, and `profileErrors`, the counts of `profiles[]`.
   Each of these three is absent when it is 0.
@@ -810,7 +846,10 @@ what it answered.
   - `verdict`: `passed`, `failed`, `not-checked`, `not-run`, `skipped`, or
     `error`. `not-run` is a check that applies and did not run: a tier not asked
     for, no key, or `--no-exec`; it counts against the readiness.
-  - `messages[]`: one for each failure, or the reason for another verdict.
+  - `messages[]`: one for each failure, or the reason for another verdict. A
+    message holds a mark in place of each value of a variable, such as
+    `[value of pod_cidr]`. See
+    [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code. A check with a second command shows
     both commands in `ran`, with `; ` between them. Then `answer` has the exit
@@ -841,7 +880,8 @@ what it answered.
   `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
-- `options`: `tiers`, `strict`, `offline`, `ready`, and `outDir` when `--out` was given.
+- `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
+  `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,

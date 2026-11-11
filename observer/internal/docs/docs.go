@@ -97,8 +97,10 @@ type Impact struct {
 }
 
 // Values holds the changes of the pack values. Only the detail tier sends Diff and Unified. Unified is
-// the text of the values as `--full` prints it, in the unified form.
+// the text of the values as `--full` prints it, in the unified form. Changed says that the values
+// differ, and it holds no value.
 type Values struct {
+	Changed   bool   `json:"changed"`
 	Parseable bool   `json:"parseable"`
 	Diff      []Leaf `json:"diff"`
 	Unified   string `json:"unified"`
@@ -181,9 +183,11 @@ type ProfilePin struct {
 }
 
 // NewerProfile is one newer published version of a profile. Created is the time that Palette gives
-// the create of the newest one, and it is empty for the others.
+// the create of the newest one, and it is empty for the others. The observer compares a record with
+// the newest version by its UID.
 type NewerProfile struct {
 	Version string `json:"version"`
+	UID     string `json:"uid"`
 	Created string `json:"created"`
 }
 
@@ -201,8 +205,25 @@ type Pin struct {
 	Newer        []Newer       `json:"newer"`
 	Behind       bool          `json:"behind"`
 	Bump         *Bump         `json:"bump"`
+	Carriers     []PinCarrier  `json:"carriers"`
 	Error        *Error        `json:"error"`
 	RegistrySync *RegistrySync `json:"registrySync"`
+}
+
+// PinCarrier is one profile version that holds a pin that is behind, and has a newer version.
+// Carrier is the newest of those newer versions that pins a newer version of the pack. It is nil when
+// no newer version does, and when strata could not read one: Error then says so.
+type PinCarrier struct {
+	Profile string   `json:"profile"`
+	Version string   `json:"version"`
+	Carrier *Carrier `json:"carrier"`
+	Error   *Error   `json:"error"`
+}
+
+// Carrier is a newer version of a profile, and the version of the pack that it pins.
+type Carrier struct {
+	Version     string `json:"version"`
+	PackVersion string `json:"packVersion"`
 }
 
 // Bump is what a move to the newest version does, as `behind` reads it with a question to Palette.

@@ -1044,6 +1044,14 @@ pub fn snapshot_of_ref(
     )
 }
 
+/// The options of `behind` that compare each bump, and ask Palette about the bump of each pin.
+pub const WITH_IMPACT: strata::ops::BehindOptions = strata::ops::BehindOptions {
+    impact: true,
+    since: None,
+    pin: None,
+    pre_release: false,
+};
+
 /// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted. The
 /// report has the time `2026-09-26T00:00:00Z`, with no progress output.
 pub fn behind_of(
@@ -1550,7 +1558,8 @@ pub fn same_release_served(
 }
 
 /// The files of the archive of the build of a pack, beside `pack.json`: the path and the content of
-/// each. None for a pack whose download holds no archive.
+/// each. For a Helm chart, they are all the files of the chart. None for a pack whose download
+/// holds no archive.
 pub type BuildFiles<'a> =
     dyn Fn(&strata::snapshot::Pack) -> Option<Vec<(&'static str, String)>> + 'a;
 
@@ -1558,27 +1567,45 @@ pub type BuildFiles<'a> =
 /// writes it: see [`profile_download`].
 ///
 /// The download names each pack of a record that has a registry. The archive of the pack holds
-/// `pack.json` and each file that `files` gives for the pack: its path and its content. A pack
-/// for which `files` gives None has no archive in the download, as a pack of a private registry.
+/// `pack.json` and each file that `files` gives for the pack: its path and its content. The
+/// archive of a Helm chart holds only the files that `files` gives, as a Helm registry serves the
+/// chart: see [`chart_archive`]. A pack for which `files` gives None has no archive in the
+/// download, as a pack of a private registry.
 pub fn serve_downloads(
     api: strata::api::MemoryApi,
     records: &[(String, strata::snapshot::Snapshot)],
     files: &BuildFiles,
 ) -> strata::api::MemoryApi {
+    serve_pack_files(api, records, &|p| build_archive(p, files))
+}
+
+/// The archive of the build of the pack `p`, as [`serve_downloads`] puts it in a download, with
+/// the files that `files` gives. None when `files` gives none.
+pub fn build_archive(p: &strata::snapshot::Pack, files: &BuildFiles) -> Option<Vec<u8>> {
+    let files = files(p)?;
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(path, text)| (*path, text.as_str()))
+        .collect();
+    let kind = PackType::parse(&p.kind)?;
+    if kind == PackType::Helm {
+        return Some(chart_archive(&p.name, &files));
+    }
+    let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
+    Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
+}
+
+/// `api`, which also serves the download of the profile version of each of `records`. The file
+/// of each pack is the one that `file` gives. An example is an archive from [`build_archive`], or
+/// an error answer of the host of a chart. A pack for which `file` gives None has no file in the
+/// download, as a pack of a private registry.
+pub fn serve_pack_files(
+    api: strata::api::MemoryApi,
+    records: &[(String, strata::snapshot::Snapshot)],
+    file: &dyn Fn(&strata::snapshot::Pack) -> Option<Vec<u8>>,
+) -> strata::api::MemoryApi {
     records.iter().fold(api, |api, (_, s)| {
-        let archives: Vec<Option<Vec<u8>>> = s
-            .packs
-            .iter()
-            .map(|p| {
-                let files = files(p)?;
-                let files: Vec<(&str, &str)> = files
-                    .iter()
-                    .map(|(path, text)| (*path, text.as_str()))
-                    .collect();
-                let top = pack_top(&p.name, &p.ref_digest);
-                Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
-            })
-            .collect();
+        let archives: Vec<Option<Vec<u8>>> = s.packs.iter().map(file).collect();
         let packs: Vec<DownloadPack> = s
             .packs
             .iter()

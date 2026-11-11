@@ -33,6 +33,7 @@ fn preflight(c: &mut Criterion) {
             selection: &selection,
             now: GENERATED_AT,
             out_dir: None,
+            out_world: false,
             progress: &quiet,
             verbose: false,
             paint: Paint::off(),

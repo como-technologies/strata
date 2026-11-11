@@ -309,20 +309,20 @@ for `strata`. `tests/workflows.rs` tests the steps of the workflow.
 ## Check a real cluster
 
 `just live-observer` runs [`observer.sh`](./live-runs.md#observersh) on cluster
-A of the live example. It needs `kubectl`, `gh`, `go`, and a token file for the
-pull Secret. The file holds a token with only the scope `read:packages`.
-`OBSERVER_IMAGE` names the image. The default is the image of the version in
-`Cargo.toml`.
+A of the live example. It needs `kubectl` and `go`. The nodes pull the public image
+with no pull Secret. `OBSERVER_IMAGE` names the image. The default is the image of
+the version in `Cargo.toml`.
 
 The script installs the observer in two ways, one after the other. Way 1 is a
 plain `kubectl apply` of the output of `kubectl kustomize`. An overlay in the
-folder of the run sets the image, the pull Secret, and two short periods. Way 2
+folder of the run sets the image and two short periods. Way 2
 is an add-on profile in Palette. The profile holds the rendered manifests as one
-manifest layer. The namespace and the Secrets are made with `kubectl` first,
-because the key must not be in a profile.
+manifest layer. The namespace and the Secret of the key are made with `kubectl`
+first, because the key must not be in a profile.
 
 The script makes sure of these facts:
 
+- The pod runs the public image and names no pull Secret.
 - The first cycle of the pod reaches Palette from a node of the cluster.
 - The page holds no finding at the baseline, and its status of each profile is
   the status of `strata verify` and `strata compare`.
@@ -347,15 +347,15 @@ cluster. `just live-down` deletes it.
 
 `just live-observer-images` runs
 [`observer-images.sh`](./live-runs.md#observer-imagessh) on cluster A. It needs
-`kubectl`, `gh`, `crane`, and a token file for the pull Secret. `OBSERVER_IMAGE`
+`kubectl` and `crane`. `OBSERVER_IMAGE`
 names the image of the observer, and the image must hold the code of the commit
 that you test. The script installs the observer with the component. Cluster A is
 billable until `just live-down`.
 
-The nodes pull the image of the observer with the Secret `ghcr-pull`, as in
-[Check a real cluster](#check-a-real-cluster). The script never pushes that image
-to another registry. A pull request that changes the observer builds the image
-with the tag `test-<short sha>`.
+The nodes pull the image of the observer from its public package with no pull
+Secret, as in [Check a real cluster](#check-a-real-cluster). The script never
+pushes that image to another registry. A pull request that changes the observer
+builds the image with the tag `test-<short sha>`.
 
 A throwaway tag on `ttl.sh` holds one image, and then another. The images on
 `ttl.sh` are copies of public images. The script runs pods on the tag and makes

@@ -108,7 +108,7 @@ address names the screen:
 | `#profiles` | The table of the profiles. |
 | `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
-| `#p-<name@version>` | One profile: its two sides, its events, and its packs as a stack of layers. |
+| `#p-<name@version>` | One profile: its two sides, its events, its packs as a stack of layers, and its move to the newest version of the profile. |
 | `#k-<name@version>/<layer>/<name>` | One pack: the stack of its profile with its own slab lit, its comparison with the record, and its move to the newest version. |
 
 Each pack page has one card of comparison with one dropdown "Compare". The dropdown
@@ -117,10 +117,18 @@ holds these options:
 - **Record → Published now.** It is always there.
 - **Record → This cluster's copy.** It is there when strata could read the copy.
 - **Pack A → pack B.** It is there when a newer version of the pack exists.
+- **Record → Newest version.** It is there when a newer version of the profile
+  exists, and strata compared the record with it. It shows the full diff of the
+  pack, as "Record → Published now" does.
+
+A side with a change shows the red badge "Changed". The two sides of a newer version,
+"Pack A → pack B" and "Record → Newest version", show the badge "Newer" in its place.
+A newer version is no drift, so it keeps the neutral color at each level of the page.
 
 The page opens on the first option that has a change, in this order, and on
-"Published now" when none has one. The page decides this from the findings and the
-newer versions, so it sends no request for a side with no change. That side shows
+"Published now" when none has one. The page decides this from the findings, the
+newer versions, and the move of the profile, so it sends no request for a side with
+no change. That side shows
 the splash "Undisturbed", with three facts: the published version, the copy of the
 cluster, and the newer version. A published side that strata could not read or could
 not verify shows "This side was not read". It never shows "Undisturbed".
@@ -185,6 +193,7 @@ now, then a command with a button Copy. The checks change with the page:
 | Does this cluster still run the record? | `strata compare record.json cluster:<cluster>/<profile>` | The status of the copy. |
 | What does the move change? | `strata compare pack:<registry>/<pack>@<old> pack:<registry>/<pack>@<new> --full` | The impact. A pack with a newer version has this row. |
 | Which newer versions does Palette list? | `strata behind record.json --pin <layer>/<pack>` | The newest version. A pack with a newer version has this row. |
+| What does the move to the newest version change? | `strata compare record.json <profile>@<newest> --full` | The impact. The page of a profile with a newer version has this row. |
 
 The first row runs `kubectl` and reads Secrets. The reader role of the install gives no
 Secret, so a person with only that role cannot run it. Each other row runs `strata`, so it
@@ -466,12 +475,15 @@ them:
   order fails a test until the other order is the same.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
-- The page of the newer versions opens with four tiles: packs behind, moves that
-  repave, new this week, and versions behind. The head of its card holds a switch,
-  Table or Timeline, and the filter. The table indents each pack under the row of its
-  profile, on a guide line. A move that changes only the build says "same" in the
-  column Settings. The timeline gives each pack one lane: the pinned version, each
-  version that the registry listed after it, and the newest, with the day of each.
+- The page of the newer versions opens with four tiles. They are packs with a newer
+  version, moves that repave, new this week, and versions newer than the pins. No text
+  of the page says "behind" for a newer version, because a newer version is a choice
+  and not a fault.
+- The head of the card of the newer versions holds a switch, Table or Timeline, and
+  the filter. The table indents each pack under the row of its profile, on a guide
+  line. A move that changes only the build says "same" in the column Settings. The
+  timeline gives each pack one lane: the pinned version, each version that the
+  registry listed after it, and the newest, with the day of each.
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the

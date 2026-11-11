@@ -73,9 +73,9 @@ main() {
     die "Palette lists no cluster named $name after 20 minutes${build:+; see $run/apply.txt}"
   fi
   echo "watch: Palette lists cluster $name as $U; the watch starts"
-  "$strata" preflight "cluster:$U" --watch --every "$every" --limit "$limit" --verbose --out out
+  "$strata" preflight "cluster:$U" --watch --every "$every" --limit "$limit" --verbose --out out --world
   code=$?
-  echo "watch: exit $code; the report is in $run/out: report.html, report.md, report.json, world.json"
+  echo "watch: exit $code; the report is in $run/out: report.html, report.md, report.json, world.json, entity.json"
 
   if [ -n "$apply_pid" ]; then
     wait "$apply_pid"

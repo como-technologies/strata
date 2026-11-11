@@ -125,7 +125,7 @@ fi
 
 if stage 2 "the install: the namespace, the settings, the records, and the manifests"; then
   check namespace 0 '#644: the namespace holds the label that makes the restricted standard' -- \
-    kc apply --server-side -f "$root/deploy/observer/namespace.yaml"
+    observer_namespace --server-side
   check config 0 '#644: the ConfigMap holds the cluster, the address of Palette, and the project' -- observer_config
   check key 0 '#644: the Secret holds the key, which comes through standard input' -- observer_key "$palette_key"
   check record-release 0 '#644: a record of the release profile' -- "$strata" snapshot "$REL" -o release.json -q
@@ -384,8 +384,7 @@ alert_secret() {
 }
 # alert_overlay: the overlay of lib.sh, with the image of this run, a short period, and the flag that allows an
 # http address. alerts/ is a copy of the component, and kustomization.yaml lists it as a team does, with a
-# ConfigMap from the file of the example. The pull Secret that the overlay names does not exist on kind, and the
-# image is in the nodes, so the pod does not pull.
+# ConfigMap from the file of the example. The image is in the nodes, so the pod does not pull.
 alert_overlay() {
   OBSERVER_IMAGE=$image observer_image && observer_overlay --content-every=1m --alerts-allow-http \
     && mkdir -p alerts && cp "$root"/deploy/observer/alerts/*.yaml alerts/ && cp "$root/examples/observer-alerts/alerts.json" . \

@@ -35,7 +35,9 @@ const COPY_READ = [...COPY_KEPT, COPY.DIFFERS];
 const KIND = {PUBLISHED: "published-changed", OVERWRITTEN: "overwritten", RENAMED: "renamed", GONE: "gone", CLUSTER: "cluster-differs", IMAGE_ID: "image-id-changed", IMAGE_MOVED: "image-moved", IMAGE_SPLIT: "image-split"};
 // The findings of the pods. They set the status of no profile and no pack.
 const IMAGE_KINDS = [KIND.IMAGE_MOVED, KIND.IMAGE_SPLIT];
-const SIDE = {PUBLISHED: "published", CLUSTER: "cluster", NEWER: "newer"};
+const SIDE = {PUBLISHED: "published", CLUSTER: "cluster", NEWER: "newer", NEWEST: "newest"};
+// The sides that come from the versions cycle: the move of a pack, and the move of its profile to the newest version.
+const VERSION_SIDES = [SIDE.NEWER, SIDE.NEWEST];
 const CAUSE = {NO_DIGEST: "no-upstream-digest", OLD_COPY: "older-registry-copy", NO_RECORD: "no-record", READ_ERROR: "read-error", PIN_ERROR: "pin-error", PODS_NOT_READ: "pods-not-read"};
 const EVENT = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", INFO: "info"};
 // The words of /v1/images: whether the observer reads pods, the status of an image, how it matched a pack, and the status of one digest.
@@ -246,7 +248,7 @@ let answering = false;
 // the clock causes asks again. A render that an answer causes does not, or two requests that fail would
 // ask each other again without end.
 function diffOf(subject, p, side) {
-  const stamp = side === SIDE.NEWER ? D.cluster.versions.readAt : D.cluster.content.checkedAt;
+  const stamp = VERSION_SIDES.includes(side) ? D.cluster.versions.readAt : D.cluster.content.checkedAt;
   const key = [subject, p.key, side, stamp].join("|");
   if (!answering && S.diffs[key] && S.diffs[key].state === "error") delete S.diffs[key];
   if (!S.diffs[key]) {
@@ -287,7 +289,9 @@ const at = (name, version) => `${name}@${version}`;
 // ref draws the same ref on the page: the name, then @version in a softer face, so the eye finds the name first. at stays for plain
 // text, such as an option of a select, a command, and a tip.
 const ref = (name, version) => h`${name}<span class="ver">@${version}</span>`;
-const subjectRef = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? ref(subject.slice(0, i), subject.slice(i + 1)) : subject; };
+// subjectParts splits a subject name@version at its last "@", or gives null for a subject with no "@" after its first letter.
+const subjectParts = subject => { const i = subject.lastIndexOf("@"); return i > 0 ? [subject.slice(0, i), subject.slice(i + 1)] : null; };
+const subjectRef = subject => { const parts = subjectParts(subject); return parts ? ref(...parts) : subject; };
 const move = (name, from, to) => h`${ref(name, from)}${ARROW}${ref(name, to)}`;
 const profileHash = subject => `#p-${enc(subject)}`;
 const packHash = (subject, p) => `#k-${enc(subject)}/${enc(p.layer)}/${enc(p.name)}`;
@@ -497,6 +501,9 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
+// movePackOf finds a pack in the move of a profile to its newest version. It is undefined when the move does not change the pack, and
+// when strata did not compare the record with that version.
+const movePackOf = (x, key) => x.newerVersion && x.newerVersion.move ? x.newerVersion.move.packs.find(q => q.key === key) : undefined;
 // packOfRow finds the pack of a profile that a row of /v1/newer moves. A profile that is not known gives null.
 const packOfRow = (profile, r) => profile ? profile.packs.find(q => q.name === r.name && q.version === r.version) : null;
 // causeNames says that a row of Not checked with the cause names the profile, and the pack too when a key is given.

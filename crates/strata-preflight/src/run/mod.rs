@@ -171,6 +171,9 @@ pub struct RunInputs<'a> {
     pub now: &'a str,
     /// The directory the report goes to, or none.
     pub out_dir: Option<&'a str>,
+    /// True when `out_dir` gets `world.json` and `entity.json` too, so the reproduce lines read
+    /// them there.
+    pub out_world: bool,
     /// Progress notes.
     pub progress: &'a Progress,
     /// Print, after each check, what it ran, its answer, the time, and the verdict.
@@ -229,6 +232,7 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 offline: !inputs.backend.has_palette(),
                 ready: inputs.selection.ready,
                 out_dir: inputs.out_dir.map(str::to_string),
+                out_world: inputs.out_world,
             },
             cluster_gone: false,
             generated_at: inputs.now.to_string(),

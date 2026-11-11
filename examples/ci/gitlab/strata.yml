@@ -37,7 +37,7 @@
 # merge request settings, so the merge button waits for strata-merge-gate.
 
 variables:
-  STRATA_VERSION: v0.32.2
+  STRATA_VERSION: v0.33.0
   STRATA_REPO: como-technologies/strata
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave
@@ -76,6 +76,9 @@ variables:
   STRATA_PREFLIGHT_EVERY: ""
   STRATA_PREFLIGHT_LIMIT: ""
   STRATA_PREFLIGHT_OUT: preflight
+  # "true" keeps world.json and entity.json in the artifact too, for the reproduce lines. They hold
+  # the value of each variable that is not sensitive, and each reader of the job can get them
+  STRATA_PREFLIGHT_WORLD: "false"
   # "true" posts the report as one note on the merge request, which needs GITLAB_TOKEN
   STRATA_PREFLIGHT_COMMENT: "false"
   # the two jobs of the observer: the folder of the first-seen records, the namespace of the

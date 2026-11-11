@@ -28,7 +28,7 @@ the options that it takes:
 | Page | What it holds |
 | --- | --- |
 | [The static tier and the live tier](preflight/tiers.md) | The checks of the body of a create, or of a cluster as Palette holds it now: without a key, and with the answers of Palette. |
-| [The report](preflight/report.md) | The report as JSON, and the files that `--out` writes. |
+| [The report](preflight/report.md) | The report as JSON, and the files that `--out` and `--world` write. |
 | [The rules and the custom probes](preflight/rules.md) | The catalog of the rules, and a file of probes of your own. |
 | [The watch](preflight/watch.md) | A cluster during its build, with `--watch`. |
 | [Confidence and promotion](preflight/promotion.md) | The runs of the ledger against the level of each rule, with `--promotion`. |
@@ -55,7 +55,8 @@ readiness, and the report says how many checks did not run and why. Exit `1`
 when the readiness is under the percentage. A row with no check in
 strata-preflight (`NOT CHECKED`) is outside the count; the report prints that
 count beside it. The last lines of the report say where `--out` wrote the
-reports and the world, or that no file was written.
+reports and the world, or that no file was written. They also say how to
+write the world when the run did not.
 
 ## Options
 
@@ -81,7 +82,8 @@ reports and the world, or that no file was written.
 | `--promotion` | Compares the level of each rule with the runs of the ledger. With `--release`, it counts only the runs of that release. | [Confidence and promotion](preflight/promotion.md) |
 | `--ledger` | Adds the runs of a company to the runs of the lab. | [Confidence and promotion](preflight/promotion.md) |
 | `--schema` | Prints the JSON Schema of the report, the rules, the ledger, or the promotion report. | |
-| `--out` | Writes the report in three forms, and the two files that the `reproduce:` lines read, into a directory. | [The report on disk](preflight/report.md#the-report-on-disk) |
+| `--out` | Writes the report in three forms into a directory. | [The report on disk](preflight/report.md#the-report-on-disk) |
+| `--world` | With `--out`, also writes the two files that the `reproduce:` lines read. They hold the values of the variables. | [The report on disk](preflight/report.md#the-report-on-disk) |
 | `--format`, `--json`, `--compact`, `--no-color`, `--color`, `-q` (`--quiet`) | As for the other commands, with `html` as one more format. | [Output formats](./index.md#output-formats) |
 | `-v`, `--verbose` | Prints, after each check, what it ran, the answer, the time, and the verdict. | [The static tier](preflight/tiers.md#the-static-tier-no-key-no-network) |
 | `-V`, `--version` | Prints the version of `strata-preflight`, which a release keeps equal to the version of `strata`. | |

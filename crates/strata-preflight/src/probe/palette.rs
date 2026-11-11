@@ -14,6 +14,7 @@ use super::outcome::{Call, Outcome, Ran, Verdict};
 use super::{judge, put_data};
 use crate::error::Error;
 use crate::jq::Jq;
+use crate::mask::Mask;
 use crate::rule::{PaletteCheck, PaletteRead, Rule};
 
 /// The answer of Palette to the request for one item of a check with `each`. It holds the item,
@@ -139,7 +140,11 @@ pub(super) fn run_palette(
                 out
             }
             Err(failed) => {
-                let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
+                let mut out = Outcome::new(
+                    Verdict::Error,
+                    vec![failed_message(&failed.error, world)],
+                    started,
+                );
                 if let Some(call) = failed.call {
                     out.ran = Ran::Request(call);
                 }
@@ -171,7 +176,11 @@ pub(super) fn run_palette(
             }
             Err(failed) => {
                 calls.extend(failed.call);
-                let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
+                let mut out = Outcome::new(
+                    Verdict::Error,
+                    vec![failed_message(&failed.error, world)],
+                    started,
+                );
                 out.ran = Ran::Requests(calls);
                 return out;
             }
@@ -182,4 +191,27 @@ pub(super) fn run_palette(
     let mut out = judge(rule, &check.expr, &with, jq, started);
     out.ran = Ran::Requests(calls);
     out
+}
+
+/// The message of a request that failed. The message of an HTTP error shows the start of the body
+/// of the answer. So the mask of the values of the variables of `world` goes over the body before
+/// the cut, and the cut leaves no part of a value.
+fn failed_message(error: &Error, world: &Value) -> String {
+    match error {
+        Error::Palette(strata::Error::Api {
+            method,
+            path,
+            status,
+            body,
+            retry_after,
+        }) => strata::Error::Api {
+            method: *method,
+            path: path.clone(),
+            status: *status,
+            body: Mask::of(world).apply(body),
+            retry_after: *retry_after,
+        }
+        .to_string(),
+        other => other.to_string(),
+    }
 }

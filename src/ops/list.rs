@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{
-    PROFILE_TEMPLATE, Palette, PaletteApi, named_entries, profile_versions, recorded_template,
+    PROFILE_TEMPLATE, Palette, PaletteApi, named_entries, profile_versions, recorded_packs,
+    recorded_template,
 };
 use crate::closed_set::Open;
 use crate::error::{ErrorDocument, Result, served};
@@ -21,7 +22,7 @@ use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
-use crate::json::{arr, first_nonempty, items, opt_flag, opt_set, str_at, text, text_map};
+use crate::json::{first_nonempty, items, opt_flag, opt_set, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
 
@@ -553,9 +554,8 @@ fn list_profiles<A: PaletteApi>(
         p.scope = ProfileScope::of_document(&doc);
         // the template that a record of the version reads
         let template = doc.pointer(&format!("/spec/{}", recorded_template(&doc)));
-        let packs = template
-            .into_iter()
-            .flat_map(|t| arr(t, "/packs"))
+        let packs = recorded_packs(&doc)
+            .iter()
             .map(|pk| ListedPack {
                 layer: text(pk, "/layer"),
                 name: text(pk, "/name"),

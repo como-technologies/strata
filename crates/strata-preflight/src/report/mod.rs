@@ -17,6 +17,7 @@ use strata::text::dash;
 
 use crate::confidence::{Confidence, NO_RUNS};
 use crate::jq::Jq;
+use crate::mask::Mask;
 use crate::probe::outcome::ran_line;
 use crate::probe::{Call, Outcome, Verdict};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
@@ -107,9 +108,15 @@ pub struct Options {
     /// The readiness the run needs, as a share, when `--ready` was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ready: Option<f64>,
-    /// The directory `--out` wrote the reports and the world into, when it was given.
+    /// The directory `--out` wrote the reports into, when it was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_dir: Option<String>,
+    /// True when `--world` wrote `world.json` and `entity.json` into `outDir` too.
+    ///
+    /// The two files hold the value of each variable that is not sensitive. A report from before
+    /// 0.33.0 has no such field, and it reads as false.
+    #[serde(default)]
+    pub out_world: bool,
 }
 
 /// The readiness that the page of a run marks on each bar when the run gave no `--ready`.
@@ -124,6 +131,12 @@ impl Options {
         let strict = if self.strict { ", strict" } else { "" };
         let offline = if self.offline { ", offline" } else { "" };
         format!("{}{strict}{offline}", tiers.join(", "))
+    }
+
+    /// The directory that holds `world.json` and `entity.json`: `outDir` when `--world` wrote
+    /// them there, else none.
+    pub(crate) fn world_dir(&self) -> Option<&str> {
+        self.out_dir.as_deref().filter(|_| self.out_world)
     }
 }
 
@@ -428,7 +441,8 @@ pub struct Assembly<'a> {
     pub outcomes: Vec<(&'a Rule, Outcome)>,
     /// The confidence of each rule from the ledger, by id.
     pub confidence: BTreeMap<String, Confidence>,
-    /// The world, for the reproduce templates.
+    /// The world, for the reproduce templates, and for the values of the variables that each
+    /// message hides.
     pub world: &'a Value,
     /// The subject.
     pub subject: Subject,
@@ -452,7 +466,11 @@ pub fn counts_as_failure(rule: &Rule, verdict: Verdict, strict: bool) -> bool {
 }
 
 /// Build the report from the outcomes.
+///
+/// Each message gets a mark in place of each value of a variable of the entity, because Palette
+/// can quote a value in a refusal. The mark names the variable, such as `[value of pod_cidr]`.
 pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
+    let mask = Mask::of(a.world);
     let mut checks = Vec::with_capacity(a.outcomes.len());
     for (rule, outcome) in &a.outcomes {
         let counts_as_failure = counts_as_failure(rule, outcome.verdict, a.options.strict);
@@ -471,7 +489,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
                 rule,
                 outcome,
                 &a.subject,
-                a.options.out_dir.as_deref(),
+                a.options.world_dir(),
             ));
         }
         checks.push(CheckResult {
@@ -483,7 +501,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             severity: rule.severity,
             status: rule.status,
             verdict: outcome.verdict,
-            messages: outcome.messages.clone(),
+            messages: outcome.messages.iter().map(|m| mask.apply(m)).collect(),
             elapsed_ms: outcome.elapsed.as_millis() as u64,
             ran: outcome.ran.text(),
             answer: outcome.ran.answer(),

@@ -16,14 +16,17 @@ const RESPONSE_OF_CURL: &str =
 
 /// The line that a person runs to see the same thing that the check saw. It is the `jq` over the
 /// world file, the `curl` to Palette, or the command.
+///
+/// `world_dir` is the directory of `world.json` and `entity.json`. A line writes its files there,
+/// beside the values of the variables, and not into the current directory.
 pub(super) fn auto_reproduce(
     rule: &Rule,
     outcome: &Outcome,
     subject: &Subject,
-    out_dir: Option<&str>,
+    world_dir: Option<&str>,
 ) -> Vec<String> {
-    // with no --out, the two files are not on disk: $OUT names where --out puts them
-    let dir = out_dir.unwrap_or("$OUT");
+    // with no --world, the two files are not on disk: $OUT names where --out DIR --world puts them
+    let dir = world_dir.unwrap_or("$OUT");
     let mut lines = Vec::new();
     match &rule.check {
         Some(Check::Static { expr }) => {
@@ -59,23 +62,25 @@ pub(super) fn auto_reproduce(
                 // a rule with its own body program sends what the program gives, not the entity
                 (Method::Post, Some(program)) => {
                     lines.push(format!(
-                        "jq '{}' {dir}/world.json > request.json",
+                        "jq '{}' {dir}/world.json > {dir}/request.json",
                         tool_program("", program)
                     ));
-                    " -X POST -H 'Content-Type: application/json' --data @request.json".to_string()
+                    format!(
+                        " -X POST -H 'Content-Type: application/json' --data @{dir}/request.json"
+                    )
                 }
                 (Method::Post, None) => format!(
                     " -X POST -H 'Content-Type: application/json' --data @{dir}/entity.json"
                 ),
                 (Method::Get, _) => String::new(),
             };
-            let mut line = code_line(&data, path);
+            let mut line = code_line(&data, path, dir);
             if let Some(saves) = saves {
                 line.push_str(saves.comment());
             }
             lines.push(line);
             lines.push(format!(
-                "jq --arg code \"$code\" --slurpfile body body.json '{}' {dir}/world.json",
+                "jq --arg code \"$code\" --slurpfile body {dir}/body.json '{}' {dir}/world.json",
                 tool_program(&format!(".response = {RESPONSE_OF_CURL} | "), expr)
             ));
         }
@@ -105,9 +110,9 @@ fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>)
     };
     let (mut flags, mut set) = match request {
         Some(call) => {
-            lines.push(code_line("", &call.path));
+            lines.push(code_line("", &call.path, dir));
             (
-                "--arg code \"$code\" --slurpfile body body.json ".to_string(),
+                format!("--arg code \"$code\" --slurpfile body {dir}/body.json "),
                 format!(".response = {RESPONSE_OF_CURL} | "),
             )
         }
@@ -138,11 +143,16 @@ fn output_in_world(key: &str, output: &str, command: &Invocation) -> String {
 }
 
 /// The line that sends a request to `path` of Palette, with the options of `data` after the
-/// headers. It keeps the body of the answer in `body.json`, and its status code in `$code`.
-fn code_line(data: &str, path: &str) -> String {
+/// headers. It keeps the body of the answer in `body.json` of `dir`, and its status code in
+/// `$code`. Strata does not read an answer for a value, so the file goes beside `world.json`,
+/// the one place that holds the values of the variables.
+fn code_line(data: &str, path: &str, dir: &str) -> String {
     format!(
         "code=$({})",
-        curl_line(&format!(" -o body.json -w '%{{http_code}}'{data}"), path)
+        curl_line(
+            &format!(" -o {dir}/body.json -w '%{{http_code}}'{data}"),
+            path
+        )
     )
 }
 
@@ -199,11 +209,14 @@ mod tests {
 
     #[test]
     fn a_line_with_a_body_puts_its_options_after_the_headers_and_keeps_the_answer() {
-        let line = code_line(" -X POST --data @request.json", "/v1/y");
-        let start = format!("code=$({} -o body.json -w '%{{http_code}}'", palette_curl());
+        let line = code_line(" -X POST --data @out/request.json", "/v1/y", "out");
+        let start = format!(
+            "code=$({} -o out/body.json -w '%{{http_code}}'",
+            palette_curl()
+        );
         assert!(line.starts_with(&start), "{line}");
         let end = format!(
-            " -X POST --data @request.json \"${{{}:-{DEFAULT_BASE_URL}}}/v1/y\")",
+            " -X POST --data @out/request.json \"${{{}:-{DEFAULT_BASE_URL}}}/v1/y\")",
             URL_VARS[0]
         );
         assert!(line.ends_with(&end), "{line}");

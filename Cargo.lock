@@ -1607,7 +1607,7 @@ dependencies = [
 
 [[package]]
 name = "strata-fuzz"
-version = "0.32.2"
+version = "0.33.0"
 dependencies = [
  "bolero",
  "flate2",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "strata-palette"
-version = "0.32.2"
+version = "0.33.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "strata-preflight"
-version = "0.32.2"
+version = "0.33.0"
 dependencies = [
  "clap",
  "jaq-core",
@@ -1664,7 +1664,7 @@ dependencies = [
 
 [[package]]
 name = "strata-report-endpoint"
-version = "0.32.2"
+version = "0.33.0"
 dependencies = [
  "hex",
  "serde",

@@ -51,7 +51,8 @@ reads the archive of each new build from Palette, and compares its files: see
 [The download of a version](../internals/palette/profiles.md#the-download-of-a-version).
 Each line names a pack, its two versions, and two facts. `pre-release to final` says
 that the move is from a pre-release to its final version. `archive: same files`
-says that the two archives differ only by the version in `pack.json`.
+says that the two archives differ only by the version in `pack.json` or in
+`Chart.yaml`.
 
 ## 3. See the impact
 
@@ -82,6 +83,20 @@ The profile gives the CSI pack the same values, so the record shows no change
 of a value. The archive of the new build holds another default value. So the
 pair fails, and the reason names the file of the archive.
 
+## 6. The download holds no chart
+
+```text
+{{#include ../output/renumber-not-readable.txt}}
+```
+
+The add-on profile moves the chart `nginx` of Bitnami to another version, with
+the same values. The host of the charts refuses the file, so the download holds
+its error answer in place of each chart. Palette answers HTTP 200: the live
+check `download-chart` of
+[export.sh](../development/live-runs.md#exportsh) shows it. Strata cannot read
+the two builds, so the pair fails, and each reason names the version and what
+the file holds.
+
 ## What to do
 
 - Run `same-release --allow renumber` when your pipeline publishes the final
@@ -89,9 +104,13 @@ pair fails, and the reason names the file of the archive.
 - Give the key of Palette to the job. Strata reads the archives from the
   download of each version, also for two record files.
 - When a line says `archive: not compared`, make sure in the pipeline that the
-  archive of the new build differs only by `version` in `pack.json`. Palette
+  new build changes only its version. The version is in `pack.json`, or in
+  `Chart.yaml` for a chart. Palette
   serves no archive of a pack of a private registry: see
   [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+- When a line says `archive: not readable`, read the reason. An XML error is
+  the answer of the host of the chart. Pin the chart from a registry whose host
+  serves it, or make sure of the files in the pipeline.
 - A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
   layer in `compare`, also with the same values. See
   [A renumber](../reference/impact.md#a-renumber).

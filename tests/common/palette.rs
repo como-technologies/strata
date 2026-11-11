@@ -2,7 +2,8 @@
 //!
 //! The crate names each route in a const of its own that is not public. So this file names the
 //! route again, in one place. `tests/common/mod.rs` re-exports it for the tests. The libraries
-//! of `benches/` and `fuzz/` include it with `#[path]`. So no second list of the routes exists.
+//! of `benches/` and `fuzz/`, the tests of `strata-preflight`, and the unit tests of
+//! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
@@ -109,6 +110,10 @@ pub fn pack_route(uid: &str) -> String {
 pub fn download_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/spc/download")
 }
+
+/// The body of the HTTP 429 that Palette gives to a download of a profile version in the 10
+/// seconds after another download of that version.
+pub const DOWNLOAD_LIMIT_REFUSAL: &str = r#"{"code":"TooManyRequests","message":"Too Many Requests, only 1 request in 10 seconds is allowed"}"#;
 
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
 pub fn group_route(uid: &str) -> String {

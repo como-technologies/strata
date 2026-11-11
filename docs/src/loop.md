@@ -207,13 +207,23 @@ asks if that is what the reviewer read:
 a name. A difference fails the job.
 
 The record of the release that the clusters run now has a newer published version.
-`behind` names it, and the exit is `1` until each record moves to it:
+`behind` names it, and the exit is `1` until each record moves to it. The line
+`bump to` gives the impact level and the change flags of the move:
 
 ```text
 {{#include output/loop-behind-profile.txt}}
 ```
 
 See [Newer versions of a profile](./commands/behind.md#newer-versions-of-a-profile).
+Each pin of the release that is behind names the new version as the profile
+version that carries a newer version of its pack. So the change of each pack
+reached the profile, and the records of the clusters are the step that waits:
+
+```text
+{{#include output/loop-behind-carrier.txt}}
+```
+
+See [The newer profile version that carries a newer pack](./commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
 
 When your team runs [the observer](./automation/observer.md), the publish step also
 writes the records into the cluster. Name the records of the project of the cluster, one for each
