@@ -211,8 +211,8 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
     grep -qx '{"Reader":{}}' download-accepts-json.out
   sleep 11
   # two downloads of one version at once: Palette takes one in 10 seconds, and can refuse one with
-  # HTTP 429 TooManyRequests. A refusal depends on the server of the API that each request reaches,
-  # so a run can see none. The check records the status of each, and does not judge them
+  # HTTP 429 TooManyRequests. A run can see no refusal, so the check records the status of each,
+  # and does not judge them
   check download-limit '?' '#751, #815: two downloads of one version at once; the status of each, and exit 2 when Palette refused one or both' -- \
     download_at_once "$uid"
 fi

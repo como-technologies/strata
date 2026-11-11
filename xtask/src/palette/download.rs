@@ -120,7 +120,7 @@ impl Built {
         let (name, version) = (text("name"), text("version"));
         let kind = PackType::parse(&text("type"))?;
         // Palette gives the archive of a pack of an OCI registry of packs also when the registry
-        // is private, and the list marks that pack as not private
+        // is private
         let is_private = kind != PackType::Oci && private.contains(&pin["registryUid"]);
         // an OCI registry of Helm charts or of Zarf packages serves no archive in a download
         let provider = pin["annotations"]["ociRegistryProviderType"]
