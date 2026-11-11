@@ -45,8 +45,11 @@ type Versions struct {
 	At     time.Time
 	Strata string
 	Pins   []docs.Pin
-	Moves  map[string]Move
-	Unread map[string]bool
+	// Profiles holds the profile versions that the records hold, with the newer published versions of
+	// each profile.
+	Profiles []docs.ProfilePin
+	Moves    map[string]Move
+	Unread   map[string]bool
 }
 
 // Clock is the state of one timer.
@@ -122,4 +125,13 @@ func MoveOf(d docs.Diff) Move {
 	m.ImpactText = d.Packs[0].Impact.Text
 	m.Fold = FoldOf(d.Packs[0].Values.Paths())
 	return m
+}
+
+// newestProfile gives the newest published version of the profile of p, when strata read the versions
+// and one is newer than the version of the record.
+func newestProfile(p docs.ProfilePin) (docs.NewerProfile, bool) {
+	if p.Error != nil || !p.Behind || len(p.Newer) == 0 {
+		return docs.NewerProfile{}, false
+	}
+	return p.Newer[0], true
 }

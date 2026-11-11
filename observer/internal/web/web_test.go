@@ -1673,6 +1673,23 @@ func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 	mustHold(t, "the row", row, `traefik<span class="ver">@38.0.1</span>`, "<div>vendor-product ran another digest in pods than the first one seen.</div>")
 }
 
+// Issue #707. The row of a profile names the newer published version of the profile itself, in words
+// that differ from the words of a pack with a newer version. The tile of the newer versions counts it,
+// and the filter "Newer" holds it.
+func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T) {
+	screens := render(t, devdata.StateOK, false)
+	profiles := pageOf(t, screens, "#profiles", "")
+	wilma := rowWith(t, profiles, `data-go="#p-wilma-gateway@3.1.2"`)
+	mustHold(t, "the row of wilma-gateway", wilma,
+		`Newer profile version wilma-gateway<span class="ver">@3.2.0</span>. <span class="badge fresh">new</span>`,
+		`traefik<span class="ver">@38.0.1</span>`)
+	// a profile with a pack that has a newer version, and no newer version of its own
+	barney := rowWith(t, profiles, `data-go="#p-barney-base@1.5.0"`)
+	mustNotHold(t, "the row of barney-base", barney, "Newer profile version")
+	overview := pageOf(t, screens, "#overview", "")
+	mustHold(t, "the tile", overview, ` · 1 newer profile version</div>`)
+}
+
 var (
 	tileOfImages = regexp.MustCompile(`<a class="tile (\w+)" href="#images"><div class="l">Image changes</div><div class="v">([^<]*)</div><div class="s">([^<]*)</div></a>`)
 	navOfImages  = regexp.MustCompile(`<a href="#images" class="[^"]*"><span>Images</span><span class="cnt">([^<]*)</span></a>`)

@@ -325,27 +325,61 @@ const impactOf = i => IMPACT[i] || ["y", i];
 
 /* ---- Sort and filter ----
    The head of a column with a key sorts its table. A click sorts up, a second click sorts down, and a third gives back the order of the
-   page. A sort keeps the order of the page among equal rows. A version sorts by the precedence of SemVer 2.0.0 when both parse, so a
-   pre-release sorts below its release; any other version sorts in natural order. */
-const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+   page. A sort keeps the order of the page among equal rows. A version sorts in the order of strata: see versionCmp. */
 const natural = (a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: "base"});
-function semverCmp(a, b) {
-  const x = SEMVER.exec(a), y = SEMVER.exec(b);
-  if (!x || !y) return natural(a, b);
-  for (let i = 1; i <= 3; i++) if (Number(x[i]) !== Number(y[i])) return Number(x[i]) - Number(y[i]);
-  if (!x[4] || !y[4]) return x[4] ? -1 : y[4] ? 1 : 0;
-  const p = x[4].split("."), q = y[4].split(".");
-  for (let i = 0; i < Math.max(p.length, q.length); i++) {
-    if (p[i] === undefined) return -1;
-    if (q[i] === undefined) return 1;
-    const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
-    if (pn && qn && Number(p[i]) !== Number(q[i])) return Number(p[i]) - Number(q[i]);
-    if (pn !== qn) return pn ? -1 : 1;
-    if (!pn && p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
+
+/* versionCmp orders two versions as src/reference/version.rs does, and that file states each rule. The page cannot ask strata to
+   order the newest versions of other packs, so it keeps this copy. The file testdata/versions.json holds the cases, and two tests,
+   one of strata and one of this page, sort them. A change of one order fails the test of the other.
+   1. A version that parses as SemVer 2.0.0 orders by its precedence. A pre-release is below its version.
+   2. A text that does not parse reads as its first three numbers. A tail of numbers puts it above them, and other text below them.
+   3. A text with no three numbers sorts after the versions, in the natural order of its runs. The empty text is the lowest. */
+const SEMVER = /^v?(\d+(?:\.\d+){0,2})(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+const DIGITS = /^\d+$/;
+// The kinds of the text beside the three numbers of a version, from the lowest to the highest.
+const TAIL = {TEXT: 0, NONE: 1, NUMBERS: 2};
+const byText = (x, y) => x < y ? -1 : x > y ? 1 : 0;
+// byValue compares two runs of digits by their value, of any length.
+const byValue = (x, y) => { const a = x.replace(/^0+/, ""), b = y.replace(/^0+/, ""); return a.length - b.length || byText(a, b); };
+// byRuns compares runs of digits by value and other runs as text. When all pairs agree, the text with more runs is higher.
+function byRuns(a, b) {
+  const x = a.match(/\d+|\D+/g) || [], y = b.match(/\d+|\D+/g) || [];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const d = DIGITS.test(x[i]) && DIGITS.test(y[i]) ? byValue(x[i], y[i]) : byText(x[i], y[i]);
+    if (d) return d;
   }
-  return 0;
+  return x.length - y.length;
 }
-const ORDERS = {num: (a, b) => a - b, text: natural, version: semverCmp};
+// readVersion gives the numbers, the pre-release, and the tail of a version, or null for a text with no three numbers.
+function readVersion(text) {
+  const m = SEMVER.exec(text);
+  if (m) {
+    const n = m[1].split(".");
+    return {numbers: [n[0], n[1] || "0", n[2] || "0"], pre: m[2] ? m[2].split(".") : [], tail: TAIL.NONE, text};
+  }
+  const t = /(\d+)\.(\d+)\.(\d+)/.exec(text);
+  if (!t) return null;
+  const head = text.slice(0, t.index), rest = text.slice(t.index + t[0].length);
+  const numbersOnly = rest.startsWith(".") && rest.slice(1).split(".").every(p => DIGITS.test(p));
+  return {numbers: [t[1], t[2], t[3]], pre: [], tail: (head === "" || head === "v") && numbersOnly ? TAIL.NUMBERS : TAIL.TEXT, text};
+}
+// byPre compares two pre-releases by their identifiers from the left: a number is below a text, and the longer list is higher.
+function byPre(p, q) {
+  for (let i = 0; i < Math.min(p.length, q.length); i++) {
+    const pn = DIGITS.test(p[i]), qn = DIGITS.test(q[i]);
+    const d = pn && qn ? byValue(p[i], q[i]) : pn !== qn ? (pn ? -1 : 1) : byText(p[i], q[i]);
+    if (d) return d;
+  }
+  return p.length - q.length;
+}
+function versionCmp(a, b) {
+  const s = String(a), t = String(b), x = readVersion(s), y = readVersion(t);
+  if (!x || !y) return x ? (t === "" ? 1 : -1) : y ? (s === "" ? -1 : 1) : byRuns(s, t);
+  for (let i = 0; i < 3; i++) { const d = byValue(x.numbers[i], y.numbers[i]); if (d) return d; }
+  if (!x.pre.length !== !y.pre.length) return x.pre.length ? -1 : 1;
+  return byPre(x.pre, y.pre) || x.tail - y.tail || (x.tail === TAIL.NONE ? 0 : byRuns(s, t));
+}
+const ORDERS = {num: (a, b) => a - b, text: natural, version: versionCmp};
 const rank = list => v => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
 
 // sortBy sorts a list by the column that S.sort holds for the table. keys maps a column to [the value of a row, the kind of order].

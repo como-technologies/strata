@@ -46,7 +46,7 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 		e := doc.Pins[0].Error
 		return &runner.RunError{Kind: e.Kind, Status: e.Status}
 	}
-	versions.Strata, versions.Pins = doc.Tool.Version, doc.Pins
+	versions.Strata, versions.Pins, versions.Profiles = doc.Tool.Version, doc.Pins, doc.Profiles
 	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc)
 	versions.At = o.now()
 	return err
@@ -87,7 +87,7 @@ type pinKey struct{ name, registryUID, version, tag string }
 // mergeBehind joins the answers of `behind` on single records into the answer of one `behind` on all of
 // them. It has one pin for each pack name, registry, pinned version, and tag, in that order, with each
 // record that pins it. When one answer could not read a pin and another could, the pin keeps the read
-// that has no error.
+// that has no error. The profile versions join in the same way: see mergeProfiles.
 func mergeBehind(answers []docs.Behind) docs.Behind {
 	var out docs.Behind
 	at := map[pinKey]int{}
@@ -95,6 +95,7 @@ func mergeBehind(answers []docs.Behind) docs.Behind {
 		if out.Schema == "" {
 			out.Schema, out.Tool = a.Schema, a.Tool
 		}
+		out.Profiles = mergeProfiles(out.Profiles, a.Profiles)
 		for _, p := range a.Pins {
 			k := pinKey{p.Name, p.RegistryUID, p.Version, p.Tag}
 			i, found := at[k]
@@ -202,4 +203,24 @@ func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (d
 	diff, err := decode[docs.Diff](res.Stdout, docs.DiffSchema)
 	diff.CapText(maxText)
 	return diff, err
+}
+
+// mergeProfiles adds the profile versions of one answer to the ones of the answers before it. It has
+// one entry for each name@version, the subject of the observer, in the order of the answers. When one
+// answer could not read a version and another could, the entry keeps the read that has no error. The
+// entry keeps each record that holds the version.
+func mergeProfiles(out, more []docs.ProfilePin) []docs.ProfilePin {
+	for _, p := range more {
+		i := slices.IndexFunc(out, func(q docs.ProfilePin) bool { return q.Name == p.Name && q.Version == p.Version })
+		if i < 0 {
+			out = append(out, p)
+			continue
+		}
+		by := append(slices.Clone(out[i].PinnedBy), p.PinnedBy...)
+		if out[i].Error != nil && p.Error == nil {
+			out[i] = p
+		}
+		out[i].PinnedBy = uniquePinnedBy(by)
+	}
+	return out
 }

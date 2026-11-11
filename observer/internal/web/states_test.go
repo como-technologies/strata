@@ -5,6 +5,7 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -962,9 +963,30 @@ func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	if got := newerOrder(back, subject); !slices.Equal(got, natural) {
 		t.Errorf("back: %v, want the order of the page %v", got, natural)
 	}
-	// A pre-release sorts below its release, and numbers compare as numbers.
-	order := pageWith(t, "testdata/api", devdata.StateOK, "#profiles", `S.q = ["1.0.0", "1.0.0-rc.10", "0.9.0", "1.0.0-alpha", "1.0.0-rc.2", "1.10.0", "1.2.0"].sort(semverCmp).join(" ")`)
-	mustHold(t, "the order of the versions", order, `value="0.9.0 1.0.0-alpha 1.0.0-rc.2 1.0.0-rc.10 1.0.0 1.2.0 1.10.0"`)
+}
+
+// Issue #707. A column of versions sorts in the order of strata. testdata/versions.json holds the cases,
+// with those of #616, and a test of strata sorts the same file with the order of strata. The page sorts
+// the cases from the last one to the first, and it must give the order of the file.
+func TestTheVersionSortOfThePageGivesTheOrderOfStrata(t *testing.T) {
+	var cases struct {
+		Ascending []string `json:"ascending"`
+	}
+	raw, err := os.ReadFile("testdata/versions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	reversed := slices.Clone(cases.Ascending)
+	slices.Reverse(reversed)
+	given, err := json.Marshal(reversed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := pageWith(t, "testdata/api", devdata.StateOK, "#profiles", fmt.Sprintf(`S.q = %s.sort(versionCmp).join("|")`, given))
+	mustHold(t, "the order of the versions", order, `value="`+strings.Join(cases.Ascending, "|")+`"`)
 }
 
 // A filter of the Newer table keeps a whole group when its profile matches, and else the rows whose pack

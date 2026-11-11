@@ -589,6 +589,34 @@ fn the_examples_fetch_orders_plain_versions_as_strata_does() {
     assert_eq!(oldest_first(&mixed), ["1.0.0", "1.0.1"]);
 }
 
+/// Issue #707. The page of the observer sorts a column of versions with its own copy of the order,
+/// because it cannot ask strata. A test of the page sorts the same file with that copy. So a change
+/// of the order of strata fails this test or that one, until both agree on each case.
+#[test]
+fn the_cases_of_the_version_sort_of_the_observer_page_are_in_the_order_of_strata() {
+    let cases: serde_json::Value =
+        serde_json::from_str(&repo_file("observer/internal/web/testdata/versions.json")).unwrap();
+    let ascending: Vec<&str> = cases["ascending"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert!(ascending.len() > 20, "{ascending:?}");
+    for pair in ascending.windows(2) {
+        assert!(
+            strata::reference::version::compare(pair[0], pair[1]).is_lt(),
+            "{:?} comes before {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+    // the cases of #616: a tail of text is below the three numbers, and a tail of numbers above
+    for case in ["1.1.8.develop", "10.4.0.1", "LTS__24.x"] {
+        assert!(ascending.contains(&case), "{case}");
+    }
+}
+
 #[test]
 fn the_examples_fetch_stops_the_send_of_the_report_whatever_the_machine_says() {
     let dir = tempfile::tempdir().unwrap();

@@ -208,7 +208,9 @@ function tiles() {
   const T = (cls, label, value, sub, href) => h`<a class="tile ${cls}" href="#${href}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></a>`;
   const driftSub = n.drift === 0 ? (calmOk() ? "Nothing changed" : "None in what was checked") : n.drift === 1 ? driftSubject() : `${n.drift} profiles`;
   const fresh = D.newer.filter(r => r.new).length;
-  const newerSub = n.newer === 0 ? (calmOk(true) ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`;
+  // The profiles with a newer published version of their own count apart from the packs. An observer of an older release gives no count.
+  const versions = n.newerProfileVersions ? ` · ${n.newerProfileVersions} newer profile ${plural(n.newerProfileVersions, "version", "versions")}` : "";
+  const newerSub = (n.newer === 0 ? (calmOk(true) ? `All ${n.packs} packs current` : "None listed") : `${n.newerProfiles} ${plural(n.newerProfiles, "profile", "profiles")} · ${fresh} this week`) + versions;
   const notCheckedSub = n.notChecked === 0 ? `${n.packsInFull} of ${n.packs} packs in full` : `${n.notChecked} ${plural(n.notChecked, "cause", "causes")} · ${n.packsInFull} of ${n.packs} packs in full`;
   // The tile "Image changes" is there only when the observer reads the pods. The other four fill the row.
   const images = () => { const [cls, value, sub] = imageTile(); return T(cls, "Image changes", value, sub, "images"); };
@@ -335,25 +337,42 @@ function newsOf(x) {
 function recordNews(x) {
   const subject = subjectOf(x);
   const ms = x.packs.filter(p => p.newer);
+  const version = profileVersionNews(x);
   switch (x.status) {
     case STATUS.DRIFT: {
       const lines = D.findings.filter(f => f.profile === subject).map(f => findingLine(f, x));
       if (ms.length) lines.push(`Also ${ms.length} newer ${plural(ms.length, "version", "versions")}.`);
-      return lines.length ? lines.join(" ") : "Drift.";
+      const text = lines.length ? lines.join(" ") : "Drift.";
+      return version ? h`${text} ${version}` : text;
     }
     case STATUS.NEWER: {
-      if (ms.length === 1) {
-        const row = newerRowOf(subject, ms[0]);
-        return h`${move(ms[0].name, ms[0].version, ms[0].newer)}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
-      }
-      const rows = D.newer.filter(r => r.profiles.includes(subject));
-      const repave = rows.filter(r => r.impact === "repave").length, may = rows.filter(r => r.impact === "may-repave").length;
-      return `${ms.length} of ${x.packs.length} packs have a newer version.${repave ? ` ${repave} repave.` : ""}${may ? ` ${may} can repave.` : ""}`;
+      const packs = packNews(x, subject, ms);
+      return version && packs ? h`${version} ${packs}` : version || packs;
     }
     case STATUS.NOT_CHECKED: return notCheckedLine(x);
     case STATUS.NO_RECORD: return mut("No record.");
     default: return mut("No change.");
   }
+}
+
+// packNews tells the packs of a profile that have a newer version: the move of one pack, or a count. It is "" when no pack has one.
+function packNews(x, subject, ms) {
+  if (!ms.length) return "";
+  if (ms.length === 1) {
+    const row = newerRowOf(subject, ms[0]);
+    return h`${move(ms[0].name, ms[0].version, ms[0].newer)}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
+  }
+  const rows = D.newer.filter(r => r.profiles.includes(subject));
+  const repave = rows.filter(r => r.impact === "repave").length, may = rows.filter(r => r.impact === "may-repave").length;
+  return `${ms.length} of ${x.packs.length} packs have a newer version.${repave ? ` ${repave} repave.` : ""}${may ? ` ${may} can repave.` : ""}`;
+}
+
+// profileVersionNews tells the newest published version of the profile itself, when it is newer than the record. Its words differ
+// from the words of a pack that has a newer version, so a person can tell the two apart. It is "" when the profile has none.
+function profileVersionNews(x) {
+  const n = x.newerVersion;
+  if (!n) return "";
+  return h`Newer profile version ${ref(x.name, n.version)}.${n.new ? h` <span class="badge fresh">new</span>` : ""}`;
 }
 
 // notCheckedLine tells why a profile was not fully checked, from the rows of /v1/notchecked.
@@ -368,8 +387,8 @@ function notCheckedLine(x) {
 }
 
 function profilesCard() {
-  // A profile with a pack that has a newer version shows under "Newer", also when its status is a drift.
-  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
+  // A profile with a newer version of itself or of a pack shows under "Newer", also when its status is a drift.
+  const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? !!x.newerVersion || x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
   const list = [...D.profiles].sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
   const cnt = {};
   FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });
