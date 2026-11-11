@@ -113,7 +113,7 @@ pub enum Error {
         method: Method,
         /// Request path.
         path: String,
-        /// What strata could not read.
+        /// What strata cannot read.
         message: String,
     },
     /// `name@version` matched nothing in the current scope. The message points at `strata list`,

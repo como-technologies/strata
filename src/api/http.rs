@@ -52,8 +52,8 @@ impl HttpApi {
         }
     }
 
-    /// The status and the body of an answer with a 2xx status, or the error that the answer
-    /// stands for: a status out of 2xx, or a body that could not be read.
+    /// The status and the body of an answer with a 2xx status. Else the error that the answer
+    /// stands for: a status out of 2xx, or a body that strata cannot read.
     fn body(
         method: Method,
         path: &str,
@@ -153,6 +153,7 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::download_path;
 
     /// One answer from a server on this machine, so the reading of a body needs no network.
     fn serve_once(status_line: &str, body: &str) -> String {
@@ -187,8 +188,7 @@ mod tests {
         let file = [0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00];
         let (url, request) = serve_bytes("200 OK", &file);
         let api = HttpApi::new(Config::new(url, "k"));
-        let path = "/v1/clusterprofiles/u1/spc/download";
-        assert_eq!(api.get_file(path).unwrap(), file);
+        assert_eq!(api.get_file(&download_path("u1")).unwrap(), file);
         let head = request.recv().unwrap().to_ascii_lowercase();
         assert!(head.contains("accept: application/octet-stream"), "{head}");
         assert!(!head.contains("application/json"), "{head}");
@@ -201,7 +201,7 @@ mod tests {
             br#"{"code":"TooManyRequests","message":"only 1 request in 10 seconds is allowed"}"#,
         );
         let api = HttpApi::new(Config::new(url, "k"));
-        match api.get_file("/v1/clusterprofiles/u1/spc/download") {
+        match api.get_file(&download_path("u1")) {
             Err(Error::Api { status, body, .. }) => {
                 assert_eq!(status, 429);
                 assert!(body.contains("TooManyRequests"), "{body}");

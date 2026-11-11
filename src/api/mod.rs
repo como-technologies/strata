@@ -40,6 +40,9 @@ pub(crate) use palette::{
     is_download_path, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
+// the unit tests build the route of a download with the one function that builds it
+#[cfg(test)]
+pub(crate) use palette::download_path;
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,

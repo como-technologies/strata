@@ -162,6 +162,13 @@ pub(super) fn resolved_values_file(route: &str) -> String {
 /// `GET /v1/clusterprofiles/{uid}/spc/download`.
 const DOWNLOAD: &str = "spc/download";
 
+/// The download of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/spc/download`. The
+/// tests ask the server for it. The server reads the route with [`downloaded_profile`].
+#[cfg(test)]
+pub(crate) fn download_route(uid: &str) -> String {
+    format!("{}/{DOWNLOAD}", profile_route(uid))
+}
+
 /// The profile route of the download route `path`, `v1/clusterprofiles/{uid}/spc/download`:
 /// `v1/clusterprofiles/{uid}`. `None` for any other path.
 pub fn downloaded_profile(path: &str) -> Option<&str> {
@@ -254,7 +261,7 @@ mod tests {
 
     #[test]
     fn the_download_route_names_the_profile_it_downloads() {
-        let download = format!("{}/spc/download", profile_route("u1"));
+        let download = download_route("u1");
         assert_eq!(downloaded_profile(&download), Some("v1/clusterprofiles/u1"));
         for other in [
             "v1/clusterprofiles/spc/download",

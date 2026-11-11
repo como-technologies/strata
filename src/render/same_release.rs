@@ -95,8 +95,8 @@ const ARCHIVE_NOT_COMPARED: &str = "archive: not compared";
 /// One line for each renumber of a pair: `<name>  <old> -> <new>`, with its facts in brackets.
 ///
 /// The facts are a move from a pre-release to its final version, and what strata found in the two
-/// archives: the same files, another file, or no compare. See [`Pair::archives_compared`],
-/// [`Pair::archives_changed`], and [`Pair::archives_not_compared`].
+/// archives. That is the same files, another file, or no compare. See
+/// [`Pair::archives_compared`], [`Pair::archives_changed`], and [`Pair::archives_not_compared`].
 pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
     let compared: BTreeSet<&str> = p.archives_compared.iter().map(String::as_str).collect();
     let changed: BTreeSet<&str> = p.archives_changed.iter().map(|c| c.key.as_str()).collect();

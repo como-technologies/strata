@@ -1,10 +1,10 @@
-//! The download of a profile version, as Palette writes it: `GET
-//! /v1/clusterprofiles/{uid}/spc/download`.
+//! The download of a profile version, as Palette writes it:
+//! `GET /v1/clusterprofiles/{uid}/spc/download`.
 //!
 //! The crate reads the layout with consts that are not public. So this file writes the layout
-//! again, in one place, as Palette writes it. The tests include it from `tests/common/mod.rs`, the
-//! unit tests of `src/api/download.rs` and the targets of `fuzz/` include it with `#[path]`, and so
-//! does the stand-in in `xtask/`. So no second writer of the layout exists.
+//! again, in one place, as Palette writes it. The tests include it from `tests/common/mod.rs`. The
+//! unit tests of `src/api/download.rs`, the targets of `fuzz/`, and the stand-in in `xtask/`
+//! include it with `#[path]`. So no second writer of the layout exists.
 //!
 //! A download is a tar archive that gzip compresses. Each path starts with the uid of the profile:
 //!
@@ -17,22 +17,14 @@
 //! ```
 //!
 //! `metadata.json` names the list of the packs, and the list names the archive of each pack. A
-//! pack archive is a tar archive that gzip compresses, with one top folder: the name of the pack
-//! and the first 12 hex digits of its digest.
+//! pack archive is a tar archive that gzip compresses, with one top folder. The folder has the name
+//! of the pack and the first 12 hex digits of its digest.
 
 use serde_json::{Value, json};
 
-/// The type of a pack in the list of the packs: `spectro` for a pack of a pack registry.
-pub const SPECTRO: &str = "spectro";
-
-/// The type of a pack of an OCI registry in the list of the packs.
-pub const OCI: &str = "oci";
-
-/// The type of a pack of a Helm registry in the list of the packs.
-pub const HELM: &str = "helm";
-
-/// The type of a manifest pack and of each manifest in the list of the packs.
-pub const MANIFEST: &str = "manifest";
+// The file that includes this one names `PackType` of the crate. A test of the crate names it as
+// `crate::model::pack_type::PackType`, and each other package as `strata::model::...`.
+use super::PackType;
 
 /// One pack of a download.
 pub struct DownloadPack<'a> {
@@ -40,8 +32,8 @@ pub struct DownloadPack<'a> {
     pub name: &'a str,
     /// The version of the pack.
     pub version: &'a str,
-    /// The type of the pack in the list: [`SPECTRO`], [`OCI`], [`HELM`], or [`MANIFEST`].
-    pub kind: &'a str,
+    /// The type of the pack. A manifest pack has an entry for each of its manifests alone.
+    pub kind: PackType,
     /// True for a pack of a private registry.
     pub private: bool,
     /// The bytes of the archive of the pack, from [`pack_archive`]. None when the download holds
@@ -99,7 +91,11 @@ fn archive_path(pack: &DownloadPack) -> String {
     } else {
         file
     };
-    let end = if pack.kind == HELM { "tgz" } else { "tar.gz" };
+    let end = if pack.kind == PackType::Helm {
+        "tgz"
+    } else {
+        "tar.gz"
+    };
     format!("packs/{}/{file}.{end}", pack.name)
 }
 
@@ -109,7 +105,7 @@ fn archive_path(pack: &DownloadPack) -> String {
 fn packs_metadata(packs: &[DownloadPack]) -> Value {
     let mut list = serde_json::Map::new();
     for pack in packs {
-        if pack.kind != MANIFEST {
+        if pack.kind != PackType::Manifest {
             let path = pack
                 .archive
                 .as_ref()
@@ -123,7 +119,7 @@ fn packs_metadata(packs: &[DownloadPack]) -> Value {
         for (manifest, _) in pack.manifests {
             list.insert(
                 format!("{}-{manifest}", pack.name),
-                json!({"name": pack.name, "manifestName": manifest, "type": MANIFEST,
+                json!({"name": pack.name, "manifestName": manifest, "type": PackType::Manifest,
                     "isRegistryPrivate": false,
                     "filePath": format!("packs/{}/manifests/{manifest}.yaml", pack.name),
                     "manifestDigest": "sha256:0000000000000000"}),
@@ -175,8 +171,8 @@ pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8
 }
 
 /// The top folder of the archive of the pack `name` with the digest `digest`, as a pack registry
-/// names it: the name and the first 12 hex digits of the digest. A pack with no digest gets 12
-/// zeros.
+/// names it. It holds the name and the first 12 hex digits of the digest. A pack with no digest
+/// gets 12 zeros.
 pub fn pack_top(name: &str, digest: &str) -> String {
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
     let short: String = hex.chars().chain(std::iter::repeat('0')).take(12).collect();

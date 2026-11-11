@@ -323,8 +323,8 @@ impl Tenant {
     }
 
     /// Publish a copy of `version` of the pack `name` as `copy_version`, as
-    /// [`Tenant::copy_pack_version`] does, from another build: the text `from` of its default
-    /// values is `to`. The pin of a profile keeps the values that the profile gives it, so only the
+    /// [`Tenant::copy_pack_version`] does. The copy is another build: the text `from` of its
+    /// default values is `to`. The pin of a profile keeps the values that the profile gives it, so only the
     /// archive of the build shows the change.
     pub fn rebuild_pack_version(
         &self,

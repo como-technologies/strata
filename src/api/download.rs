@@ -3,7 +3,8 @@
 //! `GET /v1/clusterprofiles/{uid}/spc/download` gives a tar archive that gzip compresses. All its
 //! paths start with one folder. In that folder, `metadata.json` names the list of the packs in
 //! `profiles[].packsMetaFilePath`. The list maps the name of each pack to its `version`, its
-//! `type`, and its `filePath`, the path of the archive of the pack from the folder of the list.
+//! `type`, and its `filePath`. `filePath` is the path of the archive of the pack from the folder of
+//! the list.
 //! The archive of a pack is a tar archive that gzip compresses, with one top folder. An empty
 //! `filePath` means that the download holds no archive of the pack.
 //!
@@ -55,13 +56,14 @@ pub struct ProfileDownload {
 pub struct DownloadedPack {
     /// The version of the pack, as the list gives it.
     pub version: String,
-    /// The archive of the pack. None when the download holds no archive of the pack: a pack of a
-    /// private registry, or of an OCI registry of Helm charts or of Zarf packages.
+    /// The archive of the pack. None when the download holds no archive of the pack. Palette serves
+    /// none for a pack of a private registry, or of an OCI registry of Helm charts or of Zarf
+    /// packages.
     pub archive: Option<PackArchive>,
 }
 
-/// The files of the archive of one pack: the path of each file under the top folder of the
-/// archive, and a digest of the file.
+/// The files of the archive of one pack: the path of each file under its top folder, with a
+/// digest of the file.
 ///
 /// The digest of `pack.json` covers its JSON with no `version`. So two builds of one content under
 /// two versions have the same files.
@@ -101,7 +103,7 @@ impl PackArchive {
     }
 
     /// The path of each file that differs between this archive and `other`, in the order of the
-    /// paths: a file with another digest, or a file that only one archive holds.
+    /// paths. A file differs when its digest differs, or when one archive alone holds it.
     pub fn changed_files(&self, other: &PackArchive) -> Vec<String> {
         let mut paths: Vec<String> = self
             .files
@@ -295,19 +297,20 @@ fn unpack(
 }
 
 #[cfg(test)]
+use crate::model::pack_type::PackType;
+
+#[cfg(test)]
 #[allow(dead_code)]
 #[path = "../../tests/common/download.rs"]
 mod written;
 
 #[cfg(test)]
 mod tests {
-    use super::written::{
-        DownloadPack, HELM, MANIFEST, OCI, SPECTRO, pack_archive, profile_download, tgz,
-    };
+    use super::written::{DownloadPack, pack_archive, profile_download, tgz};
     use super::*;
+    use crate::api::download_path;
 
     const UID: &str = "64f0000000000000000007a1";
-    const ROUTE: &str = "/v1/clusterprofiles/64f0000000000000000007a1/spc/download";
 
     /// A pack of a pack registry, with the archive of its build at `version` under `top`, and
     /// `files` beside `pack.json`.
@@ -320,7 +323,7 @@ mod tests {
         DownloadPack {
             name,
             version,
-            kind: SPECTRO,
+            kind: PackType::Spectro,
             private: false,
             archive: Some(pack_archive(name, version, "k8s", top, files)),
             manifests: &[],
@@ -329,14 +332,18 @@ mod tests {
 
     /// The download of `packs`, read.
     fn read(packs: &[DownloadPack]) -> ProfileDownload {
-        ProfileDownload::read(ROUTE, &profile_download(UID, "aws-stack", packs)).unwrap()
+        ProfileDownload::read(
+            &download_path(UID),
+            &profile_download(UID, "aws-stack", packs),
+        )
+        .unwrap()
     }
 
     /// The message of the error of the read of `file`.
     fn refusal(file: &[u8]) -> String {
-        match ProfileDownload::read(ROUTE, file) {
+        match ProfileDownload::read(&download_path(UID), file) {
             Err(Error::NotArchive { path, message, .. }) => {
-                assert_eq!(path, ROUTE);
+                assert_eq!(path, download_path(UID));
                 message
             }
             other => panic!("{other:?}"),
@@ -424,7 +431,7 @@ mod tests {
     #[test]
     fn a_pack_with_no_archive_in_the_download_is_listed_with_none_and_a_manifest_pack_is_not_listed()
      {
-        let none = |name: &'static str, kind: &'static str, private: bool| DownloadPack {
+        let none = |name: &'static str, kind: PackType, private: bool| DownloadPack {
             name,
             version: "1.0.0",
             kind,
@@ -433,12 +440,12 @@ mod tests {
             manifests: &[],
         };
         let download = read(&[
-            none("private-pack", SPECTRO, true),
-            none("private-chart", HELM, true),
-            none("zarf-package", OCI, false),
+            none("private-pack", PackType::Spectro, true),
+            none("private-chart", PackType::Helm, true),
+            none("zarf-package", PackType::Oci, false),
             DownloadPack {
                 manifests: &[("extra-rules", "kind: ConfigMap\n")],
-                ..none("platform-rules", MANIFEST, false)
+                ..none("platform-rules", PackType::Manifest, false)
             },
             DownloadPack {
                 manifests: &[("extra", "kind: ConfigMap\n")],
@@ -501,7 +508,7 @@ mod tests {
             (
                 format!("{UID}/{list}"),
                 json_bytes(&serde_json::json!({"packs": {"kubernetes":
-                {"name": "kubernetes", "version": "1.36.2", "type": SPECTRO,
+                {"name": "kubernetes", "version": "1.36.2", "type": PackType::Spectro,
                     "filePath": "packs/kubernetes/kubernetes-1.36.2.tar.gz"}}})),
             ),
         ]);

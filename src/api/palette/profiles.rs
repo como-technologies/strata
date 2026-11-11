@@ -571,7 +571,7 @@ const DOWNLOAD: [&str; 2] = ["spc", "download"];
 pub(crate) const DOWNLOAD_INTERVAL_SECONDS: u64 = 10;
 
 /// The route of the download of the profile version `uid`: see [`Palette::profile_download`].
-fn download_path(uid: &str) -> String {
+pub(crate) fn download_path(uid: &str) -> String {
     let mut segments = vec![uid];
     segments.extend(DOWNLOAD);
     route(PROFILES, &segments)

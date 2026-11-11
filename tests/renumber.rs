@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 
 use strata::api::MemoryApi;
 use strata::diff::{self, ImpactLevel, Renumber};
+use strata::model::pack_type::PackType;
 use strata::ops::{self, ArchiveChange, Chain, PairStatus, Policy, SameReleaseOptions};
 use strata::snapshot::{Pack, Snapshot, Template};
 
@@ -650,7 +651,7 @@ fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_t
 #[test]
 fn a_renumber_whose_download_holds_no_archive_keeps_archive_not_compared_in_each_case_of_palette() {
     let dir = fixtures();
-    let records = |kind: &'static str| {
+    let records = |kind: PackType| {
         let edit = move |profile: &mut Value, _: &mut Value| {
             for p in pack_refs(profile, "csi-aws-ebs") {
                 p["type"] = json!(kind);
@@ -673,21 +674,21 @@ fn a_renumber_whose_download_holds_no_archive_keeps_archive_not_compared_in_each
             ),
         )
     };
-    // the CSI pack: of a private pack registry, of a private Helm registry, and of an OCI registry
-    // of Helm charts or of Zarf packages. The download names it with an empty filePath
-    for kind in [common::SPECTRO, common::HELM, common::OCI] {
+    // the CSI pack is of a private registry, or of an OCI registry of Helm charts or of Zarf
+    // packages. The download names it with an empty filePath
+    for kind in [PackType::Spectro, PackType::Helm, PackType::Oci] {
         let records = records(kind);
         let no_csi = |p: &Pack| (p.name != "csi-aws-ebs").then(|| values_file(p)).flatten();
         let c = renumber_chain(&records, &no_csi);
         let p = &c.pairs[0];
-        assert_eq!(p.status, PairStatus::Renumber, "{kind}: {:?}", p.reasons);
-        assert_eq!(p.archives_not_compared, ["csi/csi-aws-ebs"], "{kind}");
-        assert!(p.archives_compared.is_empty(), "{kind}");
+        assert_eq!(p.status, PairStatus::Renumber, "{kind:?}: {:?}", p.reasons);
+        assert_eq!(p.archives_not_compared, ["csi/csi-aws-ebs"], "{kind:?}");
+        assert!(p.archives_compared.is_empty(), "{kind:?}");
         let text = common::terminal().render_chain(&c).unwrap();
         let line = "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not compared)";
         assert!(
             text.lines().any(|l| l == line),
-            "{kind}: {line:?} in\n{text}"
+            "{kind:?}: {line:?} in\n{text}"
         );
     }
 }

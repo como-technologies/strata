@@ -35,6 +35,9 @@ mod seed;
 mod support;
 mod unknown;
 
+// the type of a pack that `archive` names, as the crate of a test names it
+use strata::model::pack_type::PackType;
+
 #[path = "../../tests/common/download.rs"]
 pub mod archive;
 

@@ -8,6 +8,7 @@ use std::process::{Command, Output};
 
 use common::*;
 use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
+use strata::model::pack_type::PackType;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -12555,12 +12556,12 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
                 "kubernetes-0123456789ab",
                 &[("values.yaml", "pack: {}\n")],
             )),
-            ..none("kubernetes", "1.36.2", SPECTRO, false)
+            ..none("kubernetes", "1.36.2", PackType::Spectro, false)
         },
-        none("csi-aws-ebs", "1.65.0", SPECTRO, true),
+        none("csi-aws-ebs", "1.65.0", PackType::Spectro, true),
         DownloadPack {
             manifests: &[("extra-rules", "kind: ConfigMap\n")],
-            ..none("platform-rules", "1.0.0", MANIFEST, false)
+            ..none("platform-rules", "1.0.0", PackType::Manifest, false)
         },
     ]
 }

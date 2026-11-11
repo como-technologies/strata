@@ -33,7 +33,9 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use serde_json::{Value, json};
+use strata::closed_set::ClosedSet;
 use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
+use strata::model::pack_type::PackType;
 
 mod answer;
 pub mod closed_set;
@@ -1564,13 +1566,15 @@ pub fn serve_downloads(
             .packs
             .iter()
             .zip(archives)
-            .map(|(p, archive)| DownloadPack {
-                name: &p.name,
-                version: &p.version,
-                kind: &p.kind,
-                private: archive.is_none(),
-                archive,
-                manifests: &[],
+            .filter_map(|(p, archive)| {
+                Some(DownloadPack {
+                    name: &p.name,
+                    version: &p.version,
+                    kind: PackType::parse(&p.kind)?,
+                    private: archive.is_none(),
+                    archive,
+                    manifests: &[],
+                })
             })
             .collect();
         let bytes = profile_download(&s.source.uid, &s.source.name, &packs);

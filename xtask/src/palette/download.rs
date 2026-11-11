@@ -1,23 +1,26 @@
 //! The download of a profile version, `GET /v1/clusterprofiles/{uid}/spc/download`, as Palette
 //! serves it: a tar archive that gzip compresses, with the archive of each pack.
 //!
-//! The server builds the file at each request from the documents of the tenant, so an edit in
+//! The server builds the file at each request from the documents of the tenant. So an edit in
 //! place changes the download too, as in Palette. The archive of a pack holds `pack.json`, with the
 //! name, the version, and the layer of the pin. It also holds `values.yaml`, the default values of
 //! the pack version, when the pack listing of its registry gives them. A copy of a version has the
 //! values of the version that it copies. So two builds of one content differ only by the version
 //! in `pack.json`.
 //!
-//! The download holds no archive of a pack of a private registry, of a pack of an OCI registry of
-//! Helm charts or of Zarf packages, and of a manifest pack. The list of the packs names such a pack
-//! with an empty `filePath`, and a manifest pack only by its manifests.
+//! The download holds no archive of a pack of a private registry or of a manifest pack. It holds
+//! none of a pack of an OCI registry of Helm charts or of Zarf packages. The list of the packs
+//! names such a pack with an empty `filePath`, and a manifest pack only by its manifests.
 //!
-//! The server does not model the limit of Palette, one download of a version in 10 seconds: each
-//! step of the book would wait. A live check shows the limit.
+//! The server does not model the limit of Palette, one download of a version in 10 seconds. With
+//! the limit, a step of the book waits for the step before it. A live check shows the limit.
 
 use std::path::Path;
 
 use serde_json::Value;
+use strata::closed_set::ClosedSet;
+use strata::model::oci_provider::OciProvider;
+use strata::model::pack_type::PackType;
 
 use super::{Request, file_for};
 use crate::tenant::{REGISTRY_LISTING, downloaded_profile, manifests_route, pack_listing};
@@ -26,11 +29,7 @@ use crate::tenant::{REGISTRY_LISTING, downloaded_profile, manifests_route, pack_
 #[path = "../../../tests/common/download.rs"]
 mod written;
 
-use written::{DownloadPack, MANIFEST, OCI, pack_archive, pack_top, profile_download};
-
-/// The provider types of an OCI registry whose packs have no archive in a download: Helm charts
-/// and Zarf packages.
-const NO_ARCHIVE_PROVIDERS: [&str; 2] = ["helm", "zarf"];
+use written::{DownloadPack, pack_archive, pack_top, profile_download};
 
 /// The status of the answer to a request for the download that accepts no file.
 pub(super) const NOT_ACCEPTABLE: u16 = 406;
@@ -39,7 +38,8 @@ pub(super) const NOT_ACCEPTABLE: u16 = 406;
 /// the API of Palette writes it. Its `code` is a number, and not a code of Palette.
 const FILE_ONLY: &[u8] = br#"{"code":406,"message":"unsupported media type requested, only [application/octet-stream] are available"}"#;
 
-/// The media type of the file of a download.
+/// The media type of the file of a download. The stand-in models Palette, and not the client that it
+/// tests, so it keeps its own copy of the type.
 pub(super) const FILE_TYPE: &str = "application/octet-stream";
 
 /// True when `target` asks for the download of a profile version.
@@ -92,7 +92,7 @@ pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)>
         .unwrap_or_default();
     let built: Vec<Built> = pins
         .iter()
-        .map(|pin| Built::of(pin, &manifests, &private, &read))
+        .filter_map(|pin| Built::of(pin, &manifests, &private, &read))
         .collect();
     let listed: Vec<Vec<(&str, &str)>> = built
         .iter()
@@ -115,7 +115,7 @@ pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)>
 struct Built {
     name: String,
     version: String,
-    kind: String,
+    kind: PackType,
     private: bool,
     archive: Option<Vec<u8>>,
     manifests: Vec<(String, String)>,
@@ -124,22 +124,25 @@ struct Built {
 impl Built {
     /// The pack of the pin `pin` of the published template. `manifests` is the packs/manifests
     /// document of the version, `private` holds the uid of each private registry, and `read` reads
-    /// a document of the tenant.
+    /// a document of the tenant. None for a pin of a type that is no pack type of Palette.
     fn of(
         pin: &Value,
         manifests: &Value,
         private: &[Value],
         read: &dyn Fn(&str) -> Option<Value>,
-    ) -> Built {
+    ) -> Option<Built> {
         let text = |field: &str| pin[field].as_str().unwrap_or_default().to_string();
-        let (name, version, kind) = (text("name"), text("version"), text("type"));
+        let (name, version) = (text("name"), text("version"));
+        let kind = PackType::parse(&text("type"))?;
         let is_private = private.contains(&pin["registryUid"]);
+        // an OCI registry of Helm charts or of Zarf packages serves no archive in a download
         let provider = pin["annotations"]["ociRegistryProviderType"]
             .as_str()
-            .unwrap_or_default();
-        let has_archive = kind != MANIFEST
+            .and_then(OciProvider::parse);
+        let no_archive_provider = matches!(provider, Some(OciProvider::Helm | OciProvider::Zarf));
+        let has_archive = kind != PackType::Manifest
             && !is_private
-            && !(kind == OCI && NO_ARCHIVE_PROVIDERS.contains(&provider));
+            && !(kind == PackType::Oci && no_archive_provider);
         let archive = has_archive.then(|| {
             let listing = read(&pack_listing(&name));
             let values = listing
@@ -169,14 +172,14 @@ impl Built {
                 (field("name"), field("content"))
             })
             .collect();
-        Built {
+        Some(Built {
             name,
             version,
             kind,
             private: is_private,
             archive,
             manifests,
-        }
+        })
     }
 
     /// The pack of the download, borrowed from this one, with the name and the content of each of
@@ -185,7 +188,7 @@ impl Built {
         DownloadPack {
             name: &self.name,
             version: &self.version,
-            kind: &self.kind,
+            kind: self.kind,
             private: self.private,
             archive: self.archive.clone(),
             manifests,
@@ -202,12 +205,13 @@ mod tests {
 
     use super::*;
     use crate::palette::served;
+    use crate::tenant::download_route;
 
     /// The download of the version `u1` of the project `p1`, as the stand-in serves it to a
     /// request that accepts `accept`.
     fn answer(dir: &Path, uid: &str, accept: Option<&str>) -> (u16, Vec<u8>) {
         let request = Request {
-            target: format!("/v1/clusterprofiles/{uid}/spc/download"),
+            target: format!("/{}", download_route(uid)),
             project: Some("p1".to_string()),
             accept: accept.map(str::to_string),
             body: Vec::new(),
@@ -256,8 +260,7 @@ mod tests {
         );
         let (status, file) = answer(temp.path(), "u1", Some(FILE_TYPE));
         assert_eq!(status, 200);
-        let route = "/v1/clusterprofiles/u1/spc/download";
-        let api = MemoryApi::new().with_file(route, file);
+        let api = MemoryApi::new().with_file(format!("/{}", download_route("u1")), file);
         let download = Palette::new(&api).profile_download("u1").unwrap();
         let k8s = download.pack("kubernetes").unwrap();
         assert_eq!(k8s.version, "1.36.2");
@@ -280,7 +283,7 @@ mod tests {
         assert_eq!(answer(temp.path(), "u1", Some("*/*")).0, 200);
         assert_eq!(answer(temp.path(), "u1", None).0, 200);
         assert_eq!(answer(temp.path(), "u2", Some(FILE_TYPE)).0, 404);
-        assert!(is_download("/v1/clusterprofiles/u1/spc/download"));
+        assert!(is_download(&format!("/{}", download_route("u1"))));
         assert!(!is_download("/v1/clusterprofiles/u1/export"));
     }
 }

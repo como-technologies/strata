@@ -291,7 +291,8 @@ fn candidate_files() -> Vec<Vec<u8>> {
 /// and a manifest, a pack of a private registry, and a manifest pack. The other seeds are a
 /// download with no list, an archive of a pack that is no gzip, and an answer that is JSON.
 fn downloads() -> Vec<Vec<u8>> {
-    use crate::archive::{DownloadPack, MANIFEST, SPECTRO, pack_archive, profile_download, tgz};
+    use crate::archive::{DownloadPack, pack_archive, profile_download, tgz};
+    use strata::model::pack_type::PackType;
     let uid = crate::support::UID;
     let none = |name, kind, private| DownloadPack {
         name,
@@ -316,17 +317,17 @@ fn downloads() -> Vec<Vec<u8>> {
             version: "1.36.2",
             archive: Some(archive),
             manifests: &[("extra", "kind: ConfigMap\n")],
-            ..none("kubernetes", SPECTRO, false)
+            ..none("kubernetes", PackType::Spectro, false)
         },
-        none("private-pack", SPECTRO, true),
+        none("private-pack", PackType::Spectro, true),
         DownloadPack {
             manifests: &[("rules", "kind: ConfigMap\n")],
-            ..none("platform-rules", MANIFEST, false)
+            ..none("platform-rules", PackType::Manifest, false)
         },
     ];
     let not_gzip = [DownloadPack {
         archive: Some(br#"{"code":"NotFound"}"#.to_vec()),
-        ..none("kubernetes", SPECTRO, false)
+        ..none("kubernetes", PackType::Spectro, false)
     }];
     // an archive with no top folder, and a pack whose name holds the label of a pack
     let flat = [DownloadPack {
@@ -334,7 +335,7 @@ fn downloads() -> Vec<Vec<u8>> {
             "pack.json".to_string(),
             br#"{"name":"flat"}"#.to_vec(),
         )])),
-        ..none("flat", SPECTRO, false)
+        ..none("flat", PackType::Spectro, false)
     }];
     let labeled = [DownloadPack {
         archive: Some(pack_archive(
@@ -344,7 +345,7 @@ fn downloads() -> Vec<Vec<u8>> {
             "csi--aws-0123456789ab",
             &[],
         )),
-        ..none("csi--aws", SPECTRO, false)
+        ..none("csi--aws", PackType::Spectro, false)
     }];
     vec![
         profile_download(uid, "aws-stack", &packs),

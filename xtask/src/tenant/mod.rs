@@ -49,6 +49,8 @@ pub use routes::{
 // the routes and the sync answers that the chapter `fields` writes: each document there has the
 // route and the answer of its kind
 pub(crate) use registries::{RegistrySync, registry_sync};
+#[cfg(test)]
+pub(crate) use routes::download_route;
 pub(crate) use routes::{
     CLUSTER_LISTING, REGISTRY_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
     group_route, manifests_route, pack_listing, profile_route, registry_summary_route,

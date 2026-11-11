@@ -67,7 +67,7 @@ fn each_kind_of_error() -> Vec<Error> {
         },
         Error::NotArchive {
             method: Method::Get,
-            path: "/v1/clusterprofiles/u1/spc/download".into(),
+            path: crate::api::download_path("u1"),
             message: "no gzip".into(),
         },
         Error::ProfileNotFound {

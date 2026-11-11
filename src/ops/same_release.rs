@@ -180,7 +180,7 @@ pub struct Pair {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub archives_changed: Vec<ArchiveChange>,
     /// The key of each pack of `renumbers` whose archive can differ, and whose two archives strata
-    /// did not compare: its digest changed, or Palette gives none. A side is no published version
+    /// did not compare. Its digest changed, or Palette gives none. A side is no published version
     /// of a cluster profile, or its download holds no archive of the pack. So the pipeline must
     /// check them. A manifest pack has no archive.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -445,8 +445,9 @@ impl PairReasons {
     }
 }
 
-/// The reason of a renumber whose two archives differ in `files`, which is not empty: `pack <key>
-/// archive: values.yaml differs`, or `pack <key> archive: presets.yaml and 2 more files differ`.
+/// The reason of a renumber whose two archives differ in `files`, which is not empty. Examples
+/// are `pack <key> archive: values.yaml differs` and
+/// `pack <key> archive: presets.yaml and 2 more files differ`.
 fn archive_reason(key: &str, files: &[String]) -> String {
     match files {
         [file] => format!("pack {key} archive: {file} differs"),
@@ -611,8 +612,8 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
 /// # Errors
 ///
 /// An error of `connect`, such as `missing-credential`. An error of a download: an error of the
-/// request, such as HTTP 429 when another client read the same version less than 10 seconds
-/// before, or [`crate::Error::NotArchive`].
+/// request, or [`crate::Error::NotArchive`]. An example is HTTP 429, when another client read the
+/// version less than 10 seconds before.
 pub fn same_release_with<A, F>(
     records: &[(String, Snapshot)],
     options: SameReleaseOptions,

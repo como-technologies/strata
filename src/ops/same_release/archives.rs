@@ -22,7 +22,7 @@ pub(super) enum ArchiveCheck {
 }
 
 /// The project and the uid of the profile version of a record whose download Palette serves.
-type Version = (Option<String>, String);
+type VersionAt = (Option<String>, String);
 
 /// The download of each profile version of a chain, read once.
 ///
@@ -31,7 +31,7 @@ type Version = (Option<String>, String);
 pub(super) struct Downloads<'p, A: PaletteApi, F> {
     connect: F,
     clients: HashMap<Option<String>, Palette<A>>,
-    files: BTreeMap<Version, ProfileDownload>,
+    files: BTreeMap<VersionAt, ProfileDownload>,
     progress: &'p Progress,
 }
 
@@ -76,7 +76,7 @@ where
     }
 
     /// Read the download of the version `v` of the record `s`, when no pair read it before.
-    fn read(&mut self, v: &Version, s: &Snapshot) -> Result<()> {
+    fn read(&mut self, v: &VersionAt, s: &Snapshot) -> Result<()> {
         if let Entry::Vacant(entry) = self.files.entry(v.clone()) {
             self.progress.note(&format!(
                 "reading the download of {} from Palette",
@@ -90,9 +90,9 @@ where
 }
 
 /// The project and the uid of the version of the record `s`, when Palette serves a download of
-/// it: a record of the published template of a version of a cluster profile. A candidate, a
-/// draft, a cluster, a pack, and an app profile have none.
-fn version_of(s: &Snapshot) -> Option<Version> {
+/// it. Such a record holds the published template of a version of a cluster profile. A
+/// candidate, a draft, a cluster, a pack, and an app profile have none.
+fn version_of(s: &Snapshot) -> Option<VersionAt> {
     let source = &s.source;
     (source.is_profile_version()
         && source.template == Template::Published
