@@ -7,8 +7,8 @@ use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    recipe, repo_file, runs_of, script, steps, strings, text, toml_value, workflow, workflow_files,
-    workflow_text,
+    one_line, recipe, repo_file, runs_of, script, steps, strings, text, toml_value, workflow,
+    workflow_files, workflow_text,
 };
 
 #[test]
@@ -1539,79 +1539,22 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 
 // ---- the knurl adapter (#705) -------------------------------------------------------------------
 
-/// The adapter is a package of its own, so no check of `ci.yml` builds it. Its workflow runs
-/// `just adapter-test` on a schedule, on demand, and on a push to `main` that changes strata or
-/// the adapter. The verify holds a head that has a failed run. So a pull request runs the job only
-/// when it changes the adapter or the workflow, and not when it changes only `src/`.
+/// A job of knurl tests the adapter, so no workflow of strata runs it. A failure of it blocks no
+/// merge and no release of strata. No recipe that the checks run builds the adapter.
 #[test]
-fn the_adapter_workflow_runs_on_a_schedule_on_a_change_of_main_and_on_a_pull_request_that_changes_the_adapter()
- {
-    let doc = workflow("adapter.yml");
-    let on = &doc["on"];
-    assert!(
-        on["schedule"].is_sequence() && on.get("workflow_dispatch").is_some(),
-        "{on:?}"
-    );
-    assert_eq!(strings(&on["push"]["branches"]), ["main"]);
-    assert_eq!(
-        strings(&on["push"]["paths"]),
-        [
-            "src/**",
-            "crates/strata-knurl/**",
-            "Cargo.toml",
-            ".github/workflows/adapter.yml"
-        ]
-    );
-    assert_eq!(
-        strings(&on["pull_request"]["paths"]),
-        ["crates/strata-knurl/**", ".github/workflows/adapter.yml"]
-    );
-    assert_eq!(
-        runs_of("adapter.yml", "adapter").last().unwrap(),
-        "just adapter-test"
-    );
-}
-
-/// The key step is the first step. Each later step runs only when the key step wrote
-/// `ready=true`, so a pull request with no secret skips the build and passes.
-#[test]
-fn each_step_after_the_key_step_runs_only_when_the_job_has_the_key() {
-    let doc = workflow("adapter.yml");
-    let all: Vec<&serde_yaml::Value> = steps(&doc).collect();
-    let (key, later) = all.split_first().expect("the job has steps");
-    assert_eq!(
-        key["name"].as_str(),
-        Some("give git the deploy key of knurl")
-    );
-    assert_eq!(key["id"].as_str(), Some("key"));
-    assert!(!later.is_empty());
-    for step in later {
-        assert_eq!(
-            step["if"].as_str(),
-            Some("steps.key.outputs.ready == 'true'"),
-            "{step:?}"
-        );
+fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
+    for file in workflow_files() {
+        let text = workflow_text(&file);
+        for name in ["adapter-test", "strata-knurl"] {
+            assert!(!text.contains(name), "{file} names {name}");
+        }
     }
-}
-
-/// No release carries the adapter, so a failure of its job does not block a merge. A merge needs
-/// the job `Gate` of `ci.yml`, and `Gate` needs only the checks. A release needs the jobs of
-/// `checks.yml`, which `ci.yml` and `release.yml` call. None of the three runs the adapter or
-/// calls its workflow, and neither do the recipes that the checks run.
-#[test]
-fn no_check_that_a_merge_or_a_release_needs_runs_the_adapter() {
-    assert_eq!(
-        workflow("ci.yml")["jobs"]["gate"]["needs"].as_str(),
-        Some("checks")
-    );
-    for file in ["checks.yml", "ci.yml", "release.yml"] {
-        let text = workflow_text(file);
-        assert!(
-            !text.contains("adapter"),
-            "{file} runs the adapter or calls its workflow"
-        );
-    }
-    for name in ["lint", "test", "library-example", "examples"] {
+    let checks = workflow("checks.yml");
+    let recipes: Vec<&str> = steps(&checks)
+        .filter_map(|step| step["run"].as_str()?.strip_prefix("just "))
+        .collect();
+    assert!(recipes.contains(&"test"), "{recipes:?}");
+    for name in recipes {
         assert!(
             !recipe(name)
                 .iter()
@@ -1621,116 +1564,29 @@ fn no_check_that_a_merge_or_a_release_needs_runs_the_adapter() {
     }
 }
 
-/// The build of the adapter holds the code of knurl, which is private. A pull request from a fork
-/// can read a cache of `main`, so the job keeps no cache. Such a pull request gets no secret, so
-/// the job does not run for it.
+/// The page of the adapter names the job of knurl, the events that start it, and what a failure
+/// of it means. It names no secret of strata, because strata has none for knurl.
 #[test]
-fn the_adapter_job_keeps_no_cache_and_skips_a_pull_request_from_a_fork() {
-    let doc = workflow("adapter.yml");
-    let uses: Vec<&str> = steps(&doc).filter_map(|s| s["uses"].as_str()).collect();
-    assert!(
-        !uses
-            .iter()
-            .any(|u| u.starts_with("Swatinem/rust-cache@") || u.starts_with("actions/cache")),
-        "{uses:?}"
-    );
-    assert_eq!(
-        doc["jobs"]["adapter"]["if"].as_str(),
-        Some(
-            "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"
-        )
-    );
-}
-
-/// The step writes the deploy key to a file that only the job reads. It trusts only the host keys
-/// that GitHub publishes, gives git the command of ssh for the fetch of Cargo, and writes
-/// `ready=true`. With no secret, a pull request gets a notice and the step passes, so an empty
-/// secret holds no verify. A push, the schedule, and a run on demand fail, so the empty secret
-/// shows. With no secret, the step writes and calls nothing.
-#[test]
-fn the_key_step_gives_git_the_deploy_key_of_knurl_and_with_no_secret_fails_on_each_event_but_a_pull_request()
- {
-    let gh = "#!/usr/bin/env bash\necho \"gh $*\" >> \"$FAKE_LOG\"\necho 'github.com ssh-ed25519 AAAA'\n";
-    let temp = tempfile::tempdir().unwrap();
-    let temp_path = temp.path().display().to_string();
-    let path = format!("bin:{}", std::env::var("PATH").unwrap());
-    let give = |key: &str, event: &str| {
-        let env = [
-            ("KNURL_DEPLOY_KEY", key),
-            ("GITHUB_EVENT_NAME", event),
-            ("RUNNER_TEMP", temp_path.as_str()),
-            ("GITHUB_ENV", "env.txt"),
-            ("GITHUB_OUTPUT", "output.txt"),
-            ("PATH", path.as_str()),
-        ];
-        run_step_with(
-            "adapter.yml",
-            "give git the deploy key of knurl",
-            &env,
-            &[("bin/gh", gh)],
-        )
-    };
-    let dir = temp.path().join("knurl-ssh");
-
-    let notice = "::notice::the secret KNURL_DEPLOY_KEY is empty, so the job does not test the adapter on this pull request";
-    let error = "::error::the secret KNURL_DEPLOY_KEY is empty, so the job cannot read knurl";
-    for (event, code, message) in [
-        ("pull_request", 0, notice),
-        ("push", 1, error),
-        ("schedule", 1, error),
-        ("workflow_dispatch", 1, error),
-    ] {
-        let none = give("", event);
-        assert_eq!(none.output.status.code(), Some(code), "{event}");
-        assert_eq!(text(&none.output.stdout).trim_end(), message, "{event}");
-        assert!(none.calls().is_empty(), "{event}: {:#?}", none.calls());
-        assert!(!dir.exists(), "{event}");
-        for file in ["env.txt", "output.txt"] {
-            assert!(!none.dir.path().join(file).exists(), "{event}: {file}");
-        }
-    }
-
-    let run = give("the-key", "pull_request");
-    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
-    assert_eq!(
-        run.calls(),
-        [r#"gh api meta --jq .ssh_keys[] | "github.com " + ."#]
-    );
-    assert_eq!(
-        std::fs::read_to_string(dir.join("key")).unwrap(),
-        "the-key\n"
-    );
-    assert_eq!(
-        std::fs::read_to_string(dir.join("known_hosts")).unwrap(),
-        "github.com ssh-ed25519 AAAA\n"
-    );
-    let d = dir.display();
-    assert_eq!(
-        std::fs::read_to_string(run.dir.path().join("env.txt")).unwrap(),
-        format!(
-            "GIT_SSH_COMMAND=ssh -i {d}/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={d}/known_hosts\n"
-        )
-    );
-    assert_eq!(
-        std::fs::read_to_string(run.dir.path().join("output.txt")).unwrap(),
-        "ready=true\n"
-    );
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(dir.join("key"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600, "only the job reads the key");
-    }
-}
-
-/// The page of the adapter names the workflow and the secret that the job reads.
-#[test]
-fn the_page_of_the_adapter_names_its_workflow_and_the_secret_of_the_key() {
+fn the_page_of_the_adapter_names_the_job_of_knurl_and_what_a_failure_means() {
     let page = repo_file("docs/src/automation/knurl.md");
-    for name in ["`.github/workflows/adapter.yml`", "`KNURL_DEPLOY_KEY`"] {
-        assert!(page.contains(name), "the page does not name {name}");
+    let (_, job) = page
+        .split_once("\n### The job of knurl\n")
+        .expect("the page has the section The job of knurl");
+    for words in [
+        "`strata adapter`",
+        "`.github/workflows/strata-adapter.yml`",
+        "06:17 UTC",
+        "`strata-ref`",
+        "no credential",
+        "blocks no merge",
+    ] {
+        assert!(
+            one_line(job).contains(words),
+            "the section does not say {words}"
+        );
     }
+    assert!(
+        !page.contains("KNURL_"),
+        "the page names a secret of strata"
+    );
 }

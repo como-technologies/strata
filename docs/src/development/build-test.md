@@ -649,9 +649,9 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-The checks do not run `just adapter-test`. The workflow `knurl adapter` runs it,
-and the job `Gate` of `ci` does not need it: see
-[The job of CI](../automation/knurl.md#the-job-of-ci).
+The checks do not run `just adapter-test`. The adapter needs knurl, a private
+repository. A job of knurl runs the recipe each day on the strata of `main`: see
+[The job of knurl](../automation/knurl.md#the-job-of-knurl).
 
 `ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
 it is the one check run that the verify reads (see
