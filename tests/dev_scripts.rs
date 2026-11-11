@@ -705,6 +705,44 @@ fn deny_list_passes_a_symlink_with_a_clean_target_also_when_the_file_at_the_targ
     );
 }
 
+/// "The deny list" in `docs/src/development/build-test.md` gives a loop that finds each tracked
+/// symlink whose target holds an entry. The test runs the loop of the page, with the list as `$1`.
+#[test]
+fn the_loop_of_the_page_of_the_deny_list_prints_each_symlink_whose_target_holds_an_entry() {
+    let page = repo_file("docs/src/development/build-test.md");
+    let looped =
+        block_with(&page, "bash", "git cat-file blob").replace("<file of the list>", "\"$1\"");
+    let lists = tempfile::tempdir().unwrap();
+    let list = lists.path().join("list");
+    std::fs::write(&list, DENIED).unwrap();
+    // The text of notes/a.md holds an entry, but the loop reads only the target of a symlink.
+    let tree = deny_tree(&TRACKED);
+    let d = tree.path();
+    std::fs::create_dir(d.join("sub dir")).unwrap();
+    deny_link(d, "sub dir/a lynx", "Barney-Corp/notes.txt");
+    // `git ls-files -s` puts quotes around this path, and `git ls-files -s -z` does not.
+    deny_link(d, "sub dir/héron", "../fred/notes");
+    deny_link(d, "sub dir/clean", "../clean.txt");
+    for (dir, printed) in [
+        (d.to_path_buf(), ["sub dir/a lynx", "sub dir/héron"]),
+        (d.join("sub dir"), ["a lynx", "héron"]),
+    ] {
+        let mut c = Command::new("bash");
+        c.arg("-c")
+            .arg(&looped)
+            .arg("bash")
+            .arg(&list)
+            .current_dir(&dir);
+        let o = isolate_git(&mut c).output_locked().unwrap();
+        assert!(o.status.success(), "in {dir:?}: {}", text(&o.stderr));
+        assert_eq!(
+            text(&o.stdout).lines().collect::<Vec<_>>(),
+            printed,
+            "in {dir:?}"
+        );
+    }
+}
+
 // ---- xtask playground ----------------------------------------------------------------------
 
 /// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and
