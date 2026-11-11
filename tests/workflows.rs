@@ -53,6 +53,46 @@ fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
     }
 }
 
+/// The job named `Gate` of the parsed `ci.yml` in `ci`: the one check run that the verify reads.
+fn gate_of(ci: &serde_yaml::Value) -> &serde_yaml::Value {
+    ci["jobs"]
+        .as_mapping()
+        .expect("ci.yml has jobs")
+        .values()
+        .find(|job| job["name"].as_str() == Some("Gate"))
+        .expect("ci.yml has a job named Gate")
+}
+
+/// The arguments of each `just` command in the `run` steps of the job `job`, in order.
+///
+/// A job that calls a workflow of this repository with `uses` gives the commands of each job of
+/// that workflow. The function also reads each workflow that such a job calls in turn.
+fn just_runs_of(job: &serde_yaml::Value) -> Vec<String> {
+    if let Some(called) = job["uses"].as_str() {
+        let file = called
+            .strip_prefix("./.github/workflows/")
+            .unwrap_or_else(|| {
+                panic!("the job calls {called}, which is not a workflow of this repository")
+            });
+        let doc = workflow(file);
+        return doc["jobs"]
+            .as_mapping()
+            .unwrap_or_else(|| panic!("{file} has no jobs"))
+            .values()
+            .flat_map(just_runs_of)
+            .collect();
+    }
+    job["steps"]
+        .as_sequence()
+        .into_iter()
+        .flatten()
+        .filter_map(|step| step["run"].as_str())
+        .flat_map(str::lines)
+        .filter_map(|line| line.trim().strip_prefix("just "))
+        .map(str::to_string)
+        .collect()
+}
+
 /// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
 /// success while that run has none. The job needs `checks` and `deny-list`, and has no `if`. So
 /// GitHub runs it only when each check passed, and skips it when one failed. A renamed job, a lost
@@ -61,10 +101,7 @@ fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
 fn the_gate_job_of_ci_needs_the_checks_and_the_deny_list_and_has_no_condition() {
     let doc = workflow("ci.yml");
     let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
-    let gate = jobs
-        .values()
-        .find(|job| job["name"].as_str() == Some("Gate"))
-        .expect("ci.yml has a job named Gate");
+    let gate = gate_of(&doc);
     let needs = needs_of(gate);
     assert_eq!(needs.len(), 2, "the Gate needs {needs:?}");
     assert!(
@@ -1599,24 +1636,32 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 
 // ---- the knurl adapter (#705) -------------------------------------------------------------------
 
+/// The names that build the adapter: its recipe and its package.
+const ADAPTER_NAMES: [&str; 2] = ["adapter-test", "strata-knurl"];
+
 /// A job of knurl tests the adapter, so no workflow of strata runs it. A failure of it blocks no
-/// merge and no release of strata. No recipe that the checks run builds the adapter. The test
-/// reads the commands that `just --dry-run` prints for each of these recipes, with the commands of
-/// its dependencies. It also reads each recipe that a `just` command in them runs.
+/// merge and no release of strata.
+///
+/// No recipe of a job that `Gate` needs builds the adapter. The test reads the `just` commands of
+/// each such job, and of each workflow that the job calls. Then it reads the commands that
+/// `just --dry-run` prints for each recipe, with the commands of its dependencies. It also reads
+/// each recipe that a `just` command in them runs.
 #[test]
-fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
+fn no_workflow_of_strata_and_no_recipe_of_a_job_that_the_gate_needs_runs_the_adapter() {
     for file in workflow_files() {
         let text = workflow_text(&file);
-        for name in ["adapter-test", "strata-knurl"] {
+        for name in ADAPTER_NAMES {
             assert!(!text.contains(name), "{file} names {name}");
         }
     }
-    let checks = workflow("checks.yml");
-    let mut recipes: Vec<String> = steps(&checks)
-        .filter_map(|step| step["run"].as_str()?.strip_prefix("just "))
-        .map(str::to_string)
+    let ci = workflow("ci.yml");
+    let mut recipes: Vec<String> = needs_of(gate_of(&ci))
+        .into_iter()
+        .flat_map(|need| just_runs_of(&ci["jobs"][need]))
         .collect();
-    assert!(recipes.iter().any(|r| r == "test"), "{recipes:?}");
+    for needed in ["test", "deny-list"] {
+        assert!(recipes.iter().any(|r| r == needed), "{recipes:?}");
+    }
     let Some(just) = on_path("just") else {
         eprintln!("skipped: this machine has no just; CI reads the recipes");
         return;
@@ -1629,7 +1674,7 @@ fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
         let args: Vec<&str> = run.split_whitespace().collect();
         let commands = just_dry_run(&just, &args);
         for line in commands.lines() {
-            for name in ["adapter-test", "strata-knurl"] {
+            for name in ADAPTER_NAMES {
                 assert!(
                     !line.contains(name),
                     "the recipe {run} builds the adapter: {line}"
