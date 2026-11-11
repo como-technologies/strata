@@ -2238,7 +2238,7 @@ dependencies = [
  "strata-palette",
  "strata-preflight",
  "strata-report-endpoint",
- "syn 2.0.119",
+ "syn 3.0.5",
  "tar",
  "tempfile",
  "ureq",
