@@ -163,6 +163,7 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"the diff of an unknown pack", "/v1/packs/aws-stack@1.1.0/k8s/nope/diff?side=cluster", 404, jsonType},
 		{"the diff of a pack with no change on the side", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=published", 404, jsonType},
 		{"the diff of a pack that no pin names", "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=newer", 404, jsonType},
+		{"the diff of a profile with no newer version", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newest", 404, jsonType},
 		{"a diff with no side", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff", 400, jsonType},
 		{"a diff with a side that does not exist", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=nope", 400, jsonType},
 		{"an unknown route", "/v1/nope", 404, jsonType},

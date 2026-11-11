@@ -63,7 +63,9 @@ The last lines name the profile versions of the records: see
 [Newer versions of a profile](#newer-versions-of-a-profile).
 
 `--no-impact` skips the comparison of each bump and the question to Palette. The
-comparison costs two pack reads for each pin that is behind.
+comparison costs two pack reads for each pin that is behind. For a profile
+version that is behind, it reads the pack manifests and the variables of the two
+versions: see [The move to the newest profile version](#the-move-to-the-newest-profile-version).
 `--pre-release` names a pre-release as a newer version of a pin or of a profile
 version that is not a pre-release. `--pin` reports one pack: see [One pack](#one-pack).
 
@@ -124,9 +126,48 @@ The record of a cluster holds each profile that the cluster runs. The cluster
 {{#include ../output/behind-profile-json.txt}}
 ```
 
-Strata reads the document of each profile version one time, and the document of
-its newest version for the time of its create. With `--pin`, it reads no profile
-version. `--no-impact` does not change these reads.
+Strata reads the document of each profile version one time in each project, and
+the document of its newest version. Each part of `behind` reads that one copy:
+the newer versions, the time of the create, the move to the newest version, and
+the names of the clusters in a refusal of Palette. The comparison of the move
+also reads the pack manifests and the variables of the two versions.
+`--no-impact` skips the comparison, and not the other reads. With `--pin`, strata
+reads no profile version.
+
+## The move to the newest profile version
+
+For a profile version that is behind, `bump to` names what a move to the newest
+version does, as for a pin. Strata compares the two versions, as
+`compare <name>@<held> <name>@<newest>` does. The line gives the impact level of
+the comparison, and each change flag of its packs, in the order of the legend:
+
+```text
+{{#include ../output/behind-profile-move-lines.txt}}
+```
+
+`compare` of the two versions gives the same impact level:
+
+```text
+{{#include ../output/behind-profile-move-compare.txt}}
+```
+
+`--json` gives the move in `profiles[].bump`. `bump.packs[]` holds each pack that
+the move changes, adds, or removes. A pack gives its key, its status, its version
+on each side, its flags, and `valuesChanged` when its values change:
+
+```text
+{{#include ../output/behind-profile-move-json.txt}}
+```
+
+- **Strata adds no rule of a change.** The level, the flags, and the packs come
+  from the comparison. See [Change flags and impact](../reference/impact.md).
+- **Strata does not ask Palette about the move of a profile.** The bump of a
+  profile version has no `palette accepts` line. To ask Palette about the move of
+  a cluster, run `strata compare cluster:<cluster> <name>@<newest> --repave`. See
+  [Ask Palette if the change repaves](./compare/repave.md).
+- **A comparison that fails** makes the profile version `not checked`. The line
+  under it gives the error, and the exit is `2`.
+- `--no-impact` skips the comparison, as it skips the comparison of a pin.
 
 ## One pack
 
@@ -276,8 +317,10 @@ states what each route checks.
 
 `--no-impact` sends none of these requests. Without it, strata sends one request
 for each record that it asks about, for each pin that is behind. It reads the
-document of each cluster record one time, and the document of a profile version
-one time when Palette refuses a move.
+document of each cluster record one time. When Palette refuses a move, strata
+takes the names of the clusters from the document of the profile version. It
+reads that document one time in each project: see
+[Newer versions of a profile](#newer-versions-of-a-profile).
 
 ## A pin that is current against an older copy
 

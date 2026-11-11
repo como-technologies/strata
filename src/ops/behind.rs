@@ -386,7 +386,8 @@ struct Check<'a> {
 /// With `options.impact`, strata asks Palette about the bump of a pin in the project of the pin.
 /// It does not ask a record of another project that pins the pack, and the bump says so. It also
 /// compares each profile version that is behind with the newest version of its profile. Strata
-/// reads the document of each profile version one time.
+/// reads the document of each profile version one time in each project, also for the names of the
+/// clusters in a refusal of Palette.
 ///
 /// # Errors
 ///

@@ -196,7 +196,31 @@ function viewProfile(subject) {
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
     <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}, from the top layer to the bottom</span></h2></div>${packs}</section>
-    ${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
+    ${profileMoveCard(subject, x)}${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
+}
+
+// The words of a pack in the move of a profile, by its status in the compare.
+const MOVE_WORDS = {changed: "Changed", added: "Added", removed: "Removed"};
+
+// profileMoveCard draws the move of a profile to its newest published version: the impact, the flags of its packs, and each pack that
+// the move changes, adds, or removes, with its versions and whether its values change. A pack of the record links to its page, where
+// the Compare menu shows the full diff of the move. It is "" for a profile with no newer version.
+function profileMoveCard(subject, x) {
+  const n = x.newerVersion;
+  if (!n) return "";
+  const head = h`<h2>Move to ${ref(x.name, n.version)} <span class="sub">Created ${day(n.created)}</span></h2>${newestImpact(n)}`;
+  const card = (flags, body) => h`<section class="card"><div class="chead">${head}${flags}</div>${body}</section>`;
+  if (!n.move) return card("", h`<div class="body">${inline(TONE.WARN, "Strata could not compare the record with this version now. The next read of the versions asks again.")}</div>`);
+  const m = n.move, flags = flagRow(m, "", "");
+  if (!m.packs.length) return card(flags, h`<div class="body">${inline(TONE.SAME, "The move changes no pack.")}</div>`);
+  const rows = m.packs.map(q => {
+    const p = x.packs.find(k => k.key === q.key), href = p ? packHash(subject, p) : "";
+    const version = q.from && q.to ? (q.from === q.to ? h`${q.from} ${mut("same version")}` : h`${q.from}${ARROW}${q.to}`) : q.from || q.to;
+    // A pack that the move adds or removes has values on one side only, so the column says nothing of them.
+    const values = q.from && q.to ? (q.valuesChanged ? "Change" : mut("Same")) : DASH;
+    return h`<tr${href ? h` class="link" data-go="${href}"` : ""}><td class="m">${href ? h`<a href="${href}">${q.key}</a>` : q.key}</td><td>${MOVE_WORDS[q.status] || q.status}</td><td class="m nw">${version}</td><td>${values}</td></tr>`;
+  });
+  return card(flags, h`<div class="tw"><table><thead><tr><th>Pack</th><th>Change</th><th>Version</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 }
 
 // eventFrom names where an event comes from.

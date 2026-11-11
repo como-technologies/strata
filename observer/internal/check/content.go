@@ -275,14 +275,20 @@ func (o *Observer) compareSide(ctx context.Context, dir, record string, index in
 	if _, err := o.run(ctx, dir, exitsOfAWrite, runner.CmdSnapshot, "cluster:"+o.cfg.ClusterUID+"/"+profile, "--from-raw", "raw", "-o", side, "-q"); err != nil {
 		return nil, err
 	}
-	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, record, side, runner.FlagFull, "--json", "--compact", "-q")
+	diff, err := o.compareFull(ctx, dir, record, side)
 	if err != nil {
 		return nil, err
+	}
+	return &diff, nil
+}
+
+// compareFull compares the refs a and b with `--full`, and caps the text of each pack at maxText.
+func (o *Observer) compareFull(ctx context.Context, dir, a, b string) (docs.Diff, error) {
+	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, a, b, runner.FlagFull, "--json", "--compact", "-q")
+	if err != nil {
+		return docs.Diff{}, err
 	}
 	diff, err := decode[docs.Diff](res.Stdout, docs.DiffSchema)
-	if err != nil {
-		return nil, err
-	}
 	diff.CapText(maxText)
-	return &diff, nil
+	return diff, err
 }

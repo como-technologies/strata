@@ -73,12 +73,18 @@ plain text. The route `/` serves the page of the dashboard.
 - A profile holds `status`, `published` and `clusterCopy` with their roots, its packs
   with their `status` and `flags`, its `findings`, and `who`. A profile with a newer
   published version also holds `newerVersion`: `version`, `created`, and `new`.
+- `newerVersion.move` is what a move from the record to that version changes, from
+  the compare of the two: `impact`, `flags`, and `packs[]`. Each pack that the move
+  changes, adds, or removes has `key`, `status`, `from`, `to`, `flags`, and
+  `valuesChanged`. `from` is absent for a pack that the move adds, and `to` for a
+  pack that it removes. When the compare failed, `move` is absent and `unread` is
+  true. An observer of 0.32.2 and before gives neither.
 - `counts` of `/v1/cluster` holds `newerProfileVersions`, the profiles with a newer
   published version. An observer of 0.32.2 and before does not give it.
 
 | Status | When |
 | --- | --- |
-| `400` | The detail route has a `side` that is not `published`, `cluster`, or `newer`, or has no `side`. |
+| `400` | The detail route has a `side` that is not `published`, `cluster`, `newer`, or `newest`, or has no `side`. |
 | `403` | The click has no header `Sec-Fetch-Site: same-origin`, or the header has another value. The body has a fixed text. |
 | `404` | A profile, a pack, a diff, a move, or an image does not exist. The body has a fixed text and names no part of the request. |
 | `405` | The method is not the method of the route. The header `Allow` names it. |
@@ -214,13 +220,14 @@ rule has none.
 
 ## The detail route
 
-`side` is `published`, `cluster`, or `newer`.
+`side` is `published`, `cluster`, `newer`, or `newest`.
 
 | `side` | What it compares | Where the values come from |
 | --- | --- | --- |
 | `published` | The record with the version that Palette holds now. | The last good content cycle. |
 | `cluster` | The record with the copy of the profile in the cluster. | The last good content cycle. |
 | `newer` | The pinned version of the pack with its newest version. | The last good versions cycle. |
+| `newest` | The record with the newest published version of its profile. | The last good versions cycle. An observer of 0.32.2 and before does not have this side. |
 
 The answer holds the `profile`, the `key`, the `side`, the `status`, the `impact`,
 and the `flags` of the pack. It also holds these lists:

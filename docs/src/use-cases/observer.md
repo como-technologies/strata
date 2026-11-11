@@ -135,7 +135,8 @@ Copy. The questions are:
 - Does this cluster still run the record?
 
 A pack with a newer version adds two more: "What does the move change?" and "Which newer
-versions does Palette list?".
+versions does Palette list?". The page of a profile with a newer version of the profile
+adds "What does the move to the newest version change?".
 
 The first command reads the record out of the Secrets of the observer into `record.json`.
 The other commands read that file. The two kinds of row need different access:

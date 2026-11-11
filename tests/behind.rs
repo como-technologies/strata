@@ -494,43 +494,7 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
         "strata asks Palette nothing about the move of a profile"
     );
 
-    // the packs of the move, in the order of compare: the version changes, the packs that it adds
-    // or removes, and the values that change
-    let packs: Vec<(&str, &str, Option<&str>, Option<&str>, bool)> = bump
-        .packs
-        .iter()
-        .map(|p| {
-            let (from, to) = (p.from.as_deref(), p.to.as_deref());
-            (
-                p.key.as_str(),
-                p.status.as_str(),
-                from,
-                to,
-                p.values_changed,
-            )
-        })
-        .collect();
-    assert_eq!(
-        packs,
-        [
-            ("addon/dino-logs", "removed", Some("2.0.0"), None, false),
-            (
-                "addon/fred-compositions",
-                "changed",
-                Some("0.1.0"),
-                Some("0.2.0"),
-                false
-            ),
-            ("addon/pebbles-dns", "added", None, Some("1.0.0"), false),
-            (
-                "addon/wilma-values",
-                "changed",
-                Some("1.0.0"),
-                Some("1.0.0"),
-                true
-            ),
-        ]
-    );
+    // the packs of the move are the packs that compare changes, adds, or removes, in its order
     let compared: Vec<&str> = d
         .packs
         .iter()
@@ -539,7 +503,6 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
         .collect();
     let keys: Vec<&str> = bump.packs.iter().map(|p| p.key.as_str()).collect();
     assert_eq!(keys, compared);
-
 
     let text = common::terminal().render_behind(&r).unwrap();
     let line = format!(
@@ -559,20 +522,19 @@ fn behind_names_what_the_move_to_the_newest_profile_version_does_as_compare_give
         "{markdown}"
     );
 
-    // the JSON holds the move, and `--since` reads it again
+    // the JSON holds the move: the version changes, the packs that it adds or removes, and the
+    // values that change. `--since` reads it again
     let doc = serde_json::to_value(&r).unwrap();
     assert_eq!(
-        doc["profiles"][0]["bump"]["packs"][1],
-        json!({"key": "addon/fred-compositions", "status": "changed", "from": "0.1.0", "to": "0.2.0",
-            "flags": ["IDENTITY", "UPSTREAM"]})
-    );
-    assert_eq!(
-        doc["profiles"][0]["bump"]["packs"][2],
-        json!({"key": "addon/pebbles-dns", "status": "added", "to": "1.0.0"})
-    );
-    assert_eq!(
-        doc["profiles"][0]["bump"]["packs"][3]["valuesChanged"],
-        true
+        doc["profiles"][0]["bump"]["packs"],
+        json!([
+            {"key": "addon/dino-logs", "status": "removed", "from": "2.0.0"},
+            {"key": "addon/fred-compositions", "status": "changed", "from": "0.1.0", "to": "0.2.0",
+                "flags": ["IDENTITY", "UPSTREAM"]},
+            {"key": "addon/pebbles-dns", "status": "added", "to": "1.0.0"},
+            {"key": "addon/wilma-values", "status": "changed", "from": "1.0.0", "to": "1.0.0",
+                "flags": ["AUTHORED"], "valuesChanged": true},
+        ])
     );
     let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
     assert_eq!(back.profiles[0].bump.as_ref().unwrap().packs.len(), 4);
