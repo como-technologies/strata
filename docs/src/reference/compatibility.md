@@ -1206,6 +1206,20 @@ field, a value, an input, or an option is in the sections above.
   new field `move`, or `unread` when the compare failed. The detail route takes the side
   `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
   See [Run it once](../automation/observer.md#run-it-once).
+- **`behind` names the newer profile version that carries a newer pack.** A new line under each
+  pin that is behind names it. The line is `<name>@<version> carries <pack>@<version>`, or it says
+  that no newer version of the profile carries one. `pins[].carriers[]` of `--json` holds the
+  same. The markdown cell of the status of the pin ends with the same words. See
+  [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+  - A script that reads the text must skip the new line, or read `--json`.
+  - For each profile version that holds a pin that is behind, `behind` reads the document of each
+    newer version. It sends one request for each, also with `--no-impact`. With `--pin`, it reads
+    none.
+  - The state line of an issue of `upstream-report.sh` holds `carriers` too.
+- **The observer shows the carrier of a pack that is behind.** A pack row of `/v1/profiles` holds
+  the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
+  of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
+  badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
   `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
   read the file of a folder from the working folder. So a file of a checkout could
@@ -1369,6 +1383,8 @@ field, a value, an input, or an option is in the sections above.
 - `ops::ProfilePin` has the new field `bump: Option<ops::Bump>`, and `ops::Bump` has the new
   field `packs: Vec<ops::BumpPack>`. A struct literal must set them. `ops::BumpPack` is new.
   `api::Palette::profile_raw` is new: it reads the rest of a profile version from its document.
+- `ops::Pin` has the new field `carriers: Vec<ops::PinCarrier>`. A struct literal must set it.
+  `ops::PinCarrier` and `ops::Carrier` are new.
 - `ops::behind` reads the document of each profile version that the records hold, through
   `connect` of the project of the first record. `BehindReport::exit_code` gives `1` for a
   profile version that is behind, and `2` for one that strata could not check.

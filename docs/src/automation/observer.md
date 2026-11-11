@@ -32,7 +32,7 @@ alone, so that you can run the commands below.
 | Does Palette still have the version that I recorded? | A finding of the kind `published-changed`, `overwritten`, `renamed`, or `gone`. | `strata verify` |
 | Does this cluster run its release? | A finding `cluster-differs` or `image-id-changed`. The cluster copy of each profile. | `strata snapshot` and `strata compare` |
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
-| Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. | `strata behind`. The button runs `strata behind --pin`. |
+| Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. Each pack names the newer profile version that carries a newer version of it. | `strata behind`. The button runs `strata behind --pin`. |
 | Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". The card "Move to" of the profile page, and the choice "Record → Newest version" of the dropdown "Compare" of a pack page. | `strata behind`, and `strata compare` of the record and the newest version |
 | What changed between two pack versions? | The detail of a newer version, with the text of the diff. | `strata compare pack:...` |
 | Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
@@ -141,6 +141,43 @@ of the record links to its page. There, the dropdown "Compare" has the choice
 now" has. The card "Check this yourself" gives the command of the same compare. When
 the compare fails, the card says that strata could not compare the two, and the
 dropdown has no such choice.
+
+The summary also says how far the change of each pack went. Each row of the newer
+versions holds `carriers`, as `strata behind` gives them. For each profile of the
+row, a carrier names the newer profile version that carries a newer version of the
+pack:
+
+```text
+{{#include ../output/observer-carried.txt}}
+```
+
+Read the chain from the pack to the cluster:
+
+1. **The pack.** The row names the version that the record pins, and the newest
+   version in the registry.
+2. **The profile version.** `version` of a carrier is the newest version of the
+   profile that pins a newer version of the pack. `pack` is that version of the
+   pack. A carrier with no `version` says that no newer version of the profile pins
+   a newer version of the pack. So the change stopped at the registry. `unread`
+   says that strata could not read a newer version.
+3. **The cluster.** The record of the profile is the version that the definition of
+   the cluster pins. When a newer profile version carries the pack, the definition
+   of the cluster is the step that waits.
+
+The page shows the same words. The slab of a pack that is behind says "carried by
+`aws-stack@1.1.0`", or "carried by no newer profile version". A version of the pack
+below the newest one comes first, as in "1.65.0 carried by `aws-stack@1.1.0`". The
+row of the pack in the table of the newer versions has the same line under the name
+of the pack.
+
+A pack row of the profile holds the same carrier in `carried`. A profile with no
+newer version has no carrier, so its rows have no such line. See
+[The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+
+A pack page has two sides of a newer version in the dropdown "Compare": "Pack A →
+pack B" and "Record → Newest version". When the pack changes, these sides show the
+badge "Newer". A newer version is no drift, so they never show the red badge
+"Changed".
 
 The summary holds the status of each profile, and the limits of the check:
 

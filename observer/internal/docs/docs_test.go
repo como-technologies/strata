@@ -148,10 +148,19 @@ func TestBehindDecodes(t *testing.T) {
 			if p.RegistryUID == "" || p.Newer[0].Listed == "" || p.PinnedBy[0].Subject == "" {
 				t.Fatalf("pin: %+v", p)
 			}
+			// the record holds a profile version with a newer version, which carries the newest version of each pack (#709)
+			if len(p.Carriers) != 1 || p.Carriers[0].Profile != "aws-stack" || p.Carriers[0].Carrier == nil ||
+				p.Carriers[0].Carrier.PackVersion != p.Newer[0].Version {
+				t.Fatalf("the carriers of %s: %+v", p.Name, p.Carriers)
+			}
 		}
 	}
 	if behind != 4 {
 		t.Fatalf("%d pins behind", behind)
+	}
+	// the report holds a profile version with a newer published version, so the tests read a report of #707
+	if len(got.Profiles) != 1 || !got.Profiles[0].Behind || len(got.Profiles[0].Newer) == 0 || got.Profiles[0].Newer[0].UID == "" {
+		t.Fatalf("profiles: %+v", got.Profiles)
 	}
 }
 

@@ -59,6 +59,9 @@ under a pin name each record that pins it.
   the tenant, says so, as `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.
 
+A line such as `aws-stack@1.1.1 carries cni-cilium-oss@1.20.1` names the newer
+profile version that pins a newer version of the pack. See
+[The newer profile version that carries a newer pack](#the-newer-profile-version-that-carries-a-newer-pack).
 The last lines name the profile versions of the records: see
 [Newer versions of a profile](#newer-versions-of-a-profile).
 
@@ -128,11 +131,10 @@ The record of a cluster holds each profile that the cluster runs. The cluster
 
 Strata reads the document of each profile version one time in each project, and
 the document of its newest version. Each part of `behind` reads that one copy.
-The parts are the newer versions, the time of the create, the move, and the names
-of the clusters in a refusal. The comparison of the move also reads the pack
-manifests and the variables of the two versions. `--no-impact` skips the
-comparison, and not the other reads. With `--pin`, strata reads no profile
-version.
+The parts are the newer versions, the time of the create, the move, the carriers,
+and the names of the clusters in a refusal. The comparison of the move also reads
+the pack manifests and the variables of the two versions. `--no-impact` skips the
+comparison, and not the other reads. With `--pin`, strata reads no profile version.
 
 ## The move to the newest profile version
 
@@ -168,6 +170,61 @@ on each side, its flags, and `valuesChanged` when its values change:
 - **A comparison that fails** makes the profile version `not checked`. The line
   under it gives the error, and the exit is `2`.
 - `--no-impact` skips the comparison, as it skips the comparison of a pin.
+
+## The newer profile version that carries a newer pack
+
+A pipeline moves a change up three levels. A new pack version goes to a
+registry, a new profile version pins it, and the definition of a cluster pins
+that profile version. For each pin that is behind, `behind` says how far the
+change went. A line under the pin names the newer profile version that carries a
+newer version of the pack. Here the registry published `csi-aws-ebs` 1.66.0 and
+`cert-manager` 1.22.0 after the publish of `aws-stack@1.1.0`:
+
+```text
+{{#include ../output/behind-carrier-lines.txt}}
+```
+
+Read the chain from the top of each pin to its end:
+
+1. **The pack.** The line of the pin names the newer versions of the pack in the
+   registry.
+2. **The profile version.** `aws-stack@1.1.0 carries csi-aws-ebs@1.65.0` names the
+   newest version of the profile that pins a newer version of the pack. The version
+   of the pack can be between the pinned version and the newest one, as 1.65.0 is
+   here. `no newer version of aws-stack@1.0.0 carries a newer cert-manager` says
+   that the change stopped at the registry.
+3. **The cluster.** The lines `pinned by` name the records that pin the old
+   version. When a newer profile version carries the pack, the definition of the
+   cluster is the step that waits: move it to that profile version.
+
+- **The profile versions** are the versions that a record of the pin holds: see
+  [Newer versions of a profile](#newer-versions-of-a-profile). A version whose
+  template holds no pack of the name of the pin, such as another profile of a
+  cluster, gets no line. A version with no newer version gets no line.
+- **A newer version of the pack** follows the rule of the pin: see
+  [A pre-release](#a-pre-release).
+- **A version that strata cannot read** gives a line that starts with
+  `strata could not read which newer version`, and ends with the error. The pin
+  stays behind, and the exit does not change.
+
+`--json` gives the chain in `pins[].carriers[]`: see
+[`strata-behind/1`](../reference/documents.md#strata-behind1).
+
+```text
+{{#include ../output/behind-carrier-json.txt}}
+```
+
+No route of Palette names the profile versions that pin a version of a pack. So
+strata reads the template of each newer version from its document,
+`GET /v1/clusterprofiles/{uid}`, as `list --pack` does. It reads only the newer
+versions of a profile version that holds a pin that is behind, one request for
+each. It reads them newest first, and it stops at the first version that carries
+a newer version of the pack.
+
+Strata already read the document of the newest version for the time of its
+create, so that version costs no second request. `--no-impact` does not skip these
+reads. With `--pin`, strata reads no profile version, so a pin has no line of a
+carrier.
 
 ## One pack
 

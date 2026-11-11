@@ -128,6 +128,12 @@ if stage 3 "the publish"; then
   check behind-profile-names 0 "#707: behind names $NAME@1.0.1 as a newer version of $NAME@1.0.0, for the two records" -- \
     jq -e --arg name "$NAME" '[.profiles[] | select(.name == $name and .version == "1.0.0")]
       | length == 1 and (.[0].pinnedBy | length) == 2 and any(.[0].newer[]; .version == "1.0.1")' behind-profile.out
+  # the next version keeps the version of each pack. So for each pin of the release that is behind,
+  # behind says that no newer version of the release carries a newer version of the pack
+  check behind-carrier 0 "#709: no newer version of $NAME@1.0.0 carries a newer version of a pin of the release that is behind" -- \
+    jq -e --arg name "$NAME" '[.pins[] | select(.behind and any(.pinnedBy[]; .subject == "\($name)@1.0.0"))]
+      | all(.[]; [.carriers[]? | select(.profile == $name and .version == "1.0.0")]
+        | length == 1 and (.[0] | (has("carrier") or has("error")) | not))' behind-profile.out
   # with the impact, behind compares the release with the next version, as compare of the two
   # versions does. Both commands exit 1: the release is behind, and the roots differ
   check behind-profile-move 1 "#708: behind with the impact on the record of the release exits 1: $NAME has a newer version" -- \

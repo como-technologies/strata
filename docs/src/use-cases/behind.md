@@ -43,6 +43,11 @@ profile. The pins of `aws-stack@1.1.1` are current. The OS pins are floating
 tags. Each pins the version that its tag names now, so the tag adds no version
 to move to. `LTS__20.4.x` never reaches 22.04 or 24.04.
 
+The line `aws-stack@1.1.1 carries` under each pin of 1.0.0 says that a newer
+version of the profile already pins the newer pack. So move the clusters to
+`aws-stack@1.1.1`, and do not move each pin by hand. See
+[The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+
 The last lines are the profile versions of the records. `aws-stack@1.0.0` is
 behind 1.1.1, the other version of `dev`. See
 [A newer version of the profile exists](./newer-profile.md).

@@ -1,7 +1,8 @@
 //! The profile versions of `strata behind` (#707): the newer published versions of each profile
 //! that a record holds. The document of a version gives the published versions of its profile in
 //! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
-//! each profile version that is behind with the newest version (#708).
+//! each profile version that is behind with the newest version (#708). For a pin that is behind,
+//! it names the newer profile version that carries a newer version of the pack (#709).
 
 use std::path::{Path, PathBuf};
 
@@ -14,9 +15,9 @@ use strata::ops;
 use strata::snapshot::{AppliedProfile, ClusterSource, Snapshot};
 
 use crate::common::{
-    self, PROFILE_LISTING, PackFixture, WITH_IMPACT, behind_of, manifests_answer, manifests_route,
-    no_manifests, no_variables, profile_document, profile_route, serve_profile, snapshot_of,
-    template,
+    self, PROFILE_LISTING, PUBLIC_REGISTRY, PackFixture, REGISTRY_LISTING, WITH_IMPACT, behind_of,
+    manifests_answer, manifests_route, no_manifests, no_variables, profile_document, profile_route,
+    serve_profile, serve_registry_pack, snapshot_of, template,
 };
 
 /// The uid of `barney-addons@1.3.1`, the version that the records hold.
@@ -445,18 +446,26 @@ fn packs_newest() -> [PackFixture<'static>; 3] {
     ]
 }
 
+/// Serve the version `uid` of `barney-addons` at `version` with the packs `packs`. `versions` are
+/// the published versions of the profile, as [`version_document`] takes them.
+fn serve_packs(
+    api: MemoryApi,
+    (uid, version): (&str, &str),
+    versions: &[(&str, &str)],
+    packs: &[PackFixture],
+) -> MemoryApi {
+    let mut doc = version_document(uid, "barney-addons", version, versions);
+    doc["spec"]["published"]["packs"] = packs.iter().map(|p| p.pack_ref(&[])).collect();
+    let manifests = packs.iter().map(|p| p.pack_manifests(Vec::new())).collect();
+    serve_profile(api, uid, doc, manifests_answer(manifests), no_variables())
+}
+
 /// [`serve_versions`] of [`BARNEY`], where 1.3.1 holds [`packs_held`] and 1.4.0 holds
 /// [`packs_newest`].
 fn serve_move() -> MemoryApi {
-    let serve = |api: MemoryApi, uid: &str, version: &str, packs: &[PackFixture]| {
-        let mut doc = version_document(uid, "barney-addons", version, BARNEY);
-        doc["spec"]["published"]["packs"] = packs.iter().map(|p| p.pack_ref(&[])).collect();
-        let manifests = packs.iter().map(|p| p.pack_manifests(Vec::new())).collect();
-        serve_profile(api, uid, doc, manifests_answer(manifests), no_variables())
-    };
     let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
-    let api = serve(api, HELD, "1.3.1", &packs_held());
-    serve(api, NEWEST, "1.4.0", &packs_newest())
+    let api = serve_packs(api, (HELD, "1.3.1"), BARNEY, &packs_held());
+    serve_packs(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest())
 }
 
 #[test]
@@ -583,6 +592,269 @@ fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains("~ [profile] barney-addons  1.3.1  project  not checked\n"),
+        "{text}"
+    );
+}
+
+// ---- the newer profile version that carries a newer pack (#709) ---------------------------------
+
+/// The versions of fred-compositions in the Public Repo, `(version, pack uid)`.
+const FRED: &[(&str, &str)] = &[("0.1.0", "fc010"), ("0.1.5", "fc015"), ("0.2.0", "fc020")];
+
+/// The uids of the two versions that the pipeline published after `barney-addons@1.3.1`.
+const V132: &str = "64f0000000000000000000c2";
+const V140: &str = "64f0000000000000000000c4";
+
+/// The versions of `barney-addons` of the chain, in no order: 1.3.2 and 1.4.0 are newer than the
+/// held 1.3.1.
+const CHAIN: &[(&str, &str)] = &[(V140, "1.4.0"), (HELD, "1.3.1"), (V132, "1.3.2")];
+
+/// fred-compositions at `version` from the Public Repo.
+fn fred(version: &str) -> PackFixture<'_> {
+    let uid = FRED
+        .iter()
+        .find(|(v, _)| *v == version)
+        .map_or("fc999", |(_, u)| *u);
+    PackFixture::public(
+        "fred-compositions",
+        "addon",
+        version,
+        uid,
+        "",
+        "compositions: []\n",
+    )
+}
+
+/// The registry listing and the Public Repo with each version of [`FRED`]. A record of 0.1.0 is
+/// behind 0.2.0 and 0.1.5.
+fn serve_fred(api: MemoryApi) -> MemoryApi {
+    let api = api.with(
+        REGISTRY_LISTING,
+        json!({"items": [{"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"}]}),
+    );
+    let summaries = FRED.iter().map(|(v, _)| fred(v).summary(&[])).collect();
+    let tags: Vec<Value> = FRED
+        .iter()
+        .map(|(v, uid)| json!({"tag": v, "packUid": uid}))
+        .collect();
+    serve_registry_pack(
+        api,
+        "fred-compositions",
+        Value::Array(summaries),
+        json!({"layer": "addon", "tags": tags}),
+        PUBLIC_REGISTRY,
+    )
+}
+
+/// The tenant of the chain: `barney-addons@1.3.1` pins fred-compositions 0.1.0, 1.3.2 pins
+/// `at_132`, and 1.4.0 pins `at_140`.
+fn serve_chain(at_132: &str, at_140: &str) -> MemoryApi {
+    let api = serve_fred(MemoryApi::new());
+    let api = serve_packs(api, (HELD, "1.3.1"), CHAIN, &[fred("0.1.0")]);
+    let api = serve_packs(api, (V132, "1.3.2"), CHAIN, &[fred(at_132)]);
+    serve_packs(api, (V140, "1.4.0"), CHAIN, &[fred(at_140)])
+}
+
+/// The pin of fred-compositions in `r`.
+fn fred_pin(r: &ops::BehindReport) -> &ops::Pin {
+    r.pins
+        .iter()
+        .find(|p| p.name == "fred-compositions")
+        .expect("the records pin fred-compositions")
+}
+
+#[test]
+fn behind_names_the_newer_profile_version_that_carries_the_newer_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_chain("0.1.0", "0.2.0");
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(
+        &api,
+        std::slice::from_ref(&record),
+        &ops::BehindOptions::default(),
+    );
+    let pin = fred_pin(&r);
+    let newer: Vec<&str> = pin.newer.iter().map(|n| n.version.as_str()).collect();
+    assert_eq!(
+        (pin.version.as_str(), newer),
+        ("0.1.0", vec!["0.2.0", "0.1.5"])
+    );
+    assert_eq!(pin.carriers.len(), 1, "{:?}", pin.carriers);
+    let held = &pin.carriers[0];
+    assert_eq!(
+        (
+            held.profile.as_str(),
+            held.version.as_str(),
+            held.uid.as_str()
+        ),
+        ("barney-addons", "1.3.1", HELD)
+    );
+    let carrier = held.carrier.as_ref().expect("1.4.0 pins 0.2.0");
+    assert_eq!(
+        (
+            carrier.version.as_str(),
+            carrier.uid.as_str(),
+            carrier.pack_version.as_str()
+        ),
+        ("1.4.0", V140, "0.2.0")
+    );
+    assert!(held.error.is_none());
+    // the carrier is a fact beside the pin: the pin and the version stay behind, with exit 1
+    assert_eq!(r.exit_code(), 1);
+
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains(
+            "      barney-addons@1.4.0 carries fred-compositions@0.2.0\n      pinned by "
+        ),
+        "the line comes before the records that pin the pack: {text}"
+    );
+    let markdown = common::markdown().render_behind(&r).unwrap();
+    assert!(
+        markdown.contains("; barney-addons@1.4.0 carries fred-compositions@0.2.0 |"),
+        "{markdown}"
+    );
+    let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        doc["pins"][0]["carriers"],
+        json!([{"profile": "barney-addons", "version": "1.3.1", "uid": HELD,
+            "carrier": {"version": "1.4.0", "uid": V140, "packVersion": "0.2.0"}}])
+    );
+    let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
+    assert_eq!(
+        fred_pin(&back).carriers[0]
+            .carrier
+            .as_ref()
+            .unwrap()
+            .version,
+        "1.4.0"
+    );
+}
+
+#[test]
+fn behind_says_that_no_newer_profile_version_carries_a_newer_pack() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_chain("0.1.0", "0.1.0");
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &ops::BehindOptions::default());
+    let pin = fred_pin(&r);
+    assert!(pin.behind);
+    let held = &pin.carriers[0];
+    assert!(
+        held.carrier.is_none() && held.error.is_none(),
+        "{:?}",
+        pin.carriers
+    );
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains(
+            "      no newer version of barney-addons@1.3.1 carries a newer fred-compositions\n"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains(" carries fred-compositions@"), "{text}");
+    let doc = serde_json::to_value(&r).unwrap();
+    assert!(
+        doc["pins"][0]["carriers"][0].get("carrier").is_none(),
+        "{doc}"
+    );
+}
+
+#[test]
+fn a_newer_profile_version_that_pins_a_version_between_the_pin_and_the_newest_is_the_carrier() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = |api: &MemoryApi| record_of(api, HELD, dir.path(), "barney.json");
+
+    // the newest profile version pins 0.1.5: below the newest pack, and above the pin
+    let api = serve_chain("0.1.0", "0.1.5");
+    let r = behind_of(&api, &[record(&api)], &ops::BehindOptions::default());
+    let carrier = fred_pin(&r).carriers[0].carrier.clone().unwrap();
+    assert_eq!(
+        (carrier.version.as_str(), carrier.pack_version.as_str()),
+        ("1.4.0", "0.1.5")
+    );
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains("      barney-addons@1.4.0 carries fred-compositions@0.1.5\n"),
+        "{text}"
+    );
+
+    // the newest profile version keeps 0.1.0, and an older newer version pins 0.1.5: the carrier
+    // is the newest version that pins a newer pack
+    let api = serve_chain("0.1.5", "0.1.0");
+    let r = behind_of(&api, &[record(&api)], &ops::BehindOptions::default());
+    let carrier = fred_pin(&r).carriers[0].carrier.clone().unwrap();
+    assert_eq!(
+        (
+            carrier.version.as_str(),
+            carrier.uid.as_str(),
+            carrier.pack_version.as_str()
+        ),
+        ("1.3.2", V132, "0.1.5")
+    );
+}
+
+#[test]
+fn behind_reads_the_newer_versions_only_of_a_profile_version_that_holds_a_pin_that_is_behind() {
+    let dir = tempfile::tempdir().unwrap();
+    // barney-base holds no pin: its packs come from no registry. It has two newer versions
+    let base = [
+        ("64f0000000000000000000e0", "2.0.0"),
+        ("64f0000000000000000000e1", "2.1.0"),
+        ("64f0000000000000000000e5", "2.0.5"),
+    ];
+    let api = serve_versions(serve_chain("0.1.5", "0.1.0"), "barney-base", &base);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let cluster = cluster_record(
+        &record,
+        &[
+            (base[0].0, "barney-base", "2.0.0"),
+            (HELD, "barney-addons", "1.3.1"),
+        ],
+        dir.path(),
+    );
+    let reads = |uid: &str| api.calls(&profile_route(uid));
+    let uids = [HELD, V140, V132, base[0].0, base[1].0, base[2].0];
+    let before: Vec<u32> = uids.iter().map(|u| reads(u)).collect();
+    let r = behind_of(&api, &[record, cluster], &ops::BehindOptions::default());
+    let after: Vec<u32> = uids.iter().map(|u| reads(u)).collect();
+    let made: Vec<u32> = after.iter().zip(&before).map(|(a, b)| a - b).collect();
+    // one read of each version of barney-addons: its newest version gives the time of the create,
+    // and 1.3.2 carries the newer pack. barney-base holds the pin on no record, so strata reads its
+    // newest version for the time of the create alone, and never 2.0.5
+    assert_eq!(made, [1, 1, 1, 1, 1, 0]);
+
+    // two records hold barney-addons@1.3.1, and one entry names it
+    let pin = fred_pin(&r);
+    assert_eq!(pin.pinned_by.len(), 2);
+    let named: Vec<(&str, Option<&str>)> = pin
+        .carriers
+        .iter()
+        .map(|c| {
+            (
+                c.profile.as_str(),
+                c.carrier.as_ref().map(|by| by.version.as_str()),
+            )
+        })
+        .collect();
+    assert_eq!(named, [("barney-addons", Some("1.3.2"))]);
+}
+
+#[test]
+fn a_newer_profile_version_that_strata_cannot_read_gives_its_error_and_keeps_the_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_chain("0.1.5", "0.1.0");
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let api = api.failing(profile_route(V132), 500, "boom");
+    let r = behind_of(&api, &[record], &ops::BehindOptions::default());
+    let held = &fred_pin(&r).carriers[0];
+    assert!(held.carrier.is_none() && held.error.is_some(), "{held:?}");
+    assert_eq!(r.exit_code(), 1);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains(
+            "      strata could not read which newer version of barney-addons@1.3.1 carries a newer fred-compositions ("
+        ),
         "{text}"
     );
 }

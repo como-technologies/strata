@@ -156,6 +156,13 @@ The record of the release that `dev` runs now has a newer published version.
 {{#include output/loop-behind-profile.txt}}
 ```
 
+Each pin of the release that is behind names the profile version that carries a
+newer version of its pack. Here the new version carries each one:
+
+```text
+{{#include output/loop-behind-carrier.txt}}
+```
+
 Palette holds the version now, so the pipeline asks it two questions about the
 move of `payments`. Does the move repave the nodes? Does Palette accept the
 packs?

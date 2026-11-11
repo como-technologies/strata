@@ -723,6 +723,18 @@ of the secret does not show, because the two sides hold the mask: see
     - `paletteValidationError`: the message, when a request to Palette failed or
       strata did not ask a record of another project. An example is
       `1 record of project prod was not asked`. The pin stays behind.
+  - `carriers[]`, for a pin that is behind: one entry for each profile version that
+    holds the pin and has a newer version. A version holds the pin when a record of
+    the pin holds the version, and its template holds the pack. Absent when there is
+    none, and with `--pin`. See
+    [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+    Each entry has:
+    - `profile`, `version`, and `uid`: the profile version that holds the pin.
+    - `carrier`: the newest of its newer versions that pins a newer version of the
+      pack. It has `version` and `uid`, of the profile version, and `packVersion`,
+      the version of the pack that it pins. Absent when no newer version does.
+    - `error`, when strata could not read a newer version. `carrier` is then
+      absent, and the pin stays behind.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
     that registry.

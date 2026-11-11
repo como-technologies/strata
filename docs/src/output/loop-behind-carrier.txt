@@ -1,0 +1,10 @@
+$ strata behind releases/1.0.0/dev.json --no-impact | grep -E '^~ \[[a-z]|carries|no newer version'
+~ [cni  ] cni-cilium-oss  1.19.6  Public Repo  behind: 1.20.1, 1.20.0
+      aws-stack@1.1.0 carries cni-cilium-oss@1.20.1
+~ [csi  ] csi-aws-ebs     1.63.1  Public Repo  behind: 1.65.0, 1.64.0
+      aws-stack@1.1.0 carries csi-aws-ebs@1.65.0
+~ [k8s  ] kubernetes      1.35.3  Public Repo  behind: 1.36.2, 1.35.6
+      aws-stack@1.1.0 carries kubernetes@1.36.2
+~ [os   ] ubuntu-aws      20.04   Public Repo  behind: 24.04, 22.04 (floating tag LTS__20.4.x, now 20.04)
+      aws-stack@1.1.0 carries ubuntu-aws@24.04
+~ [profile] aws-stack  1.0.0  project  behind: 1.1.0

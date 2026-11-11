@@ -113,6 +113,14 @@ fn loop_publish(r: &mut Runner) {
         false,
         "strata behind releases/1.0.0/dev.json | grep -A2 '\\[profile\\]'",
     );
+    // each pin of the release that is behind names the newer profile version that carries a newer
+    // version of its pack (#709)
+    r.step(
+        "loop-behind-carrier",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact | grep -E '^~ \\[[a-z]|carries|no newer version'",
+    );
     // before dev moves payments, the pipeline asks Palette about the move
     r.step(
         "loop-ask-repave",

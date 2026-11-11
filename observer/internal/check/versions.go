@@ -121,13 +121,32 @@ func mergeBehind(answers []docs.Behind) docs.Behind {
 				out.Pins = append(out.Pins, p)
 				continue
 			}
+			carriers := joinCarriers(out.Pins[i].Carriers, p.Carriers)
 			joinRead(&out.Pins[i], p, func(p docs.Pin) bool { return p.Error != nil }, func(p *docs.Pin) *[]docs.PinnedBy { return &p.PinnedBy })
+			out.Pins[i].Carriers = carriers
 		}
 	}
 	slices.SortStableFunc(out.Pins, func(a, b docs.Pin) int {
 		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.RegistryUID, b.RegistryUID),
 			strings.Compare(a.Version, b.Version), strings.Compare(a.Tag, b.Tag))
 	})
+	return out
+}
+
+// joinCarriers joins the carriers of one pin from two answers. Each answer of `behind` on one record
+// names the profile versions of that record. The join keeps one carrier for each profile version, and
+// a read with no error takes the place of a read that failed.
+func joinCarriers(out, more []docs.PinCarrier) []docs.PinCarrier {
+	out = slices.Clone(out)
+	for _, c := range more {
+		i := slices.IndexFunc(out, func(o docs.PinCarrier) bool { return o.Profile == c.Profile && o.Version == c.Version })
+		switch {
+		case i < 0:
+			out = append(out, c)
+		case out[i].Error != nil && c.Error == nil:
+			out[i] = c
+		}
+	}
 	return out
 }
 

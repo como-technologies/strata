@@ -209,6 +209,36 @@ fn behind_profiles(r: &mut Runner) {
         "behind-profile-cluster",
         r"^(\$|\d+ pins|. \[profile\])",
     );
+    behind_carriers(r);
+}
+
+/// The steps of the chapter `behind-profiles` that name the newer profile version that carries a
+/// newer pack (#709).
+fn behind_carriers(r: &mut Runner) {
+    r.serve_here(); // state 1: each newer pack version is in aws-stack@1.1.0, or above it
+    // the registry publishes csi-aws-ebs 1.66.0 and cert-manager 1.22.0. No profile version pins
+    // them yet, so 1.1.0 carries 1.65.0 of csi-aws-ebs, and no version carries a newer cert-manager
+    r.tenant(|t| {
+        t.copy_pack_version(DEV, "csi-aws-ebs", "1.65.0", "1.66.0");
+        t.copy_pack_version(DEV, "cert-manager", "1.21.1", "1.22.0");
+    });
+    r.step(
+        "behind-carrier",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact",
+    );
+    r.excerpt(
+        "behind-carrier-lines",
+        "behind-carrier",
+        r"^(\$|\d+ pins|~ \[|      (aws-stack@\S+ carries|no newer version))",
+    );
+    r.step(
+        "behind-carrier-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.pins[] | select(.behind) | {name, version, newest: .newer[0].version, carriers}'",
+    );
 }
 
 /// The steps of the chapter `behind-profiles` with the impact: `behind` compares the version with

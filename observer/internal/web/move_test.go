@@ -67,7 +67,9 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	vendor := packPage(wilmaSubject, "addon", "vendor-product")
 	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
 	mustHold(t, "the pack page of vendor-product", page, `<option value="newest" selected>Record → Newest version</option>`,
-		`<span class="badge r">Changed</span>`, "product.replicas")
+		`<span class="badge b">Newer</span>`, "product.replicas")
+	// a newer version is no drift: the side keeps the neutral badge of a newer version (#709)
+	mustNotHold(t, "the pack page of vendor-product", page, `<span class="badge r">Changed</span>`)
 
 	// the move changes no pack but traefik: vendor-product is the same on that side
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {

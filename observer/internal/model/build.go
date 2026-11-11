@@ -63,8 +63,10 @@ type view struct {
 	causes *causes
 	// registries maps the uid of a registry to its name.
 	registries map[string]string
-	// newest maps a pack of a profile to the newest version that a pin names.
-	newest map[string]string
+	// newest maps a pack of a profile to the newest version that a pin names, and carried to the newer
+	// version of the profile that carries a newer version of the pack.
+	newest  map[string]string
+	carried map[string]Carried
 	// newerProfiles holds the profiles that a pin that is behind names.
 	newerProfiles map[string]bool
 	// newerVersions maps a profile to the newest published version of its profile, when it is newer.
@@ -78,7 +80,7 @@ type view struct {
 }
 
 func newView(in Input, c *causes) *view {
-	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, newerProfiles: map[string]bool{},
+	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, carried: map[string]Carried{}, newerProfiles: map[string]bool{},
 		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
 	if in.Versions != nil {
 		v.readNewerVersions(in.Versions, utc(in.Now))
@@ -92,6 +94,9 @@ func newView(in Input, c *causes) *view {
 			for _, by := range pin.PinnedBy {
 				v.newest[packID(by.Subject, PackKey(pin))] = pin.Newer[0].Version
 				v.newerProfiles[by.Subject] = true
+			}
+			for _, c := range carriersOf(pin) {
+				v.carried[packID(c.Profile, PackKey(pin))] = c
 			}
 		}
 	}
@@ -221,6 +226,9 @@ func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	if p.Kind == "" {
 		p.Kind = rp.Type
 	}
+	if c, ok := v.carried[id]; ok {
+		p.Carried = &c
+	}
 	p.Flags, p.Fold = changesOf(r, rp.Key)
 	switch {
 	// One finding names the profile and no pack. A pack that has changes then belongs to it.
@@ -289,9 +297,24 @@ func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 		}
 		rows = append(rows, Newer{Name: pin.Name, Registry: v.registry(pin.RegistryUID), RegistryUID: pin.RegistryUID, Version: pin.Version,
 			Newest: newest.Version, Listed: newest.Listed, New: listedWithin(newest.Listed, now), Floating: pin.Floating,
-			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin.PinnedBy), Steps: stepsOf(pin), Move: move})
+			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin.PinnedBy), Steps: stepsOf(pin), Carriers: carriersOf(pin),
+			Move: move})
 	}
 	return rows
+}
+
+// carriersOf gives the carriers of a pin that `behind` names, one for each profile version that holds
+// the pin, in the order of strata. The row of a pack and the row of the newer versions read the same.
+func carriersOf(pin docs.Pin) []Carried {
+	out := make([]Carried, 0, len(pin.Carriers))
+	for _, c := range pin.Carriers {
+		k := Carried{Profile: Subject(c.Profile, c.Version), Unread: c.Error != nil}
+		if c.Carrier != nil {
+			k.Version, k.Pack = c.Carrier.Version, c.Carrier.PackVersion
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 // stepsOf lists the newer versions of a pin from the oldest to the newest. Strata gives them newest first.

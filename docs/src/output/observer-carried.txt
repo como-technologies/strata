@@ -1,0 +1,5 @@
+$ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null | jq -c '.newer[] | {name, newest, carriers}'
+{"name":"cni-cilium-oss","newest":"1.20.1","carriers":[{"profile":"aws-stack@1.0.0","version":"1.1.0","pack":"1.20.1"}]}
+{"name":"csi-aws-ebs","newest":"1.65.0","carriers":[{"profile":"aws-stack@1.0.0","version":"1.1.0","pack":"1.65.0"}]}
+{"name":"kubernetes","newest":"1.36.2","carriers":[{"profile":"aws-stack@1.0.0","version":"1.1.0","pack":"1.36.2"}]}
+{"name":"ubuntu-aws","newest":"24.04","carriers":[{"profile":"aws-stack@1.0.0","version":"1.1.0","pack":"24.04"}]}
