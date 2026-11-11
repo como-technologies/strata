@@ -68,6 +68,24 @@ the cloud type `all` fits each cloud. Strata does not send this refusal again.
 `failed` and the message of Palette: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
 
+The route also refuses the whole entity with HTTP `500` and one of these codes.
+The code of Palette shows it; no live run shows it yet.
+
+- `InvalidDropDownVariable`: a value of a dropdown variable that is not the
+  label of an option.
+- `InvalidVariable`: a value that the format or the pattern of its variable
+  refuses, or a required variable with no value.
+- `K8SCidrOverlap`: for AWS with a VPC, a pod CIDR or a service CIDR that
+  overlaps the CIDR of the VPC.
+- `CidrParseError`: for AWS with a VPC, a pod CIDR or a service CIDR that is not
+  a CIDR.
+
+The check `cidr-overlap-status` of
+[`route-bodies.sh`](../../development/live-runs.md#route-bodiessh) asks the
+route about a pod CIDR that overlaps. Strata does not send these refusals
+again either. `palette-validate` reads each one as the answer of the route, with
+the verdict `failed` and the message of Palette.
+
 The same live run shows what the route does not check. It takes a body with an
 add-on profile that holds a pack version that does not list the cloud type, and
 `palette-validate` passes. Palette refuses such a pack at the create. So no
@@ -96,6 +114,10 @@ be a variable of the profile, and its value must pass the schema of the
 variable. Palette then puts each value into the values of the packs, for the
 checks of the cloud config. One such check compares the CIDRs of the Kubernetes
 pack with the CIDR of the VPC.
+
+When the schema of a variable does not take its value, the route answers HTTP
+`500` and `InvalidVariable`, or `InvalidDropDownVariable` for a dropdown
+variable. The code of Palette shows it; no live run shows it yet.
 
 A body with no `variables[]` gives the route no value to check. A value of a
 pack that reads `{{.spectro.var.NAME}}` then reaches the checks of the cloud

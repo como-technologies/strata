@@ -257,9 +257,21 @@ const REFUSALS: [(&str, &str, &str); 3] = [
     (
         "InvalidDropDownVariable",
         "tier_label",
-        "Dropdown variable 'tier_label' in cluster is invalid: label 'platinum' is not a valid option",
+        "Dropdown variable 'tier_label' in spectrocluster is invalid: label 'platinum' is not a valid option",
     ),
 ];
+
+/// What `palette-validate` says of each refusal of `REFUSALS`, in the same order: the code and the
+/// message of Palette, with a mark in place of each value.
+const SAID: [&str; 3] = [
+    "Palette refused the entity: K8SCidrOverlap: Kubernetes podCIDR '[value of pod_cidr]' is overlapping with vpc 'vpc-0a1b' cidr block '10.244.0.0/14'",
+    "Palette refused the entity: CidrParseError: CIDR '[value of service_cidr] parse error; caused by: invalid CIDR address: [value of service_cidr]",
+    "Palette refused the entity: InvalidDropDownVariable: Dropdown variable 'tier_label' in spectrocluster is invalid: label '[value of tier_label]' is not a valid option",
+];
+
+/// The refusal of a required variable with no value, as the message template of Palette writes
+/// it. It quotes no value.
+const REQUIRED_VARIABLE: &str = "spectrocluster variable is invalid due to default value can't be empty for required variable 'region_name'";
 
 /// The cluster `c1` with `variables`, as pairs of a name and a value. Its validate route answers
 /// HTTP `status` with the refusal `code` and `message`.
@@ -294,18 +306,52 @@ fn reports(mut report: Report) -> [(&'static str, String); 3] {
     .map(|(file, format)| (file, report::render(&report, format, false, &Paint::off())))
 }
 
-/// A 4xx is a refusal that the check reads, so the message holds the message of Palette. A 500
-/// with these codes is an error, so the message holds the body of the answer as JSON text. The
-/// reports hold each other word of the message, such as the CIDR of the VPC (#614).
+/// The route refuses a variable or a CIDR of the body with HTTP 500. The code of Palette shows it;
+/// no live run shows it yet. `palette-validate` reads it as the answer of the route, as it reads
+/// HTTP 400. The verdict is `failed`, and the message is the message of Palette with a mark in
+/// place of each value. Strata sends the body one time (#816).
+#[test]
+fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400()
+ {
+    let required = format!("Palette refused the entity: InvalidVariable: {REQUIRED_VARIABLE}");
+    let cases = REFUSALS
+        .iter()
+        .zip(SAID)
+        .map(|((code, _, message), said)| (*code, *message, said))
+        .chain([("InvalidVariable", REQUIRED_VARIABLE, required.as_str())]);
+    for (code, message, said) in cases {
+        for status in [500, 400] {
+            let api = refusing(&QUOTED, status, code, message);
+            let check = palette_validate(&api);
+            assert_eq!(
+                check.verdict,
+                Verdict::Failed,
+                "{code} {status}: {:?}",
+                check.messages
+            );
+            assert_eq!(check.messages, [said], "{code} {status}");
+            assert_eq!(
+                api.calls("POST /v1/spectroclusters/aws/validate"),
+                1,
+                "{code} {status}"
+            );
+        }
+    }
+}
+
+/// The check reads a 4xx, and a 500 with these codes, as a refusal, so the message holds the
+/// message of Palette. The reports hold each other word of the message, such as the CIDR of the
+/// VPC (#614).
 #[test]
 fn the_three_reports_write_a_mark_in_place_of_each_value_that_a_refusal_of_palette_quotes() {
     for (code, name, message) in REFUSALS {
-        for (status, verdict) in [(400, Verdict::Failed), (500, Verdict::Error)] {
+        for status in [400, 500] {
             let api = refusing(&QUOTED, status, code, message);
             let report = run_report(&api, &["palette-validate"]);
             let messages = &report.checks[0].messages;
             assert_eq!(
-                report.checks[0].verdict, verdict,
+                report.checks[0].verdict,
+                Verdict::Failed,
                 "{code} {status}: {messages:?}"
             );
             assert!(message.contains(QUOTED.iter().find(|(n, _)| *n == name).unwrap().1));
