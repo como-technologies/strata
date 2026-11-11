@@ -154,8 +154,24 @@ Each path of the file starts with the uid of the version:
   packs, the folder has the name and the version of the pack. The archive
   holds `pack.json`, `values.yaml`, and the other files of the build.
   `pack.json` names the version of the build.
+- A pack of a Helm registry that is not private is a chart. Its archive is the
+  file that the registry serves, `<name>-<version>.tgz`. The top folder has the
+  name of the chart. The archive holds `Chart.yaml` and the other files of the
+  chart, and no `pack.json`. The line `version` of `Chart.yaml` names the
+  version of the chart.
 - `spc.json` and the manifests hold the content with the value of each macro.
   Strata reads the two lists and the archives of the packs, and no other file.
+
+The file of a pack can be no archive. When the host of a chart refuses the
+file, the download holds the error answer of the host in place of the chart.
+The answer has the name of the chart, the list names it as a chart, and the
+route answers HTTP 200. A live run shows it for the chart `nginx` 25.1.5 of the
+public registry Bitnami. The file is an XML error of 263 bytes, with the code
+`AccessDenied`.
+
+Strata reads each other pack of such a download. It gives the pack no archive
+and a reason: see
+[The archives of the two builds](../../commands/same-release.md#the-archives-of-the-two-builds).
 
 The file holds no archive for these packs:
 
@@ -164,6 +180,9 @@ The file holds no archive for these packs:
 - A pack of an OCI registry of Helm charts or of Zarf packages. Its entry has
   an empty `filePath`.
 - A manifest pack. The list names only its manifests.
+
+A pack of an OCI registry of packs has an archive, also when the registry is
+private.
 
 When Palette cannot find the registry of a pack, it refuses the whole
 download. Strata then stops with the error `api`.
@@ -176,7 +195,8 @@ export. The route reads the version by its uid, in the project of the request.
 Palette takes one download of a version in 10 seconds. It refuses the next
 with HTTP 429, the code `TooManyRequests`, and the message "Too Many Requests,
 only 1 request in 10 seconds is allowed". After such a refusal, strata waits 10
-seconds before the next download of the version. Stage 4 of
+seconds before the next download of the version. A live run shows that Palette
+does not refuse each such download. Stage 4 of
 [export.sh](../../development/live-runs.md#exportsh) checks the facts of this
 section.
 
@@ -454,6 +474,11 @@ runs. The notifications of a cluster come from an edit of a version that the
 cluster runs, and from a change of a pack. A new version has a
 new uid that no cluster runs, so its publish notifies no cluster.
 
+No route names the profile versions that pin a version of a pack. Each entry of
+`spec.versions[]` gives only `uid` and `version`, and the filter of the profile
+search takes no pack. The template of a version, with the name and the version of
+each pack, is in the document of that version alone.
+
 The code of Palette shows these facts. On the live tenant, the checks
 `versions-tenant` and `versions-project` of
 [scope.sh](../../development/live-runs.md#scopesh) test the scope. The check
@@ -618,6 +643,14 @@ only of a pre-release, or with `--pre-release`.
 
 Palette is the owner of the rule. When a route or a status of Palette names the
 newer versions of a profile, strata removes its order and reads that answer.
+
+The same holds for the newer profile version that carries a newer pack. No route
+names the profile versions that pin a version of a pack. So `behind` reads the
+template of each newer version of a profile version that holds a pin that is
+behind. It compares the version of the pack with the order of the pins. See
+[The newer profile version that carries a newer pack](../../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+When a route of Palette names the profile versions that pin a pack, strata reads
+that answer.
 
 ### An event when a published version changes
 

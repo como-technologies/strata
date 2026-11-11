@@ -515,6 +515,21 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
     expect_2(&d, "no OCI registry r-missing");
 
     let d = tenant_digest(
+        &["oci", "r-zot", "argocd", "1.0.0"],
+        &[(
+            "v1_registries_oci_summary",
+            r#"{"items":[{"metadata":{"uid":"r-zot"},
+                "spec":{"endpoint":"zot.example.com","registryType":"zot","providerType":"pack"}}]}"#,
+        )],
+        &[],
+    );
+    expect_2(
+        &d,
+        "OCI registry r-zot has the type 'zot', not ecr or basic",
+    );
+    assert!(d.log.is_empty(), "crane is not run: {}", d.log);
+
+    let d = tenant_digest(
         &["oci", "r-oci", "argocd", "10.4.0.1"],
         &[
             OCI_SUMMARY,
@@ -1353,6 +1368,32 @@ fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
     assert_eq!(named, ["examples/live/palette-curl.sh"]);
 }
 
+/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
+/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
+#[test]
+fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut built = Vec::new();
+    for dir in ["examples", "scripts", "deploy", "crates"] {
+        for path in walk(&root.join(dir)) {
+            if path.extension().is_none_or(|e| e != "sh") {
+                continue;
+            }
+            let code = std::fs::read_to_string(&path).unwrap();
+            if code_lines(&code).any(|l| {
+                ["oci", "helm", "pack"].iter().any(|kind| {
+                    let route = format!("/v1/registries/{kind}/");
+                    l.match_indices(&route)
+                        .any(|(at, _)| l[at + route.len()..].starts_with('$'))
+                })
+            }) {
+                built.push(path.strip_prefix(root).unwrap().display().to_string());
+            }
+        }
+    }
+    assert_eq!(built, ["examples/live/palette-curl.sh"]);
+}
+
 #[test]
 fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     let root = tempfile::tempdir().unwrap();
@@ -1435,6 +1476,35 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
         assert_eq!(o.status.code(), Some(2), "{args:?}");
         assert!(
             text(&o.stderr).contains("usage: api.sh get-status PATH"),
+            "{}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
+fn api_sh_registry_path_prints_the_path_of_each_kind_and_refuses_another_kind() {
+    let root = tempfile::tempdir().unwrap();
+    for (kind, path) in [
+        ("oci-ecr", "/v1/registries/oci/r-1/ecr"),
+        ("oci-basic", "/v1/registries/oci/r-1/basic"),
+        ("helm", "/v1/registries/helm/r-1"),
+        ("pack", "/v1/registries/pack/r-1"),
+    ] {
+        let o = run_live("api.sh", &["registry-path", kind, "r-1"], root.path(), &[]);
+        assert_eq!(o.status.code(), Some(0), "{kind}: {}", text(&o.stderr));
+        assert_eq!(text(&o.stdout).trim_end(), path, "{kind}");
+    }
+    for args in [
+        &["registry-path", "git", "r-1"][..],
+        &["registry-path", "oci-basic"][..],
+    ] {
+        let o = run_live("api.sh", args, root.path(), &[]);
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        assert!(
+            text(&o.stderr).contains(
+                "usage: api.sh registry-path KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack"
+            ),
             "{}",
             text(&o.stderr)
         );
@@ -6958,6 +7028,19 @@ const AWS_CASES: [AwsCase; 4] = [
     },
 ];
 
+/// The case of validate-route.sh whose body names a VPC of the lab (#816).
+const CIDR_CASE: &str = "cidr-overlap";
+
+/// The message of the refusal of the body of `CIDR_CASE`, as the message template of Palette
+/// writes it.
+const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
+
+/// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
+/// shows it; no live run shows it yet. Strata reads it as a refusal.
+fn cidr_overlap_answer() -> String {
+    serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
+}
+
 /// The case of `AWS_CASES` that the route takes.
 fn aws_case_taken() -> &'static AwsCase {
     AWS_CASES
@@ -6966,21 +7049,27 @@ fn aws_case_taken() -> &'static AwsCase {
         .expect("one case of AWS_CASES has no refusal")
 }
 
-/// Answer the validate route for the clean AWS body and for each case of `AWS_CASES`. The route
-/// refuses a case with its refusal. It takes a case with no refusal, and a case in `takes`.
+/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, and for
+/// `CIDR_CASE`. The route refuses a case with its refusal. It takes a case with no refusal, and a
+/// case in `takes`.
 fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     stage.strata(
         "preflight */aws-clean.json --cloud aws *",
         0,
         &route_report("passed", &[]),
     );
-    for case in &AWS_CASES {
-        let (code, report) = match case.refusal {
-            Some(message) if !takes.contains(&case.id) => (1, route_report("failed", &[message])),
+    let cidr = format!("K8SCidrOverlap: {CIDR_OVERLAP_MESSAGE}");
+    let cases = AWS_CASES
+        .iter()
+        .map(|case| (case.id, case.refusal))
+        .chain([(CIDR_CASE, Some(cidr.as_str()))]);
+    for (id, refusal) in cases {
+        let (code, report) = match refusal {
+            Some(message) if !takes.contains(&id) => (1, route_report("failed", &[message])),
             _ => (0, route_report("passed", &[])),
         };
         stage.strata(
-            &format!("preflight */{}.json --cloud aws *", case.id),
+            &format!("preflight */{id}.json --cloud aws *"),
             code,
             &report,
         );
@@ -7123,6 +7212,7 @@ fn validate_route_sh_sends_each_fault_to_the_route_and_expects_a_refusal_that_na
         "azure-ssh-key-empty",
         "ntp-servers-edge",
         "pack-cloud-support",
+        CIDR_CASE,
     ] {
         assert!(
             steps.contains(&format!("skipped {skipped}: no ")),
@@ -7248,7 +7338,12 @@ fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
 fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let mut stage = Stage::new(serde_json::json!({}));
     std::fs::create_dir_all(stage.path("bodies")).unwrap();
-    for body in std::iter::once("aws-clean").chain(AWS_CASES.iter().map(|case| case.id)) {
+    let cases: Vec<&str> = AWS_CASES
+        .iter()
+        .map(|case| case.id)
+        .chain([CIDR_CASE])
+        .collect();
+    for body in std::iter::once("aws-clean").chain(cases.iter().copied()) {
         std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
     }
     // each case goes to the route of AWS. The glob names the cloud, so a case on another engine
@@ -7258,15 +7353,47 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     let mut ids = vec!["aws-clean".to_string()];
-    for case in &AWS_CASES {
-        ids.push(case.id.to_string());
-        ids.push(format!("{}-says", case.id));
+    for case in &cases {
+        ids.push(case.to_string());
+        ids.push(format!("{case}-says"));
     }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
-    for case in &AWS_CASES {
-        assert!(!steps.contains(&format!("skipped {}", case.id)), "{steps}");
+    for case in &cases {
+        assert!(!steps.contains(&format!("skipped {case}")), "{steps}");
     }
     assert_eq!(steps.matches("aws-clean ").count(), 1, "{steps}");
+
+    // a route that takes the body of cidr-overlap, or a check that reads its refusal as an error,
+    // fails both checks of the case
+    for (code, verdict) in [(0, "passed"), (2, "error")] {
+        let mut stage = Stage::new(serde_json::json!({}));
+        std::fs::create_dir_all(stage.path("bodies")).unwrap();
+        for body in ["aws-clean", CIDR_CASE] {
+            std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
+        }
+        stage.strata(
+            "preflight */aws-clean.json --cloud aws *",
+            0,
+            &route_report("passed", &[]),
+        );
+        let error = format!(
+            "POST {AWS_VALIDATE_ROUTE} failed with HTTP 500: {}",
+            cidr_overlap_answer()
+        );
+        let messages: &[&str] = if verdict == "error" { &[&error] } else { &[] };
+        stage.strata(
+            &format!("preflight */{}.json --cloud aws *", CIDR_CASE),
+            code,
+            &route_report(verdict, messages),
+        );
+        let bodies = stage.path("bodies");
+        let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(1), "{verdict}: {steps}");
+        failed(&steps, &[CIDR_CASE]);
+        if verdict == "passed" {
+            failed(&steps, &["cidr-overlap-says"]);
+        }
+    }
 }
 
 #[test]
@@ -7363,11 +7490,51 @@ fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
 
+/// The release profile `r-1` of the lab, on AWS. Its Kubernetes pack sets `podCIDR`, so
+/// route-bodies.sh can write the body of `cidr-overlap`. The OS pack comes first, and its values
+/// hold the key too (#816).
+const RELEASE_ON_AWS: &str = r#"{"spec":{"published":{"cloudType":"aws","packs":[
+    {"name":"ubuntu-aws","tag":"24.04","layer":"os","values":"pack:\n  podCIDR: \"not of the Kubernetes pack\"\n"},
+    {"name":"kubernetes","tag":"1.33.2","layer":"k8s","values":"pack:\n  podCIDR: \"192.168.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n"}]}}}"#;
+
+/// The values of the Kubernetes pack of `RELEASE_ON_AWS` in the body of `cidr-overlap`: the CIDR
+/// of the VPC `vpc-1` is the pod CIDR.
+const CIDR_OVERLAP_VALUES: &str =
+    "pack:\n  podCIDR: \"172.31.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n";
+
+/// The VPCs of the region of the lab.
+///
+/// The first has no CIDR, and the second has no subnet in the zone `us-east-2a` of the pools. So
+/// the body of `cidr-overlap` names the third, and its subnet `subnet-1a` for each pool (#824).
+const LAB_VPCS: &str = r#"{"vpcs":[
+    {"vpcId":"vpc-0","name":"no-cidr","subnets":[{"subnetId":"subnet-0a","az":"us-east-2a"}]},
+    {"vpcId":"vpc-2","name":"other-zone","cidrBlock":"10.0.0.0/16",
+        "subnets":[{"subnetId":"subnet-2b","az":"us-east-2b"}]},
+    {"vpcId":"vpc-1","name":"default","cidrBlock":"172.31.0.0/16",
+        "subnets":[{"subnetId":"subnet-1b","az":"us-east-2b"},{"subnetId":"subnet-1a","az":"us-east-2a","isPrivate":true}]}]}"#;
+
+/// The VPC route of the region of the lab.
+const LAB_VPCS_ROUTE: &str = "/v1/clouds/aws/regions/us-east-2/vpcs";
+
+/// The validate route of a create on AWS.
+const AWS_VALIDATE_ROUTE: &str = "/v1/spectroclusters/aws/validate";
+
+/// Palette answers the POST of the validate route of AWS with `status` and `body`.
+fn answer_aws_validate(stage: &Stage, status: &str, body: &str) {
+    stage.route(AWS_VALIDATE_ROUTE, body);
+    std::fs::write(
+        stage.path("routes/v1_spectroclusters_aws_validate.status"),
+        status,
+    )
+    .unwrap();
+}
+
 /// A stage of route-bodies.sh in a lab on AWS. The lab has the account `lab-aws`, the release
-/// profile `r-1` on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a
-/// profile for each `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and
-/// deletes it. The validate route refuses the fault of each case, except `pack-cloud-support` and
-/// the cases in `takes`, which it takes.
+/// profile `r-1` on AWS, the registry `Public Repo`, the packs `packs`, and the VPCs `LAB_VPCS`.
+/// Palette makes a profile for each `POST /v1/clusterprofiles` with the uid `uid-<name>`, and
+/// publishes and deletes it. The validate route refuses the fault of each case, except
+/// `pack-cloud-support` and the cases in `takes`, which it takes. It refuses the body of
+/// `cidr-overlap` with HTTP 500 and `K8SCidrOverlap`.
 fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "release_profile_uid": "r-1",
@@ -7383,10 +7550,9 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
         "/v1/cloudaccounts/summary",
         r#"{"items":[{"kind":"aws","metadata":{"name":"lab-aws","uid":"acc-1"}}]}"#,
     );
-    stage.route(
-        &profile_route("r-1"),
-        r#"{"spec":{"published":{"cloudType":"aws"}}}"#,
-    );
+    stage.route(&profile_route("r-1"), RELEASE_ON_AWS);
+    stage.route(LAB_VPCS_ROUTE, LAB_VPCS);
+    answer_aws_validate(&stage, "500", &cidr_overlap_answer());
     stage.route(
         "/v1/registries/metadata",
         r#"{"items":[{"name":"Public Repo","uid":"reg-pub"},{"name":"Other","uid":"reg-other"}]}"#,
@@ -7433,6 +7599,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         ids.push(format!("{case}-body"));
         ids.push(format!("{case}-deleted"));
     }
+    for check in ["body", "status", "code"] {
+        ids.push(format!("{CIDR_CASE}-{check}"));
+    }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
 
     // the clean body is the body of create_body: the account, the release profile, the region
@@ -7444,6 +7613,44 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         clean["spec"]["profiles"],
         serde_json::json!([{"uid": "r-1", "packValues": [], "variables": []}])
     );
+
+    // the body of cidr-overlap is the clean body with the VPC that has a CIDR and a subnet in the
+    // zone of the pools. Each pool names that subnet. Its Kubernetes pack has the CIDR of the VPC
+    // as the pod CIDR. The script sent it to the route, and asked for the VPCs of the account of
+    // the lab (#816, #824)
+    let cidr_file = bodies.join(format!("{CIDR_CASE}.json"));
+    let mut cidr = read_json(&cidr_file);
+    assert_eq!(stage.sent("POST", AWS_VALIDATE_ROUTE), [cidr.clone()]);
+    assert_eq!(cidr["spec"]["cloudConfig"]["vpcId"], "vpc-1");
+    assert_eq!(
+        cidr["spec"]["profiles"],
+        serde_json::json!([{"uid": "r-1", "variables": [], "packValues": [
+            {"name": "kubernetes", "tag": "1.33.2", "values": CIDR_OVERLAP_VALUES}]}])
+    );
+    let pools = cidr["spec"]["machinepoolconfig"].as_array_mut().unwrap();
+    assert_eq!(pools.len(), 2);
+    for pool in pools {
+        let config = pool["cloudConfig"].as_object_mut().unwrap();
+        assert_eq!(
+            config.remove("subnets"),
+            Some(serde_json::json!([{"id": "subnet-1a", "az": "us-east-2a"}])),
+            "{config:?}"
+        );
+    }
+    let asked = std::fs::read_to_string(stage.path(&format!(
+        "routes/sent/GET_{}.request",
+        Stage::route_key(LAB_VPCS_ROUTE)
+    )))
+    .unwrap();
+    assert!(
+        asked.starts_with("query=cloudAccountUid=acc-1\n"),
+        "{asked}"
+    );
+    let status = std::fs::read_to_string(stage.path("out/cidr-overlap-status.out")).unwrap();
+    assert_eq!(status, format!("HTTP 500\n{}", cidr_overlap_answer()));
+    cidr["spec"]["cloudConfig"]["vpcId"] = clean["spec"]["cloudConfig"]["vpcId"].clone();
+    cidr["spec"]["profiles"] = clean["spec"]["profiles"].clone();
+    assert_eq!(cidr, clean, "nothing else changes");
 
     // a case body is the clean body and one more profile, the one that the script made. The
     // directory holds no case body at the end, so the test reads what validate-route.sh got.
@@ -7531,14 +7738,18 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     let sent: Vec<usize> = (0..log.len())
         .filter(|&i| log[i].starts_with("VALIDATE "))
         .collect();
-    assert_eq!(sent.len(), 5, "aws-clean and the four cases: {log:?}");
+    assert_eq!(
+        sent.len(),
+        6,
+        "aws-clean, the four cases, and cidr-overlap: {log:?}"
+    );
     assert!(
         sent.iter().all(|&i| last_create < i && i < first_delete),
         "{log:?}"
     );
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     let mut answered = vec!["aws-clean".to_string()];
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    for case in AWS_CASES.iter().map(|case| case.id).chain([CIDR_CASE]) {
         answered.push(case.to_string());
         answered.push(format!("{case}-says"));
     }
@@ -7555,10 +7766,99 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     for AwsCase { id: case, .. } in &AWS_CASES {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
-    assert!(
-        bodies.join("aws-clean.json").exists(),
-        "it names the release profile, which stays"
-    );
+    for body in ["aws-clean.json", "cidr-overlap.json"] {
+        assert!(
+            bodies.join(body).exists(),
+            "{body} names the release profile alone, which stays"
+        );
+    }
+}
+
+/// The check `cidr-overlap-code` expects HTTP 500 and `K8SCidrOverlap`. The code of Palette shows
+/// that answer; no live run shows it yet. Another status, another code, or a body that the route
+/// takes fails the check, and `cidr-overlap-status.out` holds that answer (#816).
+#[test]
+fn route_bodies_sh_fails_cidr_overlap_code_when_the_route_gives_another_answer() {
+    let other_code = r#"{"code":"InternalError","message":"boom"}"#;
+    let taken = r#"{"profiles":[],"machinePools":{"results":[]}}"#;
+    for (status, body) in [
+        ("400", cidr_overlap_answer()),
+        ("500", other_code.to_string()),
+        ("200", taken.to_string()),
+    ] {
+        let stage = route_bodies_stage(&route_packs(true), &[]);
+        answer_aws_validate(&stage, status, &body);
+        let bodies = stage.path("bodies");
+        let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(1), "{status}: {steps}");
+        passed(&steps, &["cidr-overlap-body", "cidr-overlap-status"]);
+        failed(&steps, &["cidr-overlap-code"]);
+        let out = std::fs::read_to_string(stage.path("out/cidr-overlap-status.out")).unwrap();
+        assert_eq!(out, format!("HTTP {status}\n{body}"));
+    }
+}
+
+/// The script skips `cidr-overlap` when Palette lists no VPC with a CIDR, or when the Kubernetes
+/// pack of the release profile has no `podCIDR`. It also skips the case when no VPC with a CIDR has
+/// a subnet in each zone of the pools. It removes the body of an earlier run, sends nothing to the
+/// route, and the other cases run (#816, #824).
+#[test]
+fn route_bodies_sh_skips_cidr_overlap_with_no_vpc_that_has_a_cidr_and_a_subnet_in_each_zone_or_no_pod_cidr()
+ {
+    let no_pod_cidr = RELEASE_ON_AWS.replace("podCIDR: \\\"192.168.0.0/16\\\"\\n  ", "");
+    assert_ne!(no_pod_cidr, RELEASE_ON_AWS);
+    let cases: [(&str, &str, &str); 4] = [
+        (
+            LAB_VPCS_ROUTE,
+            r#"{"vpcs":[{"vpcId":"vpc-0"}]}"#,
+            "skipped cidr-overlap: the region us-east-2 lists no VPC with a CIDR",
+        ),
+        (
+            LAB_VPCS_ROUTE,
+            r#"{"vpcs":[{"vpcId":"vpc-0","subnets":[{"subnetId":"subnet-0a","az":"us-east-2a"}]},
+                {"vpcId":"vpc-1","cidrBlock":"172.31.0.0/16","subnets":[{"subnetId":"subnet-1b","az":"us-east-2b"}]},
+                {"vpcId":"vpc-2","cidrBlock":"10.0.0.0/16"}]}"#,
+            "skipped cidr-overlap: no VPC of us-east-2 with a CIDR has a subnet in each zone of the pools: us-east-2a",
+        ),
+        (
+            LAB_VPCS_ROUTE,
+            "",
+            "skipped cidr-overlap: Palette lists no VPC of us-east-2: api.sh: GET /v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc-1 answered HTTP 404",
+        ),
+        (
+            &profile_route("r-1"),
+            &no_pod_cidr,
+            "the Kubernetes pack of the release profile has no podCIDR",
+        ),
+    ];
+    for (route, answer, says) in cases {
+        let stage = route_bodies_stage(&route_packs(true), &[]);
+        if answer.is_empty() {
+            std::fs::remove_file(stage.path(&format!("routes/{}", Stage::route_key(route))))
+                .unwrap();
+        } else {
+            stage.route(route, answer);
+        }
+        let bodies = stage.path("bodies");
+        std::fs::create_dir_all(&bodies).unwrap();
+        std::fs::write(bodies.join("cidr-overlap.json"), "{}").unwrap();
+        let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{says}: {steps}{}",
+            text(&o.stderr)
+        );
+        let skipped = steps
+            .lines()
+            .find(|l| l.starts_with("skipped cidr-overlap: "))
+            .unwrap_or_else(|| panic!("{steps}"));
+        assert!(skipped.contains(says), "{skipped}");
+        assert!(!steps.contains("cidr-overlap-body"), "{steps}");
+        assert!(!bodies.join("cidr-overlap.json").exists(), "{says}");
+        assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty(), "{says}");
+        passed(&steps, &["aws-clean-body", "validate-route"]);
+    }
 }
 
 #[test]
@@ -8099,6 +8399,87 @@ fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_
             failed(&steps, &checks);
         } else {
             passed(&steps, &checks);
+        }
+    }
+}
+
+/// Issue #709. The next version keeps the version of each pack. So `behind` says that no newer
+/// version of the release carries a newer version of a pin that is behind. A pin with a carrier,
+/// with no entry for the release, or with a failed read fails the check. A pin of another record
+/// does not count.
+#[test]
+fn loop_sh_stage_3_checks_that_no_newer_version_of_the_release_carries_a_newer_pack() {
+    let none = r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1"}]"#;
+    for (carriers, subject, passes) in [
+        (none, "strata-live-profile@1.0.0", true),
+        (
+            r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1",
+                "carrier":{"version":"1.0.1","uid":"n-1","packVersion":"1.33.0"}}]"#,
+            "strata-live-profile@1.0.0",
+            false,
+        ),
+        ("[]", "strata-live-profile@1.0.0", false),
+        (
+            r#"[{"profile":"strata-live-profile","version":"1.0.0","uid":"r-1","error":{"kind":"api"}}]"#,
+            "strata-live-profile@1.0.0",
+            false,
+        ),
+        ("[]", "strata-live-addon@1.0.0", true),
+    ] {
+        let mut stage = lab_stage();
+        let report = format!(
+            r#"{{"schema":"{schema}","pins":[{{"name":"kubernetes","version":"1.32.0","behind":true,
+                "pinnedBy":[{{"subject":"{subject}"}}],"carriers":{carriers}}}],"profiles":[]}}"#,
+            schema = strata::ops::BEHIND_SCHEMA
+        );
+        stage.strata(
+            "behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json",
+            1,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        passed(&steps, &["behind-profile"]);
+        if passes {
+            passed(&steps, &["behind-carrier"]);
+        } else {
+            failed(&steps, &["behind-carrier"]);
+        }
+    }
+}
+
+/// Issue #708. With the impact, `behind` gives the bump of the release to the next version. Its level,
+/// its flags, and its packs are those of `compare` of the two versions. A bump whose level, flags,
+/// or packs differ from the compare fails.
+#[test]
+fn loop_sh_stage_3_checks_that_the_bump_of_the_release_is_the_compare_of_the_two_versions() {
+    let good = (r#""in-place""#, r#"["UPSTREAM","AUTHORED"]"#, "addon/a");
+    for (impact, flags, pack) in [
+        good,
+        (r#""repave""#, good.1, good.2),
+        (good.0, r#"["AUTHORED"]"#, good.2),
+        (good.0, good.1, "addon/b"),
+    ] {
+        let mut stage = lab_stage();
+        let report = format!(
+            r#"{{"schema":"{schema}","pins":[],"profiles":[{{"name":"strata-live-profile","version":"1.0.0",
+                "pinnedBy":[{{}}],"newer":[{{"version":"1.0.1"}}],
+                "bump":{{"to":"1.0.1","impact":{impact},"flags":{flags},"packs":[{{"key":"{pack}","status":"changed"}}]}}}}]}}"#,
+            schema = strata::ops::BEHIND_SCHEMA
+        );
+        stage.strata("behind repo/releases/1.0.0.json --json", 1, &report);
+        stage.strata(
+            "compare r-1 n-1 --json",
+            1,
+            r#"{"summary":{"maxImpact":"in-place"},"packs":[
+                {"key":"addon/a","status":"changed","identity":false,"upstream":true,"authored":true,"images":false,"charts":false},
+                {"key":"addon/b","status":"unchanged","identity":false,"upstream":false,"authored":false,"images":false,"charts":false}]}"#,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        passed(&steps, &["behind-profile-move", "compare-profile-move"]);
+        if (impact, flags, pack) == good {
+            passed(&steps, &["behind-profile-move-says"]);
+        } else {
+            failed(&steps, &["behind-profile-move-says"]);
         }
     }
 }
@@ -9850,6 +10231,21 @@ case "$1" in
 esac
 "##;
 
+/// The pod of the observer, as the cluster gives it after an apply of the overlay in the working
+/// folder. It is `fake-observer-pod` on the `PATH` of observer.sh and of observer-images.sh. It prints
+/// `$FAKE_OBS/pod.json` with the image of the overlay and an image id. `FAKE_POD_IMAGE` gives the pod
+/// another image. The pod names a pull Secret when the overlay names one, or when `FAKE_PULL_SECRET`
+/// names one.
+const FAKE_OBSERVER_POD: &str = r##"#!/usr/bin/env bash
+name=$(sed -n 's/^    newName: //p' kustomization.yaml 2> /dev/null)
+pin=$(sed -n 's/^    newTag: /:/p; s/^    digest: /@/p' kustomization.yaml 2> /dev/null)
+secret=${FAKE_PULL_SECRET-}
+[ -n "$secret" ] || ! grep -qs imagePullSecrets kustomization.yaml || secret=ghcr-pull
+jq --arg n "$name" --arg i "${FAKE_POD_IMAGE:-$name$pin}" --arg s "$secret" '.items[0].spec.containers[0].image = $i
+  | .items[0].status.containerStatuses[0].imageID = ($n + "@sha256:0a1b2c3d")
+  | if $s != "" then .items[0].spec.imagePullSecrets = [{name: $s}] else . end' "$FAKE_OBS/pod.json"
+"##;
+
 /// The `kubectl` of observer-images.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`. A pod made with `apply -f -` gets a file in `pods/`. Its image
 /// id is the digest that the registry holds at that time, as a pull with Always gives. The pod
@@ -9857,7 +10253,8 @@ esac
 ///
 /// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
 /// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
-/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`].
+/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`], and a read of the pod of the observer
+/// runs [`FAKE_OBSERVER_POD`].
 const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -9880,7 +10277,6 @@ case "$*" in
   *"create namespace strata-live-images"*) touch "$obs/ns.strata-live-images" ;;
   *"create configmap strata-observer"*) touch "$obs/config" ;;
   *"create secret generic strata-observer-key"*) cat > "$obs/key.seen" ;;
-  *"create secret generic ghcr-pull"*) cat > "$obs/pull.seen" ;;
   *"apply --server-side -f -"*)
     cat > "$obs/records.yaml"
     cp "$obs/values.txt" "$obs/records.values" 2> /dev/null || : > "$obs/records.values"
@@ -9907,6 +10303,7 @@ case "$*" in
     jq -n --arg n "$name" --arg i "$image" --arg id "$id" --arg p "$policy" --argjson r "$restarts" --arg w "$waiting" \
       '{name: $n, namespace: "strata-live-images", image: $i, imageID: $id, policy: $p, restarts: $r, waiting: $w}' \
       > "$obs/pods/$name.json" ;;
+  *"get pod -l app.kubernetes.io/name=strata-observer -o json"*) exec fake-observer-pod ;;
   *"get pod "*" -o json"*)
     name=$(sed -E 's/.* get pod ([a-z0-9-]+) .*/\1/' <<<"$*")
     [ -f "$obs/pods/$name.json" ] || notfound pods "$name"
@@ -10041,20 +10438,22 @@ fn images_stage() -> Stage {
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
     std::fs::write(obs.join("agents.json"), AGENT_PODS).unwrap();
+    std::fs::write(
+        obs.join("pod.json"),
+        serde_json::to_string(&observer_pod()).unwrap(),
+    )
+    .unwrap();
     let bin = stage.path("obs-bin");
     std::fs::create_dir_all(&bin).unwrap();
     for (name, body) in [
         ("kubectl", FAKE_KUBECTL_IMAGES),
+        ("fake-observer-pod", FAKE_OBSERVER_POD),
         ("curl", FAKE_CURL_IMAGES),
         ("crane", FAKE_CRANE_IMAGES),
         // the script never calls docker: the log of this stand-in stays empty
         (
             "docker",
             "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_OBS/docker.log\"\nexit 1\n",
-        ),
-        (
-            "gh",
-            "#!/usr/bin/env bash\ncase \"$*\" in\n  \"api user\"*) echo tester ;;\nesac\n",
         ),
         (
             "git",
@@ -10071,10 +10470,6 @@ fn images_stage() -> Stage {
     );
     let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
     stage.env("PATH", &path);
-    // the token file is outside the folder of the run, so that the look for it in the run is fair
-    let token_file = stage.path("ghcr-pull-token");
-    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
-    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("CYCLE_TRIES", "3");
@@ -10089,7 +10484,6 @@ fn run_images(stage: &Stage) -> (Output, String) {
 
 /// Each check of observer-images.sh, in the order that it runs on a good run.
 const IMAGES_CHECKS: [&str; 21] = [
-    "pull-secret",
     "tag-first",
     "values-edit",
     "namespaces",
@@ -10097,6 +10491,7 @@ const IMAGES_CHECKS: [&str; 21] = [
     "records",
     "observer-apply",
     "observer-ready",
+    "no-pull-secret",
     "pods-role",
     "pods-read",
     "image-first",
@@ -10280,7 +10675,7 @@ fn observer_images_sh_lists_the_three_images_in_the_values_of_the_add_on_and_put
 }
 
 #[test]
-fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secret() {
+fn observer_images_sh_installs_the_observer_with_the_component_and_no_pull_secret() {
     let mut stage = images_stage();
     stage.env(
         "OBSERVER_IMAGE",
@@ -10288,12 +10683,12 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
     );
     let (o, steps) = run_images(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["no-pull-secret"]);
     let overlay = std::fs::read_to_string(stage.path("out/kustomization.yaml")).unwrap();
     for line in [
         "components:\n  - pods\n",
         "newName: ghcr.io/como-technologies/strata-observer\n",
         "newTag: test-abc1234\n",
-        "- name: ghcr-pull\n",
         "value: --content-every=1m",
     ] {
         assert!(overlay.contains(line), "{line:?}:\n{overlay}");
@@ -10302,6 +10697,7 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
         !overlay.contains("ttl.sh"),
         "the observer does not come from ttl.sh:\n{overlay}"
     );
+    assert!(!overlay.contains("imagePullSecrets"), "{overlay}");
     // the folders of the overlay are copies of the base and of the component
     for file in [
         "base/deployment.yaml",
@@ -10315,26 +10711,29 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
             "{file}"
         );
     }
-    // the pull Secret holds the token of the file, through standard input, and no file shows it
-    let pull = observer_log(&stage, "pull.seen");
-    let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
-    assert_eq!(
-        auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN,
-        "{pull}"
-    );
+    // the namespace of the observer comes from its file, and the one Secret holds the key
     let kubectl = observer_log(&stage, "kubectl.log");
     assert!(
-        kubectl.contains("create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson"),
+        kubectl
+            .lines()
+            .any(|l| l.starts_with("apply -f ") && l.ends_with("/deploy/observer/namespace.yaml")),
         "{kubectl}"
+    );
+    let creates: Vec<&str> = kubectl
+        .lines()
+        .filter(|l| l.contains("create secret"))
+        .collect();
+    assert_eq!(creates.len(), 1, "{creates:?}");
+    assert!(
+        creates[0].contains("create secret generic strata-observer-key"),
+        "{creates:?}"
     );
     // the key reaches the Secret through standard input, and no other file or call shows it
     assert_eq!(observer_log(&stage, "key.seen"), OBSERVER_KEY);
     let mut shown = Vec::new();
     for dir in ["out", "obs"] {
         for (file, content) in files_under(&stage.path(dir)) {
-            if !["key.seen", "pull.seen"].contains(&file.as_str())
-                && (content.contains(OBSERVER_KEY) || content.contains(OBSERVER_PULL_TOKEN))
-            {
+            if file != "key.seen" && content.contains(OBSERVER_KEY) {
                 shown.push(format!("{dir}/{file}"));
             }
         }
@@ -10348,8 +10747,9 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
     );
 }
 
-/// The image of the observer is on a private package. The script never tags it, never pushes it, and
-/// never copies it: docker is not called, and `crane` copies public images to `ttl.sh` only.
+/// The nodes pull the image of the observer from its public package. The script never tags it, never
+/// pushes it, and never copies it, so the pod runs the image that CI built. docker is not called, and
+/// `crane` copies public images to `ttl.sh` only.
 #[test]
 fn observer_images_sh_puts_the_image_of_the_observer_on_no_registry() {
     let mut stage = images_stage();
@@ -10401,49 +10801,26 @@ fn observer_images_sh_puts_the_image_of_the_observer_on_no_registry() {
     }
 }
 
-/// A token file that fails stops the run at the pull Secret, before any change. The run makes no copy to
-/// `ttl.sh`, no edit of the add-on, and no call to the cluster.
+/// A pod of the observer that names a pull Secret fails `no-pull-secret`, and so does a pod that runs
+/// another image. The run continues, and the undo runs at its end.
 #[test]
-fn observer_images_sh_stops_at_the_pull_secret_before_it_changes_anything() {
-    for (why, body, mode) in [
-        ("absent", None, 0o600),
-        ("empty", Some(""), 0o600),
-        ("open to others", Some(OBSERVER_PULL_TOKEN), 0o644),
+fn observer_images_sh_fails_no_pull_secret_on_a_pull_secret_or_another_image() {
+    for (variable, value, shown) in [
+        ("FAKE_PULL_SECRET", "ghcr-pull", "\"name\": \"ghcr-pull\""),
+        (
+            "FAKE_POD_IMAGE",
+            "ghcr.io/como-technologies/strata-observer:v0.1.0",
+            "strata-observer:v0.1.0",
+        ),
     ] {
-        let stage = images_stage();
-        let path = stage.path("ghcr-pull-token");
-        match body {
-            Some(body) => write_with_mode(&path, body, mode),
-            None => std::fs::remove_file(&path).unwrap(),
-        }
+        let mut stage = images_stage();
+        stage.env(variable, value);
         let (o, steps) = run_images(&stage);
-        assert_eq!(
-            o.status.code(),
-            Some(1),
-            "{why}:\n{steps}{}",
-            text(&o.stderr)
-        );
-        assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
-        failed(&steps, &["pull-secret"]);
-        let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
-        assert!(
-            said.contains(path.to_str().unwrap()) && said.contains("read:packages"),
-            "{why}: the line names the file and the scope:\n{said}"
-        );
-        for log in [
-            "kubectl.log",
-            "api.log",
-            "crane.log",
-            "docker.log",
-            "pull.seen",
-        ] {
-            assert_eq!(observer_log(&stage, log), "", "{why}: {log} is not empty");
-        }
-        assert!(
-            !text(&o.stdout).contains(OBSERVER_PULL_TOKEN)
-                && !all_text(&stage.path("out")).contains(OBSERVER_PULL_TOKEN),
-            "{why}: the token is in an output"
-        );
+        assert_eq!(o.status.code(), Some(1), "{variable}:\n{steps}");
+        failed(&steps, &["no-pull-secret"]);
+        passed(&steps, &["observer-ready", "pods-read", "undo-baseline"]);
+        let said = std::fs::read_to_string(stage.path("out/no-pull-secret.out")).unwrap();
+        assert!(said.contains(shown), "{variable}: {said}");
     }
 }
 
@@ -10677,9 +11054,8 @@ fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
         ("observer_overlay_pods", None),
         ("observer_render", None),
         ("observer_ready", None),
-        ("pull_token", None),
-        ("pull_secret", None),
-        ("pull_secret_stop", None),
+        ("observer_namespace", None),
+        ("no_pull_secret", None),
     ] {
         let definition = format!("{helper}() ");
         let homes: Vec<&str> = scripts
@@ -10692,6 +11068,42 @@ fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
         want.sort_unstable();
         assert_eq!(homes, want, "{helper} has a copy");
     }
+}
+
+/// The image and the chart of the observer are on public packages (#732). So no file of the live
+/// example reads a token for a pull, makes a pull Secret, or adds one to a pod. The test reads the
+/// files that git tracks, and not the results of the runs or the providers of `tofu`.
+#[test]
+fn no_file_of_the_live_example_reads_a_pull_token_or_makes_a_pull_secret() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let listing = git(
+        root,
+        &["-c", "safe.directory=*", "ls-files", "--", "examples/live"],
+    )
+    .stdout;
+    let listing = text(&listing);
+    assert!(
+        listing.lines().any(|l| l == "examples/live/lib.sh"),
+        "{listing}"
+    );
+    let mut found = Vec::new();
+    for file in listing.lines() {
+        let body = std::fs::read(root.join(file)).unwrap();
+        let body = text(&body);
+        for word in [
+            "read:packages",
+            "GHCR_PULL_TOKEN_FILE",
+            "ghcr-pull",
+            "dockerconfigjson",
+            "docker-registry",
+            "/spec/template/spec/imagePullSecrets",
+        ] {
+            if body.contains(word) {
+                found.push(format!("{word} in {file}"));
+            }
+        }
+    }
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// The ids of the checks that a script runs: the word after `check` on each line that starts with it.
@@ -10810,9 +11222,9 @@ fi
 
 /// The `kubectl` of observer.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`: `ns.exists`, `deploy.exists`, `restarts`, and
-/// `first-load-pending`. The key goes to `key.current`, and the pull Secret to `pull.seen`.
+/// `first-load-pending`. The key goes to `key.current`.
 /// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults. A port-forward runs
-/// [`FAKE_PORT_FORWARD`].
+/// [`FAKE_PORT_FORWARD`], and a read of the pod of the observer runs [`FAKE_OBSERVER_POD`].
 const FAKE_KUBECTL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -10824,7 +11236,6 @@ case "$*" in
     [ -z "${FAKE_KEY_IN_MANIFEST-}" ] || echo "# $PALETTE_API_KEY" ;;
   *"create secret generic strata-observer-key"*"--dry-run=client"*) printf 'kind: Secret\napi-key: %s\n' "$(cat)" ;;
   *"create secret generic strata-observer-key"*) cat > "$obs/key.current" ;;
-  *"create secret generic ghcr-pull"*) cat > "$obs/pull.seen" ;;
   *"apply"*"-f -"*)
     body=$(cat)
     printf '%s\n' "$body" >> "$obs/applied.yaml"
@@ -10840,7 +11251,7 @@ case "$*" in
     [ -f "$obs/ns.exists" ] || notfound namespaces strata-observer
     echo "strata-observer Active" ;;
   *"get pod -l"*jsonpath*) echo 10.0.0.7 ;;
-  *"get pod -l"*"-o json"*) cat "$obs/pod.json" ;;
+  *"get pod -l"*"-o json"*) exec fake-observer-pod ;;
   *"get replicaset"*) echo '{"items":[]}' ;;
   *"get deployment strata-observer -o json"*)
     [ -f "$obs/deploy.exists" ] || notfound deployments.apps strata-observer
@@ -11040,18 +11451,6 @@ esac
 chmod +x "$out"
 "##;
 
-/// The token of `gh auth token` in the tests of observer.sh. It has the scopes of a person, so it
-/// never reaches the cluster.
-const OBSERVER_GH_TOKEN: &str = "ghp_token_that_no_log_shows";
-/// The token in the token file of observer.sh. It has only the scope read:packages.
-const OBSERVER_PULL_TOKEN: &str = "ghp_pull_token_that_no_log_shows";
-
-/// Write `body` to `path` with the mode `mode`.
-fn write_with_mode(path: &Path, body: &str, mode: u32) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, body).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
-}
 /// The key of the tenant in the tests of observer.sh.
 const OBSERVER_KEY: &str = "key-that-no-log-shows";
 
@@ -11114,17 +11513,12 @@ fn observer_stage() -> Stage {
     std::fs::create_dir_all(&bin).unwrap();
     for (name, body) in [
         ("kubectl", FAKE_KUBECTL_FRED),
+        ("fake-observer-pod", FAKE_OBSERVER_POD),
         ("curl", FAKE_CURL_FRED),
         ("go", FAKE_GO_FRED),
         (
             "git",
             "#!/usr/bin/env bash\necho 0123456789abcdef0123456789abcdef01234567\n",
-        ),
-        (
-            "gh",
-            &format!(
-                "#!/usr/bin/env bash\ncase \"$*\" in\n  \"auth token\") echo {OBSERVER_GH_TOKEN} ;;\n  \"api user\"*) echo tester ;;\nesac\n"
-            ),
         ),
     ] {
         executable(&bin.join(name), body);
@@ -11182,14 +11576,9 @@ fn observer_stage() -> Stage {
         r#"{"profiles":[{"name":"strata-live-profile","uid":"r-1"},{"name":"strata-live-addon","uid":"ad-1"}]}"#,
     );
 
-    // the token file is outside the folder of the run, so that the look for it in the run is fair
-    let token_file = stage.path("ghcr-pull-token");
-    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
-
     let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
     stage.env("PATH", &path);
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
-    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
     stage
@@ -11203,7 +11592,6 @@ fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
 
 /// Each check of observer.sh, in the order that it runs on a good run.
 const OBSERVER_CHECKS: [&str; 61] = [
-    "pull-secret",
     "cluster-record",
     "profile-records",
     "namespace",
@@ -11215,6 +11603,7 @@ const OBSERVER_CHECKS: [&str; 61] = [
     "apply-admitted",
     "pod-ready",
     "pod-hardened",
+    "no-pull-secret",
     "reaches-palette",
     "no-finding-at-baseline",
     "summary-matches-strata",
@@ -11305,7 +11694,7 @@ fn all_text(dir: &Path) -> String {
 }
 
 #[test]
-fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_and_the_periods() {
+fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_and_the_periods_and_no_pull_secret() {
     let stage = observer_stage();
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
@@ -11315,12 +11704,15 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "name: ghcr.io/como-technologies/strata-observer",
         "newName: ghcr.io/como-technologies/strata-observer",
         &format!("newTag: v{}", version_of("Cargo.toml")),
-        "- name: ghcr-pull",
         "value: --content-every=1m",
         "value: --versions-every=5m",
     ] {
         assert!(kustomization.contains(part), "{part}:\n{kustomization}");
     }
+    assert!(
+        !kustomization.contains("imagePullSecrets"),
+        "{kustomization}"
+    );
     assert!(
         stage.path("out/base/deployment.yaml").is_file(),
         "base/ holds the manifests of the run"
@@ -11345,7 +11737,6 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "create configmap strata-observer --from-literal=cluster-uid=c-a",
         "--from-literal=project-uid=p-1",
         "create secret generic strata-observer-key --from-file=api-key=/dev/stdin",
-        "create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson",
         "create rolebinding reader --role=strata-observer-reader --user=strata-observer-reader",
         "auth can-i -n strata-observer get secrets --as=strata-observer-reader",
         "auth can-i -n strata-observer create pods --subresource=exec --as=strata-observer-reader",
@@ -11358,11 +11749,17 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         assert!(kubectl.contains(call), "{call}:\n{kubectl}");
     }
 
-    // the pull secret holds the token of the file, and the key Secret holds the right key at the end
-    let pull = observer_log(&stage, "pull.seen");
-    let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
-    assert_eq!(auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN);
-    assert_eq!(auths["auths"]["ghcr.io"]["username"], "tester");
+    // the one Secret that the run makes holds the key, and it holds the right key at the end
+    let creates: Vec<&str> = kubectl
+        .lines()
+        .filter(|l| l.contains("create secret"))
+        .collect();
+    assert!(
+        creates
+            .iter()
+            .all(|l| l.contains("create secret generic strata-observer-key")),
+        "{creates:?}"
+    );
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     assert_eq!(
         observer_log(&stage, "restarts").trim(),
@@ -11429,7 +11826,7 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
 }
 
 #[test]
-fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call() {
+fn observer_sh_puts_the_key_in_no_output_no_file_of_the_run_and_no_call() {
     let stage = observer_stage();
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
@@ -11442,15 +11839,12 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
         ("the calls of api.sh", observer_log(&stage, "api.log")),
         ("the calls of strata", all_text(&stage.path("strata"))),
     ] {
-        for secret in [OBSERVER_KEY, OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
-            if haystack.contains(secret) {
-                shown.push(format!("{secret} in {name}"));
-            }
+        if haystack.contains(OBSERVER_KEY) {
+            shown.push(format!("the key in {name}"));
         }
     }
     assert!(shown.is_empty(), "{shown:?}");
-    // the two reach their Secrets through standard input
-    assert!(observer_log(&stage, "pull.seen").contains(OBSERVER_PULL_TOKEN));
+    // the key reaches its Secret through standard input
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     // the kubeconfig is a credential: no file of it stays in the run or in the temporary directory
     let kubeconfigs: Vec<_> = files_under(&stage.path("out"))
@@ -11465,115 +11859,29 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
     assert!(left.is_empty(), "the kubeconfig stays: {left:?}");
 }
 
-/// The token file of the stage holds `body` with the mode `mode`. `None` removes the file.
-fn observer_token_file(stage: &Stage, body: Option<&str>, mode: u32) {
-    let path = stage.path("ghcr-pull-token");
-    match body {
-        Some(body) => write_with_mode(&path, body, mode),
-        None => std::fs::remove_file(path).unwrap(),
-    }
-}
-
-/// The run of `stage` stops at `pull-secret`: it is the one check, it fails, and its line names the
-/// file and the scope. No call changes the cluster, and no call makes a Secret.
-fn assert_observer_stops_at_the_pull_secret(stage: &Stage, why: &str) {
-    let (o, steps) = run_observer(stage, &[]);
-    assert_eq!(
-        o.status.code(),
-        Some(1),
-        "{why}:\n{steps}{}",
-        text(&o.stderr)
-    );
-    assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
-    failed(&steps, &["pull-secret"]);
-    let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
-    assert_eq!(said.lines().count(), 1, "{why}: one line:\n{said}");
-    assert!(
-        said.contains(stage.path("ghcr-pull-token").to_str().unwrap())
-            && said.contains("read:packages"),
-        "{why}: the line names the file and the scope:\n{said}"
-    );
-    assert!(
-        steps.contains(said.trim()),
-        "{why}: the log holds it:\n{steps}"
-    );
-    assert_eq!(
-        observer_log(stage, "kubectl.log"),
-        "",
-        "{why}: no call to the cluster"
-    );
-    assert_eq!(observer_log(stage, "pull.seen"), "", "{why}: no Secret");
-    // the token of gh is no fallback, and no secret is in a place that the run shows
-    for secret in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN, OBSERVER_KEY] {
-        assert!(!text(&o.stdout).contains(secret), "{why}: {secret}");
-        assert!(
-            !all_text(&stage.path("out")).contains(secret),
-            "{why}: {secret}"
-        );
-    }
-}
-
+/// A pod of the observer that names a pull Secret fails `no-pull-secret`, and so does a pod that runs
+/// another image. The later stages still run, because they need the page and not the check.
 #[test]
-fn observer_sh_stops_at_the_pull_secret_when_the_token_file_is_absent_or_empty() {
-    for (why, body) in [
-        ("absent", None),
-        ("empty", Some("")),
-        ("only white space", Some(" \n\t\n")),
+fn observer_sh_fails_no_pull_secret_on_a_pull_secret_or_another_image() {
+    for (variable, value, shown) in [
+        ("FAKE_PULL_SECRET", "ghcr-pull", "\"name\": \"ghcr-pull\""),
+        (
+            "FAKE_POD_IMAGE",
+            "ghcr.io/como-technologies/strata-observer:v0.1.0",
+            "strata-observer:v0.1.0",
+        ),
     ] {
-        let stage = observer_stage();
-        observer_token_file(&stage, body, 0o600);
-        assert_observer_stops_at_the_pull_secret(&stage, why);
-    }
-}
-
-#[test]
-fn observer_sh_stops_at_the_pull_secret_when_a_group_or_others_can_read_the_token_file() {
-    for mode in [0o644, 0o640, 0o604, 0o660] {
-        let stage = observer_stage();
-        observer_token_file(&stage, Some(OBSERVER_PULL_TOKEN), mode);
-        assert_observer_stops_at_the_pull_secret(&stage, &format!("mode {mode:o}"));
-    }
-}
-
-#[test]
-fn observer_sh_sends_the_token_of_gh_to_no_call_and_no_input_of_kubectl() {
-    let stage = observer_stage();
-    let (o, steps) = run_observer(&stage, &[]);
-    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    // the stand-in keeps the calls, the key, the pull Secret, and the input of each apply
-    let kept = files_under(&stage.path("obs"));
-    for file in ["kubectl.log", "key.current", "pull.seen", "applied.yaml"] {
-        assert!(kept.iter().any(|(path, _)| path == file), "{file} is kept");
-    }
-    for (path, content) in kept {
-        assert!(!content.contains(OBSERVER_GH_TOKEN), "in {path}");
-    }
-}
-
-#[test]
-fn observer_sh_finds_the_pull_token_or_the_token_of_gh_in_a_file_of_the_run() {
-    for leak in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
         let mut stage = observer_stage();
-        stage.env("FAKE_LEAK_SECRET", leak);
-        stage.wrap_strata(
-            r#"#!/usr/bin/env bash
-out=""; prev=""
-for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
-case "$*" in
-  "snapshot op-1 -o "*) echo "{\"manifest\": \"$FAKE_LEAK_SECRET\"}" > "$out"; exit 0 ;;
-esac
-exec "$(dirname "$0")/fake-strata-rules" "$@"
-"#,
-        );
+        stage.env(variable, value);
         let (o, steps) = run_observer(&stage, &[]);
-        assert_eq!(
-            o.status.code(),
-            Some(1),
-            "{leak}:\n{steps}{}",
-            text(&o.stderr)
+        assert_eq!(o.status.code(), Some(1), "{variable}:\n{steps}");
+        failed(&steps, &["no-pull-secret"]);
+        passed(
+            &steps,
+            &["pod-hardened", "reaches-palette", "undo-baseline"],
         );
-        failed(&steps, &["no-secret-in-run"]);
-        passed(&steps, &["no-key-in-profile", "undo-namespace"]);
+        let said = std::fs::read_to_string(stage.path("out/no-pull-secret.out")).unwrap();
+        assert!(said.contains(shown), "{variable}: {said}");
     }
 }
 
@@ -12302,6 +12610,186 @@ fn observer_sh_fails_the_first_sight_check_when_a_restart_keeps_the_state_and_re
     assert!(!stage.path("obs/drifted").exists());
 }
 
+// ---- the chart of the observer with no login (#732) ------------------------------------------------
+
+/// The registry of observer-chart.sh, as Palette serves it. Palette makes it with the uid `reg-c`.
+/// A sync ends with the status Completed, and the packs of the registry hold the chart. The registry
+/// answers a read until a DELETE of it, and HTTP 404 after it.
+fn chart_stage() -> Stage {
+    let stage = Stage::new(serde_json::json!({}));
+    stage.route("/v1/registries/oci/basic", r#"{"uid":"reg-c"}"#);
+    stage.route("/v1/registries/oci/reg-c/basic/sync", "{}");
+    let routes = stage.path("routes");
+    executable(
+        &routes.join("v1_registries_oci_reg-c_basic_sync_status.sh"),
+        r#"#!/usr/bin/env bash
+if [ -f "$FAKE_ROUTES/sent/POST_v1_registries_oci_reg-c_basic_sync.request" ]; then
+  echo '{"status":"Completed","lastRunTime":"2026-11-11T10:05:00Z","lastSyncedTime":"2026-11-11T10:05:00Z","message":""}'
+else
+  echo '{"status":"Completed","lastRunTime":"2026-11-11T10:00:00Z","message":""}'
+fi
+"#,
+    );
+    executable(
+        &routes.join("v1_registries_oci_reg-c_basic.sh"),
+        r#"#!/usr/bin/env bash
+deletes=$(grep -c '^DELETE /v1/registries/oci/reg-c/basic$' "$FAKE_LOG")
+if [ "$deletes" -gt 1 ] || { [ "$deletes" = 1 ] && [ "$(tail -n 1 "$FAKE_LOG")" != "DELETE /v1/registries/oci/reg-c/basic" ]; }; then
+  echo 404 > "$FAKE_ROUTES/v1_registries_oci_reg-c_basic.status"
+fi
+echo '{"metadata":{"name":"strata-live-observer-chart","uid":"reg-c"}}'
+"#,
+    );
+    stage.route(
+        "/v1/packs",
+        r#"{"items":[{"spec":{"name":"strata-observer","version":"0.32.2","registryUid":"reg-c"}}],"listmeta":{"count":1}}"#,
+    );
+    stage
+}
+
+#[test]
+fn observer_chart_sh_makes_a_registry_with_no_login_syncs_it_finds_the_chart_and_deletes_it() {
+    let stage = chart_stage();
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(
+        check_ids(&steps),
+        [
+            "registry-no-login",
+            "sync-no-login",
+            "chart-no-login",
+            "registry-gone"
+        ],
+        "{steps}"
+    );
+    for id in ["registry-no-login", "sync-no-login", "chart-no-login"] {
+        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
+        assert!(step_line(&steps, id).ends_with("got 0"), "{id}:\n{steps}");
+    }
+    passed(&steps, &["registry-gone"]);
+
+    // the body of the create holds the auth type noAuth, and no user and no password
+    let sent = stage.sent("POST", "/v1/registries/oci/basic");
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let spec = &sent[0]["spec"];
+    assert_eq!(spec["endpoint"], "https://ghcr.io/orgs/como-technologies");
+    assert_eq!(spec["baseContentPath"], "charts");
+    assert_eq!(spec["providerType"], "helm");
+    assert_eq!(spec["isSyncSupported"], true);
+    assert_eq!(spec["auth"]["type"], "noAuth");
+    for field in ["username", "password", "token"] {
+        assert!(spec["auth"].get(field).is_none(), "{field}: {spec}");
+    }
+    let name = sent[0]["metadata"]["name"].as_str().unwrap();
+    assert!(
+        name.starts_with("strata-live-observer-chart-"),
+        "the name holds a random suffix: {name}"
+    );
+    // the registry is of the tenant: the create and the delete name no project
+    for method in [
+        "POST_v1_registries_oci_basic",
+        "DELETE_v1_registries_oci_reg-c_basic",
+    ] {
+        let request =
+            std::fs::read_to_string(stage.path(&format!("routes/sent/{method}.request"))).unwrap();
+        assert!(!request.contains("ProjectUid"), "{method}:\n{request}");
+    }
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "POST /v1/registries/oci/reg-c/basic/sync"),
+        "{calls}"
+    );
+    let chart = std::fs::read_to_string(stage.path("out/chart-no-login.out")).unwrap();
+    assert!(
+        chart.contains("\"version\": \"0.32.2\""),
+        "the output names the version: {chart}"
+    );
+}
+
+#[test]
+fn observer_chart_sh_records_a_refusal_of_the_create_with_its_code_and_deletes_nothing() {
+    let stage = chart_stage();
+    std::fs::write(
+        stage.path("routes/v1_registries_oci_basic"),
+        r#"{"code":"InvalidRegistryCredentials","message":"the registry refused the read"}"#,
+    )
+    .unwrap();
+    std::fs::write(stage.path("routes/v1_registries_oci_basic.status"), "500").unwrap();
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(
+        check_ids(&steps),
+        ["registry-no-login", "registry-gone"],
+        "{steps}"
+    );
+    assert!(
+        !step_line(&steps, "registry-no-login").ends_with("got 0"),
+        "{steps}"
+    );
+    let said = std::fs::read_to_string(stage.path("out/registry-no-login.err")).unwrap();
+    assert!(said.contains("InvalidRegistryCredentials"), "{said}");
+    passed(&steps, &["registry-gone"]);
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!calls.contains("DELETE"), "{calls}");
+}
+
+#[test]
+fn observer_chart_sh_records_a_registry_with_no_chart_and_deletes_it() {
+    let stage = chart_stage();
+    stage.route("/v1/packs", r#"{"items":[],"listmeta":{"count":0}}"#);
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        step_line(&steps, "sync-no-login").ends_with("got 0"),
+        "{steps}"
+    );
+    assert!(
+        step_line(&steps, "chart-no-login").ends_with("got 1"),
+        "{steps}"
+    );
+    passed(&steps, &["registry-gone"]);
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "DELETE /v1/registries/oci/reg-c/basic"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn observer_chart_sh_fails_when_the_registry_stays() {
+    let stage = chart_stage();
+    // the registry answers each read, also after the DELETE
+    executable(
+        &stage.path("routes/v1_registries_oci_reg-c_basic.sh"),
+        "#!/usr/bin/env bash\necho '{\"metadata\":{\"uid\":\"reg-c\"}}'\n",
+    );
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["registry-gone"]);
+}
+
+#[test]
+fn the_page_of_live_runs_names_each_check_of_observer_chart_sh() {
+    let mut in_script = script_check_ids("observer-chart.sh");
+    let mut on_page = page_check_ids("observer-chart.sh");
+    in_script.sort();
+    on_page.sort();
+    assert_eq!(in_script, on_page);
+    // the three questions to Palette record a result and judge none
+    let source = repo_file("examples/live/observer-chart.sh");
+    for id in ["registry-no-login", "sync-no-login", "chart-no-login"] {
+        assert!(
+            source.contains(&format!("check {id} ? ")),
+            "{id} is a check with ?"
+        );
+    }
+    assert!(source.contains("check registry-gone 0 "));
+}
+
 // ---- the least role of the key of the observer (#645) ----------------------------------------------
 
 /// A `strata` that logs each call with the name of the key it read. The name is `role` for the
@@ -12750,17 +13238,18 @@ fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git
 
 /// A stage of `export.sh` 4 for the version `aws-stack@1.2.0`, whose download holds `packs`. The
 /// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, and a manifest
-/// pack.
+/// pack. It also names the chart `nginx` of a Helm registry at `15.0.0`.
 fn download_stage(packs: &[DownloadPack]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILES", "aws-stack@1.2.0");
     stage.strata(
         "snapshot aws-stack@1.2.0 -q -o aws-stack.version.json",
         0,
-        r#"{"source":{"uid":"u-1"},"packs":[
-            {"name":"kubernetes","type":"spectro","version":"1.36.2"},
+        r#"{"source":{"uid":"u-1"},"root":"sha256:r1","packs":[
+            {"name":"kubernetes","type":"spectro","version":"1.36.2","hash":{"node":"n1"}},
             {"name":"csi-aws-ebs","type":"spectro","version":"1.65.0"},
-            {"name":"platform-rules","type":"manifest","version":"1.0.0"}]}"#,
+            {"name":"platform-rules","type":"manifest","version":"1.0.0"},
+            {"name":"nginx","type":"helm","version":"15.0.0","hash":{"identity":"i4","upstream":"u4","node":"n4"}}]}"#,
     );
     let file = profile_download("u-1", "aws-stack", packs);
     stage.route_file(&download_route("u-1"), &file, FILE_FOR_JSON);
@@ -12771,7 +13260,8 @@ fn download_stage(packs: &[DownloadPack]) -> Stage {
 const FILE_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
 
 /// The packs of the download of `aws-stack@1.2.0`. The `pack.json` of the archive of the Kubernetes
-/// pack names `built`. The CSI pack has no archive, and the manifest pack has none.
+/// pack names `built`. The CSI pack has no archive, and the manifest pack has none. The chart
+/// `nginx` of a Helm registry is the last pack, and its `Chart.yaml` names its version.
 fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
     let none = |name, version, kind, private| DownloadPack {
         name,
@@ -12797,13 +13287,121 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
             manifests: &[("extra-rules", "kind: ConfigMap\n")],
             ..none("platform-rules", "1.0.0", PackType::Manifest, false)
         },
+        DownloadPack {
+            archive: Some(chart_archive(
+                "nginx",
+                &[("Chart.yaml", &chart_file("nginx", "15.0.0", None))],
+            )),
+            ..none("nginx", "15.0.0", PackType::Helm, false)
+        },
     ]
 }
 
+/// The line of the check `id` in `steps` records the exit `code`: the check judges nothing.
+fn seen_with(steps: &str, id: &str, code: i32) {
+    let line = step_line(steps, id);
+    assert!(
+        line.starts_with("SEEN ") && line.ends_with(&format!("got {code}")),
+        "{id}: {steps}"
+    );
+}
+
+/// Stage 4 records the file of each chart of a Helm registry (#817, #828). A chart has one top
+/// folder and no `pack.json`, and its `Chart.yaml` names the version of its entry. A file that is
+/// no archive gets its size and its start on one line, such as the error answer of the host. The
+/// check exits 1 for a chart that names another version, and for a chart with `pack.json`. It
+/// also exits 1 for a file that is no archive, and for a download with no chart.
+#[test]
+fn export_sh_stage_4_records_the_file_of_each_chart_of_a_helm_registry() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    seen_with(&steps, "download-chart", 0);
+    let out = std::fs::read_to_string(stage.path("out/download-chart.out")).unwrap();
+    assert_eq!(out, "nginx 15.0.0: nginx/Chart.yaml\n");
+    let chart = |file: Vec<u8>| {
+        let mut packs = downloaded("1.36.2");
+        packs[3].archive = Some(file);
+        packs
+    };
+    let (named, other) = (
+        chart_file("nginx", "15.0.0", None),
+        chart_file("nginx", "15.0.1", None),
+    );
+    let mut private = downloaded("1.36.2");
+    (private[3].archive, private[3].private) = (None, true);
+    let start = CHART_HOST_REFUSAL[..200].replace('\n', " ");
+    for (packs, recorded) in [
+        (
+            chart(chart_archive("nginx", &[("Chart.yaml", &other)])),
+            "nginx 15.0.0: Chart.yaml does not name 15.0.0\n".to_string(),
+        ),
+        (
+            chart(chart_archive(
+                "nginx",
+                &[("Chart.yaml", &named), ("pack.json", "{}")],
+            )),
+            "nginx 15.0.0: the chart holds pack.json\n".to_string(),
+        ),
+        (
+            chart(CHART_HOST_REFUSAL.as_bytes().to_vec()),
+            format!("nginx 15.0.0: no archive: 263 bytes: {start}\n"),
+        ),
+        (private, String::new()),
+    ] {
+        let stage = download_stage(&packs);
+        let (_, steps) = stage.run("export.sh", &["4"]);
+        passed(&steps, &["download-archive-aws-stack"]);
+        seen_with(&steps, "download-chart", 1);
+        let out = std::fs::read_to_string(stage.path("out/download-chart.out")).unwrap();
+        assert_eq!(out, recorded);
+    }
+}
+
+/// Stage 4 records the reason that strata gives for each chart whose file is no archive (#828).
+/// The check copies the record with each chart at another version and with other hashes. Then it
+/// runs `same-release --allow renumber` on the two, so strata reads the file of the chart. It
+/// records `archivesNotReadable` and `archivesNotCompared`, and exits 1 when the pair does not pass.
+#[test]
+fn export_sh_stage_4_records_the_reason_that_strata_gives_for_a_chart_whose_file_is_no_archive() {
+    let mut packs = downloaded("1.36.2");
+    packs[3].archive = Some(CHART_HOST_REFUSAL.as_bytes().to_vec());
+    let mut stage = download_stage(&packs);
+    let reason = r#"{"key":"addon/nginx","version":"15.0.0","reason":"263 bytes of text: <?xml"}"#;
+    stage.strata(
+        "same-release --allow renumber ./aws-stack.version.json ./aws-stack.renumber.json --json",
+        1,
+        &format!(r#"{{"pairs":[{{"status":"different","archivesNotReadable":[{reason}]}}]}}"#),
+    );
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    seen_with(&steps, "download-chart-reason", 1);
+    let out = std::fs::read_to_string(stage.path("out/download-chart-reason.out")).unwrap();
+    assert_eq!(
+        out,
+        format!(
+            "./aws-stack.version.json\t{{\"archivesNotReadable\":[{reason}],\"archivesNotCompared\":null}}\n"
+        )
+    );
+    // the copy names the chart at another version, with other hashes and another root. The other
+    // packs stay as they are
+    let copy: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(stage.path("out/aws-stack.renumber.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(copy["root"], "renumber");
+    assert_eq!(copy["packs"][3]["version"], "15.0.0-renumber");
+    for hash in ["identity", "upstream", "node"] {
+        assert_eq!(copy["packs"][3]["hash"][hash], "renumber", "{hash}");
+    }
+    assert_eq!(copy["packs"][0]["version"], "1.36.2");
+    assert_eq!(copy["packs"][0]["hash"]["node"], "n1");
+}
+
 /// Stage 4 reads the layout of the download of each version, and the archive of each pack. A
-/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the packs
-/// with no archive and two downloads at once. A list or an archive that names another version
-/// fails its check. The file as the answer to a request that accepts JSON fails its check too.
+/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the top
+/// folders of each archive, a Helm chart too, the packs with no archive, and two downloads at once.
+/// A list or an archive that names another version fails its check. The file as the answer to a
+/// request that accepts JSON fails its check too.
 #[test]
 fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
     let stage = download_stage(&downloaded("1.36.2"));
@@ -12819,9 +13417,19 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
             "download-accepts-json-no-file",
         ],
     );
-    for id in ["download-no-archive", "download-limit"] {
+    for id in [
+        "download-top-folders",
+        "download-no-archive",
+        "download-limit",
+    ] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
+    let tops = std::fs::read_to_string(stage.path("out/download-top-folders.out")).unwrap();
+    assert_eq!(
+        tops,
+        "./aws-stack.list.json\tkubernetes\tspectro\tkubernetes-0123456789ab\n\
+         ./aws-stack.list.json\tnginx\thelm\tnginx\n"
+    );
     let none = std::fs::read_to_string(stage.path("out/download-no-archive.out")).unwrap();
     assert_eq!(none, "./aws-stack.list.json\tcsi-aws-ebs\tspectro\ttrue\n");
     let request = std::fs::read_to_string(
@@ -12851,4 +13459,67 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
     let (_, steps) = stage.run("export.sh", &["4"]);
     passed(&steps, &["download-accepts-json"]);
     failed(&steps, &["download-accepts-json-no-file"]);
+}
+
+/// `download-limit` starts its two downloads before it waits for either, and records the status
+/// of each. A refusal of Palette gives exit 2, and the record names its code and its message.
+#[test]
+fn export_sh_stage_4_starts_the_two_downloads_of_download_limit_before_either_ends() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let key = Stage::route_key(&download_route("u-1"));
+    // the route logs `start` and `end` for each request that accepts a file. The download of the
+    // version is the first such request, and the two of download-limit follow it. The route holds
+    // the second request until a third starts, for 10 seconds at most. So two downloads one after
+    // the other log `start` and `end` for each in turn
+    executable(
+        &stage.path("routes").join(format!("{key}.sh")),
+        &format!(
+            r#"#!/usr/bin/env bash
+if grep -qix 'Accept: application/json' "$FAKE_ROUTES/sent/GET_{key}.request"; then
+  cat "$FAKE_ROUTES/{key}.for-json"
+  exit 0
+fi
+order="$FAKE_ROUTES/{key}.order"
+echo start >> "$order"
+if [ "$(grep -c start "$order")" -ge 2 ]; then
+  for _ in $(seq 200); do
+    [ "$(grep -c start "$order")" -ge 3 ] && break
+    command -p sleep 0.05
+  done
+fi
+cat "$FAKE_ROUTES/{key}.file"
+echo end >> "$order"
+"#
+        ),
+    );
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    assert!(has_verdict(&steps, "SEEN", "download-limit"), "{steps}");
+    let order = std::fs::read_to_string(stage.path(&format!("routes/{key}.order"))).unwrap();
+    assert_eq!(
+        order, "start\nend\nstart\nstart\nend\nend\n",
+        "the two downloads of download-limit start before either ends"
+    );
+    let record = std::fs::read_to_string(stage.path("out/download-limit.out")).unwrap();
+    assert_eq!(record, "download 1: HTTP 200\ndownload 2: HTTP 200\n");
+    // Palette refuses each download
+    let stage = download_stage(&downloaded("1.36.2"));
+    stage.route_as(&download_route("u-1"), "k", 429, DOWNLOAD_LIMIT_REFUSAL);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    let line = step_line(&steps, "download-limit");
+    assert!(
+        line.starts_with("SEEN ") && line.ends_with("got 2"),
+        "{steps}"
+    );
+    let answer: serde_json::Value = serde_json::from_str(DOWNLOAD_LIMIT_REFUSAL).unwrap();
+    let refused = format!(
+        "HTTP 429 {}: {}",
+        answer["code"].as_str().unwrap(),
+        answer["message"].as_str().unwrap()
+    );
+    let record = std::fs::read_to_string(stage.path("out/download-limit.out")).unwrap();
+    assert_eq!(
+        record,
+        format!("download 1: {refused}\ndownload 2: {refused}\n")
+    );
 }

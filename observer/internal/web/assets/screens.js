@@ -54,13 +54,13 @@ function newerGroups(rows) {
 function newerTiles(rows) {
   const n = D.cluster.counts, others = packsWithoutMove();
   const repave = rows.filter(r => REPAVES.includes(r.impact)).length, fresh = rows.filter(r => r.new).length;
-  const behind = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
+  const steps = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
   const T = (cls, label, value, sub) => h`<div class="tile ${cls}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
   return h`<section class="tiles" aria-label="Newer versions in numbers">
-    ${T("b", "Packs behind", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
+    ${T("b", "Packs with a newer version", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
     ${T(repave ? "a" : "g", "Moves that repave", repave, repave ? "The move replaces the nodes" : "No move replaces the nodes")}
     ${T("b", "New this week", fresh, "Listed in the last 7 days")}
-    ${T("y", "Versions behind", behind, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
+    ${T("y", "Versions newer than the pins", steps, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
   </section>`;
 }
 
@@ -80,7 +80,8 @@ function newerTable(groups) {
       const unread = moveUnread(g.subject, k), same = !unread && buildOnly(r);
       const count = v => unread ? DASH : same ? mut(DASH) : v;
       const settings = same ? h`<span class="mut" title="Only the build of the pack changes: the values stay the same">same</span>` : h`<b>${count(r.fold.settings)}</b>`;
-      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${newChip(r.new)}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
+      const carried = carriedWords((r.carriers || []).find(c => c.profile === g.subject), r.newest);
+      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a>${carried ? h`<div class="mut small">${carried}</div>` : ""}</td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${newChip(r.new)}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
     })];
   }) : none}</tbody></table></div>`;
 }
@@ -196,7 +197,31 @@ function viewProfile(subject) {
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
     ${verdict(x)}${events}${advice}
     <section class="card"><div class="chead"><h2>Packs <span class="sub">${x.packs.length}, from the top layer to the bottom</span></h2></div>${packs}</section>
-    ${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
+    ${profileMoveCard(subject, x)}${x.status === STATUS.NO_RECORD ? "" : checkCard(terminalRows(subject, x, null))}`};
+}
+
+// The words of a pack in the move of a profile, by its status in the compare.
+const MOVE_WORDS = {changed: "Changed", added: "Added", removed: "Removed"};
+
+// profileMoveCard draws the move of a profile to its newest published version: the impact, the flags of its packs, and each pack that
+// the move changes, adds, or removes, with its versions and whether its values change. A pack of the record links to its page, where
+// the Compare menu shows the full diff of the move. It is "" for a profile with no newer version.
+function profileMoveCard(subject, x) {
+  const n = x.newerVersion;
+  if (!n) return "";
+  const head = h`<h2>Move to ${ref(x.name, n.version)} <span class="sub">Created ${day(n.created)}</span></h2>${newestImpact(n)}`;
+  const card = (flags, body) => h`<section class="card"><div class="chead">${head}${flags}</div>${body}</section>`;
+  if (!n.move) return card("", h`<div class="body">${inline(TONE.WARN, "Strata could not compare the record with this version now. The next read of the versions asks again.")}</div>`);
+  const m = n.move, flags = flagRow(m, "", "");
+  if (!m.packs.length) return card(flags, h`<div class="body">${inline(TONE.SAME, "The move changes no pack.")}</div>`);
+  const rows = m.packs.map(q => {
+    const p = x.packs.find(k => k.key === q.key), href = p ? packHash(subject, p) : "";
+    const version = q.from && q.to ? (q.from === q.to ? h`${q.from} ${mut("same version")}` : h`${q.from}${ARROW}${q.to}`) : q.from || q.to;
+    // A pack that the move adds or removes has values on one side only, so the column says nothing of them.
+    const values = q.from && q.to ? (q.valuesChanged ? "Change" : mut("Same")) : DASH;
+    return h`<tr${href ? h` class="link" data-go="${href}"` : ""}><td class="m">${href ? h`<a href="${href}">${q.key}</a>` : q.key}</td><td>${MOVE_WORDS[q.status] || q.status}</td><td class="m nw">${version}</td><td>${values}</td></tr>`;
+  });
+  return card(flags, h`<div class="tw"><table><thead><tr><th>Pack</th><th>Change</th><th>Version</th><th>Values</th></tr></thead><tbody>${rows}</tbody></table></div>`);
 }
 
 // eventFrom names where an event comes from.
@@ -206,14 +231,6 @@ function eventFrom(q) {
     case EVENT.INFO: return "audit log";
     default: return "palette";
   }
-}
-
-// newerCell never says "current" for a pack that was not checked, or before the versions were read.
-function newerCell(p) {
-  if (p.newer) return h`${ARROW}${p.newer}`;
-  if (p.status === STATUS.NOT_CHECKED) return mut("not checked");
-  if (!D.cluster.versions.readAt) return mut("-");
-  return mut("current");
 }
 
 /* ---- The stack of the packs ----
@@ -228,9 +245,20 @@ function newerWords(p) {
 }
 const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<span title="${IMAGES_LISTED}">no image list</span>`;
 
+// carriedWords names the newer version of the profile that carries a newer version of a pack, as behind reads it for one profile
+// version: "carried by name@version", with the version of the pack before it when that is not the newest. It is "" when behind
+// names no carrier, such as for a profile with no newer version.
+function carriedWords(c, newest) {
+  if (!c) return "";
+  if (c.unread) return "carrier not read";
+  if (!c.version) return "carried by no newer profile version";
+  const by = ref((subjectParts(c.profile) || [c.profile])[0], c.version);
+  return c.pack === newest ? h`carried by <span class="m">${by}</span>` : h`<span class="m">${c.pack}</span> carried by <span class="m">${by}</span>`;
+}
+
 function packSlab(subject, p, compact, here) {
-  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0];
-  const sub = compact ? "" : h`<span class="sub">${newerWords(p)} · ${imagesWords(p.images)}</span>`;
+  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0], carried = carriedWords(p.carried, p.newer);
+  const sub = compact ? "" : h`<span class="sub">${newerWords(p)}${carried ? h` · ${carried}` : ""} · ${imagesWords(p.images)}</span>`;
   return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${ref(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
 }
 

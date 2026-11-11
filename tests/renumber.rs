@@ -9,7 +9,9 @@ use serde_json::{Value, json};
 use strata::api::MemoryApi;
 use strata::diff::{self, ImpactLevel, Renumber};
 use strata::model::pack_type::PackType;
-use strata::ops::{self, ArchiveChange, Chain, PairStatus, Policy, SameReleaseOptions};
+use strata::ops::{
+    self, ArchiveChange, ArchiveNotReadable, Chain, PairStatus, Policy, SameReleaseOptions,
+};
 use strata::snapshot::{Pack, Snapshot, Template};
 
 use crate::common;
@@ -31,6 +33,22 @@ fn renumber_allowed() -> SameReleaseOptions {
 /// one content hold the same file.
 fn values_file(p: &Pack) -> Option<Vec<(&'static str, String)>> {
     Some(vec![("values.yaml", p.values.clone())])
+}
+
+/// The files of the build of the pack `p`. The CSI pack is a chart of a Helm registry: its
+/// `Chart.yaml` names the version of the app `app`, and the files `more` follow its values.
+fn chart_build(
+    p: &Pack,
+    app: &str,
+    more: &[(&'static str, &str)],
+) -> Option<Vec<(&'static str, String)>> {
+    let mut files = values_file(p)?;
+    if p.name == "csi-aws-ebs" {
+        let chart = common::chart_file(&p.name, &p.version, Some(app));
+        files.push(("Chart.yaml", chart));
+        files.extend(more.iter().map(|(path, text)| (*path, text.to_string())));
+    }
+    Some(files)
 }
 
 /// The chain of `--allow renumber` of `records`, with a Palette that serves the download of each
@@ -644,6 +662,158 @@ fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_t
     );
 }
 
+/// The criterion of #817: Palette serves the chart of a public Helm registry with no `pack.json`,
+/// and its `Chart.yaml` names the version. A renumber whose two charts differ only in the line
+/// `version` of `Chart.yaml` passes. A pair whose charts differ in another line of `Chart.yaml`,
+/// or in another file, fails, and a reason names the file.
+#[test]
+fn allow_renumber_passes_a_helm_chart_whose_archives_differ_only_in_the_version_of_chart_yaml() {
+    let dir = fixtures();
+    let helm = |profile: &mut Value, _: &mut Value| {
+        for p in pack_refs(profile, "csi-aws-ebs") {
+            p["type"] = json!(PackType::Helm);
+        }
+    };
+    let records = pair(
+        release(
+            dir.path(),
+            UID_OLD,
+            "1.4.0-rc.1",
+            &[("csi-aws-ebs", "1.28.0-rc.1")],
+            &helm,
+        ),
+        release(
+            dir.path(),
+            UID_NEW,
+            "1.4.0",
+            &[("csi-aws-ebs", "1.28.0")],
+            &helm,
+        ),
+    );
+    // each build of the chart installs the app 1.28.0
+    let same = |p: &Pack| chart_build(p, "1.28.0", &[]);
+    let c = renumber_chain(&records, &same);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
+    assert_eq!(p.archives_compared, ["csi/csi-aws-ebs"]);
+    let text = common::terminal().render_chain(&c).unwrap();
+    let line = "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: same files)";
+    assert!(text.lines().any(|l| l == line), "{line:?} in\n{text}");
+    // the version of the app is another line of Chart.yaml, and a template is another file
+    let app = |p: &Pack| chart_build(p, &p.version, &[]);
+    let template = |p: &Pack| {
+        let more: &[(&'static str, &str)] = match p.version.as_str() {
+            "1.28.0" => &[("templates/node.yaml", "kind: DaemonSet\n")],
+            _ => &[],
+        };
+        chart_build(p, "1.28.0", more)
+    };
+    let changes: [(&common::BuildFiles, &str); 2] =
+        [(&app, "Chart.yaml"), (&template, "templates/node.yaml")];
+    for (files, file) in changes {
+        let c = renumber_chain(&records, files);
+        let p = &c.pairs[0];
+        assert_eq!(p.status, PairStatus::Different, "{file}");
+        assert_eq!(
+            p.reasons,
+            [format!("pack csi/csi-aws-ebs archive: {file} differs")]
+        );
+        assert_eq!(
+            p.archives_changed,
+            [ArchiveChange {
+                key: "csi/csi-aws-ebs".to_string(),
+                files: vec![file.to_string()],
+            }]
+        );
+    }
+}
+
+/// The criterion of #828: the download of a side holds the error answer of the host of a chart in
+/// place of the chart. The renumber of the chart names the version and the reason, and does not
+/// pass. The other renumber keeps the compare of its archives.
+#[test]
+fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_renumber() {
+    let dir = fixtures();
+    let helm = |profile: &mut Value, _: &mut Value| {
+        for p in pack_refs(profile, "csi-aws-ebs") {
+            p["type"] = json!(PackType::Helm);
+        }
+    };
+    let builds = |k8s, csi| [("kubernetes", k8s), ("csi-aws-ebs", csi)];
+    let records = pair(
+        release(
+            dir.path(),
+            UID_OLD,
+            "1.4.0-rc.1",
+            &builds("1.29.4-rc.1", "1.28.0-rc.1"),
+            &helm,
+        ),
+        release(
+            dir.path(),
+            UID_NEW,
+            "1.4.0",
+            &builds("1.29.4", "1.28.0"),
+            &helm,
+        ),
+    );
+    // the host of the chart refuses the file of the final version
+    let same = |p: &Pack| chart_build(p, "1.28.0", &[]);
+    let refused = |p: &Pack| match (p.name.as_str(), p.version.as_str()) {
+        ("csi-aws-ebs", "1.28.0") => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
+        _ => common::build_archive(p, &same),
+    };
+    let api = common::serve_pack_files(MemoryApi::new(), &records, &refused);
+    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Different);
+    assert_eq!(c.exit_code(), 1);
+    let reason = "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
+        <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…";
+    assert_eq!(
+        p.archives_not_readable,
+        [ArchiveNotReadable {
+            key: "csi/csi-aws-ebs".to_string(),
+            version: "1.28.0".to_string(),
+            reason: reason.to_string(),
+        }]
+    );
+    assert_eq!(
+        p.reasons,
+        [format!(
+            "pack csi/csi-aws-ebs 1.28.0 archive: not readable: {reason}"
+        )]
+    );
+    assert_eq!(p.archives_compared, ["k8s/kubernetes"]);
+    assert!(p.archives_not_compared.is_empty());
+    let text = common::terminal().render_chain(&c).unwrap();
+    for line in [
+        "               kubernetes  1.29.4-rc.1 -> 1.29.4 (pre-release to final; archive: same files)",
+        "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not readable)",
+        &format!("               pack csi/csi-aws-ebs 1.28.0 archive: not readable: {reason}"),
+    ] {
+        assert!(text.lines().any(|l| l == line), "{line:?} in\n{text}");
+    }
+    let json: Value = serde_json::to_value(&c).unwrap();
+    assert_eq!(
+        json["pairs"][0]["archivesNotReadable"],
+        json!([{"key": "csi/csi-aws-ebs", "version": "1.28.0", "reason": reason}])
+    );
+    // each side whose file is no archive has its own reason
+    let both = |p: &Pack| match p.name.as_str() {
+        "csi-aws-ebs" => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
+        _ => common::build_archive(p, &same),
+    };
+    let api = common::serve_pack_files(MemoryApi::new(), &records, &both);
+    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let versions: Vec<&str> = c.pairs[0]
+        .archives_not_readable
+        .iter()
+        .map(|n| n.version.as_str())
+        .collect();
+    assert_eq!(versions, ["1.28.0-rc.1", "1.28.0"]);
+    assert_eq!(c.pairs[0].reasons.len(), 2);
+}
+
 /// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of
 /// Helm charts or of Zarf packages. The list of the download names such a pack with no file. Such
 /// a renumber keeps `archive: not compared`, and the pair passes. A manifest pack has no archive:
@@ -761,11 +931,10 @@ fn a_download_that_palette_refuses_for_its_limit_is_an_error_that_names_the_limi
         &no_edit,
     );
     let records = pair(old, new);
-    let body = r#"{"code":"TooManyRequests","message":"Too Many Requests, only 1 request in 10 seconds is allowed"}"#;
     let api = common::serve_downloads(MemoryApi::new(), &records, &values_file).failing(
         common::download_route(UID_NEW),
         429,
-        body,
+        common::DOWNLOAD_LIMIT_REFUSAL,
     );
     let err = ops::same_release_with(
         &records,

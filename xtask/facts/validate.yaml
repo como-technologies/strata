@@ -17,6 +17,11 @@ facts:
         - message
       codes:
         - ClusterProfilesNotSupported
+        - InvalidDropDownVariable
+        - InvalidVariable
+        - K8SCidrOverlap
+        - CidrParseError
+        - RequiredParam
       values:
         cloudType:
           - aws
@@ -147,11 +152,58 @@ facts:
     reads:
       fields:
         - spec.profiles[].variables[]
+      codes:
+        - InvalidDropDownVariable
+        - InvalidVariable
     stand_in: []
     live: []
     unchecked: No live run shows how the route reads the variables.
     pages:
       - internals/palette/validate-routes.md#the-variables-of-the-body
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules:
+      - palette-validate
+
+  # For AWS with a VPC, the route refuses a CIDR of the Kubernetes pack with HTTP 500 (#816). The
+  # CIDR overlaps the CIDR of the VPC, or it is not a CIDR.
+  - id: validate-create-vpc-cidr
+    kind: behavior
+    reads:
+      codes:
+        - K8SCidrOverlap
+        - CidrParseError
+    stand_in: []
+    live:
+      - route-bodies.sh:cidr-overlap-status
+      - route-bodies.sh:cidr-overlap-code
+      - validate-route.sh:cidr-overlap
+      - validate-route.sh:cidr-overlap-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - development/live-runs.md#route-bodiessh
+    code:
+      - src/api/codes.rs
+    rules:
+      - palette-validate
+
+  # For AWS with a VPC, the route refuses a machine pool with no subnet with HTTP 500 (#824).
+  - id: validate-create-pool-subnets
+    kind: behavior
+    reads:
+      codes:
+        - RequiredParam
+    stand_in: []
+    live: []
+    unchecked: A live run of the first body of cidr-overlap showed it. That body now names a subnet for each pool, so no check of a live script sends a pool with no subnet.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - development/live-runs.md#route-bodiessh
+    code:
+      - src/api/codes.rs
     rules:
       - palette-validate
 

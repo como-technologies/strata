@@ -80,6 +80,15 @@ pub(crate) fn recorded_template(profile: &Value) -> Template {
     }
 }
 
+/// The packs of the template of `profile` that [`recorded_template`] names, in the order of the
+/// profile.
+pub(crate) fn recorded_packs(profile: &Value) -> &[Value] {
+    arr(
+        profile,
+        &format!("/spec/{}/packs", recorded_template(profile)),
+    )
+}
+
 /// The file of a raw directory that holds the profile document.
 const PROFILE_FILE: &str = "profile.json";
 

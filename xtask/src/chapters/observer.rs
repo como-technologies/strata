@@ -114,7 +114,23 @@ fn answers(r: &mut Runner) {
         "observer-profile-version",
         PAYMENTS,
         "state",
-        "-c '.profiles[] | select(.newerVersion) | {name, version, status, newerVersion}'",
+        "-c '.profiles[] | select(.newerVersion) | {name, version, status, newerVersion: (.newerVersion | {version, created, new})}'",
+    );
+    // the versions cycle compares the record with that version, as `compare` does (#708)
+    summary(
+        r,
+        "observer-profile-move",
+        PAYMENTS,
+        "state",
+        "-c '.profiles[].newerVersion.move // empty | {impact, flags}, .packs[]'",
+    );
+    // that version carries a newer version of each pack that is behind (#709)
+    summary(
+        r,
+        "observer-carried",
+        PAYMENTS,
+        "state",
+        "-c '.newer[] | {name, newest, carriers}'",
     );
     summary(
         r,

@@ -31,7 +31,7 @@ use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
-pub use download::{DownloadedPack, PackArchive, ProfileDownload};
+pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
@@ -47,8 +47,8 @@ pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
 };
-pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
+pub(crate) use raw::{recorded_packs, recorded_template};
 pub use retry::{Retry, RetryPolicy};
 
 /// The method of a request that strata sends to Palette.

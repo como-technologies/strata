@@ -125,7 +125,9 @@ and of each wave, checks them.
      the read and the news `image`.
    - No route says that a newer version of a profile exists. `behind` reads the
      versions that Palette lists for the profile, and orders them. When a route
-     of Palette names the newer versions, strata removes its order. See
+     of Palette names the newer versions, strata removes its order. No route
+     names the profile versions that pin a pack either, so `behind` reads the
+     template of each newer version. See
      [A newer version of a profile](./internals/palette/profiles.md#a-newer-version-of-a-profile).
 2. **Do not repeat a status that Palette shows.** Palette shows flags and
    states in its console, its notifications, and its audit log. A record holds

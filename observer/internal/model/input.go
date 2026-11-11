@@ -50,6 +50,11 @@ type Versions struct {
 	Profiles []docs.ProfilePin
 	Moves    map[string]Move
 	Unread   map[string]bool
+	// ProfileMoves holds the compare of a record with the newest published version of its profile, for
+	// each profile version that is behind, by subject. The diff holds the changed values, and only the
+	// detail tier reads them. ProfileUnread holds the subject of each such version whose compare failed.
+	ProfileMoves  map[string]docs.Diff
+	ProfileUnread map[string]bool
 }
 
 // Clock is the state of one timer.
@@ -127,9 +132,30 @@ func MoveOf(d docs.Diff) Move {
 	return m
 }
 
-// newestProfile gives the newest published version of the profile of p. It gives one only when strata
+// ProfileMoveOf reads the move of a profile from the compare of its record and the newest version:
+// the impact level, the flags, and each pack that the move changes, adds, or removes. It keeps
+// whether the values of a pack change, and drops the values.
+func ProfileMoveOf(d docs.Diff) ProfileMove {
+	m := ProfileMove{Impact: d.Summary.MaxImpact, Flags: d.Flags(), Packs: []MovePack{}}
+	for _, p := range d.Packs {
+		if p.Status == docs.PackUnchanged {
+			continue
+		}
+		mp := MovePack{Key: p.Key, Status: p.Status, Flags: p.Flags(), ValuesChanged: p.Values.Changed}
+		if p.A != nil {
+			mp.From = p.A.Version
+		}
+		if p.B != nil {
+			mp.To = p.B.Version
+		}
+		m.Packs = append(m.Packs, mp)
+	}
+	return m
+}
+
+// NewestProfile gives the newest published version of the profile of p. It gives one only when strata
 // read the versions, and one is newer than the version of the record.
-func newestProfile(p docs.ProfilePin) (docs.NewerProfile, bool) {
+func NewestProfile(p docs.ProfilePin) (docs.NewerProfile, bool) {
 	if p.Error != nil || !p.Behind || len(p.Newer) == 0 {
 		return docs.NewerProfile{}, false
 	}

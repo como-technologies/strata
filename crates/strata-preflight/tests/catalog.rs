@@ -1908,6 +1908,7 @@ fn reproduce_lines(
                 offline: false,
                 ready: None,
                 out_dir: Some(out.display().to_string()),
+                out_world: true,
             },
             cluster_gone: false,
             generated_at: "2026-01-01T00:00:00Z".into(),
@@ -3027,13 +3028,14 @@ fn saving_route(rule: &Rule) -> Option<(String, Saves)> {
 
 /// What `line` changes, when it changes something. A change is a word of [`CHANGES`] outside
 /// [`READ_FORMS`], or a `POST` to a route that is not in [`POST_READS`]. A write of a file outside
-/// the current directory is a change too. `request.json` and `body.json` of the lines that a report
-/// adds are files of the current directory.
+/// the current directory and outside `world_dir` is a change too. The lines that a report adds
+/// write `request.json` and `body.json` into `world_dir`, the folder of `world.json`, beside the
+/// values of the variables.
 ///
 /// `saving` is the route of the check of the rule of the line, and what Palette saves there, when
 /// the check names it: see [`saving_route`]. A `POST` to it passes when the line ends with a
 /// comment that says what Palette saves.
-fn change_in(line: &str, saving: Option<(&str, Saves)>) -> Option<String> {
+fn change_in(line: &str, world_dir: &str, saving: Option<(&str, Saves)>) -> Option<String> {
     let text = command_text(line);
     let words: Vec<&str> = text
         .split(|c: char| c.is_whitespace() || "|;&()$`<>".contains(c))
@@ -3072,9 +3074,15 @@ fn change_in(line: &str, saving: Option<(&str, Saves)>) -> Option<String> {
             return Some("a POST to no route of Palette".to_string());
         }
     }
+    // a file of the folder of the world is `<world_dir>/<name>`, with no other slash in the name
+    let in_world_dir = |file: &str| {
+        file.strip_prefix(world_dir)
+            .and_then(|rest| rest.strip_prefix('/'))
+            .is_some_and(|name| !name.contains('/'))
+    };
     written_files(&text)
         .into_iter()
-        .find(|file| *file != "/dev/null" && file.contains('/'))
+        .find(|file| *file != "/dev/null" && file.contains('/') && !in_world_dir(file))
         .map(|file| format!("a write of {file}"))
 }
 
@@ -3089,6 +3097,7 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
     let catalog = catalog::builtin().unwrap();
     let jq = Jq::new();
     let dir = folder_for_reproduce();
+    let world_dir = dir.path().display().to_string();
     // a line of a rule starts its `curl` with a template, and the words of a command skip a
     // template. So the test fills it, and reads the `curl` and its options.
     let template = format!("{{{{ {PALETTE_CURL} }}}}");
@@ -3130,7 +3139,7 @@ fn no_reproduce_line_of_the_catalog_deletes_or_changes_anything() {
             let saving = saving
                 .as_ref()
                 .map(|(route, saves)| (route.as_str(), *saves));
-            if let Some(change) = change_in(&line, saving) {
+            if let Some(change) = change_in(&line, &world_dir, saving) {
                 found.push(format!("{}: {change}: {line}", rule.id));
             }
         }
@@ -3156,6 +3165,8 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         r#"curl -s -X POST -d '{"spectroComponents":"unlock"}' "https://h/v1/spectroclusters/u/upgrade/settings"   # resume"#,
         r#"code=$(curl -s -d @body.json "https://h/v1/x")"#,
         "jq . world.json > ~/.kube/config",
+        "jq '.validateBody' out/world.json > out/sub/request.json",
+        "jq '.validateBody' out/world.json > ../request.json",
         "rm -rf out",
         "aws ecr get-login-password --region r | crane auth login <account>.dkr.ecr.r.amazonaws.com -u AWS --password-stdin",
         "aws ecr get-login-password --region r | docker login -u AWS --password-stdin <account>.dkr.ecr.r.amazonaws.com",
@@ -3169,7 +3180,7 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "aws eks tag-resource --resource-arn <arn> --tags k=v",
         "docker pull <registry>/app:1.0.0",
     ] {
-        assert!(change_in(bad, None).is_some(), "{bad}");
+        assert!(change_in(bad, "out", None).is_some(), "{bad}");
     }
     for good in [
         "aws ec2 describe-vpcs --filters Name=tag-key,Values=x --query 'Vpcs[].VpcId' --output text   # no id before a force delete",
@@ -3177,6 +3188,8 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "maas $PROFILE tag machines palette | jq -r '.[] | .hostname'",
         r#"curl -s -X POST -H 'Content-Type: application/json' --data @request.json "https://h/v1/spectroclusters/aws/validate""#,
         "jq '.validateBody' out/world.json > request.json",
+        "jq '.validateBody' out/world.json > out/request.json",
+        r#"code=$(curl -s -o out/body.json -w '%{http_code}' -X POST --data @out/request.json "https://h/v1/spectroclusters/aws/validate")"#,
         r#"for t in tofu jq; do command -v $t >/dev/null || echo "$t is missing"; done"#,
         "aws iam simulate-principal-policy --action-names eks:CreateCluster ec2:RunInstances --output json",
         r#"gcloud logging read 'protoPayload.methodName="CreateCluster" severity>=WARNING' --limit 3"#,
@@ -3190,7 +3203,7 @@ fn the_change_test_refuses_each_form_of_a_change_and_passes_each_read() {
         "helm pull <chart> --version <version> --repo <url> && sha256sum <chart>-<version>.tgz",
         "aws ecr list-tags-for-resource --resource-arn <arn>",
     ] {
-        assert_eq!(change_in(good, None), None, "{good}");
+        assert_eq!(change_in(good, "out", None), None, "{good}");
     }
 }
 
@@ -3208,7 +3221,7 @@ fn the_change_test_passes_a_post_only_to_a_route_that_saves_nothing_or_to_the_ro
             .map(|part| if part.starts_with('{') { "x-1" } else { part })
             .collect();
         let line = post(&path.join("/"));
-        assert_eq!(change_in(&line, None), None, "{line}");
+        assert_eq!(change_in(&line, "out", None), None, "{line}");
     }
     let saving = Some((
         "/v1/spectroclusters/{}/validate/repave",
@@ -3228,14 +3241,14 @@ fn the_change_test_passes_a_post_only_to_a_route_that_saves_nothing_or_to_the_ro
         (post("/v1/clusterprofiles/x-1/validate"), None),
         ("curl -s -d @body.json https://h/x".to_string(), None),
     ] {
-        assert!(change_in(&line, saving).is_some(), "{line}");
+        assert!(change_in(&line, "out", saving).is_some(), "{line}");
     }
-    assert_eq!(change_in(&format!("{repave}{says}"), saving), None);
+    assert_eq!(change_in(&format!("{repave}{says}"), "out", saving), None);
     // a line of a rule names the uid with a template, which can hold a `/`
     let line = format!(
         r#"curl -s -X POST "${{PALETTE_API}}/v1/spectroclusters/{{{{ .clusterUid // "<uid>" }}}}/validate/repave" -d @x.json{says}"#
     );
-    assert_eq!(change_in(&line, saving), None, "{line}");
+    assert_eq!(change_in(&line, "out", saving), None, "{line}");
 }
 
 /// No machine outside the lab has the scripts of the live example. So no text of the catalog

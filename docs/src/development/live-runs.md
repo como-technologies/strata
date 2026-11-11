@@ -1000,11 +1000,13 @@ No cluster, no profile of its own, and no cost. It asks
 the body of a create for each engine, and the cloud accounts that the bodies
 name.
 
-A case makes one fault. The fault is one edit of the body of its engine, or
-a body of its own when the fault is in a profile. [`route-bodies.sh`](#route-bodiessh)
-writes those bodies on AWS for each case whose profile Palette takes, and runs this
-script on them. A body of a case names a profile, so it is valid only while that
-profile is in the tenant. A case whose body is not in the directory is skipped, and
+A case makes one fault. The fault is one edit of the body of its engine, or a
+body of its own. A case has a body of its own when the fault is in a profile or
+needs a VPC of the lab.
+[`route-bodies.sh`](#route-bodiessh) writes those bodies on AWS for each case
+whose profile Palette takes, and for `cidr-overlap`, and runs this script on
+them. A body of a case names a profile, so it is valid only while that profile is
+in the tenant. A case whose body is not in the directory is skipped, and
 `steps.log` names it.
 
 A case that passes shows that the route answers the check. The part of the rule
@@ -1026,6 +1028,7 @@ two checks expect the verdict `passed` and no message.
 | `pack-state-disabled`, `pack-state-deleted`, each with `-says` | 0 | #243: the route refuses a profile that holds a pack in the state `disabled` or `deleted` (`pack-state`). No live run can show it: Palette refuses a new profile with such a pack at the create, as the cases of [`route-bodies.sh`](#route-bodiessh) show. |
 | `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. |
 | `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. |
+| `cidr-overlap`, `cidr-overlap-says` | 0 | #816: the route refuses a body whose pod CIDR overlaps the CIDR of its VPC, with `K8SCidrOverlap`. `palette-validate` gives the verdict `failed` with the message of Palette, also when the status is `500`. A live run of the first body, with no subnet for the pools, failed both checks. The route refused that body with `RequiredParam` (#824). A live run of the body with the subnets passes both checks. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet: the lab has no cloud account of vSphere (#409). |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet: the lab has no cloud account of vSphere or Edge (#409). |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet: the lab has no cloud account of Azure (#409). |
@@ -1034,9 +1037,10 @@ two checks expect the verdict `passed` and no message.
 ## route-bodies.sh
 
 No cluster, and no cost that stays. It writes the bodies that
-[`validate-route.sh`](#validate-routesh) needs for four cases on AWS. The fault
-of each case is in a profile. The script needs the key, the release profile of
-the live example on AWS, and the cloud account of `terraform.tfvars`.
+[`validate-route.sh`](#validate-routesh) needs for five cases on AWS. The fault
+of four cases is in a profile, and the fault of `cidr-overlap` needs a VPC. The
+script needs the key, the release profile of the live example on AWS, and the
+cloud account of `terraform.tfvars`.
 
 A case body is the clean body of a create on AWS with one more profile. The
 script makes that profile through the API, with the name `strata-route-<case>`,
@@ -1052,7 +1056,8 @@ under `validate-route/` in the results of the script. Then the script deletes ea
 profile and the body of each case. It does the same when a step fails, when a check
 of `validate-route.sh` fails, and when a signal stops it. A later run of
 `validate-route.sh` on the directory skips the four cases, because no body of a case
-stays. `aws-clean.json` stays, because it names the release profile.
+stays. `aws-clean.json` and `cidr-overlap.json` stay, because they name the release
+profile alone.
 
 | Case | The profile |
 |---|---|
@@ -1077,10 +1082,26 @@ stay skipped in the live example. The script skips a case when Palette refuses i
 profile, and `steps.log` names the case with the refusal. No body of that case
 stays in the directory, and `validate-route.sh` skips it.
 
+One more case, `cidr-overlap`, makes no profile (#816). Its body is
+`aws-clean.json` with a VPC from `GET /v1/clouds/aws/regions/{region}/vpcs`. It
+is the first VPC of the region with a CIDR and a subnet in each zone of the
+pools. Each pool names the subnet of that VPC in each of its zones. The route
+refuses a pool with no subnet with `RequiredParam` (#824). The body also holds
+the values of the Kubernetes pack of the release profile, with the CIDR of the
+VPC as the pod CIDR.
+
+The script sends the body to the route with `api.sh post-status`, and records
+the status and the code. Then `validate-route.sh` sends it through
+`palette-validate`. The script skips the case when Palette lists no VPC with a
+CIDR, or when the Kubernetes pack has no `podCIDR`. It also skips the case when
+no VPC with a CIDR has a subnet in each zone of the pools.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. |
 | `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. |
+| `cidr-overlap-body` | 0 | #816, #824: `cidr-overlap.json` names a VPC of the region, and each pool names a subnet of that VPC in each of its zones. The Kubernetes pack of the release profile has the CIDR of that VPC as its pod CIDR. A case that is skipped has no check. A live run of the first body, with no subnet for the pools, passed. A live run of the body with the subnets passes. |
+| `cidr-overlap-status`, `cidr-overlap-code` | 0, 0 | #816: the route answers the body of `cidr-overlap`, and `cidr-overlap-status.out` holds the status and the answer. The route refuses the body with HTTP `500` and `K8SCidrOverlap`: the code of Palette shows it. A live run of the first body, with no subnet for the pools, gave `0` and `1`. The route refused that body with HTTP `500` and `RequiredParam`: `Parameter 'Subnets' is required` (#824). A live run of the body with the subnets gives `0` and `0`: HTTP `500` and `K8SCidrOverlap`. |
 | `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. |
 | `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
 
@@ -1107,13 +1128,16 @@ states what stage 4 checks.
 | `export-minted-<name>` | 0 | #156: the export of a version with a manifest pack differs only by the pack uid that Palette mints for that pack |
 | `export-json-<name>`, `export-json-record-<name>`, `export-json-root-<name>` | 0 | #156: the export with `format=json` gives the same root |
 | `export-accepts-json`, `export-accepts-json-no-file` | 0 | #156: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file |
-| `export-limit` | ? | #156: three exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
+| `export-limit` | ? | #156: three exports with no wait between them. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
 | `download-<name>` | 0 | #751: `GET /v1/clusterprofiles/{uid}/spc/download` gives the file of the version to a request that accepts a file. |
 | `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. |
-| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. |
-| `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. The check records the entries, and judges none. |
+| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. The check does not read a chart of a Helm registry: `download-chart` reads it. |
+| `download-top-folders` | ? | #815: the top folders of each archive of a pack in each download, a Helm chart too. The check records them, and judges none. In one run, `download-archive-<name>` shows `<name>-<first 12 hex digits of the digest>` for each pack of the Public Repo. It shows `<name>-<version>` for the OCI pack of the lab OCI registry of packs. In one run, it recorded no folder for the chart of the registries version: the file was no archive, see `download-chart`. The folder of a chart has no result yet: no run read a chart. |
+| `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive. The check records the entries, and judges none. In one run, it recorded no entry. Each pack of a registry in the three versions has an archive, and the list names the manifest pack only by its manifest. The lab OCI registry of packs is private, and its OCI pack has an archive too. |
+| `download-chart` | ? | #817, #828: one line for each chart of a Helm registry with a file in a list. A chart has one top folder and no `pack.json`, and the line `version` of its `Chart.yaml` names the version of its entry. For a file that is no archive, the line gives its size and its start. The check exits 1 when a file is not such a chart, or when no list holds a chart. The registries version pins the chart `nginx` 25.1.5 of Bitnami, a registry that serves charts without credentials. In one run, Palette answered HTTP 200, and the file `packs/nginx/nginx-25.1.5.tgz` held an XML error of 263 bytes with the code `AccessDenied`. |
+| `download-chart-reason` | ? | #828: what `same-release --allow renumber` gives for each chart of a Helm registry. A copy of each record that holds a chart names each chart at another version, with other hashes. Strata reads the download of the version once, and reads the file of the chart of the record. The check records `archivesNotReadable` and `archivesNotCompared` of the pair, and exits 1 when the pair does not pass. A live run gives 1 for the Helm chart of the registries version. `archivesNotReadable` names `addon/nginx` 25.1.5, and its reason starts with `263 bytes of text: <?xml`. |
 | `download-accepts-json`, `download-accepts-json-no-file` | 0 | #751: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file, as for the export. |
-| `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. In one run, Palette refused none (recorded 0). |
+| `download-limit` | ? | #751, #815: two downloads of one version at once. The check starts the two before it waits for either. It records the HTTP status of each, and the code and the message of a refusal. Exit 2 when Palette refused one or both. A run can see no refusal. A live run gives HTTP `200` for each of the two downloads. |
 
 ## registry-kinds.sh
 
@@ -1189,7 +1213,7 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
 | `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer. This is a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 | `pool-route`, `pool-before`, `pool-before-none` | 0 | #515: the route of the cloud config of cluster A, and a record of cluster A before the stage. The worker pool holds neither override, because Palette omits a field with no value. |
-| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier writes `entity.json` of cluster A. `pool-world` records its exit, which is 0, and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. |
+| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier and `--world` writes `entity.json` of cluster A. `pool-world` records its exit, which is 0, and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. |
 | `pool-set`, `pool-read`, `pool-in-cloud-config` | 0 | #515: the PUT of the worker pool to `/v1/cloudconfigs/<cloud type>/<config uid>/machinePools/worker-pool` takes both overrides. The cloud config then holds each as a field of the pool in `spec.machinePoolConfig`. |
 | `pool-cluster-level` | ? | #515: the values of `overrideClusterAPIConfig` and `overrideHealthCheckConfiguration` in `spec.clusterConfig` after the PUT. The check judges none, and records 0. Both values are `null`: an override of a pool does not reach the cloud part of the cluster. |
 | `pool-record`, `pool-in-record` | 0 | #515: the `shape` tier of a new record keeps both overrides on the worker pool. It keeps them on no other pool and not in the cloud part. |
@@ -1387,6 +1411,8 @@ needs the example at its baseline with cluster A.
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
 | `behind-profile`, `behind-profile-names` | 1, 0 | #707: after the publish of the next version, `behind` on the records of the release and of cluster A exits `1`. One entry of `profiles` holds the release for the two records, and its newer versions hold the next version. |
+| `behind-carrier` | 0 | #709: the next version keeps the version of each pack. So each pin of the release that is behind has one carrier entry for the release. The entry has no carrier and no error. When no pin of the release is behind, the check holds no pin. A live run passes. |
+| `behind-profile-move`, `compare-profile-move`, `behind-profile-move-says` | 1, 1, 0 | #708: with the impact, `behind` on the record of the release exits `1`, and the bump of the release names the next version. Its impact level is the `maxImpact` of `compare` of the two versions. Its flags are the flags of the packs of that compare, and its packs are the packs that the compare changes, adds, or removes. A live run passes these checks. |
 | `same-release-renumber` | 0 | #730: `same-release --allow renumber` passes the same publish, and the pair names no renumber: no pack moved its version. |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
@@ -1503,16 +1529,14 @@ The script puts the edit back at its end, also when a check fails.
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A with the
 component `deploy/observer/pods`, and it reads the digest of each pod image. It
 needs the example at its baseline with cluster A, which is billable until `just
-live-down`. It also needs the key, the token file of the pull Secret, `crane`,
-`kubectl`, `curl`, `jq`, `gh`, and `git`. `OBSERVER_IMAGE` names the image of the
-observer. That image must hold the code of the commit that you test.
+live-down`. It also needs the key, `crane`, `kubectl`, `curl`, `jq`, and `git`.
+`OBSERVER_IMAGE` names the image of the observer. That image must hold the code
+of the commit that you test.
 
-The image of the observer is on a private package of GitHub. The script never
-tags it, never pushes it, and never copies it to another registry. The nodes of
-cluster A pull it with the Secret `ghcr-pull`. The Secret comes from the token
-file, as in [`observer.sh`](#observersh). The file is `GHCR_PULL_TOKEN_FILE`, and
-it holds a token with only the scope `read:packages`. When the file fails,
-`pull-secret` fails, and the run stops before it changes the cluster.
+The image of the observer is on a public package of GitHub. The nodes of cluster
+A pull it with no pull Secret. The script never tags it, never pushes it, and
+never copies it to another registry, so the pod runs the image that CI built.
+`no-pull-secret` makes sure that the pod names no pull Secret.
 
 A throwaway tag on `ttl.sh` holds one image, and then another. These images are
 copies of public images. The names of the images hold a random suffix, and
@@ -1537,10 +1561,10 @@ such image, or when a finding names one. It uses no list of namespaces.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `pull-secret` | 0 | #646: the Secret `ghcr-pull` holds the token of the file. The token comes through standard input |
 | `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place |
-| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag |
-| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component, the image of `OBSERVER_IMAGE`, and the pull Secret. The Deployment becomes available |
+| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the observer with the `restricted` standard, the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag |
+| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component and the image of `OBSERVER_IMAGE`. The Deployment becomes available |
+| `no-pull-secret` | 0 | #732: the pod runs the image of `OBSERVER_IMAGE` with an image id, and its spec names no `imagePullSecrets`. So a node pulled the public image with no login. `no-pull-secret.out` shows the image, the image id, and the pull Secrets. A live run passes: the spec names no pull Secret. |
 | `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node |
 | `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A |
 | `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag |
@@ -1558,9 +1582,8 @@ such image, or when a finding names one. It uses no list of namespaces.
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A, `fred`,
 in two ways. Way 1 is a plain `kubectl apply` of the rendered manifests. Way 2
 is an add-on profile in Palette, with the rendered manifests as one manifest
-layer. It needs the example at its baseline with cluster A Running, the key, the
-token file of the pull Secret, `kubectl`, `gh`, `git`, and `go`. `OBSERVER_IMAGE`
-names the image.
+layer. It needs the example at its baseline with cluster A Running, the key,
+`kubectl`, `git`, and `go`. `OBSERVER_IMAGE` names the image.
 
 The first cycle of the pod reads Palette from a node of cluster A. So
 `reaches-palette` answers whether a workload cluster reaches the API. A failed
@@ -1574,18 +1597,10 @@ through standard input. It is never in a profile, because a profile variable is
 in clear in the copy of the cluster. The kubeconfig lives in a temporary file
 that the script deletes.
 
-The pull Secret comes from a token file, and it goes the same way. The file is
-`GHCR_PULL_TOKEN_FILE`, or `~/.config/strata/ghcr-pull-token` when the variable
-is not set. It holds a token with only the scope `read:packages`. The pull needs
-no other scope. Whoever reads the Secret in the cluster has each scope of its
-token. So the token of `gh auth token`, with the scopes of a person, never goes
-to the cluster.
-
-A person makes the file with the mode `0600`. The script never prints it, and it
-has no fallback. When the file is absent, empty, or open to a group or to
-others, `pull-secret` fails with one line. The line names the file and the
-scope. The run stops before it changes the cluster. `no-secret-in-run` looks for
-the pull token and for the token of `gh` in the files of the run.
+The image of the observer is on a public package of GitHub. The nodes of cluster
+A pull it with no pull Secret, and the script reads no token. `no-pull-secret`
+makes sure that the pod names no pull Secret. `no-secret-in-run` searches the
+files of the run for the key.
 
 Stage 4 counts the requests of the cycles. `count-requests` is a small Go
 program that sits between `strata` and Palette. It writes one line for each
@@ -1609,7 +1624,7 @@ namespace goes. The script deletes no cluster. `KEEP=1` skips the undo, so that
 `observer.sh N` can resume the run at stage N. A check with `?` records its
 result without judging it.
 
-Each check of both ways passes. A workload cluster reaches the API: the pod on
+Each check of #656 passes in both ways. A workload cluster reaches the API: the pod on
 cluster A ends its first cycle against Palette. A profile in Palette installs
 the observer too. The layer does not replace a node. When the profile leaves the
 cluster, Palette deletes the Deployment.
@@ -1626,7 +1641,6 @@ finding, because `verify --who` then reads the audit log.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `pull-secret` | 0 | #656: the token file holds a token with only `read:packages`, and it goes to the Secret `ghcr-pull` through standard input. A file that fails stops the run before any change |
 | `cluster-record`, `profile-records` | 0 | #656: a record of cluster A, and a record of each profile that it runs |
 | `namespace`, `config`, `key` | 0 | #656: the namespace, the ConfigMap, and the Secret of the key. The key goes through standard input |
 | `records-apply` | 0 | #656: the records of the Git revision apply with `--server-side` |
@@ -1634,6 +1648,7 @@ finding, because `verify --who` then reads the audit log.
 | `apply-admitted` | 0 | #656: the namespace enforces `restricted`, and the standard admits the pod |
 | `pod-ready` | 0 | #656: the Deployment is Available in 3 minutes. `strata-observer health` exits 0 through `kubectl exec` |
 | `pod-hardened` | 0 | #656: the pod runs as non-root with a read-only root. It has no capability and no token volume |
+| `no-pull-secret` | 0 | #732: the pod runs the image of `OBSERVER_IMAGE` with an image id, and its spec names no `imagePullSecrets`. So a node pulled the public image with no login. `no-pull-secret.out` shows the image, the image id, and the pull Secrets. A live run passes: the spec names no pull Secret. |
 | `reaches-palette` | 0 | #656: `/v1/cluster` gives `page` `ok` and a `checkedAt` through `port-forward`. A workload cluster reaches the API |
 | `no-finding-at-baseline` | 0 | #656: `/v1/findings` is empty for the records that the run made |
 | `summary-matches-strata` | 0 | #656: the page shows the status that `strata verify` and `strata compare` give |
@@ -1658,7 +1673,7 @@ finding, because `verify --who` then reads the audit log.
 | `first-seen-starts-again` | 0 | #656: an edit gives a finding, and a restart gives it a later `firstSeen`. The state goes with the pod |
 | `manifests-delete`, `removal-is-clean` | 0 | #656: `kubectl delete -f observer.yaml` removes the namespace, and no object of the observer stays |
 | `fred-unchanged` | 0 | #656: `strata verify` says that cluster A did not change |
-| `profile-prepare`, `nodes-before` | 0 | #656: the namespace and the Secrets, made with `kubectl` before the profile. The machines of cluster A, before the layer |
+| `profile-prepare`, `nodes-before` | 0 | #656: the namespace, the ConfigMap, the Secret of the key, and the records, made with `kubectl` before the profile. The machines of cluster A, before the layer |
 | `profile-create`, `profile-attach` | 0 | #656: an add-on profile with the rendered manifests as one manifest layer goes to cluster A. The cluster is Running |
 | `profile-applied` | 0 | #656: Palette applies the layer, and the pod is Ready |
 | `profile-does-not-disturb` | 0 | #656: each other profile of cluster A still agrees with its record |
@@ -1667,7 +1682,7 @@ finding, because `verify --who` then reads the audit log.
 | `no-repave` | ? | #656: cluster A keeps its machines when the layer is applied. The output lists the machines before and after. The two lists are the same, so Palette replaces no node for the layer |
 | `profile-detach`, `profile-removal` | 0 | #656: the profile leaves cluster A, and the Deployment goes. Palette deletes the Deployment of a whole layer when a person removes the layer. See [An object that an edit drops from a manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest) |
 | `undo-profile`, `undo-namespace` | 0 | #656: no profile of way 2 stays in Palette, and the namespace is gone |
-| `no-secret-in-run` | 1 | #656: no file of the run holds the key, the pull token, or the `gh` token |
+| `no-secret-in-run` | 1 | #656: no file of the run holds the key |
 | `undo-baseline` | 0 | the example is at its baseline |
 
 
@@ -1703,6 +1718,33 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version |
 | `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
+
+## observer-chart.sh
+
+Read-write. It asks whether Palette syncs the public chart of
+[the observer](./observer-deploy.md) from a registry with no login (#732). Step 1 of
+[Install with a profile in Palette](../automation/observer.md#install-with-a-profile-in-palette)
+adds that registry with a token now. The script needs no cluster, and it changes
+nothing else in the tenant. It needs the key, with a role that adds a registry at
+tenant scope, `curl`, and `jq`.
+
+The script makes an OCI registry of the type `basic`, with the provider `helm` and
+the auth type `noAuth`, for `https://ghcr.io/orgs/<owner>` and the folder `charts`.
+`ENDPOINT` and `BASE_PATH` give another address and folder. The name of the
+registry holds a random suffix. Palette reads the address when it makes the
+registry, so a refusal of that read fails the create. The output of each check
+holds the answer of Palette, with its code or its message.
+
+A status of `Completed` alone does not show that Palette read the chart. So only
+`chart-no-login` shows it. The end deletes the registry, also after a failed check
+or an error. The checks with `?` record what Palette does and do not judge it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `registry-no-login` | ? | #732: Palette makes the registry with the auth type `noAuth`. 1 says that Palette refuses the registry, and `registry-no-login.err` holds the code. A live run gives 1 for `ghcr.io`: the create answers HTTP 500 with `InvalidRegistryCredentials`. A read of the catalog of `ghcr.io` with no login answers HTTP 401. |
+| `sync-no-login` | ? | #732: a sync of the registry ends with the status `Completed`. 1 says that the sync ends with another status, and the output holds the status and the message. The live run did not get to this check, because Palette made no registry. |
+| `chart-no-login` | ? | #732: the packs of the registry hold the chart `strata-observer`, and the output names its version. 1 says that Palette read no chart. The live run did not get to this check, because Palette made no registry. |
+| `registry-gone` | 0 | #732: the registry of the run is deleted, and a read of it answers HTTP 404. A live run gives 0: no registry stays. |
 
 ## version-states.sh
 

@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -476,5 +477,95 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 		if s.Profiles[0].NewerVersion != nil || s.Profiles[0].Status != StatusOK || s.Counts.NewerProfileVersions != 0 {
 			t.Errorf("a current version: %+v, status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
 		}
+	}
+}
+
+// Issue #708. The row of a profile with a newer published version holds the move from the record to
+// that version: the impact level, the flags of its packs, each pack whose version changes, each pack
+// that the move adds or removes, and each pack whose values change. It holds no value.
+func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
+	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
+	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
+	fred := docs.Pack{Key: "addon/fred-compositions", Status: docs.PackChanged, Identity: true, Upstream: true, A: side("0.1.0"), B: side("0.2.0")}
+	wilma := changed("addon/wilma-values", "replicas")
+	wilma.Values.Changed, wilma.A, wilma.B = true, side("1.0.0"), side("1.0.0")
+	diff := docs.Diff{Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{
+		{Key: "addon/dino-logs", Status: docs.PackRemoved, A: side("2.0.0")}, fred,
+		{Key: "addon/pebbles-dns", Status: docs.PackAdded, B: side("1.0.0")},
+		{Key: "addon/unchanged", Status: docs.PackUnchanged}, wilma,
+	}}
+	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{},
+		Profiles:     []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "1.4.0", at(-2*time.Hour))},
+		ProfileMoves: map[string]docs.Diff{"barney-addons@1.3.1": diff}}
+	s := build(&c, v)
+	n := s.Profiles[0].NewerVersion
+	if n == nil || n.Move == nil || n.Unread {
+		t.Fatalf("the newer version %+v", n)
+	}
+	want := ProfileMove{Impact: "in-place", Flags: []string{docs.FlagIdentity, docs.FlagUpstream, docs.FlagAuthored}, Packs: []MovePack{
+		{Key: "addon/dino-logs", Status: docs.PackRemoved, From: "2.0.0", Flags: []string{}},
+		{Key: "addon/fred-compositions", Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity, docs.FlagUpstream}},
+		{Key: "addon/pebbles-dns", Status: docs.PackAdded, To: "1.0.0", Flags: []string{}},
+		{Key: "addon/wilma-values", Status: docs.PackChanged, From: "1.0.0", To: "1.0.0", Flags: []string{docs.FlagAuthored}, ValuesChanged: true},
+	}}
+	if !reflect.DeepEqual(*n.Move, want) {
+		t.Errorf("the move\n got %+v\nwant %+v", *n.Move, want)
+	}
+	raw := marshal(t, s)
+	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"} {
+		if strings.Contains(raw, banned) {
+			t.Errorf("the summary holds %q", banned)
+		}
+	}
+
+	// a compare that failed names the newer version with no move, and says so
+	v.ProfileMoves, v.ProfileUnread = nil, map[string]bool{"barney-addons@1.3.1": true}
+	if n := build(&c, v).Profiles[0].NewerVersion; n == nil || n.Move != nil || !n.Unread {
+		t.Errorf("a failed compare: %+v", n)
+	}
+	// a version that is current shows no move, also when a compare of an earlier cycle is there
+	v.Profiles, v.ProfileMoves, v.ProfileUnread = []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "", "")}, map[string]docs.Diff{"barney-addons@1.3.1": diff}, nil
+	if n := build(&c, v).Profiles[0].NewerVersion; n != nil {
+		t.Errorf("a current version: %+v", n)
+	}
+}
+
+// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709), as `behind`
+// names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed read says that
+// the carrier was not read. A profile that the pin does not name has no carrier on its row.
+func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
+	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
+	fred.Carriers = []docs.PinCarrier{
+		{Profile: "barney-addons", Version: "1.3.1", Carrier: &docs.Carrier{Version: "1.4.0", PackVersion: "0.1.5"}},
+		{Profile: "barney-addons", Version: "1.3.0"},
+		{Profile: "other", Version: "1.0.0", Error: &docs.Error{Kind: "api", Status: 500}},
+	}
+	records := []Record{
+		rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("barney-addons", "1.3.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("other", "1.0.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+		rec("wilma", "1.0.0", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0")),
+	}
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{fred}}
+	s := build(ptr(content(t, records...)), v)
+	want := map[string]*Carried{
+		"barney-addons@1.3.1": {Profile: "barney-addons@1.3.1", Version: "1.4.0", Pack: "0.1.5"},
+		"barney-addons@1.3.0": {Profile: "barney-addons@1.3.0"},
+		"other@1.0.0":         {Profile: "other@1.0.0", Unread: true},
+		"wilma@1.0.0":         nil,
+	}
+	for _, p := range s.Profiles {
+		got, w := p.Packs[0].Carried, want[Subject(p.Name, p.Version)]
+		if (got == nil) != (w == nil) || got != nil && *got != *w {
+			t.Errorf("%s@%s: the pack row carries %+v, want %+v", p.Name, p.Version, got, w)
+		}
+	}
+	rows := s.Newer
+	if len(rows) != 1 {
+		t.Fatalf("rows %+v", rows)
+	}
+	carriers := []Carried{*want["barney-addons@1.3.1"], *want["barney-addons@1.3.0"], *want["other@1.0.0"]}
+	if !slices.Equal(rows[0].Carriers, carriers) {
+		t.Errorf("the newer row carries %+v, want %+v", rows[0].Carriers, carriers)
 	}
 }

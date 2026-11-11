@@ -149,11 +149,18 @@ whether it is the version that the reviewer read:
 `IDENTICAL`: the root of the published version is the root of the candidate.
 The check is by content, not by a tag or a name.
 
-The record of the release that `dev` runs now has a newer published version, and
-`behind` names it:
+The record of the release that `dev` runs now has a newer published version.
+`behind` names it, and the line `bump to` says what the move to it changes:
 
 ```text
 {{#include output/loop-behind-profile.txt}}
+```
+
+Each pin of the release that is behind names the profile version that carries a
+newer version of its pack. Here the new version carries each one:
+
+```text
+{{#include output/loop-behind-carrier.txt}}
 ```
 
 Palette holds the version now, so the pipeline asks it two questions about the

@@ -1137,6 +1137,31 @@ field, a value, an input, or an option is in the sections above.
   reports use the same words. A script that reads that line gets a new word.
   `strata-preflight/1` has the new field `options.offline`. Read the field: the
   text forms can change in any release.
+- **`strata preflight --out` writes no `world.json` and no `entity.json`.** The
+  two files hold the values of the variables. Give `--world` beside `--out` to
+  write them. See [The report on disk](../commands/preflight/report.md#the-report-on-disk).
+  - `--out` writes `report.md`, `report.json`, and `report.html` alone. A script
+    that reads one of the two files after `--out` must give `--world`.
+  - `--world` without `--out` is a usage error with exit `2`.
+  - When the run writes no world, the reproduce lines name `$OUT` in place of the
+    directory of `--out`. The last line of each form of the report says how to
+    write the two files.
+  - A line that the report adds writes `request.json` and `body.json` into the
+    folder of `world.json`, not into the current directory. So it holds
+    `> $OUT/request.json`, `--data @$OUT/request.json`, `-o $OUT/body.json`, and
+    `--slurpfile body $OUT/body.json`.
+  - `strata-preflight/1` has the new field `options.outWorld`: `true` when
+    `--world` wrote the two files into `outDir`.
+- **A preflight report holds a mark in place of each value of a variable.**
+  Palette can quote such a value in a refusal. The mark names the variable,
+  such as `[value of pod_cidr]`. See
+  [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+  - Each form of the report has the mark: the terminal, the markdown, the JSON,
+    and the HTML. So does `messages[]` of `strata-preflight/1`. A script that
+    reads a value of a variable from a message must read `entity.json` of
+    `--world`.
+  - The message of an error holds the marks in the start of the body of the
+    answer.
 - **`compare` of a profile version with `cluster:<cluster>` answers for that profile.** The
   cluster side holds only the profile that the version replaces, as
   `cluster:<cluster>/<profile>` does. Before, it held each profile of the cluster. See
@@ -1167,6 +1192,38 @@ field, a value, an input, or an option is in the sections above.
   a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
   [Run it once](../automation/observer.md#run-it-once).
+- **`behind` names the move to the newest profile version.** A new line
+  `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
+  `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
+  `packs[]`. The markdown table of the profiles has the new column `bump`. See
+  [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+  - A script that reads the text must skip the new line, or read `--json`. A script that reads
+    the cells of the markdown table must read the new column.
+  - Without `--no-impact`, `behind` reads the pack manifests and the variables of the two
+    versions of each move. A comparison that fails makes the version `not checked`, and the
+    exit `2`.
+- **The observer shows the move to the newest version of a profile.** `newerVersion` holds the
+  new field `move`, or `unread` when the compare failed. The detail route takes the side
+  `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
+  See [Run it once](../automation/observer.md#run-it-once).
+- **`behind` names the newer profile version that carries a newer pack.** A new line under each
+  pin that is behind names it. The line is `<name>@<version> carries <pack>@<version>`, or it says
+  that no newer version of the profile carries one. `pins[].carriers[]` of `--json` holds the
+  same. The markdown cell of the status of the pin ends with the same words. See
+  [The newer profile version that carries a newer pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
+  - A script that reads the text must skip the new line, or read `--json`.
+  - For each profile version that holds a pin that is behind, `behind` reads the document of each
+    newer version. It sends one request for each, also with `--no-impact`. With `--pin`, it reads
+    none.
+  - The state line of an issue of `upstream-report.sh` holds `carriers` too.
+- **The observer shows the carrier of a pack that is behind.** A pack row of `/v1/profiles` holds
+  the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
+  of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
+  badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
+- **The tiles of the page of the newer versions say "newer", and not "behind".** The tile
+  "Packs behind" is now "Packs with a newer version". The tile "Versions behind" is now
+  "Versions newer than the pins". The numbers and the lines under them stay the same. A check
+  that reads the words of the page must read the new labels.
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
   `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
   read the file of a folder from the working folder. So a file of a checkout could
@@ -1197,11 +1254,20 @@ field, a value, an input, or an option is in the sections above.
 - **`same-release --allow renumber` compares the archives of the packs.** It reads them from
   Palette for each renumber whose digest changed. See
   [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
-  - A renumber whose two archives differ in a file that is not the version in `pack.json` fails.
-    The pair is `different`, and a reason names the file. Before, the pair passed, and the line
-    said `archive: not compared`.
+  - A renumber whose two archives differ in more than the version of the pack fails. The pair is
+    `different`, and a reason names the file. Before, the pair passed, and the line said
+    `archive: not compared`.
+  - Strata does not compare `version` in `pack.json`. A chart of a Helm registry has no
+    `pack.json`, so strata does not compare the line `version` of its `Chart.yaml`. Each other
+    line of the file counts, also `appVersion`. A renumber of a chart whose `appVersion` changes
+    fails with `Chart.yaml differs`.
   - The line of a renumber says `archive: same files` when the two archives agree, and
     `pairs[].archivesCompared` names the pack.
+  - A renumber whose file in the download of a side is no archive fails. Palette can put an
+    error answer of the host of a Helm chart there. The line says `archive: not readable`, a
+    reason names the version and what the file holds, and `pairs[].archivesNotReadable` names the
+    pack. Strata reads the other packs of the download. Such a file does not give the error
+    `not-archive`.
   - The command connects to Palette, also for two record files. Without a key, it stops with
     `missing-credential` and exit `2` when a renumber has a new digest. Give the key to the job.
   - Palette takes one download of a version in 10 seconds, and refuses the next with HTTP 429
@@ -1210,6 +1276,19 @@ field, a value, an input, or an option is in the sections above.
 - **`compare` gives the impact `none` to `1.2-rc.1` to `1.2.0`.** A number that a version omits
   is `0`, as Palette reads it. So such a renumber keeps its numbers, and the impact is
   `none (renumber only)`. Before, the move had the level of its layer.
+- **`palette-validate`, for a variable or a CIDR that Palette refuses.** The route refuses such a
+  body with HTTP `500` and `InvalidDropDownVariable`, `InvalidVariable`, `K8SCidrOverlap`, or
+  `CidrParseError`. The code of Palette shows it; no live run shows it yet. Strata now reads such
+  a refusal as the answer of the route, and does not send the request again. The verdict is
+  `failed`, with the message of Palette, and the exit code is `0`, or `1` with `--strict`.
+  Before, the verdict was `error`, and the exit code was `2`. See
+  [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate).
+- **`palette-validate`, for a pool with no subnet.** For AWS with a `vpcId`, the route refuses
+  such a pool with HTTP `500` and `RequiredParam`. A live run shows it. Strata
+  now reads such a refusal as the answer of the route, and does not send the request again. The
+  verdict is `failed`, with the message of Palette, and the exit code is `0`, or `1` with
+  `--strict`. Before, the verdict was `error`, and the exit code was `2`. On each other route,
+  strata also does not send a request again after HTTP `5xx` with `RequiredParam`.
 
 ### For a user of the CI drop-ins
 
@@ -1229,6 +1308,9 @@ field, a value, an input, or an option is in the sections above.
 - **The steps of the observer make no pull Secret.** The image and the chart are
   public. An install that has the Secret `ghcr-pull` still works. Delete the Secret
   to remove the token from the cluster.
+- **`just observer-up` makes no pull Secret, and reads no token file.** The variable
+  `GHCR_PULL_TOKEN_FILE` has no effect now. A Secret `ghcr-pull` from an earlier run
+  stays in the cluster. Delete it, or run `just observer-down`, to remove the token.
 - **`pr-comment.sh cluster:<cluster> <version>` comments on one profile of the cluster.** The
   script runs `compare`. So the comment names only the packs of the profile that the version
   replaces. The maximum impact and the label come from those packs.
@@ -1259,6 +1341,17 @@ field, a value, an input, or an option is in the sections above.
   checkout of the tag, which holds it. A pipeline that copies one script by hand
   must copy `palette-key.sh` too. Without it, a script that looks for the key
   stops with exit `2`.
+- **The artifact of the preflight job holds no `world.json` and no
+  `entity.json`.** This holds for `preflight.yml`, for the GitLab job
+  `strata-preflight`, and for `preflight.sh`. The two files hold the values of
+  the variables, and each reader of a run can download the artifact.
+  - To keep them, give the input `world: true` to `preflight.yml`, or set
+    `STRATA_PREFLIGHT_WORLD` to `true`. See
+    [The files of the job](../automation/preflight.md#the-files-of-the-job).
+  - A later step that reads `world.json` or `entity.json` from the directory of
+    the job must set that input.
+  - A message of the three reports, of the summary, and of the comment has a
+    mark in place of each value of a variable.
 - **`palette-key.sh` reads `~/.palette.env` only from an absolute `HOME`, as strata
   does.** Before, a relative `HOME` read the file of a folder from the working
   folder. Now, when no variable gives a key, `merge-gate.sh` omits the verify and
@@ -1302,6 +1395,11 @@ field, a value, an input, or an option is in the sections above.
   `ops::BehindSummary` has the new fields `profiles`, `profiles_behind`, and
   `profile_errors`. A struct literal must set them, and a pattern with no `..` must name
   them. `ops::ProfilePin` and `ops::NewerProfile` are new.
+- `ops::ProfilePin` has the new field `bump: Option<ops::Bump>`, and `ops::Bump` has the new
+  field `packs: Vec<ops::BumpPack>`. A struct literal must set them. `ops::BumpPack` is new.
+  `api::Palette::profile_raw` is new: it reads the rest of a profile version from its document.
+- `ops::Pin` has the new field `carriers: Vec<ops::PinCarrier>`. A struct literal must set it.
+  `ops::PinCarrier` and `ops::Carrier` are new.
 - `ops::behind` reads the document of each profile version that the records hold, through
   `connect` of the project of the first record. `BehindReport::exit_code` gives `1` for a
   profile version that is behind, and `2` for one that strata could not check.
@@ -1313,15 +1411,26 @@ field, a value, an input, or an option is in the sections above.
   renumber whose digest changed. Without `allow_renumber`, it sends no request. `ops::same_release`
   sends none, as before.
 - `ops::PairStatus` has the new value `Renumber`. A `match` with no wildcard arm must name it.
-- `ops::Pair` has the new fields `renumbers`, `archives_compared`, `archives_changed`, and
-  `archives_not_compared`. `ops::Chain` has `allow_renumber`, and `diff::PackDiff` has
-  `renumbered`. A struct literal must name them. `diff::Renumber` and `ops::ArchiveChange` are
-  new.
+- `ops::Pair` has the new fields `renumbers`, `archives_compared`, `archives_changed`,
+  `archives_not_readable`, and `archives_not_compared`. `ops::Chain` has `allow_renumber`, and
+  `diff::PackDiff` has `renumbered`. A struct literal must name them. `diff::Renumber`,
+  `ops::ArchiveChange`, and `ops::ArchiveNotReadable` are new.
 - `api::PaletteApi` has the new method `get_file`, with a default that gives
   `Error::Transport`. A type that wraps another API must forward it, so that a download reaches
   Palette. `api::Palette::profile_download`, `api::ProfileDownload`, `api::DownloadedPack`,
-  `api::PackArchive`, and `api::MemoryApi::with_file` are new.
+  `api::PackFile`, `api::PackArchive`, and `api::MemoryApi::with_file` are new.
+  `DownloadedPack::file` is the `PackFile` of a pack: `NoArchive`, `Archive`, or `NotReadable`
+  with its reason. `DownloadedPack::archive` gives the archive when strata reads one.
 - `Error::NotArchive` is new. A `match` with no wildcard arm must name it.
+- `api::codes::ValidateRoute::ClusterCreate` refuses the whole request with HTTP `500` and
+  `InvalidDropDownVariable`, `InvalidVariable`, `K8SCidrOverlap`, or `CidrParseError`.
+  `refusal_codes` gives the four codes, and `refuses_answer` and `refuses_request` read them.
+  `Error::class()` now gives `Terminal` for an HTTP `5xx` with one of these codes. It gave
+  `Transient`.
+- `api::codes::ValidateRoute::ClusterCreate` also refuses the whole request with HTTP `500` and
+  `RequiredParam`, and `refusal_codes` gives it. `api::codes::is_refusal_code("RequiredParam")` is
+  `true`, so `Error::class()` gives `Terminal` for an HTTP `5xx` with `RequiredParam` from each
+  route. It gave `Transient`.
 
 ### For a user of the library of strata-preflight
 
@@ -1331,6 +1440,16 @@ field, a value, an input, or an option is in the sections above.
 - `report::Options` has the new field `offline: bool`. A literal must set it.
   With `false`, the text forms are those of 0.32.2. `run::run` sets it to `true` when
   `Backend::has_palette` gives `false`.
+- `report::Options`, `run::RunInputs`, and `run::WatchInputs` have the new field
+  `out_world: bool`. A literal must set it. With `false`, the reproduce lines name
+  `$OUT`, and not `out_dir`. Give `true` only when the program writes `world.json`
+  and `entity.json` into `out_dir`.
+- A reproduce line that the report adds writes `request.json` and `body.json` into
+  the folder of `world.json`, not into the current directory.
+- `report::assemble` writes a mark, such as `[value of pod_cidr]`, in place of each
+  value of a variable in the `messages` of each `CheckResult`.
+  `probe::run_check` writes the marks into the body of an answer that failed,
+  before strata cuts the body in the message of the error.
 
 ## Release 0.28.0: changes that need action
 

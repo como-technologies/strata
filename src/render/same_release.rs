@@ -84,11 +84,15 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
 }
 
 /// The fact of a renumber whose two archives hold the same files, but for the version in
-/// `pack.json`.
+/// `pack.json` or in `Chart.yaml`.
 const ARCHIVE_SAME: &str = "archive: same files";
 
 /// The fact of a renumber whose two archives differ in another file. A reason names the file.
 const ARCHIVE_CHANGED: &str = "archive: other files";
+
+/// The fact of a renumber whose file in a download is no archive. A reason names the version and
+/// what the file holds.
+const ARCHIVE_NOT_READABLE: &str = "archive: not readable";
 
 /// The fact of a renumber whose two archives strata did not compare.
 const ARCHIVE_NOT_COMPARED: &str = "archive: not compared";
@@ -104,11 +108,17 @@ pub(crate) fn pair_projects(c: &Chain, index: usize) -> Option<String> {
 /// One line for each renumber of a pair: `<name>  <old> -> <new>`, with its facts in brackets.
 ///
 /// The facts are a move from a pre-release to its final version, and what strata found in the two
-/// archives. That is the same files, another file, or no compare. See
-/// [`Pair::archives_compared`], [`Pair::archives_changed`], and [`Pair::archives_not_compared`].
+/// archives. That is the same files, another file, a file that is no archive, or no compare. See
+/// [`Pair::archives_compared`], [`Pair::archives_changed`], [`Pair::archives_not_readable`], and
+/// [`Pair::archives_not_compared`].
 pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
     let compared: BTreeSet<&str> = p.archives_compared.iter().map(String::as_str).collect();
     let changed: BTreeSet<&str> = p.archives_changed.iter().map(|c| c.key.as_str()).collect();
+    let not_readable: BTreeSet<&str> = p
+        .archives_not_readable
+        .iter()
+        .map(|n| n.key.as_str())
+        .collect();
     let not_compared: BTreeSet<&str> = p.archives_not_compared.iter().map(String::as_str).collect();
     p.renumbers
         .iter()
@@ -121,6 +131,8 @@ pub(crate) fn renumber_lines(p: &Pair) -> Vec<String> {
                 facts.push(ARCHIVE_SAME);
             } else if changed.contains(r.key.as_str()) {
                 facts.push(ARCHIVE_CHANGED);
+            } else if not_readable.contains(r.key.as_str()) {
+                facts.push(ARCHIVE_NOT_READABLE);
             } else if not_compared.contains(r.key.as_str()) {
                 facts.push(ARCHIVE_NOT_COMPARED);
             }

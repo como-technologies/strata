@@ -1423,7 +1423,8 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
 
 /// The checks that the live window of Wave 16 ran have their result in the book: draft.sh,
 /// projects.sh, scope.sh, loop.sh, and stage 4 of export.sh. A row that says "no result yet" for one
-/// of them tells a reader that nobody ran the check.
+/// of them tells a reader that nobody ran the check. `download-limit` is not in the list: #815
+/// sends its two downloads at once, and no live window ran that form.
 #[test]
 fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
     let page = read(&docs().join("development/live-runs.md"));
@@ -1459,7 +1460,22 @@ fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
         "download-archive-<name>",
         "download-no-archive",
         "download-accepts-json",
+        "cidr-overlap",
+        "cidr-overlap-says",
+        "cidr-overlap-body",
+        "cidr-overlap-status",
+        "cidr-overlap-code",
+        "download-chart-reason",
         "download-limit",
+        "behind-carrier",
+        "behind-profile-move",
+        "compare-profile-move",
+        "behind-profile-move-says",
+        "no-pull-secret",
+        "registry-no-login",
+        "sync-no-login",
+        "chart-no-login",
+        "registry-gone",
     ] {
         let row = page
             .lines()
@@ -1538,7 +1554,7 @@ fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
 
 /// A rule that waits for a call of the route says why (#409). A rule that a live run showed the
 /// route answers waits no more. The lab has cloud accounts of AWS and GCP only, so the cases of the
-/// other clouds have no result.
+/// other clouds have no result. A case of AWS that no live window ran yet says so (#816).
 #[test]
 fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_does_not_wait() {
     let page = read(&docs().join("reference/preflight-rules.md"));
@@ -1577,7 +1593,9 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
         .filter(|l| l.starts_with('|') && l.to_lowercase().contains("no result yet"))
     {
         assert!(
-            row.contains("the lab has no cloud account of"),
+            ["the lab has no cloud account of", "no live window ran"]
+                .iter()
+                .any(|reason| row.contains(reason)),
             "a case with no result gives no reason: {row}"
         );
     }
@@ -2820,10 +2838,14 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647 and #648 wait for the next live window, so they are not in this test
+        // the rows of #647, #648, and #732 wait for the next live window, so they are not in this test
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
-            .filter(|line| !line.contains("#647") && !line.contains("#648"))
+            .filter(|line| {
+                !["#647", "#648", "#732"]
+                    .iter()
+                    .any(|item| line.contains(item))
+            })
             .collect::<Vec<_>>()
             .join("\n")
             .to_lowercase();

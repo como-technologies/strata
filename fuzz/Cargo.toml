@@ -1,6 +1,6 @@
 [package]
 name = "strata-fuzz"
-version = "0.32.2"
+version = "0.33.0"
 edition = "2024"
 # The floor of the workspace: this crate uses the same `if let` chains as strata.
 rust-version.workspace = true
@@ -18,7 +18,7 @@ bolero = "0.13"
 serde = "1"
 serde_json = "1"
 serde_yaml = "0.9"
-sha2 = "0.10"
+sha2 = "0.11"
 strata = { path = "..", package = "strata-palette" }
 strata-preflight = { path = "../crates/strata-preflight" }
 strata-report-endpoint = { path = "../crates/strata-report-endpoint" }

@@ -21,7 +21,7 @@ the kind.
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `method`, `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `method`, `path` |
-| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
+| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. A file of one pack that is no archive does not give this error: see `archivesNotReadable` of [`strata-chain/1`](./documents.md#strata-chain1). See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
 | `profile-name-ambiguous` | Two or more profile versions in the scope have this name and version: a profile of the tenant and a profile of the project. Give the uid in place of the name. | `name`, `version`, `profiles[]` of `uid` and `scope` |
 | `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |
@@ -250,6 +250,14 @@ does not send its refusal again, and `palette-validate` reports it. See
 | Code | Palette refuses |
 | --- | --- |
 | `ClusterProfilesNotSupported` | A profile of another cloud type than the route, and not of the cloud type `all`. |
+| `InvalidDropDownVariable` | A value of a dropdown variable that is not the label of an option. |
+| `InvalidVariable` | A value that the format or the pattern of its variable refuses, or no value for a required variable. |
+| `K8SCidrOverlap` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that overlaps the CIDR of the VPC. |
+| `CidrParseError` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that is not a CIDR. |
+| `RequiredParam` | For AWS with a VPC, a machine pool with no subnet. |
+
+A live run shows `ClusterProfilesNotSupported` and `RequiredParam`. The code of
+Palette shows the other four, and no live run shows them yet.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

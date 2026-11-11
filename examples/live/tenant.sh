@@ -170,13 +170,13 @@ sha256_of() {
 }
 
 digest() {
-  local kind=${1:-} reg=${2:-} name=${3:-} version=${4:-} tmp status endpoint type base ref
+  local kind=${1:-} reg=${2:-} name=${3:-} version=${4:-} tmp status endpoint type path base ref
   [ -n "$version" ] || die "usage: tenant.sh digest helm|oci REGISTRY_UID NAME VERSION"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   case "$kind" in
     helm)
       command -v helm >/dev/null || die "digest helm needs helm"
-      status=$(get "/v1/registries/helm/$reg" "$tmp/registry")
+      status=$(get "$(registry_base helm "$reg")" "$tmp/registry")
       [ "$status" = 200 ] || die "reading Helm registry $reg answered HTTP $status"
       endpoint=$(jq -r '.spec.endpoint // ""' "$tmp/registry")
       [ -n "$endpoint" ] || die "Helm registry $reg has no endpoint"
@@ -202,7 +202,8 @@ digest() {
         || die "OCI registry $reg holds $(jq -r '.spec.providerType' "$tmp/entry"), not packs; digest reads pack registries"
       endpoint=$(jq -r '.spec.endpoint // ""' "$tmp/entry")
       type=$(jq -r '.spec.registryType // ""' "$tmp/entry")
-      status=$(get "/v1/registries/oci/$reg/$type" "$tmp/registry")
+      path=$(registry_base "oci-$type" "$reg") || die "OCI registry $reg has the type '$type', not ecr or basic"
+      status=$(get "$path" "$tmp/registry")
       [ "$status" = 200 ] || die "reading OCI registry $reg answered HTTP $status"
       base=$(jq -r '.spec.baseContentPath // ""' "$tmp/registry")
       endpoint=${endpoint#https://}; endpoint=${endpoint#http://}; endpoint=${endpoint%/}

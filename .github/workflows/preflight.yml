@@ -72,9 +72,13 @@ on:
         default: ""
         type: string
       out:
-        description: The directory in the checkout that gets report.md, report.json, report.html, world.json, and entity.json; the artifact holds it
+        description: The directory in the checkout that gets report.md, report.json, and report.html; the artifact holds it
         default: preflight
         type: string
+      world:
+        description: Keep world.json and entity.json in the directory of out too, for the reproduce lines of the report. They hold the value of each variable that is not sensitive, and each reader of the run can download the artifact
+        default: false
+        type: boolean
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -111,7 +115,7 @@ jobs:
           path: .strata
           token: ${{ secrets.strata-token || github.token }}
       # the installer checks the signature of SHA256SUMS, and cosign 3 reads its bundle
-      - uses: sigstore/cosign-installer@v4.1.2
+      - uses: sigstore/cosign-installer@v4.1.3
       - name: install strata and strata-preflight
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
@@ -143,6 +147,7 @@ jobs:
           STRATA_PREFLIGHT_EVERY: ${{ inputs.every }}
           STRATA_PREFLIGHT_LIMIT: ${{ inputs.limit }}
           STRATA_PREFLIGHT_OUT: ${{ inputs.out }}
+          STRATA_PREFLIGHT_WORLD: ${{ inputs.world }}
         run: .strata/scripts/ci/preflight.sh | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()

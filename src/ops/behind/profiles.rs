@@ -6,6 +6,9 @@
 //! the scope of the version. Palette selects them, so strata does not copy that rule. The list has
 //! no order, so strata orders it with [`version::compare`], as it orders the pins. When Palette
 //! gives the newer versions of a profile, strata reads that answer and drops this order.
+//!
+//! With the impact, strata also compares each profile version that is behind with the newest
+//! version, as `compare` of the two versions does. It adds no rule of a change.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -15,9 +18,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::PinnedBy;
+use super::documents::ProfileDocuments;
 use super::newer::is_newer;
-use crate::api::{Palette, PaletteApi};
+use super::{Bump, Check, PinnedBy};
+use crate::api::PaletteApi;
 use crate::error::{ErrorDocument, Result, found};
 use crate::json::{arr, text};
 use crate::model::scope::ProfileScope;
@@ -49,6 +53,10 @@ pub struct ProfilePin {
     pub newer: Vec<NewerProfile>,
     /// True when `newer` is not empty.
     pub behind: bool,
+    /// For a version that is behind: what a move to the newest version does, from `compare` of the
+    /// two versions. Absent with `--no-impact`, or when strata could not compare them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bump: Option<Bump>,
     /// True when Palette no longer holds the version: its document answers HTTP 404. Strata then
     /// cannot read the other versions of the profile from it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -109,13 +117,12 @@ pub(super) struct Held {
     pub(super) project: String,
 }
 
-/// Add each profile version that the record `snap` holds to `held`. `path` is the path of the
-/// record.
+/// The profile versions that the record `snap` holds.
 ///
 /// A record of a profile version holds that version. A record of a cluster, an edge host, or a
 /// cluster group holds each profile that it runs. A candidate has no uid, and a pack record and
-/// an app profile hold no profile version, so they add none.
-pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, path: &Path) {
+/// an app profile hold no profile version, so they give none.
+pub(super) fn held_keys(snap: &Snapshot) -> impl Iterator<Item = ProfileKey> + '_ {
     let source = &snap.source;
     let own = source
         .is_profile_version()
@@ -125,24 +132,31 @@ pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, pa
         .iter()
         .flat_map(|c| &c.profiles)
         .map(|p| (&p.name, &p.version, &p.uid));
-    for (name, version, uid) in own.into_iter().chain(applied) {
-        if uid.is_empty() {
-            continue;
-        }
-        let key = ProfileKey {
+    own.into_iter()
+        .chain(applied)
+        .filter(|(_, _, uid)| !uid.is_empty())
+        .map(|(name, version, uid)| ProfileKey {
             name: name.clone(),
             version: version.clone(),
             uid: uid.clone(),
-        };
-        let entry = held.entry(key).or_insert_with(|| Held {
+        })
+}
+
+/// Add each profile version that the record `snap` holds to `held`: see [`held_keys`]. `path` is
+/// the path of the record.
+pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, path: &Path) {
+    let source = &snap.source;
+    for key in held_keys(snap) {
+        let entry = held.entry(key.clone()).or_insert_with(|| Held {
             profile: ProfilePin {
-                name: name.clone(),
-                version: version.clone(),
-                uid: uid.clone(),
+                name: key.name,
+                version: key.version,
+                uid: key.uid,
                 scope: None,
                 pinned_by: Vec::new(),
                 newer: Vec::new(),
                 behind: false,
+                bump: None,
                 gone: false,
                 error: None,
             },
@@ -152,24 +166,24 @@ pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, pa
     }
 }
 
-/// Give `profile` its scope and the newer published versions of its profile.
+/// Give `profile` its scope and the newer published versions of its profile. With the impact, also
+/// give a profile version that is behind its bump: see [`read_move`].
 ///
-/// `palette` is the connection to the project of its first record. `pre_release` also names a
-/// pre-release above a version that is not one: see [`is_newer`].
+/// `documents` holds the documents of the scope of its first record. `check.pre_release` also names
+/// a pre-release above a version that is not one: see [`is_newer`].
 ///
 /// A version that Palette no longer holds is `gone`. Each other failed read is the error of
 /// `profile`, with no newer version.
 pub(super) fn check_profile<A: PaletteApi>(
-    palette: &Palette<A>,
+    documents: &mut ProfileDocuments<'_, A>,
     profile: &mut ProfilePin,
-    pre_release: bool,
-    progress: &Progress,
+    check: &Check<'_>,
 ) {
-    progress.note(&format!(
+    check.progress.note(&format!(
         "reading the versions of profile {}",
         name_version(&profile.name, &profile.version)
     ));
-    match newer_of(palette, profile, pre_release) {
+    match newer_of(documents, profile, check.pre_release) {
         Ok(Some((scope, newer))) => {
             profile.scope = scope;
             profile.behind = !newer.is_empty();
@@ -177,6 +191,9 @@ pub(super) fn check_profile<A: PaletteApi>(
         }
         Ok(None) => profile.gone = true,
         Err(e) => profile.error = Some(e.to_json()),
+    }
+    if check.impact && profile.behind {
+        read_move(documents, profile, check.generated_at, check.progress);
     }
 }
 
@@ -187,14 +204,15 @@ pub(super) fn check_profile<A: PaletteApi>(
 /// Strata keeps each version above the version of `profile` by [`is_newer`]. It reads the
 /// document of the newest one for the time of its create.
 fn newer_of<A: PaletteApi>(
-    palette: &Palette<A>,
+    documents: &mut ProfileDocuments<'_, A>,
     profile: &ProfilePin,
     pre_release: bool,
 ) -> Result<Option<(Option<ProfileScope>, Vec<NewerProfile>)>> {
-    let Some(doc) = found(palette.profile_document(&profile.uid))? else {
+    let Some(doc) = found(documents.get(&profile.uid))? else {
         return Ok(None);
     };
-    let mut newer: Vec<NewerProfile> = arr(&doc, "/spec/versions")
+    let scope = ProfileScope::of_document(doc);
+    let mut newer: Vec<NewerProfile> = arr(doc, "/spec/versions")
         .iter()
         .map(|v| NewerProfile {
             version: text(v, "/version"),
@@ -207,8 +225,49 @@ fn newer_of<A: PaletteApi>(
     newer.sort_by(|a, b| a.uid.cmp(&b.uid));
     newer.sort_by(|a, b| version::compare(&b.version, &a.version));
     if let Some(newest) = newer.first_mut() {
-        let newest_doc = palette.profile_document(&newest.uid)?;
-        newest.created = text(&newest_doc, "/metadata/creationTimestamp");
+        newest.created = text(documents.get(&newest.uid)?, "/metadata/creationTimestamp");
     }
-    Ok(Some((ProfileScope::of_document(&doc), newer)))
+    Ok(Some((scope, newer)))
+}
+
+/// Give `profile` its bump: what a move to the newest version of its profile does, from `compare`
+/// of the two versions. `at` is the time of the report, in RFC 3339. A comparison that fails is the
+/// error of `profile`.
+fn read_move<A: PaletteApi>(
+    documents: &mut ProfileDocuments<'_, A>,
+    profile: &mut ProfilePin,
+    at: &str,
+    progress: &Progress,
+) {
+    let Some(newest) = profile.newer.first() else {
+        return;
+    };
+    let (held, to) = (
+        name_version(&profile.name, &profile.version),
+        name_version(&profile.name, &newest.version),
+    );
+    progress.note(&format!("comparing profile {held} with {to}"));
+    let compared = version_record(documents, &profile.uid, &held, at, progress).and_then(|a| {
+        let b = version_record(documents, &newest.uid, &to, at, progress)?;
+        Ok(crate::ops::compare(&a, &b, at))
+    });
+    match compared {
+        Ok(d) => profile.bump = Some(Bump::of_profile(&newest.version, &d)),
+        Err(e) => profile.error = Some(e.to_json()),
+    }
+}
+
+/// The record of the profile version `uid`, which `reference` names: its document in `documents`,
+/// with its pack manifests and its variables.
+fn version_record<A: PaletteApi>(
+    documents: &mut ProfileDocuments<'_, A>,
+    uid: &str,
+    reference: &str,
+    at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    // the read of a draft writes a mask over its secrets, so the read takes its own copy
+    let doc = documents.get(uid)?.clone();
+    let raw = documents.palette.profile_raw(uid, doc, progress)?;
+    Snapshot::from_raw(&raw, reference, at)
 }

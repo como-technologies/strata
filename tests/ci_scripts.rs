@@ -729,7 +729,7 @@ const FULL: Left = Left {
 /// each one and passes the option. The reusable workflow sets the variable from the input, and the
 /// GitLab drop-in gives the variable a default. An empty input or variable means that the script
 /// sets the option itself.
-const PREFLIGHT: [Reach; 17] = [
+const PREFLIGHT: [Reach; 18] = [
     reach("--cloud", "cloud", "STRATA_PREFLIGHT_CLOUD"),
     reach("--release", "release", "STRATA_PREFLIGHT_RELEASE"),
     reach("--records", "records", "STRATA_PREFLIGHT_RECORDS"),
@@ -744,6 +744,7 @@ const PREFLIGHT: [Reach; 17] = [
     reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
     reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
     reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
+    reach("--world", "world", "STRATA_PREFLIGHT_WORLD"),
     // set by the script: the markdown goes to standard output and to the directory of --out.
     // A run with no key reads nothing from Palette
     reach("--format", "", ""),
@@ -5070,6 +5071,7 @@ fn preflight_sh_builds_the_list_of_arguments_from_the_variables() {
             ("STRATA_PREFLIGHT_STRICT", "true"),
             ("STRATA_PREFLIGHT_NO_EXEC", "true"),
             ("STRATA_PREFLIGHT_WATCH", "true"),
+            ("STRATA_PREFLIGHT_WORLD", "true"),
             ("STRATA_PREFLIGHT_RULE", "eks-subnets  eks-roles"),
             (
                 "STRATA_PREFLIGHT_RECORDS",
@@ -5086,7 +5088,7 @@ fn preflight_sh_builds_the_list_of_arguments_from_the_variables() {
         [
             "strata preflight cluster:64f0 change.json --cloud eks --tier static,palette \
              --probes probes.yaml --release 4.10 --ready 80 --every 5 --limit 60 --strict \
-             --no-exec --watch --quiet --rule eks-subnets --rule eks-roles \
+             --no-exec --watch --world --quiet --rule eks-subnets --rule eks-roles \
              --records releases/**/*.json --records other/*.json --out out --format markdown"
         ]
     );
@@ -5128,6 +5130,7 @@ fn preflight_sh_gives_no_option_for_an_empty_variable_and_a_value_other_than_tru
             ("STRATA_PREFLIGHT_CLOUD", ""),
             ("STRATA_PREFLIGHT_STRICT", "false"),
             ("STRATA_PREFLIGHT_VERBOSE", "false"),
+            ("STRATA_PREFLIGHT_WORLD", "false"),
             ("PALETTE_API_KEY", "a-key"),
         ],
     );

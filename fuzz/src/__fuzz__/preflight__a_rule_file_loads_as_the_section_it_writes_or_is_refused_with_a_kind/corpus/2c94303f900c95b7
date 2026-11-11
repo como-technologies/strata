@@ -1,0 +1,126 @@
+section: platform
+title: The Palette platform
+about: |
+  What Palette itself does with a build: the validate routes it has and does not call, the
+  states that hide an error, the webhook of the pivot, and the answers of its API.
+rules:
+- id: palette-validate
+  title: The validate route of Palette for the cloud type passes
+  engines:
+  - aws
+  - eks
+  - gcp
+  - gke
+  - azure
+  - aks
+  - maas
+  - edge
+  - vsphere
+  tier: palette
+  severity: fail
+  status: seen
+  what: |
+    `POST /v1/spectroclusters/{cloudType}/validate` takes the body of the create. It checks the
+    name, the credit, the profile packs and their variables, and the machine resources against
+    the needs of the packs. For GKE it checks the pool size. Only the console calls it; the
+    provider and palette-cli do not, and the create path of the API runs the name and the limit
+    checks alone. A 4xx is one refusal, with its code, and so is a 500 with the code of a refusal
+    of the route; a 200 lists the errors of each pool and each profile. On EKS the route reports
+    no CPU floor for a managed node group. One `t3.xlarge` worker got `200` with no error; the
+    aws route answers `MachinePoolWithMinCpuRequired` for the same pool. No run shows whether the
+    EKS create fails later. `worker-cpu-floor`, `pack-dependency`, and `ecr-oci-images` call the
+    same route and read one class of its errors each; this rule reads them all.
+  check:
+    kind: palette
+    method: POST
+    path: /v1/spectroclusters/{{ .routeCloud }}/validate
+    body: .validateBody
+    expr: |
+      .response as $r
+      | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"]
+        else [ ($r.body.profiles // [])[] | .uid as $u | (.packs.results // [])[] | .name as $n | (.errors // [])[] | "profile \($u), pack \($n): \(.code): \(.message)" ]
+           + [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | "pool \($n): \(.code): \(.message)" ]
+        end
+  fix:
+    owner: palette
+    text: Run the validate route at the start of each create, and add it to the SDK and the provider.
+  evidence:
+  - kind: run
+    ref: a live run
+  - kind: source
+    note: the validate route of a cluster checks the profiles of the cluster
+  tests:
+  - fault: fixtures/gke/validate-refused.json
+    clean: fixtures/gke/clean.json
+  - fault: fixtures/eks/validate-cpu.json
+- id: status-not-cloud
+  title: The status shows an error when the cloud refuses the build
+  engines:
+  - gke
+  - gcp
+  tier: watch
+  severity: fail
+  status: seen
+  what: |
+    GCP refuses the build, and the status of the cluster shows no error: the GCP provider
+    reports nothing to the status, so `ControlPlaneNodeAdditionDone` is `True`. The
+    refusal is in the events alone, as `GCPManagedControlPlaneReconcile` with the message of GCP,
+    or `ReconcileError`. A stop of CAPG after a pool change, "machinePoolList length (1) !=
+    managedMachinePoolList length (2)", comes in the same event and shows in no condition.
+  check:
+    kind: watch
+    expr: |
+      [ (.events // [])[]
+        | select(.severity == "Warning" or .severity == "Error")
+        | select((.reason // "") | test("Reconcile"))
+        | select((.message // "") | test("InvalidArgument|PERMISSION_DENIED|has not been used in project|is disabled|QUOTA_EXCEEDED|NOT_FOUND|failed to (create|reconcile)|machinePoolList length"))
+        | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+      | unique | .[:3]
+  fix:
+    owner: palette
+    text: Copy an error the provider gets from the cloud into a condition of the cluster.
+  evidence:
+  - kind: run
+    ref: '#90'
+    note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status; after the pool change, the CAPG stop in the same event
+  - kind: source
+    note: Palette puts the refusal of the cloud in the status of the cluster
+  tests:
+  - fault: fixtures/gke/pool-roll-mismatch.json
+    clean: fixtures/gke/watch-running.json
+- id: infrastructure-stalled
+  title: The infrastructure of the cluster is ready within 30 minutes, or the status says why
+  engines:
+  - all
+  tier: watch
+  severity: fail
+  status: seen
+  what: |
+    A build waits at `CloudInfrastructureReady: False` with the reason `PreparingInfrastructure`
+    for 30 minutes or more, and the status shows no error. In #90 the Kubernetes Engine API was
+    off, and only an event of the cluster named it. The watch stops here and names the
+    condition, so a person reads the events and the audit log of the cloud, and does not wait
+    for the timeout of the client.
+  check:
+    kind: watch
+    expr: |
+      (.cluster.status.state // "") as $s | (.elapsed // 0) as $e
+      | if ($s != "Provisioning" and $s != "Pending") or $e < 1800 then []
+        else [ (.cluster.status.conditions // [])[]
+               | select(.type == "CloudInfrastructureReady" and (.status // "") == "False")
+               | "the cluster is \($s) and CloudInfrastructureReady is False with the reason \(.reason // "?") after \($e)s, and the status shows no error: read the events of the cluster and the audit log of the cloud" ]
+        end
+  reproduce:
+  - '{{ palette_curl }} "${PALETTE_API:-https://api.spectrocloud.com}/v1/events/components/spectrocluster/{{ .clusterUid // "<cluster uid>" }}?limit=50" | jq ''.items[] | {reason, severity, message: .message[:160]}'''
+  fix:
+    owner: palette
+    text: Copy an error the provider gets from the cloud into the condition, and fail the build after a limit.
+  evidence:
+  - kind: run
+    ref: '#90'
+    note: PreparingInfrastructure for about 30 minutes with the Kubernetes Engine API off, and no error in the status
+  - kind: run
+    ref: a live run
+  tests:
+  - fault: fixtures/gke/infrastructure-stalled.json
+    clean: fixtures/gke/watch-running.json

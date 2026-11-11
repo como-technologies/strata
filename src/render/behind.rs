@@ -1,7 +1,8 @@
-//! The lines of `behind`: the heading, the state of each pin, and its bump.
+//! The lines of `behind`: the heading, the state of each pin, its bump, and its carriers.
 
-use super::{count_of, registry_sync_suffix};
+use super::{count_of, entry_error, registry_sync_suffix};
 use crate::model::validation::answer_lines;
+use crate::reference::name_version;
 use crate::text::and_list;
 
 /// The status of a pin or of a profile version that strata could not check.
@@ -112,6 +113,31 @@ pub(crate) fn arrived_line(pin: &crate::ops::Pin) -> Option<String> {
     Some(format!("arrived: {}", arrived.join(", ")))
 }
 
+/// One line for each profile version that holds a pin that is behind, and has a newer version:
+/// `barney-addons@1.4.0 carries fred-compositions@0.2.0`, or `no newer version of
+/// barney-addons@1.3.1 carries a newer fred-compositions`. When strata could not read a version,
+/// the line gives the error.
+pub(crate) fn carrier_lines(pin: &crate::ops::Pin) -> Vec<String> {
+    pin.carriers
+        .iter()
+        .map(|c| {
+            let held = name_version(&c.profile, &c.version);
+            match (&c.carrier, entry_error(c.error.as_ref())) {
+                (Some(by), _) => format!(
+                    "{} carries {}",
+                    name_version(&c.profile, &by.version),
+                    name_version(&pin.name, &by.pack_version)
+                ),
+                (None, Some(msg)) => format!(
+                    "strata could not read which newer version of {held} carries a newer {} ({msg})",
+                    pin.name
+                ),
+                (None, None) => format!("no newer version of {held} carries a newer {}", pin.name),
+            }
+        })
+        .collect()
+}
+
 /// One newer version of a pin, with its notes in parentheses: `1.65.0`, `1.64.0 (deprecated)`,
 /// `1.66.0 (drops arm64)`, or `1.64.0 (deprecated, drops arm64)`.
 fn newer_version(n: &crate::ops::Newer) -> String {
@@ -155,10 +181,7 @@ pub(crate) fn palette_lines(pin: &crate::ops::Pin) -> Vec<String> {
 /// latest`.
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
-    let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
-    for f in &b.flags {
-        line.push_str(&format!(" {}", f.as_str()));
-    }
+    let mut line = bump_text(b);
     if let Some(n) = pin
         .newer
         .iter()
@@ -167,4 +190,19 @@ pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
         line.push_str(&format!("; Palette calls {} the latest", n.version));
     }
     Some(line)
+}
+
+/// `bump to 1.4.0: in-place IDENTITY AUTHORED`, for a profile version with a bump: the impact
+/// level and the flags of the packs that the move changes.
+pub(crate) fn profile_bump_line(p: &crate::ops::ProfilePin) -> Option<String> {
+    p.bump.as_ref().map(bump_text)
+}
+
+/// `bump to <version>: <impact> <flags>`: the words that a pin and a profile version share.
+fn bump_text(b: &crate::ops::Bump) -> String {
+    let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
+    for f in &b.flags {
+        line.push_str(&format!(" {}", f.as_str()));
+    }
+    line
 }
