@@ -162,6 +162,17 @@ Each path of the file starts with the uid of the version:
 - `spc.json` and the manifests hold the content with the value of each macro.
   Strata reads the two lists and the archives of the packs, and no other file.
 
+The file of a pack can be no archive. When the host of a chart refuses the
+file, the download holds the error answer of the host in place of the chart.
+The answer has the name of the chart, the list names it as a chart, and the
+route answers HTTP 200. A live run shows it for the chart `nginx` 25.1.5 of the
+public registry Bitnami. The file is an XML error of 263 bytes, with the code
+`AccessDenied`.
+
+Strata reads each other pack of such a download. It gives the pack no archive
+and a reason: see
+[The archives of the two builds](../../commands/same-release.md#the-archives-of-the-two-builds).
+
 The file holds no archive for these packs:
 
 - A pack of a pack registry or of a Helm registry that is private. Its entry

@@ -83,6 +83,20 @@ The profile gives the CSI pack the same values, so the record shows no change
 of a value. The archive of the new build holds another default value. So the
 pair fails, and the reason names the file of the archive.
 
+## 6. The download holds no chart
+
+```text
+{{#include ../output/renumber-not-readable.txt}}
+```
+
+The add-on profile moves the chart `nginx` of Bitnami to another version, with
+the same values. The host of the charts refuses the file, so the download holds
+its error answer in place of each chart. Palette answers HTTP 200: the live
+check `download-chart` of
+[export.sh](../development/live-runs.md#exportsh) shows it. Strata cannot read
+the two builds, so the pair fails, and each reason names the version and what
+the file holds.
+
 ## What to do
 
 - Run `same-release --allow renumber` when your pipeline publishes the final
@@ -94,6 +108,9 @@ pair fails, and the reason names the file of the archive.
   `Chart.yaml` for a chart. Palette
   serves no archive of a pack of a private registry: see
   [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+- When a line says `archive: not readable`, read the reason. An XML error is
+  the answer of the host of the chart. Pin the chart from a registry whose host
+  serves it, or make sure of the files in the pipeline.
 - A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
   layer in `compare`, also with the same values. See
   [A renumber](../reference/impact.md#a-renumber).

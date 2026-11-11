@@ -1263,6 +1263,11 @@ field, a value, an input, or an option is in the sections above.
     fails with `Chart.yaml differs`.
   - The line of a renumber says `archive: same files` when the two archives agree, and
     `pairs[].archivesCompared` names the pack.
+  - A renumber whose file in the download of a side is no archive fails. Palette can put an
+    error answer of the host of a Helm chart there. The line says `archive: not readable`, a
+    reason names the version and what the file holds, and `pairs[].archivesNotReadable` names the
+    pack. Strata reads the other packs of the download. Such a file does not give the error
+    `not-archive`.
   - The command connects to Palette, also for two record files. Without a key, it stops with
     `missing-credential` and exit `2` when a renumber has a new digest. Give the key to the job.
   - Palette takes one download of a version in 10 seconds, and refuses the next with HTTP 429
@@ -1406,14 +1411,16 @@ field, a value, an input, or an option is in the sections above.
   renumber whose digest changed. Without `allow_renumber`, it sends no request. `ops::same_release`
   sends none, as before.
 - `ops::PairStatus` has the new value `Renumber`. A `match` with no wildcard arm must name it.
-- `ops::Pair` has the new fields `renumbers`, `archives_compared`, `archives_changed`, and
-  `archives_not_compared`. `ops::Chain` has `allow_renumber`, and `diff::PackDiff` has
-  `renumbered`. A struct literal must name them. `diff::Renumber` and `ops::ArchiveChange` are
-  new.
+- `ops::Pair` has the new fields `renumbers`, `archives_compared`, `archives_changed`,
+  `archives_not_readable`, and `archives_not_compared`. `ops::Chain` has `allow_renumber`, and
+  `diff::PackDiff` has `renumbered`. A struct literal must name them. `diff::Renumber`,
+  `ops::ArchiveChange`, and `ops::ArchiveNotReadable` are new.
 - `api::PaletteApi` has the new method `get_file`, with a default that gives
   `Error::Transport`. A type that wraps another API must forward it, so that a download reaches
   Palette. `api::Palette::profile_download`, `api::ProfileDownload`, `api::DownloadedPack`,
-  `api::PackArchive`, and `api::MemoryApi::with_file` are new.
+  `api::PackFile`, `api::PackArchive`, and `api::MemoryApi::with_file` are new.
+  `DownloadedPack::file` is the `PackFile` of a pack: `NoArchive`, `Archive`, or `NotReadable`
+  with its reason. `DownloadedPack::archive` gives the archive when strata reads one.
 - `Error::NotArchive` is new. A `match` with no wildcard arm must name it.
 - `api::codes::ValidateRoute::ClusterCreate` refuses the whole request with HTTP `500` and
   `InvalidDropDownVariable`, `InvalidVariable`, `K8SCidrOverlap`, or `CidrParseError`.

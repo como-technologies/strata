@@ -561,6 +561,24 @@ facts:
     code:
       - src/api/http.rs
 
+  # The file of a pack in the download can be no archive. When the host of a chart refuses the
+  # file, Palette puts the answer of the host in place of the chart, and answers HTTP 200.
+  - id: profile-download-chart-host-answer
+    kind: behavior
+    reads:
+      fields:
+        - packs.*.filePath
+    stand_in: []
+    live:
+      - export.sh:download-chart
+      - export.sh:download-chart-reason
+    pages:
+      - internals/palette/profiles.md#the-download-of-a-version
+      - commands/same-release.md#the-archives-of-the-two-builds
+    code:
+      - src/api/download.rs
+      - src/ops/same_release/archives.rs
+
   - id: profile-download-limit
     kind: behavior
     reads:

@@ -13,9 +13,9 @@
 #   3  what the export route answers: a request that accepts JSON gets no file; and three
 #      exports with no wait between them, whose refusals the run records
 #   4  the download of each version: the layout of the file, the archive of each pack and its
-#      top folder, the packs with no archive, the archive of each chart of a Helm registry
-#      (#817), and what the route answers to a request that accepts JSON and to two downloads
-#      at once
+#      top folder, the packs with no archive, the file of each chart of a Helm registry (#817)
+#      and the reason that strata gives for a file that is no archive (#828), and what the route
+#      answers to a request that accepts JSON and to two downloads at once
 #
 # PROFILES holds the versions, by <name>@<version>, in the project of the key. The default is the
 # three versions that `just live-up` publishes. Palette can refuse an export with HTTP 429 and
@@ -128,30 +128,74 @@ download_at_once() {
   return "$refused"
 }
 
-# download_charts LIST...: each chart of a Helm registry with an archive in the lists LIST has one
-# top folder and no pack.json. The line version of its Chart.yaml names the version of its entry.
-# The download of LIST is the file NAME.tgz beside NAME.list.json. With no such chart, it fails
+# file_start FILE PATH: the size of the file PATH in the download FILE, and its first 200 bytes on
+# one line, with a ? for each byte that a terminal does not print
+file_start() {
+  local size
+  size=$(tar -xzOf "$1" "$2" | wc -c | tr -d ' ')
+  printf '%s bytes: %s\n' "$size" \
+    "$(tar -xzOf "$1" "$2" | head -c 200 | LC_ALL=C tr -s '\n\r\t' ' ' | LC_ALL=C tr -c '[:print:]' '?')"
+}
+
+# download_charts LIST...: one line for each chart of a Helm registry with a file in the lists LIST.
+# A chart has one top folder and no pack.json, and the line version of its Chart.yaml names the
+# version of its entry. For a file that is no archive, the line gives its size and its start (#828).
+# The download of LIST is the file NAME.tgz beside NAME.list.json. Exit 1 when a file is not such
+# a chart, and when no list names a chart with a file
 download_charts() {
-  local list file folder name path version files top charts=0
+  local list file folder name path version files top charts=0 faults=0
   for list in "$@"; do
     file=${list%.list.json}.tgz
     folder=$(dirname "$(cat "$list.path")")
     while IFS=$'\t' read -r name path version; do
-      files=$(archive_files "$file" "$folder/$path") || { echo "$name: no archive" >&2; return 1; }
-      top=$(archive_tops "$file" "$folder/$path")
-      [ "$(printf '%s\n' "$top" | grep -c .)" = 1 ] || { echo "$name: no one top folder" >&2; return 1; }
-      if printf '%s\n' "$files" | grep -qx "$top/pack.json"; then
-        echo "$name: the chart holds pack.json" >&2
-        return 1
-      fi
-      [ "$(tar -xzOf "$file" "$folder/$path" | tar -xzO "$top/Chart.yaml" \
-        | sed -n 's/^version:[[:space:]]*//p' | tr -d "\"'\r")" = "$version" ] \
-        || { echo "$name: Chart.yaml does not name $version" >&2; return 1; }
-      echo "$name $version: $top/Chart.yaml"
       charts=$((charts + 1))
+      if ! files=$(archive_files "$file" "$folder/$path" 2> /dev/null); then
+        echo "$name $version: no archive: $(file_start "$file" "$folder/$path")"
+        faults=1
+        continue
+      fi
+      top=$(archive_tops "$file" "$folder/$path")
+      if [ "$(printf '%s\n' "$top" | grep -c .)" != 1 ]; then
+        echo "$name $version: no one top folder"
+        faults=1
+      elif printf '%s\n' "$files" | grep -qx "$top/pack.json"; then
+        echo "$name $version: the chart holds pack.json"
+        faults=1
+      elif [ "$(tar -xzOf "$file" "$folder/$path" | tar -xzO "$top/Chart.yaml" \
+        | sed -n 's/^version:[[:space:]]*//p' | tr -d "\"'\r")" != "$version" ]; then
+        echo "$name $version: Chart.yaml does not name $version"
+        faults=1
+      else
+        echo "$name $version: $top/Chart.yaml"
+      fi
     done < <(jq -r '.packs[] | select(.type == "helm" and .filePath != "") | [.name, .filePath, .version] | @tsv' "$list")
   done
-  [ "$charts" -gt 0 ] || { echo "no list names a chart of a Helm registry with an archive" >&2; return 1; }
+  [ "$charts" -gt 0 ] || { echo "no list names a chart of a Helm registry with a file" >&2; return 1; }
+  return "$faults"
+}
+
+# chart_reasons RECORD...: what same-release --allow renumber gives for each chart of a Helm
+# registry in each RECORD that holds one (#828). The copy NAME.renumber.json of RECORD names each
+# chart at another version and with other hashes, so each chart is a renumber. The download of the
+# version names no chart at the other version, so strata reads the file of the chart of RECORD
+# alone. One line for each RECORD: the record, and archivesNotReadable and archivesNotCompared of
+# the pair. Exit 1 when a pair does not pass, and when no record holds a chart
+chart_reasons() {
+  local record copy found=0 faults=0
+  for record in "$@"; do
+    jq -e 'any(.packs[]; .type == "helm")' "$record" > /dev/null || continue
+    found=1
+    copy=${record%.version.json}.renumber.json
+    jq '(.packs[] | select(.type == "helm")) |= (.version += "-renumber" | .hash.identity = "renumber"
+      | .hash.upstream = "renumber" | .hash.node = "renumber") | .root = "renumber"' "$record" > "$copy" \
+      || return 2
+    sleep 11
+    "$strata" same-release --allow renumber "$record" "$copy" --json > "$copy.chain" || faults=1
+    printf '%s\t%s\n' "$record" \
+      "$(jq -c '.pairs[0] | {archivesNotReadable, archivesNotCompared}' "$copy.chain")"
+  done
+  [ "$found" = 1 ] || { echo "no record holds a chart of a Helm registry" >&2; return 1; }
+  return "$faults"
 }
 
 # the record of each version gives its uid, and the root that the export must give
@@ -234,10 +278,15 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
   # check records the entries and does not judge them
   check download-no-archive '?' '#751: the entry of each pack with no archive: its name, its type, and isRegistryPrivate' -- \
     bash -c 'for f in "$@"; do jq -r --arg f "$f" ".packs[] | select(.filePath == \"\" and (.manifestName // \"\") == \"\") | [\$f, .name, .type, .isRegistryPrivate] | @tsv" "$f"; done' _ ./*.list.json
-  # Palette puts the chart of a Helm registry that is not private in the file as the registry
-  # serves it. same-release does not compare the line version of its Chart.yaml (#817)
-  check download-chart 0 '#817: each chart of a Helm registry has one top folder and no pack.json, and its Chart.yaml names the version of its entry' -- \
+  # Palette puts the chart of a Helm registry that is not private in the file as the host of the
+  # chart serves it, also an error answer of the host. same-release does not compare the line
+  # version of its Chart.yaml (#817). The check records what Palette gives (#828)
+  check download-chart '?' '#817, #828: each chart of a Helm registry: its top folder and its Chart.yaml, or the size and the start of a file that is no archive' -- \
     download_charts ./*.list.json
+  # the reason that strata gives for each chart whose file is no archive (#828). The check reads
+  # one more download of each version that holds a chart
+  check download-chart-reason '?' '#828: same-release --allow renumber names each chart whose file is no archive, with its reason' -- \
+    chart_reasons ./*.version.json
   ref=${profiles%% *}
   name=${ref%@*}
   uid=$(jq -r .source.uid "$name.version.json")

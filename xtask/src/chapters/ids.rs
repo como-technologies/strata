@@ -120,6 +120,10 @@ pub(super) const DEVELOP_SHORT: &str = "64e000000000000000000111";
 pub(super) const A120_RC: &str = "64e000000000000000000112";
 pub(super) const A130_PROD: &str = "64e100000000000000000110";
 pub(super) const A200_TENANT: &str = "64e400000000000000000111";
+// web-addons@1.0.0 and web-addons@1.0.1 of the chapter renumber (#828): each pins the chart nginx
+// of the registry Bitnami, at 25.1.5 and at 25.1.6. The host of the charts refuses each file
+pub(super) const WEB_ADDONS_OLD: &str = "64e000000000000000000114";
+pub(super) const WEB_ADDONS_NEW: &str = "64e000000000000000000115";
 // aws-stack@1.2.2 of the use case of a renumber: the final build of the CSI pack has another default
 // value, and the profile gives the pin the same values
 pub(super) const RENUMBER_REBUILT: &str = "64e000000000000000000113";

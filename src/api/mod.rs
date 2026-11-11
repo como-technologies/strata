@@ -31,7 +31,7 @@ use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
-pub use download::{DownloadedPack, PackArchive, ProfileDownload};
+pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{

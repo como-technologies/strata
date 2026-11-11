@@ -13238,17 +13238,18 @@ fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git
 
 /// A stage of `export.sh` 4 for the version `aws-stack@1.2.0`, whose download holds `packs`. The
 /// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, and a manifest
-/// pack.
+/// pack. It also names the chart `nginx` of a Helm registry at `15.0.0`.
 fn download_stage(packs: &[DownloadPack]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILES", "aws-stack@1.2.0");
     stage.strata(
         "snapshot aws-stack@1.2.0 -q -o aws-stack.version.json",
         0,
-        r#"{"source":{"uid":"u-1"},"packs":[
-            {"name":"kubernetes","type":"spectro","version":"1.36.2"},
+        r#"{"source":{"uid":"u-1"},"root":"sha256:r1","packs":[
+            {"name":"kubernetes","type":"spectro","version":"1.36.2","hash":{"node":"n1"}},
             {"name":"csi-aws-ebs","type":"spectro","version":"1.65.0"},
-            {"name":"platform-rules","type":"manifest","version":"1.0.0"}]}"#,
+            {"name":"platform-rules","type":"manifest","version":"1.0.0"},
+            {"name":"nginx","type":"helm","version":"15.0.0","hash":{"identity":"i4","upstream":"u4","node":"n4"}}]}"#,
     );
     let file = profile_download("u-1", "aws-stack", packs);
     stage.route_file(&download_route("u-1"), &file, FILE_FOR_JSON);
@@ -13296,19 +13297,30 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
     ]
 }
 
-/// Stage 4 reads the chart of a Helm registry (#817). The archive has one top folder and no
-/// `pack.json`, and its `Chart.yaml` names the version of its entry. A chart that names another
-/// version, a chart with `pack.json`, and a download with no chart fail the check.
+/// The line of the check `id` in `steps` records the exit `code`: the check judges nothing.
+fn seen_with(steps: &str, id: &str, code: i32) {
+    let line = step_line(steps, id);
+    assert!(
+        line.starts_with("SEEN ") && line.ends_with(&format!("got {code}")),
+        "{id}: {steps}"
+    );
+}
+
+/// Stage 4 records the file of each chart of a Helm registry (#817, #828). A chart has one top
+/// folder and no `pack.json`, and its `Chart.yaml` names the version of its entry. A file that is
+/// no archive gets its size and its start on one line, such as the error answer of the host. The
+/// check exits 1 for a chart that names another version, and for a chart with `pack.json`. It
+/// also exits 1 for a file that is no archive, and for a download with no chart.
 #[test]
-fn export_sh_stage_4_reads_the_chart_of_a_helm_registry_by_the_version_in_its_chart_yaml() {
+fn export_sh_stage_4_records_the_file_of_each_chart_of_a_helm_registry() {
     let stage = download_stage(&downloaded("1.36.2"));
     let (_, steps) = stage.run("export.sh", &["4"]);
-    passed(&steps, &["download-chart"]);
+    seen_with(&steps, "download-chart", 0);
     let out = std::fs::read_to_string(stage.path("out/download-chart.out")).unwrap();
     assert_eq!(out, "nginx 15.0.0: nginx/Chart.yaml\n");
-    let chart = |files: &[(&str, &str)]| {
+    let chart = |file: Vec<u8>| {
         let mut packs = downloaded("1.36.2");
-        packs[3].archive = Some(chart_archive("nginx", files));
+        packs[3].archive = Some(file);
         packs
     };
     let (named, other) = (
@@ -13317,15 +13329,72 @@ fn export_sh_stage_4_reads_the_chart_of_a_helm_registry_by_the_version_in_its_ch
     );
     let mut private = downloaded("1.36.2");
     (private[3].archive, private[3].private) = (None, true);
-    for packs in [
-        chart(&[("Chart.yaml", &other)]),
-        chart(&[("Chart.yaml", &named), ("pack.json", "{}")]),
-        private,
+    let start = CHART_HOST_REFUSAL[..200].replace('\n', " ");
+    for (packs, recorded) in [
+        (
+            chart(chart_archive("nginx", &[("Chart.yaml", &other)])),
+            "nginx 15.0.0: Chart.yaml does not name 15.0.0\n".to_string(),
+        ),
+        (
+            chart(chart_archive(
+                "nginx",
+                &[("Chart.yaml", &named), ("pack.json", "{}")],
+            )),
+            "nginx 15.0.0: the chart holds pack.json\n".to_string(),
+        ),
+        (
+            chart(CHART_HOST_REFUSAL.as_bytes().to_vec()),
+            format!("nginx 15.0.0: no archive: 263 bytes: {start}\n"),
+        ),
+        (private, String::new()),
     ] {
-        let (_, steps) = download_stage(&packs).run("export.sh", &["4"]);
+        let stage = download_stage(&packs);
+        let (_, steps) = stage.run("export.sh", &["4"]);
         passed(&steps, &["download-archive-aws-stack"]);
-        failed(&steps, &["download-chart"]);
+        seen_with(&steps, "download-chart", 1);
+        let out = std::fs::read_to_string(stage.path("out/download-chart.out")).unwrap();
+        assert_eq!(out, recorded);
     }
+}
+
+/// Stage 4 records the reason that strata gives for each chart whose file is no archive (#828).
+/// The check copies the record with each chart at another version and with other hashes. Then it
+/// runs `same-release --allow renumber` on the two, so strata reads the file of the chart. It
+/// records `archivesNotReadable` and `archivesNotCompared`, and exits 1 when the pair does not pass.
+#[test]
+fn export_sh_stage_4_records_the_reason_that_strata_gives_for_a_chart_whose_file_is_no_archive() {
+    let mut packs = downloaded("1.36.2");
+    packs[3].archive = Some(CHART_HOST_REFUSAL.as_bytes().to_vec());
+    let mut stage = download_stage(&packs);
+    let reason = r#"{"key":"addon/nginx","version":"15.0.0","reason":"263 bytes of text: <?xml"}"#;
+    stage.strata(
+        "same-release --allow renumber ./aws-stack.version.json ./aws-stack.renumber.json --json",
+        1,
+        &format!(r#"{{"pairs":[{{"status":"different","archivesNotReadable":[{reason}]}}]}}"#),
+    );
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    seen_with(&steps, "download-chart-reason", 1);
+    let out = std::fs::read_to_string(stage.path("out/download-chart-reason.out")).unwrap();
+    assert_eq!(
+        out,
+        format!(
+            "./aws-stack.version.json\t{{\"archivesNotReadable\":[{reason}],\"archivesNotCompared\":null}}\n"
+        )
+    );
+    // the copy names the chart at another version, with other hashes and another root. The other
+    // packs stay as they are
+    let copy: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(stage.path("out/aws-stack.renumber.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(copy["root"], "renumber");
+    assert_eq!(copy["packs"][3]["version"], "15.0.0-renumber");
+    for hash in ["identity", "upstream", "node"] {
+        assert_eq!(copy["packs"][3]["hash"][hash], "renumber", "{hash}");
+    }
+    assert_eq!(copy["packs"][0]["version"], "1.36.2");
+    assert_eq!(copy["packs"][0]["hash"]["node"], "n1");
 }
 
 /// Stage 4 reads the layout of the download of each version, and the archive of each pack. A

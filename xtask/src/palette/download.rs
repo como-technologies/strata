@@ -10,7 +10,9 @@
 //!
 //! A pack of a Helm registry is the chart as the registry serves it, with no `pack.json`. Its
 //! `Chart.yaml` holds the name and the version of the pin, and `values.yaml` follows it. So two
-//! builds of one chart differ only by the line `version` of `Chart.yaml`.
+//! builds of one chart differ only by the line `version` of `Chart.yaml`. The host of the charts of
+//! the registry Bitnami refuses the file of each chart. Palette puts the answer of the host in the
+//! download in place of the chart, with the name of the chart, and answers HTTP 200.
 //!
 //! The download holds no archive of a pack of a private pack registry or Helm registry, or of a
 //! manifest pack. It holds none of a pack of an OCI registry of Helm charts or of Zarf packages.
@@ -32,14 +34,15 @@ use strata::model::oci_provider::OciProvider;
 use strata::model::pack_type::PackType;
 
 use super::{Request, file_for};
-use crate::tenant::{REGISTRY_LISTING, downloaded_profile, manifests_route, pack_listing};
+use crate::tenant::{BITNAMI, REGISTRY_LISTING, downloaded_profile, manifests_route, pack_listing};
 
 #[allow(dead_code)]
 #[path = "../../../tests/common/download.rs"]
 mod written;
 
 use written::{
-    DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download,
+    CHART_HOST_REFUSAL, DownloadPack, archive_top, chart_archive, chart_file, pack_archive,
+    profile_download,
 };
 
 /// The media type of the file of a download. The stand-in models Palette, and not the client that it
@@ -146,6 +149,11 @@ impl Built {
                 .find(|item| item["metadata"]["uid"] == pin["packUid"])
                 .and_then(|item| item["spec"]["values"].as_str());
             let files: Vec<(&str, &str)> = values.map(|v| ("values.yaml", v)).into_iter().collect();
+            // Palette does not check the answer of the host of a chart, so an error answer goes
+            // in the download as the file of the chart
+            if kind == PackType::Helm && pin["registryUid"] == BITNAMI {
+                return CHART_HOST_REFUSAL.as_bytes().to_vec();
+            }
             if kind == PackType::Helm {
                 let chart = chart_file(&name, &version, None);
                 let files: Vec<(&str, &str)> = [("Chart.yaml", chart.as_str())]
@@ -202,7 +210,7 @@ mod tests {
     use std::fs;
 
     use serde_json::json;
-    use strata::api::{MemoryApi, Palette};
+    use strata::api::{MemoryApi, PackFile, Palette};
 
     use super::*;
     use crate::palette::served;
@@ -245,10 +253,11 @@ mod tests {
 
     /// The stand-in serves a gzip tar at the route, and strata reads it. The pack of the Public
     /// Repo has its archive, with the default values of its listing. The chart of a Helm registry
-    /// has `Chart.yaml` and no `pack.json`, under the top folder `nginx`. The pack of a private
-    /// registry and the manifest pack have none. The pack of a private OCI registry of packs has
-    /// an archive, whose top folder has the name and the version of the pack. A request that
-    /// accepts JSON alone gets `{"Reader":{}}`, and not the file.
+    /// has `Chart.yaml` and no `pack.json`, under the top folder `nginx`. A chart of Bitnami is the
+    /// answer of its host, which strata cannot read. The pack of a private registry and the
+    /// manifest pack have none. The pack of a private OCI registry of packs has an archive, whose
+    /// top folder has the name and the version of the pack. A request that accepts JSON alone gets
+    /// `{"Reader":{}}`, and not the file.
     #[test]
     fn the_download_route_serves_a_file_that_strata_reads() {
         let temp = tempfile::tempdir().unwrap();
@@ -270,7 +279,8 @@ mod tests {
                     pin("private-pack", "spectro", "reg-private", "pk-2"),
                     pin("rules", "manifest", "", "pk-3"),
                     pin("argocd", "oci", "reg-private", "pk-4"),
-                    pin("nginx", "helm", "reg-public", "pk-5")]}}}),
+                    pin("nginx", "helm", "reg-public", "pk-5"),
+                    pin("redis", "helm", BITNAMI, "pk-6")]}}}),
         );
         write(
             "v1/clusterprofiles/u1/packs/manifests",
@@ -280,7 +290,8 @@ mod tests {
         write(
             REGISTRY_LISTING,
             json!({"items": [{"uid": "reg-public", "isPrivate": false},
-                {"uid": "reg-private", "isPrivate": true}]}),
+                {"uid": "reg-private", "isPrivate": true},
+                {"uid": BITNAMI, "isPrivate": false}]}),
         );
         write(
             &pack_listing("kubernetes"),
@@ -294,14 +305,20 @@ mod tests {
         let k8s = download.pack("kubernetes").unwrap();
         assert_eq!(k8s.version, "1.36.2");
         let paths = |name: &str| -> Vec<String> {
-            let archive = download.pack(name).unwrap().archive.as_ref().unwrap();
+            let archive = download.pack(name).unwrap().archive().unwrap();
             archive.files().map(|(path, _)| path.to_string()).collect()
         };
         assert_eq!(paths("kubernetes"), ["pack.json", "values.yaml"]);
         assert_eq!(paths("nginx"), ["Chart.yaml"]);
-        assert_eq!(download.pack("private-pack").unwrap().archive, None);
+        // the host of the charts of Bitnami refuses the file, and Palette puts its answer in the
+        // download in place of the chart
+        let PackFile::NotReadable(reason) = &download.pack("redis").unwrap().file else {
+            panic!("{download:?}");
+        };
+        assert!(reason.starts_with("263 bytes of text: <?xml"), "{reason}");
+        assert_eq!(download.pack("private-pack").unwrap().archive(), None);
         assert!(download.pack("rules").is_none());
-        assert!(download.pack("argocd").unwrap().archive.is_some());
+        assert!(download.pack("argocd").unwrap().archive().is_some());
         assert_eq!(
             tops(&file, "u1/profiles/u1/packs/argocd/argocd-1.36.2.tar.gz"),
             ["argocd-1.36.2"]

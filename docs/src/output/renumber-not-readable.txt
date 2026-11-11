@@ -1,0 +1,6 @@
+$ strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1
+DIFFERENT      web-addons@1.0.0 -> web-addons@1.0.1   root 5ff3ae43359b -> b6cf4b4ff05e
+               nginx  25.1.5 -> 25.1.6 (archive: not readable)
+               pack addon/nginx 25.1.5 archive: not readable: 263 bytes of text: <?xml version="1.0" encoding="UTF-8"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…
+               pack addon/nginx 25.1.6 archive: not readable: 263 bytes of text: <?xml version="1.0" encoding="UTF-8"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…
+NOT THE SAME RELEASE: 1 of 1 pair failed
