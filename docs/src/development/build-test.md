@@ -649,10 +649,6 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-The checks do not run `just adapter-test`. The adapter needs knurl, a private
-repository. A job of knurl runs the recipe each day on the strata of `main`: see
-[The job of knurl](../automation/knurl.md#the-job-of-knurl).
-
 `ci` adds three jobs of its own. `deny list` scans each tracked file and its
 path for the names that the public tree must not hold: see
 [The deny list](#the-deny-list). `Gate` needs the checks and `deny list`, and
@@ -661,6 +657,13 @@ does no other work. It is the one check run that the verify reads: see
 same two jobs and runs only on `main`, so the site is a build that every check
 passed. The `docs` job builds the book once and passes it to the publish job, so
 no job builds it twice.
+
+No job that `Gate` needs runs `just adapter-test`, and no recipe of such a job
+runs it. `tests/workflows.rs` reads the `just` steps of each such job and of
+each workflow that it calls. It does not read the steps of an action in
+`.github/actions/`. The adapter needs knurl, a private repository. A job of
+knurl runs the recipe each day on the strata of `main`: see
+[The job of knurl](../automation/knurl.md#the-job-of-knurl).
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
