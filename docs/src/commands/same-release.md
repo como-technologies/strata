@@ -119,12 +119,17 @@ names that is not Semantic Versioning passes too, such as `1.2.0-build5` to
 The `pack.json` of a new build holds the new version, so the build has a new
 digest. The digest alone cannot show that only `pack.json` changed. So strata
 reads the archive of each such pack from Palette, and compares the files of
-the two archives. It does not compare `version` in `pack.json`. The line of
-each renumber gives what strata found:
+the two archives. It does not compare `version` in `pack.json`.
+
+A chart of a Helm registry has no `pack.json`, and its `Chart.yaml` names the
+version. So strata does not compare the line `version` of `Chart.yaml`. It
+compares each other line of the file, also `appVersion`, the version of the
+app, and the version of a dependency. The line of each renumber gives what
+strata found:
 
 | Fact | What strata found |
 | --- | --- |
-| `archive: same files` | The two archives hold the same files, and `pack.json` differs only by its `version`. `pairs[].archivesCompared` names the pack. |
+| `archive: same files` | The two archives hold the same files. `pack.json` differs only by its `version`, or `Chart.yaml` only by its line `version`. `pairs[].archivesCompared` names the pack. |
 | `archive: other files` | Another file differs. The pair fails, and a reason names the file. `pairs[].archivesChanged` names the pack and each file. |
 | `archive: not compared` | Palette serves no archive of the pack, or a record is not a published version. `pairs[].archivesNotCompared` names the pack. |
 

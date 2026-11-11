@@ -33,6 +33,22 @@ fn values_file(p: &Pack) -> Option<Vec<(&'static str, String)>> {
     Some(vec![("values.yaml", p.values.clone())])
 }
 
+/// The files of the build of the pack `p`. The CSI pack is a chart of a Helm registry: its
+/// `Chart.yaml` names the version of the app `app`, and the files `more` follow its values.
+fn chart_build(
+    p: &Pack,
+    app: &str,
+    more: &[(&'static str, &str)],
+) -> Option<Vec<(&'static str, String)>> {
+    let mut files = values_file(p)?;
+    if p.name == "csi-aws-ebs" {
+        let chart = common::chart_file(&p.name, &p.version, Some(app));
+        files.push(("Chart.yaml", chart));
+        files.extend(more.iter().map(|(path, text)| (*path, text.to_string())));
+    }
+    Some(files)
+}
+
 /// The chain of `--allow renumber` of `records`, with a Palette that serves the download of each
 /// record. The archive of each pack holds `pack.json` and the files that `files` gives.
 fn renumber_chain(records: &[(String, Snapshot)], files: &common::BuildFiles) -> Chain {
@@ -642,6 +658,72 @@ fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_t
         c.pairs[0].reasons,
         ["pack k8s/kubernetes archive: values.yaml differs"]
     );
+}
+
+/// The criterion of #817: Palette serves the chart of a public Helm registry with no `pack.json`,
+/// and its `Chart.yaml` names the version. A renumber whose two charts differ only in the line
+/// `version` of `Chart.yaml` passes. A pair whose charts differ in another line of `Chart.yaml`,
+/// or in another file, fails, and a reason names the file.
+#[test]
+fn allow_renumber_passes_a_helm_chart_whose_archives_differ_only_in_the_version_of_chart_yaml() {
+    let dir = fixtures();
+    let helm = |profile: &mut Value, _: &mut Value| {
+        for p in pack_refs(profile, "csi-aws-ebs") {
+            p["type"] = json!(PackType::Helm);
+        }
+    };
+    let records = pair(
+        release(
+            dir.path(),
+            UID_OLD,
+            "1.4.0-rc.1",
+            &[("csi-aws-ebs", "1.28.0-rc.1")],
+            &helm,
+        ),
+        release(
+            dir.path(),
+            UID_NEW,
+            "1.4.0",
+            &[("csi-aws-ebs", "1.28.0")],
+            &helm,
+        ),
+    );
+    // each build of the chart installs the app 1.28.0
+    let same = |p: &Pack| chart_build(p, "1.28.0", &[]);
+    let c = renumber_chain(&records, &same);
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Renumber, "{:?}", p.reasons);
+    assert_eq!(p.archives_compared, ["csi/csi-aws-ebs"]);
+    let text = common::terminal().render_chain(&c).unwrap();
+    let line = "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: same files)";
+    assert!(text.lines().any(|l| l == line), "{line:?} in\n{text}");
+    // the version of the app is another line of Chart.yaml, and a template is another file
+    let app = |p: &Pack| chart_build(p, &p.version, &[]);
+    let template = |p: &Pack| {
+        let more: &[(&'static str, &str)] = match p.version.as_str() {
+            "1.28.0" => &[("templates/node.yaml", "kind: DaemonSet\n")],
+            _ => &[],
+        };
+        chart_build(p, "1.28.0", more)
+    };
+    let changes: [(&common::BuildFiles, &str); 2] =
+        [(&app, "Chart.yaml"), (&template, "templates/node.yaml")];
+    for (files, file) in changes {
+        let c = renumber_chain(&records, files);
+        let p = &c.pairs[0];
+        assert_eq!(p.status, PairStatus::Different, "{file}");
+        assert_eq!(
+            p.reasons,
+            [format!("pack csi/csi-aws-ebs archive: {file} differs")]
+        );
+        assert_eq!(
+            p.archives_changed,
+            [ArchiveChange {
+                key: "csi/csi-aws-ebs".to_string(),
+                files: vec![file.to_string()],
+            }]
+        );
+    }
 }
 
 /// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of

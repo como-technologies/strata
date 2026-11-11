@@ -84,7 +84,7 @@ pub(crate) fn pair_detail(p: &Pair) -> String {
 }
 
 /// The fact of a renumber whose two archives hold the same files, but for the version in
-/// `pack.json`.
+/// `pack.json` or in `Chart.yaml`.
 const ARCHIVE_SAME: &str = "archive: same files";
 
 /// The fact of a renumber whose two archives differ in another file. A reason names the file.

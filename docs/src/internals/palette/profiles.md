@@ -154,6 +154,11 @@ Each path of the file starts with the uid of the version:
   packs, the folder has the name and the version of the pack. The archive
   holds `pack.json`, `values.yaml`, and the other files of the build.
   `pack.json` names the version of the build.
+- A pack of a Helm registry that is not private is a chart. Its archive is the
+  file that the registry serves, `<name>-<version>.tgz`. The top folder has the
+  name of the chart. The archive holds `Chart.yaml` and the other files of the
+  chart, and no `pack.json`. The line `version` of `Chart.yaml` names the
+  version of the chart.
 - `spc.json` and the manifests hold the content with the value of each macro.
   Strata reads the two lists and the archives of the packs, and no other file.
 

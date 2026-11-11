@@ -1110,8 +1110,9 @@ states what stage 4 checks.
 | `export-limit` | ? | #156: three exports at once. In two of four runs, Palette refused one or more with HTTP 429, `TooManyRequests`, "only 1 request in 10 seconds is allowed". In the other two, it refused none |
 | `download-<name>` | 0 | #751: `GET /v1/clusterprofiles/{uid}/spc/download` gives the file of the version to a request that accepts a file. |
 | `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. |
-| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. |
+| `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. The check does not read a chart of a Helm registry: `download-chart` reads it. |
 | `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. The check records the entries, and judges none. |
+| `download-chart` | 0 | #817: each chart of a Helm registry with an archive in a list is the file of the registry. It has one top folder and no `pack.json`, and the line `version` of its `Chart.yaml` names the version of its entry. The check fails when no list holds such a chart. The registries version pins a chart of a registry that serves charts without credentials. No result yet: no live window ran the check. |
 | `download-accepts-json`, `download-accepts-json-no-file` | 0 | #751: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file, as for the export. |
 | `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. In one run, Palette refused none (recorded 0). |
 
