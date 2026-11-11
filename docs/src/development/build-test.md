@@ -142,7 +142,7 @@ table gives the files.
 | `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its public macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. `strata-preflight` uses the macro and the legend for its own sets. |
 | `src/closed_set/unknown.rs`, `src/closed_set/unknown/` | `unknown.rs` holds what strata does with a value that a set does not name: the watch, the note, and the line of the log. `unknown/sighting.rs` holds the facts that a line and an entry both state, and the checks of them. `unknown/log.rs` holds the line and the read of the log. `unknown/report.rs` holds the report and its check, `unknown/hint.rs` the hint, and `unknown/send.rs` the send. |
 | `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `unified.rs` holds the unified text of the values and of the manifests, which `--full` prints and the field `unified` carries. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
-| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` prints the unified diffs of `--full` in the terminal and in markdown. |
+| `src/render/` | The output: `terminal/`, `markdown.rs` with `markdown/behind.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal, and `terminal/behind.rs` paints the report of `behind`. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` prints the unified diffs of `--full` in the terminal and in markdown. |
 | `src/candidate/` | The candidate file. `mod.rs` holds the format, `rules.rs` the check of the file, and `resolve.rs` the resolve of each layer. `pack.rs` finds the versions of a pack in the registries, and `presets.rs` holds the options of a pack template. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, flags, values, the items of a listing, and the first text that is not empty. Each module reads a document with them. The helpers that `crates/strata-preflight/` and `crates/strata-knurl/` use are public, so that those packages write no read of their own. |
 | `src/file.rs` | The read and the write of a file, with the path in each error. Each layer reads and writes its files with them. |
@@ -185,12 +185,18 @@ A new read of Palette goes in `api/palette/`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot/`, outside the root unless it
 is content: see [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
+A new command that reads Palette takes `--project` and `--project-name`. Add it
+to `READS_PALETTE` in the unit tests of `src/cli/args.rs`, and to `commands` in
+`tests/projects.rs`. Add a command that reads no Palette to `READS_NO_PALETTE`
+in the two files. The tests of each file fail on a command that its two lists
+do not name.
+
 ## Where a script goes
 
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `deny-list.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `crates/strata-knurl/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
@@ -649,16 +655,23 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-CI does not run `just adapter-test`. The adapter needs knurl, a private
-repository, and CI has no key for it: see
-[The knurl adapter](../automation/knurl.md#test-it).
+`ci` adds three jobs of its own. `deny list` scans each tracked file and its
+path for the names that the public tree must not hold: see
+[The deny list](#the-deny-list). `Gate` needs the checks and `deny list`, and
+does no other work. It is the one check run that the verify reads: see
+[How a change lands](./changes.md#the-verify). `publish the book` needs the
+same two jobs and runs only on `main`, so the site is a build that every check
+passed. The `docs` job builds the book once and passes it to the publish job, so
+no job builds it twice.
 
-`ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
-it is the one check run that the verify reads (see
-[How a change lands](./changes.md#the-verify)). `publish the book` needs the
-checks and runs only on `main`, so the site is a build that every check passed.
-The `docs` job builds the book once and passes it to the publish job, so no job
-builds it twice.
+No job that `Gate` needs runs `just adapter-test`, and no recipe of such a job
+runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
+workflow that it calls, and of each action of `.github/actions/` that it uses.
+The test gives each input of an action the value of the `with` of the step, or
+else the default of the input. No workflow and no action names the recipe or
+the package of the adapter. The adapter needs knurl, a private repository. No
+job of CI builds or tests the adapter: see
+[The knurl adapter](../automation/knurl.md#test-it).
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
@@ -697,6 +710,123 @@ git worktree remove --force "$d"   # also removes the target directory of the wo
 ```
 
 When the shared `target/` already holds such a build, `cargo clean` removes it.
+
+### The deny list
+
+The repository is public, so a name in a tracked file, in its path, or in the
+target of a tracked symlink is public. The job `deny list` of the `ci` workflow
+scans the text and the path of each tracked file for each entry of a deny list.
+It also scans the target of each tracked symlink. The list holds the names that
+the tree must not hold. The notes of the lead give its classes. The job runs on
+each push to `main` and on each pull request.
+
+The list is the secret `STEP14_DENY` of the repository, with one entry on each
+line. It is not a file of the tree, because a public file names what it denies.
+The owner of the repository sets the secret. Write no entry in a file, a commit,
+an issue, a pull request, or a thread.
+
+The step gives the secret to `just deny-list` in a variable of the same name.
+The recipe runs `scripts/dev/deny-list.sh`. The script:
+
+- stops the trace of the shell, because a trace prints the value of a variable;
+- writes the list to a file under `$RUNNER_TEMP`, and removes the file at the
+  end;
+- removes each empty line, because an empty pattern matches each line;
+- removes the spaces at the two ends of an entry, also a carriage return;
+- matches each entry as a fixed string, with no difference of case, in the text
+  and in the path of each tracked file;
+- reads the target of each tracked symlink, which `git grep` does not read, and
+  matches it with the same rules;
+- counts a symlink whose target holds an entry as a path that holds one;
+- prints the number of tracked files that it scans;
+- prints the path and the line number of each hit in a text, or the path alone
+  for a hit in a binary file;
+- prints the number of tracked paths that hold an entry, and no such path or
+  target.
+
+A path that holds an entry is a hit, and the log must not show it. For a hit in
+the text of such a file, the script prints `<a path that holds an entry>` in
+place of the path. These lines follow the other hits, so their place does not
+show the start of the path. The script never prints an entry or the text of a
+line. It does not read the commit messages or the body of a pull request.
+
+| The list and the tree | The job |
+| --- | --- |
+| An entry in the text of a tracked file | Fails. |
+| An entry in a tracked path | Fails, and gives the number of such paths. |
+| An entry in the target of a symlink | Fails, as for an entry in a path. |
+| No entry in a file, a path, or a target | Passes. |
+| A list with no entry | Gives a notice that it did not scan, and passes. |
+
+When the job fails, GitHub skips `Gate`, so the verify of a pull request cannot
+pass. On `main`, `publish the book` does not run.
+
+The list has no entry before the owner sets the secret. It also has no entry on
+a pull request from a fork, because GitHub gives no secret to that run. A person
+who holds the list can run the same scan before a push:
+
+```bash
+STEP14_DENY="$(cat <file of the list>)" just deny-list
+```
+
+The log does not show a path that holds an entry. A person who holds the list
+finds each such path with the same match:
+
+```bash
+git ls-files -z | grep --null-data -F -i -f <file of the list> | tr '\0' '\n'
+```
+
+That match does not read the target of a symlink. This loop finds each tracked
+symlink whose target holds an entry. Without `-z`, Git puts quotes around a path
+with unusual characters, so the loop reads the index with `-z`, as the script
+does:
+
+```bash
+git ls-files -s -z | while IFS= read -r -d '' entry; do
+  # An entry is "<mode> <object> <stage>", a tab, and the path.
+  read -r mode object _ <<< "${entry%%$'\t'*}"
+  [ "$mode" = 120000 ] || continue  # 120000 is the mode of a symlink
+  if git cat-file blob "$object" | grep -q -F -i -f <file of the list>; then
+    printf '%s\n' "${entry#*$'\t'}"
+  fi
+done
+```
+
+Replace each hit with a made-up name, in the text, the path, or the target of a
+symlink. See
+[The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
+the branch made the name public, so also tell the lead.
+
+### Dependency updates
+
+`.github/dependabot.yml` asks Dependabot for pull requests of version updates
+each Monday. Each package ecosystem gets one pull request for its minor and
+patch updates, and one pull request for each major update.
+
+| Ecosystem | Folders |
+| --- | --- |
+| Cargo | the workspace at the root, `examples/library`, and `examples/library-preflight` |
+| Go | `observer` and `examples/live/count-requests` |
+| GitHub Actions | the workflows, and each action of `.github/actions/` |
+| Docker | `deploy/observer` and `deploy/report` |
+
+Dependabot reads no other package:
+
+- `crates/strata-knurl` needs knurl, a private repository.
+- `examples/live/terraform` pins the provider of Spectro Cloud. A new provider
+  needs a live run, and the contract run watches its releases.
+- `deploy/session` is the image of the riff sessions, and it follows riff.
+
+Two pins stay. The test of the order of versions compares strata with the crate
+`versions` at one exact release. A new minor release of `bolero` needs the same
+`CARGO_BOLERO_VERSION` in `.github/workflows/fuzz.yml`, so Dependabot proposes
+only its patch releases.
+
+The security updates of Dependabot are on in the settings of the repository, so
+an alert can also open a pull request. Each pull request of Dependabot goes to
+the milestone Backlog, so no wave counts it. riff does not take it, so it gets
+no `riff/verify`, which the ruleset of `main` needs. A maintainer merges it when
+its checks pass.
 
 ## A change to how strata reads Palette
 

@@ -108,16 +108,34 @@ where each module goes. The Go code of the observer follows
   `version::numbers`, and `version::is_pre_release`. `xtask/` and
   `strata-preflight` use them too. Do not write a second parse.
 - A string that does not parse reads as its first three numbers, as Palette
-  reads it. `version::has_three_numbers` finds them. The natural order of the
-  text is only the fallback for a string with no three numbers, such as
-  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
-  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
-- One order of a version lives outside strata: `oldest_first` in
-  `examples/fetch-examples.sh`. The script runs offline, so it cannot ask
-  strata. It keeps only a version of plain numbers and orders it by the
-  numbers. The test `the_examples_fetch_orders_plain_versions_as_strata_does`
-  fails when this order differs from `version::compare`. Add no other
-  exception.
+  reads it. `version::has_three_numbers` finds them. Where Palette gives no
+  order or reads no version, `version::compare` follows the order of the crate
+  `versions` 8.0.1. A string with no number at its start and no three numbers,
+  such as `LTS__24.x`, is below each version. The natural order of the text
+  orders such strings.
+- `tests/version_order.rs` compares the order with the crate, row by row. A row
+  where strata keeps a rule of Palette names the rule. Add a row for each new
+  form. The crate is a dev-dependency only, and its version is pinned.
+- The same file also makes a probe of strings with each form, and compares the
+  two orders on each pair. Each difference needs a rule that names it, and the
+  test holds the count of differences for each rule. Add each new form to the
+  probe.
+- No script uses `sort -V` for a version. A script reads the direction of a
+  move from strata, such as `versionMove` in `strata-diff/1`.
+- Two orders of a version live outside strata, and each has a test against
+  `version::compare`. Add no other exception.
+  - `oldest_first` in `examples/fetch-examples.sh`. The script runs offline, so it
+    cannot ask strata. It keeps only a version of plain numbers and orders it by
+    the numbers. The test `the_examples_fetch_orders_plain_versions_as_strata_does`
+    fails when this order differs from `version::compare`.
+  - `versionCmp` in `observer/internal/web/assets/app.js`, the sort of a column of
+    versions on the page of the observer. A column holds the versions of many
+    packs, and no answer of strata orders them. The file
+    `observer/internal/web/testdata/versions.json` holds a case for each form.
+    `the_cases_of_the_version_sort_of_the_observer_page_are_in_the_order_of_strata`
+    sorts them with `version::compare`, and
+    `TestTheVersionSortOfThePageGivesTheOrderOfStrata` with `versionCmp`. The test
+    of the page also compares each pair of cases. Add a case for each new form.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).
@@ -325,7 +343,9 @@ the Rust code, and these rules are for the Go code.
   and after a failed cycle.
 - The one compare of versions in the Go code is the major and minor number of
   `tool.version`, in `model.ReBaselineNeeded`. The observer does not order pack
-  versions: `behind` gives the order in `newer[0]`.
+  versions or profile versions: `behind` gives the order in `newer[0]`. The sort of
+  a column of the page is the one order in the scripts: see [Types and
+  data](#types-and-data).
 - `internal/api` serves the summary and the detail tiers: see
   [The server of the observer](./observer-api.md). The summary tier uses types of
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the

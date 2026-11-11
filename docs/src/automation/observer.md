@@ -25,7 +25,7 @@ alone, so that you can run the commands below.
 
 </div>
 
-## The six questions
+## The seven questions
 
 | Question | Where the page answers it | What the observer runs |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ alone, so that you can run the commands below.
 | Does this cluster run its release? | A finding `cluster-differs` or `image-id-changed`. The cluster copy of each profile. | `strata snapshot` and `strata compare` |
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
 | Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. | `strata behind`. The button runs `strata behind --pin`. |
+| Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". | `strata behind` |
 | What changed between two pack versions? | The detail of a newer version, with the text of the diff. | `strata compare pack:...` |
 | Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
 
@@ -45,7 +46,8 @@ finding, and each state of the page.
   Palette, reads the cluster, and compares each record with the copy that Palette
   holds for the cluster. With `--read-pods`, it lists the pods first.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
-  in the registry, and compares each pin with its newest version.
+  in the registry, and compares each pin with its newest version. It also asks which
+  profile versions of the records have a newer published version.
 - **A click** on "Ask Palette" runs `strata behind` for one pack. No timer starts it.
 - **A click on the pill of a cycle** opens its menu. "Check the content now" or "Read
   the versions now" runs that cycle at once, and not at the end of its period.
@@ -101,6 +103,25 @@ of the move to the newest version, as `strata compare` gives it:
 ```text
 {{#include ../output/observer-newer.txt}}
 ```
+
+The tenant also holds `aws-stack` 1.1.0, a newer published version of the
+profile `aws-stack@1.0.0`. The row of the profile holds it in `newerVersion`, with
+the time that Palette created it. `new` is true for a version of the last 7 days:
+
+```text
+{{#include ../output/observer-profile-version.txt}}
+```
+
+The page shows the two kinds of newer version with different words. The row of a
+profile says "Newer profile version `aws-stack@1.1.0`" for a newer version of the
+profile itself. A pack with a newer version shows the badge "Newer", and the move
+of the pack. For both, the status of the profile is `newer`, unless it is `drift`.
+
+The tile "Newer versions" counts the packs, and its last line counts the profiles with a
+newer version, as `counts.newerProfileVersions`. The filter "Newer" of the
+profiles holds both kinds. A newer profile version gives the event
+`NewProfileVersion` at the time of its create. When strata cannot read the versions
+of a profile, the row names no newer profile version.
 
 The summary holds the status of each profile, and the limits of the check:
 
@@ -487,7 +508,7 @@ wrote. An apply keeps the keys of the seed.
 
 ## The pods of the cluster
 
-The observer can read the pods of its cluster. It then answers a sixth question:
+The observer can read the pods of its cluster. It then answers the last question:
 which digest does each tag run as on this cluster? No route of Palette gives that
 digest, so the read repeats nothing that Palette answers. See [The pods of a
 cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).

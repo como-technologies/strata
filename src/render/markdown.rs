@@ -1,5 +1,7 @@
 //! The pull request comment.
 
+mod behind;
+
 use super::changes::{
     OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
     status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
@@ -11,7 +13,8 @@ use super::consumers::{
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_heading, version_note, virtual_group, virtual_line,
+    profile_marks, project_label, registry_heading, side_projects, version_note, virtual_group,
+    virtual_line,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
@@ -19,7 +22,8 @@ use super::notes::{
 };
 use super::report::markdown_report;
 use super::same_release::{
-    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
+    renumber_lines,
 };
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
@@ -69,7 +73,8 @@ pub(super) fn variable_line(v: &VarLine<'_>) -> String {
     }
 }
 
-/// The heading and the table of the two records: their uids, roots, consumers, and fetch times.
+/// The heading and the table of the two records: their uids, projects when they differ, roots,
+/// consumers, and fetch times.
 fn heading_table(d: &Diff) -> String {
     let mut o = String::new();
     o.push_str(&format!("### {} → {}\n\n", d.a.title(), d.b.title()));
@@ -79,6 +84,9 @@ fn heading_table(d: &Diff) -> String {
         dash(d.a.shown_uid()),
         dash(d.b.shown_uid())
     ));
+    if let Some((a, b)) = side_projects(&d.a.project_uid, &d.b.project_uid) {
+        o.push_str(&format!("| project | {a} | {b} |\n"));
+    }
     o.push_str(&format!(
         "| root | `{}` | `{}` |\n",
         short(&d.root_a),
@@ -330,8 +338,12 @@ impl Renderer for MarkdownRenderer {
     fn render_chain(&self, c: &Chain) -> Result<String> {
         let mut o = format!("### same release: {}\n\n", chain_verdict(c));
         o.push_str("| status | from | to | detail |\n|---|---|---|---|\n");
-        for p in &c.pairs {
+        for (index, p) in c.pairs.iter().enumerate() {
             let mut detail = markdown_cell(&pair_detail(p));
+            for line in pair_projects(c, index).into_iter().chain(renumber_lines(p)) {
+                detail.push_str("<br>");
+                detail.push_str(&markdown_cell(&line));
+            }
             for r in &p.reasons {
                 detail.push_str("<br>");
                 detail.push_str(&markdown_cell(r));
@@ -390,61 +402,7 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let mut o = format!(
-            "### behind: {}\n\n",
-            markdown_cell(&super::behind::behind_heading(r))
-        );
-        if r.pins.is_empty() {
-            return Ok(o);
-        }
-        o.push_str(
-            "| pack | pinned | registry | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
-        );
-        for pin in &r.pins {
-            let mut status = super::behind::pin_status(pin);
-            for line in [
-                super::behind::listed_since(pin),
-                super::behind::arrived_line(pin),
-            ]
-            .into_iter()
-            .flatten()
-            {
-                status.push_str(&format!("; {line}"));
-            }
-            if let Some(msg) = entry_error(pin.error.as_ref()) {
-                status.push_str(&format!(" ({msg})"));
-            }
-            let by: Vec<String> = pin
-                .pinned_by
-                .iter()
-                .map(|b| {
-                    format!(
-                        "`{}` ({})",
-                        markdown_cell(&b.path),
-                        markdown_cell(&b.subject)
-                    )
-                })
-                .collect();
-            let bump: Vec<String> = super::behind::bump_line(pin)
-                .into_iter()
-                .chain(super::behind::palette_lines(pin))
-                .map(|l| markdown_cell(&l))
-                .collect();
-            o.push_str(&format!(
-                "| `{}` | `{}` | {} | {} | {} | {} |\n",
-                markdown_cell(&pin.name),
-                markdown_cell(&pin.version),
-                markdown_cell(dash(&pin.registry)),
-                markdown_cell(&status),
-                if bump.is_empty() {
-                    "-".to_string()
-                } else {
-                    bump.join("<br>")
-                },
-                by.join("<br>")
-            ));
-        }
-        Ok(o)
+        Ok(behind::markdown_behind(r))
     }
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {

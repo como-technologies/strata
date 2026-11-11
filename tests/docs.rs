@@ -469,11 +469,20 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
 
 /// The values that the generated help of `strata <command>` lists for one argument or option.
 /// The line of that argument or option starts with `name`, such as `<KIND>` or `--allow `.
+///
+/// The values are on that line, or on the next line. When the help of one option is too wide, clap
+/// puts the help of each option on the line after its name.
 fn possible_values(command: &str, name: &str) -> Vec<String> {
     let help = read(&docs().join(format!("output/help-{command}.txt")));
-    help.lines()
-        .find(|line| line.trim_start().starts_with(name))
-        .and_then(|line| line.split("[possible values: ").nth(1))
+    let lines: Vec<&str> = help.lines().collect();
+    lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(name))
+        .and_then(|at| {
+            lines[at..lines.len().min(at + 2)]
+                .iter()
+                .find_map(|line| line.split("[possible values: ").nth(1))
+        })
         .and_then(|rest| rest.split(']').next())
         .unwrap_or_else(|| panic!("the help of {command} lists no values of {name:?}"))
         .split(", ")
@@ -1412,6 +1421,51 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
 }
 
+/// The checks that part 1 of the live window of Wave 16 ran have their result in the book: draft.sh,
+/// projects.sh, and loop.sh. A row that says "no result yet" for one of them tells a reader that
+/// nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    for check in [
+        "route-names",
+        "copy-create",
+        "record-a",
+        "record-b",
+        "verify-both",
+        "same-release",
+        "same-release-line",
+        "compare-projects",
+        "records-same",
+        "copy-delete",
+        "same-release-renumber",
+        "cluster-plain",
+        "ask-repave-plain",
+        "preflight-job",
+        "preflight-job-key",
+        "other-project-read",
+        "ask-repave-plain-says",
+        "preflight-job-says",
+        "preflight-job-key-says",
+        "record-a-project",
+        "record-b-project",
+        "same-release-projects",
+        "versions-tenant",
+        "versions-project",
+        "behind-profile",
+        "behind-profile-names",
+    ] {
+        let row = page
+            .lines()
+            .find(|l| l.starts_with("| `") && l.contains(&format!("`{check}`")))
+            .unwrap_or_else(|| panic!("live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
+}
+
 /// The checks of public.sh ran after the repository and its packages became public (#65, #483). A
 /// row that says "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]
@@ -2001,8 +2055,9 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
         (
             "src/reference/version.rs",
-            "A string with no three numbers keeps",
+            "Two strings with no version keep",
         ),
+        ("src/reference/version.rs", "Five forms are a pre-release:"),
         ("src/candidate/resolve.rs", "The documents are those that"),
         (
             "src/candidate/resolve.rs",
@@ -4443,6 +4498,118 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
     );
 }
 
+/// Issue #714. The book stated that a text with no three numbers, such as `1.2.develop`, is above
+/// each version. brett changed the answer: where Palette gives no order or reads no version, strata
+/// follows the crate `versions`, and the rules of Palette stay. The rule of `@latest`, the pages of
+/// Palette and of `behind`, the rules of the code, and the section of the release state it. They
+/// also state text right after a number, as in `1.2rc1`, `1.2.3rc1b`, and `1.2.3.4rc1`, and the
+/// rest after one text before the numbers.
+#[test]
+fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = release_section(&page, "0.33.0");
+    for needle in [
+        "**One or two numbers and a tail of text make a pre-release of the version of the numbers.**",
+        "`<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "So `behind --pre-release` names `1.2.develop` as newer than `1.1.10`.",
+        "**A text with no number at its start and no three numbers is below each version.**",
+        "`1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`.",
+        "`1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below `1.2.4`.",
+        "`chart-1.2.3` is above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release.",
+        "**A `v` in front of the three numbers does not count in a tie.**",
+        "A move from `1.2.develop` to `1.10.0` passes the gate now.",
+        "Where Palette gives no order or reads no version, `compare` follows the order of the crate `versions` 8.0.1.",
+        "It is true for one or two numbers and a tail of text, such as `1.2.develop` and `1.2rc1`.",
+        "`1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`.",
+        "So `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`.",
+        "the rest decides: `chart-1.2.3.develop` is below `chart-1.2.3-alpha`",
+        "So `1.2.3rc1b` is below `1.2.3.develop`.",
+        "`1.2.3rc1b` below `1.2.3.develop`,",
+        "So `1.2.0rc1b` is above `1.2rc1` and below `1.2.develop`.",
+        "It puts `1.2rc1` below `1.2.0rc1b`, and `1.2.0rc1b` below `1.2.develop`.",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of 0.33.0 lacks {needle:?}"
+        );
+    }
+    for old in [
+        "A text with no three numbers, such as `LTS__24.x`, keeps its order.",
+        "**A text with no three numbers is below each version.**",
+    ] {
+        assert!(
+            !release.contains(old),
+            "the section of 0.33.0 still states {old:?}"
+        );
+    }
+
+    let refs = one_line(&read(&docs().join("reference/refs.md")));
+    for needle in [
+        "There, strata follows the order of the Rust crate `versions` 8.0.1.",
+        "2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.",
+        "Text right after the fourth number puts the version below it: `1.2.0.1rc1` is below `1.2.0.1`.",
+        "So `1.2rc1` holds two numbers, and `1.2a1b` holds one number and the tail `2a1b`.",
+        "Palette also ignores the text before the numbers.",
+        "The crate gives no total order to digits and text in a part that is not the last",
+        "Strata puts letters with no number after them below the same letters with a number",
+        "6. A fourth number, as in `1.2.0.1`.",
+        "`@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "Strata puts it below `1.1.8-alpha`, as the crate does.",
+        "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`.",
+        "Palette finds the numbers at any place, so `chart-1.2.3` is above `1.2.2`.",
+        "The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`.",
+        "For each count of numbers, text right after the last number is below a tail after a dot.",
+        "`1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.",
+        "So `1.2rc1` is below `1.2.0rc1b`, and `1.2.0rc1b` is below `1.2.develop`.",
+        "3. A tail of text after a dot after the three numbers, as in `1.2.0.develop`.",
+    ] {
+        assert!(refs.contains(needle), "refs.md lacks {needle:?}");
+    }
+    for old in [
+        "Such a text is above each version.",
+        "It is below each version, also below a pre-release.",
+        "The crate gives no total order to text right after the numbers",
+        "3. A tail of text after the three numbers, as in `1.2.0rc1b`",
+    ] {
+        assert!(!refs.contains(old), "refs.md still states {old:?}");
+    }
+    for (path, needle) in [
+        (
+            "internals/palette/profiles.md",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
+        ),
+        (
+            "internals/palette/limits.md",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
+        ),
+        (
+            "commands/behind.md",
+            "So `--pre-release` names it as newer than `1.65.0`.",
+        ),
+        (
+            "development/code.md",
+            "`tests/version_order.rs` compares the order with the crate, row by row.",
+        ),
+        (
+            "development/code.md",
+            "Each difference needs a rule that names it, and the test holds the count of differences for each rule.",
+        ),
+    ] {
+        let text = one_line(&read(&docs().join(path)));
+        assert!(text.contains(needle), "{path} lacks {needle:?}");
+    }
+    let listed = read(&docs().join("output/latest-develop-list.txt"));
+    assert!(
+        listed.contains("\n  aws-stack@1.1.10 ") && listed.ends_with(" aws\n"),
+        "the playground does not list the profiles: {listed}"
+    );
+    let last = listed.lines().last().unwrap_or_default();
+    assert!(
+        last.starts_with("  aws-stack@1.2.develop "),
+        "the playground does not list 1.2.develop last: {listed}"
+    );
+}
+
 /// The fuzz package is the newest code, and the review at the end of Wave 12 found 42 comment
 /// sentences in it over the limit. Each sentence of each comment in `fuzz/` has 25 words at most,
 /// so the next wave cannot add one.
@@ -4483,7 +4650,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
         ("src/api/palette/mod.rs", "The walk ends at a page"),
         (
             "src/reference/version.rs",
-            "Of two pre-releases, the first identifier",
+            "The identifiers of two pre-releases decide",
         ),
         (
             "scripts/ci/merge-gate.sh",
@@ -6650,6 +6817,87 @@ fn the_page_names_the_renumber_as_open_while_same_release_does_not_take_it() {
             "the page does not name the item of the renumber"
         );
     }
+}
+
+/// The text of a renumber: the use case, and its section in each page that says what a renumber
+/// is. Each one is a page, the heading of its text, and the heading after it.
+const RENUMBER_TEXT: [(&str, &str, Option<&str>); 4] = [
+    (
+        "use-cases/renumber.md",
+        "# A release gets new version numbers",
+        None,
+    ),
+    (
+        "commands/same-release.md",
+        "## A release under new version numbers",
+        Some("\n## "),
+    ),
+    (
+        "commands/compare/versions.md",
+        "## A version that only changes its numbers",
+        Some("\n## "),
+    ),
+    ("reference/impact.md", "## A renumber", Some("\n## ")),
+];
+
+/// The text of a renumber keeps to the limits and the words of "The style rules".
+#[test]
+fn the_text_of_a_renumber_keeps_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        for block in blocks_of(section(&text, from, to)) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// The book shows a renumber with the outputs of the chapter `renumber` of the runner. They are in
+/// the pages of `same-release`, of `compare`, and of the impact, and in a use case with its
+/// playground. Each one names the archive that strata does not compare.
+#[test]
+fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
+    assert!(
+        possible_values("same-release", "--allow ")
+            .iter()
+            .any(|v| v == "renumber"),
+        "the help of same-release does not name renumber"
+    );
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        let part = one_line(section(&text, from, to));
+        assert!(
+            part.contains("{{#include ../") && part.contains("output/renumber-"),
+            "{page}: the text includes no output of the chapter renumber"
+        );
+        assert!(
+            part.contains("renumber only") || part.contains("archive: not compared"),
+            "{page}: the text does not say what a renumber does not compare"
+        );
+        assert!(
+            part.contains("archive"),
+            "{page}: the text does not name the archive"
+        );
+    }
+    let use_case = read(&docs().join("use-cases/renumber.md"));
+    assert!(
+        use_case.contains("`just playground renumber`"),
+        "the use case has no playground"
+    );
+    let allow = read(&docs().join("output/renumber-allow.txt"));
+    assert!(
+        allow.contains("\nRENUMBER ")
+            && allow.contains("(pre-release to final; archive: not compared)"),
+        "{allow}"
+    );
+    let compare = read(&docs().join("output/renumber-compare.txt"));
+    assert_eq!(
+        compare.matches("impact: none (renumber only)").count(),
+        2,
+        "{compare}"
+    );
 }
 
 /// The page states that the gap of the order of versions is closed, and its outputs show it.

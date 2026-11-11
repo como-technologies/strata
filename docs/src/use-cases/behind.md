@@ -43,6 +43,10 @@ profile. The pins of `aws-stack@1.1.1` are current. The OS pins are floating
 tags. Each pins the version that its tag names now, so the tag adds no version
 to move to. `LTS__20.4.x` never reaches 22.04 or 24.04.
 
+The last lines are the profile versions of the records. `aws-stack@1.0.0` is
+behind 1.1.1, the other version of `dev`. See
+[A newer version of the profile exists](./newer-profile.md).
+
 With last week's run, the report says what arrived since:
 
 ```text

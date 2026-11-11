@@ -157,6 +157,15 @@ pub const PUBLISHED_RULES: &str =
 pub const DRAFT_RULES: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
 
+/// The options of `same-release --allow no-digest`: the exact policy, and a pack with no upstream
+/// digest can pass.
+pub fn no_digest_allowed() -> strata::ops::SameReleaseOptions {
+    strata::ops::SameReleaseOptions {
+        allow_no_digest: true,
+        ..strata::ops::SameReleaseOptions::default()
+    }
+}
+
 /// The JSON document in the file at `path`.
 pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
@@ -884,6 +893,20 @@ pub fn recipe(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// The commands that `just --dry-run` prints for the recipe and the arguments `args`. They are
+/// the lines of the recipe and of its dependencies, with each variable replaced. No command runs.
+/// `just` is the path that [`on_path`] gives.
+pub fn just_dry_run(just: &Path, args: &[&str]) -> String {
+    let o = Command::new(just)
+        .arg("--dry-run")
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "just {args:?}: {}", text(&o.stderr));
+    text(&o.stderr)
+}
+
 /// The text of the workflow `file` of `.github/workflows/`.
 pub fn workflow_text(file: &str) -> String {
     repo_file(&format!(".github/workflows/{file}"))
@@ -905,6 +928,16 @@ pub fn workflow_files() -> Vec<String> {
 /// The workflow `file` of `.github/workflows/`, parsed.
 pub fn workflow(file: &str) -> serde_yaml::Value {
     serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
+/// The names of the strings in a YAML sequence.
+pub fn strings(value: &serde_yaml::Value) -> Vec<&str> {
+    value
+        .as_sequence()
+        .unwrap_or_else(|| panic!("not a sequence: {value:?}"))
+        .iter()
+        .map(|v| v.as_str().unwrap_or_else(|| panic!("not a string: {v:?}")))
+        .collect()
 }
 
 /// The steps of each job of the workflow `doc`, in order.
@@ -1005,6 +1038,23 @@ pub fn snapshot_of_ref(
         at,
         &strata::term::progress::Progress::silent(),
     )
+}
+
+/// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted. The
+/// report has the time `2026-09-26T00:00:00Z`, with no progress output.
+pub fn behind_of(
+    api: &strata::api::MemoryApi,
+    records: &[std::path::PathBuf],
+    options: &strata::ops::BehindOptions,
+) -> strata::ops::BehindReport {
+    strata::ops::behind(
+        records,
+        options,
+        |_| Ok(strata::api::Palette::new(api)),
+        "2026-09-26T00:00:00Z",
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap()
 }
 
 /// A snapshot of the candidate file `file`, resolved against the in-memory Palette `api` and

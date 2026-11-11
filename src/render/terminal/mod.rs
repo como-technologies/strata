@@ -7,7 +7,8 @@ use super::consumers::{
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_heading, version_note, virtual_line, virtual_note,
+    profile_marks, project_label, registry_heading, side_projects, version_note, virtual_line,
+    virtual_note,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
@@ -15,7 +16,8 @@ use super::notes::{
 };
 use super::report::report_heading;
 use super::same_release::{
-    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
+    renumber_lines,
 };
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
@@ -35,6 +37,7 @@ use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
 use table::{column_widths, matched, painted_text, table_line};
 
+mod behind;
 mod lines;
 mod table;
 
@@ -79,6 +82,9 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
             }
         ),
     ));
+    if let Some((a, b)) = side_projects(&d.a.project_uid, &d.b.project_uid) {
+        out.push(key_line("project", format!("{a} -> {b}")));
+    }
     for note in diff_notes(d) {
         match note {
             DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&text))),
@@ -202,11 +208,11 @@ impl Renderer for TerminalRenderer {
     fn render_chain(&self, c: &Chain) -> Result<String> {
         let p = &self.paint;
         let mut out = String::new();
-        for pair in &c.pairs {
+        for (index, pair) in c.pairs.iter().enumerate() {
             let word = format!("{:<13}", pair_word(pair.status));
             let word = match pair.status {
                 PairStatus::Identical | PairStatus::SameContent => p.bgreen(&word),
-                PairStatus::RegistryMove => p.byellow(&word),
+                PairStatus::RegistryMove | PairStatus::Renumber => p.byellow(&word),
                 PairStatus::Different | PairStatus::UnknownUpstream => p.bred(&word),
             };
             out.push_str(&format!(
@@ -215,6 +221,12 @@ impl Renderer for TerminalRenderer {
                 pair.b,
                 p.dim(&pair_detail(pair))
             ));
+            for line in pair_projects(c, index)
+                .into_iter()
+                .chain(renumber_lines(pair))
+            {
+                out.push_str(&format!("               {line}\n"));
+            }
             for r in &pair.reasons {
                 out.push_str(&format!("               {r}\n"));
             }
@@ -332,56 +344,7 @@ impl Renderer for TerminalRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let p = &self.paint;
-        let mut out = format!("{}\n", super::behind::behind_heading(r));
-        let name_w = r.pins.iter().map(|x| x.name.len()).max().unwrap_or(0);
-        let ver_w = r.pins.iter().map(|x| x.version.len()).max().unwrap_or(0);
-        let reg_w = r
-            .pins
-            .iter()
-            .map(|x| dash(&x.registry).len())
-            .max()
-            .unwrap_or(0);
-        for pin in &r.pins {
-            let status = super::behind::pin_status(pin);
-            let status = if pin.error.is_some() {
-                p.byellow(&status)
-            } else if pin.behind {
-                p.yellow(&status)
-            } else {
-                p.dim(&status)
-            };
-            out.push_str(&format!(
-                "{} [{:<5}] {}  {}  {}  {status}\n",
-                if pin.behind { "~" } else { " " },
-                pin.layer,
-                p.bold(&format!("{:<name_w$}", pin.name)),
-                format_args!("{:<ver_w$}", pin.version),
-                format_args!("{:<reg_w$}", dash(&pin.registry)),
-            ));
-            if let Some(listed) = super::behind::listed_since(pin) {
-                out.push_str(&format!("      {}\n", p.dim(&listed)));
-            }
-            if let Some(line) = super::behind::bump_line(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            for line in super::behind::palette_lines(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            if let Some(arrived) = super::behind::arrived_line(pin) {
-                out.push_str(&format!("      {}\n", p.cyan(&arrived)));
-            }
-            if let Some(msg) = entry_error(pin.error.as_ref()) {
-                out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
-            }
-            for by in &pin.pinned_by {
-                out.push_str(&format!(
-                    "      {}\n",
-                    p.dim(&format!("pinned by {} ({})", by.path, by.subject))
-                ));
-            }
-        }
-        Ok(out)
+        Ok(behind::terminal_behind(r, &self.paint))
     }
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {

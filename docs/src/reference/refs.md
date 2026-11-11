@@ -39,13 +39,68 @@ A ref names the thing that a command reads.
   found in `source.version`, and keeps `aws-stack@latest` in `source.ref`.
   - A text that does not parse reads as its first three numbers, as Palette
     reads it: see [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
-  - A tail of text puts a version below its numbers, and makes it a
-    pre-release. So `1.1.8.develop` is below `1.1.8`, and `@latest` gives
-    `1.1.10` over `1.2.0.develop`.
-  - A tail of numbers puts a version above its numbers: `10.4.0.1` is above
-    `10.4.0` and below `10.5.0`.
-  - For a text with no three numbers, digit runs compare as numbers and other
-    text as text. Such a text is above each version.
+    The numbers decide first.
+  - Palette gives no order to two texts with one set of numbers, and it reads
+    no version in a text with no three numbers. There, strata follows the order
+    of the Rust crate `versions` 8.0.1. A test compares the two orders.
+  - For one set of numbers, the forms go from the lowest to the highest:
+    1. Text before the numbers, as in `chart-1.2.0`.
+    2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.
+       A missing number is `0`, so `1.2.develop` is above `1.1.10`. Text right
+       after the third number is such a tail too, as the crate reads it:
+       `1.2.0rc1b` is `1.2` and the tail `0rc1b`.
+    3. A tail of text after a dot after the three numbers, as in
+       `1.2.0.develop`.
+    4. A pre-release, as in `1.2.0-rc.1`.
+    5. The version, `1.2.0`.
+    6. A fourth number, as in `1.2.0.1`. So `10.4.0.1` is above `10.4.0` and
+       below `10.5.0`. Text right after the fourth number puts the version below
+       it: `1.2.0.1rc1` is below `1.2.0.1`. A tail after `-` or a dot puts the
+       version above it, as the crate orders it: `1.2.0.1` is below `1.2.0.1-rc1`.
+  - A part between dots is a number when it holds only digits, as the crate
+    reads it. In the last part, the digits in front of letters are a number too,
+    as in `2rc1`. So `1.2rc1` holds two numbers, and `1.2a1b` holds one number
+    and the tail `2a1b`. The three numbers that Palette reads still decide
+    first, so `1.2.3rc1b` is above `1.2.develop`.
+  - Of two texts with one form, the crate orders the tails. For each count of
+    numbers, text right after the last number is below a tail after a dot. So
+    `1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.
+    Digits with letters right after them are below the digits alone, so
+    `1.2.0.1rc1` is below `1.2.0.1`. Build data after `+` does not count.
+  - The tail `0rc1b` of `1.2.0rc1b` is a tail after a dot, as the crate reads
+    it. So `1.2rc1` is below `1.2.0rc1b`, and `1.2.0rc1b` is below
+    `1.2.develop`.
+  - Each form with text is a pre-release. So `1.1.8.develop` is below `1.1.8`,
+    and `@latest` gives `1.1.10` over `1.2.0.develop`. `@latest` on
+    `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. A tail of numbers, as
+    in `10.4.0.1`, is no pre-release.
+  - Palette reads `1.1.8.develop` as `1.1.8`, above `1.1.8-alpha`. Strata puts
+    it below `1.1.8-alpha`, as the crate does.
+  - The rules of Palette stay where the crate orders in another way. A `v` in
+    front does not count, so `v1.1.8.1` equals `1.1.8.1`. A missing number is
+    `0`, so `1.2` equals `1.2.0`. Palette finds the numbers at any place, so
+    `chart-1.2.3` is above `1.2.2`.
+  - Palette also ignores the text before the numbers. Of two texts with the
+    same text before the numbers, the rest decides by these rules. So
+    `chart-1.2.3.develop` is below `chart-1.2.3-alpha`, and `chart-1.2.3` is
+    above both. The crate reads `1.2.3-alpha` there as a pre-release of the text
+    `chart`, and puts `chart-1.2.3` below both.
+  - Two different texts before the numbers keep the natural order of that text,
+    so `app-1.2.3` is below `chart-1.2.3`.
+  - The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts
+    `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`. Strata puts such a text
+    below each pre-release of its numbers.
+  - The crate gives no total order to digits and text in a part that is not the
+    last, as in `1.2rc1.x` and `1.2.3.4rc1.x`. Strata reads such a part as text,
+    so `1.2.3.4rc1.x` is below each pre-release of `1.2.3`.
+  - The crate gives `1.2rc` the same rank as `1.2rc1` and `1.2rc2`, but it puts
+    `1.2rc1` below `1.2rc2`. Strata puts letters with no number after them
+    below the same letters with a number: `1.2rc` is below `1.2rc1`.
+  - A text with no number at its start and no three numbers, such as `develop`,
+    `LTS__24.x`, or `1a1b`, holds no version. It is below each version.
+    `@latest` gives such a text only when the name has no version.
+  - Of two texts with no version, digit runs compare as numbers and other text
+    as text. So `LTS__24.x` is above `LTS__22.04`.
 - **`@draft`.** The draft template of a profile version, and not its published
   template. A person who edits a published version and does not publish makes
   a draft. The record holds the values and the manifests of the draft, and

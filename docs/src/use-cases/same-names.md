@@ -94,13 +94,16 @@ Give the uid in place of the name. `strata list` marks the tenant version: see
 
 ## What to do
 
-- Set `PALETTE_PROJECT` for each command. `list` and `verify` also take
-  `--project` and `--project-name`; the other commands do not.
+- Give the project of a command with `--project-name`. `PALETTE_PROJECT`
+  gives the project of each command of a shell. Each command that reads Palette
+  takes `--project` and `--project-name`. `compare` and `same-release` also take
+  a project for each side: see
+  [Environments in the projects of one tenant](./projects.md).
 - When a profile of the tenant has the name and the version of a profile of
   the project, give the uid. `strata list --json` gives the scope of each
   version.
 - In a script, name the project and the uid together:
-  `PALETTE_PROJECT=prod strata snapshot cluster:64f1000000000000000000f1`. A uid
+  `strata snapshot cluster:64f1000000000000000000f1 --project-name prod`. A uid
   names one cluster, and it does not widen the scope: strata reads a cluster in
   the project it works in.
 - Name the records by project: `dev-payments.json`, `prod-payments.json`.

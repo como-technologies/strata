@@ -81,6 +81,9 @@ identity. The uid is, in the project that holds it.
 
 - [The same names in two projects](./same-names.md): `cluster:payments` names
   two clusters, or `name@version` is not found.
+- [Environments in the projects of one tenant](./projects.md): each environment
+  is a project of one tenant, and a question about dev and prod reads two
+  projects.
 - [Find the profiles that carry a pack](./find-a-pack.md): a pack version has a
   security problem, and you need every profile and cluster that carries it.
 
@@ -110,6 +113,9 @@ can give different roots, and how strata says so.
   manifest have different roots.
 - [A pack comes from another registry](./registry-move.md): a team pins a pack
   to another registry, and `same-release` fails without `--allow registry-move`.
+- [A release gets new version numbers](./renumber.md): a pipeline publishes a
+  pre-release and then the same content under its final numbers, and
+  `same-release` fails without `--allow renumber`.
 - [A pack has no digest](./no-digest.md): `verify` reports `UNVERIFIED`, or
   `same-release` reports `NO DIGEST`.
 
@@ -120,6 +126,8 @@ can give different roots, and how strata says so.
 - [Retire a version](./retire.md): you want to delete an old version.
 - [The registry has newer versions](./behind.md): every record verifies, and the registry
   offers newer versions of the packs that they pin.
+- [A newer version of the profile exists](./newer-profile.md): `verify` passes on each
+  record, and the pipeline published a newer version of the profile that a record holds.
 - [A registry deletes the tag of a pack](./invalid-pack.md): a record verifies,
   and Palette marks a pack of the version invalid.
 

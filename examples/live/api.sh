@@ -22,6 +22,11 @@
 #       of /v1/clusterprofiles with no ProjectUid header, and the publish a PATCH of
 #       /v1/clusterprofiles/{uid}/publish. Print the uid of the new profile. Palette lists a
 #       profile of the tenant in each project.
+#   api.sh create-copy PROFILE_UID NAME PROJECT_UID
+#       The create and the publish of create-tenant-copy, in the project PROJECT_UID: each
+#       request has the header ProjectUid PROJECT_UID. The source is a published version of the
+#       project of PALETTE_PROJECT_UID. Print the uid of the new profile. Delete it with
+#       PALETTE_PROJECT_UID=PROJECT_UID api.sh delete.
 #   api.sh delete-tenant PROFILE_UID
 #       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
 #       error.
@@ -309,29 +314,45 @@ publish() {
   echo "published the draft of $uid"
 }
 
+# copy_body UID NAME DIR: DIR/body, the create of the profile NAME with the version, the packs,
+# the values, and the manifests of the published version UID. Each manifest goes with no uid, so
+# the new profile gets its own manifests.
+copy_body() {
+  fetch_published "$1" "$3"
+  body "$3" '.manifests |= map({name, content})' \
+    | jq --arg n "$2" '.metadata = {name: $n}' > "$3/body"
+}
+
 create_unpublished() {
   local uid=${1:-} name=${2:-} tmp
   [ -n "$uid" ] && [ -n "$name" ] || die "usage: api.sh create-unpublished PROFILE_UID NAME"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  fetch_published "$uid" "$tmp"
-  body "$tmp" '.manifests |= map({name, content})' \
-    | jq --arg n "$name" '.metadata = {name: $n}' > "$tmp/body"
+  copy_body "$uid" "$name" "$tmp"
   call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid' || exit 2
 }
 
-# create_tenant_copy UID NAME: the create of create_unpublished with no ProjectUid header, so the
-# profile is of the tenant, and then its publish. Palette lists a profile of the tenant in each
-# project.
-create_tenant_copy() {
-  local uid=${1:-} name=${2:-} tmp new
-  [ -n "$uid" ] && [ -n "$name" ] || die "usage: api.sh create-tenant-copy PROFILE_UID NAME"
+# copy_into SCOPE UID NAME: create_published of the copy_body of UID, with the ProjectUid header
+# SCOPE. An empty SCOPE sends no header, so the profile is of the tenant. Print the uid of the new
+# profile.
+copy_into() {
+  local scope=$1 uid=$2 name=$3 tmp
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
-  fetch_published "$uid" "$tmp"
-  body "$tmp" '.manifests |= map({name, content})' \
-    | jq --arg n "$name" '.metadata = {name: $n}' > "$tmp/body"
-  new=$(PROJECT= call POST /v1/clusterprofiles "$tmp/body" | jq -er '.uid') || exit 2
-  PROJECT= call PATCH "/v1/clusterprofiles/$new/publish" > /dev/null || exit 2
-  echo "$new"
+  copy_body "$uid" "$name" "$tmp"
+  PROJECT=$scope create_published "$tmp/body" || exit 2
+}
+
+# create_tenant_copy UID NAME: copy_into with no ProjectUid header. Palette lists a profile of the
+# tenant in each project.
+create_tenant_copy() {
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] || die "usage: api.sh create-tenant-copy PROFILE_UID NAME"
+  copy_into "" "$1" "$2"
+}
+
+# create_copy UID NAME PROJECT: copy_into the project PROJECT
+create_copy() {
+  [ -n "${1:-}" ] && [ -n "${2:-}" ] && [ -n "${3:-}" ] \
+    || die "usage: api.sh create-copy PROFILE_UID NAME PROJECT_UID"
+  copy_into "$3" "$1" "$2"
 }
 
 # delete_tenant UID: the delete of a profile of the tenant, with no ProjectUid header
@@ -904,6 +925,7 @@ case "${1:-}" in
   publish) shift; publish "$@" ;;
   create-unpublished) shift; create_unpublished "$@" ;;
   create-tenant-copy) shift; create_tenant_copy "$@" ;;
+  create-copy) shift; create_copy "$@" ;;
   delete-tenant) shift; delete_tenant "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;

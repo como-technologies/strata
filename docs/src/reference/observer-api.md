@@ -71,7 +71,10 @@ plain text. The route `/` serves the page of the dashboard.
 - `/v1/cluster` gives the fields of the summary up to `counts`. `page` has one value
   of [the page state](../development/observer.md#the-page-state).
 - A profile holds `status`, `published` and `clusterCopy` with their roots, its packs
-  with their `status` and `flags`, its `findings`, and `who`.
+  with their `status` and `flags`, its `findings`, and `who`. A profile with a newer
+  published version also holds `newerVersion`: `version`, `created`, and `new`.
+- `counts` of `/v1/cluster` holds `newerProfileVersions`, the profiles with a newer
+  published version. An observer of 0.32.2 and before does not give it.
 
 | Status | When |
 | --- | --- |

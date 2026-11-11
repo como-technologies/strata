@@ -48,8 +48,14 @@ request that times out is the error `transport`.
 ## Command options
 
 `--project <uid>` and `--project-name <name>` replace the configured project for
-one command. `--project ''` is tenant scope. `list` and `verify` take these
-options.
+one command. `--project ''` is tenant scope. Each command that reads Palette
+takes these options. `strata preflight` does not: `strata-preflight` reads the
+project from the environment.
+
+`compare` and `same-release` also take a project for each side:
+`--project-a <uid>` or `--project-name-a <name>` for the first ref, and
+`--project-b <uid>` or `--project-name-b <name>` for the second. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
 
 ## The address in a pipeline
 

@@ -57,6 +57,7 @@ fn sets() -> [Set; 23] {
             "identical",
             "same-content",
             "registry-move",
+            "renumber",
             "different",
             "unknown-upstream",
         ]),

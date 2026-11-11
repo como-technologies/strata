@@ -325,27 +325,134 @@ const impactOf = i => IMPACT[i] || ["y", i];
 
 /* ---- Sort and filter ----
    The head of a column with a key sorts its table. A click sorts up, a second click sorts down, and a third gives back the order of the
-   page. A sort keeps the order of the page among equal rows. A version sorts by the precedence of SemVer 2.0.0 when both parse, so a
-   pre-release sorts below its release; any other version sorts in natural order. */
-const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+   page. A sort keeps the order of the page among equal rows. A version sorts in the order of strata: see versionCmp. */
 const natural = (a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: "base"});
-function semverCmp(a, b) {
-  const x = SEMVER.exec(a), y = SEMVER.exec(b);
-  if (!x || !y) return natural(a, b);
-  for (let i = 1; i <= 3; i++) if (Number(x[i]) !== Number(y[i])) return Number(x[i]) - Number(y[i]);
-  if (!x[4] || !y[4]) return x[4] ? -1 : y[4] ? 1 : 0;
-  const p = x[4].split("."), q = y[4].split(".");
-  for (let i = 0; i < Math.max(p.length, q.length); i++) {
-    if (p[i] === undefined) return -1;
-    if (q[i] === undefined) return 1;
-    const pn = /^\d+$/.test(p[i]), qn = /^\d+$/.test(q[i]);
-    if (pn && qn && Number(p[i]) !== Number(q[i])) return Number(p[i]) - Number(q[i]);
-    if (pn !== qn) return pn ? -1 : 1;
-    if (!pn && p[i] !== q[i]) return p[i] < q[i] ? -1 : 1;
+
+/* versionCmp orders two versions as src/reference/version.rs does, and that file states each rule. The page cannot ask strata to
+   order the newest versions of other packs, so it keeps this copy. The file testdata/versions.json holds the cases, and two tests,
+   one of strata and one of this page, sort them. A change of one order fails the test of the other.
+   1. A version reads as its three numbers, and the numbers decide first. A text that does not parse gives its first three numbers,
+      or the one or two numbers at its start. One "v" in front does not count. A number above the largest u64 holds no version.
+   2. For one set of numbers, text before the numbers is the lowest, in its natural order. Then the forms go up: one or two numbers
+      and a tail, a tail after a dot after the three numbers, a pre-release, the version, and a fourth number.
+   3. Then the tails decide, part by part, and then a pre-release after "-" is above no pre-release.
+   4. A text with no version sorts below each version, in the natural order of its runs. The empty text is the lowest. */
+const DIGITS = /^\d+$/;
+// NUMBER_AND_TEXT reads a part as a number, the letters right after it, and a number after the letters: "4", "4rc", or "4rc1".
+const NUMBER_AND_TEXT = /^(\d+)([A-Za-z]*)(\d*)$/;
+const IDENTIFIER = /^[0-9A-Za-z-]+$/;
+const U64_MAX = "18446744073709551615";
+// The forms of a version around its three numbers, from the lowest to the highest for one set of numbers.
+const FORM = {SHORT: 0, TEXT: 1, PARSED: 2, MORE: 3};
+const byText = (x, y) => x < y ? -1 : x > y ? 1 : 0;
+// byValue compares two runs of digits by their value, of any length.
+const byValue = (x, y) => { const a = x.replace(/^0+/, ""), b = y.replace(/^0+/, ""); return a.length - b.length || byText(a, b); };
+const fits = n => byValue(n, U64_MAX) <= 0;
+const noV = v => v.startsWith("v") ? v.slice(1) : v;
+// byRuns compares runs of digits by value and other runs as text. When all pairs agree, the text with more runs is higher.
+function byRuns(a, b) {
+  const x = a.match(/\d+|\D+/g) || [], y = b.match(/\d+|\D+/g) || [];
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const d = DIGITS.test(x[i]) && DIGITS.test(y[i]) ? byValue(x[i], y[i]) : byText(x[i], y[i]);
+    if (d) return d;
   }
-  return 0;
+  return x.length - y.length;
 }
-const ORDERS = {num: (a, b) => a - b, text: natural, version: semverCmp};
+// byIds compares two lists of identifiers from the left. A number is below a text, and the longer list is higher.
+function byIds(a, b) {
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const an = DIGITS.test(a[i]), bn = DIGITS.test(b[i]);
+    const d = an && bn ? byValue(a[i], b[i]) : an ? -1 : bn ? 1 : byText(a[i], b[i]);
+    if (d) return d;
+  }
+  return a.length - b.length;
+}
+// byPart compares two parts of a tail. A number is above a text, and a number with letters right after it is below the number.
+function byPart(a, b) {
+  const x = NUMBER_AND_TEXT.exec(a), y = NUMBER_AND_TEXT.exec(b);
+  if (!x || !y) return x ? 1 : y ? -1 : byText(a, b);
+  return byValue(x[1], y[1]) || (x[2] === "") - (y[2] === "") || byText(x[2], y[2]) ||
+    (x[3] !== "") - (y[3] !== "") || byValue(x[3], y[3]);
+}
+// byTails compares two tails part by part, at their dots. When one tail is the start of the other, the longer tail is higher.
+function byTails(a, b) {
+  const x = a.split("."), y = b.split(".");
+  for (let i = 0; i < Math.min(x.length, y.length); i++) { const d = byPart(x[i], y[i]); if (d) return d; }
+  return x.length - y.length;
+}
+// splitVersion gives the text before the pre-release, the pre-release, and the build data, or null for a part that is missing. The
+// build data starts at the first "+", and the pre-release at the first "-" before it.
+function splitVersion(v) {
+  const plus = v.indexOf("+"), head = plus < 0 ? v : v.slice(0, plus), build = plus < 0 ? null : v.slice(plus + 1);
+  const dash = head.indexOf("-");
+  return dash < 0 ? [head, null, build] : [head.slice(0, dash), head.slice(dash + 1), build];
+}
+// splitPre gives the text of a tail and the identifiers of its pre-release. The build data does not count.
+const splitPre = v => { const [tail, pre] = splitVersion(v); return [tail, pre === null ? [] : pre.split(".")]; };
+const versionOf = (numbers, count, form, attached, pre, tail) => ({before: "", numbers, count, form, attached, pre, tail});
+// parsedVersion reads a version as Palette parses it, or gives null.
+function parsedVersion(v) {
+  const [core, pre, build] = splitVersion(noV(v)), n = core.split(".");
+  const ids = s => s.split(".").every(id => IDENTIFIER.test(id));
+  if (n.length > 3 || !n.every(x => DIGITS.test(x) && fits(x))) return null;
+  if ((build !== null && !ids(build)) || (pre !== null && !ids(pre))) return null;
+  return versionOf([n[0], n[1] || "0", n[2] || "0"], n.length, FORM.PARSED, false, pre === null ? [] : pre.split("."), "");
+}
+// threeNumbers reads the first three numbers of a text and the form around them, or gives null.
+function threeNumbers(v) {
+  const t = /\d+\.\d+\.\d+/.exec(v);
+  if (!t) return null;
+  const before = v.slice(0, t.index), end = t.index + t[0].length;
+  if (before !== "" && before !== "v") { const after = readVersion(v.slice(t.index)); return after && {...after, before}; }
+  const numbers = t[0].split(".");
+  if (!numbers.every(fits)) return null;
+  const [rest, pre] = splitPre(v.slice(end)), tail = rest.startsWith(".") ? rest.slice(1) : null;
+  // a number with text right after it counts as a fourth number only in the last part
+  const dot = tail === null ? -1 : tail.indexOf(".");
+  const fourth = tail !== null && (dot < 0 ? NUMBER_AND_TEXT.test(tail) : DIGITS.test(tail.slice(0, dot)));
+  // text right after the third number: that number and the text are one part, so the version has two numbers and that tail
+  if (tail === null && rest !== "") {
+    return versionOf(numbers, 2, FORM.SHORT, false, pre, v.slice(v.slice(0, end).lastIndexOf(".") + 1, end + rest.length));
+  }
+  return versionOf(numbers, 3, fourth ? FORM.MORE : FORM.TEXT, false, pre, tail === null ? rest : tail);
+}
+// shortVersion reads the one or two numbers at the start of a text and the tail after them, or gives null.
+function shortVersion(v) {
+  let [rest, pre] = splitPre(noV(v)), count = 0;
+  const numbers = ["0", "0", "0"];
+  for (;;) {
+    const dot = rest.indexOf("."), part = dot < 0 ? rest : rest.slice(0, dot);
+    if (!DIGITS.test(part)) break;
+    if (count === 3 || !fits(part)) return null;
+    numbers[count++] = part;
+    rest = dot < 0 ? "" : rest.slice(dot + 1);
+  }
+  // the number of a last part with text right after it, as in "1.2rc1"
+  const attached = rest.includes(".") ? null : NUMBER_AND_TEXT.exec(rest);
+  if (attached) {
+    if (count === 3 || !fits(attached[1])) return null;
+    numbers[count++] = attached[1];
+  }
+  return count ? versionOf(numbers, count, FORM.SHORT, !!attached, pre, rest) : null;
+}
+// readVersion gives the version that strata reads in a text, or null for a text with no version.
+const readVersion = v => parsedVersion(v) || threeNumbers(v) || shortVersion(v);
+// byForm orders two versions of one form, after their numbers and the text before them.
+function byForm(x, y) {
+  const tails = () => byTails(x.tail, y.tail) || (x.pre.length > 0) - (y.pre.length > 0) || byIds(x.pre, y.pre);
+  switch (x.form) {
+    case FORM.SHORT: return x.count - y.count || y.attached - x.attached || tails();
+    case FORM.PARSED: return (x.pre.length === 0) - (y.pre.length === 0) || byIds(x.pre, y.pre);
+    default: return tails();
+  }
+}
+function versionCmp(a, b) {
+  const s = String(a), t = String(b), x = readVersion(s), y = readVersion(t);
+  if (!x || !y) return x ? 1 : y ? -1 : byRuns(s, t);
+  for (let i = 0; i < 3; i++) { const d = byValue(x.numbers[i], y.numbers[i]); if (d) return d; }
+  return (x.before === "") - (y.before === "") || byRuns(x.before, y.before) || x.form - y.form || byForm(x, y);
+}
+const ORDERS = {num: (a, b) => a - b, text: natural, version: versionCmp};
 const rank = list => v => { const i = list.indexOf(v); return i < 0 ? list.length : i; };
 
 // sortBy sorts a list by the column that S.sort holds for the table. keys maps a column to [the value of a row, the kind of order].
@@ -370,6 +477,8 @@ const filterBox = (key, words) => h`<input class="search" id="q-${key}" data-q="
 const matches = (key, ...texts) => { const q = (S.qs[key] || "").toLowerCase(); return !q || texts.some(t => String(t).toLowerCase().includes(q)); };
 
 const badge = (cls, text) => h`<span class="badge ${cls}">${text}</span>`;
+// newChip is the chip "new" after a version of the last 7 days, or "" when the version is older.
+const newChip = on => on ? h` <span class="badge fresh">new</span>` : "";
 // badgeOf draws the badge of a word from one of the tables above. A word that the table lacks shows as it is.
 const badgeOf = (table, key) => { const [c, t] = table[key] || ["y", key]; return badge(c, t); };
 const statusBadge = st => badgeOf(BADGE, st);

@@ -98,7 +98,7 @@ the level, and says when the two disagree. See
 | `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. Palette does not replace the nodes for it: its repave check reads no CNI or CSI layer. |
 | `in-place` | any other layer with `IDENTITY` or `AUTHORED` | Palette upgrades or configures the pack in place. |
 | `sync` | only `UPSTREAM`, on any layer, or `UPSTREAM` with `IDENTITY` at the same version on the OS, Kubernetes, or kernel layer | Palette applies the change at the next profile sync. |
-| `none` | no change, only a tag renamed for the same build, or `IDENTITY` alone at the same version on the OS, Kubernetes, or kernel layer | No node changes. |
+| `none` | no change, only a tag renamed for the same build, `IDENTITY` alone at the same version on the OS, Kubernetes, or kernel layer, or a renumber that keeps the numbers of the version | No node changes. |
 
 **A new version repaves, and another pack reference does not.** On the OS,
 Kubernetes, and kernel layers, `IDENTITY` gives `repave` only for a new
@@ -123,6 +123,37 @@ alone is.
 A change of the pack order alone moves no flag and no level. Every pack stays
 `unchanged`, and `maxImpact` is `none`. The report adds the line `note: pack
 order changed between the two profiles`.
+
+## A renumber
+
+A renumber moves a pack to another version and keeps its content. A pipeline
+makes one when it gives a pre-release its final number. The two sides of the
+pack have the same name, layer, type, and registry. They have the same values,
+manifests, params, image list, and `imageId`. The tag, the pack uid, and the
+digest of the archive follow the version.
+
+A renumber whose version keeps its numbers gets the impact `none` on each
+layer, also on the OS and the Kubernetes layers. Only the pre-release or the
+build data of such a version changes, as from `1.65.0-rc.1` to `1.65.0`. The
+text is `none (renumber only)`, and `packs[].renumbered` in the JSON is `true`.
+The flags still show `IDENTITY`, and `UPSTREAM` for the new digest:
+
+```text
+{{#include ../output/renumber-compare.txt}}
+```
+
+**A renumber to other numbers keeps the level of its layer.** Strata does not
+read the archive of a pack. The values do not always name the content. In the
+Public Repo, `ubuntu-aws` `20.04` and `24.04` have the same values and two
+digests, and they are two releases of the OS. So such a move stays `repave`.
+`same-release --allow renumber` can accept such a move: see
+[A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+
+**Check the archive of each new build in your pipeline.** The impact `none`
+covers what the profile holds. Strata does not compare the files of the two
+archives, so it cannot show that only `pack.json` changed in the new build.
+[#751](https://github.com/como-technologies/strata/issues/751) adds the
+compare of the archives.
 
 ## Where to see it
 

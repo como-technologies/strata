@@ -206,6 +206,15 @@ asks if that is what the reviewer read:
 `IDENTICAL` means that the content is the same, by its digest, and not by a tag or
 a name. A difference fails the job.
 
+The record of the release that the clusters run now has a newer published version.
+`behind` names it, and the exit is `1` until each record moves to it:
+
+```text
+{{#include output/loop-behind-profile.txt}}
+```
+
+See [Newer versions of a profile](./commands/behind.md#newer-versions-of-a-profile).
+
 When your team runs [the observer](./automation/observer.md), the publish step also
 writes the records into the cluster. Name the records of the project of the cluster, one for each
 version. Here the observer watches the cluster `payments` of `dev`, so these are the
@@ -252,6 +261,8 @@ The `palette` line is the answer of Palette. Your team decides what to do with i
 | What happens | What you run | Read |
 | --- | --- | --- |
 | You copy the release to `prod`. | `strata same-release releases/dev.json releases/prod.json` | [Promote a release to another project](./use-cases/promote.md) |
+| You ask if `dev` and `prod` hold one release now, with no record. | `strata same-release <name>@<version> <name>@<version> --project-name-a dev --project-name-b prod` | [Environments in the projects of one tenant](./use-cases/projects.md) |
+| Your pipeline publishes the same content under its final numbers. | `strata same-release --allow renumber releases/rc.json releases/final.json` | [A release gets new version numbers](./use-cases/renumber.md) |
 | You write a new cluster. | `strata preflight cluster.json --cloud eks` | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
 | A pack has a security fault. | `strata list --pack <name>`, then `strata consumers <name>@<version>` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
 | You delete an old version. | `strata consumers <name>@<version>` | [Retire a version](./use-cases/retire.md) |

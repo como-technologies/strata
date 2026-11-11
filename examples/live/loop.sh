@@ -7,7 +7,8 @@
 #   1  main records the release version and cluster A that runs it
 #   2  a change: the next version as a candidate on a branch, and the question to Palette if it
 #      accepts the packs of the candidate. Then the comment of the pull request, and the merge gate
-#   3  the publish: the published next version is the candidate that the reviewer read. The stage
+#   3  the publish: the published next version is the candidate that the reviewer read, and behind
+#      names it as a newer version of the release (#707). The stage
 #      asks Palette if the move of cluster A to the next version repaves, and if Palette accepts
 #      the packs. pr-comment.sh --repave puts the answer in the comment of the pull request of the
 #      move. A cluster ref that selects no profile holds the release alone (#615)
@@ -114,8 +115,18 @@ if stage 3 "the publish"; then
     in_repo "$strata" snapshot "$NEXT" -o releases/1.0.1.json
   check same-release 0 '#81: Palette holds the content that the reviewer read' -- \
     in_repo "$strata" same-release candidate.json releases/1.0.1.json
+  # no pack of the publish moves its version, so --allow renumber gives the same verdict
+  check same-release-renumber 0 '#730: --allow renumber passes the publish too, and names no renumber' -- \
+    in_repo bash -c "\"$strata\" same-release --allow renumber candidate.json releases/1.0.1.json --json | jq -e '.same and .allowRenumber and (.pairs[0] | has(\"renumbers\") | not)'"
   check commit-publish 0 'main records the published version' -- \
     in_repo bash -c 'git add releases && git commit -qm "record 1.0.1"'
+  # the publish of the next version: Palette lists it with the release. So behind names it for the
+  # record of the release, and for the record of cluster A, which runs the release
+  check behind-profile 1 "#707: behind on the records of the release and of cluster A exits 1: $NAME has a newer version" -- \
+    "$strata" behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json
+  check behind-profile-names 0 "#707: behind names $NAME@1.0.1 as a newer version of $NAME@1.0.0, for the two records" -- \
+    jq -e --arg name "$NAME" '[.profiles[] | select(.name == $name and .version == "1.0.0")]
+      | length == 1 and (.[0].pinnedBy | length) == 2 and any(.[0].newer[]; .version == "1.0.1")' behind-profile.out
   # Palette answers for a version that it holds: the move of cluster A to the next version. Both
   # commands exit 1, because the roots differ; the answers are in the report.
   check ask-repave 1 '#385: compare --repave: Palette answers if the move of cluster A to the next version repaves' -- \

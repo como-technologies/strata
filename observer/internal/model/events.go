@@ -30,6 +30,7 @@ func (k Kind) Sentence() string {
 const (
 	reasonProfileUpdated = "ProfileUpdated"
 	reasonNewVersion     = "NewVersion"
+	reasonNewProfile     = "NewProfileVersion"
 	reasonOldCopy        = "OldCopy"
 	reasonAuditUnread    = "AuditUnread"
 )
@@ -38,8 +39,8 @@ const (
 // its first sight. Each write of its `who` makes an info event at the time of the write. A finding
 // whose audit log strata could not read makes one info event that says so, at its last sight: the
 // event states what is true now. A newer version makes an event at its listing. A registry copy
-// that is older makes one at its last sync. An event that is older than the window is not in the
-// list.
+// that is older makes one at its last sync. A newer published version of a profile makes one at its
+// create. An event that is older than the window is not in the list.
 func eventsOf(findings []Finding, versions *Versions, now time.Time) []Event {
 	out := []Event{}
 	add := func(e Event) {
@@ -92,7 +93,7 @@ func versionEvents(vs *Versions) []Event {
 	}
 	copies := map[string]*copyOf{}
 	for _, pin := range vs.Pins {
-		profiles := pinProfiles(pin)
+		profiles := pinProfiles(pin.PinnedBy)
 		if pin.Behind && len(pin.Newer) > 0 {
 			if t, ok := parseTime(pin.Newer[0].Listed); ok {
 				out = append(out, Event{Type: EventNewer, Reason: reasonNewVersion, Time: t, Object: strings.Join(profiles, ", "),
@@ -118,13 +119,30 @@ func versionEvents(vs *Versions) []Event {
 		out = append(out, Event{Type: EventNotChecked, Reason: reasonOldCopy, Time: c.at, Object: strings.Join(slices.Compact(c.profiles), ", "),
 			Message: fmt.Sprintf("Current against a copy of %s from %s.", registry, c.at.UTC().Format("Jan 2"))})
 	}
+	return append(out, profileEvents(vs.Profiles)...)
+}
+
+// profileEvents gives an event for each newer published version of a profile, at its create. The
+// object is the profiles that hold the older version.
+func profileEvents(profiles []docs.ProfilePin) []Event {
+	var out []Event
+	for _, p := range profiles {
+		newest, ok := newestProfile(p)
+		if !ok {
+			continue
+		}
+		if t, ok := parseTime(newest.Created); ok {
+			out = append(out, Event{Type: EventNewer, Reason: reasonNewProfile, Time: t, Object: strings.Join(pinProfiles(p.PinnedBy), ", "),
+				Message: fmt.Sprintf("%s@%s is a newer version of the profile.", p.Name, newest.Version)})
+		}
+	}
 	return out
 }
 
-// pinProfiles lists the profiles that pin a pack, sorted.
-func pinProfiles(pin docs.Pin) []string {
-	out := make([]string, 0, len(pin.PinnedBy))
-	for _, by := range pin.PinnedBy {
+// pinProfiles lists the profiles of the records that pin a pack or hold a profile version, sorted.
+func pinProfiles(pinnedBy []docs.PinnedBy) []string {
+	out := make([]string, 0, len(pinnedBy))
+	for _, by := range pinnedBy {
 		out = append(out, by.Subject)
 	}
 	slices.Sort(out)

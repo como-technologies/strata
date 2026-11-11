@@ -6,6 +6,7 @@
 
 mod common;
 
+mod behind;
 mod benches;
 mod ci_scripts;
 mod cli;
@@ -24,6 +25,8 @@ mod masked;
 mod observer_deploy;
 mod observer_up;
 mod presets;
+mod projects;
+mod renumber;
 mod report;
 mod report_deploy;
 mod routes;
@@ -32,4 +35,5 @@ mod spawn;
 mod unknown;
 mod unsynced;
 mod verify;
+mod version_order;
 mod workflows;

@@ -9,6 +9,10 @@ Arguments:
 Options:
   -o, --output <OUTPUT>
           Write to this file, not to standard output
+      --project <PROJECT>
+          Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>
+          The same, by project name
       --raw-dir <RAW_DIR>
           Also save the raw API answers in this directory
       --from-raw <FROM_RAW>

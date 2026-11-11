@@ -7,7 +7,7 @@ use strata::ops;
 use strata::reference::Ref;
 
 use super::args::ConsumersArgs;
-use super::{connect, now_utc};
+use super::{connect_in, now_utc};
 
 pub(crate) fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
@@ -16,7 +16,7 @@ pub(crate) fn cmd_consumers(a: &ConsumersArgs) -> Result<ExitCode> {
         &ops::ConsumersOptions {
             list_only: a.list_only,
         },
-        |scope| connect(progress, scope),
+        |scope| connect_in(progress, Some(&a.project), scope),
         &now_utc(),
         &progress,
     )?;

@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::common::{
-    CommandExt, FAKE_PORT_FORWARD, copy_scripts, executable, fake_bin, on_path, path_with,
-    repo_file, text, walk,
+    CommandExt, FAKE_PORT_FORWARD, copy_scripts, executable, fake_bin, just_dry_run, on_path,
+    path_with, repo_file, text, walk,
 };
 
 /// The key of Palette in a run. A run must not show it in an argument of `kubectl` or in a file.
@@ -831,14 +831,7 @@ fn the_recipes_pass_the_cluster_and_the_tag_and_the_flags_to_the_script() {
         return;
     };
     let dry = |args: &[&str]| {
-        let o = Command::new(&just)
-            .arg("--dry-run")
-            .args(args)
-            .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .output_locked()
-            .unwrap();
-        assert!(o.status.success(), "{}", text(&o.stderr));
-        text(&o.stderr)
+        just_dry_run(&just, args)
             .lines()
             .filter(|l| l.starts_with("examples/live/"))
             .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))

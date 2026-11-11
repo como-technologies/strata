@@ -247,8 +247,9 @@ A version that does not parse reads as the first three numbers that it holds
 with dots between them, at any place. Palette ignores the rest of the text,
 also a pre-release after the numbers. So `1.1.8.develop` reads as `1.1.8`, and
 `10.4.0.1` reads as `10.4.0`. Palette gives no order to two versions that read
-as one. A text with no three numbers, such as `LTS__24.x`, holds no version for
-Palette.
+as one. A text with no three numbers, such as `1.2.develop` or `LTS__24.x`,
+holds no version for Palette. A compare with such a text fails with
+`VersionParseFailure`.
 
 The create of a profile version refuses a version that does not parse, with
 `VersionParseFailure`: see
@@ -257,8 +258,9 @@ So such a profile version comes from before that rule. A registry can still
 list a pack version of that form.
 
 These rules come from the code of Palette. No run makes such a profile version,
-because Palette refuses the create. Strata reads the same numbers, and it adds
-an order for two versions that read as one: see
+because Palette refuses the create. Strata reads the same numbers, and the
+numbers decide first. Where Palette gives no order or reads no version, strata
+follows the order of the Rust crate `versions` 8.0.1: see
 [the rule of `@latest`](../../reference/refs.md#rules).
 
 ## Drafts
@@ -372,6 +374,38 @@ project profile:
 
 The command page is
 [A profile of the tenant](../../commands/list.md#a-profile-of-the-tenant).
+
+## The versions of a profile
+
+`GET /v1/clusterprofiles/{uid}` gives the published versions of the profile in
+`spec.versions[]`, each with `uid` and `version`. Palette selects them:
+
+- They have the name of the version. The compare of the names ignores the case.
+- They are in the scope of the version. For a profile of a project, they are in
+  the same project. For a profile of the tenant, they are at tenant scope. So a
+  version of another project, or of the other scope, is not in the list.
+- A version that nobody published is not in the list, and a deleted version is
+  not either.
+- The list has no order, and no mark of the latest version.
+
+The list gives no time. The document of each version gives
+`metadata.creationTimestamp`, the time of its create. Palette gives no time of
+the publish.
+
+No route and no status of a cluster says that a newer version of a profile
+exists. The document of a cluster names the version of each profile that it
+runs. The notifications of a cluster come from an edit of a version that the
+cluster runs, and from a change of a pack. A new version has a
+new uid that no cluster runs, so its publish notifies no cluster.
+
+The code of Palette shows these facts. On the live tenant, the checks
+`versions-tenant` and `versions-project` of
+[scope.sh](../../development/live-runs.md#scopesh) test the scope. The check
+`behind-profile-names` of [loop.sh](../../development/live-runs.md#loopsh)
+tests a new version of the same project. No result yet: the live window of wave
+16 runs them. The compare of the names and the deleted versions have no live
+check. The command page is
+[Newer versions of a profile](../../commands/behind.md#newer-versions-of-a-profile).
 
 ## The lock of a cluster template
 
@@ -515,6 +549,19 @@ twice. So strata does not check them, and `--validate` asks Palette. With no
 
 Strata does not copy the rules that the validate route checks: see
 [Checks before any request](../../reference/candidate-file.md#checks-before-any-request).
+
+### A newer version of a profile
+
+No route of Palette says that a newer version of a profile exists: see
+[The versions of a profile](#the-versions-of-a-profile). So `behind` makes the
+check. It reads the published versions that Palette lists for the profile, and it
+does not copy the rule of the name and the scope. Palette gives them in no order,
+so strata orders them, as it orders the versions of a pack: see
+[The order of versions](#the-order-of-versions). A pre-release is a newer version
+only of a pre-release, or with `--pre-release`.
+
+Palette is the owner of the rule. When a route or a status of Palette names the
+newer versions of a profile, strata removes its order and reads that answer.
 
 ### An event when a published version changes
 

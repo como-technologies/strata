@@ -61,7 +61,7 @@ flowchart LR
   version -. "snapshot" .-> record
   cluster -. "snapshot, or a set: tag: or filter:" .-> record
   pack -. "snapshot pack:" .-> record
-  record -. "verify" .-> version
+  record -. "verify, behind" .-> version
   record -. "verify" .-> cluster
   record -. "verify, behind" .-> pack
   record -. "compare" .-> cluster
@@ -77,7 +77,8 @@ Palette has it, and a **record**, the hashes of an object that Palette holds.
 `snapshot` writes a record of any of them, and one record for each cluster of a
 label or a saved tag filter. `verify` asks whether Palette, or the registry,
 still holds what a record says. `compare` reports what differs between two of
-them. `behind` names the pins that the registry has passed.
+them. `behind` names the pins that the registry has passed, and the profile
+versions that have a newer published version.
 
 The root joins the two files. A candidate and the published version give the
 same root, so `same-release` shows that Palette holds the version that a
@@ -94,6 +95,7 @@ reviewer approved, by its content and not by a tag or a name.
 | Does this change replace the nodes? | [`strata compare cluster:NAME B --repave`](./commands/compare/repave.md) |
 | What changed between two pack versions? | [`strata compare pack:NAME@A pack:NAME@B`](./use-cases/pack-versions.md) |
 | Does the registry have newer versions of what we pin? | [`strata behind 'releases/*.json'`](./commands/behind.md) |
+| Does Palette have a newer version of the profile that we run? | [`strata behind 'releases/*.json'`](./commands/behind.md#newer-versions-of-a-profile) |
 | Which clusters are production? | [`strata snapshot filter:production --dir fleet`](./use-cases/fleet.md) |
 | Can I delete this version? | [`strata consumers NAME@VERSION`](./commands/consumers.md) |
 | Which digest does each tag run as on this cluster? | [`strata-observer serve --read-pods`](./automation/observer.md#the-pods-of-the-cluster) |

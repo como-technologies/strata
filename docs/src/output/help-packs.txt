@@ -7,13 +7,15 @@ Arguments:
   <NAME>  The pack name, as the registry holds it
 
 Options:
-      --registry <NAME>  Only this registry, by name or uid
-      --cloud <TYPE>     Keep the versions of this cloud, such as aws, and the versions of the cloud type all
-      --latest           Only the version that `@latest` names in each registry, and the version Palette calls the latest when it differs
-      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
-      --json             The same as --format json
-      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
-      --no-color         The same as --color=never
-      --compact          Write the JSON on one line
-  -q, --quiet            No progress messages, no note of an unknown value, and no warning of the send
-  -h, --help             Print help
+      --registry <NAME>              Only this registry, by name or uid
+      --cloud <TYPE>                 Keep the versions of this cloud, such as aws, and the versions of the cloud type all
+      --latest                       Only the version that `@latest` names in each registry, and the version Palette calls the latest when it differs
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>  The same, by project name
+      --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
+      --json                         The same as --format json
+      --color [<COLOR>]              Color the report: auto, always, or never [default: auto]
+      --no-color                     The same as --color=never
+      --compact                      Write the JSON on one line
+  -q, --quiet                        No progress messages, no note of an unknown value, and no warning of the send
+  -h, --help                         Print help

@@ -42,7 +42,7 @@ or the version as the input:
 | Input | Gate | Function |
 | --- | --- | --- |
 | `records` | promotion | The records, in promotion order, separated by spaces. |
-| `allow` | promotion | The differences to accept, separated by spaces or new lines: `registry-move` for a promotion that moves packs to another registry, and `no-digest`. |
+| `allow` | promotion | The differences to accept, separated by spaces or new lines: `registry-move`, `renumber`, and `no-digest`. See [Which pairs pass](../commands/same-release.md#which-pairs-pass). |
 | `version` | retire | The version to retire, as `name@version` or a profile uid. |
 | `project` | both | The project that holds a ref such as `name@version`, by name; empty is tenant scope. A record that is a file needs none. |
 | `palette-api` | both | A self-hosted Palette; empty is `https://api.spectrocloud.com`. |

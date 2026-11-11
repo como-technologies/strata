@@ -46,6 +46,11 @@ func Build(in Input) Summary {
 	s.Counts = s.counts(in, v)
 	s.Counts.Newer = len(s.Newer)
 	s.Counts.NewerProfiles = distinctProfiles(s.Newer)
+	for _, p := range s.Profiles {
+		if p.NewerVersion != nil {
+			s.Counts.NewerProfileVersions++
+		}
+	}
 	return s
 }
 
@@ -62,6 +67,8 @@ type view struct {
 	newest map[string]string
 	// newerProfiles holds the profiles that a pin that is behind names.
 	newerProfiles map[string]bool
+	// newerVersions maps a profile to the newest published version of its profile, when it is newer.
+	newerVersions map[string]NewerVersion
 	// findingProfiles and findingPacks hold the profiles and the packs that a finding names.
 	// packlessProfiles holds the profiles with a finding that names no pack, such as overwritten.
 	findingProfiles  map[string]bool
@@ -72,8 +79,9 @@ type view struct {
 
 func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, newerProfiles: map[string]bool{},
-		findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
+		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
 	if in.Versions != nil {
+		v.readNewerVersions(in.Versions.Profiles, utc(in.Now))
 		for _, pin := range in.Versions.Pins {
 			if pin.Registry != "" {
 				v.registries[pin.RegistryUID] = pin.Registry
@@ -105,6 +113,20 @@ func newView(in Input, c *causes) *view {
 		}
 	}
 	return v
+}
+
+// readNewerVersions keeps the newest published version of each profile that is behind. A profile
+// version that strata could not check has none: the page then says nothing about a newer version.
+func (v *view) readNewerVersions(profiles []docs.ProfilePin, now time.Time) {
+	for _, p := range profiles {
+		newest, ok := newestProfile(p)
+		if !ok {
+			continue
+		}
+		for _, by := range p.PinnedBy {
+			v.newerVersions[by.Subject] = NewerVersion{Version: newest.Version, Created: newest.Created, New: listedWithin(newest.Created, now)}
+		}
+	}
 }
 
 func (v *view) registry(uid string) string {
@@ -150,13 +172,17 @@ func profileRow(r Record, v *view) Profile {
 		p.Published = &Published{Status: r.Row.Status, RootRecorded: r.Row.RootRecorded, RootLive: r.Row.RootLive}
 	}
 	p.ClusterCopy = copyOf(r.Cluster)
+	if newer, ok := v.newerVersions[subject]; ok {
+		p.NewerVersion = &newer
+	}
 	for _, rp := range r.Doc.Packs {
 		p.Packs = append(p.Packs, packRow(r, rp, v))
 	}
 	switch {
 	case v.findingProfiles[subject]:
 		p.Status = StatusDrift
-	case v.newerProfiles[subject]:
+	// a newer version of a pack, or of the profile itself: the page gives each its own words
+	case v.newerProfiles[subject], p.NewerVersion != nil:
 		p.Status = StatusNewer
 	case v.causes.profiles[subject]:
 		p.Status = StatusNotChecked
@@ -255,7 +281,7 @@ func newerRows(vs *Versions, v *view, now time.Time) []Newer {
 		}
 		rows = append(rows, Newer{Name: pin.Name, Registry: v.registry(pin.RegistryUID), RegistryUID: pin.RegistryUID, Version: pin.Version,
 			Newest: newest.Version, Listed: newest.Listed, New: listedWithin(newest.Listed, now), Floating: pin.Floating,
-			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin), Steps: stepsOf(pin), Move: move})
+			PinnedState: pin.PinnedState, Drops: drops, Profiles: pinProfiles(pin.PinnedBy), Steps: stepsOf(pin), Move: move})
 	}
 	return rows
 }

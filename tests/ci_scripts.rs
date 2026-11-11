@@ -482,7 +482,7 @@ const WRAPPERS: [Wrapper; 9] = [
         job: "strata-promote-gate",
         tool: Listed::Command("same-release"),
         reaches: &[reach("--allow", "allow", "STRATA_PROMOTE_ALLOW")],
-        left: &[PRINTING],
+        left: &[PRINTING, PROJECT, SIDES],
     },
     Wrapper {
         workflow: "observer-propose.yml",
@@ -523,6 +523,7 @@ const WRAPPERS: [Wrapper; 9] = [
         reaches: &[],
         left: &[
             PRINTING,
+            PROJECT,
             Left {
                 flags: &["--list-only"],
                 why: "the gate reads each cluster, because the list of Palette can omit a consumer",
@@ -704,6 +705,16 @@ const PROJECT: Left = Left {
     why: "the project comes from PALETTE_PROJECT_UID or PALETTE_PROJECT",
 };
 
+const SIDES: Left = Left {
+    flags: &[
+        "--project-a",
+        "--project-name-a",
+        "--project-b",
+        "--project-name-b",
+    ],
+    why: "a record names its project, so a gate over two projects reads a record of each",
+};
+
 const FORMATS: Left = Left {
     flags: &["--json", "--color", "--no-color", "--compact"],
     why: "the script asks for the format that it reads",
@@ -793,6 +804,7 @@ const PASSES: [Passes; 4] = [
         ],
         left: &[
             FORMATS,
+            PROJECT,
             Left {
                 flags: &["--pin"],
                 why: "the report covers each pin, and this option limits the run to one pack",
@@ -924,12 +936,7 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
 #[test]
 fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without_a_watch() {
     let gitlab = gitlab_drop_in();
-    let lines: Vec<&str> = gitlab["strata-preflight"]["script"]
-        .as_sequence()
-        .expect("the job has script lines")
-        .iter()
-        .map(|l| l.as_str().unwrap())
-        .collect();
+    let lines = strings(&gitlab["strata-preflight"]["script"]);
     let run = |tier: &str, watch: &str| -> String {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".strata")).unwrap();
@@ -2907,12 +2914,7 @@ const FAKE_UNAME: &str = "#!/bin/sh\ncase \"$1\" in -s) echo Linux ;; -m) echo x
 /// no token. Its project folder is `project` in the release `d`. `apt-get` is a stand-in.
 fn gitlab_install(d: &Path, envs: &[(&str, &str)]) -> Output {
     let gitlab = gitlab_drop_in();
-    let mut lines: Vec<&str> = gitlab[".strata"]["before_script"]
-        .as_sequence()
-        .expect("the template .strata has before_script lines")
-        .iter()
-        .map(|l| l.as_str().unwrap())
-        .collect();
+    let mut lines = strings(&gitlab[".strata"]["before_script"]);
     lines.push(r#""$STRATA_BIN" --version"#);
     fake_bin(d, &[("apt-get", "#!/bin/sh\n"), ("uname", FAKE_UNAME)]);
     let project = d.join("project");
@@ -3215,6 +3217,8 @@ fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_versi
 }
 
 /// Issue #616. A version that does not parse reads as its first three numbers, as in Palette.
+/// Issue #714: one or two numbers and a tail of text are a pre-release of the version of their
+/// numbers.
 #[test]
 fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_rest_as_a_move_back()
 {
@@ -3235,9 +3239,24 @@ fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_r
         Some(1),
         "1.1.8.develop is below 1.1.10:\n{out}"
     );
-    // a version with no three numbers is still above each version
+    // one or two numbers and a tail of text are below the version of the numbers, and above a
+    // lower version
     let (o, out) = gate_for_pin_move("1.2.x", "1.3.0");
-    assert_eq!(o.status.code(), Some(1), "1.3.0 is below 1.2.x:\n{out}");
+    assert!(o.status.success(), "1.3.0 is above 1.2.x:\n{out}");
+    let (o, out) = gate_for_pin_move("1.1.10", "1.2.develop");
+    assert!(o.status.success(), "1.2.develop is above 1.1.10:\n{out}");
+    let (o, out) = gate_for_pin_move("1.2.0-rc.1", "1.2.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.2.develop is below 1.2.0-rc.1:\n{out}"
+    );
+    let (o, out) = gate_for_pin_move("1.10.0", "1.2.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.2.develop is below 1.10.0:\n{out}"
+    );
 }
 
 /// A branch that deliberately returns the record to the release that main pinned before.

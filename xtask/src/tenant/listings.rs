@@ -29,6 +29,11 @@ impl Tenant {
     pub fn listings(&self) {
         let mut every_cluster = Vec::new();
         let scopes = self.project_dirs();
+        // the versions of a profile first: the copy of a tenant profile below carries them
+        self.profile_versions(TENANT, ProfileScope::Tenant);
+        for project in &scopes {
+            self.profile_versions(project, ProfileScope::Project);
+        }
         // Palette lists a profile of the tenant in each project, and serves its document there.
         // So each project gets a copy of the documents of each tenant profile. Its listing and
         // its search name the tenant versions beside its own.
@@ -58,6 +63,50 @@ impl Tenant {
         }
         self.write_listings(TENANT, &tenant_profiles, &every_cluster);
         self.write_cluster_searches(&scopes, &every_cluster);
+    }
+
+    /// Give each profile document of `dir` the versions of its profile, in `spec.versions[]`.
+    ///
+    /// `scope` is the scope of the documents that get the list. A document with no
+    /// `metadata.creationTimestamp` also gets the time of its create.
+    ///
+    /// As in Palette, the versions are the published versions of the same name in the same scope.
+    /// The compare of the names ignores the case. A version that nobody published is not one.
+    /// Palette gives the list in no order. Here the list has the order of the files, so the order
+    /// of the versions says nothing.
+    fn profile_versions(&self, dir: &str, scope: ProfileScope) {
+        let docs: Vec<Value> = self
+            .documents_in(dir, PROFILES)
+            .into_iter()
+            .filter(|d| d["metadata"]["annotations"]["scope"] == scope.as_str())
+            .collect();
+        let name_of = |d: &Value| {
+            d["metadata"]["name"]
+                .as_str()
+                .unwrap_or_default()
+                .to_lowercase()
+        };
+        // each create takes the next minute, in the order of the publishes of the chapter
+        let mut created = docs
+            .iter()
+            .filter(|d| d["metadata"]["creationTimestamp"].is_string())
+            .count();
+        for doc in &docs {
+            let versions: Vec<Value> = docs
+                .iter()
+                .filter(|d| d["status"]["isPublished"] == true && name_of(d) == name_of(doc))
+                .map(|d| json!({"uid": d["metadata"]["uid"], "version": d["spec"]["version"]}))
+                .collect();
+            let mut doc = doc.clone();
+            doc["spec"]["versions"] = json!(versions);
+            if !doc["metadata"]["creationTimestamp"].is_string() {
+                doc["metadata"]["creationTimestamp"] =
+                    json!(format!("2026-09-15T08:{created:02}:00.000Z"));
+                created += 1;
+            }
+            let uid = doc["metadata"]["uid"].as_str().unwrap_or_default();
+            self.write(dir, &profile_route(uid), &doc);
+        }
     }
 
     /// The directory of each project, in name order. The directory of the tenant is no project.
@@ -363,4 +412,71 @@ fn search_row(doc: &Value, project_name: &str, virtual_summary: Option<&Value>) 
                                         "uid": doc["metadata"]["annotations"]["projectUid"]}},
         "status": status
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// Put the profile version `uid`, `name` at `version`, of the scope `scope` in the directory
+    /// `dir`. A version that ends in `-draft` is a version that nobody published.
+    fn put_version(tenant: &Tenant, dir: &str, version: (&str, &str, &str), scope: ProfileScope) {
+        let (uid, name, version) = version;
+        let published = !version.ends_with("-draft");
+        let doc = json!({"metadata": {"uid": uid, "name": name,
+                "annotations": {"scope": scope.as_str()}},
+            "spec": {"version": version}, "status": {"isPublished": published}});
+        tenant.put(dir, &profile_route(uid), &doc);
+    }
+
+    /// The versions that the document of `uid` in `dir` lists in `spec.versions[]`, sorted.
+    fn listed(tenant: &Tenant, dir: &str, uid: &str) -> Vec<String> {
+        let doc = tenant.read(dir, &profile_route(uid));
+        let mut versions: Vec<String> = doc["spec"]["versions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|v| v["version"].as_str().unwrap_or_default().to_string())
+            .collect();
+        versions.sort();
+        versions
+    }
+
+    /// As in Palette, the document of a version lists the published versions of its name in its
+    /// scope, with no regard to case. A version of another project, of the other scope, or that
+    /// nobody published is not in the list. Each document gets the time of its create (#707).
+    #[test]
+    fn the_document_of_a_version_lists_the_published_versions_of_its_name_in_its_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), Path::new("/nowhere"));
+        let project = ProfileScope::Project;
+        put_version(&tenant, "dev", ("u1", "aws-stack", "1.0.0"), project);
+        put_version(&tenant, "dev", ("u2", "AWS-Stack", "1.1.0"), project);
+        put_version(&tenant, "dev", ("u3", "aws-stack", "1.2.0-draft"), project);
+        put_version(&tenant, "dev", ("u4", "other", "9.0.0"), project);
+        put_version(&tenant, "prod", ("u5", "aws-stack", "1.3.0"), project);
+        put_version(
+            &tenant,
+            TENANT,
+            ("u6", "aws-stack", "2.0.0"),
+            ProfileScope::Tenant,
+        );
+        tenant.listings();
+
+        assert_eq!(listed(&tenant, "dev", "u1"), ["1.0.0", "1.1.0"]);
+        assert_eq!(listed(&tenant, "dev", "u3"), ["1.0.0", "1.1.0"]);
+        assert_eq!(listed(&tenant, "dev", "u4"), ["9.0.0"]);
+        assert_eq!(listed(&tenant, "prod", "u5"), ["1.3.0"]);
+        // the copy of the profile of the tenant in a project lists the versions of the tenant
+        assert_eq!(listed(&tenant, "dev", "u6"), ["2.0.0"]);
+        let created =
+            |uid| tenant.read("dev", &profile_route(uid))["metadata"]["creationTimestamp"].clone();
+        assert!(created("u1").is_string() && created("u1") != created("u2"));
+        // a second rebuild keeps the time of each create
+        let before = created("u2");
+        tenant.listings();
+        assert_eq!(created("u2"), before);
+    }
 }
