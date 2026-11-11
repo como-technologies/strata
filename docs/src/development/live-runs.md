@@ -1520,16 +1520,14 @@ The script puts the edit back at its end, also when a check fails.
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A with the
 component `deploy/observer/pods`, and it reads the digest of each pod image. It
 needs the example at its baseline with cluster A, which is billable until `just
-live-down`. It also needs the key, the token file of the pull Secret, `crane`,
-`kubectl`, `curl`, `jq`, `gh`, and `git`. `OBSERVER_IMAGE` names the image of the
-observer. That image must hold the code of the commit that you test.
+live-down`. It also needs the key, `crane`, `kubectl`, `curl`, `jq`, and `git`.
+`OBSERVER_IMAGE` names the image of the observer. That image must hold the code
+of the commit that you test.
 
-The image of the observer is on a private package of GitHub. The script never
-tags it, never pushes it, and never copies it to another registry. The nodes of
-cluster A pull it with the Secret `ghcr-pull`. The Secret comes from the token
-file, as in [`observer.sh`](#observersh). The file is `GHCR_PULL_TOKEN_FILE`, and
-it holds a token with only the scope `read:packages`. When the file fails,
-`pull-secret` fails, and the run stops before it changes the cluster.
+The image of the observer is on a public package of GitHub. The nodes of cluster
+A pull it with no pull Secret. The script never tags it, never pushes it, and
+never copies it to another registry, so the pod runs the image that CI built.
+`no-pull-secret` makes sure that the pod names no pull Secret.
 
 A throwaway tag on `ttl.sh` holds one image, and then another. These images are
 copies of public images. The names of the images hold a random suffix, and
@@ -1554,10 +1552,10 @@ such image, or when a finding names one. It uses no list of namespaces.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `pull-secret` | 0 | #646: the Secret `ghcr-pull` holds the token of the file. The token comes through standard input |
 | `tag-first`, `values-edit` | 0 | #646: the tag on `ttl.sh` holds its first image, and an image with a shell is there for the crash loop. The pack of the add-on lists the three images of the run, in place |
-| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag |
-| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component, the image of `OBSERVER_IMAGE`, and the pull Secret. The Deployment becomes available |
+| `namespaces`, `settings`, `records` | 0 | #646: the namespace of the observer with the `restricted` standard, the namespace of the pods, the ConfigMap, and the Secret of the key. A record of each profile applies with `--server-side`, and the add-on record lists the tag |
+| `observer-apply`, `observer-ready` | 0 | #646: the overlay lists the component and the image of `OBSERVER_IMAGE`. The Deployment becomes available |
+| `no-pull-secret` | 0 | #732: the pod runs the image of `OBSERVER_IMAGE` with an image id, and its spec names no `imagePullSecrets`. So a node pulled the public image with no login. `no-pull-secret.out` shows the image, the image id, and the pull Secrets. No result yet: no live window ran this check. |
 | `pods-role` | 0 | #646: the account of the observer gets and lists pods in each namespace. It cannot watch or write a pod, and it cannot read a Secret or a node |
 | `pods-read` | 0 | #646: `/v1/images` says `read`, with a time and a count of images. The token, the role, and the policy of the component work on cluster A |
 | `image-first` | 0 | #646: a pod runs the tag. The row holds one digest, the first digest, and it equals the digest of the registry. No finding names the tag |
@@ -1575,9 +1573,8 @@ such image, or when a finding names one. It uses no list of namespaces.
 Read-write. It runs [the observer](./observer-deploy.md) on cluster A, `fred`,
 in two ways. Way 1 is a plain `kubectl apply` of the rendered manifests. Way 2
 is an add-on profile in Palette, with the rendered manifests as one manifest
-layer. It needs the example at its baseline with cluster A Running, the key, the
-token file of the pull Secret, `kubectl`, `gh`, `git`, and `go`. `OBSERVER_IMAGE`
-names the image.
+layer. It needs the example at its baseline with cluster A Running, the key,
+`kubectl`, `git`, and `go`. `OBSERVER_IMAGE` names the image.
 
 The first cycle of the pod reads Palette from a node of cluster A. So
 `reaches-palette` answers whether a workload cluster reaches the API. A failed
@@ -1591,18 +1588,10 @@ through standard input. It is never in a profile, because a profile variable is
 in clear in the copy of the cluster. The kubeconfig lives in a temporary file
 that the script deletes.
 
-The pull Secret comes from a token file, and it goes the same way. The file is
-`GHCR_PULL_TOKEN_FILE`, or `~/.config/strata/ghcr-pull-token` when the variable
-is not set. It holds a token with only the scope `read:packages`. The pull needs
-no other scope. Whoever reads the Secret in the cluster has each scope of its
-token. So the token of `gh auth token`, with the scopes of a person, never goes
-to the cluster.
-
-A person makes the file with the mode `0600`. The script never prints it, and it
-has no fallback. When the file is absent, empty, or open to a group or to
-others, `pull-secret` fails with one line. The line names the file and the
-scope. The run stops before it changes the cluster. `no-secret-in-run` looks for
-the pull token and for the token of `gh` in the files of the run.
+The image of the observer is on a public package of GitHub. The nodes of cluster
+A pull it with no pull Secret, and the script reads no token. `no-pull-secret`
+makes sure that the pod names no pull Secret. `no-secret-in-run` searches the
+files of the run for the key.
 
 Stage 4 counts the requests of the cycles. `count-requests` is a small Go
 program that sits between `strata` and Palette. It writes one line for each
@@ -1626,7 +1615,7 @@ namespace goes. The script deletes no cluster. `KEEP=1` skips the undo, so that
 `observer.sh N` can resume the run at stage N. A check with `?` records its
 result without judging it.
 
-Each check of both ways passes. A workload cluster reaches the API: the pod on
+Each check of #656 passes in both ways. A workload cluster reaches the API: the pod on
 cluster A ends its first cycle against Palette. A profile in Palette installs
 the observer too. The layer does not replace a node. When the profile leaves the
 cluster, Palette deletes the Deployment.
@@ -1643,7 +1632,6 @@ finding, because `verify --who` then reads the audit log.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `pull-secret` | 0 | #656: the token file holds a token with only `read:packages`, and it goes to the Secret `ghcr-pull` through standard input. A file that fails stops the run before any change |
 | `cluster-record`, `profile-records` | 0 | #656: a record of cluster A, and a record of each profile that it runs |
 | `namespace`, `config`, `key` | 0 | #656: the namespace, the ConfigMap, and the Secret of the key. The key goes through standard input |
 | `records-apply` | 0 | #656: the records of the Git revision apply with `--server-side` |
@@ -1651,6 +1639,7 @@ finding, because `verify --who` then reads the audit log.
 | `apply-admitted` | 0 | #656: the namespace enforces `restricted`, and the standard admits the pod |
 | `pod-ready` | 0 | #656: the Deployment is Available in 3 minutes. `strata-observer health` exits 0 through `kubectl exec` |
 | `pod-hardened` | 0 | #656: the pod runs as non-root with a read-only root. It has no capability and no token volume |
+| `no-pull-secret` | 0 | #732: the pod runs the image of `OBSERVER_IMAGE` with an image id, and its spec names no `imagePullSecrets`. So a node pulled the public image with no login. `no-pull-secret.out` shows the image, the image id, and the pull Secrets. No result yet: no live window ran this check. |
 | `reaches-palette` | 0 | #656: `/v1/cluster` gives `page` `ok` and a `checkedAt` through `port-forward`. A workload cluster reaches the API |
 | `no-finding-at-baseline` | 0 | #656: `/v1/findings` is empty for the records that the run made |
 | `summary-matches-strata` | 0 | #656: the page shows the status that `strata verify` and `strata compare` give |
@@ -1675,7 +1664,7 @@ finding, because `verify --who` then reads the audit log.
 | `first-seen-starts-again` | 0 | #656: an edit gives a finding, and a restart gives it a later `firstSeen`. The state goes with the pod |
 | `manifests-delete`, `removal-is-clean` | 0 | #656: `kubectl delete -f observer.yaml` removes the namespace, and no object of the observer stays |
 | `fred-unchanged` | 0 | #656: `strata verify` says that cluster A did not change |
-| `profile-prepare`, `nodes-before` | 0 | #656: the namespace and the Secrets, made with `kubectl` before the profile. The machines of cluster A, before the layer |
+| `profile-prepare`, `nodes-before` | 0 | #656: the namespace, the ConfigMap, the Secret of the key, and the records, made with `kubectl` before the profile. The machines of cluster A, before the layer |
 | `profile-create`, `profile-attach` | 0 | #656: an add-on profile with the rendered manifests as one manifest layer goes to cluster A. The cluster is Running |
 | `profile-applied` | 0 | #656: Palette applies the layer, and the pod is Ready |
 | `profile-does-not-disturb` | 0 | #656: each other profile of cluster A still agrees with its record |
@@ -1684,7 +1673,7 @@ finding, because `verify --who` then reads the audit log.
 | `no-repave` | ? | #656: cluster A keeps its machines when the layer is applied. The output lists the machines before and after. The two lists are the same, so Palette replaces no node for the layer |
 | `profile-detach`, `profile-removal` | 0 | #656: the profile leaves cluster A, and the Deployment goes. Palette deletes the Deployment of a whole layer when a person removes the layer. See [An object that an edit drops from a manifest](../internals/palette/clusters.md#an-object-that-an-edit-drops-from-a-manifest) |
 | `undo-profile`, `undo-namespace` | 0 | #656: no profile of way 2 stays in Palette, and the namespace is gone |
-| `no-secret-in-run` | 1 | #656: no file of the run holds the key, the pull token, or the `gh` token |
+| `no-secret-in-run` | 1 | #656: no file of the run holds the key |
 | `undo-baseline` | 0 | the example is at its baseline |
 
 
@@ -1720,6 +1709,33 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version |
 | `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
+
+## observer-chart.sh
+
+Read-write. It asks whether Palette syncs the public chart of
+[the observer](./observer-deploy.md) from a registry with no login (#732). Step 1 of
+[Install with a profile in Palette](../automation/observer.md#install-with-a-profile-in-palette)
+adds that registry with a token now. The script needs no cluster, and it changes
+nothing else in the tenant. It needs the key, with a role that adds a registry at
+tenant scope, `curl`, and `jq`.
+
+The script makes an OCI registry of the type `basic`, with the provider `helm` and
+the auth type `noAuth`, for `https://ghcr.io/orgs/<owner>` and the folder `charts`.
+`ENDPOINT` and `BASE_PATH` give another address and folder. The name of the
+registry holds a random suffix. Palette reads the address when it makes the
+registry, so a refusal of that read fails the create. The output of each check
+holds the answer of Palette, with its code or its message.
+
+A status of `Completed` alone does not show that Palette read the chart. So only
+`chart-no-login` shows it. The end deletes the registry, also after a failed check
+or an error. The checks with `?` record what Palette does and do not judge it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `registry-no-login` | ? | #732: Palette makes the registry with the auth type `noAuth`. 1 says that Palette refuses the registry, and `registry-no-login.err` holds the code. No result yet: no live window ran this check. |
+| `sync-no-login` | ? | #732: a sync of the registry ends with the status `Completed`. 1 says that the sync ends with another status, and the output holds the status and the message. No result yet: no live window ran this check. |
+| `chart-no-login` | ? | #732: the packs of the registry hold the chart `strata-observer`, and the output names its version. 1 says that Palette read no chart. No result yet: no live window ran this check. |
+| `registry-gone` | 0 | #732: the registry of the run is deleted, and a read of it answers HTTP 404. No result yet: no live window ran this check. |
 
 ## version-states.sh
 

@@ -515,6 +515,21 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
     expect_2(&d, "no OCI registry r-missing");
 
     let d = tenant_digest(
+        &["oci", "r-zot", "argocd", "1.0.0"],
+        &[(
+            "v1_registries_oci_summary",
+            r#"{"items":[{"metadata":{"uid":"r-zot"},
+                "spec":{"endpoint":"zot.example.com","registryType":"zot","providerType":"pack"}}]}"#,
+        )],
+        &[],
+    );
+    expect_2(
+        &d,
+        "OCI registry r-zot has the type 'zot', not ecr or basic",
+    );
+    assert!(d.log.is_empty(), "crane is not run: {}", d.log);
+
+    let d = tenant_digest(
         &["oci", "r-oci", "argocd", "10.4.0.1"],
         &[
             OCI_SUMMARY,
@@ -1353,6 +1368,32 @@ fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
     assert_eq!(named, ["examples/live/palette-curl.sh"]);
 }
 
+/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
+/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
+#[test]
+fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut built = Vec::new();
+    for dir in ["examples", "scripts", "deploy", "crates"] {
+        for path in walk(&root.join(dir)) {
+            if path.extension().is_none_or(|e| e != "sh") {
+                continue;
+            }
+            let code = std::fs::read_to_string(&path).unwrap();
+            if code_lines(&code).any(|l| {
+                ["oci", "helm", "pack"].iter().any(|kind| {
+                    let route = format!("/v1/registries/{kind}/");
+                    l.match_indices(&route)
+                        .any(|(at, _)| l[at + route.len()..].starts_with('$'))
+                })
+            }) {
+                built.push(path.strip_prefix(root).unwrap().display().to_string());
+            }
+        }
+    }
+    assert_eq!(built, ["examples/live/palette-curl.sh"]);
+}
+
 #[test]
 fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     let root = tempfile::tempdir().unwrap();
@@ -1435,6 +1476,35 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
         assert_eq!(o.status.code(), Some(2), "{args:?}");
         assert!(
             text(&o.stderr).contains("usage: api.sh get-status PATH"),
+            "{}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
+fn api_sh_registry_path_prints_the_path_of_each_kind_and_refuses_another_kind() {
+    let root = tempfile::tempdir().unwrap();
+    for (kind, path) in [
+        ("oci-ecr", "/v1/registries/oci/r-1/ecr"),
+        ("oci-basic", "/v1/registries/oci/r-1/basic"),
+        ("helm", "/v1/registries/helm/r-1"),
+        ("pack", "/v1/registries/pack/r-1"),
+    ] {
+        let o = run_live("api.sh", &["registry-path", kind, "r-1"], root.path(), &[]);
+        assert_eq!(o.status.code(), Some(0), "{kind}: {}", text(&o.stderr));
+        assert_eq!(text(&o.stdout).trim_end(), path, "{kind}");
+    }
+    for args in [
+        &["registry-path", "git", "r-1"][..],
+        &["registry-path", "oci-basic"][..],
+    ] {
+        let o = run_live("api.sh", args, root.path(), &[]);
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        assert!(
+            text(&o.stderr).contains(
+                "usage: api.sh registry-path KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack"
+            ),
             "{}",
             text(&o.stderr)
         );
@@ -10092,6 +10162,21 @@ case "$1" in
 esac
 "##;
 
+/// The pod of the observer, as the cluster gives it after an apply of the overlay in the working
+/// folder. It is `fake-observer-pod` on the `PATH` of observer.sh and of observer-images.sh. It prints
+/// `$FAKE_OBS/pod.json` with the image of the overlay and an image id. `FAKE_POD_IMAGE` gives the pod
+/// another image. The pod names a pull Secret when the overlay names one, or when `FAKE_PULL_SECRET`
+/// names one.
+const FAKE_OBSERVER_POD: &str = r##"#!/usr/bin/env bash
+name=$(sed -n 's/^    newName: //p' kustomization.yaml 2> /dev/null)
+pin=$(sed -n 's/^    newTag: /:/p; s/^    digest: /@/p' kustomization.yaml 2> /dev/null)
+secret=${FAKE_PULL_SECRET-}
+[ -n "$secret" ] || ! grep -qs imagePullSecrets kustomization.yaml || secret=ghcr-pull
+jq --arg n "$name" --arg i "${FAKE_POD_IMAGE:-$name$pin}" --arg s "$secret" '.items[0].spec.containers[0].image = $i
+  | .items[0].status.containerStatuses[0].imageID = ($n + "@sha256:0a1b2c3d")
+  | if $s != "" then .items[0].spec.imagePullSecrets = [{name: $s}] else . end' "$FAKE_OBS/pod.json"
+"##;
+
 /// The `kubectl` of observer-images.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`. A pod made with `apply -f -` gets a file in `pods/`. Its image
 /// id is the digest that the registry holds at that time, as a pull with Always gives. The pod
@@ -10099,7 +10184,8 @@ esac
 ///
 /// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
 /// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
-/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`].
+/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`], and a read of the pod of the observer
+/// runs [`FAKE_OBSERVER_POD`].
 const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -10122,7 +10208,6 @@ case "$*" in
   *"create namespace strata-live-images"*) touch "$obs/ns.strata-live-images" ;;
   *"create configmap strata-observer"*) touch "$obs/config" ;;
   *"create secret generic strata-observer-key"*) cat > "$obs/key.seen" ;;
-  *"create secret generic ghcr-pull"*) cat > "$obs/pull.seen" ;;
   *"apply --server-side -f -"*)
     cat > "$obs/records.yaml"
     cp "$obs/values.txt" "$obs/records.values" 2> /dev/null || : > "$obs/records.values"
@@ -10149,6 +10234,7 @@ case "$*" in
     jq -n --arg n "$name" --arg i "$image" --arg id "$id" --arg p "$policy" --argjson r "$restarts" --arg w "$waiting" \
       '{name: $n, namespace: "strata-live-images", image: $i, imageID: $id, policy: $p, restarts: $r, waiting: $w}' \
       > "$obs/pods/$name.json" ;;
+  *"get pod -l app.kubernetes.io/name=strata-observer -o json"*) exec fake-observer-pod ;;
   *"get pod "*" -o json"*)
     name=$(sed -E 's/.* get pod ([a-z0-9-]+) .*/\1/' <<<"$*")
     [ -f "$obs/pods/$name.json" ] || notfound pods "$name"
@@ -10283,20 +10369,22 @@ fn images_stage() -> Stage {
     let obs = stage.path("obs");
     std::fs::create_dir_all(&obs).unwrap();
     std::fs::write(obs.join("agents.json"), AGENT_PODS).unwrap();
+    std::fs::write(
+        obs.join("pod.json"),
+        serde_json::to_string(&observer_pod()).unwrap(),
+    )
+    .unwrap();
     let bin = stage.path("obs-bin");
     std::fs::create_dir_all(&bin).unwrap();
     for (name, body) in [
         ("kubectl", FAKE_KUBECTL_IMAGES),
+        ("fake-observer-pod", FAKE_OBSERVER_POD),
         ("curl", FAKE_CURL_IMAGES),
         ("crane", FAKE_CRANE_IMAGES),
         // the script never calls docker: the log of this stand-in stays empty
         (
             "docker",
             "#!/usr/bin/env bash\necho \"$*\" >> \"$FAKE_OBS/docker.log\"\nexit 1\n",
-        ),
-        (
-            "gh",
-            "#!/usr/bin/env bash\ncase \"$*\" in\n  \"api user\"*) echo tester ;;\nesac\n",
         ),
         (
             "git",
@@ -10313,10 +10401,6 @@ fn images_stage() -> Stage {
     );
     let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
     stage.env("PATH", &path);
-    // the token file is outside the folder of the run, so that the look for it in the run is fair
-    let token_file = stage.path("ghcr-pull-token");
-    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
-    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("CYCLE_TRIES", "3");
@@ -10331,7 +10415,6 @@ fn run_images(stage: &Stage) -> (Output, String) {
 
 /// Each check of observer-images.sh, in the order that it runs on a good run.
 const IMAGES_CHECKS: [&str; 21] = [
-    "pull-secret",
     "tag-first",
     "values-edit",
     "namespaces",
@@ -10339,6 +10422,7 @@ const IMAGES_CHECKS: [&str; 21] = [
     "records",
     "observer-apply",
     "observer-ready",
+    "no-pull-secret",
     "pods-role",
     "pods-read",
     "image-first",
@@ -10522,7 +10606,7 @@ fn observer_images_sh_lists_the_three_images_in_the_values_of_the_add_on_and_put
 }
 
 #[test]
-fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secret() {
+fn observer_images_sh_installs_the_observer_with_the_component_and_no_pull_secret() {
     let mut stage = images_stage();
     stage.env(
         "OBSERVER_IMAGE",
@@ -10530,12 +10614,12 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
     );
     let (o, steps) = run_images(&stage);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["no-pull-secret"]);
     let overlay = std::fs::read_to_string(stage.path("out/kustomization.yaml")).unwrap();
     for line in [
         "components:\n  - pods\n",
         "newName: ghcr.io/como-technologies/strata-observer\n",
         "newTag: test-abc1234\n",
-        "- name: ghcr-pull\n",
         "value: --content-every=1m",
     ] {
         assert!(overlay.contains(line), "{line:?}:\n{overlay}");
@@ -10544,6 +10628,7 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
         !overlay.contains("ttl.sh"),
         "the observer does not come from ttl.sh:\n{overlay}"
     );
+    assert!(!overlay.contains("imagePullSecrets"), "{overlay}");
     // the folders of the overlay are copies of the base and of the component
     for file in [
         "base/deployment.yaml",
@@ -10557,26 +10642,29 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
             "{file}"
         );
     }
-    // the pull Secret holds the token of the file, through standard input, and no file shows it
-    let pull = observer_log(&stage, "pull.seen");
-    let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
-    assert_eq!(
-        auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN,
-        "{pull}"
-    );
+    // the namespace of the observer comes from its file, and the one Secret holds the key
     let kubectl = observer_log(&stage, "kubectl.log");
     assert!(
-        kubectl.contains("create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson"),
+        kubectl
+            .lines()
+            .any(|l| l.starts_with("apply -f ") && l.ends_with("/deploy/observer/namespace.yaml")),
         "{kubectl}"
+    );
+    let creates: Vec<&str> = kubectl
+        .lines()
+        .filter(|l| l.contains("create secret"))
+        .collect();
+    assert_eq!(creates.len(), 1, "{creates:?}");
+    assert!(
+        creates[0].contains("create secret generic strata-observer-key"),
+        "{creates:?}"
     );
     // the key reaches the Secret through standard input, and no other file or call shows it
     assert_eq!(observer_log(&stage, "key.seen"), OBSERVER_KEY);
     let mut shown = Vec::new();
     for dir in ["out", "obs"] {
         for (file, content) in files_under(&stage.path(dir)) {
-            if !["key.seen", "pull.seen"].contains(&file.as_str())
-                && (content.contains(OBSERVER_KEY) || content.contains(OBSERVER_PULL_TOKEN))
-            {
+            if file != "key.seen" && content.contains(OBSERVER_KEY) {
                 shown.push(format!("{dir}/{file}"));
             }
         }
@@ -10590,8 +10678,9 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_the_pull_secr
     );
 }
 
-/// The image of the observer is on a private package. The script never tags it, never pushes it, and
-/// never copies it: docker is not called, and `crane` copies public images to `ttl.sh` only.
+/// The nodes pull the image of the observer from its public package. The script never tags it, never
+/// pushes it, and never copies it, so the pod runs the image that CI built. docker is not called, and
+/// `crane` copies public images to `ttl.sh` only.
 #[test]
 fn observer_images_sh_puts_the_image_of_the_observer_on_no_registry() {
     let mut stage = images_stage();
@@ -10643,49 +10732,26 @@ fn observer_images_sh_puts_the_image_of_the_observer_on_no_registry() {
     }
 }
 
-/// A token file that fails stops the run at the pull Secret, before any change. The run makes no copy to
-/// `ttl.sh`, no edit of the add-on, and no call to the cluster.
+/// A pod of the observer that names a pull Secret fails `no-pull-secret`, and so does a pod that runs
+/// another image. The run continues, and the undo runs at its end.
 #[test]
-fn observer_images_sh_stops_at_the_pull_secret_before_it_changes_anything() {
-    for (why, body, mode) in [
-        ("absent", None, 0o600),
-        ("empty", Some(""), 0o600),
-        ("open to others", Some(OBSERVER_PULL_TOKEN), 0o644),
+fn observer_images_sh_fails_no_pull_secret_on_a_pull_secret_or_another_image() {
+    for (variable, value, shown) in [
+        ("FAKE_PULL_SECRET", "ghcr-pull", "\"name\": \"ghcr-pull\""),
+        (
+            "FAKE_POD_IMAGE",
+            "ghcr.io/como-technologies/strata-observer:v0.1.0",
+            "strata-observer:v0.1.0",
+        ),
     ] {
-        let stage = images_stage();
-        let path = stage.path("ghcr-pull-token");
-        match body {
-            Some(body) => write_with_mode(&path, body, mode),
-            None => std::fs::remove_file(&path).unwrap(),
-        }
+        let mut stage = images_stage();
+        stage.env(variable, value);
         let (o, steps) = run_images(&stage);
-        assert_eq!(
-            o.status.code(),
-            Some(1),
-            "{why}:\n{steps}{}",
-            text(&o.stderr)
-        );
-        assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
-        failed(&steps, &["pull-secret"]);
-        let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
-        assert!(
-            said.contains(path.to_str().unwrap()) && said.contains("read:packages"),
-            "{why}: the line names the file and the scope:\n{said}"
-        );
-        for log in [
-            "kubectl.log",
-            "api.log",
-            "crane.log",
-            "docker.log",
-            "pull.seen",
-        ] {
-            assert_eq!(observer_log(&stage, log), "", "{why}: {log} is not empty");
-        }
-        assert!(
-            !text(&o.stdout).contains(OBSERVER_PULL_TOKEN)
-                && !all_text(&stage.path("out")).contains(OBSERVER_PULL_TOKEN),
-            "{why}: the token is in an output"
-        );
+        assert_eq!(o.status.code(), Some(1), "{variable}:\n{steps}");
+        failed(&steps, &["no-pull-secret"]);
+        passed(&steps, &["observer-ready", "pods-read", "undo-baseline"]);
+        let said = std::fs::read_to_string(stage.path("out/no-pull-secret.out")).unwrap();
+        assert!(said.contains(shown), "{variable}: {said}");
     }
 }
 
@@ -10919,9 +10985,8 @@ fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
         ("observer_overlay_pods", None),
         ("observer_render", None),
         ("observer_ready", None),
-        ("pull_token", None),
-        ("pull_secret", None),
-        ("pull_secret_stop", None),
+        ("observer_namespace", None),
+        ("no_pull_secret", None),
     ] {
         let definition = format!("{helper}() ");
         let homes: Vec<&str> = scripts
@@ -10934,6 +10999,42 @@ fn the_helpers_of_the_observer_scripts_have_one_definition_in_lib_sh() {
         want.sort_unstable();
         assert_eq!(homes, want, "{helper} has a copy");
     }
+}
+
+/// The image and the chart of the observer are on public packages (#732). So no file of the live
+/// example reads a token for a pull, makes a pull Secret, or adds one to a pod. The test reads the
+/// files that git tracks, and not the results of the runs or the providers of `tofu`.
+#[test]
+fn no_file_of_the_live_example_reads_a_pull_token_or_makes_a_pull_secret() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let listing = git(
+        root,
+        &["-c", "safe.directory=*", "ls-files", "--", "examples/live"],
+    )
+    .stdout;
+    let listing = text(&listing);
+    assert!(
+        listing.lines().any(|l| l == "examples/live/lib.sh"),
+        "{listing}"
+    );
+    let mut found = Vec::new();
+    for file in listing.lines() {
+        let body = std::fs::read(root.join(file)).unwrap();
+        let body = text(&body);
+        for word in [
+            "read:packages",
+            "GHCR_PULL_TOKEN_FILE",
+            "ghcr-pull",
+            "dockerconfigjson",
+            "docker-registry",
+            "/spec/template/spec/imagePullSecrets",
+        ] {
+            if body.contains(word) {
+                found.push(format!("{word} in {file}"));
+            }
+        }
+    }
+    assert!(found.is_empty(), "{found:#?}");
 }
 
 /// The ids of the checks that a script runs: the word after `check` on each line that starts with it.
@@ -11052,9 +11153,9 @@ fi
 
 /// The `kubectl` of observer.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`: `ns.exists`, `deploy.exists`, `restarts`, and
-/// `first-load-pending`. The key goes to `key.current`, and the pull Secret to `pull.seen`.
+/// `first-load-pending`. The key goes to `key.current`.
 /// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults. A port-forward runs
-/// [`FAKE_PORT_FORWARD`].
+/// [`FAKE_PORT_FORWARD`], and a read of the pod of the observer runs [`FAKE_OBSERVER_POD`].
 const FAKE_KUBECTL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -11066,7 +11167,6 @@ case "$*" in
     [ -z "${FAKE_KEY_IN_MANIFEST-}" ] || echo "# $PALETTE_API_KEY" ;;
   *"create secret generic strata-observer-key"*"--dry-run=client"*) printf 'kind: Secret\napi-key: %s\n' "$(cat)" ;;
   *"create secret generic strata-observer-key"*) cat > "$obs/key.current" ;;
-  *"create secret generic ghcr-pull"*) cat > "$obs/pull.seen" ;;
   *"apply"*"-f -"*)
     body=$(cat)
     printf '%s\n' "$body" >> "$obs/applied.yaml"
@@ -11082,7 +11182,7 @@ case "$*" in
     [ -f "$obs/ns.exists" ] || notfound namespaces strata-observer
     echo "strata-observer Active" ;;
   *"get pod -l"*jsonpath*) echo 10.0.0.7 ;;
-  *"get pod -l"*"-o json"*) cat "$obs/pod.json" ;;
+  *"get pod -l"*"-o json"*) exec fake-observer-pod ;;
   *"get replicaset"*) echo '{"items":[]}' ;;
   *"get deployment strata-observer -o json"*)
     [ -f "$obs/deploy.exists" ] || notfound deployments.apps strata-observer
@@ -11282,18 +11382,6 @@ esac
 chmod +x "$out"
 "##;
 
-/// The token of `gh auth token` in the tests of observer.sh. It has the scopes of a person, so it
-/// never reaches the cluster.
-const OBSERVER_GH_TOKEN: &str = "ghp_token_that_no_log_shows";
-/// The token in the token file of observer.sh. It has only the scope read:packages.
-const OBSERVER_PULL_TOKEN: &str = "ghp_pull_token_that_no_log_shows";
-
-/// Write `body` to `path` with the mode `mode`.
-fn write_with_mode(path: &Path, body: &str, mode: u32) {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::write(path, body).unwrap();
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
-}
 /// The key of the tenant in the tests of observer.sh.
 const OBSERVER_KEY: &str = "key-that-no-log-shows";
 
@@ -11356,17 +11444,12 @@ fn observer_stage() -> Stage {
     std::fs::create_dir_all(&bin).unwrap();
     for (name, body) in [
         ("kubectl", FAKE_KUBECTL_FRED),
+        ("fake-observer-pod", FAKE_OBSERVER_POD),
         ("curl", FAKE_CURL_FRED),
         ("go", FAKE_GO_FRED),
         (
             "git",
             "#!/usr/bin/env bash\necho 0123456789abcdef0123456789abcdef01234567\n",
-        ),
-        (
-            "gh",
-            &format!(
-                "#!/usr/bin/env bash\ncase \"$*\" in\n  \"auth token\") echo {OBSERVER_GH_TOKEN} ;;\n  \"api user\"*) echo tester ;;\nesac\n"
-            ),
         ),
     ] {
         executable(&bin.join(name), body);
@@ -11424,14 +11507,9 @@ fn observer_stage() -> Stage {
         r#"{"profiles":[{"name":"strata-live-profile","uid":"r-1"},{"name":"strata-live-addon","uid":"ad-1"}]}"#,
     );
 
-    // the token file is outside the folder of the run, so that the look for it in the run is fair
-    let token_file = stage.path("ghcr-pull-token");
-    write_with_mode(&token_file, &format!("{OBSERVER_PULL_TOKEN}\n"), 0o600);
-
     let path = format!("{}:{}", bin.display(), path_with(&stage.path("bin")));
     stage.env("PATH", &path);
     stage.env("PALETTE_API_KEY", OBSERVER_KEY);
-    stage.env("GHCR_PULL_TOKEN_FILE", token_file.to_str().unwrap());
     stage.env("FAKE_OBS", obs.to_str().unwrap());
     stage.env("FAKE_REPO", env!("CARGO_MANIFEST_DIR"));
     stage
@@ -11445,7 +11523,6 @@ fn run_observer(stage: &Stage, args: &[&str]) -> (Output, String) {
 
 /// Each check of observer.sh, in the order that it runs on a good run.
 const OBSERVER_CHECKS: [&str; 61] = [
-    "pull-secret",
     "cluster-record",
     "profile-records",
     "namespace",
@@ -11457,6 +11534,7 @@ const OBSERVER_CHECKS: [&str; 61] = [
     "apply-admitted",
     "pod-ready",
     "pod-hardened",
+    "no-pull-secret",
     "reaches-palette",
     "no-finding-at-baseline",
     "summary-matches-strata",
@@ -11547,7 +11625,7 @@ fn all_text(dir: &Path) -> String {
 }
 
 #[test]
-fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_and_the_periods() {
+fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_and_the_periods_and_no_pull_secret() {
     let stage = observer_stage();
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
@@ -11557,12 +11635,15 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "name: ghcr.io/como-technologies/strata-observer",
         "newName: ghcr.io/como-technologies/strata-observer",
         &format!("newTag: v{}", version_of("Cargo.toml")),
-        "- name: ghcr-pull",
         "value: --content-every=1m",
         "value: --versions-every=5m",
     ] {
         assert!(kustomization.contains(part), "{part}:\n{kustomization}");
     }
+    assert!(
+        !kustomization.contains("imagePullSecrets"),
+        "{kustomization}"
+    );
     assert!(
         stage.path("out/base/deployment.yaml").is_file(),
         "base/ holds the manifests of the run"
@@ -11587,7 +11668,6 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         "create configmap strata-observer --from-literal=cluster-uid=c-a",
         "--from-literal=project-uid=p-1",
         "create secret generic strata-observer-key --from-file=api-key=/dev/stdin",
-        "create secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson",
         "create rolebinding reader --role=strata-observer-reader --user=strata-observer-reader",
         "auth can-i -n strata-observer get secrets --as=strata-observer-reader",
         "auth can-i -n strata-observer create pods --subresource=exec --as=strata-observer-reader",
@@ -11600,11 +11680,17 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
         assert!(kubectl.contains(call), "{call}:\n{kubectl}");
     }
 
-    // the pull secret holds the token of the file, and the key Secret holds the right key at the end
-    let pull = observer_log(&stage, "pull.seen");
-    let auths: serde_json::Value = serde_json::from_str(&pull).unwrap();
-    assert_eq!(auths["auths"]["ghcr.io"]["password"], OBSERVER_PULL_TOKEN);
-    assert_eq!(auths["auths"]["ghcr.io"]["username"], "tester");
+    // the one Secret that the run makes holds the key, and it holds the right key at the end
+    let creates: Vec<&str> = kubectl
+        .lines()
+        .filter(|l| l.contains("create secret"))
+        .collect();
+    assert!(
+        creates
+            .iter()
+            .all(|l| l.contains("create secret generic strata-observer-key")),
+        "{creates:?}"
+    );
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     assert_eq!(
         observer_log(&stage, "restarts").trim(),
@@ -11671,7 +11757,7 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_the_pull_secret_an
 }
 
 #[test]
-fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call() {
+fn observer_sh_puts_the_key_in_no_output_no_file_of_the_run_and_no_call() {
     let stage = observer_stage();
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
@@ -11684,15 +11770,12 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
         ("the calls of api.sh", observer_log(&stage, "api.log")),
         ("the calls of strata", all_text(&stage.path("strata"))),
     ] {
-        for secret in [OBSERVER_KEY, OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
-            if haystack.contains(secret) {
-                shown.push(format!("{secret} in {name}"));
-            }
+        if haystack.contains(OBSERVER_KEY) {
+            shown.push(format!("the key in {name}"));
         }
     }
     assert!(shown.is_empty(), "{shown:?}");
-    // the two reach their Secrets through standard input
-    assert!(observer_log(&stage, "pull.seen").contains(OBSERVER_PULL_TOKEN));
+    // the key reaches its Secret through standard input
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     // the kubeconfig is a credential: no file of it stays in the run or in the temporary directory
     let kubeconfigs: Vec<_> = files_under(&stage.path("out"))
@@ -11707,115 +11790,29 @@ fn observer_sh_puts_no_token_and_no_key_in_an_output_a_file_of_the_run_or_a_call
     assert!(left.is_empty(), "the kubeconfig stays: {left:?}");
 }
 
-/// The token file of the stage holds `body` with the mode `mode`. `None` removes the file.
-fn observer_token_file(stage: &Stage, body: Option<&str>, mode: u32) {
-    let path = stage.path("ghcr-pull-token");
-    match body {
-        Some(body) => write_with_mode(&path, body, mode),
-        None => std::fs::remove_file(path).unwrap(),
-    }
-}
-
-/// The run of `stage` stops at `pull-secret`: it is the one check, it fails, and its line names the
-/// file and the scope. No call changes the cluster, and no call makes a Secret.
-fn assert_observer_stops_at_the_pull_secret(stage: &Stage, why: &str) {
-    let (o, steps) = run_observer(stage, &[]);
-    assert_eq!(
-        o.status.code(),
-        Some(1),
-        "{why}:\n{steps}{}",
-        text(&o.stderr)
-    );
-    assert_eq!(check_ids(&steps), ["pull-secret"], "{why}:\n{steps}");
-    failed(&steps, &["pull-secret"]);
-    let said = std::fs::read_to_string(stage.path("out/pull-secret.err")).unwrap();
-    assert_eq!(said.lines().count(), 1, "{why}: one line:\n{said}");
-    assert!(
-        said.contains(stage.path("ghcr-pull-token").to_str().unwrap())
-            && said.contains("read:packages"),
-        "{why}: the line names the file and the scope:\n{said}"
-    );
-    assert!(
-        steps.contains(said.trim()),
-        "{why}: the log holds it:\n{steps}"
-    );
-    assert_eq!(
-        observer_log(stage, "kubectl.log"),
-        "",
-        "{why}: no call to the cluster"
-    );
-    assert_eq!(observer_log(stage, "pull.seen"), "", "{why}: no Secret");
-    // the token of gh is no fallback, and no secret is in a place that the run shows
-    for secret in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN, OBSERVER_KEY] {
-        assert!(!text(&o.stdout).contains(secret), "{why}: {secret}");
-        assert!(
-            !all_text(&stage.path("out")).contains(secret),
-            "{why}: {secret}"
-        );
-    }
-}
-
+/// A pod of the observer that names a pull Secret fails `no-pull-secret`, and so does a pod that runs
+/// another image. The later stages still run, because they need the page and not the check.
 #[test]
-fn observer_sh_stops_at_the_pull_secret_when_the_token_file_is_absent_or_empty() {
-    for (why, body) in [
-        ("absent", None),
-        ("empty", Some("")),
-        ("only white space", Some(" \n\t\n")),
+fn observer_sh_fails_no_pull_secret_on_a_pull_secret_or_another_image() {
+    for (variable, value, shown) in [
+        ("FAKE_PULL_SECRET", "ghcr-pull", "\"name\": \"ghcr-pull\""),
+        (
+            "FAKE_POD_IMAGE",
+            "ghcr.io/como-technologies/strata-observer:v0.1.0",
+            "strata-observer:v0.1.0",
+        ),
     ] {
-        let stage = observer_stage();
-        observer_token_file(&stage, body, 0o600);
-        assert_observer_stops_at_the_pull_secret(&stage, why);
-    }
-}
-
-#[test]
-fn observer_sh_stops_at_the_pull_secret_when_a_group_or_others_can_read_the_token_file() {
-    for mode in [0o644, 0o640, 0o604, 0o660] {
-        let stage = observer_stage();
-        observer_token_file(&stage, Some(OBSERVER_PULL_TOKEN), mode);
-        assert_observer_stops_at_the_pull_secret(&stage, &format!("mode {mode:o}"));
-    }
-}
-
-#[test]
-fn observer_sh_sends_the_token_of_gh_to_no_call_and_no_input_of_kubectl() {
-    let stage = observer_stage();
-    let (o, steps) = run_observer(&stage, &[]);
-    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    // the stand-in keeps the calls, the key, the pull Secret, and the input of each apply
-    let kept = files_under(&stage.path("obs"));
-    for file in ["kubectl.log", "key.current", "pull.seen", "applied.yaml"] {
-        assert!(kept.iter().any(|(path, _)| path == file), "{file} is kept");
-    }
-    for (path, content) in kept {
-        assert!(!content.contains(OBSERVER_GH_TOKEN), "in {path}");
-    }
-}
-
-#[test]
-fn observer_sh_finds_the_pull_token_or_the_token_of_gh_in_a_file_of_the_run() {
-    for leak in [OBSERVER_PULL_TOKEN, OBSERVER_GH_TOKEN] {
         let mut stage = observer_stage();
-        stage.env("FAKE_LEAK_SECRET", leak);
-        stage.wrap_strata(
-            r#"#!/usr/bin/env bash
-out=""; prev=""
-for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
-case "$*" in
-  "snapshot op-1 -o "*) echo "{\"manifest\": \"$FAKE_LEAK_SECRET\"}" > "$out"; exit 0 ;;
-esac
-exec "$(dirname "$0")/fake-strata-rules" "$@"
-"#,
-        );
+        stage.env(variable, value);
         let (o, steps) = run_observer(&stage, &[]);
-        assert_eq!(
-            o.status.code(),
-            Some(1),
-            "{leak}:\n{steps}{}",
-            text(&o.stderr)
+        assert_eq!(o.status.code(), Some(1), "{variable}:\n{steps}");
+        failed(&steps, &["no-pull-secret"]);
+        passed(
+            &steps,
+            &["pod-hardened", "reaches-palette", "undo-baseline"],
         );
-        failed(&steps, &["no-secret-in-run"]);
-        passed(&steps, &["no-key-in-profile", "undo-namespace"]);
+        let said = std::fs::read_to_string(stage.path("out/no-pull-secret.out")).unwrap();
+        assert!(said.contains(shown), "{variable}: {said}");
     }
 }
 
@@ -12542,6 +12539,186 @@ fn observer_sh_fails_the_first_sight_check_when_a_restart_keeps_the_state_and_re
     let edits = api.lines().filter(|l| l.starts_with("edit ")).count();
     assert_eq!(edits, 4, "two edits and two undos: {api}");
     assert!(!stage.path("obs/drifted").exists());
+}
+
+// ---- the chart of the observer with no login (#732) ------------------------------------------------
+
+/// The registry of observer-chart.sh, as Palette serves it. Palette makes it with the uid `reg-c`.
+/// A sync ends with the status Completed, and the packs of the registry hold the chart. The registry
+/// answers a read until a DELETE of it, and HTTP 404 after it.
+fn chart_stage() -> Stage {
+    let stage = Stage::new(serde_json::json!({}));
+    stage.route("/v1/registries/oci/basic", r#"{"uid":"reg-c"}"#);
+    stage.route("/v1/registries/oci/reg-c/basic/sync", "{}");
+    let routes = stage.path("routes");
+    executable(
+        &routes.join("v1_registries_oci_reg-c_basic_sync_status.sh"),
+        r#"#!/usr/bin/env bash
+if [ -f "$FAKE_ROUTES/sent/POST_v1_registries_oci_reg-c_basic_sync.request" ]; then
+  echo '{"status":"Completed","lastRunTime":"2026-11-11T10:05:00Z","lastSyncedTime":"2026-11-11T10:05:00Z","message":""}'
+else
+  echo '{"status":"Completed","lastRunTime":"2026-11-11T10:00:00Z","message":""}'
+fi
+"#,
+    );
+    executable(
+        &routes.join("v1_registries_oci_reg-c_basic.sh"),
+        r#"#!/usr/bin/env bash
+deletes=$(grep -c '^DELETE /v1/registries/oci/reg-c/basic$' "$FAKE_LOG")
+if [ "$deletes" -gt 1 ] || { [ "$deletes" = 1 ] && [ "$(tail -n 1 "$FAKE_LOG")" != "DELETE /v1/registries/oci/reg-c/basic" ]; }; then
+  echo 404 > "$FAKE_ROUTES/v1_registries_oci_reg-c_basic.status"
+fi
+echo '{"metadata":{"name":"strata-live-observer-chart","uid":"reg-c"}}'
+"#,
+    );
+    stage.route(
+        "/v1/packs",
+        r#"{"items":[{"spec":{"name":"strata-observer","version":"0.32.2","registryUid":"reg-c"}}],"listmeta":{"count":1}}"#,
+    );
+    stage
+}
+
+#[test]
+fn observer_chart_sh_makes_a_registry_with_no_login_syncs_it_finds_the_chart_and_deletes_it() {
+    let stage = chart_stage();
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(
+        check_ids(&steps),
+        [
+            "registry-no-login",
+            "sync-no-login",
+            "chart-no-login",
+            "registry-gone"
+        ],
+        "{steps}"
+    );
+    for id in ["registry-no-login", "sync-no-login", "chart-no-login"] {
+        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
+        assert!(step_line(&steps, id).ends_with("got 0"), "{id}:\n{steps}");
+    }
+    passed(&steps, &["registry-gone"]);
+
+    // the body of the create holds the auth type noAuth, and no user and no password
+    let sent = stage.sent("POST", "/v1/registries/oci/basic");
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let spec = &sent[0]["spec"];
+    assert_eq!(spec["endpoint"], "https://ghcr.io/orgs/como-technologies");
+    assert_eq!(spec["baseContentPath"], "charts");
+    assert_eq!(spec["providerType"], "helm");
+    assert_eq!(spec["isSyncSupported"], true);
+    assert_eq!(spec["auth"]["type"], "noAuth");
+    for field in ["username", "password", "token"] {
+        assert!(spec["auth"].get(field).is_none(), "{field}: {spec}");
+    }
+    let name = sent[0]["metadata"]["name"].as_str().unwrap();
+    assert!(
+        name.starts_with("strata-live-observer-chart-"),
+        "the name holds a random suffix: {name}"
+    );
+    // the registry is of the tenant: the create and the delete name no project
+    for method in [
+        "POST_v1_registries_oci_basic",
+        "DELETE_v1_registries_oci_reg-c_basic",
+    ] {
+        let request =
+            std::fs::read_to_string(stage.path(&format!("routes/sent/{method}.request"))).unwrap();
+        assert!(!request.contains("ProjectUid"), "{method}:\n{request}");
+    }
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "POST /v1/registries/oci/reg-c/basic/sync"),
+        "{calls}"
+    );
+    let chart = std::fs::read_to_string(stage.path("out/chart-no-login.out")).unwrap();
+    assert!(
+        chart.contains("\"version\": \"0.32.2\""),
+        "the output names the version: {chart}"
+    );
+}
+
+#[test]
+fn observer_chart_sh_records_a_refusal_of_the_create_with_its_code_and_deletes_nothing() {
+    let stage = chart_stage();
+    std::fs::write(
+        stage.path("routes/v1_registries_oci_basic"),
+        r#"{"code":"InvalidRegistryCredentials","message":"the registry refused the read"}"#,
+    )
+    .unwrap();
+    std::fs::write(stage.path("routes/v1_registries_oci_basic.status"), "500").unwrap();
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert_eq!(
+        check_ids(&steps),
+        ["registry-no-login", "registry-gone"],
+        "{steps}"
+    );
+    assert!(
+        !step_line(&steps, "registry-no-login").ends_with("got 0"),
+        "{steps}"
+    );
+    let said = std::fs::read_to_string(stage.path("out/registry-no-login.err")).unwrap();
+    assert!(said.contains("InvalidRegistryCredentials"), "{said}");
+    passed(&steps, &["registry-gone"]);
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(!calls.contains("DELETE"), "{calls}");
+}
+
+#[test]
+fn observer_chart_sh_records_a_registry_with_no_chart_and_deletes_it() {
+    let stage = chart_stage();
+    stage.route("/v1/packs", r#"{"items":[],"listmeta":{"count":0}}"#);
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        step_line(&steps, "sync-no-login").ends_with("got 0"),
+        "{steps}"
+    );
+    assert!(
+        step_line(&steps, "chart-no-login").ends_with("got 1"),
+        "{steps}"
+    );
+    passed(&steps, &["registry-gone"]);
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "DELETE /v1/registries/oci/reg-c/basic"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn observer_chart_sh_fails_when_the_registry_stays() {
+    let stage = chart_stage();
+    // the registry answers each read, also after the DELETE
+    executable(
+        &stage.path("routes/v1_registries_oci_reg-c_basic.sh"),
+        "#!/usr/bin/env bash\necho '{\"metadata\":{\"uid\":\"reg-c\"}}'\n",
+    );
+    let (o, steps) = stage.run("observer-chart.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["registry-gone"]);
+}
+
+#[test]
+fn the_page_of_live_runs_names_each_check_of_observer_chart_sh() {
+    let mut in_script = script_check_ids("observer-chart.sh");
+    let mut on_page = page_check_ids("observer-chart.sh");
+    in_script.sort();
+    on_page.sort();
+    assert_eq!(in_script, on_page);
+    // the three questions to Palette record a result and judge none
+    let source = repo_file("examples/live/observer-chart.sh");
+    for id in ["registry-no-login", "sync-no-login", "chart-no-login"] {
+        assert!(
+            source.contains(&format!("check {id} ? ")),
+            "{id} is a check with ?"
+        );
+    }
+    assert!(source.contains("check registry-gone 0 "));
 }
 
 // ---- the least role of the key of the observer (#645) ----------------------------------------------

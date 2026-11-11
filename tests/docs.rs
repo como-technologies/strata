@@ -2822,10 +2822,14 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "observer-role.sh",
         "who.sh",
     ] {
-        // the rows of #647 and #648 wait for the next live window, so they are not in this test
+        // the rows of #647, #648, and #732 wait for the next live window, so they are not in this test
         let part = section(&runs, &format!("## {script}"), Some("\n## "))
             .lines()
-            .filter(|line| !line.contains("#647") && !line.contains("#648"))
+            .filter(|line| {
+                !["#647", "#648", "#732"]
+                    .iter()
+                    .any(|item| line.contains(item))
+            })
             .collect::<Vec<_>>()
             .join("\n")
             .to_lowercase();

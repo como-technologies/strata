@@ -380,9 +380,9 @@ A Secret with no record is empty. The next apply then removes the old content.
 The pipeline of your team runs the script in its publish step, so the records are
 the files that the team approved.
 
-A live run applied these steps to a cluster that Palette built. The run took the
-token from a file and bound the role to one user. It also set short periods for the
-two cycles, and it applied the output of `kubectl kustomize`.
+A live run applied these steps to a cluster that Palette built. The run bound the
+role to one user. It also set short periods for the two cycles, and it applied the
+output of `kubectl kustomize`.
 
 The pod passed the `restricted` standard and became Ready. Its first cycle reached
 Palette, so a workload cluster reaches the API. A user with only the reader role
@@ -398,7 +398,10 @@ yet.
 1. **A tenant admin adds the registry once.** It is an OCI registry of the type
    `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`. It uses a
    classic token with the scope `read:packages`. Palette lets only a role at tenant
-   scope add a registry. A project role can then use it.
+   scope add a registry, and a project role can then use it. The API of Palette also
+   takes the auth type `noAuth` for this public chart. No live run shows yet that
+   Palette syncs the chart with no login, so the step keeps the token: see
+   [observer-chart.sh](../development/live-runs.md#observer-chartsh).
 2. **Make the Secret of the key with `kubectl`**, as in steps 1 and 2 of
    [Install with Helm](#install-with-helm). A value of a layer reaches the
    cluster in clear, so the profile holds no key and no token.

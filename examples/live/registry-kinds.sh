@@ -54,7 +54,7 @@ summary() {
 # cleanup: the objects of the API first, then the host and the registries of OpenTofu
 cleanup() {
   [ -z "$PINNED" ] || "$live/api.sh" delete "$PINNED" >> steps.log 2>&1
-  [ -z "$PACK_REG" ] || "$live/api.sh" pack-registry-delete "$PACK_REG" >> steps.log 2>&1
+  [ -z "$PACK_REG" ] || "$live/api.sh" registry-delete pack "$PACK_REG" >> steps.log 2>&1
   tf_apply false "${cluster_var[@]}" >> steps.log 2>&1
   summary
 }

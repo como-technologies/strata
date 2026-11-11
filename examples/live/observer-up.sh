@@ -26,14 +26,15 @@
 #
 # The script asks Palette for the kubeconfig of the cluster and writes it to ~/.kube/strata-<cluster>.yaml
 # with the mode 0600. Each kubectl call uses that file, so no call reaches another cluster, whatever the
-# context of the shell is. The key of Palette and the pull token go to kubectl through standard input.
-# They reach no argument and no file. The overlay lives in a temporary folder that the script deletes.
+# context of the shell is. The key of Palette goes to kubectl through standard input. It reaches no
+# argument and no file. The image is on a public package, so the pod pulls it with no pull Secret. The
+# overlay lives in a temporary folder that the script deletes.
 #
-# Needs a built strata (just build), kubectl, curl, jq, gzip, base64, the key of Palette in
-# PALETTE_API_KEY or ~/.palette.env, and, for up, a token file with only the scope read:packages
-# (GHCR_PULL_TOKEN_FILE, default ~/.config/strata/ghcr-pull-token, mode 0600) and gh. PALETTE_PROJECT_UID
-# selects the project. OBSERVER_IMAGE names the whole image, and then --tag is not allowed. The
-# observer reads Palette from a node of the cluster, so the node must reach the API.
+# Needs a built strata (just build), kubectl, curl, jq, gzip, base64, and the key of Palette in
+# PALETTE_API_KEY or ~/.palette.env. An up with neither --tag nor OBSERVER_IMAGE also needs gh, which
+# reads the newest release. PALETTE_PROJECT_UID selects the project. OBSERVER_IMAGE names the whole
+# image, and then --tag is not allowed. The observer reads Palette from a node of the cluster, so the
+# node must reach the API.
 set -uo pipefail
 script=observer-up
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -149,8 +150,8 @@ newest_release() { (cd "$root" && gh release view --json tagName --jq .tagName);
 # records_first_seen: the first-seen records of the cluster. A server-side apply takes the Secrets over
 # from an earlier apply, and a client-side apply fails above 256 KiB.
 records_first_seen() { "$records_script" --first-seen "$C" | kc apply --server-side --force-conflicts -f -; }
-# render: observer.yaml, from the overlay with the tag, the pull Secret, and two short periods. --read-pods
-# adds the component.
+# render: observer.yaml, from the overlay with the tag and two short periods. --read-pods adds the
+# component.
 render() {
   observer_overlay --content-every=1m --versions-every=5m \
     && { [ -z "$read_pods" ] || observer_overlay_pods; } \
@@ -162,7 +163,7 @@ up() {
     tag=$(newest_release) && [ -n "$tag" ] || die "cannot read the newest release with gh; give --tag TAG"
   fi
   observer_image "$tag"
-  step "the pull Secret of $image" pull_secret
+  step "the namespace $ns" observer_namespace
   step "the ConfigMap" observer_config
   step "the Secret of the key" observer_key "$palette_key"
   step "the first-seen records" records_first_seen

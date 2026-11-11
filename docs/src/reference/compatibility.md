@@ -1275,6 +1275,9 @@ field, a value, an input, or an option is in the sections above.
 - **The steps of the observer make no pull Secret.** The image and the chart are
   public. An install that has the Secret `ghcr-pull` still works. Delete the Secret
   to remove the token from the cluster.
+- **`just observer-up` makes no pull Secret, and reads no token file.** The variable
+  `GHCR_PULL_TOKEN_FILE` has no effect now. A Secret `ghcr-pull` from an earlier run
+  stays in the cluster. Delete it, or run `just observer-down`, to remove the token.
 - **`pr-comment.sh cluster:<cluster> <version>` comments on one profile of the cluster.** The
   script runs `compare`. So the comment names only the packs of the profile that the version
   replaces. The maximum impact and the label come from those packs.
