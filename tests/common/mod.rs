@@ -907,6 +907,16 @@ pub fn workflow(file: &str) -> serde_yaml::Value {
     serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
 }
 
+/// The names of the strings in a YAML sequence.
+pub fn strings(value: &serde_yaml::Value) -> Vec<&str> {
+    value
+        .as_sequence()
+        .unwrap_or_else(|| panic!("not a sequence: {value:?}"))
+        .iter()
+        .map(|v| v.as_str().unwrap_or_else(|| panic!("not a string: {v:?}")))
+        .collect()
+}
+
 /// The steps of each job of the workflow `doc`, in order.
 pub fn steps(doc: &serde_yaml::Value) -> impl Iterator<Item = &serde_yaml::Value> {
     doc["jobs"]

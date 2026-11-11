@@ -63,6 +63,11 @@ workflow. It needs the four checks and does no other work. GitHub runs it only
 when each check passed, and skips it when one failed. So one check run names
 the full result of a commit, and the ruleset of `main` needs no change for it.
 
+The tool also sends no verify request for a head commit that has a failed run of
+a workflow. This is also true for a workflow that no rule needs, such as
+[the job of the knurl adapter](../automation/knurl.md#the-job-of-ci). On `main`,
+the tool makes a work item to fix a failure only when `Gate` fails.
+
 ## The merge
 
 A ruleset on `main` applies these rules to each change:

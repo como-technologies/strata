@@ -646,7 +646,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
 The checks do not run `just adapter-test`. The workflow `knurl adapter` runs it,
-and a failure of it does not block a merge: see
+and the job `Gate` of `ci` does not need it: see
 [The job of CI](../automation/knurl.md#the-job-of-ci).
 
 `ci` adds two jobs of its own. `Gate` needs the checks and does no other work:

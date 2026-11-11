@@ -7,7 +7,7 @@ use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    recipe, repo_file, runs_of, script, steps, text, toml_value, workflow, workflow_files,
+    recipe, repo_file, runs_of, script, steps, strings, text, toml_value, workflow, workflow_files,
     workflow_text,
 };
 
@@ -1247,14 +1247,8 @@ fn the_observer_image_workflow_runs_on_a_call_a_dispatch_and_a_pull_request_that
         "latest"
     );
     assert_eq!(on["workflow_call"]["inputs"]["version"]["required"], true);
-    let paths: Vec<&str> = on["pull_request"]["paths"]
-        .as_sequence()
-        .expect("the pull request has paths")
-        .iter()
-        .filter_map(|p| p.as_str())
-        .collect();
     assert_eq!(
-        paths,
+        strings(&on["pull_request"]["paths"]),
         [
             "observer/**",
             "deploy/observer/**",
@@ -1546,52 +1540,70 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 // ---- the knurl adapter (#705) -------------------------------------------------------------------
 
 /// The adapter is a package of its own, so no check of `ci.yml` builds it. Its workflow runs
-/// `just adapter-test` on a schedule, on demand, and on a change of strata or of the adapter.
+/// `just adapter-test` on a schedule, on demand, and on a push to `main` that changes strata or
+/// the adapter. The verify holds a head that has a failed run. So a pull request runs the job only
+/// when it changes the adapter or the workflow, and not when it changes only `src/`.
 #[test]
-fn the_adapter_workflow_runs_the_adapter_test_on_a_schedule_and_on_a_change_of_strata_or_the_adapter()
+fn the_adapter_workflow_runs_on_a_schedule_on_a_change_of_main_and_on_a_pull_request_that_changes_the_adapter()
  {
     let doc = workflow("adapter.yml");
-    let on = doc["on"].as_mapping().expect("the workflow has triggers");
+    let on = &doc["on"];
     assert!(
-        doc["on"]["schedule"].is_sequence() && on.contains_key("workflow_dispatch"),
+        on["schedule"].is_sequence() && on.get("workflow_dispatch").is_some(),
         "{on:?}"
     );
-    let branches: Vec<&str> = doc["on"]["push"]["branches"]
-        .as_sequence()
-        .expect("a push names its branches")
-        .iter()
-        .filter_map(|b| b.as_str())
-        .collect();
-    assert_eq!(branches, ["main"]);
-    for trigger in ["push", "pull_request"] {
-        let paths: Vec<&str> = doc["on"][trigger]["paths"]
-            .as_sequence()
-            .unwrap_or_else(|| panic!("{trigger} has paths"))
-            .iter()
-            .filter_map(|p| p.as_str())
-            .collect();
-        assert_eq!(
-            paths,
-            [
-                "src/**",
-                "crates/strata-knurl/**",
-                "Cargo.toml",
-                ".github/workflows/adapter.yml"
-            ],
-            "{trigger}"
-        );
-    }
+    assert_eq!(strings(&on["push"]["branches"]), ["main"]);
+    assert_eq!(
+        strings(&on["push"]["paths"]),
+        [
+            "src/**",
+            "crates/strata-knurl/**",
+            "Cargo.toml",
+            ".github/workflows/adapter.yml"
+        ]
+    );
+    assert_eq!(
+        strings(&on["pull_request"]["paths"]),
+        ["crates/strata-knurl/**", ".github/workflows/adapter.yml"]
+    );
     assert_eq!(
         runs_of("adapter.yml", "adapter").last().unwrap(),
         "just adapter-test"
     );
 }
 
-/// No release carries the adapter, so a failure of its job does not block a merge. A merge and a
-/// release need the jobs of `checks.yml`, which `ci.yml` and `release.yml` call. None of the three
-/// runs the adapter or calls its workflow, and neither do the recipes that the checks run.
+/// The key step is the first step. Each later step runs only when the key step wrote
+/// `ready=true`, so a pull request with no secret skips the build and passes.
+#[test]
+fn each_step_after_the_key_step_runs_only_when_the_job_has_the_key() {
+    let doc = workflow("adapter.yml");
+    let all: Vec<&serde_yaml::Value> = steps(&doc).collect();
+    let (key, later) = all.split_first().expect("the job has steps");
+    assert_eq!(
+        key["name"].as_str(),
+        Some("give git the deploy key of knurl")
+    );
+    assert_eq!(key["id"].as_str(), Some("key"));
+    assert!(!later.is_empty());
+    for step in later {
+        assert_eq!(
+            step["if"].as_str(),
+            Some("steps.key.outputs.ready == 'true'"),
+            "{step:?}"
+        );
+    }
+}
+
+/// No release carries the adapter, so a failure of its job does not block a merge. A merge needs
+/// the job `Gate` of `ci.yml`, and `Gate` needs only the checks. A release needs the jobs of
+/// `checks.yml`, which `ci.yml` and `release.yml` call. None of the three runs the adapter or
+/// calls its workflow, and neither do the recipes that the checks run.
 #[test]
 fn no_check_that_a_merge_or_a_release_needs_runs_the_adapter() {
+    assert_eq!(
+        workflow("ci.yml")["jobs"]["gate"]["needs"].as_str(),
+        Some("checks")
+    );
     for file in ["checks.yml", "ci.yml", "release.yml"] {
         let text = workflow_text(file);
         assert!(
@@ -1631,19 +1643,24 @@ fn the_adapter_job_keeps_no_cache_and_skips_a_pull_request_from_a_fork() {
 }
 
 /// The step writes the deploy key to a file that only the job reads. It trusts only the host keys
-/// that GitHub publishes, and gives git the command of ssh for the fetch of Cargo. With no
-/// secret, the step stops with a message, and it writes and calls nothing.
+/// that GitHub publishes, gives git the command of ssh for the fetch of Cargo, and writes
+/// `ready=true`. With no secret, a pull request gets a notice and the step passes, so an empty
+/// secret holds no verify. A push, the schedule, and a run on demand fail, so the empty secret
+/// shows. With no secret, the step writes and calls nothing.
 #[test]
-fn the_key_step_gives_git_the_deploy_key_of_knurl_and_stops_when_the_secret_is_empty() {
+fn the_key_step_gives_git_the_deploy_key_of_knurl_and_with_no_secret_fails_on_each_event_but_a_pull_request()
+ {
     let gh = "#!/usr/bin/env bash\necho \"gh $*\" >> \"$FAKE_LOG\"\necho 'github.com ssh-ed25519 AAAA'\n";
     let temp = tempfile::tempdir().unwrap();
     let temp_path = temp.path().display().to_string();
     let path = format!("bin:{}", std::env::var("PATH").unwrap());
-    let give = |key: &str| {
+    let give = |key: &str, event: &str| {
         let env = [
             ("KNURL_DEPLOY_KEY", key),
+            ("GITHUB_EVENT_NAME", event),
             ("RUNNER_TEMP", temp_path.as_str()),
             ("GITHUB_ENV", "env.txt"),
+            ("GITHUB_OUTPUT", "output.txt"),
             ("PATH", path.as_str()),
         ];
         run_step_with(
@@ -1655,19 +1672,25 @@ fn the_key_step_gives_git_the_deploy_key_of_knurl_and_stops_when_the_secret_is_e
     };
     let dir = temp.path().join("knurl-ssh");
 
-    let none = give("");
-    assert_eq!(none.output.status.code(), Some(1));
-    assert!(
-        text(&none.output.stdout).contains(
-            "::error::the secret KNURL_DEPLOY_KEY is empty, so the job cannot read knurl"
-        ),
-        "{}",
-        text(&none.output.stdout)
-    );
-    assert!(none.calls().is_empty(), "{:#?}", none.calls());
-    assert!(!dir.exists() && !none.dir.path().join("env.txt").exists());
+    let notice = "::notice::the secret KNURL_DEPLOY_KEY is empty, so the job does not test the adapter on this pull request";
+    let error = "::error::the secret KNURL_DEPLOY_KEY is empty, so the job cannot read knurl";
+    for (event, code, message) in [
+        ("pull_request", 0, notice),
+        ("push", 1, error),
+        ("schedule", 1, error),
+        ("workflow_dispatch", 1, error),
+    ] {
+        let none = give("", event);
+        assert_eq!(none.output.status.code(), Some(code), "{event}");
+        assert_eq!(text(&none.output.stdout).trim_end(), message, "{event}");
+        assert!(none.calls().is_empty(), "{event}: {:#?}", none.calls());
+        assert!(!dir.exists(), "{event}");
+        for file in ["env.txt", "output.txt"] {
+            assert!(!none.dir.path().join(file).exists(), "{event}: {file}");
+        }
+    }
 
-    let run = give("the-key");
+    let run = give("the-key", "pull_request");
     assert!(run.output.status.success(), "{}", text(&run.output.stderr));
     assert_eq!(
         run.calls(),
@@ -1687,6 +1710,10 @@ fn the_key_step_gives_git_the_deploy_key_of_knurl_and_stops_when_the_secret_is_e
         format!(
             "GIT_SSH_COMMAND=ssh -i {d}/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={d}/known_hosts\n"
         )
+    );
+    assert_eq!(
+        std::fs::read_to_string(run.dir.path().join("output.txt")).unwrap(),
+        "ready=true\n"
     );
     #[cfg(unix)]
     {
