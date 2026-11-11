@@ -1421,6 +1421,47 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
 }
 
+/// The checks that part 1 of the live window of Wave 16 ran have their result in the book: draft.sh,
+/// projects.sh, and loop.sh. A row that says "no result yet" for one of them tells a reader that
+/// nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    for check in [
+        "route-names",
+        "copy-create",
+        "record-a",
+        "record-b",
+        "verify-both",
+        "same-release",
+        "same-release-line",
+        "compare-projects",
+        "records-same",
+        "copy-delete",
+        "same-release-renumber",
+        "cluster-plain",
+        "ask-repave-plain",
+        "preflight-job",
+        "preflight-job-key",
+        "other-project-read",
+        "ask-repave-plain-says",
+        "preflight-job-says",
+        "preflight-job-key-says",
+        "record-a-project",
+        "record-b-project",
+        "same-release-projects",
+    ] {
+        let row = page
+            .lines()
+            .find(|l| l.starts_with("| `") && l.contains(&format!("`{check}`")))
+            .unwrap_or_else(|| panic!("live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
+}
+
 /// The checks of public.sh ran after the repository and its packages became public (#65, #483). A
 /// row that says "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]
