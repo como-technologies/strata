@@ -155,7 +155,7 @@ library-example:
 # The job `deny list` of CI runs this recipe with the secret STEP14_DENY. See "The deny list" in
 # docs/src/development/build-test.md.
 
-# Scan each tracked file for each entry of STEP14_DENY, and print the path and the line of each hit, never the entry
+# Scan the text and the path of each tracked file for each entry of STEP14_DENY, and print no entry
 [group('check')]
 deny-list:
     scripts/dev/deny-list.sh

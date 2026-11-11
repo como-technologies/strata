@@ -653,10 +653,10 @@ CI does not run `just adapter-test`. The adapter needs knurl, a private
 repository, and CI has no key for it: see
 [The knurl adapter](../automation/knurl.md#test-it).
 
-`ci` adds three jobs of its own. `deny list` scans the tracked files for the
-names that the public tree must not hold: see [The deny list](#the-deny-list).
-`Gate` needs the checks and `deny list`, and does no other work. It is the one
-check run that the verify reads: see
+`ci` adds three jobs of its own. `deny list` scans each tracked file and its
+path for the names that the public tree must not hold: see
+[The deny list](#the-deny-list). `Gate` needs the checks and `deny list`, and
+does no other work. It is the one check run that the verify reads: see
 [How a change lands](./changes.md#the-verify). `publish the book` needs the
 same two jobs and runs only on `main`, so the site is a build that every check
 passed. The `docs` job builds the book once and passes it to the publish job, so
@@ -702,11 +702,11 @@ When the shared `target/` already holds such a build, `cargo clean` removes it.
 
 ### The deny list
 
-The repository is public, so a name in a tracked file is public. The job
-`deny list` of the `ci` workflow scans each tracked file for each entry of a
-deny list. The list holds the names that the tree must not hold. The notes of
-the lead give its classes. The job runs on each push to `main` and on each pull
-request.
+The repository is public, so a name in a tracked file or in its path is public.
+The job `deny list` of the `ci` workflow scans the text and the path of each
+tracked file for each entry of a deny list. The list holds the names that the
+tree must not hold. The notes of the lead give its classes. The job runs on each
+push to `main` and on each pull request.
 
 The list is the secret `STEP14_DENY` of the repository, with one entry on each
 line. It is not a file of the tree, because a public file names what it denies.
@@ -720,19 +720,24 @@ The recipe runs `scripts/dev/deny-list.sh`. The script:
 - writes the list to a file under `$RUNNER_TEMP`, and removes the file at the end;
 - removes each empty line, because an empty pattern matches each line;
 - removes the spaces at the two ends of an entry, also a carriage return;
-- matches each entry as a fixed string, with no difference of case;
+- matches each entry as a fixed string, with no difference of case, in the text
+  and in the path of each tracked file;
 - prints the number of tracked files that it scans;
-- prints the path and the line number of each hit, or the path alone for a hit
-  in a binary file.
+- prints the path and the line number of each hit in a text, or the path alone
+  for a hit in a binary file;
+- prints the number of tracked paths that hold an entry, and no such path.
 
-The script never prints an entry or the text of a line. It reads the text of the
-files. It does not read the paths, the commit messages, or the body of a pull
-request.
+A path that holds an entry is a hit, and the log must not show it. For a hit in
+the text of such a file, the script prints `<a path that holds an entry>` in
+place of the path. These lines follow the other hits, so their place does not
+show the start of the path. The script never prints an entry or the text of a
+line. It does not read the commit messages or the body of a pull request.
 
 | The list and the tree | The job |
 | --- | --- |
-| An entry in a tracked file | Fails. GitHub skips `Gate`, so the verify of a pull request cannot pass. On `main`, `publish the book` does not run. |
-| No entry in a tracked file | Passes. |
+| An entry in the text of a tracked file | Fails. GitHub skips `Gate`, so the verify of a pull request cannot pass. On `main`, `publish the book` does not run. |
+| An entry in a tracked path | Fails in the same way, and gives the number of such paths. |
+| No entry in a tracked file or path | Passes. |
 | A list with no entry | Gives a notice that it did not scan, and passes. |
 
 The list has no entry before the owner sets the secret. It also has no entry on
@@ -743,7 +748,15 @@ who holds the list can run the same scan before a push:
 STEP14_DENY="$(cat <file of the list>)" just deny-list
 ```
 
-When the job finds a hit, replace the name with a made-up name. See
+The log does not show a path that holds an entry. A person who holds the list
+finds each such path with the same match:
+
+```bash
+git ls-files -z | grep --null-data -F -i -f <file of the list> | tr '\0' '\n'
+```
+
+When the job finds a hit, replace the name with a made-up name, in the text or
+in the path. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
 

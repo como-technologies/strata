@@ -14,10 +14,10 @@ jobs:
     name: checks
     uses: ./.github/workflows/checks.yml
 
-  # The scan of each tracked file for each entry of the deny list: see "The deny list" in
-  # docs/src/development/build-test.md. The list is a secret, because a file of a public tree
-  # names what it denies. A run with no secret, such as a pull request from a fork, gives a
-  # notice and passes. The job has no `if`, so it runs on each event.
+  # The scan of the text and the path of each tracked file for each entry of the deny list: see
+  # "The deny list" in docs/src/development/build-test.md. The list is a secret, because a file of
+  # a public tree names what it denies. A run with no secret, such as a pull request from a fork,
+  # gives a notice and passes. The job has no `if`, so it runs on each event.
   deny-list:
     name: deny list
     runs-on: ubuntu-latest
