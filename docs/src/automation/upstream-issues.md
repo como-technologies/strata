@@ -31,6 +31,10 @@ first line, and the label `strata-behind`:
 A pack that strata could not check keeps its issue as it is. An issue of a pack
 that no record pins is left alone.
 
+The script opens no issue for a newer version of a profile, and its exit reads
+the pins alone. `strata behind` names the newer profile versions: see
+[Newer versions of a profile](../commands/behind.md#newer-versions-of-a-profile).
+
 A pre-release is not a newer version of a pin that is final: see
 [A pre-release](../commands/behind.md#a-pre-release). So a pipeline that
 publishes a pre-release for each build opens no issue for it. The issue opens

@@ -28,7 +28,7 @@ use common::CommandExt;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
-    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route,
+    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, behind_of,
     candidate_snapshot, cluster_manifests_route, cluster_ref, cluster_resolved_values_route,
     cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
@@ -13624,22 +13624,6 @@ const WITH_IMPACT: ops::BehindOptions = ops::BehindOptions {
     pre_release: false,
 };
 
-/// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted.
-fn behind_of(
-    api: &MemoryApi,
-    records: &[std::path::PathBuf],
-    options: &ops::BehindOptions,
-) -> ops::BehindReport {
-    ops::behind(
-        records,
-        options,
-        |_| Ok(Palette::new(api)),
-        "2026-09-26T00:00:00Z",
-        &Progress::silent(),
-    )
-    .unwrap()
-}
-
 /// What the three commands that ask if a pack supports a cloud say for the cloud `cloud`.
 /// The registry has csi-aws-ebs at 1.63.1 for the clouds `pinned` and at 1.65.0 for the
 /// clouds `newer`. The answers, in order: `packs --cloud` keeps 1.65.0; `behind` names 1.65.0
@@ -14809,8 +14793,9 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
         serde_json::to_value(&r).unwrap()["pins"][0]["bump"]["paletteValidation"],
         serde_json::json!({"accepts": true})
     );
-    // Palette gave no error, so strata read no document of the profile for the names
-    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    // Palette gave no error, so strata read no document of the profile for the names. It reads
+    // the document one time, for the versions of the profile
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
 }
 
 #[test]
@@ -14837,7 +14822,9 @@ fn behind_with_no_impact_makes_no_validate_request() {
     assert!(r.pins[0].behind && r.pins[0].bump.is_none());
     assert!(api.posted().is_empty(), "{:?}", api.posted());
     assert_eq!(api.calls(&cluster_route("c1")), 0);
-    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    // the two records hold one version of the profile. Strata reads its document one time, for the
+    // versions of the profile, and not for the bump
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(!text.contains("palette "), "{text}");
 }
@@ -14892,6 +14879,7 @@ fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
     let r = behind_of(&every, std::slice::from_ref(&path), &WITH_IMPACT);
     assert_eq!(r.pins.len(), 2);
     assert_eq!(every.posted().len(), 2, "one request for each pin");
+    assert_eq!(r.profiles.len(), 1, "the profile version of the record");
 
     let one = api.clone();
     let options = ops::BehindOptions {
@@ -14907,6 +14895,8 @@ fn behind_with_a_pin_compares_and_asks_palette_about_that_pack_only() {
         (r.summary.pins, r.summary.behind, r.summary.errors),
         (1, 1, 0)
     );
+    // one pack alone: strata reads no profile version
+    assert!(r.profiles.is_empty() && r.summary.profiles == 0);
 }
 
 #[test]

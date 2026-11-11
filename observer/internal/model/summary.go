@@ -107,10 +107,13 @@ type Counts struct {
 	Drift         int `json:"drift"`
 	Newer         int `json:"newer"`
 	NewerProfiles int `json:"newerProfiles"`
-	NotChecked    int `json:"notChecked"`
-	Packs         int `json:"packs"`
-	PacksInFull   int `json:"packsInFull"`
-	Profiles      int `json:"profiles"`
+	// NewerProfileVersions counts the profiles with a newer published version. NewerProfiles counts the
+	// profiles with a pack that has a newer version.
+	NewerProfileVersions int `json:"newerProfileVersions"`
+	NotChecked           int `json:"notChecked"`
+	Packs                int `json:"packs"`
+	PacksInFull          int `json:"packsInFull"`
+	Profiles             int `json:"profiles"`
 }
 
 // Finding is one cause of drift in one profile. Images names the image references of a finding of the
@@ -132,16 +135,26 @@ type Finding struct {
 	WhoUnread        bool       `json:"whoUnread"`
 }
 
-// Profile is one profile of the cluster or of the baseline.
+// Profile is one profile of the cluster or of the baseline. NewerVersion is the newest published version
+// of the profile, when it is newer than the version of the record.
 type Profile struct {
-	Name        string       `json:"name"`
-	Version     string       `json:"version"`
-	Type        string       `json:"type"`
-	Scope       string       `json:"scope,omitempty"`
-	Status      Status       `json:"status"`
-	Published   *Published   `json:"published,omitempty"`
-	ClusterCopy *ClusterCopy `json:"clusterCopy,omitempty"`
-	Packs       []Pack       `json:"packs"`
+	Name         string        `json:"name"`
+	Version      string        `json:"version"`
+	Type         string        `json:"type"`
+	Scope        string        `json:"scope,omitempty"`
+	Status       Status        `json:"status"`
+	Published    *Published    `json:"published,omitempty"`
+	ClusterCopy  *ClusterCopy  `json:"clusterCopy,omitempty"`
+	NewerVersion *NewerVersion `json:"newerVersion,omitempty"`
+	Packs        []Pack        `json:"packs"`
+}
+
+// NewerVersion is the newest published version of a profile. Created is the time of its create in
+// Palette, and New says that it is in the last 7 days.
+type NewerVersion struct {
+	Version string `json:"version"`
+	Created string `json:"created"`
+	New     bool   `json:"new"`
 }
 
 // Published is the answer of `verify` for the record.

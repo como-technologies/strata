@@ -735,7 +735,26 @@ of the secret does not show, because the two sides hold the mask: see
   - `registrySyncError`, for a pin that is current: why strata could not read
     the last sync of the registry. `registrySync` is then absent, and the pin
     stays current.
-- `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`.
+- `profiles[]`: one entry for each profile version that the records hold, in the
+  order of the name and then of the version. A record of a profile version holds
+  that version. A record of a cluster, an edge host, or a cluster group holds each
+  profile that it runs. Absent when the records hold none, and with `--pin`. See
+  [Newer versions of a profile](../commands/behind.md#newer-versions-of-a-profile).
+  Each entry has:
+  - `name`, `version`, and `uid`.
+  - `scope`: `project`, `tenant`, or `system`, from the document of the version.
+    Absent when strata could not read the document, or the document does not give it.
+  - `pinnedBy[]`: `path` and `subject` of each record that holds it.
+  - `newer[]`: the newer published versions of the profile, newest first, by the
+    order of the pins. Palette lists the versions of the same name in the scope
+    of the version. Each has `version`, `uid`, and `created` on the newest one:
+    when Palette created that version.
+  - `behind`: `true` when `newer` is not empty.
+  - `gone`, only when true: Palette no longer holds the version.
+  - `error`, when strata could not read the versions.
+- `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`. Also
+  `profiles`, `profilesBehind`, and `profileErrors`, the counts of `profiles[]`.
+  Each of these three is absent when it is 0.
 
 ## strata-set/1
 

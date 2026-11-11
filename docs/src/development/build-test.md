@@ -142,7 +142,7 @@ table gives the files.
 | `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its public macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. `strata-preflight` uses the macro and the legend for its own sets. |
 | `src/closed_set/unknown.rs`, `src/closed_set/unknown/` | `unknown.rs` holds what strata does with a value that a set does not name: the watch, the note, and the line of the log. `unknown/sighting.rs` holds the facts that a line and an entry both state, and the checks of them. `unknown/log.rs` holds the line and the read of the log. `unknown/report.rs` holds the report and its check, `unknown/hint.rs` the hint, and `unknown/send.rs` the send. |
 | `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `unified.rs` holds the unified text of the values and of the manifests, which `--full` prints and the field `unified` carries. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
-| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` prints the unified diffs of `--full` in the terminal and in markdown. |
+| `src/render/` | The output: `terminal/`, `markdown.rs` with `markdown/behind.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal, and `terminal/behind.rs` paints the report of `behind`. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` prints the unified diffs of `--full` in the terminal and in markdown. |
 | `src/candidate/` | The candidate file. `mod.rs` holds the format, `rules.rs` the check of the file, and `resolve.rs` the resolve of each layer. `pack.rs` finds the versions of a pack in the registries, and `presets.rs` holds the options of a pack template. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, flags, values, the items of a listing, and the first text that is not empty. Each module reads a document with them. The helpers that `crates/strata-preflight/` and `crates/strata-knurl/` use are public, so that those packages write no read of their own. |
 | `src/file.rs` | The read and the write of a file, with the path in each error. Each layer reads and writes its files with them. |
@@ -671,9 +671,9 @@ runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
 workflow that it calls, and of each action of `.github/actions/` that it uses.
 The test gives each input of an action the value of the `with` of the step, or
 else the default of the input. No workflow and no action names the recipe or
-the package of the adapter. The adapter needs knurl, a private repository. A
-job of knurl runs the recipe each day on the strata of `main`: see
-[The job of knurl](../automation/knurl.md#the-job-of-knurl).
+the package of the adapter. The adapter needs knurl, a private repository. No
+job of CI builds or tests the adapter: see
+[The knurl adapter](../automation/knurl.md#test-it).
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which

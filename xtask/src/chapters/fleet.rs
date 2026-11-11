@@ -3,8 +3,8 @@
 use super::DEV_ENV;
 use super::edits::RETAIN;
 use super::ids::{
-    A100, A110, A110_PROD, A111, A111_PROD, A1111, AWS_STANDARD, DEV, LEDGER, PAYMENTS,
-    PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
+    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, AWS_STANDARD,
+    DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
 use crate::book::Runner;
 use crate::tenant::{Edit, UpgradeRefusal};
@@ -13,6 +13,7 @@ use serde_json::json;
 /// Run the chapters of the fleet, the registries, and the retire of a version.
 pub(super) fn run(r: &mut Runner) {
     behind(r);
+    behind_profiles(r);
     fleet(r);
     same_names(r);
     projects(r);
@@ -147,6 +148,63 @@ fn behind_refused(r: &mut Runner) {
         1,
         false,
         "strata behind refused/payments.json",
+    );
+}
+
+/// The chapter `behind-profiles`: the newer published versions of a profile that a record holds.
+fn behind_profiles(r: &mut Runner) {
+    // the pipeline of the team published aws-stack 1.1.0 and the pre-release 1.2.0-rc.1 in dev,
+    // after the record of 1.0.0. prod and the tenant hold later versions of the same name
+    r.chapter("behind-profiles", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.registries(DEV));
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.profile(DEV, A120_RC, "1.2.0-rc.1", "aws-stack@1.1.1", &[]);
+    r.profile(PROD, A130_PROD, "1.3.0", "aws-stack@1.1.1", &[]);
+    r.tenant_profile(A200_TENANT, "2.0.0", "aws-stack@1.1.1", &[]);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A100], &[]));
+    r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json");
+    r.step(
+        "behind-profile",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact",
+    );
+    r.excerpt(
+        "behind-profile-lines",
+        "behind-profile",
+        r"^(\$|\d+ pins|. \[profile\]|      1\.1\.0 created)",
+    );
+    r.step(
+        "behind-profile-pre-release",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --pre-release",
+    );
+    r.excerpt(
+        "behind-profile-pre-release-lines",
+        "behind-profile-pre-release",
+        r"^(\$|. \[profile\])",
+    );
+    r.step(
+        "behind-profile-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.profiles[] | {name, version, scope, newer: [.newer[].version], behind}'",
+    );
+    // the record of a cluster holds each profile that the cluster runs
+    r.quiet("strata snapshot cluster:payments -o payments.json");
+    r.step(
+        "behind-profile-cluster",
+        1,
+        false,
+        "strata behind payments.json --no-impact",
+    );
+    r.excerpt(
+        "behind-profile-cluster-lines",
+        "behind-profile-cluster",
+        r"^(\$|\d+ pins|. \[profile\])",
     );
 }
 
@@ -361,7 +419,7 @@ fn projects_records(r: &mut Runner) {
     );
     r.step(
         "projects-behind",
-        0,
+        1,
         false,
         "strata behind 'releases/*/*.json' --no-impact",
     );

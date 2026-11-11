@@ -1,2 +1,2 @@
 $ strata behind releases/1.1.1/dev.json --no-impact | head -1
-5 pins from 1 record: 0 behind, 1 floating
+5 pins from 1 record: 0 behind, 1 floating; 1 profile version: 0 behind

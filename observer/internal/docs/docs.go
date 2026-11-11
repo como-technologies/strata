@@ -163,9 +163,28 @@ type Who struct {
 
 // Behind is strata-behind/1.
 type Behind struct {
-	Schema string `json:"schema"`
-	Tool   Tool   `json:"tool"`
-	Pins   []Pin  `json:"pins"`
+	Schema   string       `json:"schema"`
+	Tool     Tool         `json:"tool"`
+	Pins     []Pin        `json:"pins"`
+	Profiles []ProfilePin `json:"profiles"`
+}
+
+// ProfilePin is one profile version that a record holds, with the newer published versions of its
+// profile, newest first.
+type ProfilePin struct {
+	Name     string         `json:"name"`
+	Version  string         `json:"version"`
+	PinnedBy []PinnedBy     `json:"pinnedBy"`
+	Newer    []NewerProfile `json:"newer"`
+	Behind   bool           `json:"behind"`
+	Error    *Error         `json:"error"`
+}
+
+// NewerProfile is one newer published version of a profile. Created is the time that Palette gives
+// the create of the newest one, and it is empty for the others.
+type NewerProfile struct {
+	Version string `json:"version"`
+	Created string `json:"created"`
 }
 
 // Pin is one pack, registry, pinned version, and tag.

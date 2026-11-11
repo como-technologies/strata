@@ -12,7 +12,10 @@ facts:
         - metadata.annotations.scope
         - metadata.annotations.projectUid
         - metadata.lastModifiedTimestamp
+        - metadata.creationTimestamp
         - spec.version
+        - spec.versions[].uid
+        - spec.versions[].version
         - spec.published.type
         - spec.published.cloudType
         - spec.published.packs[].name
@@ -61,9 +64,13 @@ facts:
       - draft.sh:no-has-draft
       - who.sh:edit-last-modified
       - registry.sh:del-doc-fields
+      - loop.sh:behind-profile-names
+      - scope.sh:versions-tenant
+      - scope.sh:versions-project
     pages:
       - reference/palette-api.md#a-profile-version
       - internals/palette/profiles.md#the-scope-of-a-version
+      - internals/palette/profiles.md#the-versions-of-a-profile
       - internals/palette/profiles.md#drafts
       - internals/palette/profiles.md#what-the-delete-of-a-version-checks
       - reference/palette-api.md#the-checks-of-strata-preflight
@@ -75,6 +82,7 @@ facts:
       - src/ops/consumer_list.rs
       - src/ops/consumers/mod.rs
       - src/ops/list.rs
+      - src/ops/behind/profiles.rs
     rules:
       - consumers-empty-on-error
       - template-outside
@@ -1119,6 +1127,25 @@ facts:
     code:
       - src/candidate/gaps.rs
       - src/api/codes.rs
+
+  # No route says that a newer version of a profile exists. Palette lists the published versions
+  # of the profile in no order, and strata orders them (#707).
+  - id: gap-newer-profile-version
+    kind: gap
+    reads:
+      fields:
+        - spec.versions[].uid
+        - spec.versions[].version
+    stand_in: []
+    live:
+      - loop.sh:behind-profile
+      - loop.sh:behind-profile-names
+    pages:
+      - internals/palette/profiles.md#a-newer-version-of-a-profile
+      - commands/behind.md#newer-versions-of-a-profile
+    code:
+      - src/ops/behind/profiles.rs
+      - src/reference/version.rs
 
   # What the delete of a version checks.
   - id: profile-delete-in-use

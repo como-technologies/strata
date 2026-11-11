@@ -5,6 +5,7 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -962,9 +963,57 @@ func TestAHeadSortsItsTableUpThenDownThenBack(t *testing.T) {
 	if got := newerOrder(back, subject); !slices.Equal(got, natural) {
 		t.Errorf("back: %v, want the order of the page %v", got, natural)
 	}
-	// A pre-release sorts below its release, and numbers compare as numbers.
-	order := pageWith(t, "testdata/api", devdata.StateOK, "#profiles", `S.q = ["1.0.0", "1.0.0-rc.10", "0.9.0", "1.0.0-alpha", "1.0.0-rc.2", "1.10.0", "1.2.0"].sort(semverCmp).join(" ")`)
-	mustHold(t, "the order of the versions", order, `value="0.9.0 1.0.0-alpha 1.0.0-rc.2 1.0.0-rc.10 1.0.0 1.2.0 1.10.0"`)
+}
+
+// searchPattern finds the value of the box "Filter by name" of the screen of the profiles. A test of a rule of the
+// page puts the result of the rule in that box.
+var searchPattern = regexp.MustCompile(`id="q" type="search"[^>]* value="([^"]*)"`)
+
+// searchOf gives the value of the box "Filter by name" of a screen of the profiles.
+func searchOf(t *testing.T, html string) string {
+	t.Helper()
+	m := searchPattern.FindStringSubmatch(html)
+	if m == nil {
+		t.Fatalf("the screen has no box Filter by name: %.300s", html)
+	}
+	return m[1]
+}
+
+// Issue #707. A column of versions sorts in the order of strata. testdata/versions.json holds the cases,
+// with those of #616 and each form of the order, and a test of strata sorts the same file with the order of
+// strata. The page sorts the cases from the last one to the first, and it must give the order of the file.
+// A sort compares only some pairs, so the page also compares each pair of cases in the two directions.
+func TestTheVersionSortOfThePageGivesTheOrderOfStrata(t *testing.T) {
+	var cases struct {
+		Ascending []string `json:"ascending"`
+	}
+	raw, err := os.ReadFile("testdata/versions.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		t.Fatal(err)
+	}
+	reversed := slices.Clone(cases.Ascending)
+	slices.Reverse(reversed)
+	given, err := json.Marshal(reversed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ascending, err := json.Marshal(cases.Ascending)
+	if err != nil {
+		t.Fatal(err)
+	}
+	order := searchOf(t, pageWith(t, "testdata/api", devdata.StateOK, "#profiles", fmt.Sprintf(`S.q = %s.sort(versionCmp).join("|")`, given)))
+	if want := strings.Join(cases.Ascending, "|"); order != want {
+		t.Errorf("the order of the versions:\n got %s\nwant %s", order, want)
+	}
+	// a case gives 0 with itself, and a value below 0 with each later case and above 0 from it
+	pairs := `S.q = (c => c.flatMap((a, i) => c.slice(i).filter((b, j) =>
+		Math.sign(versionCmp(a, b)) !== -Math.sign(j) || Math.sign(versionCmp(b, a)) !== Math.sign(j)).map(b => a + " and " + b)).join("|"))(%s)`
+	if wrong := searchOf(t, pageWith(t, "testdata/api", devdata.StateOK, "#profiles", fmt.Sprintf(pairs, ascending))); wrong != "" {
+		t.Errorf("the page orders these pairs of versions wrong: %s", wrong)
+	}
 }
 
 // A filter of the Newer table keeps a whole group when its profile matches, and else the rows whose pack

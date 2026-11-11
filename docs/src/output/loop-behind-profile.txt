@@ -1,0 +1,3 @@
+$ strata behind releases/1.0.0/dev.json --no-impact | grep -A1 '\[profile\]'
+~ [profile] aws-stack  1.0.0  project  behind: 1.1.0
+      1.1.0 created 2026-09-15T08:04:00.000Z

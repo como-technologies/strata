@@ -367,6 +367,11 @@ After 0.32.2, `strata-preflight-rules/1` has the new key `saves` in a check of k
 with the one value `console-address`. The id stays, and a reader that ignores unknown fields
 reads it. The JSON Schema of `preflight --schema rules` has the new key.
 
+After 0.32.2, `strata-behind/1` has the new field `profiles[]`, the profile versions of the
+records. `summary` has the new counts `profiles`, `profilesBehind`, and `profileErrors`. The
+id stays, and `--since` reads a report of 0.32.2 and before. The exit changes:
+see [Release 0.33.0](#release-0330-changes-that-need-action).
+
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
@@ -1145,6 +1150,23 @@ field, a value, an input, or an option is in the sections above.
   - A version of an add-on that the cluster does not run, two clusters, and a
     `cluster:<cluster>/<profile>` ref give what they gave before.
   - To compare each profile of a cluster with a release, compare a record of the cluster.
+- **`behind` names the newer published versions of each profile version that a record
+  holds.** See [Newer versions of a profile](../commands/behind.md#newer-versions-of-a-profile).
+  - A record of a profile version, or of a cluster that runs it, exits `1` when Palette holds
+    a newer version of the profile. Before, `behind` read the pins alone, so such a record
+    could exit `0`.
+  - A profile version that strata cannot read makes the exit `2`. A version that Palette no
+    longer holds is `gone`, and the exit does not change.
+  - The terminal report ends with one `[profile]` line for each profile version. Its first
+    line ends with `; <n> profile versions: <m> behind`, and `, <k> not checked` after a failed
+    read. The markdown report has a second table. A script that reads the text must read the
+    new lines, or read `--json`.
+  - `behind` sends one more request for each profile version, and one for the newest version
+    of each profile version that is behind. With `--pin`, it sends none of them.
+- **The observer gives the status `newer` to a profile with a newer version.** Before, such
+  a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
+  field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
+  [Run it once](../automation/observer.md#run-it-once).
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
   `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
   read the file of a folder from the working folder. So a file of a checkout could
@@ -1276,6 +1298,13 @@ field, a value, an input, or an option is in the sections above.
 - `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
   Before, it read the file of the working folder, or of a folder from the working
   folder.
+- `ops::BehindReport` has the new field `profiles: Vec<ops::ProfilePin>`.
+  `ops::BehindSummary` has the new fields `profiles`, `profiles_behind`, and
+  `profile_errors`. A struct literal must set them, and a pattern with no `..` must name
+  them. `ops::ProfilePin` and `ops::NewerProfile` are new.
+- `ops::behind` reads the document of each profile version that the records hold, through
+  `connect` of the project of the first record. `BehindReport::exit_code` gives `1` for a
+  profile version that is behind, and `2` for one that strata could not check.
 - `ops::same_release_with` takes `ops::SameReleaseOptions` in place of a `Policy` and a `bool`.
   `SameReleaseOptions { policy, allow_no_digest, ..SameReleaseOptions::default() }` gives the
   result of 0.32.2. The new field `allow_renumber` is `--allow renumber`.

@@ -1,5 +1,5 @@
 $ strata behind releases/1.1.1/dev.json --no-impact --pre-release
-5 pins from 1 record: 1 behind, 1 floating
+5 pins from 1 record: 1 behind, 1 floating; 1 profile version: 0 behind
 ...
 ~ [csi  ] csi-aws-ebs     1.65.0  Public Repo  behind: 1.66.0-rc.1
 ...

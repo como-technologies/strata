@@ -1,5 +1,5 @@
 $ strata behind 'releases/*/dev.json'
-9 pins from 2 records: 4 behind, 2 floating
+9 pins from 2 records: 4 behind, 2 floating; 2 profile versions: 1 behind
   [addon] cert-manager    1.21.1  Public Repo  current
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
@@ -30,4 +30,9 @@ $ strata behind 'releases/*/dev.json'
       palette accepts
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
   [os   ] ubuntu-aws      24.04   Public Repo  current (floating tag LTS__24.x, now 24.04)
+      pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
+~ [profile] aws-stack  1.0.0  project  behind: 1.1.1
+      1.1.1 created 2026-09-15T08:01:00.000Z
+      pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
+  [profile] aws-stack  1.1.1  project  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)

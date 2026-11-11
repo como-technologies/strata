@@ -37,6 +37,7 @@ use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
 use table::{column_widths, matched, painted_text, table_line};
 
+mod behind;
 mod lines;
 mod table;
 
@@ -343,56 +344,7 @@ impl Renderer for TerminalRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let p = &self.paint;
-        let mut out = format!("{}\n", super::behind::behind_heading(r));
-        let name_w = r.pins.iter().map(|x| x.name.len()).max().unwrap_or(0);
-        let ver_w = r.pins.iter().map(|x| x.version.len()).max().unwrap_or(0);
-        let reg_w = r
-            .pins
-            .iter()
-            .map(|x| dash(&x.registry).len())
-            .max()
-            .unwrap_or(0);
-        for pin in &r.pins {
-            let status = super::behind::pin_status(pin);
-            let status = if pin.error.is_some() {
-                p.byellow(&status)
-            } else if pin.behind {
-                p.yellow(&status)
-            } else {
-                p.dim(&status)
-            };
-            out.push_str(&format!(
-                "{} [{:<5}] {}  {}  {}  {status}\n",
-                if pin.behind { "~" } else { " " },
-                pin.layer,
-                p.bold(&format!("{:<name_w$}", pin.name)),
-                format_args!("{:<ver_w$}", pin.version),
-                format_args!("{:<reg_w$}", dash(&pin.registry)),
-            ));
-            if let Some(listed) = super::behind::listed_since(pin) {
-                out.push_str(&format!("      {}\n", p.dim(&listed)));
-            }
-            if let Some(line) = super::behind::bump_line(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            for line in super::behind::palette_lines(pin) {
-                out.push_str(&format!("      {line}\n"));
-            }
-            if let Some(arrived) = super::behind::arrived_line(pin) {
-                out.push_str(&format!("      {}\n", p.cyan(&arrived)));
-            }
-            if let Some(msg) = entry_error(pin.error.as_ref()) {
-                out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
-            }
-            for by in &pin.pinned_by {
-                out.push_str(&format!(
-                    "      {}\n",
-                    p.dim(&format!("pinned by {} ({})", by.path, by.subject))
-                ));
-            }
-        }
-        Ok(out)
+        Ok(behind::terminal_behind(r, &self.paint))
     }
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {

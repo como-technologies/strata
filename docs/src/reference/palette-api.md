@@ -21,7 +21,7 @@ of each response.
 
 | Request | Gives |
 | --- | --- |
-| `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. `metadata.annotations.scope` gives the scope of the version: `project`, `tenant`, or `system`. |
+| `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. `metadata.annotations.scope` gives the scope of the version: `project`, `tenant`, or `system`. `behind` reads `spec.versions[]`, the published versions of the profile, for each profile version that a record holds. It also reads the document of the newest of them, for `metadata.creationTimestamp`. See [The versions of a profile](../internals/palette/profiles.md#the-versions-of-a-profile). |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | The registry digests and the manifest contents. |
 | `GET /v1/clusterprofiles/{uid}/variables` | The profile variables. |
 | `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). `strata preflight` with a key also reads it for the pack of each layer of the profiles of the entity. A pack that Palette does not give, with each 4xx but 401 and 429, has no entry in the world. |
@@ -136,8 +136,8 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 A command reads the project listing of a scope one time. A record, a resolve
 with its validate, and `behind` read each registry listing of a scope one time.
 `verify` of many pack records reads the registry listings again for each record.
-`behind` connects one time for each project of its pins, and keeps the registry
-listings of that project for all its pins.
+`behind` connects one time for each project of its pins and its profile versions. It
+keeps the registry listings of that project for all its pins.
 
 Palette serves `/v1/packs` 100 entries at a time. Strata raises `offset` by the
 entries it got, until a page is short or `offset` reaches `listmeta.count`.

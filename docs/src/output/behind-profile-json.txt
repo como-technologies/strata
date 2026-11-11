@@ -1,0 +1,2 @@
+$ strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.profiles[] | {name, version, scope, newer: [.newer[].version], behind}'
+{"name":"aws-stack","version":"1.0.0","scope":"project","newer":["1.1.0"],"behind":true}

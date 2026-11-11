@@ -422,3 +422,59 @@ func TestAnUnverifiedRecordThatNamesNoPackStillShowsItsProfile(t *testing.T) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }
+
+// profilePin is the answer of `behind` for the profile version name@version, which holds the
+// newest published version newest. An empty newest is a version that is current.
+func profilePin(name, version, newest, created string) docs.ProfilePin {
+	p := docs.ProfilePin{Name: name, Version: version, PinnedBy: []docs.PinnedBy{{Subject: Subject(name, version)}}}
+	if newest != "" {
+		p.Behind = true
+		p.Newer = []docs.NewerProfile{{Version: newest, Created: created}, {Version: version + "-older"}}
+	}
+	return p
+}
+
+// Issue #707. A profile whose newest published version is above the record shows that version, apart
+// from the newer versions of its packs. The overview counts it, and it makes an event at its create.
+func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
+	c := content(t,
+		rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "cert-manager", "1.21.1")),
+		rec("barney-base", "1.5.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))
+	failed := profilePin("barney-base", "1.5.0", "1.6.0", at(-time.Hour))
+	failed.Error = &docs.Error{Kind: docs.KindAPI, Status: 500}
+	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{},
+		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "barney-base@1.5.0")},
+		Profiles: []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "1.4.0", at(-2*time.Hour)), failed}}
+	s := build(&c, v)
+	addons, base := s.Profiles[0], s.Profiles[1]
+	want := &NewerVersion{Version: "1.4.0", Created: at(-2 * time.Hour), New: true}
+	if addons.NewerVersion == nil || *addons.NewerVersion != *want || addons.Status != StatusNewer {
+		t.Errorf("barney-addons: %+v, status %q", addons.NewerVersion, addons.Status)
+	}
+	// a pack of barney-base has a newer version. strata could not read the versions of the profile, so
+	// the row names no newer profile version
+	if base.NewerVersion != nil || base.Status != StatusNewer {
+		t.Errorf("barney-base: %+v, status %q", base.NewerVersion, base.Status)
+	}
+	if s.Counts.NewerProfileVersions != 1 || s.Counts.NewerProfiles != 1 || s.Counts.Newer != 1 {
+		t.Errorf("counts %+v", s.Counts)
+	}
+	got := reasons(s.Events)
+	addonsEvent, baseEvent := "newer "+reasonNewProfile+" barney-addons@1.3.1", "newer "+reasonNewProfile+" barney-base@1.5.0"
+	if !slices.Contains(got, addonsEvent) || slices.Contains(got, baseEvent) {
+		t.Errorf("events %q", got)
+	}
+	for _, e := range s.Events {
+		if e.Reason == reasonNewProfile && (e.Message != "barney-addons@1.4.0 is a newer version of the profile." || !e.Time.Equal(t0.Add(-2*time.Hour))) {
+			t.Errorf("the event %+v", e)
+		}
+	}
+	// a version that is current, and an answer of an older strata with no profiles, show none
+	v.Profiles = []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "", "")}
+	for _, versions := range []*Versions{v, {At: t0, Strata: "0.29.0", Moves: map[string]Move{}}} {
+		s := build(&c, versions)
+		if s.Profiles[0].NewerVersion != nil || s.Profiles[0].Status != StatusOK || s.Counts.NewerProfileVersions != 0 {
+			t.Errorf("a current version: %+v, status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
+		}
+	}
+}
