@@ -12,7 +12,8 @@ use crate::term::progress::Progress;
 /// What strata found when it compared the two archives of one renumber.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ArchiveCheck {
-    /// The two archives hold the same files, and `pack.json` differs only by its `version`.
+    /// The two archives hold the same files. `pack.json` differs only by its `version`, and
+    /// `Chart.yaml` only by its line `version`.
     Same,
     /// The path of each file that differs between the two archives.
     Changed(Vec<String>),

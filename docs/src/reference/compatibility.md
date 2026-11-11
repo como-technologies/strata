@@ -1222,9 +1222,13 @@ field, a value, an input, or an option is in the sections above.
 - **`same-release --allow renumber` compares the archives of the packs.** It reads them from
   Palette for each renumber whose digest changed. See
   [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
-  - A renumber whose two archives differ in a file that is not the version in `pack.json` fails.
-    The pair is `different`, and a reason names the file. Before, the pair passed, and the line
-    said `archive: not compared`.
+  - A renumber whose two archives differ in more than the version of the pack fails. The pair is
+    `different`, and a reason names the file. Before, the pair passed, and the line said
+    `archive: not compared`.
+  - Strata does not compare `version` in `pack.json`. A chart of a Helm registry has no
+    `pack.json`, so strata does not compare the line `version` of its `Chart.yaml`. Each other
+    line of the file counts, also `appVersion`. A renumber of a chart whose `appVersion` changes
+    fails with `Chart.yaml differs`.
   - The line of a renumber says `archive: same files` when the two archives agree, and
     `pairs[].archivesCompared` names the pack.
   - The command connects to Palette, also for two record files. Without a key, it stops with

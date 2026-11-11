@@ -506,8 +506,9 @@ of the secret does not show, because the two sides hold the mask: see
     reason lists its renumbers too. See
     [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
   - `archivesCompared`, only when it is not empty: the key of each pack of
-    `renumbers[]` whose two archives strata compared. They hold the same files,
-    and `pack.json` differs only by its `version`. See
+    `renumbers[]` whose two archives strata compared. They hold the same files.
+    `pack.json` differs only by its `version`, or the `Chart.yaml` of a Helm
+    chart only by its line `version`. See
     [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
   - `archivesChanged[]`, only when it is not empty: each pack of `renumbers[]`
     whose two archives differ in another file, with `key` and `files[]`. The
