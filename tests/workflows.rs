@@ -1718,8 +1718,9 @@ fn no_workflow_or_action_of_strata_and_no_recipe_of_a_job_that_the_gate_needs_ru
     for dir in [".github/workflows", ".github/actions"] {
         for path in walk(&root.join(dir)) {
             let text = std::fs::read_to_string(&path).unwrap();
+            let file = path.strip_prefix(root).unwrap().display();
             for name in ADAPTER_NAMES {
-                assert!(!text.contains(name), "{} names {name}", path.display());
+                assert!(!text.contains(name), "{file} names {name}");
             }
         }
     }
