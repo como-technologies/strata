@@ -1045,15 +1045,17 @@ var stepPattern = regexp.MustCompile(`<span class="step ([a-z]*)"><i></i><b>([^<
 
 // The page opens with four tiles and the table. The switch shows the timeline: one lane for each pack of
 // each profile, from the pinned version through each listed version to the newest. A move that changes only
-// the build says "same" in the table.
+// the build says "same" in the table. No word of the two views says "behind" (#643).
 func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	table := pageOf(t, render(t, devdata.StateOK, false), "#newer", "")
-	mustHold(t, "the tiles", table, `<div class="l">Packs behind</div><div class="v">10</div>`, `<div class="l">Moves that repave</div><div class="v">2</div>`,
-		`<div class="l">New this week</div>`, `<div class="l">Versions behind</div><div class="v">16</div>`)
+	mustHold(t, "the tiles", table, `<div class="l">Packs with a newer version</div><div class="v">10</div>`, `<div class="l">Moves that repave</div><div class="v">2</div>`,
+		`<div class="l">New this week</div>`, `<div class="l">Versions newer than the pins</div><div class="v">16</div>`)
+	mustNotHold(t, "the words of the table", strings.ToLower(textOf(table)), "behind")
 	mustHold(t, "the head", table, `<button data-nview="table" aria-pressed="true" class="on">Table</button>`, `id="q-newer"`)
 	mustHold(t, "the row of ubuntu-aws", rowWith(t, table, `data-go="#k-barney-base@1.5.0/os/ubuntu-aws"`), `title="Only the build of the pack changes: the values stay the same">same</span>`)
 	timeline := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.newerView = "timeline"`)
+	mustNotHold(t, "the words of the timeline", strings.ToLower(textOf(timeline)), "behind")
 	lanes := lanePattern.FindAllStringSubmatch(timeline, -1)
 	want := 0
 	for _, r := range set.Newer.Newer {

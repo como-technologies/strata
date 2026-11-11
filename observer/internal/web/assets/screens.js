@@ -54,13 +54,13 @@ function newerGroups(rows) {
 function newerTiles(rows) {
   const n = D.cluster.counts, others = packsWithoutMove();
   const repave = rows.filter(r => REPAVES.includes(r.impact)).length, fresh = rows.filter(r => r.new).length;
-  const behind = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
+  const steps = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
   const T = (cls, label, value, sub) => h`<div class="tile ${cls}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
   return h`<section class="tiles" aria-label="Newer versions in numbers">
-    ${T("b", "Packs behind", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
+    ${T("b", "Packs with a newer version", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
     ${T(repave ? "a" : "g", "Moves that repave", repave, repave ? "The move replaces the nodes" : "No move replaces the nodes")}
     ${T("b", "New this week", fresh, "Listed in the last 7 days")}
-    ${T("y", "Versions behind", behind, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
+    ${T("y", "Versions newer than the pins", steps, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
   </section>`;
 }
 
