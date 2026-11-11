@@ -5,4 +5,4 @@ project dev (uid 64f20000000000000000a0d1)
   aws-stack@1.1.8.develop  64e000000000000000000107  aws
   aws-stack@1.1.8          64e000000000000000000106  aws
   aws-stack@1.1.10         64e000000000000000000108  aws
-  aws-stack@1.2.develop    64e00000000000000000010e  aws
+  aws-stack@1.2.develop    64e000000000000000000111  aws
