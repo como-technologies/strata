@@ -361,9 +361,9 @@ A Secret with no record is empty. The next apply then removes the old content.
 The pipeline of your team runs the script in its publish step, so the records are
 the files that the team approved.
 
-A live run applied these steps to a cluster that Palette built. The run took the
-token from a file and bound the role to one user. It also set short periods for the
-two cycles, and it applied the output of `kubectl kustomize`.
+A live run applied these steps to a cluster that Palette built. The run bound the
+role to one user. It also set short periods for the two cycles, and it applied the
+output of `kubectl kustomize`.
 
 The pod passed the `restricted` standard and became Ready. Its first cycle reached
 Palette, so a workload cluster reaches the API. A user with only the reader role

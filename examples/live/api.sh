@@ -110,8 +110,8 @@
 #   KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER
 #       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
 #   api.sh oci-registry-create NAME ENDPOINT BASE_PATH
-#       Make an OCI registry of the tenant, of the type basic, with the provider helm, the auth
-#       type noAuth, and the sync on, and print its uid. ENDPOINT, such as
+#       Make an OCI registry of the tenant, and print its uid. The registry has the type basic,
+#       the provider helm, the auth type noAuth, and the sync on. ENDPOINT, such as
 #       https://ghcr.io/orgs/OWNER, and BASE_PATH, such as charts, name the charts.
 #   api.sh registry-delete KIND REGISTRY_UID
 #       Remove a registry of the tenant. KIND is a kind of api.sh sync. A registry that is gone
@@ -711,22 +711,7 @@ sync_oci() {
 }
 
 # The seconds between two requests about a sync. A test sets it to 0.
-
-# The kinds of registry_base, for a usage line.
-REGISTRY_KINDS="oci-ecr, oci-basic, helm, or pack"
 SYNC_WAIT=${SYNC_WAIT:-5}
-
-# registry_base KIND UID: the path of the registry UID of KIND: oci-ecr, oci-basic (an OCI registry
-# of the type basic), helm, or pack (a Spectro pack registry). It fails for another KIND.
-registry_base() {
-  case "$1" in
-    oci-ecr) echo "/v1/registries/oci/$2/ecr" ;;
-    oci-basic) echo "/v1/registries/oci/$2/basic" ;;
-    helm) echo "/v1/registries/helm/$2" ;;
-    pack) echo "/v1/registries/pack/$2" ;;
-    *) return 1 ;;
-  esac
-}
 
 # sync_registry KIND UID: POST the sync of a registry of KIND (oci-ecr, oci-basic, helm, or pack),
 # then wait until a run newer than the last one has ended

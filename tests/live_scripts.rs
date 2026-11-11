@@ -514,6 +514,18 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
     expect_2(&d, "no OCI registry r-missing");
 
     let d = tenant_digest(
+        &["oci", "r-zot", "argocd", "1.0.0"],
+        &[(
+            "v1_registries_oci_summary",
+            r#"{"items":[{"metadata":{"uid":"r-zot"},
+                "spec":{"endpoint":"zot.example.com","registryType":"zot","providerType":"pack"}}]}"#,
+        )],
+        &[],
+    );
+    expect_2(&d, "OCI registry r-zot has the type 'zot', not ecr or basic");
+    assert!(d.log.is_empty(), "crane is not run: {}", d.log);
+
+    let d = tenant_digest(
         &["oci", "r-oci", "argocd", "10.4.0.1"],
         &[
             OCI_SUMMARY,
@@ -1350,6 +1362,32 @@ fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
         }
     }
     assert_eq!(named, ["examples/live/palette-curl.sh"]);
+}
+
+/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
+/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
+#[test]
+fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut built = Vec::new();
+    for dir in ["examples", "scripts", "deploy", "crates"] {
+        for path in walk(&root.join(dir)) {
+            if path.extension().is_none_or(|e| e != "sh") {
+                continue;
+            }
+            let code = std::fs::read_to_string(&path).unwrap();
+            if code_lines(&code).any(|l| {
+                ["oci", "helm", "pack"].iter().any(|kind| {
+                    let route = format!("/v1/registries/{kind}/");
+                    l.match_indices(&route)
+                        .any(|(at, _)| l[at + route.len()..].starts_with('$'))
+                })
+            }) {
+                built.push(path.strip_prefix(root).unwrap().display().to_string());
+            }
+        }
+    }
+    assert_eq!(built, ["examples/live/palette-curl.sh"]);
 }
 
 #[test]

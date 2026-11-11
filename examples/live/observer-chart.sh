@@ -8,9 +8,9 @@
 #
 # The script makes an OCI registry of the type basic, with the provider helm and the auth type
 # noAuth. It starts a sync of the registry, and it reads the packs of the registry for the chart
-# strata-observer. Then it deletes the registry, also after a failed check or an error. A check with ?
-# records what Palette does and judges nothing: 0 says that the step works with no login, and 1 says
-# that it does not. The output of each check holds the answer of Palette.
+# strata-observer. Then it deletes the registry, also after a failed check or an error. A check
+# with ? records what Palette does, and it judges nothing. 0 says that the step works with no
+# login, and 1 says that it does not. The output of each check holds the answer of Palette.
 #
 # The registry is of the tenant, so the key needs a role that adds a registry at tenant scope. The
 # script needs no cluster, and it changes nothing else in the tenant. The name of the registry holds

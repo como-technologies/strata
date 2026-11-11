@@ -431,9 +431,9 @@ live-observer: build
 live-observer-role: build
     examples/live/observer-role.sh
 
-# The chart of the observer in a registry of Palette with no login (#732): an OCI registry with the auth type noAuth, a sync, and the chart in the packs of the registry. Needs the key, with a role that adds a registry at tenant scope; needs no cluster. Makes one registry, and deletes it.
+# The chart of the observer in a registry of Palette with no login (#732). Makes an OCI registry with the auth type noAuth, starts a sync, and reads the packs of the registry for the chart. Needs the key, with a role that adds a registry at tenant scope; needs no cluster. Deletes the registry at the end.
 [group('live checks')]
-live-observer-chart:
+live-observer-chart: build
     examples/live/observer-chart.sh
 
 # The three recipes below put the observer on a test cluster of the project. A team installs it with the steps of
