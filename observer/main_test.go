@@ -157,8 +157,8 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 // loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, the seed, which
 // gets and updates the four Secrets of the records, and the alerts, which send one POST of a message to the
 // webhook of a team. Only internal/api, internal/kube, and
-// internal/alert import a package of the network, and so does the stand-in for the API server in
-// internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
+// internal/alert import a package of the network, and so do the stand-in for the API server and the
+// webhook of the tests in internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
 func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string
