@@ -185,6 +185,12 @@ A new read of Palette goes in `api/palette/`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot/`, outside the root unless it
 is content: see [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
+A new command that reads Palette takes `--project` and `--project-name`. Add it
+to `READS_PALETTE` in the unit tests of `src/cli/args.rs`, and to `commands` in
+`tests/projects.rs`. Add a command that reads no Palette to `READS_NO_PALETTE`
+in the two files. The tests of each file fail on a command that its two lists
+do not name.
+
 ## Where a script goes
 
 | Who runs it | Directory | Examples |
@@ -663,9 +669,9 @@ runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
 workflow that it calls, and of each action of `.github/actions/` that it uses.
 The test gives each input of an action the value of the `with` of the step, or
 else the default of the input. No workflow and no action names the recipe or
-the package of the adapter. The adapter needs knurl, a private repository. A
-job of knurl runs the recipe each day on the strata of `main`: see
-[The job of knurl](../automation/knurl.md#the-job-of-knurl).
+the package of the adapter. The adapter needs knurl, a private repository. No
+job of CI builds or tests the adapter: see
+[The knurl adapter](../automation/knurl.md#test-it).
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
@@ -790,6 +796,37 @@ Replace each hit with a made-up name, in the text, the path, or the target of a
 symlink. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
+
+### Dependency updates
+
+`.github/dependabot.yml` asks Dependabot for pull requests of version updates
+each Monday. Each package ecosystem gets one pull request for its minor and
+patch updates, and one pull request for each major update.
+
+| Ecosystem | Folders |
+| --- | --- |
+| Cargo | the workspace at the root, `examples/library`, and `examples/library-preflight` |
+| Go | `observer` and `examples/live/count-requests` |
+| GitHub Actions | the workflows, and each action of `.github/actions/` |
+| Docker | `deploy/observer` and `deploy/report` |
+
+Dependabot reads no other package:
+
+- `crates/strata-knurl` needs knurl, a private repository.
+- `examples/live/terraform` pins the provider of Spectro Cloud. A new provider
+  needs a live run, and the contract run watches its releases.
+- `deploy/session` is the image of the riff sessions, and it follows riff.
+
+Two pins stay. The test of the order of versions compares strata with the crate
+`versions` at one exact release. A new minor release of `bolero` needs the same
+`CARGO_BOLERO_VERSION` in `.github/workflows/fuzz.yml`, so Dependabot proposes
+only its patch releases.
+
+The security updates of Dependabot are on in the settings of the repository, so
+an alert can also open a pull request. Each pull request of Dependabot goes to
+the milestone Backlog, so no wave counts it. riff does not take it, so it gets
+no `riff/verify`, which the ruleset of `main` needs. A maintainer merges it when
+its checks pass.
 
 ## A change to how strata reads Palette
 
