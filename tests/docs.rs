@@ -4444,8 +4444,8 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
 /// each version. brett changed the answer: where Palette gives no order or reads no version, strata
 /// follows the crate `versions`, and the rules of Palette stay. The rule of `@latest`, the pages of
 /// Palette and of `behind`, the rules of the code, and the section of the release state it. They
-/// also state text right after a number, as in `1.2rc1` and `1.2.3.4rc1`, and the rest after one
-/// text before the numbers.
+/// also state text right after a number, as in `1.2rc1`, `1.2.3rc1b`, and `1.2.3.4rc1`, and the
+/// rest after one text before the numbers.
 #[test]
 fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
     let page = read(&docs().join("reference/compatibility.md"));
@@ -4465,6 +4465,8 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "`1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`.",
         "So `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`.",
         "the rest decides: `chart-1.2.3.develop` is below `chart-1.2.3-alpha`",
+        "So `1.2.3rc1b` is below `1.2.3.develop`.",
+        "`1.2.3rc1b` below `1.2.3.develop`,",
     ] {
         assert!(
             release.contains(needle),
@@ -4495,13 +4497,16 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "Strata puts it below `1.1.8-alpha`, as the crate does.",
         "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`.",
         "Palette finds the numbers at any place, so `chart-1.2.3` is above `1.2.2`.",
-        "The crate gives no total order to text right after the numbers, as in `1.2.3rc1` and `1.0.0-a_b`.",
+        "The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`.",
+        "For each count of numbers, text right after the last number is below a tail after a dot.",
+        "`1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.",
     ] {
         assert!(refs.contains(needle), "refs.md lacks {needle:?}");
     }
     for old in [
         "Such a text is above each version.",
         "It is below each version, also below a pre-release.",
+        "The crate gives no total order to text right after the numbers",
     ] {
         assert!(!refs.contains(old), "refs.md still states {old:?}");
     }

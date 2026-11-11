@@ -190,6 +190,30 @@ fn a_tail_of_text_after_three_numbers_is_below_each_pre_release_of_them() {
     // text right after the numbers is a tail of text too. The crate gives these no total order.
     ascending(&["1.2.2", "1.2.3rc1", "1.2.3-0", "1.2.3"]);
     ascending(&["0.9.9", "1.0.0-a_b", "1.0.0-0", "1.0.0"]);
+    // Issue #714, call 6: text right after the third number is below a tail after a dot, as the
+    // crate orders it. Strata compared the two tails as bytes.
+    ascending(&[
+        "1.2.2",
+        "1.2.3a1b",
+        "1.2.3rc1b",
+        "1.2.3x1y",
+        "1.2.3.4a1b",
+        "1.2.3.develop",
+        "1.2.3.rc1b",
+        "1.2.3.x",
+        "1.2.3-0",
+    ]);
+    ascending(&["1.2.3rc1b", "1.2.3rc1b-1", "1.2.3.rc1b"]);
+    eq("1.2.3rc1b+5", "1.2.3rc1b");
+    eq("v1.2.3rc1b", "1.2.3rc1b");
+    // the crate reads `3rc1` as a number with text, above the text `3x1y` and below `1.2.3.develop`
+    ascending(&[
+        "1.2.3x1y",
+        "1.2.3rc1",
+        "1.2.3rc9",
+        "1.2.3rc10",
+        "1.2.3.develop",
+    ]);
 }
 
 /// Text before the three numbers, as in `chart-1.2.3`: Palette finds the numbers at any place,
@@ -296,6 +320,10 @@ fn the_order_of_all_strings_is_total() {
         "1.2.0.develop",
         "chart-1.2.0",
         "1.2.3rc1",
+        "1.2.3rc1b",
+        "1.2.3rc1b-1",
+        "1.2.3.rc1b",
+        "1.2.3x1y",
         "1.2.3.4-rc1",
         "1.2.3.4.develop",
         "1.2.3.4.1",

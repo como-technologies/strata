@@ -47,7 +47,8 @@ A ref names the thing that a command reads.
     1. Text before the numbers, as in `chart-1.2.0`.
     2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.
        A missing number is `0`, so `1.2.develop` is above `1.1.10`.
-    3. A tail of text right after the three numbers, as in `1.2.0.develop`.
+    3. A tail of text after the three numbers, as in `1.2.0rc1b` and
+       `1.2.0.develop`.
     4. A pre-release, as in `1.2.0-rc.1`.
     5. The version, `1.2.0`.
     6. A fourth number, as in `1.2.0.1`. So `10.4.0.1` is above `10.4.0` and
@@ -58,8 +59,9 @@ A ref names the thing that a command reads.
     reads it. In the last part, the digits in front of letters are a number too,
     as in `2rc1`. So `1.2rc1` holds two numbers, and `1.2a1b` holds one number
     and the tail `2a1b`.
-  - Of two texts with one form, the crate orders the tails. Text right after the
-    last number is below a tail after a dot, so `1.2rc1` is below `1.2.develop`.
+  - Of two texts with one form, the crate orders the tails. For each count of
+    numbers, text right after the last number is below a tail after a dot. So
+    `1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.
     Digits with letters right after them are below the digits alone, so
     `1.2.0.1rc1` is below `1.2.0.1`. Build data after `+` does not count.
   - Each form with text is a pre-release. So `1.1.8.develop` is below `1.1.8`,
@@ -79,9 +81,9 @@ A ref names the thing that a command reads.
     `chart`, and puts `chart-1.2.3` below both.
   - Two different texts before the numbers keep the natural order of that text,
     so `app-1.2.3` is below `chart-1.2.3`.
-  - The crate gives no total order to text right after the numbers, as in
-    `1.2.3rc1` and `1.0.0-a_b`. Strata puts such a text below each pre-release
-    of its numbers.
+  - The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts
+    `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`. Strata puts such a text
+    below each pre-release of its numbers.
   - The crate gives no total order to digits and text in a part that is not the
     last, as in `1.2rc1.x` and `1.2.3.4rc1.x`. Strata reads such a part as text,
     so `1.2.3.4rc1.x` is below each pre-release of `1.2.3`.

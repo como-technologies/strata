@@ -1018,6 +1018,8 @@ field, a value, an input, or an option is in the sections above.
     numbers, and makes it a pre-release. `1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`. So
     `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
     Before, it recorded the develop build. `pack:<name>@latest` skips such a version too.
+  - Text right after the third number is below a tail after a dot, as the crate `versions`
+    orders it. So `1.2.3rc1b` is below `1.2.3.develop`.
   - A tail of numbers puts the version above its numbers. `10.4.0.1` is above `10.4.0` and
     below `10.5.0`. So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.
   - A tail after `-` or a dot after a fourth number puts the version above its four numbers, as
@@ -1204,8 +1206,9 @@ field, a value, an input, or an option is in the sections above.
   `reference::version::pick` follows that order.
   - Where Palette gives no order or reads no version, `compare` follows the order of the crate
     `versions` 8.0.1. It puts `1.2.develop` above `1.1.10` and below `1.2.0-0`, and
-    `1.1.8.develop` below `1.1.8-0`. It puts `1.2rc1` below `1.2.develop`, and `1.2.3.4rc1`
-    above `1.2.3` and below `1.2.3.4`. Before, it put each such text above each version.
+    `1.1.8.develop` below `1.1.8-0`. It puts `1.2rc1` below `1.2.develop`, `1.2.3rc1b` below
+    `1.2.3.develop`, and `1.2.3.4rc1` above `1.2.3` and below `1.2.3.4`. Before, it put each such
+    text above each version.
   - `compare` puts a text with no number at its start and no three numbers, such as `develop`,
     below each version.
   - A `v` in front of the three numbers does not count in a tie, so `v1.1.8.1` equals `1.1.8.1`.

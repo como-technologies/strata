@@ -189,6 +189,17 @@ const FORMS: &[(&str, Ordering, &str, Source)] = &[
     // a part of digits and other text is a text: `1.2.3.4a1b` is a tail of text
     ("1.2.3.4a1b", Less, "1.2.3-rc.1", Crate),
     ("1.2.3.4a1b", Less, "1.2.3.develop", Crate),
+    // text right after the third number: below a tail after a dot of the same numbers
+    ("1.2.3rc1b", Less, "1.2.3.develop", Crate),
+    ("1.2.3x1y", Less, "1.2.3.x", Crate),
+    ("1.2.3a1b", Less, "1.2.3.4a1b", Crate),
+    ("1.2.3rc1b", Less, "1.2.3.rc1b", Crate),
+    ("1.2.3rc1b", Less, "1.2.3-rc.1", Crate),
+    ("1.2.3rc1b", Less, "1.2.3.4", Crate),
+    ("1.2.3a1b", Less, "1.2.3rc1b", Crate),
+    ("1.2.3rc1b", Less, "1.2.3x1y", Crate),
+    ("1.2.3rc1b-1", Greater, "1.2.3rc1b", Crate),
+    ("1.2.3rc1b+5", Equal, "1.2.3rc1b", Crate),
     // one or two numbers with text right after the last number: below a tail after a dot
     ("1.2rc1", Less, "1.2.develop", Crate),
     ("1.2rc1", Less, "1.2.rc1", Crate),
@@ -328,7 +339,8 @@ fn latest_gives_the_highest_version_of_the_crate_and_skips_only_a_pre_release() 
 }
 
 /// The crate gives no total order for `1.2.3rc1` and `1.0.0-a_b`, so no order can follow it there.
-/// Strata keeps the rule of a tail of text: it is below each pre-release of its three numbers.
+/// Strata keeps the rule of a tail of text: it is below each pre-release of its three numbers. The
+/// crate orders other text right after the three numbers, as in `1.2.3rc1b`, and `FORMS` holds it.
 #[test]
 fn the_crate_has_a_cycle_for_text_right_after_three_numbers_so_strata_keeps_its_rule() {
     // `1.2.3rc1` equals `1.2.3` and `1.2.3-rc.1` for the crate, and `1.2.3-rc.1` is below `1.2.3`

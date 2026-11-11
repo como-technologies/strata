@@ -24,7 +24,7 @@ use crate::reference::LATEST;
 ///
 /// 1. Text before the three numbers: `chart-1.2.0`.
 /// 2. One or two numbers and a tail of text: `1.2rc1` or `1.2.develop`. A missing number is `0`.
-/// 3. A tail of text right after the three numbers: `1.2.0.develop`.
+/// 3. A tail of text after the three numbers: `1.2.0rc1b` or `1.2.0.develop`.
 /// 4. A pre-release: `1.2.0-rc.1`.
 /// 5. The version: `1.2.0`.
 /// 6. A fourth number: `1.2.0.1`. Text right after it puts the string below it: `1.2.0.1rc1`. A
@@ -36,8 +36,9 @@ use crate::reference::LATEST;
 ///
 /// The natural order of the text before the numbers orders two strings of the first form. When
 /// that text is the same, the rest decides: `chart-1.2.0.develop` is below `chart-1.2.0-rc.1`. Of
-/// two strings of the second form, the string with fewer numbers is lower. Then text right after
-/// the last number is lower than a tail after a dot: `1rc1` is below `1.develop`.
+/// two strings of the second form, the string with fewer numbers is lower. In the second and the
+/// third form, text right after the last number is then lower than a tail after a dot. So `1rc1` is
+/// below `1.develop`, and `1.2.0rc1b` is below `1.2.0.develop`.
 ///
 /// Each other tail orders part by part, at its dots, as the crate orders it. A part of digits is
 /// above a text, and two parts of digits compare as numbers. Digits with letters right after them,
@@ -181,12 +182,13 @@ struct Version<'a> {
     count: usize,
     /// The form of the text around the numbers.
     form: Form,
-    /// True when the tail starts right after the last number, as in `1.2rc1`, and not after a
-    /// dot. Only one or two numbers have such a tail.
+    /// True when the tail starts right after the last number, as in `1.2rc1` or `1.2.3rc1b`, and
+    /// not after a dot. A fourth number has no such tail.
     attached: bool,
     /// The identifiers of the pre-release after `-`. Empty for a version with no pre-release.
     pre: Vec<&'a str>,
-    /// The text that orders two versions of one form. Empty for a version that parses.
+    /// The text that orders two versions of one form. Empty for a version that parses. Text right
+    /// after the last number starts at that number, as the crate reads it: `3rc1b` of `1.2.3rc1b`.
     tail: &'a str,
 }
 
@@ -230,15 +232,6 @@ impl<'a> Version<'a> {
         for (slot, n) in numbers.iter_mut().zip(v[found.clone()].split('.')) {
             *slot = n.parse().ok()?;
         }
-        let version = |form, tail, pre| Version {
-            before: "",
-            numbers,
-            count: 3,
-            form,
-            attached: false,
-            pre,
-            tail,
-        };
         let (rest, pre) = split_pre(&v[found.end..]);
         let tail = rest.strip_prefix('.');
         // the crate reads a number with text right after it only in the last part
@@ -246,8 +239,22 @@ impl<'a> Version<'a> {
             Some((first, _)) => is_digits(first),
             None => number_and_text(tail).is_some(),
         });
-        let form = if fourth { Form::More } else { Form::Text };
-        Some(version(form, tail.unwrap_or(rest), pre))
+        let attached = tail.is_none() && !rest.is_empty();
+        // the crate reads the third number and the text right after it as one part, as in `3rc1b`
+        let third = v[..found.end].rfind('.').map_or(found.start, |dot| dot + 1);
+        Some(Version {
+            before: "",
+            numbers,
+            count: 3,
+            form: if fourth { Form::More } else { Form::Text },
+            attached,
+            pre,
+            tail: match tail {
+                Some(tail) => tail,
+                None if attached => &v[third..found.end + rest.len()],
+                None => rest,
+            },
+        })
     }
 
     /// One or two numbers at the start of `v` and the tail after them, as in `1.2.develop`. None
@@ -339,9 +346,9 @@ impl<'a> Version<'a> {
     /// pre-releases. The identifiers of two pre-releases decide, as item 11.4 says.
     ///
     /// The crate `versions` orders two versions of another form. Of two versions with one or two
-    /// numbers, fewer numbers are lower, and then a tail right after the last number is lower.
-    /// Then the tails decide: see [`tails`]. Then a pre-release is above no pre-release, and the
-    /// identifiers decide.
+    /// numbers, fewer numbers are lower. With one to three numbers, a tail right after the last
+    /// number is then lower. Then the tails decide: see [`tails`]. Then a pre-release is above no
+    /// pre-release, and the identifiers decide.
     fn precedence(&self, other: &Self) -> Ordering {
         let tails = || {
             tails(self.tail, other.tail)
@@ -359,7 +366,8 @@ impl<'a> Version<'a> {
                     .cmp(&other.count)
                     .then_with(|| other.attached.cmp(&self.attached))
                     .then_with(tails),
-                Form::Text | Form::More => tails(),
+                Form::Text => other.attached.cmp(&self.attached).then_with(tails),
+                Form::More => tails(),
                 Form::Parsed => self
                     .pre
                     .is_empty()
