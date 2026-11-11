@@ -125,6 +125,8 @@
 - [Where to look in the repository](./development/repository.md)
 - [Build and test](./development/build-test.md)
 - [How a change lands](./development/changes.md)
+- [A finding from a real pipeline](./development/real-pipelines.md)
+- [The review at the end of a wave](./development/wave-review.md)
 - [Release](./development/release.md)
 - [Write the code](./development/code.md)
 - [The checks of the observer](./development/observer.md)

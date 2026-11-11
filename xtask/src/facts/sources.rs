@@ -15,6 +15,7 @@ use super::cloud::{CloudSources, read_code, read_rules};
 use super::model::{DIRECTORY, Fact, load, split_request};
 use super::sets::{Set, SetRead, closed_sets, reads};
 use crate::checks::anchors;
+use crate::code_span::code_spans;
 use crate::files::{book, files_with_ext, pages};
 use crate::table::cells;
 
@@ -184,18 +185,14 @@ pub(super) fn method_pattern() -> String {
     methods.join("|")
 }
 
-/// The text of each code span in `cell`.
-fn spans_in(cell: &str) -> impl Iterator<Item = String> + '_ {
-    static SPAN: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"`([^`]+)`").expect("a pattern"));
-    SPAN.captures_iter(cell).map(|c| c[1].to_string())
-}
-
-/// The shape of each request in `cell`: a code span that starts with a method and a space.
+/// The shape of each request in `cell`: a code span that starts with a method, a space, and a
+/// `/`.
 fn requests_in(cell: &str) -> Vec<String> {
-    static REQUEST: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(&format!(r"`((?:{}) /[^`]*)`", method_pattern())).expect("a pattern")
-    });
-    REQUEST.captures_iter(cell).map(|c| shape(&c[1])).collect()
+    code_spans(cell)
+        .into_iter()
+        .filter(|span| split_request(span).is_some_and(|(_, path)| path.starts_with('/')))
+        .map(shape)
+        .collect()
 }
 
 /// The table rows of the section `heading` of `page`, up to the next `##` heading.
@@ -232,7 +229,8 @@ pub(super) fn rule_rows(page: &str) -> BTreeMap<String, BTreeSet<String>> {
             continue;
         };
         for request in requests_in(requests) {
-            rows.entry(request).or_default().extend(spans_in(rules));
+            let names = code_spans(rules).into_iter().map(str::to_string);
+            rows.entry(request).or_default().extend(names);
         }
     }
     rows
@@ -273,7 +271,8 @@ fn live_checks(repo: &Path) -> BTreeMap<String, BTreeSet<String>> {
 pub(super) fn section_rows(page: &str, heading: &str) -> BTreeSet<String> {
     section_lines(page, heading)
         .filter_map(|line| cells(line).first().copied())
-        .flat_map(spans_in)
+        .flat_map(code_spans)
+        .map(str::to_string)
         .collect()
 }
 

@@ -37,6 +37,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
+mod code_span;
 mod git;
 mod palette;
 mod process;
@@ -47,6 +48,7 @@ mod walk;
 
 pub use answer::*;
 pub use closed_set::schema_values;
+pub use code_span::*;
 pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
@@ -951,6 +953,21 @@ pub fn gitlab_drop_in() -> serde_yaml::Value {
     serde_yaml::from_str(&repo_file(GITLAB_DROP_IN))
         .unwrap_or_else(|e| panic!("{GITLAB_DROP_IN}: not YAML: {e}"))
 }
+
+/// The value of the variable `name` in the `variables` of the GitLab drop-in, such as the release
+/// of `STRATA_VERSION` that its jobs install.
+///
+/// `gitlab` is the drop-in from [`gitlab_drop_in`]. A caller that reads many variables parses
+/// the file one time.
+pub fn gitlab_drop_in_variable<'a>(gitlab: &'a serde_yaml::Value, name: &str) -> &'a str {
+    gitlab["variables"][name]
+        .as_str()
+        .unwrap_or_else(|| panic!("{GITLAB_DROP_IN} gives {name} no text value"))
+}
+
+/// The variables that `scripts/ci/install-strata.sh` reads a token from. A test of the installer
+/// removes each one, so that no request gets a token of the machine.
+pub const INSTALLER_TOKENS: [&str; 3] = ["STRATA_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"];
 
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
 /// or one of `joins`. `--thresh` is not in `--threshold`, and `$NAME` is not in `$NAME_2`,
