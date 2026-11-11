@@ -7502,10 +7502,16 @@ const RELEASE_ON_AWS: &str = r#"{"spec":{"published":{"cloudType":"aws","packs":
 const CIDR_OVERLAP_VALUES: &str =
     "pack:\n  podCIDR: \"172.31.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n";
 
-/// The VPCs of the region of the lab. The first has no CIDR, so the body of `cidr-overlap` names
-/// the second.
-const LAB_VPCS: &str = r#"{"vpcs":[{"vpcId":"vpc-0","name":"no-cidr"},
-    {"vpcId":"vpc-1","name":"default","cidrBlock":"172.31.0.0/16"}]}"#;
+/// The VPCs of the region of the lab.
+///
+/// The first has no CIDR, and the second has no subnet in the zone `us-east-2a` of the pools. So
+/// the body of `cidr-overlap` names the third, and its subnet `subnet-1a` for each pool (#824).
+const LAB_VPCS: &str = r#"{"vpcs":[
+    {"vpcId":"vpc-0","name":"no-cidr","subnets":[{"subnetId":"subnet-0a","az":"us-east-2a"}]},
+    {"vpcId":"vpc-2","name":"other-zone","cidrBlock":"10.0.0.0/16",
+        "subnets":[{"subnetId":"subnet-2b","az":"us-east-2b"}]},
+    {"vpcId":"vpc-1","name":"default","cidrBlock":"172.31.0.0/16",
+        "subnets":[{"subnetId":"subnet-1b","az":"us-east-2b"},{"subnetId":"subnet-1a","az":"us-east-2a","isPrivate":true}]}]}"#;
 
 /// The VPC route of the region of the lab.
 const LAB_VPCS_ROUTE: &str = "/v1/clouds/aws/regions/us-east-2/vpcs";
@@ -7608,18 +7614,29 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         serde_json::json!([{"uid": "r-1", "packValues": [], "variables": []}])
     );
 
-    // the body of cidr-overlap is the clean body with the VPC that has a CIDR. Its Kubernetes pack
-    // has that CIDR as the pod CIDR. The script sent it to the route, and asked for the VPCs of the
-    // account of the lab (#816)
+    // the body of cidr-overlap is the clean body with the VPC that has a CIDR and a subnet in the
+    // zone of the pools. Each pool names that subnet. Its Kubernetes pack has the CIDR of the VPC
+    // as the pod CIDR. The script sent it to the route, and asked for the VPCs of the account of
+    // the lab (#816, #824)
     let cidr_file = bodies.join(format!("{CIDR_CASE}.json"));
     let mut cidr = read_json(&cidr_file);
+    assert_eq!(stage.sent("POST", AWS_VALIDATE_ROUTE), [cidr.clone()]);
     assert_eq!(cidr["spec"]["cloudConfig"]["vpcId"], "vpc-1");
     assert_eq!(
         cidr["spec"]["profiles"],
         serde_json::json!([{"uid": "r-1", "variables": [], "packValues": [
             {"name": "kubernetes", "tag": "1.33.2", "values": CIDR_OVERLAP_VALUES}]}])
     );
-    assert_eq!(stage.sent("POST", AWS_VALIDATE_ROUTE), [cidr.clone()]);
+    let pools = cidr["spec"]["machinepoolconfig"].as_array_mut().unwrap();
+    assert_eq!(pools.len(), 2);
+    for pool in pools {
+        let config = pool["cloudConfig"].as_object_mut().unwrap();
+        assert_eq!(
+            config.remove("subnets"),
+            Some(serde_json::json!([{"id": "subnet-1a", "az": "us-east-2a"}])),
+            "{config:?}"
+        );
+    }
     let asked = std::fs::read_to_string(stage.path(&format!(
         "routes/sent/GET_{}.request",
         Stage::route_key(LAB_VPCS_ROUTE)
@@ -7782,18 +7799,26 @@ fn route_bodies_sh_fails_cidr_overlap_code_when_the_route_gives_another_answer()
 }
 
 /// The script skips `cidr-overlap` when Palette lists no VPC with a CIDR, or when the Kubernetes
-/// pack of the release profile has no `podCIDR`. It removes the body of an earlier run, sends
-/// nothing to the route, and the other cases run (#816).
+/// pack of the release profile has no `podCIDR`. It also skips the case when no VPC with a CIDR has
+/// a subnet in each zone of the pools. It removes the body of an earlier run, sends nothing to the
+/// route, and the other cases run (#816, #824).
 #[test]
-fn route_bodies_sh_skips_cidr_overlap_when_no_vpc_has_a_cidr_or_the_kubernetes_pack_has_no_pod_cidr()
+fn route_bodies_sh_skips_cidr_overlap_with_no_vpc_that_has_a_cidr_and_a_subnet_in_each_zone_or_no_pod_cidr()
  {
     let no_pod_cidr = RELEASE_ON_AWS.replace("podCIDR: \\\"192.168.0.0/16\\\"\\n  ", "");
     assert_ne!(no_pod_cidr, RELEASE_ON_AWS);
-    let cases: [(&str, &str, &str); 3] = [
+    let cases: [(&str, &str, &str); 4] = [
         (
             LAB_VPCS_ROUTE,
             r#"{"vpcs":[{"vpcId":"vpc-0"}]}"#,
             "skipped cidr-overlap: the region us-east-2 lists no VPC with a CIDR",
+        ),
+        (
+            LAB_VPCS_ROUTE,
+            r#"{"vpcs":[{"vpcId":"vpc-0","subnets":[{"subnetId":"subnet-0a","az":"us-east-2a"}]},
+                {"vpcId":"vpc-1","cidrBlock":"172.31.0.0/16","subnets":[{"subnetId":"subnet-1b","az":"us-east-2b"}]},
+                {"vpcId":"vpc-2","cidrBlock":"10.0.0.0/16"}]}"#,
+            "skipped cidr-overlap: no VPC of us-east-2 with a CIDR has a subnet in each zone of the pools: us-east-2a",
         ),
         (
             LAB_VPCS_ROUTE,

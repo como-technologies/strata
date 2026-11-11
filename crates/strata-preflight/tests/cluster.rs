@@ -339,6 +339,35 @@ fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_
     }
 }
 
+/// The refusal of a machine pool with no subnet, for AWS with a VPC, as Palette writes it.
+const NO_SUBNET: &str = "Parameter 'Subnets' is required";
+
+/// The route refuses a body for AWS with a VPC and a pool with no subnet with HTTP 500 and
+/// `RequiredParam`, as a live run shows.
+///
+/// `palette-validate` reads it as the answer of the route, as it reads HTTP 400. The verdict is
+/// `failed`, with the message of Palette. Strata sends the body one time (#824).
+#[test]
+fn a_pool_with_no_subnet_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400() {
+    let said = format!("Palette refused the entity: RequiredParam: {NO_SUBNET}");
+    for status in [500, 400] {
+        let api = refusing(&[], status, "RequiredParam", NO_SUBNET);
+        let check = palette_validate(&api);
+        assert_eq!(
+            check.verdict,
+            Verdict::Failed,
+            "{status}: {:?}",
+            check.messages
+        );
+        assert_eq!(check.messages, [said.as_str()], "{status}");
+        assert_eq!(
+            api.calls("POST /v1/spectroclusters/aws/validate"),
+            1,
+            "{status}"
+        );
+    }
+}
+
 /// The check reads a 4xx, and a 500 with these codes, as a refusal, so the message holds the
 /// message of Palette. The reports hold each other word of the message, such as the CIDR of the
 /// VPC (#614).

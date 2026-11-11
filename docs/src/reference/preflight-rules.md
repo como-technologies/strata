@@ -291,9 +291,9 @@ lists the codes of the refusals of that route, and the check reads a 5xx with on
 answer. See
 [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
 The codes are `ClusterProfilesNotSupported`, `InvalidDropDownVariable`, `InvalidVariable`,
-`K8SCidrOverlap`, and `CidrParseError`. `palette-validate` gives each such refusal the verdict
-`FAILED`, with the message of Palette. Before release 0.33.0, a 500 with one of the last four
-codes was `ERROR`.
+`K8SCidrOverlap`, `CidrParseError`, and `RequiredParam`. `palette-validate` gives each such refusal
+the verdict `FAILED`, with the message of Palette. Before release 0.33.0, a 500 with one of the
+last five codes was `ERROR`.
 
 The backend keeps the answer of a request for the run. A rule that does not name the code
 reads the same 500 as an error. A fixture follows the same rule for each status

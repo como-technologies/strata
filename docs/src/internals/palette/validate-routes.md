@@ -27,7 +27,7 @@ The checks, in order:
    override, and for each pool a size over 0, min and max that agree, and a
    size inside them. For a GKE worker pool, a size that is not a multiple of 3
    is refused here, as a 400 `InvalidParam` "Node pool size should be multiple
-   of 3".
+   of 3". For AWS with a `vpcId`, each pool names a subnet: see below.
 2. The name: valid, and not in use. The cluster limit of the tenant: a trial
    tenant has a limit on its active clusters, and the route refuses a create
    over it with `FreemiumActiveClusterLimitExceeded`. The limit holds for a
@@ -68,6 +68,14 @@ the cloud type `all` fits each cloud. Strata does not send this refusal again.
 `failed` and the message of Palette: see
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
 
+A live run shows one more refusal with HTTP `500`: an AWS body with a `vpcId`
+and a machine pool with no subnet. The code is `RequiredParam`, and the message
+is `Parameter 'Subnets' is required`. The route gives it before the check of
+the CIDRs. The code of Palette shows that the route gives `RequiredParam` for no
+other cause. Strata does not send this refusal again. `palette-validate` reads
+it as the answer of the route, with the verdict `failed` and the message of
+Palette.
+
 The route also refuses the whole entity with HTTP `500` and one of these codes.
 The code of Palette shows it; no live run shows it yet.
 
@@ -82,7 +90,8 @@ The code of Palette shows it; no live run shows it yet.
 
 The check `cidr-overlap-status` of
 [`route-bodies.sh`](../../development/live-runs.md#route-bodiessh) asks the
-route about a pod CIDR that overlaps. Strata does not send these refusals
+route about a pod CIDR that overlaps. Its body names a subnet for each pool, so
+that the route reaches the check of the CIDRs. Strata does not send these refusals
 again either. `palette-validate` reads each one as the answer of the route, with
 the verdict `failed` and the message of Palette.
 

@@ -1260,6 +1260,12 @@ field, a value, an input, or an option is in the sections above.
   `failed`, with the message of Palette, and the exit code is `0`, or `1` with `--strict`.
   Before, the verdict was `error`, and the exit code was `2`. See
   [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate).
+- **`palette-validate`, for a machine pool with no subnet.** For AWS with a `vpcId`, the route
+  refuses a pool with no subnet with HTTP `500` and `RequiredParam`. A live run shows it. Strata
+  now reads such a refusal as the answer of the route, and does not send the request again. The
+  verdict is `failed`, with the message of Palette, and the exit code is `0`, or `1` with
+  `--strict`. Before, the verdict was `error`, and the exit code was `2`. On each other route,
+  strata also does not send a request again after HTTP `5xx` with `RequiredParam`.
 
 ### For a user of the CI drop-ins
 
@@ -1394,6 +1400,10 @@ field, a value, an input, or an option is in the sections above.
   `refusal_codes` gives the four codes, and `refuses_answer` and `refuses_request` read them.
   `Error::class()` now gives `Terminal` for an HTTP `5xx` with one of these codes. It gave
   `Transient`.
+- `api::codes::ValidateRoute::ClusterCreate` also refuses the whole request with HTTP `500` and
+  `RequiredParam`, and `refusal_codes` gives it. `api::codes::is_refusal_code("RequiredParam")` is
+  `true`, so `Error::class()` gives `Terminal` for an HTTP `5xx` with `RequiredParam` from each
+  route. It gave `Transient`.
 
 ### For a user of the library of strata-preflight
 
