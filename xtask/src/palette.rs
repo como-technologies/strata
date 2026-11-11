@@ -44,6 +44,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 
+use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROJECT_SCOPE_CODE;
 
 use crate::tenant::{
@@ -399,7 +400,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
             break;
         }
         if let Some((name, value)) = header.split_once(':') {
-            if name.eq_ignore_ascii_case("ProjectUid") {
+            if name.eq_ignore_ascii_case(PROJECT_UID_HEADER) {
                 request.project = Some(value.trim().to_string());
             } else if name.eq_ignore_ascii_case("Accept") {
                 request.accept = Some(value.trim().to_string());

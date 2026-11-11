@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
+use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -1368,7 +1369,7 @@ fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     );
     let sent = request();
     assert!(!sent.contains("ApiKey"), "no key: {sent}");
-    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+    assert!(!sent.contains(PROJECT_UID_HEADER), "no project: {sent}");
 
     let o = run_live("api.sh", &["app-version"], root.path(), &[]);
     assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
@@ -1379,7 +1380,7 @@ fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
     );
     let sent = request();
     assert!(sent.contains("ApiKey: (hidden)"), "the key: {sent}");
-    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+    assert!(!sent.contains(PROJECT_UID_HEADER), "no project: {sent}");
 
     let o = run_live("api.sh", &["app-version", "--key"], root.path(), &[]);
     assert_eq!(o.status.code(), Some(2));
@@ -6133,7 +6134,7 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
         "routes/sent/PATCH_v1_clusterprofiles_t-1_publish.request",
     ] {
         let sent = std::fs::read_to_string(stage.path(request)).unwrap();
-        assert!(!sent.contains("ProjectUid"), "{request}: {sent}");
+        assert!(!sent.contains(PROJECT_UID_HEADER), "{request}: {sent}");
     }
     let posts = stage.sent("POST", "/v1/clusterprofiles");
     assert_eq!(posts.len(), 1, "one create: {posts:?}");
@@ -6150,7 +6151,10 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
         stage.path("routes/sent/POST_v1_dashboard_clusterprofiles.request"),
     )
     .unwrap();
-    assert!(request.contains("ProjectUid: p-1"), "{request}");
+    assert!(
+        request.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{request}"
+    );
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     assert!(
         calls.ends_with("DELETE /v1/clusterprofiles/t-1\n"),
@@ -6260,17 +6264,23 @@ fn projects_sh_copies_the_release_into_the_second_project_and_checks_each_side()
     // the source is read in the lab project, and the copy goes to the second project
     let sent = |request: &str| std::fs::read_to_string(stage.path(request)).unwrap();
     let read = sent("routes/sent/GET_v1_clusterprofiles_r-1.request");
-    assert!(read.contains("ProjectUid: p-1"), "{read}");
+    assert!(
+        read.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{read}"
+    );
     // the read that the check records asks for the copy in the lab project
     let other = sent("routes/sent/GET_v1_clusterprofiles_c-1.request");
-    assert!(other.contains("ProjectUid: p-1"), "{other}");
+    assert!(
+        other.contains(&format!("{PROJECT_UID_HEADER}: p-1")),
+        "{other}"
+    );
     for request in [
         "routes/sent/POST_v1_clusterprofiles.request",
         "routes/sent/PATCH_v1_clusterprofiles_c-1_publish.request",
         "routes/sent/DELETE_v1_clusterprofiles_c-1.request",
     ] {
         assert!(
-            sent(request).contains("ProjectUid: p-2"),
+            sent(request).contains(&format!("{PROJECT_UID_HEADER}: p-2")),
             "{request}: {}",
             sent(request)
         );
