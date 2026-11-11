@@ -128,6 +128,26 @@ as Palette does. Each chapter of the runner builds the tenant that one page need
 the real pack data in `examples/`. It changes the tenant between commands as
 Palette does.
 
+A pack version that a chapter adds, such as a pre-release, gets a uid and a
+digest of its own in its registry. An upgrade of a pin takes the uid and the
+digest of the new version from the listing of the registry of the pin. A version
+that the listing does not hold gets a uid and a digest of its own in that
+registry. See
+[The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest) and
+[A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
+
+Each edit changes the pin and its pack summary in `packs/manifests` together, at
+a publish, at an edit in place, and in a draft. As in Palette, the summary takes
+the uid, the registry, and the digest of the pinned version. It takes the name
+and the values of the pin. The answer has the metadata of the profile, so a new
+name of the profile also changes the answer. In a draft, the profile takes the
+new name and the new version at once, as a `PUT` does. The stand-in refuses a
+draft with the name and the version of another profile, as Palette does: see
+[Drafts](../internals/palette/profiles.md#drafts).
+
+A test of `xtask/src/tenant/edit.rs` applies one edit of each variant of `Edit`.
+Its build fails on a new variant until the test holds an edit of it.
+
 1. Find the chapter of the page in `xtask/src/chapters/`. To add one, put
    `r.chapter("name", env)` in the file of its group of pages.
 2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,

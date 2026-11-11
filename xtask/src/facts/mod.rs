@@ -23,7 +23,6 @@ pub(crate) mod subjects;
 #[cfg(test)]
 mod tests;
 
-pub use check::route_matches;
 pub use model::{Fact, Kind, Scope, expand, fill, names};
 use sources::Sources;
 

@@ -320,6 +320,7 @@ rules:
       method: POST
       path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
       body: "{profiles: .entity.spec.profiles}"
+      saves: console-address
       expr: |
         def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
         .cloud as $c
@@ -328,7 +329,7 @@ rules:
           then ["Palette repaves the \($c) cluster for this change, and its answer is the truth on \($c), not the impact table of strata: \(reasons)"]
           else [] end
     reproduce:
-      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'{{ saves_comment(\"console-address\") }}"
     fix:
       owner: strata
       text: Scope the impact table to the kubeadm engine, and print the answer of Palette on the others.
@@ -358,6 +359,7 @@ rules:
       method: POST
       path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
       body: "{profiles: .entity.spec.profiles}"
+      saves: console-address
       expr: |
         def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
         def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
@@ -371,7 +373,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'{{ saves_comment(\"console-address\") }}"
     evidence:
       - kind: run
         ref: "#89"
@@ -399,6 +401,7 @@ rules:
       method: POST
       path: /v1/spectroclusters/{{ .clusterUid }}/validate/repave
       body: "{profiles: .entity.spec.profiles}"
+      saves: console-address
       expr: |
         def k8s_tag(e): [ e | (.spec.profiles // [])[] | (.packValues // [])[] | select((.name // "") | test("^kubernetes")) | .tag ] | .[0];
         def reasons: [ (.response.body.reasons // [])[] | "\(.code // "?"): \(.message // "") [\(.pack.target.name // .pack.current.name // "?")]" ] | join("; ");
@@ -412,7 +415,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "{{ palette_curl }} -X POST -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'{{ saves_comment(\"console-address\") }}"
     evidence:
       - kind: run
         ref: "#90"

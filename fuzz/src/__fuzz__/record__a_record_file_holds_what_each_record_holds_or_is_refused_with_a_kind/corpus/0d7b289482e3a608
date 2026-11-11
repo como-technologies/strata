@@ -1,0 +1,72 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "{password: x, list: [a, b], nested: {adminPassword: y}}",
+      "valuesCanon": {
+        "list": [
+          "a",
+          "b"
+        ],
+        "nested": {
+          "adminPassword": "y"
+        },
+        "password": "x"
+      },
+      "valuesHash": "475c435a8c42a2e46dd5865cc99fd9aa9ac76251302445420ca4e5a1861e91cf",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "{password: x, list: [a, b], nested: {adminPassword: y}}",
+          "contentHash": "475c435a8c42a2e46dd5865cc99fd9aa9ac76251302445420ca4e5a1861e91cf"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "7cf8ea5e26f11b5ea846f14cd936a97d95a1f552307eb28a5d3c82f952df2696",
+        "node": "982c7335e9201d8f9889ed252b2e783ff7d902699af3743b4edcb0553126cc81"
+      }
+    }
+  ],
+  "root": "1ddb1c6a35d6310139b1af4e5b0ba2b1c2d5de496431b044129c499471b4e2c3",
+  "contentDigest": "db3503067c9dc6cf18b4e1a70cfe637abf76bd289df31fc6359cb09a5d9ffb2e"
+}

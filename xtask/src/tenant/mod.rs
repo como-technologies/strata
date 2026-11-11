@@ -40,7 +40,7 @@ mod profiles;
 mod registries;
 mod routes;
 
-pub use answers::{PackRefusal, UpgradeRefusal};
+pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;
 pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,

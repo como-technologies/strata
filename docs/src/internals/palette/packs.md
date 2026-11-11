@@ -23,6 +23,10 @@ registry it is the digest of the first push that Palette read: see
 registry of its own for a published profile: the profile document carries what
 it needs.**
 
+- Each version of a pack has a uid and a digest of its own in the listing. A pin
+  takes the digest of the version that its `packUid` names. So when a pin moves
+  to another version, its digest moves too, and `compare` shows
+  `IDENTITY UPSTREAM`.
 - A Helm digest is bare hex, with no `sha256:` prefix.
 - A chart in an OCI Helm registry that Palette reads itself is a pack of type
   `oci`. The example's own chart is in ECR. Its digest is the manifest digest of

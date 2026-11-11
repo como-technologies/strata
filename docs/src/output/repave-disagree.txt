@@ -1,6 +1,6 @@
 $ strata compare cluster:payments aws-stack@1.1.7 --repave
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.7 (uid 64e0000000000000000000fa)
-root       088136c929bd -> 871be831b29a   CHANGED
+root       088136c929bd -> 6364a9323cb8   CHANGED
 palette    no repave
 note       the impact table says repave, and Palette says no repave for this cluster: the table does not describe its upgrade engine
 consumers  aws-stack@1.1.7 has no consumers
@@ -8,7 +8,8 @@ consumers  aws-stack@1.1.7 has no consumers
   variables unchanged
 
   [os   ] ubuntu-aws                 24.04              unchanged
-~ [k8s  ] kubernetes                 1.36.2 -> 1.36.3   IDENTITY
+~ [k8s  ] kubernetes                 1.36.2 -> 1.36.3   IDENTITY UPSTREAM
+      upstream digest: sha256:c4f7f20f40c7 -> sha256:4e3f771da105 (packRef.digest)
       impact: node repave (Kubernetes version change)
   [cni  ] cni-cilium-oss             1.20.1             unchanged
   [csi  ] csi-aws-ebs                1.65.0             unchanged

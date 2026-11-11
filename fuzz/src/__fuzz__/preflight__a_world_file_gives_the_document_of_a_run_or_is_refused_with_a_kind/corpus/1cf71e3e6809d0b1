@@ -1,0 +1,13 @@
+{
+  "_base": "cpu-quota-low.json",
+  "_note": "the pool asks for 4 x e2-small, a type under 4 GiB that the route lists only when the query lifts its default filter; the region has 4 free CPUs, and the pool asks for 8",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool", "size": 4 }, "cloudConfig": { "instanceType": "e2-small" } }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.32.2",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "sha256:0123",
+      "params": {},
+      "values": "password: >-\n  folded\n  text\n",
+      "valuesCanon": {
+        "password": "folded text"
+      },
+      "valuesHash": "6f99c8b60be28cd206cda93dd920e8303cd21521ef5f19b9cc422e3609147687",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "password: >-\n  folded\n  text\n",
+          "contentHash": "6f99c8b60be28cd206cda93dd920e8303cd21521ef5f19b9cc422e3609147687"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "76e5b4568a863d969581968242da53ccc5acdae3fe89983ae376469af091d0e9",
+        "node": "43d843391a9a664da1554d81c38fa566e7f513a6636d15ecea48716e95030cc0"
+      }
+    }
+  ],
+  "root": "3cea38fe553713500489ef701f5ef6d76e159cb705ff0cde057bc25621744f0f",
+  "contentDigest": "d235647bd3f9b021d815ce0b5e3d69296ddbfff65e0045e8e5e66e69e02dfe99"
+}

@@ -4577,12 +4577,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))
             .unwrap();
-        let cell = row
-            .split(" | ")
-            .nth(4)
-            .unwrap()
-            .strip_prefix("bump to ")
-            .unwrap();
+        let cell = cells(row)[4].strip_prefix("bump to ").unwrap();
         let o = u.run(&["releases/*.json", "--dry-run"]);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
         let body = text(&o.stdout);
@@ -5253,9 +5248,15 @@ const NO_KEY: &str = "no Palette key in PALETTE_API_KEY, SPECTROCLOUD_APIKEY, or
 
 /// Run `palette-key.sh` with the home `home` and the variables `envs`, and no other key.
 fn palette_key(home: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    palette_key_in(home, home, args, envs)
+}
+
+/// [`palette_key`] in the working folder `work`.
+fn palette_key_in(home: &Path, work: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
     Command::new("bash")
         .arg(script("ci/palette-key.sh"))
         .args(args)
+        .current_dir(work)
         .env("HOME", home)
         .env_remove("PALETTE_API_KEY")
         .env_remove("SPECTROCLOUD_APIKEY")
@@ -5264,12 +5265,14 @@ fn palette_key(home: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
         .unwrap()
 }
 
-/// True when strata finds a key with the home `home` and no key in the environment. The address
-/// refuses a connection. So a run with a key fails at the request, and a run with no key fails
-/// before it, with `missing-credential`.
-fn strata_finds_a_key(home: &Path) -> bool {
+/// True when strata finds a key with the home `home`, in the working folder `work`, and no key in
+/// the environment. The address refuses a connection. So a run with a key fails at the request,
+/// and a run with no key fails before it, with `missing-credential`.
+fn strata_finds_a_key(home: &Path, work: &Path) -> bool {
     let mut c = strata_command();
-    isolate_palette(&mut c, home).env_remove("PALETTE_API_KEY");
+    isolate_palette(&mut c, home)
+        .env_remove("PALETTE_API_KEY")
+        .current_dir(work);
     let o = c
         .args(["list", "--json", "projects"])
         .output_locked()
@@ -5319,9 +5322,37 @@ fn palette_key_sh_finds_a_key_in_each_place_that_strata_reads_and_names_the_plac
 }
 
 /// The script reads `~/.palette.env` in the same way as strata. Each line here gives strata a key
-/// or no key, and the script must give the same answer.
+/// or no key, and the script must give the same answer. Each home here gives strata the file or
+/// no file, and the script must agree too.
 #[test]
 fn palette_key_sh_reads_the_file_as_strata_reads_it() {
+    // An empty or a relative home names a folder from the working folder, such as a checkout.
+    // Neither one reads the file there. The absolute path of the same folder reads it.
+    let work = tempfile::tempdir().unwrap();
+    std::fs::create_dir(work.path().join("home")).unwrap();
+    for file in [".palette.env", "home/.palette.env"] {
+        std::fs::write(work.path().join(file), "PALETTE_API_KEY=k\n").unwrap();
+    }
+    let absolute = work.path().join("home");
+    for (home, key) in [
+        (Path::new(""), false),
+        (Path::new("home"), false),
+        (Path::new("./home"), false),
+        (absolute.as_path(), true),
+    ] {
+        assert_eq!(
+            strata_finds_a_key(home, work.path()),
+            key,
+            "strata: HOME={home:?}"
+        );
+        let o = palette_key_in(home, work.path(), &[], &[]);
+        assert_eq!(
+            o.status.code(),
+            Some(if key { 0 } else { 1 }),
+            "palette-key.sh: HOME={home:?}"
+        );
+    }
+
     let home = tempfile::tempdir().unwrap();
     for (palette_env, key) in [
         ("PALETTE_API_KEY=k\n", true),
@@ -5338,7 +5369,7 @@ fn palette_key_sh_reads_the_file_as_strata_reads_it() {
     ] {
         std::fs::write(home.path().join(".palette.env"), palette_env).unwrap();
         assert_eq!(
-            strata_finds_a_key(home.path()),
+            strata_finds_a_key(home.path(), home.path()),
             key,
             "strata: {palette_env:?}"
         );

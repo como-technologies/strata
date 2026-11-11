@@ -27,15 +27,15 @@ use strata::term::progress::Progress;
 use common::CommandExt;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
-    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, REGISTRY_LISTING,
-    SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, candidate_snapshot,
-    cluster_manifests_route, cluster_ref, cluster_resolved_values_route, cluster_route,
-    cluster_variables_route, edge_host_route, fetch_examples, group_resolved_values_route,
-    group_route, listing, manifest_route, manifests_route, no_manifests, no_template, no_variables,
-    pack_entity_route, pack_listing_route, post, profile_document, profile_route, read_json,
-    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
-    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
-    write_record, write_yaml,
+    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
+    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route,
+    candidate_snapshot, cluster_manifests_route, cluster_ref, cluster_resolved_values_route,
+    cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
+    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
+    no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
+    profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
+    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
+    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -5434,12 +5434,15 @@ fn serve_registry_for_b(dir: &Path) -> MemoryApi {
             .iter()
             .find(|m| m["spec"]["name"] == name)
             .unwrap();
-        let summary = serde_json::json!({
-            "metadata": {"uid": pack["packUid"]},
-            "spec": {"name": name, "version": pack["version"], "registryUid": "reg-public",
-                     "digest": entry["spec"]["digest"], "layer": pack["layer"], "type": "spectro",
-                     "values": "registry: defaults"},
-        });
+        let summary = PackFixture::public(
+            name,
+            pack["layer"].as_str().unwrap(),
+            pack["version"].as_str().unwrap(),
+            pack["packUid"].as_str().unwrap(),
+            entry["spec"]["digest"].as_str().unwrap_or_default(),
+            "registry: defaults",
+        )
+        .summary(&[]);
         let entity = serde_json::json!({"tags": [
             {"tag": "floating.x", "packUid": pack["packUid"]},
             {"tag": pack["tag"], "packUid": pack["packUid"]},
@@ -5702,11 +5705,16 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
     // Palette stores the tag a profile was authored with. A profile built with Terraform pins the
     // version itself, `24.04`, although the registry names that version `LTS__24.x`; the live
     // example run of 2026-09-16 recorded exactly that.
-    let summary = serde_json::json!([{
-        "metadata": {"uid": "pk-ubuntu-2404"},
-        "spec": {"name": "ubuntu-aws", "version": "24.04", "registryUid": "reg", "digest": "sha256:u",
-                 "layer": "os", "type": "spectro", "values": ""},
-    }]);
+    let ubuntu = PackFixture::new(
+        "ubuntu-aws",
+        "os",
+        "24.04",
+        "pk-ubuntu-2404",
+        "reg",
+        "sha256:u",
+        "",
+    );
+    let summary = serde_json::json!([ubuntu.summary(&[])]);
     let entity = serde_json::json!({"tags": [
         {"tag": "LTS__24.x", "packUid": "pk-ubuntu-2404"},
         {"tag": "LTS__24.04", "packUid": "pk-ubuntu-2404"},
@@ -5723,9 +5731,9 @@ fn an_explicit_tag_equal_to_the_version_is_accepted_as_palette_does() {
         api = serve_registry_pack(
             api,
             name,
-            serde_json::json!([{"metadata": {"uid": uid},
-                "spec": {"name": name, "version": "1.0.0", "registryUid": "reg", "layer": layer,
-                         "type": "spectro", "values": ""}}]),
+            serde_json::json!([
+                PackFixture::new(name, layer, "1.0.0", &uid, "reg", "", "").summary(&[])
+            ]),
             serde_json::json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
             "reg",
         );
@@ -6678,20 +6686,17 @@ use strata::diff::ImpactLevel as Impact;
 const CSI_63: &str = "charts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      - name: spectro-storage-class\n        reclaimPolicy: Delete\n";
 const CSI_65: &str = "charts:\n  aws-ebs-csi-driver:\n    storageClasses:\n      - name: spectro-storage-class\n        reclaimPolicy: Retain\n    controller:\n      replicas: 2\n";
 
-fn pack_summary(uid: &str, version: &str, registry: &str, digest: &str, values: &str) -> Value {
-    serde_json::json!({
-        "metadata": {"uid": uid},
-        "spec": {"name": "csi-aws-ebs", "version": version, "registryUid": registry,
-                 "digest": digest, "layer": "csi", "type": "spectro", "values": values,
-                 "cloudTypes": ["aws"]},
-    })
+/// The build `uid` of csi-aws-ebs at `version` in the registry `registry`, for aws, as the pack
+/// listing gives it.
+fn csi_summary(uid: &str, version: &str, registry: &str, digest: &str, values: &str) -> Value {
+    PackFixture::new("csi-aws-ebs", "csi", version, uid, registry, digest, values).summary(&["aws"])
 }
 
 /// Two versions of one pack in the Public Repo, and the registry listing that names it.
 fn serve_registry(extra: Vec<Value>, entities: &[(&str, Value)]) -> MemoryApi {
     let mut summaries = vec![
-        pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
-        pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+        csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+        csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
     ];
     summaries.extend(extra);
     serve_summaries(summaries, entities)
@@ -6825,7 +6830,7 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
     // 100 on the first page, 30 on the second, and 1.65.0 served twice, as Palette does
     let mut first: Vec<Value> = (0..100)
         .map(|i| {
-            pack_summary(
+            csi_summary(
                 &format!("pk-{i}"),
                 &format!("1.{i}.0"),
                 "reg-public",
@@ -6834,7 +6839,7 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
             )
         })
         .collect();
-    first.push(pack_summary(
+    first.push(csi_summary(
         "pk-65",
         "1.65.0",
         "reg-public",
@@ -6842,8 +6847,8 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
         CSI_65,
     ));
     let second: Vec<Value> = vec![
-        pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
-        pack_summary("pk-200", "1.200.0", "reg-public", "sha256:c", CSI_65),
+        csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+        csi_summary("pk-200", "1.200.0", "reg-public", "sha256:c", CSI_65),
     ];
     let api = MemoryApi::new()
         .with(
@@ -6898,13 +6903,13 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     // without the states query. A deprecated version it still serves, with its tags.
     let api = serve_summaries(
         vec![
-            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
             in_state(
-                pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
                 "deprecated",
             ),
             in_state(
-                pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63),
+                csi_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63),
                 "disabled",
             ),
         ],
@@ -6984,15 +6989,15 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
     // refuses the profile, and strata does not copy that rule
     let api = serve_summaries(
         vec![
-            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
-            marked(pack_summary(
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            marked(csi_summary(
                 "pk-65",
                 "1.65.0",
                 "reg-public",
                 "sha256:bbb",
                 CSI_65,
             )),
-            marked(pack_summary(
+            marked(csi_summary(
                 "pk-m",
                 "1.64.0",
                 "reg-mirror",
@@ -7065,7 +7070,7 @@ fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stop
     // the Mirror answers 404 with and without the states query: it serves no version. Its
     // disabled and deleted versions differ in state
     let mirror =
-        |uid: &str, version: &str| pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
+        |uid: &str, version: &str| csi_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
     let api = serve_registry(
         vec![
             mirror("pk-m4", "1.64.0"),
@@ -7108,7 +7113,7 @@ fn a_disabled_or_deleted_pack_version_is_unavailable_and_a_deprecated_one_resolv
     for state in ["disabled", "deleted"] {
         let api = serve_summaries(
             vec![in_state(
-                pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
                 state,
             )],
             &[],
@@ -7127,7 +7132,7 @@ fn a_disabled_or_deleted_pack_version_is_unavailable_and_a_deprecated_one_resolv
     }
     let api = serve_summaries(
         vec![in_state(
-            pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+            csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
             "deprecated",
         )],
         &[("reg-public", public_entity())],
@@ -7304,7 +7309,7 @@ fn comparing_two_pack_versions_says_what_changed_between_them() {
 
 #[test]
 fn a_pack_in_several_registries_needs_the_registry_named() {
-    let mirrored = pack_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
     let mirror_entity =
         serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
     let api = serve_registry(
@@ -7366,7 +7371,7 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
 
     // the registry now serves other content under the same version
     // the same version, with other content under it
-    let mut summary = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:moved", CSI_63);
+    let mut summary = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:moved", CSI_63);
     summary["metadata"]["lastModifiedTimestamp"] = Value::from("2026-07-30T22:45:47.109Z");
     let moved = serve_summaries(vec![summary], &[("reg-public", public_entity())]);
     let v = ops::verify(&recorded, &Palette::new(moved), "t1", &Progress::silent()).unwrap();
@@ -7385,7 +7390,7 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
 fn verify_of_an_oci_pack_record_reads_the_oci_listing_one_time() {
     // the record reads the listing for the provider type, and the sync note for the last sync
     let mirror_api = || {
-        let mut oci = pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
+        let mut oci = csi_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
         oci["spec"]["type"] = serde_json::json!("oci");
         let mirror =
             serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
@@ -10664,7 +10669,7 @@ fn a_pack_from_an_oci_registry_records_the_provider_type_outside_the_root() {
 #[test]
 fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
     // the pack listing does not name the provider type: the listing of the OCI registries does
-    let mut oci = pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
+    let mut oci = csi_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
     oci["spec"]["type"] = serde_json::json!("oci");
     let mirror =
         serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
@@ -11832,8 +11837,8 @@ const CSI_IMAGES_65: &str = "pack:\n  content:\n    images:\n      - image: publ
 fn serve_image_versions() -> MemoryApi {
     serve_summaries(
         vec![
-            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_IMAGES_63),
-            pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_IMAGES_65),
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_IMAGES_63),
+            csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_IMAGES_65),
         ],
         &[("reg-public", public_entity())],
     )
@@ -11975,14 +11980,14 @@ fn an_image_under_a_path_that_holds_the_pack_version_keeps_one_repository() {
     };
     let api = serve_summaries(
         vec![
-            pack_summary(
+            csi_summary(
                 "pk-63",
                 "1.63.1",
                 "reg-public",
                 "sha256:aaa",
                 &values("1.63.1", "v1.63.1"),
             ),
-            pack_summary(
+            csi_summary(
                 "pk-65",
                 "1.65.0",
                 "reg-public",
@@ -13536,8 +13541,8 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
 // ---- behind -----------------------------------------------------------------------------------
 
 /// A version of csi-aws-ebs in the Public Repo with a state, or for other clouds.
-fn pack_summary_with(version: &str, state: Option<&str>, clouds: &[&str]) -> Value {
-    let mut s = pack_summary(
+fn csi_summary_with(version: &str, state: Option<&str>, clouds: &[&str]) -> Value {
+    let mut s = csi_summary(
         &format!("pk-{version}"),
         version,
         "reg-public",
@@ -13557,9 +13562,9 @@ fn pack_summary_with(version: &str, state: Option<&str>, clouds: &[&str]) -> Val
 fn serve_behind() -> MemoryApi {
     serve_registry(
         vec![
-            pack_summary_with("1.64.0", Some("deprecated"), &["aws"]),
-            pack_summary_with("1.66.0", Some("disabled"), &["aws"]),
-            pack_summary_with("1.67.0", None, &["gcp"]),
+            csi_summary_with("1.64.0", Some("deprecated"), &["aws"]),
+            csi_summary_with("1.66.0", Some("disabled"), &["aws"]),
+            csi_summary_with("1.67.0", None, &["gcp"]),
         ],
         // Palette serves no disabled version, so 1.66.0 has no tag
         &[(
@@ -13602,9 +13607,9 @@ fn behind_of(
 /// clouds `newer`. The answers, in order: `packs --cloud` keeps 1.65.0; `behind` names 1.65.0
 /// as newer for a record of 1.63.1; a candidate of the cloud takes 1.65.0.
 fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [bool; 3] {
-    let mut old = pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
+    let mut old = csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
     old["spec"]["cloudTypes"] = serde_json::json!(pinned);
-    let mut new = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    let mut new = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     new["spec"]["cloudTypes"] = serde_json::json!(newer);
     let api = serve_summaries(vec![old, new], &[("reg-public", public_entity())]);
     let listing = packs_of(
@@ -13723,14 +13728,14 @@ fn packs_a_record_and_behind_agree_on_the_type_of_a_listing_entry_with_no_type()
     };
     let api = serve_summaries(
         vec![
-            untyped(pack_summary(
+            untyped(csi_summary(
                 "pk-63",
                 "1.63.1",
                 "reg-public",
                 "sha256:aaa",
                 CSI_63,
             )),
-            untyped(pack_summary(
+            untyped(csi_summary(
                 "pk-65",
                 "1.65.0",
                 "reg-public",
@@ -13922,7 +13927,7 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
 /// 1.0.0. Palette gives the registry in the OCI summary listing.
 fn serve_two_packs_of_the_oci_registry() -> MemoryApi {
     let build = |name: &str, uid: &str, version: &str| {
-        let mut s = pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
+        let mut s = csi_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
         s["spec"]["name"] = serde_json::json!(name);
         s["spec"]["type"] = serde_json::json!("oci");
         s
@@ -14090,13 +14095,13 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
     // Palette reads a version with four numbers as its first three, so it reads 1.65.0.1 and
     // 1.65.0 as one version, and here it calls 1.65.0 the latest. Strata puts 1.65.0.1 above it
-    let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    let mut release = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
     let api = serve_summaries(
         vec![
-            pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
             release,
-            pack_summary_with("1.65.0.1", None, &["aws"]),
+            csi_summary_with("1.65.0.1", None, &["aws"]),
         ],
         &[(
             "reg-public",
@@ -14132,7 +14137,7 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
 /// A registry with 1.63.1 and 1.65.0, and the pre-releases 1.65.0-rev1, 1.65.0-g0123456789ab, and
 /// 1.66.0-rc.1. Palette calls 1.65.0 the latest.
 fn serve_pre_releases() -> MemoryApi {
-    let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    let mut release = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
     let pre = ["1.65.0-rev1", "1.65.0-g0123456789ab", "1.66.0-rc.1"];
     let mut entity = public_entity();
@@ -14140,10 +14145,10 @@ fn serve_pre_releases() -> MemoryApi {
         entity = with_tag(entity, v, &format!("pk-{v}"));
     }
     let mut summaries = vec![
-        pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+        csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
         release,
     ];
-    summaries.extend(pre.map(|v| pack_summary_with(v, None, &["aws"])));
+    summaries.extend(pre.map(|v| csi_summary_with(v, None, &["aws"])));
     serve_summaries(summaries, &[("reg-public", entity)])
 }
 
@@ -14184,11 +14189,11 @@ fn a_pack_at_latest_is_the_highest_version_that_is_not_a_pre_release() {
 /// only such a version does not hold the pack for `@latest`.
 #[test]
 fn a_pack_at_latest_is_the_version_that_packs_marks_when_the_highest_version_has_no_tag() {
-    let mut mirror = pack_summary("pk-66", "1.66.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mut mirror = csi_summary("pk-66", "1.66.0", "reg-mirror", "sha256:ccc", CSI_65);
     mirror["spec"]["type"] = serde_json::json!("oci");
     let api = serve_registry(
         vec![
-            pack_summary("pk-66", "1.66.0", "reg-public", "sha256:ccc", CSI_65),
+            csi_summary("pk-66", "1.66.0", "reg-public", "sha256:ccc", CSI_65),
             mirror,
         ],
         &[
@@ -14262,7 +14267,7 @@ fn serve_develop_builds() -> MemoryApi {
         entity = with_tag(entity, v, &format!("pk-{v}"));
     }
     serve_registry(
-        more.map(|v| pack_summary_with(v, None, &["aws"])).to_vec(),
+        more.map(|v| csi_summary_with(v, None, &["aws"])).to_vec(),
         &[("reg-public", entity)],
     )
 }
@@ -14353,15 +14358,15 @@ fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop
 fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_architectures() {
     // the pinned version supports both architectures, the newest supports amd64 alone, and the
     // deprecated one names none
-    let mut both = pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
+    let mut both = csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63);
     both["spec"]["annotations"] = serde_json::json!({"architecture": "arm64,amd64"});
-    let mut one = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    let mut one = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     one["spec"]["annotations"] = serde_json::json!({"architecture": "amd64"});
     let api = serve_summaries(
         vec![
             both,
             one,
-            pack_summary_with("1.64.0", Some("deprecated"), &["aws"]),
+            csi_summary_with("1.64.0", Some("deprecated"), &["aws"]),
         ],
         &[(
             "reg-public",
@@ -14420,7 +14425,7 @@ fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_s
     // 1.68.0 is not FIPS compliant. The listing applies no FIPS rule, so it holds 1.68.0 in each
     // tenant. The registry route applies the FIPS rule of the tenant. In a FIPS tenant, it gives
     // no tag for 1.68.0. In another tenant, it gives the tag.
-    let mut not_fips = pack_summary_with("1.68.0", None, &["aws"]);
+    let mut not_fips = csi_summary_with("1.68.0", None, &["aws"]);
     not_fips["spec"]["annotations"] = serde_json::json!({"fips": "false"});
     let serve = |entity: Value| serve_registry(vec![not_fips.clone()], &[("reg-public", entity)]);
     let fips = serve(public_entity());
@@ -14468,7 +14473,7 @@ fn in_a_fips_tenant_packs_and_behind_offer_no_version_of_a_pack_with_no_fips_ver
     // No version is FIPS compliant. So in a FIPS tenant, the registry route of Palette serves no
     // version, and answers 404. The listing still holds each version.
     let not_fips = |uid: &str, version: &str| {
-        let mut s = pack_summary(uid, version, "reg-public", "sha256:ccc", CSI_63);
+        let mut s = csi_summary(uid, version, "reg-public", "sha256:ccc", CSI_63);
         s["spec"]["annotations"] = serde_json::json!({"fips": "false"});
         s
     };
@@ -14802,7 +14807,7 @@ fn behind_with_no_impact_makes_no_validate_request() {
 /// `serve_behind`, and a second pack in the Public Repo: `csi-extra` at 1.0.0 and 1.1.0.
 fn serve_behind_two_packs() -> MemoryApi {
     let summary = |version: &str| {
-        let mut s = pack_summary(
+        let mut s = csi_summary(
             &format!("pk-extra-{version}"),
             version,
             "reg-public",
@@ -15486,8 +15491,8 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_registry(
         vec![
-            marked(pack_summary_with("1.66.0", None, &["aws"])),
-            pack_summary_with("1.67.0", None, &["aws"]),
+            marked(csi_summary_with("1.66.0", None, &["aws"])),
+            csi_summary_with("1.67.0", None, &["aws"]),
         ],
         &[(
             "reg-public",

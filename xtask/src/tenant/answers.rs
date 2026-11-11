@@ -15,6 +15,13 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
     })
 }
 
+/// The message of the refusal of a profile name and version that another profile has, with
+/// [`PROFILE_EXISTS_CODE`](strata::api::codes::PROFILE_EXISTS_CODE). The name route, the import
+/// validate route, and a PUT of a profile give it.
+pub fn profile_exists_message(name: &str, version: &str) -> String {
+    format!("Cluster Profile with name '{name}' and version '{version}' already exists")
+}
+
 /// The entries of `packs.results` for a move that a pack does not allow on the clusters of the
 /// refusal: one error, `DependencyPackUpgradeNotSupported`. Empty when there is no refusal.
 fn upgrade_results(refusal: Option<UpgradeRefusal>) -> Vec<Value> {

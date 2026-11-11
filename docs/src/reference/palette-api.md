@@ -1,9 +1,15 @@
 # Palette API requests
 
-Strata reads. Most requests are `GET` requests. Ten are `POST` requests, and
-none of them changes anything. Four are searches that Palette takes as a
-`POST`. With the other six, `compare --repave`, `compare --validate`,
-`snapshot --validate`, and `behind` ask Palette a question.
+Strata reads. Most requests are `GET` requests. Ten are `POST` requests. Four
+are searches that Palette takes as a `POST`. With the other six,
+`compare --repave`, `compare --validate`, `snapshot --validate`, and `behind`
+ask Palette a question.
+
+Eight of the ten `POST` requests change nothing. The other two go to the two
+routes of `validate/repave`, which `compare --repave` asks. They change no
+setting of a cluster. But Palette can save the address that the console
+of a pack of virtual machines forwards to: see
+[What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 
 Each request has the headers `ApiKey` and `Accept: application/json`. A request
 in a project has the header `ProjectUid` too. The
@@ -54,8 +60,8 @@ same with its own document. See
 | `GET /v1/clustergroups/{uid}/packs/resolvedValues` | The value that Palette gives each macro for a cluster group, in the shape of the answer for a cluster. `snapshot clustergroup:<group> --macros` and `verify` of its record read it. |
 | `GET /v1/clusterprofiles/{uid}/packs/resolvedValues` | The value that Palette gives each macro at the scope of a profile version, with no cluster, in one `resolved` map. `snapshot <name>@<version> --macros` and `verify` of its record read it. |
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
-| `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The change is a move to a profile version, or the update that waits. The request changes nothing. |
-| `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` | The same answer for a cluster template, for `compare --repave` of a cluster that the template governs. The body names the profiles by uid, with `isUpgradeNow: false`. The request changes nothing. |
+| `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The change is a move to a profile version, or the update that waits. The request changes no setting. For a pack of virtual machines, Palette can save the address of its console: see [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves). |
+| `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` | The same answer for a cluster template, for `compare --repave` of a cluster that the template governs. The body names the profiles by uid, with `isUpgradeNow: false`. Palette saves the record of the route of a cluster for one cluster of the template. |
 | `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster. `compare --validate` sends it with a profile version that the cluster does not run. It takes the body of `validate/repave`, and changes nothing. It checks no sent tag of a profile that the cluster runs. So no command sends it for such a profile: see [The sent tag](../internals/palette/validate-routes.md#the-sent-tag). |
 
 ## The fleet
@@ -144,16 +150,29 @@ namespaces. See
 
 ## The checks of `strata preflight`
 
-`strata preflight` with a key asks Palette about the cloud account of the entity.
-Each request below changes nothing, and the counts at the top of this page do not
-include them. `strata preflight --rules --json` lists the request of every rule.
+`strata preflight` with a key asks Palette about the entity, its cloud account,
+and its cluster. The table lists each route that a check of the catalog sends,
+and the rules that send it. A run sends each request one time, and each rule of
+the row reads the answer. The counts at the top of this page are of the
+commands of strata, not of these checks. `strata preflight --rules --json`
+lists the request of every rule.
+
+Each request below changes nothing, except `validate/repave`. That request
+changes no setting of the cluster. But Palette can save the address that the
+console of a pack of virtual machines forwards to: see
+[What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 
 | Request | Read by | Gives |
 | --- | --- | --- |
+| `GET /v1/cloudaccounts/{cloudType}/{uid}` | `account-missing` | The cloud account that the entity names: see [A cluster](#a-cluster). The rule fails when Palette gives no account of the cloud type of the entity. |
 | `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=&subscriptionId=&cpuGtEq=0&memoryGtEq=0` | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` | The instance types of the region, with the `cpu` of each. The query lifts the default filter of the route, which drops each type with fewer than 2 vCPUs or less than 4 GiB of memory. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
 | `GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=` | `static-subnets` | The VPCs of the account in the region, each with its subnets. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
 | `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `sg-name-collision` | The security groups of the VPC, as `groups[]`. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | The key pairs of the account in the region. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `GET /v1/clouds/aws/regions?cloudAccountUid=` | `aws-region-not-enabled` | The regions that the account has enabled, as `regions[].name`. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `POST /v1/clouds/aws/account/validate` | `sts-account-not-assumable` | Whether Palette can assume the role of an STS cloud account, and call `ec2:DescribeRegions` with it. The body is the `spec` of the account. See [The account routes](../internals/palette/validate-routes.md#the-account-routes). |
+| `POST /v1/clouds/aws/properties/validate` | `iaas-pod-identity` | The check of the cloud account and the key pair of an AWS cluster. See [The property routes](../internals/palette/validate-routes.md#the-property-routes). |
+| `POST /v1/clouds/eks/properties/validate` | `eks-public-subnet-mapping` | The check of the key pair and the subnets of an EKS cluster. See [The property routes](../internals/palette/validate-routes.md#the-property-routes). |
 | `POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity?hrgArn=` | `dedicated-hosts` | The check of the free capacity of the hosts of a host resource group for an instance type. The body holds `cloudAccountUid`, `instanceType`, and `replicaCount`. The answer holds `isValid`, `availableCapacity`, and `message`. |
 | `GET /v1/clouds/aws/imageIds/{imageId}/volumeSize?region=&cloudAccountUid=` | `root-volume` | The size of the root snapshot of the AMI, as `sizeGB`. |
 | `GET /v1/clouds/azure/regions?cloudAccountUid=&subscriptionId=` | `azure-location` | The regions that the account sees in the subscription, as `regions[].name`. |
@@ -169,3 +188,8 @@ include them. `strata preflight --rules --json` lists the request of every rule.
 | `GET /v1/cloudaccounts/vsphere/{uid}/properties/datacenters` | `vsphere-datacenter` | Each datacenter in `items[]`, named by `datacenter`, with its compute clusters in `computeclusters[]` and its VM folders in `folders[]`. The route goes through the PCG of the account. |
 | `GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources?datacenter=&computecluster=` | `vsphere-compute-resources` | The datastores, the networks, and the resource pools of one compute cluster: `computecluster.datastores[]`, `networks[]`, and `resourcePools[]`. The route goes through the PCG of the account. |
 | `GET /v1/overlords/vsphere/{uid}/pools` | `vsphere-ip-pool-capacity` | The IP pools of the PCG, as `items[]`. A pool has `metadata.uid`, `metadata.name`, `spec.pool.start`, `spec.pool.end`, and `spec.restrictToSingleCluster`. Its status has `allottedIps[]`, `inUse`, and `associatedClusters[]`. |
+| `POST /v1/spectroclusters/{cloudType}/validate` | `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor` | The validate route of a create, with the body of the create. The answer holds the errors of each profile, pack, and machine pool. See [The validate route of a create](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
+| `GET /v1/spectroclusters/{uid}` | `delete-pending-repave`, `delete-while-provisioning`, `pause-agent-upgrades`, `delete-blockers` | The cluster of `cluster:UID`, before a delete: `status.state`, `status.repave.state`, `status.virtual`, and `metadata.annotations`. See [A cluster](#a-cluster). |
+| `GET /v1/clusterprofiles/{uid}` | `template-outside`, `variables-in-use`, `consumers-empty-on-error` | A profile of the entity: `status.inUseClusters` and `status.inUseClusterTemplates`. See [A profile version](#a-profile-version). |
+| `GET /v1/edgehosts/{uid}` | `edge-host-in-use`, `edge-host-health`, `edge-host-arch`, `edge-host-resources`, `edge-host-nic`, `edge-agent-version` | Each edge host of the entity: `spec.device`, `spec.version`, and `status`. See [An edge host, a cluster group, and an app profile](#an-edge-host-a-cluster-group-and-an-app-profile). |
+| `POST /v1/spectroclusters/{uid}/validate/repave` | `engine-repave-rules`, `eks-repave-answers`, `gke-repave-answers` | Whether the change of `cluster:UID CHANGE.json` replaces the nodes: `isRepaveRequired` and the reasons. The body holds the profiles of the entity after the change. The request changes no setting of the cluster. But Palette can save the address that the console of a pack of virtual machines forwards to: see [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves). |

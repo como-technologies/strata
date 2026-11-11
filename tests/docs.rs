@@ -11,8 +11,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
-    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
+    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, first_cells, gitlab_drop_in, one_line,
+    recipe, repo_file, schema, script, table_rows, toml_entries, toml_table, toml_value,
+    version_of, walk,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -186,16 +187,7 @@ fn codes_after(text: &str, anchor: &str) -> Vec<String> {
     let at = text
         .find(anchor)
         .unwrap_or_else(|| panic!("errors.md does not name {anchor}"));
-    let mut codes: Vec<String> = text[at..]
-        .lines()
-        .skip_while(|line| !line.starts_with("| Code |"))
-        .skip(2) // the header and the line under it
-        .take_while(|line| line.starts_with('|'))
-        .map(|row| {
-            let cell = row.split('|').nth(1).expect("a row has a first cell");
-            cell.trim().trim_matches('`').to_string()
-        })
-        .collect();
+    let mut codes = first_cells(&text[at..], "| Code |");
     codes.sort();
     codes
 }
@@ -1081,11 +1073,7 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
 /// The sentences of a block. A table row has the sentences of each cell.
 fn block_sentences(block: &str) -> Vec<String> {
     if block.starts_with('|') {
-        return block
-            .trim_matches('|')
-            .split('|')
-            .flat_map(|cell| sentences(cell.trim()))
-            .collect();
+        return cells(block).into_iter().flat_map(sentences).collect();
     }
     sentences(block)
 }
@@ -1376,7 +1364,7 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
             "the rule eks-ami-type left the catalog, and the table {name} names it"
         );
     }
-    let rows = table_rows(waits);
+    let rows = table_rows(waits, "|");
     assert!(!rows.is_empty(), "{waits}");
     for row in rows {
         assert!(
@@ -1412,20 +1400,6 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
 /// The text of `docs/src/loop.md`, and of `docs/src/walkthrough.md`, which holds each step of it.
 fn the_loop() -> String {
     read(&docs().join("loop.md")) + &read(&docs().join("walkthrough.md"))
-}
-
-/// The cells of each row of the first table in `text`, without the header and the rule line.
-fn table_rows(text: &str) -> Vec<Vec<String>> {
-    text.lines()
-        .filter(|l| l.starts_with('|'))
-        .skip(2)
-        .map(|l| {
-            l.trim_matches('|')
-                .split('|')
-                .map(|c| c.trim().to_string())
-                .collect()
-        })
-        .collect()
 }
 
 /// The code spans of `text`: the text between a pair of backticks.
@@ -1510,7 +1484,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
     );
 
     let names = command_words();
-    let rows = table_rows(part);
+    let rows = table_rows(part, "|");
     assert_eq!(rows.len(), 11, "the table of the day has eleven steps");
     for row in rows {
         assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
@@ -1583,7 +1557,11 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         .find(|l| l.starts_with('|'))
         .expect("the section has a table");
     assert_eq!(header, "| When | Who | The question | What runs | Page |");
-    assert_eq!(table_rows(part).len(), 13, "the table has thirteen jobs");
+    assert_eq!(
+        table_rows(part, "|").len(),
+        13,
+        "the table has thirteen jobs"
+    );
 
     let spans = code_spans(part);
     for command in [
@@ -1767,7 +1745,7 @@ fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_
     let text = the_loop();
     let part = section(&text, "## Each step at a glance", Some("\n## "));
     let names = command_words();
-    for row in table_rows(part) {
+    for row in table_rows(part, "|") {
         let place = &row[2];
         assert!(
             !names.contains(place) && place != "preflight",
@@ -1822,6 +1800,71 @@ fn build_test_states_the_rustdoc_packages_the_version_order_and_the_save_of_a_cl
         ) && !page.contains("The save of a cluster with `--raw-dir`"),
         "build-test.md does not name the function that masks the group values"
     );
+}
+
+/// The files of `tests/common/` that a package other than the root package includes with
+/// `#[path]`. The path goes up to the root with one `../` for each level of the file.
+fn files_of_tests_common_that_another_package_includes() -> BTreeSet<String> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    ["benches", "crates", "examples", "fuzz", "xtask"]
+        .iter()
+        .flat_map(|tree| walk(&root.join(tree)))
+        .filter(|f| f.extension().is_some_and(|e| e == "rs"))
+        .filter(|f| !f.components().any(|c| c.as_os_str() == "target"))
+        .flat_map(|f| {
+            read(&f)
+                .lines()
+                .filter_map(|line| {
+                    let path = line
+                        .trim()
+                        .strip_prefix("#[path = \"")?
+                        .strip_suffix("\"]")?;
+                    let path = path.trim_start_matches("../");
+                    Some(path.strip_prefix("tests/common/")?.to_string())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+/// A helper of `tests/common/` that another package includes is in a file of its own. The rule of
+/// "Tests" in `code.md` names each such file, and no other. The table "Where the code goes" of
+/// `build-test.md` has a row for each. The verify of #711 and of #721 found a file that each page
+/// left out.
+#[test]
+fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
+    let included = files_of_tests_common_that_another_package_includes();
+    assert!(
+        included.contains("git.rs") && included.contains("palette.rs"),
+        "the scan finds the includes: {included:?}"
+    );
+    let code = one_line(&read(&docs().join("development/code.md")));
+    let rule = code
+        .split(". ")
+        .find(|s| s.ends_with(" have such users"))
+        .expect("code.md names the files that other packages include");
+    let named: BTreeSet<String> = rule
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .map(String::from)
+        .collect();
+    assert_eq!(named, included, "the rule of Tests in code.md: {rule}");
+
+    let page = read(&docs().join("development/build-test.md"));
+    let table = section(
+        &page,
+        "## Where the code goes",
+        Some("## Where a script goes"),
+    );
+    let rows = table_rows(table, "|");
+    for file in &included {
+        let cell = format!("`tests/common/{file}`");
+        assert!(
+            rows.iter().any(|row| row[0].contains(&cell)),
+            "the table Where the code goes of build-test.md has no row of {cell}"
+        );
+    }
 }
 
 /// The public items show their comments to each user of the library. So each sentence of the
@@ -2496,6 +2539,18 @@ fn the_readme_has_one_line_for_the_observer_and_the_summary_lists_the_three_page
     }
 }
 
+/// A cell of the book can hold `\|`, as the flag `--host github\|gitlab` does. The read of a row
+/// keeps such a cell whole. It also reads a row with no `|` at its end, and an empty last cell.
+#[test]
+fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
+    assert_eq!(
+        cells(r"| `--host github\|gitlab` | The code host. |"),
+        [r"`--host github\|gitlab`", "The code host."]
+    );
+    assert_eq!(cells("| a | b"), ["a", "b"]);
+    assert_eq!(cells("| a | |"), ["a", ""]);
+}
+
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
 /// link is lost, and the page shows the raw target. Code fences are skipped.
 fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
@@ -2509,8 +2564,8 @@ fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
             continue;
         }
         found.extend(
-            line.split('|')
-                .map(str::trim)
+            cells(line)
+                .into_iter()
                 .filter(|cell| {
                     ["(./", "(../", "(http://", "(https://"]
                         .iter()
@@ -3611,13 +3666,13 @@ fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() 
 
     let day = section(&text, "## Each step at a glance", Some("\n## "));
     assert!(
-        table_rows(day).iter().any(|row| row[0]
+        table_rows(day, "|").iter().any(|row| row[0]
             == "A job writes a note about a value that strata does not know"
             && row[1].contains("Strata sends nothing unless you choose the send.")),
         "the day of work has no row for the note"
     );
     let jobs = section(&text, "## The jobs and their commands", Some("\n## "));
-    let row = table_rows(jobs)
+    let row = table_rows(jobs, "|")
         .into_iter()
         .find(|row| row[0] == "A note of an unknown value")
         .expect("the table of the jobs has no row for the note");
@@ -4073,8 +4128,8 @@ fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
         .filter(|p| p.extension().is_some_and(|e| e == "md"))
     {
         for block in blocks_of(&read(path)).iter().filter(|b| b.starts_with('|')) {
-            for cell in block.trim_matches('|').split('|') {
-                let count = sentences(cell.trim()).len();
+            for cell in cells(block) {
+                let count = sentences(cell).len();
                 if count > MOST_SENTENCES {
                     faults.push(format!(
                         "{}: {count} sentences: {}",
@@ -6278,7 +6333,7 @@ fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
 ///
 /// A page sends the header to `curl` as a config on standard input, as
 /// `examples/live/palette-curl.sh` does. A line of a report sends it as a config that `printf`
-/// writes into `<( )` (#694).
+/// writes into `<( )` (#694), after the escape of the key (#717).
 #[test]
 fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
     let rules = Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/strata-preflight/rules");
@@ -6306,8 +6361,7 @@ fn no_page_teaches_the_key_of_palette_in_an_argument_of_curl() {
                 n + 1
             );
         }
-        if file.starts_with(docs().join("output")) && text.contains("--config <(printf 'header = ")
-        {
+        if file.starts_with(docs().join("output")) && text.contains("&& curl -s --config <(k=") {
             outputs += 1;
         }
         for block in crate::common::code_blocks(&text, "bash") {
@@ -6336,7 +6390,10 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
     let lines = one_line(section(&rules, "## The reproduce lines", Some("\n## ")));
     for needle in [
         "each line reads, and changes nothing",
-        "A `POST` goes only to a validate route of Palette",
+        // a `POST` to `validate/repave` can save a record of Palette (#717)
+        "A `POST` goes to a validate route of Palette, which checks the body",
+        "The test of the catalog names each such route that saves nothing",
+        "One route can save a record, `validate/repave`",
         "A line makes no login to a registry or a cloud",
         "A line names no path of the live example, `examples/live`",
         "A rule that only the lab can reproduce says so in such a line",
@@ -6363,6 +6420,66 @@ fn the_book_states_that_a_reproduce_line_reads_and_names_no_path_of_the_lab() {
         documents.contains("(./preflight-rules.md#the-reproduce-lines)"),
         "documents.md does not link the reproduce lines"
     );
+}
+
+/// At `validate/repave`, Palette can save the address that the console of a pack of virtual
+/// machines forwards to (#717). A block that says a request or a reproduce line changes nothing
+/// also says what Palette can save there.
+#[test]
+fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_save() {
+    let pages = walk(&docs())
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|e| e == "md"));
+    for page in pages {
+        let text = one_line(&read(&page));
+        assert!(
+            !text.contains("none of them changes anything"),
+            "{}",
+            page.display()
+        );
+    }
+    for (page, anchor) in [
+        (
+            "reference/palette-api.md",
+            "Eight of the ten `POST` requests change nothing",
+        ),
+        // the sentence above the table of the checks of strata-preflight, and the row of the
+        // three checks that send `validate/repave` (#756)
+        (
+            "reference/palette-api.md",
+            "Each request below changes nothing, except `validate/repave`",
+        ),
+        (
+            "reference/palette-api.md",
+            "`engine-repave-rules`, `eks-repave-answers`, `gke-repave-answers`",
+        ),
+        (
+            "reference/documents.md",
+            "Each line reads, and changes nothing",
+        ),
+        (
+            "use-cases/stop-a-build.md",
+            "Each line reads, and changes nothing",
+        ),
+        ("development/live-example.md", "| `tenant.sh` | Lookups"),
+        (
+            "internals/palette/validate-routes.md",
+            "The request changes no setting of the cluster",
+        ),
+        (
+            "automation/pr-comments.md",
+            "The question changes no setting in Palette",
+        ),
+        ("commands/compare/repave.md", "The `POST` asks a question"),
+    ] {
+        let text = block(&read(&docs().join(page)), anchor);
+        assert!(
+            ["Palette can save", "Palette can also save"]
+                .iter()
+                .any(|says| text.contains(says)),
+            "{page}: {text}"
+        );
+    }
 }
 
 // ---- the page of the pipeline of a team (#492) ---------------------------------------------------
@@ -6417,7 +6534,7 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
         fits < ideas && ideas < sample,
         "the section for your own pipeline does not come before the sample pipeline"
     );
-    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")));
+    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")), "|");
     for (event, command) in [
         ("A publish", "strata snapshot"),
         ("A promotion", "strata same-release"),

@@ -3,7 +3,7 @@
 
 use std::ffi::OsString;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::TOOL_NAME;
@@ -108,6 +108,10 @@ impl Config {
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
     /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
+    ///
+    /// Strata reads the file only when `HOME` is an absolute path. An empty or a relative `HOME`
+    /// names a folder from the working folder, not the home of the user, so strata then reads the
+    /// environment alone.
     ///
     /// # Errors
     ///
@@ -221,6 +225,19 @@ pub fn quiet_from_env() -> bool {
 
 /// The variable that names the base folder of the files that a program keeps for itself.
 const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
+/// The variable that names the home folder.
+const HOME_VAR: &str = "HOME";
+
+/// The folder that `value`, the value of a variable, names. `None` when the value is not set, or
+/// is not an absolute path.
+///
+/// An empty or a relative value, such as `../home`, names a folder from the working folder, and
+/// not a folder of the person. That folder can be in the checkout of a job. So strata reads no
+/// `~/.palette.env` and keeps no state below such a `HOME`. This one rule gives the home for the
+/// key file and for the state folder.
+fn absolute_folder(value: Option<OsString>) -> Option<PathBuf> {
+    value.map(PathBuf::from).filter(|p| p.is_absolute())
+}
 
 /// The folder where strata keeps the files of its own state: `$XDG_STATE_HOME/strata`, or
 /// `~/.local/state/strata` when the variable is not set. `None` when strata knows no home.
@@ -228,20 +245,20 @@ const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
 /// A relative `XDG_STATE_HOME` is no place, so strata skips it, as the XDG Base Directory
 /// Specification says. The folder can be missing: the code that writes a file creates it.
 pub(crate) fn state_dir() -> Option<PathBuf> {
-    state_dir_from(std::env::var_os(STATE_HOME_VAR), std::env::var_os("HOME"))
+    state_dir_from(std::env::var_os(STATE_HOME_VAR), std::env::var_os(HOME_VAR))
 }
 
 /// [`state_dir`] for the given values of `XDG_STATE_HOME` and `HOME`.
 fn state_dir_from(state_home: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
-    let base = state_home
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| {
-            home.map(PathBuf::from)
-                .filter(|p| p.is_absolute())
-                .map(|h| h.join(".local/state"))
-        })?;
+    let base = absolute_folder(state_home)
+        .or_else(|| absolute_folder(home).map(|h| h.join(".local/state")))?;
     Some(base.join(TOOL_NAME))
+}
+
+/// The file `~/.palette.env` for `home`, the value of `HOME`. `None` when strata knows no home:
+/// see [`absolute_folder`].
+fn env_file_from(home: Option<OsString>) -> Option<PathBuf> {
+    absolute_folder(home).map(|h| h.join(ENV_FILE))
 }
 
 fn env_nonempty(key: &str) -> Option<String> {
@@ -260,10 +277,11 @@ pub(crate) fn in_ci() -> bool {
     env_nonempty(CI_VAR).is_some()
 }
 
-/// `KEY=VALUE` lines from `~/.palette.env`, with optional `export ` and quotes.
+/// `KEY=VALUE` lines from `~/.palette.env`, with optional `export ` and quotes. With no absolute
+/// `HOME`, strata reads no file.
 fn dotenv_lookup(key: &str) -> Option<String> {
-    let home = std::env::var_os("HOME")?;
-    let text = fs::read_to_string(Path::new(&home).join(ENV_FILE)).ok()?;
+    let file = env_file_from(std::env::var_os(HOME_VAR))?;
+    let text = fs::read_to_string(file).ok()?;
     parse_dotenv(&text, key)
 }
 
@@ -466,8 +484,8 @@ mod tests {
 }
 
 #[cfg(test)]
-mod state_dir_tests {
-    use super::state_dir_from;
+mod home_tests {
+    use super::{env_file_from, state_dir_from};
     use std::ffi::OsString;
     use std::path::PathBuf;
 
@@ -507,6 +525,25 @@ mod state_dir_tests {
         assert_eq!(state_dir_from(None, None), None);
         assert_eq!(state_dir_from(None, os("")), None);
         assert_eq!(state_dir_from(os("state"), os("home")), None);
+    }
+
+    #[test]
+    fn the_key_file_is_in_a_home_that_is_an_absolute_path() {
+        assert_eq!(
+            env_file_from(os("/home/a")),
+            Some(PathBuf::from("/home/a/.palette.env"))
+        );
+    }
+
+    /// An empty or a relative `HOME`, also `../home`, names a folder from the working folder. A
+    /// checkout can put a `.palette.env` there, with an address that then gets the key of the
+    /// environment.
+    #[test]
+    fn an_empty_or_a_relative_home_has_no_key_file() {
+        assert_eq!(env_file_from(None), None);
+        for bad in ["", "home", "./home", "../home"] {
+            assert_eq!(env_file_from(os(bad)), None, "{bad:?}");
+        }
     }
 }
 

@@ -66,8 +66,18 @@ See
 [Compare a profile version with a cluster](clusters.md#compare-a-profile-version-with-a-cluster).
 
 `--repave` costs two requests, the cluster document and one `POST` to
-`/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
-changes nothing: the cluster keeps its instances.
+`/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question, and
+the cluster keeps its instances. For a cluster or a change with the pack
+`virtual-machine-orchestrator`, `spectro-vm-dashboard`, or
+`vm-migration-assistant`, Palette can also save the address of the console of
+that pack. Other values of the pack move that address until the agent of the cluster
+reads the cluster again.
+
+Strata sends a profile that the change does not touch by its uid alone. The
+route of a cluster template takes each profile by its uid alone too. So for a
+cluster with one of these packs, the question can move the address that the
+console forwards to, until the agent reads the cluster again. See
+[What the route saves](../../internals/palette/validate-routes.md#what-the-route-saves).
 
 The comment of a pull request asks the same question. See
 [Ask Palette if the change repaves](../../automation/pr-comments.md#ask-palette-if-the-change-repaves).

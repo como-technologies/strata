@@ -7,8 +7,9 @@ use super::ids::{
     DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, profile_exists_message};
 use serde_json::json;
+use strata::api::codes::PROFILE_EXISTS_CODE;
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
 
@@ -394,11 +395,8 @@ fn candidate_validate_names(r: &mut Runner) {
     // Palette's own checks before a create (#273). The candidate comes from aws-stack@1.1.1, which
     // the project holds, so the name route and the import validate route refuse it
     r.tenant(|t| t.profile_packs_answer(DEV, None, None));
-    let exists = (
-        409,
-        "ClusterProfileAlreadyExists",
-        "Cluster Profile with name 'aws-stack' and version '1.1.1' already exists",
-    );
+    let message = profile_exists_message("aws-stack", "1.1.1");
+    let exists = (409, PROFILE_EXISTS_CODE, message.as_str());
     r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.1.1"), Some(exists), Some(exists)));
     r.step(
         "candidate-validate-exists",
