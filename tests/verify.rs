@@ -12657,7 +12657,7 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     let member = cluster_ref(CLUSTER_UID, None, false);
     let group_ref = Ref::parse("clustergroup:g1");
     for (a, b) in [(&group_ref, &member), (&member, &group_ref)] {
-        let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+        let (sa, sb) = ops::snapshot_pair(a, b, |_| connect(), "t1", &Progress::silent()).unwrap();
         assert_eq!(sa.root, sb.root, "the member runs the pin");
         let side = if matches!(a, Ref::Cluster { .. }) {
             &sa
@@ -12682,7 +12682,7 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     let (_, whole) = ops::snapshot_pair(
         &group_ref,
         &Ref::parse(&format!("cluster:{CLUSTER_UID}/{infra}")),
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )
@@ -12709,7 +12709,8 @@ fn beside_the_cluster(api: &MemoryApi, version: &str) -> Vec<(Snapshot, strata::
     [(&version, &cluster), (&cluster, &version)]
         .into_iter()
         .map(|(a, b)| {
-            let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+            let (sa, sb) =
+                ops::snapshot_pair(a, b, |_| connect(), "t1", &Progress::silent()).unwrap();
             let d = ops::compare(&sa, &sb, "t1");
             let side = if sa.source.cluster.is_some() { sa } else { sb };
             (side, d)
@@ -12795,7 +12796,8 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     // two clusters stay whole
     let connect = || Ok(Palette::new(api.clone()));
     let whole = cluster_ref(CLUSTER_UID, None, false);
-    let (sa, sb) = ops::snapshot_pair(&whole, &whole, connect, "t1", &Progress::silent()).unwrap();
+    let (sa, sb) =
+        ops::snapshot_pair(&whole, &whole, |_| connect(), "t1", &Progress::silent()).unwrap();
     for side in [&sa, &sb] {
         assert_eq!(covered(side).0, [infra.as_str(), addon.as_str()]);
     }
@@ -12803,7 +12805,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     let (_, selected) = ops::snapshot_pair(
         &Ref::parse(UID_ADDONS),
         &cluster_ref(CLUSTER_UID, Some("lab-profile"), false),
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )
@@ -12814,7 +12816,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     let (_, pending) = ops::snapshot_pair(
         &Ref::parse(UID_ADDONS),
         &cluster_ref(CLUSTER_UID, None, true),
-        || Ok(Palette::new(waits.clone())),
+        |_| Ok(Palette::new(waits.clone())),
         "t1",
         &Progress::silent(),
     )
@@ -13016,7 +13018,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     let (sa, sb) = ops::snapshot_pair(
         &Ref::parse("clustergroup:g1"),
         &member,
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )

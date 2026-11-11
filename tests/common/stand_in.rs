@@ -59,12 +59,26 @@ pub fn later_type_tenant() -> BTreeMap<String, Value> {
 /// Serve `routes` on this machine, one answer for each request. A route that nobody lists
 /// answers 404. The address is the one for `PALETTE_API`.
 pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
+    serve_recorded(routes).0
+}
+
+/// [`serve_routes`], and each request that the stand-in took, in the order of arrival.
+pub fn serve_recorded(routes: BTreeMap<String, Value>) -> (String, Arc<Mutex<Vec<Request>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&requests);
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let path = read_request(&mut stream).map_or_else(|| "/".to_string(), |r| r.path);
+            let path = match read_request(&mut stream) {
+                Some(request) => {
+                    let path = request.path.clone();
+                    seen.lock().unwrap().push(request);
+                    path
+                }
+                None => "/".to_string(),
+            };
             let (status, body) = match routes.get(&path) {
                 Some(doc) => ("200 OK", doc.to_string()),
                 None => ("404 Not Found", "{}".to_string()),
@@ -76,7 +90,7 @@ pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
             let _ = stream.write_all(answer.as_bytes());
         }
     });
-    format!("http://{address}")
+    (format!("http://{address}"), requests)
 }
 
 /// The command `strata list profiles --packs` with the arguments `more` against `api`. The run
@@ -151,12 +165,14 @@ pub fn write_log(home: &Path, lines: &[String]) -> PathBuf {
     file
 }
 
-/// One request that the stand-in endpoint took.
+/// One request that a stand-in took.
 #[derive(Debug, Clone)]
 pub struct Request {
     pub method: String,
     pub path: String,
     pub body: String,
+    /// The header `ProjectUid`: the project of the request, or `None` for the tenant scope.
+    pub project: Option<String>,
 }
 
 impl Request {
@@ -281,5 +297,10 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<Request> {
         method: first.next()?.to_string(),
         path: first.next()?.to_string(),
         body: String::from_utf8_lossy(&data[head_end..]).into_owned(),
+        project: head.lines().find_map(|l| {
+            let (name, value) = l.split_once(':')?;
+            name.eq_ignore_ascii_case("ProjectUid")
+                .then(|| value.trim().to_string())
+        }),
     })
 }

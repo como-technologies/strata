@@ -24,6 +24,7 @@ mod masked;
 mod observer_deploy;
 mod observer_up;
 mod presets;
+mod projects;
 mod renumber;
 mod report;
 mod report_deploy;
