@@ -900,8 +900,8 @@ fn the_cases_of_the_version_sort_of_the_observer_page_are_in_the_order_of_strata
     for case in ["1.1.8.develop", "10.4.0.1", "LTS__24.x"] {
         assert!(ascending.contains(&case), "{case}");
     }
-    // the forms of #714: text right after the last number, text before the numbers with a tail, a
-    // pre-release after a tail, and a number above the largest u64
+    // the new forms of #714, such as text right after the last number, and a number above the
+    // largest u64
     for case in [
         "1rc1",
         "1.2rc1",
