@@ -129,10 +129,10 @@ The record of a cluster holds each profile that the cluster runs. The cluster
 Strata reads the document of each profile version one time in each project, and
 the document of its newest version. Each part of `behind` reads that one copy.
 The parts are the newer versions, the time of the create, the move, and the names
-of the clusters in a refusal. The comparison of the move
-also reads the pack manifests and the variables of the two versions.
-`--no-impact` skips the comparison, and not the other reads. With `--pin`, strata
-reads no profile version.
+of the clusters in a refusal. The comparison of the move also reads the pack
+manifests and the variables of the two versions. `--no-impact` skips the
+comparison, and not the other reads. With `--pin`, strata reads no profile
+version.
 
 ## The move to the newest profile version
 

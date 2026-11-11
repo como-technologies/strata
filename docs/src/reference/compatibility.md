@@ -1164,8 +1164,8 @@ field, a value, an input, or an option is in the sections above.
   [Run it once](../automation/observer.md#run-it-once).
 - **`behind` names the move to the newest profile version.** A new line
   `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
-  `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with `packs[]`. The markdown table
-  of the profiles has the new column `bump`. See
+  `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
+  `packs[]`. The markdown table of the profiles has the new column `bump`. See
   [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
   - A script that reads the text must skip the new line, or read `--json`. A script that reads
     the cells of the markdown table must read the new column.
