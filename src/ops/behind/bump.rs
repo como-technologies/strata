@@ -15,9 +15,10 @@ use std::collections::btree_map::Entry;
 
 use serde_json::Value;
 
+use super::documents::ProfileDocuments;
 use super::{Bump, Pin, PinKey};
+use crate::api::PaletteApi;
 use crate::api::registry::Registries;
-use crate::api::{Palette, PaletteApi};
 use crate::candidate::pack::pack_snapshot_in;
 use crate::diff::Diff;
 use crate::error::{Error, Result};
@@ -69,25 +70,23 @@ impl<'r> Asked<'r> {
     }
 }
 
-/// The questions of `behind` to Palette in one scope. It reads the document of a cluster, and the
-/// clusters that run a profile, one time each.
+/// The questions of `behind` to Palette in one scope. It reads the document of a cluster one time,
+/// and the document of a profile version through the documents of the scope.
 pub(super) struct BumpQuestions<'a, A: PaletteApi> {
-    palette: &'a Palette<A>,
+    /// The documents of the profile versions of the scope, with the connection to it.
+    documents: ProfileDocuments<'a, A>,
     /// The project of the connection: `None` is the tenant scope.
     scope: Option<&'a str>,
     /// The documents of the clusters, by uid.
     clusters: BTreeMap<String, Value>,
-    /// The names of the clusters that run a profile version, by uid of the version.
-    running: BTreeMap<String, Vec<String>>,
 }
 
 impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
-    pub(super) fn new(palette: &'a Palette<A>, scope: Option<&'a str>) -> Self {
+    pub(super) fn new(documents: ProfileDocuments<'a, A>, scope: Option<&'a str>) -> Self {
         BumpQuestions {
-            palette,
+            documents,
             scope,
             clusters: BTreeMap::new(),
-            running: BTreeMap::new(),
         }
     }
 
@@ -196,34 +195,33 @@ impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
     /// `POST /v1/clusterprofiles/{uid}/validate/packs` with `body`. Palette checks the packs
     /// against each cluster that runs the version, and names the clusters in each error.
     fn ask_version(&mut self, uid: &str, body: &Value) -> Result<Vec<PaletteRefusal>> {
-        let errors = profile_packs_answer(self.palette, Some(uid), body)?;
+        let errors = profile_packs_answer(self.documents.palette, Some(uid), body)?;
         if errors.is_empty() {
             return Ok(errors);
         }
         // the refusal stands without the names of the clusters: the line then gives the message
         // of Palette, which holds them
         let names = self.clusters_running(uid).unwrap_or_default();
-        Ok(errors.into_iter().map(|e| e.naming(names)).collect())
+        Ok(errors.into_iter().map(|e| e.naming(&names)).collect())
     }
 
     /// The document of the cluster `uid`, read one time.
     fn cluster_document(&mut self, uid: &str) -> Result<&Value> {
         let doc = match self.clusters.entry(uid.to_string()) {
             Entry::Occupied(known) => known.into_mut(),
-            Entry::Vacant(new) => {
-                new.insert(self.palette.subject_document(SubjectKind::Cluster, uid)?)
-            }
+            Entry::Vacant(new) => new.insert(
+                self.documents
+                    .palette
+                    .subject_document(SubjectKind::Cluster, uid)?,
+            ),
         };
         Ok(doc)
     }
 
-    /// The names of the clusters that run the profile version `uid`, read one time.
-    fn clusters_running(&mut self, uid: &str) -> Result<&[String]> {
-        let names = match self.running.entry(uid.to_string()) {
-            Entry::Occupied(known) => known.into_mut(),
-            Entry::Vacant(new) => new.insert(consumer_names(&self.palette.profile_document(uid)?)),
-        };
-        Ok(names)
+    /// The names of the clusters that run the profile version `uid`, from its document in the
+    /// documents of the scope.
+    fn clusters_running(&mut self, uid: &str) -> Result<Vec<String>> {
+        self.documents.get(uid).map(consumer_names)
     }
 }
 

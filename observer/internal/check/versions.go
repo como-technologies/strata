@@ -14,7 +14,8 @@ import (
 )
 
 // versionsCycle runs one versions cycle. It asks `behind` for the pins of each record and compares
-// each pinned version with the newest one. files is -1 when the directory was not read. With no record,
+// each pinned version with the newest one. It also compares the record of each profile version that is
+// behind with the newest version of its profile. files is -1 when the directory was not read. With no record,
 // it runs no `behind`, because the command needs a file. It then reads no version, so At stays zero.
 func (o *Observer) versionsCycle(ctx context.Context) (versions model.Versions, files int, err error) {
 	set, err := baseline.Load(o.cfg.Records)
@@ -48,8 +49,24 @@ func (o *Observer) readVersions(ctx context.Context, dir string, set baseline.Se
 	}
 	versions.Strata, versions.Pins, versions.Profiles = doc.Tool.Version, doc.Pins, doc.Profiles
 	versions.Moves, versions.Unread, err = o.moves(ctx, dir, doc)
+	if err == nil {
+		versions.ProfileMoves, versions.ProfileUnread, err = o.profileMoves(ctx, dir, recordFiles(set.Entries, names), doc.Profiles)
+	}
 	versions.At = o.now()
 	return err
+}
+
+// recordFiles maps the subject of each record to the file of the record in the directory of the
+// cycle. names holds the file of each entry, in order. A subject keeps the file of its first record.
+func recordFiles(entries []baseline.Entry, names []string) map[string]string {
+	files := map[string]string{}
+	for i, e := range entries {
+		subject := model.Subject(e.Record.Source.Name, e.Record.Source.Version)
+		if _, ok := files[subject]; !ok {
+			files[subject] = names[i]
+		}
+	}
+	return files
 }
 
 // behind runs `behind` on each record, as many at once as the pool of processes lets. So the progress
@@ -192,13 +209,54 @@ func (o *Observer) moves(ctx context.Context, dir string, doc docs.Behind) (map[
 // and the changed values apart.
 func (o *Observer) compareMove(ctx context.Context, dir string, pin docs.Pin) (docs.Diff, error) {
 	ref := "pack:" + pin.RegistryUID + "/" + pin.Name + "@"
-	res, err := o.run(ctx, dir, exitsOfACompare, runner.CmdCompare, ref+pin.Version, ref+pin.Newer[0].Version, runner.FlagFull, "--json", "--compact", "-q")
-	if err != nil {
-		return docs.Diff{}, err
+	return o.compareFull(ctx, dir, ref+pin.Version, ref+pin.Newer[0].Version)
+}
+
+// profileMoves compares the record of each profile version that is behind with the newest version of
+// its profile, by the uid of that version. files maps a subject to its record in dir. The compares run
+// at the same time, as many as the pool of processes lets. A compare that fails is in the second
+// result, and the page then says that strata could not compare the two. The other versions stay in
+// the cycle. Only a stop of ctx ends the cycle, and then the error is the one of ctx.
+//
+// A move of a profile has no cache, because a published version can change in place. So each cycle
+// compares it again. The diff stays in memory for the detail tier, and the state never holds it.
+func (o *Observer) profileMoves(ctx context.Context, dir string, files map[string]string, profiles []docs.ProfilePin) (map[string]docs.Diff, map[string]bool, error) {
+	type job struct {
+		subject, record, uid string
+		diff                 docs.Diff
+		err                  error
 	}
-	diff, err := decode[docs.Diff](res.Stdout, docs.DiffSchema)
-	diff.CapText(maxText)
-	return diff, err
+	var jobs []*job
+	for _, p := range profiles {
+		subject := model.Subject(p.Name, p.Version)
+		newest, ok := model.NewestProfile(p)
+		record, found := files[subject]
+		if ok && found && newest.UID != "" {
+			jobs = append(jobs, &job{subject: subject, record: record, uid: newest.UID})
+		}
+	}
+	o.expect(ctx, len(jobs))
+	var wg sync.WaitGroup
+	for _, j := range jobs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			j.diff, j.err = o.compareFull(ctx, dir, j.record, j.uid)
+		}()
+	}
+	wg.Wait()
+	if ctx.Err() != nil {
+		return nil, nil, ctx.Err()
+	}
+	moves, unread := map[string]docs.Diff{}, map[string]bool{}
+	for _, j := range jobs {
+		if j.err != nil {
+			unread[j.subject] = true
+			continue
+		}
+		moves[j.subject] = j.diff
+	}
+	return moves, unread, nil
 }
 
 // mergeProfiles adds the profile versions of one answer to the ones of the answers before it. It has

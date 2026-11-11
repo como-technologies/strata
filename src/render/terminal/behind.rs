@@ -5,7 +5,7 @@ use crate::closed_set::ClosedSet;
 use crate::ops::{BehindReport, PinnedBy, ProfilePin};
 use crate::render::behind::{
     arrived_line, behind_heading, bump_line, created_since, listed_since, palette_lines,
-    pin_status, profile_status,
+    pin_status, profile_bump_line, profile_status,
 };
 use crate::render::entry_error;
 use crate::term::color::Paint;
@@ -99,6 +99,9 @@ fn profile_lines(profiles: &[ProfilePin], p: &Paint) -> String {
         ));
         if let Some(created) = created_since(x) {
             out.push_str(&format!("      {}\n", p.dim(&created)));
+        }
+        if let Some(line) = profile_bump_line(x) {
+            out.push_str(&format!("      {line}\n"));
         }
         if let Some(msg) = entry_error(x.error.as_ref()) {
             out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));

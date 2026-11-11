@@ -1,0 +1,2 @@
+$ strata compare aws-stack@1.0.0 aws-stack@1.1.0 --format markdown | grep '^\*\*Result'
+**Result:** CHANGED · max impact: `repave` · packs: 4 changed, 0 added, 0 removed, 1 unchanged · variables: unchanged

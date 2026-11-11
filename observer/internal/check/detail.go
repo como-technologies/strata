@@ -18,13 +18,25 @@ import (
 // its values. So after a restart the memory holds no values for a move that the state knows. Then
 // the call runs one `compare` of the two packs, as a cycle does, and keeps the answer in memory. It
 // waits for the detail slot and a token of the pool, and never for a cycle, and it ends with the
-// context. No call sends a POST.
+// context. The newest side comes from the move of the profile in the last good versions cycle, which
+// the memory holds. No call sends a POST.
 func (o *Observer) PackDiff(ctx context.Context, subject, key string, side model.Side) (docs.Pack, bool, error) {
 	if side == model.SideNewer {
 		return o.newerPack(ctx, subject, key)
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	if side == model.SideNewest {
+		if o.versions == nil {
+			return docs.Pack{}, false, nil
+		}
+		d, ok := o.versions.ProfileMoves[subject]
+		if !ok {
+			return docs.Pack{}, false, nil
+		}
+		pack, ok := packOf(&d, key)
+		return pack, ok, nil
+	}
 	if o.content == nil {
 		return docs.Pack{}, false, nil
 	}

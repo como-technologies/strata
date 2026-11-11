@@ -1044,6 +1044,14 @@ pub fn snapshot_of_ref(
     )
 }
 
+/// The options of `behind` that compare each bump, and ask Palette about the bump of each pin.
+pub const WITH_IMPACT: strata::ops::BehindOptions = strata::ops::BehindOptions {
+    impact: true,
+    since: None,
+    pin: None,
+    pre_release: false,
+};
+
 /// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted. The
 /// report has the time `2026-09-26T00:00:00Z`, with no progress output.
 pub fn behind_of(

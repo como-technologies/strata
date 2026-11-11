@@ -207,7 +207,8 @@ asks if that is what the reviewer read:
 a name. A difference fails the job.
 
 The record of the release that the clusters run now has a newer published version.
-`behind` names it, and the exit is `1` until each record moves to it:
+`behind` names it, and the exit is `1` until each record moves to it. The line
+`bump to` gives the impact level and the change flags of the move:
 
 ```text
 {{#include output/loop-behind-profile.txt}}

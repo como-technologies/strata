@@ -8,10 +8,11 @@
 #   2  a change: the next version as a candidate on a branch, and the question to Palette if it
 #      accepts the packs of the candidate. Then the comment of the pull request, and the merge gate
 #   3  the publish: the published next version is the candidate that the reviewer read, and behind
-#      names it as a newer version of the release (#707). The stage
-#      asks Palette if the move of cluster A to the next version repaves, and if Palette accepts
-#      the packs. pr-comment.sh --repave puts the answer in the comment of the pull request of the
-#      move. A cluster ref that selects no profile holds the release alone (#615)
+#      names it as a newer version of the release (#707), with what the move to it changes
+#      (#708). The stage asks Palette if the move of cluster A to the next version repaves, and
+#      if Palette accepts the packs. pr-comment.sh --repave puts the answer in the comment of the
+#      pull request of the move. A cluster ref that selects no profile holds the release alone
+#      (#615)
 #   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
 #      of a create on the release. The comment of the pull request holds the static report. The
 #      stage creates nothing
@@ -127,6 +128,18 @@ if stage 3 "the publish"; then
   check behind-profile-names 0 "#707: behind names $NAME@1.0.1 as a newer version of $NAME@1.0.0, for the two records" -- \
     jq -e --arg name "$NAME" '[.profiles[] | select(.name == $name and .version == "1.0.0")]
       | length == 1 and (.[0].pinnedBy | length) == 2 and any(.[0].newer[]; .version == "1.0.1")' behind-profile.out
+  # with the impact, behind compares the release with the next version, as compare of the two
+  # versions does. Both commands exit 1: the release is behind, and the roots differ
+  check behind-profile-move 1 "#708: behind with the impact on the record of the release exits 1: $NAME has a newer version" -- \
+    "$strata" behind repo/releases/1.0.0.json --json
+  check compare-profile-move 1 "#708: compare of the release and the next version, the two versions of the move" -- \
+    "$strata" compare "$REL" "$NEXT" --json
+  check behind-profile-move-says 0 "#708: the bump of $NAME@1.0.0 names 1.0.1, the impact level of compare, each flag, and each pack that changes" -- \
+    jq -e -n --arg name "$NAME" --slurpfile b behind-profile-move.out --slurpfile c compare-profile-move.out '
+      def flags: [.packs[] | to_entries[] | select((.key | IN("identity", "upstream", "authored", "images", "charts")) and .value == true) | .key | ascii_upcase] | unique;
+      ($b[0].profiles[] | select(.name == $name and .version == "1.0.0") | .bump) as $m
+      | $m.to == "1.0.1" and $m.impact == $c[0].summary.maxImpact and ($m.flags | sort) == ($c[0] | flags)
+        and ([$m.packs[].key] | sort) == ([$c[0].packs[] | select(.status != "unchanged") | .key] | sort)'
   # Palette answers for a version that it holds: the move of cluster A to the next version. Both
   # commands exit 1, because the roots differ; the answers are in the report.
   check ask-repave 1 '#385: compare --repave: Palette answers if the move of cluster A to the next version repaves' -- \

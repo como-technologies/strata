@@ -51,6 +51,10 @@ type world struct {
 	// moves gives the diff of a compare of two packs, by "ref ref".
 	moves    map[string]docs.Diff
 	moveErrs map[string]error
+	// profileMoves gives the diff of a compare of a record with a profile version, by "<subject of the
+	// record> <uid of the version>". profileMoveErrs fails such a compare.
+	profileMoves    map[string]docs.Diff
+	profileMoveErrs map[string]error
 
 	// overlap counts the calls that run at one time, from the time that a test sets it. Its delay and its
 	// hold let a test see two calls at once.
@@ -81,6 +85,9 @@ func (w *world) Run(ctx context.Context, dir string, args ...string) (runner.Res
 	case runner.CmdSnapshot:
 		return w.runSnapshot(dir, args)
 	case runner.CmdCompare:
+		if isProfileMove(args) {
+			return w.runProfileMove(dir, args)
+		}
 		return w.runCompare(args)
 	case runner.CmdBehind:
 		return w.runBehind()
@@ -187,6 +194,41 @@ func (w *world) runCompare(args []string) (runner.Result, error) {
 		d = docs.Diff{Same: true, SameContent: true}
 	}
 	return diffDoc(d)
+}
+
+// runProfileMove answers the compare of a record with a profile version, which the second ref names by
+// its uid. It reads the record in dir, so a compare of the wrong record finds no answer.
+func (w *world) runProfileMove(dir string, args []string) (runner.Result, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, args[1]))
+	if err != nil {
+		return runner.Result{}, err
+	}
+	var r docs.Record
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return runner.Result{}, err
+	}
+	key := r.Source.Name + "@" + r.Source.Version + " " + args[2]
+	if err := w.profileMoveErrs[key]; err != nil {
+		return runner.Result{}, err
+	}
+	d, ok := w.profileMoves[key]
+	if !ok {
+		return runner.Result{}, fmt.Errorf("the fake has no move of a profile %q", key)
+	}
+	return diffDoc(d)
+}
+
+// countProfileMoves gives the number of compares of a record with a profile version.
+func (w *world) countProfileMoves() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n := 0
+	for _, c := range w.calls {
+		if isProfileMove(c) {
+			n++
+		}
+	}
+	return n
 }
 
 // diffDoc prints a diff, and exits 1 when the two sides differ, as `compare` does.
@@ -302,4 +344,10 @@ func entries(t *testing.T, dir string) []string {
 		names = append(names, e.Name())
 	}
 	return names
+}
+
+// isProfileMove says that args compare a record with a profile version, which the second ref names by
+// its uid. The other compares name two packs, or a record and a file of the cluster side.
+func isProfileMove(args []string) bool {
+	return args[0] == runner.CmdCompare && !strings.HasPrefix(args[1], "pack:") && !strings.HasSuffix(args[2], ".json")
 }

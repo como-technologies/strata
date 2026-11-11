@@ -157,7 +157,7 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 	script := readScripts(t)
 	table := tableRows(t, sectionOf(t, serverPage, "### Check this yourself"))
-	if len(table) != 7 {
+	if len(table) != 8 {
 		t.Fatalf("the table of the card has %d rows", len(table))
 	}
 	useCase := strings.Join(strings.Fields(string(readFile(t, useCasePage))), " ")

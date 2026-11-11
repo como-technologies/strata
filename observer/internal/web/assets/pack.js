@@ -230,8 +230,9 @@ function valuesPanel(d, id, command) {
 }
 
 /* A comparison of a pack has one card, and one dropdown "Compare" in its head: the record against the published version, the
-   record against the copy of this cluster, and the pack against its newer version. The card opens on the first side that
-   holds a change. A side with no change sends no request, and it shows the facts of the three sides. */
+   record against the copy of this cluster, the pack against its newer version, and the record against the newest version of
+   its profile. The card opens on the first side that holds a change. A side with no change sends no request, and it shows the
+   facts of the three sides. */
 
 // The commands of the card "Check this yourself" and of the splash for a text above the cap. record.json is the file that
 // the first row of the card writes. Each value from the data goes through shq(), so a command pastes as the arguments it means.
@@ -240,6 +241,8 @@ const clusterCommand = (x, full) => `strata compare ${RECORD_FILE} ${shq(`cluste
 // packRef gives a pack of a registry as one word of a shell.
 const packRef = (row, version) => shq(`pack:${row.registryUid}/${row.name}@${version}`);
 const moveCommand = row => `strata compare ${packRef(row, row.version)} ${packRef(row, row.newest)} --full`;
+// newestCommand compares the record with the newest version of its profile, as the versions cycle does.
+const newestCommand = x => `strata compare ${RECORD_FILE} ${shq(at(x.name, x.newerVersion.version))} --full`;
 const pinCommand = p => `strata behind ${RECORD_FILE} --pin ${shq(p.key)}`;
 // recordKey gives the key of a record in the Secrets, as scripts/ci/observer-records.sh writes it. recordCommand reads the key in
 // each of the four Secrets, because the page does not know which one holds it.
@@ -259,10 +262,10 @@ function flagTab(flag, d) {
 
 // flagRow draws the five flags of a comparison. A flag that lit is violet and a flag that did not is dim: that is the one signal, and
 // each flag keeps one color. A hover or a focus shows what the flag means. A lit flag with a tab opens that tab, and href is the
-// page of the pack. A dim flag is no link.
+// page of the pack. A dim flag is no link. With no id, as for the move of a whole profile, no flag is a link.
 function flagRow(d, id, href) {
   return h`<span class="flags">${FLAGS.map(f => {
-    const lit = d.flags.includes(f), tab = lit ? flagTab(f, d) : "", w = FLAG_WORDS[f], cls = lit ? "b" : "y off";
+    const lit = d.flags.includes(f), tab = lit && id ? flagTab(f, d) : "", w = FLAG_WORDS[f], cls = lit ? "b" : "y off";
     const face = tab ? h`<a class="badge ${cls}" href="${href}" data-tab="${id}" data-k="${tab}">${f}</a>` : h`<span class="badge ${cls}" tabindex="0">${f}</span>`;
     const words = lit ? h`Lit: ${w.when}. ${w.means}` : h`Dim. It lights when ${w.when}.`;
     return h`<span class="flagw">${face}<span class="tip" role="tooltip"><b>${f}</b>${words}</span></span>`;
@@ -306,24 +309,26 @@ function comparePanel(id, d, href, command) {
 }
 
 // sidesOf lists the comparisons that a pack can show: the record against the published version, against the copy of this cluster when
-// strata read it, and the pack against its newer version.
+// strata read it, the pack against its newer version, and the record against the newest version of its profile when strata compared them.
 function sidesOf(x, row) {
   const out = [[SIDE.PUBLISHED, "Record → Published now"]];
   const cp = x.clusterCopy && x.clusterCopy.status;
   if (COPY_READ.includes(cp)) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
   if (row) out.push([SIDE.NEWER, `${at(row.name, row.version)} → ${at(row.name, row.newest)}`]);
+  if (x.newerVersion && x.newerVersion.move) out.push([SIDE.NEWEST, "Record → Newest version"]);
   return out;
 }
 
-// changedSides says which sides of a pack hold a change. It reads the findings and the move, and it sends no request. A finding of
-// the pods says nothing about the sides of a record.
+// changedSides says which sides of a pack hold a change. It reads the findings, the move of the pack, and the move of its profile, and
+// it sends no request. A finding of the pods says nothing about the sides of a record.
 const CLUSTER_KINDS = [KIND.CLUSTER, KIND.IMAGE_ID];
-function changedSides(subject, p, row) {
+function changedSides(subject, x, p, row) {
   const fs = D.findings.filter(f => f.profile === subject && f.packs.includes(p.key) && !IMAGE_KINDS.includes(f.kind));
   return {
     [SIDE.PUBLISHED]: fs.some(f => !CLUSTER_KINDS.includes(f.kind)) || (p.status === STATUS.DRIFT && fs.length === 0),
     [SIDE.CLUSTER]: fs.some(f => CLUSTER_KINDS.includes(f.kind) || f.alsoOnCluster),
     [SIDE.NEWER]: !!row,
+    [SIDE.NEWEST]: !!movePackOf(x, p.key),
   };
 }
 
@@ -345,9 +350,12 @@ function sideFacts(x, p, row, changed) {
 // undisturbed is the splash of a side with no change.
 // undisturbed is the splash of a side that strata read and found the same as the record. That is a result of a check, so it takes the
 // mark SAME wherever the rest of the cluster stands. The outline is for a place that is off, or that has nothing yet.
+const UNDISTURBED_WORDS = {
+  [SIDE.CLUSTER]: "The copy of this cluster holds what the record holds.",
+  [SIDE.NEWEST]: "The newest version of the profile holds what the record holds for this pack.",
+};
 function undisturbed(side, list) {
-  const words = side === SIDE.CLUSTER ? "The copy of this cluster holds what the record holds." : "The published version holds what the record holds.";
-  return splash(TONE.SAME, "Undisturbed", words, facts(list), SIZE.CARD);
+  return splash(TONE.SAME, "Undisturbed", UNDISTURBED_WORDS[side] || "The published version holds what the record holds.", facts(list), SIZE.CARD);
 }
 
 // notCheckedSplash is the splash of a pack that strata did not check in full. It names the cause, and it points to the screen of the causes.
@@ -355,15 +363,15 @@ const notCheckedSplash = x => splash(TONE.WARN, "Part of this layer is hidden", 
   next(h`<a href="#notchecked">Why, on the Not checked page</a>`), SIZE.CARD);
 
 function comparePack(subject, x, p, row) {
-  const sides = sidesOf(x, row), changed = changedSides(subject, p, row), id = "side-" + subject + "-" + p.key;
+  const sides = sidesOf(x, row), changed = changedSides(subject, x, p, row), id = "side-" + subject + "-" + p.key;
   const chosen = S.side[id], side = sides.some(([k]) => k === chosen) ? chosen : (sides.find(([k]) => changed[k]) || sides[0])[0];
   const pub = x.published, cp = x.clusterCopy;
   const unread = side === SIDE.PUBLISHED && publishedUnread(x);
   const select = h`<select id="side" class="search auto" data-id="${id}" aria-label="Compare">${sides.map(([k, l]) => h`<option value="${k}" ${k === side ? raw("selected") : ""}>${l}</option>`)}</select>`;
   const to = side === SIDE.CLUSTER ? cp && cp.rootB : pub && pub.rootLive;
-  const roots = side === SIDE.NEWER ? "" : h`<span class="m mut">root ${root(pub && pub.rootRecorded)}${ARROW}${root(to)}</span>`;
+  const roots = VERSION_SIDES.includes(side) ? "" : h`<span class="m mut">root ${root(pub && pub.rootRecorded)}${ARROW}${root(to)}</span>`;
   const tabId = side === SIDE.NEWER ? "move-" + subject + "-" + p.key : id + "-" + side;
-  const command = side === SIDE.CLUSTER ? clusterCommand(x, true) : side === SIDE.NEWER ? moveCommand(row) : publishedCommand(subject);
+  const command = side === SIDE.CLUSTER ? clusterCommand(x, true) : side === SIDE.NEWER ? moveCommand(row) : side === SIDE.NEWEST ? newestCommand(x) : publishedCommand(subject);
   // Only a side with a change sends a request. The route says "unchanged" for a side that the findings did not name.
   const d = unread || !changed[side] ? null : diffOf(subject, p, side);
   // A side with no change reads as hidden when the pack was not checked, or when the last read of the profile failed in part and the side
@@ -428,8 +436,13 @@ function terminalRows(subject, x, p, row) {
     rows.push(["What does the move change?", moveCommand(row), impactCell(subject, p, row)]);
     rows.push(["Which newer versions does Palette list?", pinCommand(p), h`<span class="mut">Newest ${ref(row.name, row.newest)}</span>`]);
   }
+  // The page of a pack shows the move of its profile in the card of its comparison, so only the page of the profile has this row.
+  if (!p && x.newerVersion) rows.push(["What does the move to the newest version change?", newestCommand(x), newestImpact(x.newerVersion)]);
   return rows;
 }
+
+// newestImpact gives the impact of the move of a profile to its newest version, or "Not read" when strata could not compare them.
+const newestImpact = n => n.move ? impactBadge(n.move.impact) : badge("y", "Not read");
 
 // checkCard is closed at first: most readers trust the page, and the commands are for a person who wants the proof. Each check is a
 // question with what the page says now, then the command that answers it in a terminal. An open card stays open on the next page.

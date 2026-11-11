@@ -333,7 +333,23 @@ impl<A: PaletteApi> Palette<A> {
     /// The error of the first request that fails.
     pub fn fetch_profile(&self, uid: &str, progress: &Progress) -> Result<RawProfile> {
         progress.note(&format!("fetching profile {uid}"));
-        let mut profile = self.profile_document(uid)?;
+        let profile = self.profile_document(uid)?;
+        self.profile_raw(uid, profile, progress)
+    }
+
+    /// The raw documents of the profile version `uid`, from its document `profile` that
+    /// [`Palette::profile_document`] gives: the rest of what [`Palette::fetch_profile`] reads.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. A missing variables route is no error: see
+    /// [`Palette::fetch_profile`].
+    pub fn profile_raw(
+        &self,
+        uid: &str,
+        mut profile: Value,
+        progress: &Progress,
+    ) -> Result<RawProfile> {
         let mut manifests = self.profile_pack_manifests(uid)?;
         self.mask_draft(&mut profile, &mut manifests, progress)?;
         let manifest_entities = self.manifest_entities(uid, &profile, progress)?;

@@ -127,7 +127,7 @@ func versionEvents(vs *Versions) []Event {
 func profileEvents(profiles []docs.ProfilePin) []Event {
 	var out []Event
 	for _, p := range profiles {
-		newest, ok := newestProfile(p)
+		newest, ok := NewestProfile(p)
 		if !ok {
 			continue
 		}

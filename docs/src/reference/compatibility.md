@@ -1192,6 +1192,20 @@ field, a value, an input, or an option is in the sections above.
   a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
   [Run it once](../automation/observer.md#run-it-once).
+- **`behind` names the move to the newest profile version.** A new line
+  `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
+  `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
+  `packs[]`. The markdown table of the profiles has the new column `bump`. See
+  [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+  - A script that reads the text must skip the new line, or read `--json`. A script that reads
+    the cells of the markdown table must read the new column.
+  - Without `--no-impact`, `behind` reads the pack manifests and the variables of the two
+    versions of each move. A comparison that fails makes the version `not checked`, and the
+    exit `2`.
+- **The observer shows the move to the newest version of a profile.** `newerVersion` holds the
+  new field `move`, or `unread` when the compare failed. The detail route takes the side
+  `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
+  See [Run it once](../automation/observer.md#run-it-once).
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
   `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
   read the file of a folder from the working folder. So a file of a checkout could
@@ -1345,6 +1359,9 @@ field, a value, an input, or an option is in the sections above.
   `ops::BehindSummary` has the new fields `profiles`, `profiles_behind`, and
   `profile_errors`. A struct literal must set them, and a pattern with no `..` must name
   them. `ops::ProfilePin` and `ops::NewerProfile` are new.
+- `ops::ProfilePin` has the new field `bump: Option<ops::Bump>`, and `ops::Bump` has the new
+  field `packs: Vec<ops::BumpPack>`. A struct literal must set them. `ops::BumpPack` is new.
+  `api::Palette::profile_raw` is new: it reads the rest of a profile version from its document.
 - `ops::behind` reads the document of each profile version that the records hold, through
   `connect` of the project of the first record. `BehindReport::exit_code` gives `1` for a
   profile version that is behind, and `2` for one that strata could not check.
