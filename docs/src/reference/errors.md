@@ -250,6 +250,13 @@ does not send its refusal again, and `palette-validate` reports it. See
 | Code | Palette refuses |
 | --- | --- |
 | `ClusterProfilesNotSupported` | A profile of another cloud type than the route, and not of the cloud type `all`. |
+| `InvalidDropDownVariable` | A value of a dropdown variable that is not the label of an option. |
+| `InvalidVariable` | A value that the format or the pattern of its variable refuses, or no value for a required variable. |
+| `K8SCidrOverlap` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that overlaps the CIDR of the VPC. |
+| `CidrParseError` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that is not a CIDR. |
+
+A live run shows the first code. The code of Palette shows the other four, and
+no live run shows them yet.
 
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.

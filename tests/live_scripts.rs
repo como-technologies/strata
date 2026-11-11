@@ -6958,6 +6958,19 @@ const AWS_CASES: [AwsCase; 4] = [
     },
 ];
 
+/// The case of validate-route.sh whose body names a VPC of the lab (#816).
+const CIDR_CASE: &str = "cidr-overlap";
+
+/// The message of the refusal of the body of `CIDR_CASE`, as the message template of Palette
+/// writes it.
+const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
+
+/// The answer of the validate route to the body of `CIDR_CASE`. The code of Palette gives it
+/// HTTP 500, and strata reads it as a refusal.
+fn cidr_overlap_answer() -> String {
+    serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
+}
+
 /// The case of `AWS_CASES` that the route takes.
 fn aws_case_taken() -> &'static AwsCase {
     AWS_CASES
@@ -6966,21 +6979,27 @@ fn aws_case_taken() -> &'static AwsCase {
         .expect("one case of AWS_CASES has no refusal")
 }
 
-/// Answer the validate route for the clean AWS body and for each case of `AWS_CASES`. The route
-/// refuses a case with its refusal. It takes a case with no refusal, and a case in `takes`.
+/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, and for
+/// `CIDR_CASE`. The route refuses a case with its refusal. It takes a case with no refusal, and a
+/// case in `takes`.
 fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     stage.strata(
         "preflight */aws-clean.json --cloud aws *",
         0,
         &route_report("passed", &[]),
     );
-    for case in &AWS_CASES {
-        let (code, report) = match case.refusal {
-            Some(message) if !takes.contains(&case.id) => (1, route_report("failed", &[message])),
+    let cidr = format!("K8SCidrOverlap: {CIDR_OVERLAP_MESSAGE}");
+    let cases = AWS_CASES
+        .iter()
+        .map(|case| (case.id, case.refusal))
+        .chain([(CIDR_CASE, Some(cidr.as_str()))]);
+    for (id, refusal) in cases {
+        let (code, report) = match refusal {
+            Some(message) if !takes.contains(&id) => (1, route_report("failed", &[message])),
             _ => (0, route_report("passed", &[])),
         };
         stage.strata(
-            &format!("preflight */{}.json --cloud aws *", case.id),
+            &format!("preflight */{id}.json --cloud aws *"),
             code,
             &report,
         );
@@ -7123,6 +7142,7 @@ fn validate_route_sh_sends_each_fault_to_the_route_and_expects_a_refusal_that_na
         "azure-ssh-key-empty",
         "ntp-servers-edge",
         "pack-cloud-support",
+        CIDR_CASE,
     ] {
         assert!(
             steps.contains(&format!("skipped {skipped}: no ")),
@@ -7248,7 +7268,12 @@ fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
 fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let mut stage = Stage::new(serde_json::json!({}));
     std::fs::create_dir_all(stage.path("bodies")).unwrap();
-    for body in std::iter::once("aws-clean").chain(AWS_CASES.iter().map(|case| case.id)) {
+    let cases: Vec<&str> = AWS_CASES
+        .iter()
+        .map(|case| case.id)
+        .chain([CIDR_CASE])
+        .collect();
+    for body in std::iter::once("aws-clean").chain(cases.iter().copied()) {
         std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
     }
     // each case goes to the route of AWS. The glob names the cloud, so a case on another engine
@@ -7258,15 +7283,47 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     let mut ids = vec!["aws-clean".to_string()];
-    for case in &AWS_CASES {
-        ids.push(case.id.to_string());
-        ids.push(format!("{}-says", case.id));
+    for case in &cases {
+        ids.push(case.to_string());
+        ids.push(format!("{case}-says"));
     }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
-    for case in &AWS_CASES {
-        assert!(!steps.contains(&format!("skipped {}", case.id)), "{steps}");
+    for case in &cases {
+        assert!(!steps.contains(&format!("skipped {case}")), "{steps}");
     }
     assert_eq!(steps.matches("aws-clean ").count(), 1, "{steps}");
+
+    // a route that takes the body of cidr-overlap, or a check that reads its refusal as an error,
+    // fails both checks of the case
+    for (code, verdict) in [(0, "passed"), (2, "error")] {
+        let mut stage = Stage::new(serde_json::json!({}));
+        std::fs::create_dir_all(stage.path("bodies")).unwrap();
+        for body in ["aws-clean", CIDR_CASE] {
+            std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
+        }
+        stage.strata(
+            "preflight */aws-clean.json --cloud aws *",
+            0,
+            &route_report("passed", &[]),
+        );
+        let error = format!(
+            "POST {AWS_VALIDATE_ROUTE} failed with HTTP 500: {}",
+            cidr_overlap_answer()
+        );
+        let messages: &[&str] = if verdict == "error" { &[&error] } else { &[] };
+        stage.strata(
+            &format!("preflight */{}.json --cloud aws *", CIDR_CASE),
+            code,
+            &route_report(verdict, messages),
+        );
+        let bodies = stage.path("bodies");
+        let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(1), "{verdict}: {steps}");
+        failed(&steps, &[CIDR_CASE]);
+        if verdict == "passed" {
+            failed(&steps, &["cidr-overlap-says"]);
+        }
+    }
 }
 
 #[test]
@@ -7363,11 +7420,45 @@ fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
 
+/// The release profile `r-1` of the lab, on AWS. Its Kubernetes pack sets `podCIDR`, so
+/// route-bodies.sh can write the body of `cidr-overlap`. The OS pack comes first, and its values
+/// hold the key too (#816).
+const RELEASE_ON_AWS: &str = r#"{"spec":{"published":{"cloudType":"aws","packs":[
+    {"name":"ubuntu-aws","tag":"24.04","layer":"os","values":"pack:\n  podCIDR: \"not of the Kubernetes pack\"\n"},
+    {"name":"kubernetes","tag":"1.33.2","layer":"k8s","values":"pack:\n  podCIDR: \"192.168.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n"}]}}}"#;
+
+/// The values of the Kubernetes pack of `RELEASE_ON_AWS` in the body of `cidr-overlap`: the CIDR
+/// of the VPC `vpc-1` is the pod CIDR.
+const CIDR_OVERLAP_VALUES: &str =
+    "pack:\n  podCIDR: \"172.31.0.0/16\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n";
+
+/// The VPCs of the region of the lab. The first has no CIDR, so the body of `cidr-overlap` names
+/// the second.
+const LAB_VPCS: &str = r#"{"vpcs":[{"vpcId":"vpc-0","name":"no-cidr"},
+    {"vpcId":"vpc-1","name":"default","cidrBlock":"172.31.0.0/16"}]}"#;
+
+/// The VPC route of the region of the lab.
+const LAB_VPCS_ROUTE: &str = "/v1/clouds/aws/regions/us-east-2/vpcs";
+
+/// The validate route of a create on AWS.
+const AWS_VALIDATE_ROUTE: &str = "/v1/spectroclusters/aws/validate";
+
+/// Palette answers the POST of the validate route of AWS with `status` and `body`.
+fn answer_aws_validate(stage: &Stage, status: &str, body: &str) {
+    stage.route(AWS_VALIDATE_ROUTE, body);
+    std::fs::write(
+        stage.path("routes/v1_spectroclusters_aws_validate.status"),
+        status,
+    )
+    .unwrap();
+}
+
 /// A stage of route-bodies.sh in a lab on AWS. The lab has the account `lab-aws`, the release
-/// profile `r-1` on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a
-/// profile for each `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and
-/// deletes it. The validate route refuses the fault of each case, except `pack-cloud-support` and
-/// the cases in `takes`, which it takes.
+/// profile `r-1` on AWS, the registry `Public Repo`, the packs `packs`, and the VPCs `LAB_VPCS`.
+/// Palette makes a profile for each `POST /v1/clusterprofiles` with the uid `uid-<name>`, and
+/// publishes and deletes it. The validate route refuses the fault of each case, except
+/// `pack-cloud-support` and the cases in `takes`, which it takes. It refuses the body of
+/// `cidr-overlap` with HTTP 500 and `K8SCidrOverlap`.
 fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "release_profile_uid": "r-1",
@@ -7383,10 +7474,9 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
         "/v1/cloudaccounts/summary",
         r#"{"items":[{"kind":"aws","metadata":{"name":"lab-aws","uid":"acc-1"}}]}"#,
     );
-    stage.route(
-        &profile_route("r-1"),
-        r#"{"spec":{"published":{"cloudType":"aws"}}}"#,
-    );
+    stage.route(&profile_route("r-1"), RELEASE_ON_AWS);
+    stage.route(LAB_VPCS_ROUTE, LAB_VPCS);
+    answer_aws_validate(&stage, "500", &cidr_overlap_answer());
     stage.route(
         "/v1/registries/metadata",
         r#"{"items":[{"name":"Public Repo","uid":"reg-pub"},{"name":"Other","uid":"reg-other"}]}"#,
@@ -7433,6 +7523,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         ids.push(format!("{case}-body"));
         ids.push(format!("{case}-deleted"));
     }
+    for check in ["body", "status", "code"] {
+        ids.push(format!("{CIDR_CASE}-{check}"));
+    }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
 
     // the clean body is the body of create_body: the account, the release profile, the region
@@ -7444,6 +7537,33 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         clean["spec"]["profiles"],
         serde_json::json!([{"uid": "r-1", "packValues": [], "variables": []}])
     );
+
+    // the body of cidr-overlap is the clean body with the VPC that has a CIDR, and the values of
+    // the Kubernetes pack with that CIDR as the pod CIDR. The script sent it to the route, and
+    // asked for the VPCs of the account of the lab (#816)
+    let cidr_file = bodies.join(format!("{CIDR_CASE}.json"));
+    let mut cidr = read_json(&cidr_file);
+    assert_eq!(cidr["spec"]["cloudConfig"]["vpcId"], "vpc-1");
+    assert_eq!(
+        cidr["spec"]["profiles"],
+        serde_json::json!([{"uid": "r-1", "variables": [], "packValues": [
+            {"name": "kubernetes", "tag": "1.33.2", "values": CIDR_OVERLAP_VALUES}]}])
+    );
+    assert_eq!(stage.sent("POST", AWS_VALIDATE_ROUTE), [cidr.clone()]);
+    let asked = std::fs::read_to_string(stage.path(&format!(
+        "routes/sent/GET_{}.request",
+        Stage::route_key(LAB_VPCS_ROUTE)
+    )))
+    .unwrap();
+    assert!(
+        asked.starts_with("query=cloudAccountUid=acc-1\n"),
+        "{asked}"
+    );
+    let status = std::fs::read_to_string(stage.path("out/cidr-overlap-status.out")).unwrap();
+    assert_eq!(status, format!("HTTP 500\n{}", cidr_overlap_answer()));
+    cidr["spec"]["cloudConfig"]["vpcId"] = clean["spec"]["cloudConfig"]["vpcId"].clone();
+    cidr["spec"]["profiles"] = clean["spec"]["profiles"].clone();
+    assert_eq!(cidr, clean, "nothing else changes");
 
     // a case body is the clean body and one more profile, the one that the script made. The
     // directory holds no case body at the end, so the test reads what validate-route.sh got.
@@ -7531,14 +7651,18 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     let sent: Vec<usize> = (0..log.len())
         .filter(|&i| log[i].starts_with("VALIDATE "))
         .collect();
-    assert_eq!(sent.len(), 5, "aws-clean and the four cases: {log:?}");
+    assert_eq!(
+        sent.len(),
+        6,
+        "aws-clean, the four cases, and cidr-overlap: {log:?}"
+    );
     assert!(
         sent.iter().all(|&i| last_create < i && i < first_delete),
         "{log:?}"
     );
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     let mut answered = vec!["aws-clean".to_string()];
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    for case in AWS_CASES.iter().map(|case| case.id).chain([CIDR_CASE]) {
         answered.push(case.to_string());
         answered.push(format!("{case}-says"));
     }
@@ -7555,10 +7679,91 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     for AwsCase { id: case, .. } in &AWS_CASES {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
-    assert!(
-        bodies.join("aws-clean.json").exists(),
-        "it names the release profile, which stays"
-    );
+    for body in ["aws-clean.json", "cidr-overlap.json"] {
+        assert!(
+            bodies.join(body).exists(),
+            "{body} names the release profile alone, which stays"
+        );
+    }
+}
+
+/// The check `cidr-overlap-code` holds the answer that the code of Palette gives: HTTP 500 and
+/// `K8SCidrOverlap`. Another status, another code, or a body that the route takes fails it, and
+/// `cidr-overlap-status.out` holds that answer (#816).
+#[test]
+fn route_bodies_sh_fails_cidr_overlap_code_when_the_route_gives_another_answer() {
+    let other_code = r#"{"code":"InternalError","message":"boom"}"#;
+    let taken = r#"{"profiles":[],"machinePools":{"results":[]}}"#;
+    for (status, body) in [
+        ("400", cidr_overlap_answer()),
+        ("500", other_code.to_string()),
+        ("200", taken.to_string()),
+    ] {
+        let stage = route_bodies_stage(&route_packs(true), &[]);
+        answer_aws_validate(&stage, status, &body);
+        let bodies = stage.path("bodies");
+        let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(o.status.code(), Some(1), "{status}: {steps}");
+        passed(&steps, &["cidr-overlap-body", "cidr-overlap-status"]);
+        failed(&steps, &["cidr-overlap-code"]);
+        let out = std::fs::read_to_string(stage.path("out/cidr-overlap-status.out")).unwrap();
+        assert_eq!(out, format!("HTTP {status}\n{body}"));
+    }
+}
+
+/// The script skips `cidr-overlap` when Palette lists no VPC with a CIDR, or when the Kubernetes
+/// pack of the release profile has no `podCIDR`. It removes the body of an earlier run, sends
+/// nothing to the route, and the other cases run (#816).
+#[test]
+fn route_bodies_sh_skips_cidr_overlap_when_no_vpc_has_a_cidr_or_the_kubernetes_pack_has_no_pod_cidr()
+ {
+    let no_pod_cidr = RELEASE_ON_AWS.replace("podCIDR: \\\"192.168.0.0/16\\\"\\n  ", "");
+    assert_ne!(no_pod_cidr, RELEASE_ON_AWS);
+    let cases: [(&str, &str, &str); 3] = [
+        (
+            LAB_VPCS_ROUTE,
+            r#"{"vpcs":[{"vpcId":"vpc-0"}]}"#,
+            "skipped cidr-overlap: the region us-east-2 lists no VPC with a CIDR",
+        ),
+        (
+            LAB_VPCS_ROUTE,
+            "",
+            "skipped cidr-overlap: Palette lists no VPC of us-east-2: api.sh: GET /v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc-1 answered HTTP 404",
+        ),
+        (
+            &profile_route("r-1"),
+            &no_pod_cidr,
+            "the Kubernetes pack of the release profile has no podCIDR",
+        ),
+    ];
+    for (route, answer, says) in cases {
+        let stage = route_bodies_stage(&route_packs(true), &[]);
+        if answer.is_empty() {
+            std::fs::remove_file(stage.path(&format!("routes/{}", Stage::route_key(route))))
+                .unwrap();
+        } else {
+            stage.route(route, answer);
+        }
+        let bodies = stage.path("bodies");
+        std::fs::create_dir_all(&bodies).unwrap();
+        std::fs::write(bodies.join("cidr-overlap.json"), "{}").unwrap();
+        let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+        assert_eq!(
+            o.status.code(),
+            Some(0),
+            "{says}: {steps}{}",
+            text(&o.stderr)
+        );
+        let skipped = steps
+            .lines()
+            .find(|l| l.starts_with("skipped cidr-overlap: "))
+            .unwrap_or_else(|| panic!("{steps}"));
+        assert!(skipped.contains(says), "{skipped}");
+        assert!(!steps.contains("cidr-overlap-body"), "{steps}");
+        assert!(!bodies.join("cidr-overlap.json").exists(), "{says}");
+        assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty(), "{says}");
+        passed(&steps, &["aws-clean-body", "validate-route"]);
+    }
 }
 
 #[test]

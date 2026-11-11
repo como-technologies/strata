@@ -32,6 +32,13 @@
 # Repo for the first pack in the layer addon whose cloud types lack aws.
 # PACK_CLOUD_SUPPORT=<pack>@<version> names that pack instead.
 #
+# One more case makes no profile (#816). cidr-overlap.json is the clean body with the first VPC
+# of the region that has a CIDR. It also holds the values of the Kubernetes pack of the release
+# profile, with that CIDR as the pod CIDR. The script sends it to the route with api.sh
+# post-status, and records the status and the code. The code of Palette refuses it with HTTP 500
+# and K8SCidrOverlap. cidr-overlap.json stays, as aws-clean.json does. The script skips the case
+# when Palette lists no VPC with a CIDR, or the Kubernetes pack has no podCIDR.
+#
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
 # that stays. Results go under runs/<UTC time>/route-bodies/, or OUT. Exit 0 only when no check
@@ -73,8 +80,8 @@ load_outputs
 export PALETTE_PROJECT_UID=$(out project_uid)
 R=$(out release_profile_uid)
 [ -n "$R" ] || die "no release profile; run just live-profiles first"
-profile_cloud=$("$live/api.sh" get "/v1/clusterprofiles/$R" | jq -r '.spec.published.cloudType // empty') ||
-  die "cannot read the release profile $R"
+"$live/api.sh" get "/v1/clusterprofiles/$R" > release.json || die "cannot read the release profile $R"
+profile_cloud=$(jq -r '.spec.published.cloudType // empty' release.json)
 [ "$profile_cloud" = aws ] || die "the release profile $R is of cloud type ${profile_cloud:-unknown}, not aws: apply with -var cloud=aws"
 public_uid=$(registry_uid "$public_repo")
 [ -n "$public_uid" ] || die "the key cannot see the registry $public_repo"
@@ -83,6 +90,47 @@ echo "== the clean body of a create on AWS (#408)" | tee -a steps.log
 create_body aws "$R" strata-route-aws "$bodies/aws-clean.json"
 check aws-clean-body 0 "#408: aws-clean.json names the account $account_name and the release profile $R" -- \
   jq -e --arg a "$A" --arg r "$R" '.spec.cloudAccountUid == $a and .spec.profiles[0].uid == $r' "$bodies/aws-clean.json"
+
+# refused STATUS CODE FILE: FILE, the output of api.sh post-status, holds HTTP STATUS and an
+# answer with the code CODE
+refused() {
+  [ "$(head -n 1 "$3")" = "HTTP $1" ] && tail -n +2 "$3" | jq -e --arg c "$2" '.code == $c' > /dev/null
+}
+
+# cidr_body: write BODIES/cidr-overlap.json, send it to the route, and record the answer. Skip the
+# case when Palette lists no VPC with a CIDR, or the Kubernetes pack has no podCIDR.
+cidr_body() {
+  local vpc cidr
+  echo "== cidr-overlap: the pod CIDR of the Kubernetes pack is the CIDR of the VPC (#816)" | tee -a steps.log
+  rm -f "$bodies/cidr-overlap.json"
+  if ! "$live/api.sh" get "/v1/clouds/aws/regions/$region/vpcs?cloudAccountUid=$A" > vpcs.json 2> vpcs.err; then
+    echo "skipped cidr-overlap: Palette lists no VPC of $region: $(head -n 1 vpcs.err)" | tee -a steps.log
+    return
+  fi
+  vpc=$(jq -r '[.vpcs[]? | select((.cidrBlock // "") != "")][0].vpcId // empty' vpcs.json)
+  [ -n "$vpc" ] || { echo "skipped cidr-overlap: the region $region lists no VPC with a CIDR" | tee -a steps.log; return; }
+  cidr=$(jq -r --arg v "$vpc" '[.vpcs[] | select(.vpcId == $v)][0].cidrBlock' vpcs.json)
+  if ! jq --arg v "$vpc" --arg c "$cidr" --slurpfile p release.json '
+      [$p[0].spec.published.packs[]? | select(.layer == "k8s" and ((.values // "") | test("podCIDR:")))][0] as $k
+      | if $k == null then error("the Kubernetes pack of the release profile has no podCIDR") else . end
+      | .spec.cloudConfig.vpcId = $v
+      | .spec.profiles[0].packValues = [{name: $k.name, tag: $k.tag,
+          values: ($k.values | sub("podCIDR:[^\n]*"; "podCIDR: \"\($c)\""))}]' \
+      "$bodies/aws-clean.json" > "$bodies/cidr-overlap.json" 2> cidr-overlap.err; then
+    rm -f "$bodies/cidr-overlap.json"
+    echo "skipped cidr-overlap: $(head -n 1 cidr-overlap.err)" | tee -a steps.log
+    return
+  fi
+  check cidr-overlap-body 0 "#816: cidr-overlap.json names the VPC $vpc, and its Kubernetes pack has the pod CIDR $cidr" -- \
+    jq -e --arg v "$vpc" --arg c "$cidr" \
+      '.spec.cloudConfig.vpcId == $v and (.spec.profiles[0].packValues[0].values | contains("podCIDR: \"\($c)\""))' \
+      "$bodies/cidr-overlap.json"
+  check cidr-overlap-status 0 "#816: the route answers the body of cidr-overlap; the output holds the status and the answer" -- \
+    "$live/api.sh" post-status /v1/spectroclusters/aws/validate "$bodies/cidr-overlap.json"
+  check cidr-overlap-code 0 "#816: the route refuses the body with HTTP 500 and K8SCidrOverlap" -- \
+    refused 500 K8SCidrOverlap cidr-overlap-status.out
+}
+cidr_body
 
 # case_body CASE NAME PACK VERSION [CLOUD]: make and publish the add-on profile NAME with PACK at
 # VERSION from the registry of the lab, of the cloud type CLOUD or all. Then write BODIES/CASE.json:

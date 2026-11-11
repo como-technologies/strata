@@ -15,12 +15,12 @@ rules:
       name, the credit, the profile packs and their variables, and the machine resources against
       the needs of the packs. For GKE it checks the pool size. Only the console calls it; the
       provider and palette-cli do not, and the create path of the API runs the name and the limit
-      checks alone. A 4xx is one refusal, with its code; a 200 lists the errors of each pool and
-      each profile. On EKS the route reports no CPU floor for a managed node group. One `t3.xlarge`
-      worker got `200` with no error; the aws route answers `MachinePoolWithMinCpuRequired` for the
-      same pool. No run shows whether the EKS create fails later. `worker-cpu-floor`, `pack-dependency`,
-      and `ecr-oci-images` call the same route and read one class of its errors each; this rule
-      reads them all.
+      checks alone. A 4xx is one refusal, with its code, and so is a 500 with the code of a refusal
+      of the route; a 200 lists the errors of each pool and each profile. On EKS the route reports
+      no CPU floor for a managed node group. One `t3.xlarge` worker got `200` with no error; the
+      aws route answers `MachinePoolWithMinCpuRequired` for the same pool. No run shows whether the
+      EKS create fails later. `worker-cpu-floor`, `pack-dependency`, and `ecr-oci-images` call the
+      same route and read one class of its errors each; this rule reads them all.
     check:
       kind: palette
       method: POST

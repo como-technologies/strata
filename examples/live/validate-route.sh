@@ -11,14 +11,16 @@
 # route must take each one. A case makes its fault with one jq edit of the body of its engine. A
 # case whose body is not there is skipped, and steps.log names it.
 #
-# Five cases need a body of their own, BODIES/<case>.json, because the fault is in a profile:
+# Six cases need a body of their own, BODIES/<case>.json, because the fault is in a profile or
+# needs a VPC of the lab:
 #   edge-two-node-pxk      a two-node cluster whose Kubernetes pack is not K3s
 #   pack-state-disabled    a profile with a disabled pack
 #   pack-state-deleted     a profile with a deleted pack
 #   profile-cloud-mismatch a profile of another cloud type
 #   pack-cloud-support     a pack version that does not list the cloud type
-# Each of the last four runs on AWS, with the engine of its body. route-bodies.sh writes aws-clean.json,
-# and the body of each of the four whose profile Palette takes.
+#   cidr-overlap           a VPC, and a pod CIDR of the Kubernetes pack that is the CIDR of the VPC
+# Each of the last five runs on AWS, with the engine of its body. route-bodies.sh writes
+# aws-clean.json and cidr-overlap.json, and the body of each of the four whose profile Palette takes.
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
@@ -127,6 +129,10 @@ fault pack-state-deleted aws 'deleted' -
 # It takes a pack version that does not list the cloud type.
 fault profile-cloud-mismatch aws 'ClusterProfilesNotSupported' -
 takes pack-cloud-support aws
+# cidr-overlap: the pod CIDR of the Kubernetes pack overlaps the CIDR of the VPC of the body. The
+# code of Palette refuses it with HTTP 500 and K8SCidrOverlap, and palette-validate reads it as a
+# refusal (#816).
+fault cidr-overlap aws 'K8SCidrOverlap' -
 # vsphere-static-ip-pool: a static network with no pool, and a DHCP cluster with a static network
 network='(.spec.cloudConfig.placement.network, (.spec.machinepoolconfig[].cloudConfig.placements[]?.network))'
 fault vsphere-static-ip-pool-empty vsphere 'ParentPoolUid' \
