@@ -2370,10 +2370,6 @@ fn release() -> tempfile::TempDir {
     dir
 }
 
-/// The variables that the installer reads a token from. A test of the installer removes each one,
-/// so that no request gets a token of the machine.
-const INSTALLER_TOKENS: [&str; 3] = ["STRATA_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"];
-
 /// A `bash` with the environment that each install in the release `d` of [`release`] gets. The
 /// `PATH` has only the folders `bin` and `tools` of `d`, and `FAKE_REL` names `d`. The command
 /// removes `STRATA_QUIET` and each variable of [`INSTALLER_TOKENS`].

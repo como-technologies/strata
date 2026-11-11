@@ -956,6 +956,10 @@ pub fn gitlab_drop_in_variable<'a>(gitlab: &'a serde_yaml::Value, name: &str) ->
         .unwrap_or_else(|| panic!("{GITLAB_DROP_IN} gives {name} no text value"))
 }
 
+/// The variables that `scripts/ci/install-strata.sh` reads a token from. A test of the installer
+/// removes each one, so that no request gets a token of the machine.
+pub const INSTALLER_TOKENS: [&str; 3] = ["STRATA_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"];
+
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
 /// or one of `joins`. `--thresh` is not in `--threshold`, and `$NAME` is not in `$NAME_2`,
 /// although the longer text contains the shorter one.
