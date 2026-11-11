@@ -178,8 +178,8 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
 
 /// Issue #616. A field test recorded a develop build, such as `1.2.0.develop`, for `@latest`, with
 /// exit 0. Palette reads it as `1.2.0`. Strata puts it below `1.2.0`, and `@latest` skips it.
-/// Issue #714: `1.4.develop` holds no three numbers. Strata put it above each version, and now
-/// below each version.
+/// Issue #714: `1.4.develop` holds no three numbers. Strata put it above each version. Now it is a
+/// pre-release of `1.4.0`, above `1.3.0`, and `@latest` skips it because it is a pre-release.
 #[test]
 fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_text() {
     let dir = tempfile::tempdir().unwrap();
