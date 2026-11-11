@@ -13237,8 +13237,8 @@ fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git
 // ---- export.sh -------------------------------------------------------------------------------------
 
 /// A stage of `export.sh` 4 for the version `aws-stack@1.2.0`, whose download holds `packs`. The
-/// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, a manifest
-/// pack, and the chart `nginx` of a Helm registry at `15.0.0`.
+/// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, and a manifest
+/// pack. It also names the chart `nginx` of a Helm registry at `15.0.0`.
 fn download_stage(packs: &[DownloadPack]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILES", "aws-stack@1.2.0");
@@ -13308,9 +13308,9 @@ fn seen_with(steps: &str, id: &str, code: i32) {
 
 /// Stage 4 records the file of each chart of a Helm registry (#817, #828). A chart has one top
 /// folder and no `pack.json`, and its `Chart.yaml` names the version of its entry. A file that is
-/// no archive, such as the error answer of the host of the chart, gets its size and its start on
-/// one line. The check exits 1 for a chart that names another version, a chart with `pack.json`,
-/// a file that is no archive, and a download with no chart.
+/// no archive gets its size and its start on one line, such as the error answer of the host. The
+/// check exits 1 for a chart that names another version, and for a chart with `pack.json`. It
+/// also exits 1 for a file that is no archive, and for a download with no chart.
 #[test]
 fn export_sh_stage_4_records_the_file_of_each_chart_of_a_helm_registry() {
     let stage = download_stage(&downloaded("1.36.2"));

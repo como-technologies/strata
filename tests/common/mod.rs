@@ -1596,8 +1596,8 @@ pub fn build_archive(p: &strata::snapshot::Pack, files: &BuildFiles) -> Option<V
 }
 
 /// `api`, which also serves the download of the profile version of each of `records`. The file
-/// of each pack is the one that `file` gives, such as an archive from [`build_archive`] or an
-/// error answer of the host of a chart. A pack for which `file` gives None has no file in the
+/// of each pack is the one that `file` gives. An example is an archive from [`build_archive`], or
+/// an error answer of the host of a chart. A pack for which `file` gives None has no file in the
 /// download, as a pack of a private registry.
 pub fn serve_pack_files(
     api: strata::api::MemoryApi,

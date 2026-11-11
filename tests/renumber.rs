@@ -768,7 +768,7 @@ fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_r
     assert_eq!(p.status, PairStatus::Different);
     assert_eq!(c.exit_code(), 1);
     let reason = "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
-        <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3Z...";
+        <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…";
     assert_eq!(
         p.archives_not_readable,
         [ArchiveNotReadable {

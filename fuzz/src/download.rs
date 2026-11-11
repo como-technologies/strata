@@ -13,7 +13,7 @@ use crate::support::{UID, answer};
 const DIGEST_LENGTH: usize = 71;
 
 /// The most characters of the reason of a pack file that is no archive. The reason holds the size
-/// of the file, a few words, and 120 characters of the file or of the error, with `...`.
+/// of the file, a few words, and 120 characters at most of the file or of the error.
 const REASON_LENGTH: usize = 160;
 
 /// The download that a Palette gives when it answers the download of the profile with `bytes`.

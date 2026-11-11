@@ -131,6 +131,7 @@ strata found:
 | --- | --- |
 | `archive: same files` | The two archives hold the same files. `pack.json` differs only by its `version`, or `Chart.yaml` only by its line `version`. `pairs[].archivesCompared` names the pack. |
 | `archive: other files` | Another file differs. The pair fails, and a reason names the file. `pairs[].archivesChanged` names the pack and each file. |
+| `archive: not readable` | The file of the pack in the download of a side is no archive. The pair fails, and a reason names the version and what the file holds. `pairs[].archivesNotReadable` names the pack, the version, and the reason. |
 | `archive: not compared` | Palette serves no archive of the pack, or a record is not a published version. `pairs[].archivesNotCompared` names the pack. |
 
 A new build of a pack can change a file that the profile does not show, such
@@ -144,6 +145,30 @@ and only the archive shows the change:
 ```text
 {{#include ../output/renumber-archive-json.txt}}
 ```
+
+The download can hold a file that is no archive in place of a chart of a Helm
+registry. When the host of the chart refuses the file, Palette puts the error
+answer of the host there. The route answers HTTP 200: see
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version).
+Strata cannot show that the two builds of such a pack hold the same files. So
+the renumber does not pass, and a reason names the version and what the file
+holds:
+
+```text
+{{#include ../output/renumber-not-readable.txt}}
+```
+
+The reason gives the size of the file, and the start of its text on one line
+when the file is text. Else it gives the error of the read.
+`pairs[].archivesNotReadable` names each side whose file is no archive:
+
+```text
+{{#include ../output/renumber-not-readable-json.txt}}
+```
+
+Strata reads the other packs of the download as before. A pack whose version
+stays has no compare, so such a file does not change its pair. Get the chart
+from another registry, or check its archive in your pipeline.
 
 Strata reads the archives from the download of each profile version: see
 [The download of a version](../internals/palette/profiles.md#the-download-of-a-version).

@@ -1,3 +1,3 @@
 $ strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --json | jq -c '.pairs[0].archivesNotReadable[]'
-{"key":"addon/nginx","version":"25.1.5","reason":"263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3Z..."}
-{"key":"addon/nginx","version":"25.1.6","reason":"263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3Z..."}
+{"key":"addon/nginx","version":"25.1.5","reason":"263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…"}
+{"key":"addon/nginx","version":"25.1.6","reason":"263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…"}
