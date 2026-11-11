@@ -1542,3 +1542,168 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
         );
     }
 }
+
+// ---- the knurl adapter (#705) -------------------------------------------------------------------
+
+/// The adapter is a package of its own, so no check of `ci.yml` builds it. Its workflow runs
+/// `just adapter-test` on a schedule, on demand, and on a change of strata or of the adapter.
+#[test]
+fn the_adapter_workflow_runs_the_adapter_test_on_a_schedule_and_on_a_change_of_strata_or_the_adapter()
+ {
+    let doc = workflow("adapter.yml");
+    let on = doc["on"].as_mapping().expect("the workflow has triggers");
+    assert!(
+        doc["on"]["schedule"].is_sequence() && on.contains_key("workflow_dispatch"),
+        "{on:?}"
+    );
+    let branches: Vec<&str> = doc["on"]["push"]["branches"]
+        .as_sequence()
+        .expect("a push names its branches")
+        .iter()
+        .filter_map(|b| b.as_str())
+        .collect();
+    assert_eq!(branches, ["main"]);
+    for trigger in ["push", "pull_request"] {
+        let paths: Vec<&str> = doc["on"][trigger]["paths"]
+            .as_sequence()
+            .unwrap_or_else(|| panic!("{trigger} has paths"))
+            .iter()
+            .filter_map(|p| p.as_str())
+            .collect();
+        assert_eq!(
+            paths,
+            [
+                "src/**",
+                "crates/strata-knurl/**",
+                "Cargo.toml",
+                ".github/workflows/adapter.yml"
+            ],
+            "{trigger}"
+        );
+    }
+    assert_eq!(
+        runs_of("adapter.yml", "adapter").last().unwrap(),
+        "just adapter-test"
+    );
+}
+
+/// No release carries the adapter, so a failure of its job does not block a merge. A merge and a
+/// release need the jobs of `checks.yml`, which `ci.yml` and `release.yml` call. None of the three
+/// runs the adapter or calls its workflow, and neither do the recipes that the checks run.
+#[test]
+fn no_check_that_a_merge_or_a_release_needs_runs_the_adapter() {
+    for file in ["checks.yml", "ci.yml", "release.yml"] {
+        let text = workflow_text(file);
+        assert!(
+            !text.contains("adapter"),
+            "{file} runs the adapter or calls its workflow"
+        );
+    }
+    for name in ["lint", "test", "library-example", "examples"] {
+        assert!(
+            !recipe(name)
+                .iter()
+                .any(|line| line.contains("strata-knurl")),
+            "the recipe {name} builds the adapter"
+        );
+    }
+}
+
+/// The build of the adapter holds the code of knurl, which is private. A pull request from a fork
+/// can read a cache of `main`, so the job keeps no cache. Such a pull request gets no secret, so
+/// the job does not run for it.
+#[test]
+fn the_adapter_job_keeps_no_cache_and_skips_a_pull_request_from_a_fork() {
+    let doc = workflow("adapter.yml");
+    let uses: Vec<&str> = steps(&doc).filter_map(|s| s["uses"].as_str()).collect();
+    assert!(
+        !uses
+            .iter()
+            .any(|u| u.starts_with("Swatinem/rust-cache@") || u.starts_with("actions/cache")),
+        "{uses:?}"
+    );
+    assert_eq!(
+        doc["jobs"]["adapter"]["if"].as_str(),
+        Some(
+            "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository"
+        )
+    );
+}
+
+/// The step writes the deploy key to a file that only the job reads. It trusts only the host keys
+/// that GitHub publishes, and gives git the command of ssh for the fetch of Cargo. With no
+/// secret, the step stops with a message, and it writes and calls nothing.
+#[test]
+fn the_key_step_gives_git_the_deploy_key_of_knurl_and_stops_when_the_secret_is_empty() {
+    let gh = "#!/usr/bin/env bash\necho \"gh $*\" >> \"$FAKE_LOG\"\necho 'github.com ssh-ed25519 AAAA'\n";
+    let temp = tempfile::tempdir().unwrap();
+    let temp_path = temp.path().display().to_string();
+    let path = format!("bin:{}", std::env::var("PATH").unwrap());
+    let give = |key: &str| {
+        let env = [
+            ("KNURL_DEPLOY_KEY", key),
+            ("RUNNER_TEMP", temp_path.as_str()),
+            ("GITHUB_ENV", "env.txt"),
+            ("PATH", path.as_str()),
+        ];
+        run_step_with(
+            "adapter.yml",
+            "give git the deploy key of knurl",
+            &env,
+            &[("bin/gh", gh)],
+        )
+    };
+    let dir = temp.path().join("knurl-ssh");
+
+    let none = give("");
+    assert_eq!(none.output.status.code(), Some(1));
+    assert!(
+        text(&none.output.stdout).contains(
+            "::error::the secret KNURL_DEPLOY_KEY is empty, so the job cannot read knurl"
+        ),
+        "{}",
+        text(&none.output.stdout)
+    );
+    assert!(none.calls().is_empty(), "{:#?}", none.calls());
+    assert!(!dir.exists() && !none.dir.path().join("env.txt").exists());
+
+    let run = give("the-key");
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [r#"gh api meta --jq .ssh_keys[] | "github.com " + ."#]
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("key")).unwrap(),
+        "the-key\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("known_hosts")).unwrap(),
+        "github.com ssh-ed25519 AAAA\n"
+    );
+    let d = dir.display();
+    assert_eq!(
+        std::fs::read_to_string(run.dir.path().join("env.txt")).unwrap(),
+        format!(
+            "GIT_SSH_COMMAND=ssh -i {d}/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile={d}/known_hosts\n"
+        )
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dir.join("key"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "only the job reads the key");
+    }
+}
+
+/// The page of the adapter names the workflow and the secret that the job reads.
+#[test]
+fn the_page_of_the_adapter_names_its_workflow_and_the_secret_of_the_key() {
+    let page = repo_file("docs/src/automation/knurl.md");
+    for name in ["`.github/workflows/adapter.yml`", "`KNURL_DEPLOY_KEY`"] {
+        assert!(page.contains(name), "the page does not name {name}");
+    }
+}

@@ -1,0 +1,58 @@
+name: knurl adapter
+
+# Builds and tests the knurl adapter of crates/strata-knurl/ on the strata of the commit, with
+# `just adapter-test`. The adapter is a package of its own, so the checks of ci.yml do not build
+# it. This job is not a check that a merge needs, and no release carries the adapter. So a failure
+# does not block a merge: it tells that the adapter needs a change. See "The job of CI" in
+# docs/src/automation/knurl.md.
+#
+# A push or a pull request finds a change of strata. The schedule finds a change of the branch of
+# knurl, and a key that cannot read knurl.
+on:
+  schedule:
+    - cron: "43 4 * * 1"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [src/**, crates/strata-knurl/**, Cargo.toml, .github/workflows/adapter.yml]
+  pull_request:
+    paths: [src/**, crates/strata-knurl/**, Cargo.toml, .github/workflows/adapter.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  adapter:
+    name: the knurl adapter
+    # A pull request from a fork gets no secret, so the job cannot read knurl there.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # No cache: the build holds the code of knurl, which is private, and a pull request from a
+      # fork can read a cache of main.
+      - uses: extractions/setup-just@v4
+      # Cargo fetches knurl with git over SSH. The deploy key reads knurl and no other repository.
+      # Only the job can read the file of the key. ssh trusts only the host keys that GitHub
+      # publishes for github.com.
+      - name: give git the deploy key of knurl
+        env:
+          KNURL_DEPLOY_KEY: ${{ secrets.KNURL_DEPLOY_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$KNURL_DEPLOY_KEY" ]; then
+            echo "::error::the secret KNURL_DEPLOY_KEY is empty, so the job cannot read knurl"
+            exit 1
+          fi
+          umask 077
+          dir="$RUNNER_TEMP/knurl-ssh"
+          mkdir -p "$dir"
+          printf '%s\n' "$KNURL_DEPLOY_KEY" > "$dir/key"
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > "$dir/known_hosts"
+          echo "GIT_SSH_COMMAND=ssh -i $dir/key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$dir/known_hosts" >> "$GITHUB_ENV"
+      - run: just adapter-test

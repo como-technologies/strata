@@ -208,3 +208,28 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path crates/strata-knurl
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-core.path='$K/knurl-core'" \
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-ports.path='$K/knurl-ports'"
 ```
+
+### The job of CI
+
+`.github/workflows/adapter.yml` runs `just adapter-test` on the strata of the
+commit, in the job `the knurl adapter`. It runs each Monday and on demand. It
+also runs on a push to `main` or a pull request that changes `src/`,
+`crates/strata-knurl/`, or `Cargo.toml`.
+
+The job reads knurl with a deploy key of knurl that can only read. The secret
+`KNURL_DEPLOY_KEY` of strata holds its private half. A pull request from a fork
+gets no secret, so the job does not run for it. The job keeps no cache. The
+build holds the code of knurl, and a pull request from a fork can read a cache
+of `main`.
+
+A failure of the job does not block a merge. No merge needs the job, and no
+release carries the adapter. A failure tells that the adapter does not build,
+or does not keep the rules of knurl, on the strata of that commit. The adapter
+has no lock file in the repository. So each run takes the newest commit of the
+branch of knurl that `crates/strata-knurl/Cargo.toml` names.
+
+| What fails | What it means |
+| --- | --- |
+| The step `give git the deploy key of knurl` | The secret `KNURL_DEPLOY_KEY` is empty. |
+| Cargo cannot fetch knurl | The key cannot read knurl, or knurl has no such branch. When knurl merges the branch, name `main` or a tag of knurl in `crates/strata-knurl/Cargo.toml`. |
+| The format, clippy, or a test | A change of strata or of knurl breaks the adapter. Change `crates/strata-knurl/` in the same pull request, or in the next one. |

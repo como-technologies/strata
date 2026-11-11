@@ -644,9 +644,9 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-CI does not run `just adapter-test`. The adapter needs knurl, a private
-repository, and CI has no key for it: see
-[The knurl adapter](../automation/knurl.md#test-it).
+The checks do not run `just adapter-test`. The workflow `knurl adapter` runs it,
+and a failure of it does not block a merge: see
+[The job of CI](../automation/knurl.md#the-job-of-ci).
 
 `ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
 it is the one check run that the verify reads (see
