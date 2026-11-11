@@ -19,7 +19,7 @@ use super::notes::{
 };
 use super::report::markdown_report;
 use super::same_release::{
-    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word, renumber_lines,
 };
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
@@ -332,6 +332,10 @@ impl Renderer for MarkdownRenderer {
         o.push_str("| status | from | to | detail |\n|---|---|---|---|\n");
         for p in &c.pairs {
             let mut detail = markdown_cell(&pair_detail(p));
+            for line in renumber_lines(p) {
+                detail.push_str("<br>");
+                detail.push_str(&markdown_cell(&line));
+            }
             for r in &p.reasons {
                 detail.push_str("<br>");
                 detail.push_str(&markdown_cell(r));

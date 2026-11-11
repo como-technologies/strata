@@ -252,6 +252,7 @@ The `palette` line is the answer of Palette. Your team decides what to do with i
 | What happens | What you run | Read |
 | --- | --- | --- |
 | You copy the release to `prod`. | `strata same-release releases/dev.json releases/prod.json` | [Promote a release to another project](./use-cases/promote.md) |
+| Your pipeline publishes the same content under its final numbers. | `strata same-release --allow renumber releases/rc.json releases/final.json` | [A release gets new version numbers](./use-cases/renumber.md) |
 | You write a new cluster. | `strata preflight cluster.json --cloud eks` | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
 | A pack has a security fault. | `strata list --pack <name>`, then `strata consumers <name>@<version>` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
 | You delete an old version. | `strata consumers <name>@<version>` | [Retire a version](./use-cases/retire.md) |

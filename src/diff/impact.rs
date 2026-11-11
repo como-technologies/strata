@@ -14,8 +14,9 @@ use crate::model::layer::Layer;
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ImpactLevel {
-    /// No change, a renamed tag of the same build, or an OS, Kubernetes, or kernel pack that moved
-    /// to another pack reference at the same version.
+    /// No change, a renamed tag of the same build, an OS, Kubernetes, or kernel pack that moved to
+    /// another pack reference at the same version, or a pack whose version alone changed and kept
+    /// its numbers.
     #[default]
     None,
     /// Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack
@@ -44,7 +45,7 @@ impl Described for ImpactLevel {
     fn describe(self) -> &'static str {
         match self {
             Self::None => {
-                "No change, only the tag name of a pack changed for the same build, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version."
+                "No change, only the tag name of a pack changed for the same build, an OS, Kubernetes, or kernel pack moved to another pack reference at the same version, or only the version of a pack changed and it kept its numbers: renumber only."
             }
             Self::Sync => {
                 "Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version and its digest changed. Applied on the next profile sync."
@@ -211,6 +212,18 @@ pub fn impact(layer: Layer, flags: Flags) -> Impact {
     Impact {
         level: other.level,
         text: text.to_string(),
+    }
+}
+
+/// The impact of a renumber: `none`, with `renumber only`, on each layer.
+///
+/// The version of the pack changed and kept its numbers, and its values, manifests, params, and
+/// images stay: see [`crate::diff::PackDiff::renumbered`]. So the rules of the layers do not
+/// apply, also on the OS and the Kubernetes layers.
+pub(crate) fn renumber_impact() -> Impact {
+    Impact {
+        level: ImpactLevel::None,
+        text: "none (renumber only)".to_string(),
     }
 }
 

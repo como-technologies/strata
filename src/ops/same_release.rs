@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
-use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
+use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Renumber, Status};
 use crate::render::changes::{VALUES_UNPARSED, manifest_change};
 use crate::render::notes::no_upstream_digest;
 use crate::snapshot::{Pack, Snapshot, Tool};
@@ -44,6 +44,18 @@ impl Described for Policy {
     }
 }
 
+/// What `same-release` accepts beside equal roots: the policy, and each value of `--allow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SameReleaseOptions {
+    /// Equal roots only, or a registry move too: `--allow registry-move`.
+    pub policy: Policy,
+    /// Accept a pack with no upstream digest: `--allow no-digest`. Without it, such a pair is
+    /// `unknown-upstream`.
+    pub allow_no_digest: bool,
+    /// Accept a pack whose version alone changed: `--allow renumber`. See [`Renumber`].
+    pub allow_renumber: bool,
+}
+
 /// The outcome for one consecutive pair.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -55,6 +67,9 @@ pub enum PairStatus {
     SameContent,
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
+    /// The roots differ only because the version of packs changed, with the same values,
+    /// manifests, params, and images: see [`Renumber`]. `--allow renumber` accepts it.
+    Renumber,
     /// Not the same release; `reasons` says why.
     Different,
     /// The roots would pass, and a pack on either side has no upstream digest, so an equal root
@@ -73,6 +88,7 @@ impl_closed_set!(PairStatus {
     Identical => "identical",
     SameContent => "same-content",
     RegistryMove => "registry-move",
+    Renumber => "renumber",
     Different => "different",
     UnknownUpstream => "unknown-upstream",
 });
@@ -88,6 +104,9 @@ impl Described for PairStatus {
             }
             Self::RegistryMove => {
                 "The roots differ only because a pack moved to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
+            }
+            Self::Renumber => {
+                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this. Strata does not compare the archives: archivesNotCompared names each pack whose archive the pipeline must check."
             }
             Self::Different => {
                 "This is not the same release. The field reasons lists each difference."
@@ -136,6 +155,16 @@ pub struct Pair {
     /// Packs pinned under another tag name for the same build, with nothing else changed.
     #[serde(default)]
     pub packs_retagged: usize,
+    /// With `--allow renumber`: each pack whose version alone changed, in pack order. The values,
+    /// the manifests, the params, and the images stay: see [`Renumber`]. A pair that fails for
+    /// another reason lists them too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub renumbers: Vec<Renumber>,
+    /// The key of each pack of `renumbers` whose archive can differ: its digest changed, or Palette
+    /// gives none. Strata does not compare the files of the two archives, so the pipeline must
+    /// check them. A manifest pack has no archive.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives_not_compared: Vec<String>,
     /// Why the pair is not the same release, one sentence per difference; empty when it passed.
     /// Under the exact policy a registry move is listed too, so the reader can decide to allow it.
     pub reasons: Vec<String>,
@@ -202,6 +231,9 @@ pub struct Chain {
     /// True when a pack with no upstream digest is accepted: `--allow no-digest`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub allow_no_digest: bool,
+    /// True when a pack whose version alone changed is accepted: `--allow renumber`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub allow_renumber: bool,
     /// True when every pair passed: the records are one release.
     pub same: bool,
     /// The counts.
@@ -260,18 +292,22 @@ fn identity_detail(x: &Pack, y: &Pack) -> String {
 /// What the difference between two records says about their release.
 #[derive(Default)]
 struct PairReasons {
-    /// The differences that the policy does not accept.
+    /// The differences that the options do not accept.
     reasons: Vec<String>,
     /// The packs that a clean registry re-pin moved.
     repinned: usize,
     /// The packs pinned under another tag name with nothing else changed.
     retagged: usize,
+    /// The packs whose version alone changed, when `--allow renumber` accepts them.
+    renumbers: Vec<Renumber>,
+    /// The key of each accepted renumber whose archive can differ.
+    archives_not_compared: Vec<String>,
 }
 
 impl PairReasons {
     /// Add the reasons and the counts for the changed pack `pd`. `x` and `y` are the pack in the
     /// first record and in the second record.
-    fn changed_pack(&mut self, pd: &PackDiff, x: &Pack, y: &Pack, policy: Policy) {
+    fn changed_pack(&mut self, pd: &PackDiff, x: &Pack, y: &Pack, options: SameReleaseOptions) {
         // a packUid that Palette mints is not part of the release
         let minted = diff::pack::minted_uid_pair(x, y);
         // The type follows the registry (spectro, helm, oci), so a move may change it; a
@@ -290,12 +326,14 @@ impl PairReasons {
                 if !pd.authored {
                     self.repinned += 1;
                 }
-                if policy == Policy::Exact {
+                if options.policy == Policy::Exact {
                     self.reasons.push(format!(
                         "pack {} moved registry {} -> {}",
                         pd.key, x.registry_uid, y.registry_uid
                     ));
                 }
+            } else if options.allow_renumber && diff::renumber::renumbered(x, y) {
+                self.renumbered(pd, x, y);
             } else {
                 self.reasons.push(format!(
                     "pack {} {}: {}",
@@ -323,12 +361,25 @@ impl PairReasons {
             ));
         }
     }
+
+    /// Accept the renumber of the pack `pd`, from `x` in the first record to `y` in the second.
+    /// The versions can change their numbers: the user asks for the renumber.
+    ///
+    /// The new build of a pack has a new digest, because its `pack.json` holds the new version.
+    /// The digest alone cannot show that only that file changed, and strata reads no archive. So a
+    /// renumber whose digest changed, or that has no digest, keeps the archive to the pipeline.
+    fn renumbered(&mut self, pd: &PackDiff, x: &Pack, y: &Pack) {
+        self.renumbers.push(Renumber::of(x, y));
+        if pd.upstream || pd.upstream_unknown {
+            self.archives_not_compared.push(pd.key.clone());
+        }
+    }
 }
 
-/// The differences between the records `a` and `b` that `policy` does not accept. It also counts
+/// The differences between the records `a` and `b` that `options` does not accept. It also counts
 /// the clean registry re-pins and the packs pinned under another tag name with nothing else
-/// changed. `d` is their comparison.
-fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> PairReasons {
+/// changed, and it lists each accepted renumber. `d` is their comparison.
+fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, options: SameReleaseOptions) -> PairReasons {
     let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
     let mut out = PairReasons::default();
     if d.variables.changed {
@@ -340,7 +391,7 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> PairRea
             Status::Added => out.reasons.push(format!("pack {} added", pd.key)),
             Status::Removed => out.reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
-                out.changed_pack(pd, pa[pd.key.as_str()], pb[pd.key.as_str()], policy);
+                out.changed_pack(pd, pa[pd.key.as_str()], pb[pd.key.as_str()], options);
             }
         }
     }
@@ -349,18 +400,21 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> PairRea
     }
     out.reasons
         .extend(d.image_ids_changed.iter().map(ImageIdChange::sentence));
-    if out.reasons.is_empty() && !d.same_content && policy == Policy::Exact {
+    if out.reasons.is_empty()
+        && out.renumbers.is_empty()
+        && !d.same_content
+        && options.policy == Policy::Exact
+    {
         out.reasons.push("roots differ".to_string());
     }
     out
 }
 
-/// The verdict on two consecutive records `(label, record)`, under `policy`.
+/// The verdict on two consecutive records `(label, record)`, under `options`.
 fn build_pair(
     (la, a): &(String, Snapshot),
     (lb, b): &(String, Snapshot),
-    policy: Policy,
-    allow_no_digest: bool,
+    options: SameReleaseOptions,
     generated_at: &str,
 ) -> Pair {
     let d = diff::compute(a, b, generated_at, None);
@@ -368,7 +422,9 @@ fn build_pair(
         mut reasons,
         repinned: packs_repinned,
         retagged: packs_retagged,
-    } = pair_reasons(&d, a, b, policy);
+        renumbers,
+        archives_not_compared,
+    } = pair_reasons(&d, a, b, options);
     // The root does not cover the annotations, so two records with one root can boot their nodes
     // from two machine images.
     let mut status = if !d.image_ids_changed.is_empty() {
@@ -377,12 +433,14 @@ fn build_pair(
         PairStatus::Identical
     } else if d.same_content {
         PairStatus::SameContent
-    } else if policy == Policy::RegistryMove && reasons.is_empty() {
+    } else if reasons.is_empty() && !renumbers.is_empty() {
+        PairStatus::Renumber
+    } else if options.policy == Policy::RegistryMove && reasons.is_empty() {
         PairStatus::RegistryMove
     } else {
         PairStatus::Different
     };
-    if !d.upstream_unknown.is_empty() && !allow_no_digest {
+    if !d.upstream_unknown.is_empty() && !options.allow_no_digest {
         reasons.push(format!(
             "{}, so an equal root does not show an equal archive; --allow no-digest accepts it",
             no_upstream_digest(&d.upstream_unknown)
@@ -399,6 +457,8 @@ fn build_pair(
         root_b: b.root.clone(),
         packs_repinned,
         packs_retagged,
+        renumbers,
+        archives_not_compared,
         reasons,
         minted_uid_only: d
             .packs
@@ -423,23 +483,27 @@ fn build_pair(
 /// Each of `records` is the path of a record, as the report names it, and the record itself.
 /// `generated_at` is the time of the report, in RFC 3339.
 pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at: &str) -> Chain {
-    same_release_with(records, policy, false, generated_at)
+    let options = SameReleaseOptions {
+        policy,
+        ..SameReleaseOptions::default()
+    };
+    same_release_with(records, options, generated_at)
 }
 
-/// [`same_release`] with the choice for a pack that has no upstream digest.
+/// [`same_release`] with each value of `--allow`: see [`SameReleaseOptions`].
 ///
 /// With `allow_no_digest`, a pair that holds a pack with no upstream digest can pass. Without it,
 /// such a pair is `unknown-upstream`. A move from a registry that gives a digest to one that gives
-/// none loses what the root can show. `generated_at` is the time of the report, in RFC 3339.
+/// none loses what the root can show. With `allow_renumber`, a pair whose packs differ only by
+/// their versions is `renumber`. `generated_at` is the time of the report, in RFC 3339.
 pub fn same_release_with(
     records: &[(String, Snapshot)],
-    policy: Policy,
-    allow_no_digest: bool,
+    options: SameReleaseOptions,
     generated_at: &str,
 ) -> Chain {
     let pairs: Vec<Pair> = records
         .windows(2)
-        .map(|w| build_pair(&w[0], &w[1], policy, allow_no_digest, generated_at))
+        .map(|w| build_pair(&w[0], &w[1], options, generated_at))
         .collect();
     let passed = pairs.iter().filter(|p| p.status.passed()).count();
     Chain {
@@ -450,8 +514,9 @@ pub fn same_release_with(
             status: legend::<PairStatus>(),
             policy: legend::<Policy>(),
         },
-        policy,
-        allow_no_digest,
+        policy: options.policy,
+        allow_no_digest: options.allow_no_digest,
+        allow_renumber: options.allow_renumber,
         same: passed == pairs.len(),
         summary: ChainCounts {
             pairs: pairs.len(),

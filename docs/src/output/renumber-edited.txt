@@ -1,0 +1,6 @@
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.1
+DIFFERENT      aws-stack@1.2.0-rc.1 -> aws-stack@1.2.1   root 5608b33990f7 -> 78a86f401545
+               kubernetes  1.36.2-rc.1 -> 1.36.2 (pre-release to final; archive: not compared)
+               pack csi/csi-aws-ebs IDENTITY: version 1.65.0-rc.1 -> 1.65.0
+               pack csi/csi-aws-ebs AUTHORED: charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy
+NOT THE SAME RELEASE: 1 of 1 pair failed

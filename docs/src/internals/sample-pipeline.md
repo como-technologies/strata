@@ -16,18 +16,18 @@ difference, and `2` for no answer. The pipeline decides what to do next.
 | A publish | `strata snapshot <name>@<version> -o <record>` | What did the team publish? The record holds the content and its root. | [A publish fans out to what pins it](../use-cases/publish-fan-out.md) |
 | A merge request | `pr-comment.sh <record> <candidate>` | What does the change do to the clusters? | [Pull request comments](../automation/pr-comments.md) |
 | A promotion | `strata same-release <record> <record>` | Do the two projects hold one release? | [Promote a release to another project](../use-cases/promote.md) |
-| A renumber | `strata same-release <record> <record>` | Is the content the same when only the version numbers change? | [A pre-release and its final version](#a-pre-release-and-its-final-version) |
+| A renumber | `strata same-release --allow renumber <record> <record>` | Is the content the same when only the version numbers change? | [A release gets new version numbers](../use-cases/renumber.md) |
 | A bump | `strata behind <records>` | Which pins have a newer version in the registry? | [strata behind](../commands/behind.md) |
 | A delete | `strata consumers <name>@<version>` | Does a cluster, an edge host, or a template still use the version? | [Retire a version](../use-cases/retire.md) |
 | Drift | `strata verify <records>`, or the observer | Does Palette still hold the content of each record? | [Drift issues](../automation/drift-issues.md), [The observer](../automation/observer.md) |
 
 A renumber moves a release to new version numbers and keeps its content. An
-example is the move from a pre-release to its final version. Today
-`same-release` passes a renumber only when no pack version changes. The option
-`same-release --allow renumber` is an open item,
-[#730](https://github.com/como-technologies/strata/issues/730). It passes a pair
-whose pack versions and archive digests alone change. Until it merges, such a
-pair is `DIFFERENT`.
+example is the move from a pre-release to its final version.
+`same-release --allow renumber` passes a pair whose packs differ only by their
+versions and the digests of their archives. Strata reads no suffix, so the rule
+holds for each scheme of names. Strata does not compare the archives, so the
+pipeline checks the archive of each new build: see
+[A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
 
 ## Add the ideas of strata to your pipeline
 
@@ -135,8 +135,8 @@ replaces the pin. See
 | The candidate merge request | `pr-comment.sh <record> <name>@<version>-mr<iid>.<pipeline>` | Fits: the candidate is a version in Palette, so the side B is a ref. |
 | A merge that is a fast-forward | the merge gate | Not needed: the head of the merge request is the result. |
 | A pre-release on each merge | `same-release` of the candidate and the pre-release, `behind`, and `<name>@latest` | Fits: the root does not cover the profile version, and a pre-release is below its version. |
-| The final number and its check against the pre-release | `same-release`, `compare` | Fits when no pin moves. Does not fit when a pin moves: the roots differ, and `compare` grades the move of a pin as an upgrade. |
-| The move of a cluster to the final version | `compare` | Does not fit, for the same reason. |
+| The final number and its check against the pre-release | `same-release --allow renumber`, `compare` | Fits. The pipeline still checks the archive of each new build, because strata does not compare the archives. |
+| The move of a cluster to the final version | `compare` | Fits: the move of a pin from a pre-release to its final version, with the same content, has the impact `none`. |
 | The stamps and the graph | none | The pipeline of the team owns them. Strata publishes nothing. |
 | The sweep | `consumers`, the retire gate | Fits as the check in Palette before a delete. The sweep also reads the pins in Git, which strata does not read. |
 | Drift after the final | `verify-report.sh` | Fits when the pipeline keeps a record of each final version. The sample pipeline keeps none. |
@@ -203,11 +203,27 @@ final version:
 ```
 
 Exit `1`. In Palette, the archive of the new build has a new digest too, because
-its `pack.json` holds the new version. `compare` grades the move of each pin as a
-new pack version: for the OS or the Kubernetes pack, `repave`. So strata does not
-answer the move of a cluster to its final version either. Until
-[#730](https://github.com/como-technologies/strata/issues/730) merges, the
-pipeline makes this check itself, as the sample pipeline does.
+its `pack.json` holds the new version. `--allow renumber` passes the pair, and
+names each pack whose version moved:
+
+```text
+{{#include ../output/pipeline-final-renumber.txt}}
+```
+
+Exit `0`. Strata does not compare the archives, so the pipeline still checks
+that only `pack.json` changed in each new build.
+[#751](https://github.com/como-technologies/strata/issues/751) adds the
+compare of the archives.
+
+A CI cluster runs the pre-release `aws-stack@1.1.3-g8e2d1c0b9a7f`. Its move to
+the final version is a renumber. The version of the CSI pack keeps its numbers,
+so the impact is `none`:
+
+```text
+{{#include ../output/pipeline-move-cluster-lines.txt}}
+```
+
+See [A renumber](../reference/impact.md#a-renumber).
 
 Before the final commit, `behind` names each pin of a pre-release that has its
 final version now. These are the pins that the final commit must move:
@@ -285,10 +301,12 @@ row of the gap on this page.
   [#616](https://github.com/como-technologies/strata/issues/616) are in strata.
   Strata orders versions as Palette does: a pre-release is below its version, and
   a version that does not parse reads as its first three numbers.
-- **A pre-release and its final version.** Open:
-  [#730](https://github.com/como-technologies/strata/issues/730) adds
-  `same-release --allow renumber`. In `compare`, it also gives the impact `none`
-  to the move of a pin that only changes its version.
+- **A pre-release and its final version.** No gap for the profile now.
+  `same-release --allow renumber` passes the final version. `compare` gives the
+  move of a pin from a pre-release to its final version the impact `none`.
+  The archive of each new build is a gap:
+  [#751](https://github.com/como-technologies/strata/issues/751) adds the
+  compare of the archives. Until then, the pipeline checks the archive.
 - **A record of each final version.** A gap of the pipeline: the publish of a
   final version writes no record. No item of strata is necessary.
 - **The build of a cluster from a Terraform root.** Strata does not read a

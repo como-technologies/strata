@@ -16,7 +16,7 @@ takes:
 
 | Page | What it holds |
 | --- | --- |
-| [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, and a version that replaces nodes. |
+| [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, a version that replaces nodes, and a version that only changes its numbers. |
 | [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, a profile version against a cluster that runs many profiles, and a cluster group against a member. |
 | [Ask Palette if the change repaves](compare/repave.md) | `--repave`: the answer of Palette for one cluster, beside the level of the table. |
 | [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: Palette checks the packs of the change on one cluster. |

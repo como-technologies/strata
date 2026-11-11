@@ -103,3 +103,9 @@ pub(super) const SAMPLE_FINAL: &str = "64e00000000000000000010b";
 // the pre-release that pins the pre-release of the pack, and the final version that pins its final
 pub(super) const SAMPLE_PIN_PRE: &str = "64e00000000000000000010c";
 pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
+// aws-stack@1.2.0 of the use case of a renumber: the pre-release pins a pre-release of the
+// Kubernetes pack and of the CSI pack, and the final version pins the final build of each. 1.2.1 is
+// the final version with one more value
+pub(super) const RENUMBER_PRE: &str = "64e00000000000000000010e";
+pub(super) const RENUMBER_FINAL: &str = "64e00000000000000000010f";
+pub(super) const RENUMBER_EDITED: &str = "64e000000000000000000110";
