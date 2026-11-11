@@ -465,10 +465,11 @@ fn fuzz_refuses_a_name_that_no_target_has_and_a_call_with_no_name() {
 const DENIED: &str = "barney-corp\nfred/notes\n";
 
 /// The words that no output of the scan can hold. They are the two entries, a word of each line of
-/// a hit, and a word of each path that holds an entry. A word of a line shows that the script
-/// printed the text of that line. A word of a path shows that it printed the path.
-const SECRET_WORDS: [&str; 8] = [
-    "barney", "fred", "zebra", "yak", "gnu", "ibis", "walrus", "ocelot",
+/// a hit, and a word of each path that holds an entry. Each tracked symlink and each target of the
+/// tests also hold one. A word of a line shows that the script printed the text of that line. A
+/// word of a path, of a symlink, or of a target shows that it printed that name.
+const SECRET_WORDS: [&str; 10] = [
+    "barney", "fred", "zebra", "yak", "gnu", "ibis", "walrus", "ocelot", "lynx", "heron",
 ];
 
 /// The files of most trees of the tests. Two text files and a binary file hold an entry, with
@@ -495,6 +496,13 @@ fn deny_tree(files: &[(&str, &[u8])]) -> tempfile::TempDir {
     std::fs::write(d.join("scratch.md"), "barney-corp\n").unwrap();
     std::fs::write(d.join("Barney-Corp.md"), "nothing\n").unwrap();
     dir
+}
+
+/// Make a symlink at `path` of the tree `dir` to `target`, and track it. The blob of the symlink
+/// holds `target` as its text.
+fn deny_link(dir: &Path, path: &str, target: &str) {
+    std::os::unix::fs::symlink(target, dir.join(path)).unwrap();
+    git(dir, &["add", "--", path]);
 }
 
 /// Run `deny-list.sh` in `dir` with `list` as `STEP14_DENY`, or with no such variable.
@@ -654,6 +662,85 @@ fn deny_list_prints_no_path_that_holds_an_entry_for_a_hit_in_its_text_and_puts_s
         ),
         "{out}"
     );
+}
+
+#[test]
+fn deny_list_counts_a_symlink_with_an_entry_in_its_target_and_prints_no_symlink_or_target() {
+    let tree = deny_tree(&[("clean.txt", b"nothing to see\n")]);
+    let d = tree.path();
+    // git grep does not read the target of a symlink. Neither target is a tracked path.
+    deny_link(d, "lynx.md", "Fred/Notes/heron.txt");
+    deny_link(d, "ocelot.md", "../BARNEY-CORP");
+    // An entry in the path and in the target of one symlink counts one time.
+    deny_link(d, "Barney-Corp-walrus.md", "fred/notes");
+    deny_link(d, "clean-link.md", "clean.txt");
+    let (o, left) = deny_list(d, Some(DENIED));
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "deny-list: scanned 5 tracked files\n\
+         ::error title=deny list::An entry of the deny list is in 3 of the tracked paths. The \
+         scan prints no such path. Change each one.\n",
+        "the symlink with a clean target gives no hit"
+    );
+    assert!(left.is_empty(), "the list stays in RUNNER_TEMP: {left:?}");
+}
+
+#[test]
+fn deny_list_passes_a_symlink_with_a_clean_target_also_when_the_file_at_the_target_holds_an_entry()
+{
+    let tree = deny_tree(&[("clean.txt", b"nothing to see\n")]);
+    let d = tree.path();
+    deny_link(d, "clean-link.md", "clean.txt");
+    // deny_tree writes an entry in the text of scratch.md, which git does not track. The scan
+    // reads the target of the symlink, and not the file at the target.
+    deny_link(d, "scratch-link.md", "scratch.md");
+    // The end of the path and the start of the target do not join to an entry.
+    deny_link(d, "zebra-barney-", "corp.md");
+    let (o, _) = deny_list(d, Some(DENIED));
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "deny-list: scanned 4 tracked files\ndeny-list: no hit\n"
+    );
+}
+
+/// "The deny list" in `docs/src/development/build-test.md` gives a loop that finds each tracked
+/// symlink whose target holds an entry. The test runs the loop of the page, with the list as `$1`.
+#[test]
+fn the_loop_of_the_page_of_the_deny_list_prints_each_symlink_whose_target_holds_an_entry() {
+    let page = repo_file("docs/src/development/build-test.md");
+    let looped =
+        block_with(&page, "bash", "git cat-file blob").replace("<file of the list>", "\"$1\"");
+    let lists = tempfile::tempdir().unwrap();
+    let list = lists.path().join("list");
+    std::fs::write(&list, DENIED).unwrap();
+    // The text of notes/a.md holds an entry, but the loop reads only the target of a symlink.
+    let tree = deny_tree(&TRACKED);
+    let d = tree.path();
+    std::fs::create_dir(d.join("sub dir")).unwrap();
+    deny_link(d, "sub dir/a lynx", "Barney-Corp/notes.txt");
+    // `git ls-files -s` puts quotes around this path, and `git ls-files -s -z` does not.
+    deny_link(d, "sub dir/héron", "../fred/notes");
+    deny_link(d, "sub dir/clean", "../clean.txt");
+    for (dir, printed) in [
+        (d.to_path_buf(), ["sub dir/a lynx", "sub dir/héron"]),
+        (d.join("sub dir"), ["a lynx", "héron"]),
+    ] {
+        let mut c = Command::new("bash");
+        c.arg("-c")
+            .arg(&looped)
+            .arg("bash")
+            .arg(&list)
+            .current_dir(&dir);
+        let o = isolate_git(&mut c).output_locked().unwrap();
+        assert!(o.status.success(), "in {dir:?}: {}", text(&o.stderr));
+        assert_eq!(
+            text(&o.stdout).lines().collect::<Vec<_>>(),
+            printed,
+            "in {dir:?}"
+        );
+    }
 }
 
 // ---- xtask playground ----------------------------------------------------------------------

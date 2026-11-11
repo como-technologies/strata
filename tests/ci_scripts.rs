@@ -936,12 +936,7 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
 #[test]
 fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without_a_watch() {
     let gitlab = gitlab_drop_in();
-    let lines: Vec<&str> = gitlab["strata-preflight"]["script"]
-        .as_sequence()
-        .expect("the job has script lines")
-        .iter()
-        .map(|l| l.as_str().unwrap())
-        .collect();
+    let lines = strings(&gitlab["strata-preflight"]["script"]);
     let run = |tier: &str, watch: &str| -> String {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".strata")).unwrap();
@@ -2919,12 +2914,7 @@ const FAKE_UNAME: &str = "#!/bin/sh\ncase \"$1\" in -s) echo Linux ;; -m) echo x
 /// no token. Its project folder is `project` in the release `d`. `apt-get` is a stand-in.
 fn gitlab_install(d: &Path, envs: &[(&str, &str)]) -> Output {
     let gitlab = gitlab_drop_in();
-    let mut lines: Vec<&str> = gitlab[".strata"]["before_script"]
-        .as_sequence()
-        .expect("the template .strata has before_script lines")
-        .iter()
-        .map(|l| l.as_str().unwrap())
-        .collect();
+    let mut lines = strings(&gitlab[".strata"]["before_script"]);
     lines.push(r#""$STRATA_BIN" --version"#);
     fake_bin(d, &[("apt-get", "#!/bin/sh\n"), ("uname", FAKE_UNAME)]);
     let project = d.join("project");
