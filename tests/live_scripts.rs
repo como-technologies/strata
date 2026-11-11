@@ -1505,13 +1505,15 @@ if [ -n "$out" ]; then cat "$body" > "$out"; else cat "$body"; fi
 [ -z "$fail" ] || [ "$status" -lt 400 ] || exit 22
 "#;
 
-/// The installer of a release, for `public.sh`. It writes the tokens that it got to
-/// `install.tokens`, and two binaries that print their versions into `--dir`.
+/// The installer of a release, for `public.sh`. It adds a line with the tokens that it got to
+/// `install.tokens`, and writes two binaries that print their versions into `--dir`.
+///
+/// [`public_web`] puts the variables of [`INSTALLER_TOKENS`] in the place of `@TOKENS@`.
 const FAKE_PUBLIC_INSTALLER: &str = r#"#!/usr/bin/env bash
 dir=""
 while [ $# -gt 0 ]; do case "$1" in --dir) dir=$2; shift 2 ;; *) shift ;; esac; done
 mkdir -p "$dir"
-echo "${STRATA_TOKEN-}${GITHUB_TOKEN-}${GH_TOKEN-}" > "$FAKE_WEB/install.tokens"
+echo "@TOKENS@" >> "$FAKE_WEB/install.tokens"
 printf '#!/bin/sh\necho strata 9.9.9\n' > "$dir/strata"
 printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
 chmod +x "$dir/strata" "$dir/strata-preflight"
@@ -1522,9 +1524,15 @@ chmod +x "$dir/strata" "$dir/strata-preflight"
 fn public_web(dir: &Path, book: u16) {
     let web = dir.join("web");
     std::fs::create_dir_all(&web).unwrap();
+    let tokens = INSTALLER_TOKENS
+        .map(|name| format!("${{{name}-}}"))
+        .concat();
     let files = [
         ("book.html", "<html>the book</html>".to_string()),
-        ("installer.sh", FAKE_PUBLIC_INSTALLER.to_string()),
+        (
+            "installer.sh",
+            FAKE_PUBLIC_INSTALLER.replace("@TOKENS@", &tokens),
+        ),
         ("token.json", r#"{"token":"anonymous"}"#.to_string()),
         ("manifest.json", r#"{"schemaVersion":2}"#.to_string()),
         (
@@ -1541,6 +1549,10 @@ fn public_web(dir: &Path, book: u16) {
         format!(
             "{}/releases/latest/download/install-strata.sh 200 installer.sh",
             env!("CARGO_PKG_REPOSITORY")
+        ),
+        format!(
+            "https://github.com/o/r/releases/download/{}/install-strata.sh 200 installer.sh",
+            gitlab_drop_in_variable(&gitlab_drop_in(), "STRATA_VERSION")
         ),
         "https://ghcr.io/token* 200 token.json".into(),
         "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
@@ -1589,6 +1601,7 @@ fn public_sh_shows_what_a_reader_with_no_login_gets_from_the_public_repository()
         "book-opens",
         "install-no-token",
         "install-runs",
+        "gitlab-install-no-token",
         "image-no-login",
         "chart-no-login",
         "repository-public",
@@ -1600,10 +1613,16 @@ fn public_sh_shows_what_a_reader_with_no_login_gets_from_the_public_repository()
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     passed(&steps, &ids);
 
-    // the install gets no token, and the registry gets the anonymous token alone
+    // the job of the drop-in runs the binary that its install lines wrote
+    let gitlab =
+        std::fs::read_to_string(dir.path().join("out/gitlab-install-no-token.out")).unwrap();
+    assert_eq!(gitlab.lines().last(), Some("strata 9.9.9"), "{gitlab}");
+    assert!(dir.path().join("out/gitlab/.strata/strata").exists());
+
+    // the two installs get no token, and the registry gets the anonymous token alone
     let web = dir.path().join("web");
     let tokens = std::fs::read_to_string(web.join("install.tokens")).unwrap();
-    assert_eq!(tokens.trim(), "", "the installer got a token");
+    assert_eq!(tokens, "\n\n", "an installer got a token");
     let log = std::fs::read_to_string(web.join("curl.log")).unwrap();
     assert!(!log.contains("the-token-of-gh"), "{log}");
     for line in log.lines().filter(|l| l.contains("Authorization")) {
@@ -1641,6 +1660,7 @@ fn public_sh_fails_the_checks_of_a_reader_while_the_repository_or_its_packages_a
             "book-opens",
             "install-no-token",
             "install-runs",
+            "gitlab-install-no-token",
             "repository-public",
         ],
     );
@@ -1652,7 +1672,15 @@ fn public_sh_fails_the_checks_of_a_reader_while_the_repository_or_its_packages_a
     let (o, steps) = run_public(dir.path(), &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
     failed(&steps, &["image-no-login", "chart-no-login"]);
-    passed(&steps, &["book-opens", "install-runs", "repository-public"]);
+    passed(
+        &steps,
+        &[
+            "book-opens",
+            "install-runs",
+            "gitlab-install-no-token",
+            "repository-public",
+        ],
+    );
 
     let (o, _) = run_public(dir.path(), &["--help"]);
     assert_eq!(o.status.code(), Some(2));

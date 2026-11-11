@@ -211,6 +211,10 @@ The same test file checks that a script passes the options of `verify` and
 each such step with a stand-in for the tool, because `act` is not in every
 container. The expressions of GitHub (`${{ ... }}`) do not run there.
 
+`tests/ci_scripts.rs` also runs the install lines of the GitLab drop-in, as a
+job runs them. A stand-in `curl` serves the release, and the test gives no
+token.
+
 The development tooling is the `xtask` crate. A `just` recipe wraps each command
 that the book and the examples need, and `cargo xtask <command>` runs the same
 command directly. `cargo xtask` with no command prints its usage and exits `2`. The alias is in
