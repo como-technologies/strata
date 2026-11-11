@@ -1,0 +1,99 @@
+section: images
+title: Images and registries
+about: |
+  The pack registries, the digests, the tags, and the images that the nodes pull.
+rules:
+- id: helm-digest-frozen
+  title: The digest of a Helm chart in Palette names the bytes a cluster installs
+  engines:
+  - all
+  tier: static
+  severity: warn
+  status: seen
+  when: (.profiles | length) > 0
+  what: |
+    The sync of Palette keeps the first digest of a chart. This holds for a Helm registry and for
+    an OCI registry of the provider type `helm`: the sync compares the annotations alone. A push
+    again of the chart version changes what a new attach installs, and changes nothing that
+    Palette shows. A running cluster keeps the old bytes, and a new attach gets the new ones. This
+    rule names each such pack. The cloud check in `reproduce` compares the digest in the registry
+    with the digest in Palette.
+  check:
+    kind: static
+    expr: |
+      [ .profiles[] | .source.name as $p | .packs[]
+        | select(.type == "helm" or (.type == "oci" and (.registryProviderType // "") == "helm"))
+        | "profile \($p): pack \(.name)@\(.version) is a chart of a \(if .type == "helm" then "Helm" else "OCI Helm" end) registry; Palette keeps its first digest, and a push again of \(.version) changes what a new attach installs" ]
+  reproduce:
+  - helm pull <chart> --version <version> --repo <url> && sha256sum <chart>-<version>.tgz
+  - crane digest <oci host>/<chart>:<version>
+  fix:
+    owner: palette
+    text: Compare the digest in the skip check of the sync for Helm and OCI Helm charts. A registry with immutable tags closes it at the source.
+  evidence:
+  - kind: run
+    ref: a live run
+    note: one profile version with one digest gave two different installs, before and after a push again
+  - kind: source
+    note: Helm, OCI Helm, and OCI Zarf compare the annotations alone; the other kinds compare the digest
+  tests:
+  - fault: fixtures/eks/helm-chart.json
+    clean: fixtures/eks/addon-profile.json
+- id: no-digest-kinds
+  title: Each pack of the profiles carries a digest
+  engines:
+  - all
+  tier: static
+  severity: warn
+  status: seen
+  when: (.profiles | length) > 0
+  what: |
+    A Zarf package of an OCI registry, and a chart of a Helm registry with credentials, carry no
+    digest in Palette. The record of such a pack has `hash.upstreamSource: none`, and a change of
+    its bytes cannot show in a record or in `strata verify`. A manifest pack has no archive and is
+    not counted.
+  check:
+    kind: static
+    expr: |
+      [ .profiles[] | .source.name as $p | .packs[]
+        | select((.type // "spectro") != "manifest")
+        | select((.hash.upstreamSource // "") == "none")
+        | "profile \($p): pack \(.name)@\(.version) of type \(.type // "spectro")\(if (.registryProviderType // "") != "" then " (\(.registryProviderType) registry)" else "" end) has no digest in Palette; a change of its bytes cannot show" ]
+  reproduce:
+  - strata snapshot 'pack:<registry>/<name>@<version>' | jq '.packs[].hash.upstreamSource'
+  fix:
+    owner: palette
+    text: Give a digest to each pack kind. For a Zarf package, read the manifest digest of the registry; for a private Helm chart, read the chart archive.
+  evidence:
+  - kind: run
+    ref: '#71, #75'
+  - kind: run
+    ref: a live run
+  - kind: source
+    note: the digest comes from the tag listing of the registry, and the listing of a Docker registry gives none
+  tests:
+  - fault: fixtures/eks/no-digest.json
+    clean: fixtures/eks/addon-profile.json
+- id: private-pack-registry-empty
+  title: A private pack registry lists its packs
+  engines:
+  - all
+  tier: palette
+  severity: warn
+  status: seen
+  what: |
+    A Spectro pack registry with `private: true` syncs as `Completed` in under a second, and
+    Palette lists no pack of it. The same registry with `private: false` lists its packs at the
+    next sync. Nothing in the status says that the sync read no pack. The world holds no registry
+    document, so strata-preflight has no check; `strata packs` shows an empty registry.
+  reproduce:
+  - strata packs <pack> --registry <registry>
+  - '{{ palette_curl }} "${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary" | jq ''.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'''
+  fix:
+    owner: palette
+    text: Sync a private pack registry, or say in the sync status that a private registry lists no pack.
+  evidence:
+  - kind: run
+    ref: a live run
+  - kind: source
+    note: Palette returns no pack of a private registry when it lists or reads packs

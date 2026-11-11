@@ -186,11 +186,11 @@ func TestEachToneHasItsLookAndItsAnimationInTheStyle(t *testing.T) {
 func TestTheMarkOfTheSplashIsTheGeometryOfTheLogo(t *testing.T) {
 	logo := readFile(t, logoDir+"strata-mark-dark.svg")
 	want := regexp.MustCompile(`<path fill="(#[0-9a-fA-F]+)" d="([^"]+)"`).FindAllStringSubmatch(string(logo), -1)
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	_, rest, ok := strings.Cut(script, "const SLABS = [")
 	list, _, ok2 := strings.Cut(rest, "];")
 	if !ok || !ok2 {
-		t.Fatal("app.js has no list SLABS")
+		t.Fatal("the scripts have no list SLABS")
 	}
 	got := regexp.MustCompile(`"(M[^"]+)"`).FindAllStringSubmatch(list, -1)
 	if len(want) != 4 || len(got) != 4 {
@@ -230,18 +230,18 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	want := []string{"LICENSES.md", "app.css", "app.js", "favicon-dark.svg", "favicon-light.svg", "fonts", "index.html", "theme.js"}
+	want := []string{"LICENSES.md", "app.css", "app.js", "favicon-dark.svg", "favicon-light.svg", "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", "theme.js"}
 	if !slices.Equal(names, want) {
 		t.Errorf("assets/ holds %v, want %v", names, want)
 	}
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	for _, banned := range []string{"<img", "new Image", "@import", "<link", "<style"} {
 		if strings.Contains(script, banned) {
-			t.Errorf("app.js holds %s", banned)
+			t.Errorf("the scripts hold %s", banned)
 		}
 	}
 	// The mark is drawn in markup through h``, like every other part of the page.
 	if !strings.Contains(script, `<svg class="slabs tone-${tone}"`) || strings.Count(script, "innerHTML") != 1 {
-		t.Error("the mark is not drawn through the template of the script")
+		t.Error("the mark is not drawn through the template of the scripts")
 	}
 }

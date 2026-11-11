@@ -28,8 +28,8 @@ rules:
     reproduce:
       - "aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'Subnets[].AvailabilityZone' --output text | tr '\\t' '\\n' | sort -u"
     evidence:
-      - kind: report
-        ref: palette-precreate-validation-gaps-findings-2026-09-28 F6
+      - kind: run
+        ref: a live run
       - kind: source
         note: no minimum count of zones for EKS
     tests:

@@ -37,7 +37,7 @@ url=""
 # the label of the issues of the endpoint, and the repository of the workspace. The endpoint has the
 # same two texts as its defaults, and a test of the endpoint makes sure that they agree
 label=unknown-value
-repo=$(sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' "$live/../../Cargo.toml")
+repo=$(workspace_repo)
 [ -n "$repo" ] || die "Cargo.toml of the root names no repository"
 while [ $# -gt 0 ]; do
   case "$1" in

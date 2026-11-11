@@ -56,11 +56,10 @@ See [Where each idea belongs](../boundary.md#where-each-idea-belongs).
 
 ## A sample pipeline and its versions
 
-The rest of this page maps strata to one pipeline, the pipeline of
-`palette-pipeline-tools`. It is one opinionated example, and not a rule. Its team
-decided that a version gets its final number only when its whole graph passes,
-in its decision ADR-0009. Another pipeline names its versions in another way, and
-the table of [Where strata fits](#where-strata-fits) still holds for it.
+The rest of this page maps strata to one sample pipeline. It is one opinionated
+example, and not a rule. Its team decided that a version gets its final number
+only when its whole graph passes. Another pipeline names its versions in another
+way, and the table of [Where strata fits](#where-strata-fits) still holds for it.
 
 <div class="playground-demo">
 

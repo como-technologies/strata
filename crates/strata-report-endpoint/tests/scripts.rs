@@ -40,7 +40,8 @@ fn the_contract_run_has_a_label_of_its_own_and_the_milestone_of_the_service() {
 }
 
 #[test]
-fn the_repository_has_one_text_in_the_workspace_and_the_deploy_and_the_live_send_do_not_copy_it() {
+fn the_repository_has_one_text_in_the_workspace_and_the_deploy_and_the_live_scripts_do_not_copy_it()
+{
     let manifest = read("../../Cargo.toml");
     let url = toml_value(manifest.lines(), "repository").expect("Cargo.toml names the repository");
     let name = url.strip_prefix("https://github.com/").unwrap();
@@ -52,11 +53,20 @@ fn the_repository_has_one_text_in_the_workspace_and_the_deploy_and_the_live_send
         !deploy.contains("GITHUB_REPOSITORY"),
         "deploy.sh sets the repository"
     );
-    let send = code(&read("../../examples/live/report-send.sh"));
-    assert!(!send.contains(name), "report-send.sh names the repository");
+    // the two live scripts take the repository from `workspace_repo` of github.sh, which reads the
+    // manifest of the workspace
+    for script in ["report-send.sh", "public.sh"] {
+        let text = code(&read(&format!("../../examples/live/{script}")));
+        assert!(!text.contains(name), "{script} names the repository");
+        assert!(
+            text.contains("$(workspace_repo)"),
+            "{script} reads no repository of the workspace"
+        );
+    }
+    let github = code(&read("../../examples/live/github.sh"));
     assert!(
-        send.contains("\"$live/../../Cargo.toml\""),
-        "report-send.sh reads the manifest of the workspace"
+        github.contains("/../../Cargo.toml\""),
+        "workspace_repo of github.sh reads the manifest of the workspace"
     );
 }
 

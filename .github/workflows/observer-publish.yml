@@ -25,7 +25,7 @@ on:
         description: A kubeconfig that can get and update the four Secrets of the records. The role publisher of the chart gives that right and no other.
         required: true
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private.
+        description: Optional. A token that reads como-technologies/strata. When it is empty, the workflow reads that public repository with the token of the caller.
         required: false
 
 permissions:

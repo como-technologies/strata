@@ -21,7 +21,9 @@
 #   PALETTE_API_KEY   needed to read Palette. A job needs it for a ref that is not a
 #                     snapshot file, for STRATA_REPAVE, and for the verify of the merge
 #                     gate. The drift and upstream reports need it too.
-#   STRATA_TOKEN      a token that can read the strata releases, while that repository is private.
+#   STRATA_TOKEN      optional: a GitHub token that the installer sends to the API of GitHub. That
+#                     API limits the requests with no token for each address, and the runners
+#                     can share one.
 #
 # A CI/CD variable of the type File, for the two jobs of the observer:
 #   STRATA_OBSERVER_KUBECONFIG  a kubeconfig of the role publisher of the chart of the observer.
@@ -90,13 +92,8 @@ variables:
     - apt-get install -y -qq --no-install-recommends ca-certificates curl jq git
     - |
       set -eu
-      auth=()
-      if [ -n "${STRATA_TOKEN:-}" ]; then auth=(-H "Authorization: Bearer $STRATA_TOKEN"); fi
-      release="https://api.github.com/repos/$STRATA_REPO/releases/tags/$STRATA_VERSION"
-      id=$(curl -fsSL "${auth[@]}" "$release" \
-        | jq -r '.assets[] | select(.name == "install-strata.sh") | .id')
-      curl -fsSL "${auth[@]}" -H "Accept: application/octet-stream" -o install-strata.sh \
-        "https://api.github.com/repos/$STRATA_REPO/releases/assets/$id"
+      curl -fsSL -o install-strata.sh \
+        "https://github.com/$STRATA_REPO/releases/download/$STRATA_VERSION/install-strata.sh"
       bash install-strata.sh --version "$STRATA_VERSION" --dir "$CI_PROJECT_DIR/.strata"
     - export STRATA_BIN="$CI_PROJECT_DIR/.strata/strata"
 

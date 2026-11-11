@@ -20,7 +20,7 @@ default: build
 # Build the release binaries at target/release/strata and target/release/strata-preflight
 [group('build')]
 build:
-    cargo build --release -p strata -p strata-preflight
+    cargo build --release -p strata-palette -p strata-preflight
 
 # The observer is a Go program in observer/. The build is static (no cgo), and the version is that of Cargo.toml.
 
@@ -87,8 +87,8 @@ build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
-      *linux*) cross build --release --target "{{target}}" -p strata -p strata-preflight ;;
-      *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
+      *linux*) cross build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
+      *) cargo build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
     esac
 
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
@@ -128,7 +128,7 @@ bench-short:
 # strata-report-endpoint, and strata-fuzz, and runs the command a second time with all items. The
 # build of the public items does not read the comment of a private item. The build of all items does not warn when a public item links to a private item.
 # So `just lint` needs both.
-rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
+rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata-palette -p strata-preflight'
 
 # The last two lines fail when a module enters observer/go.mod or the go.mod of the request counter: both use the standard library only.
 
@@ -502,6 +502,11 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
+# The public repository (#65): with no login, the book opens, the install command of the README installs a release, and the registry gives the image and the chart of the observer. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
+[group('live checks')]
+live-public: build
+    examples/live/public.sh
+
 # The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). --with-cluster holds the floor of a window with a cluster: a skipped fact of the floor is an error. Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
 [group('contract')]
 live-contract *args: examples stand-in
@@ -536,9 +541,9 @@ contract-timer-remove:
 contract-timer-status:
     deploy/contract/timer.sh status
 
-# The lead runs this on kadomony after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
+# The lead runs this on its host after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
 
-# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login. --dry-run prints the gcloud commands and runs none.
+# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login, and the project in STRATA_REPORT_PROJECT or --project ID. --dry-run prints the gcloud commands and runs none.
 [group('report-endpoint')]
 report-deploy *args:
     deploy/report/deploy.sh {{args}}

@@ -122,7 +122,6 @@ jobs:
       records: releases/**/*.json
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 ```
 
@@ -135,10 +134,6 @@ jobs:
 | `who` | no | Add who changed a record that drifted. Default `false`. |
 | `palette-api` | no | The address of a self-hosted Palette. |
 
-The secret `palette-api-key` is required. `strata-token` reads this repository
-while it is private. Another scheduler runs the script directly. On GitLab, the
-variables `STRATA_ALLOW_NO_DIGEST` and `STRATA_WHO` set the two options: see
-[GitLab CI](./gitlab.md#the-variables).
-
-[Pull request comments](./pr-comments.md#while-this-repository-is-private)
-gives the two steps for a private repository.
+The secret `palette-api-key` is required. Another scheduler runs the script
+directly. On GitLab, the variables `STRATA_ALLOW_NO_DIGEST` and `STRATA_WHO` set
+the two options: see [GitLab CI](./gitlab.md#the-variables).

@@ -15,7 +15,7 @@ import (
 )
 
 /* The tests below hold the viewer: the text of the diffs in two layouts, the note for a text above the cap,
-and the question to Palette. They read the markup that app.js writes, and they check it against a second
+and the question to Palette. They read the markup that the scripts write, and they check it against a second
 reading of the same data in Go. */
 
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
@@ -877,9 +877,9 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 			}
 		})
 	}
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	if got := strings.Count(script, `"POST"`); got != 2 {
-		t.Errorf("app.js holds %d POST requests, want 2: the clicks Ask Palette and Check now", got)
+		t.Errorf("the scripts hold %d POST requests, want 2: the clicks Ask Palette and Check now", got)
 	}
 	if got := strings.Count(script, "checkNow("); got != 2 {
 		t.Errorf("checkNow is called in %d places and defined once, want 2 uses", got)
@@ -894,7 +894,7 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 		t.Error("the click handler does not call askPalette")
 	}
 	if got := strings.Count(script, "setInterval("); got != 1 || !strings.Contains(script, "setInterval(refresh, REFRESH_MS)") {
-		t.Errorf("app.js holds %d timers, and the only timer must read the routes", got)
+		t.Errorf("the scripts hold %d timers, and the only timer must read the routes", got)
 	}
 }
 
@@ -913,7 +913,7 @@ func TestTheWordAcceptsIsOnNoScreen(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"app.js", "index.html", "app.css"} {
+	for _, name := range append(screenScripts(t), "index.html", "app.css") {
 		if accepts.Match(readPage(t, name)) {
 			t.Errorf("%s holds the word", name)
 		}
