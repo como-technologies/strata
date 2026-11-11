@@ -152,6 +152,14 @@ library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
     cargo run --quiet --manifest-path examples/library-preflight/Cargo.toml --target-dir target/library-example
 
+# The job `deny list` of CI runs this recipe with the secret STEP14_DENY. See "The deny list" in
+# docs/src/development/build-test.md.
+
+# Scan each tracked file for each entry of STEP14_DENY, and print the path and the line of each hit, never the entry
+[group('check')]
+deny-list:
+    scripts/dev/deny-list.sh
+
 # knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
 # its own package: `cargo build` and `cargo test` at the root never build it, and no release
 # carries it.

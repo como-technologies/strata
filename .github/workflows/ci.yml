@@ -14,13 +14,28 @@ jobs:
     name: checks
     uses: ./.github/workflows/checks.yml
 
+  # The scan of each tracked file for each entry of the deny list: see "The deny list" in
+  # docs/src/development/build-test.md. The list is a secret, because a file of a public tree
+  # names what it denies. A run with no secret, such as a pull request from a fork, gives a
+  # notice and passes. The job has no `if`, so it runs on each event.
+  deny-list:
+    name: deny list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: extractions/setup-just@v4
+      - name: scan the tracked files
+        env:
+          STEP14_DENY: ${{ secrets.STEP14_DENY }}
+        run: just deny-list
+
   # The one check that a verify reads. `riff verify pass` needs a successful run named `Gate` on
-  # the head commit. The job needs `checks`, so GitHub runs it only when
+  # the head commit. The job needs `checks` and `deny-list`, so GitHub runs it only when
   # each check passed, and skips it when one failed. A skipped run is not a success. It does no
   # other work.
   gate:
     name: Gate
-    needs: checks
+    needs: [checks, deny-list]
     runs-on: ubuntu-latest
     steps:
       - run: echo "each check passed"
@@ -28,7 +43,7 @@ jobs:
   # the book goes out only after every check passed, and only from main
   publish-docs:
     name: publish the book
-    needs: checks
+    needs: [checks, deny-list]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:

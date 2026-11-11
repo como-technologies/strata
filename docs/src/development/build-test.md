@@ -190,7 +190,7 @@ is content: see [What the root does not cover](../internals/hashes.md#what-the-r
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `deny-list.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `crates/strata-knurl/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
@@ -653,12 +653,14 @@ CI does not run `just adapter-test`. The adapter needs knurl, a private
 repository, and CI has no key for it: see
 [The knurl adapter](../automation/knurl.md#test-it).
 
-`ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
-it is the one check run that the verify reads (see
-[How a change lands](./changes.md#the-verify)). `publish the book` needs the
-checks and runs only on `main`, so the site is a build that every check passed.
-The `docs` job builds the book once and passes it to the publish job, so no job
-builds it twice.
+`ci` adds three jobs of its own. `deny list` scans the tracked files for the
+names that the public tree must not hold: see [The deny list](#the-deny-list).
+`Gate` needs the checks and `deny list`, and does no other work. It is the one
+check run that the verify reads: see
+[How a change lands](./changes.md#the-verify). `publish the book` needs the
+same two jobs and runs only on `main`, so the site is a build that every check
+passed. The `docs` job builds the book once and passes it to the publish job, so
+no job builds it twice.
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
@@ -697,6 +699,53 @@ git worktree remove --force "$d"   # also removes the target directory of the wo
 ```
 
 When the shared `target/` already holds such a build, `cargo clean` removes it.
+
+### The deny list
+
+The repository is public, so a name in a tracked file is public. The job
+`deny list` of the `ci` workflow scans each tracked file for each entry of a
+deny list. The list holds the names that the tree must not hold. The notes of
+the lead give its classes. The job runs on each push to `main` and on each pull
+request.
+
+The list is the secret `STEP14_DENY` of the repository, with one entry on each
+line. It is not a file of the tree, because a public file names what it denies.
+The owner of the repository sets the secret. Write no entry in a file, a commit,
+an issue, a pull request, or a thread.
+
+The step gives the secret to `just deny-list` in a variable of the same name.
+The recipe runs `scripts/dev/deny-list.sh`. The script:
+
+- stops the trace of the shell, because a trace prints the value of a variable;
+- writes the list to a file under `$RUNNER_TEMP`, and removes the file at the end;
+- removes each empty line, because an empty pattern matches each line;
+- removes the spaces at the two ends of an entry, also a carriage return;
+- matches each entry as a fixed string, with no difference of case;
+- prints the number of tracked files that it scans;
+- prints the path and the line number of each hit, or the path alone for a hit
+  in a binary file.
+
+The script never prints an entry or the text of a line. It reads the text of the
+files. It does not read the paths, the commit messages, or the body of a pull
+request.
+
+| The list and the tree | The job |
+| --- | --- |
+| An entry in a tracked file | Fails. GitHub skips `Gate`, so the verify of a pull request cannot pass. On `main`, `publish the book` does not run. |
+| No entry in a tracked file | Passes. |
+| A list with no entry | Gives a notice that it did not scan, and passes. |
+
+The list has no entry before the owner sets the secret. It also has no entry on
+a pull request from a fork, because GitHub gives no secret to that run. A person
+who holds the list can run the same scan before a push:
+
+```bash
+STEP14_DENY="$(cat <file of the list>)" just deny-list
+```
+
+When the job finds a hit, replace the name with a made-up name. See
+[The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
+the branch made the name public, so also tell the lead.
 
 ## A change to how strata reads Palette
 

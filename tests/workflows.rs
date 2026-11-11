@@ -40,27 +40,86 @@ fn the_steps_of_a_workflow_are_the_steps_of_each_job_in_order_and_a_job_with_no_
     assert_eq!(names, ["one", "two", "three"]);
 }
 
+/// The keys of the jobs that the job `job` of a workflow needs: one key, or a list of keys.
+fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
+    match &job["needs"] {
+        serde_yaml::Value::String(one) => vec![one.as_str()],
+        serde_yaml::Value::Sequence(many) => many
+            .iter()
+            .map(|need| need.as_str().expect("a need is the key of a job"))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
 /// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
-/// success while that run has none. The job needs `checks` and has no `if`, so GitHub runs it only
-/// when each check passed, and skips it when one failed. A renamed job, a lost `needs`, or an
-/// `if: always()` lets a verify pass a commit that a check refused.
+/// success while that run has none. The job needs `checks` and `deny-list`, and has no `if`. So
+/// GitHub runs it only when each check passed, and skips it when one failed. A renamed job, a lost
+/// `needs`, or an `if: always()` lets a verify pass a commit that a check refused.
 #[test]
-fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
+fn the_gate_job_of_ci_needs_the_checks_and_the_deny_list_and_has_no_condition() {
     let doc = workflow("ci.yml");
     let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
     let gate = jobs
         .values()
         .find(|job| job["name"].as_str() == Some("Gate"))
         .expect("ci.yml has a job named Gate");
-    let needs = gate["needs"].as_str().expect("the Gate needs one job");
+    let needs = needs_of(gate);
+    assert_eq!(needs.len(), 2, "the Gate needs {needs:?}");
     assert!(
-        jobs.get(needs).is_some_and(|job| job.get("uses").is_some()),
-        "the Gate needs `{needs}`, which is not the job that calls the checks workflow"
+        needs
+            .iter()
+            .any(|need| jobs.get(*need).is_some_and(|job| job.get("uses").is_some())),
+        "the Gate needs {needs:?}, and none is the job that calls the checks workflow"
+    );
+    assert!(
+        needs.contains(&"deny-list"),
+        "the Gate needs {needs:?}, and not the scan of the deny list"
     );
     assert!(
         gate.get("if").is_none(),
         "the Gate has a condition: GitHub must skip it when a check fails"
     );
+}
+
+/// The job `deny list` gives the secret `STEP14_DENY` to the one step that runs the recipe, and no
+/// other step of `ci.yml` gets a secret. The job has no `if`, so it runs on each event. The Gate
+/// and the publish of the book need it, so a hit stops the verify and the book of `main`. A trace
+/// prints the list, so no line of the job turns one on.
+#[test]
+fn the_deny_list_job_scans_with_the_secret_on_each_event_and_the_gate_and_the_book_need_it() {
+    let doc = workflow("ci.yml");
+    let job = &doc["jobs"]["deny-list"];
+    assert_eq!(job["name"].as_str(), Some("deny list"));
+    assert!(job.get("if").is_none(), "the scan has a condition");
+    let runs = runs_of("ci.yml", "deny-list");
+    assert_eq!(runs, ["just deny-list"]);
+    let step = job["steps"]
+        .as_sequence()
+        .expect("the job has steps")
+        .iter()
+        .find(|step| step["run"].as_str() == Some("just deny-list"))
+        .unwrap();
+    assert_eq!(
+        step["env"]["STEP14_DENY"].as_str(),
+        Some("${{ secrets.STEP14_DENY }}")
+    );
+    assert_eq!(
+        workflow_text("ci.yml").matches("secrets.").count(),
+        1,
+        "a step of ci.yml other than the scan gets a secret"
+    );
+    for key in ["gate", "publish-docs"] {
+        assert!(
+            needs_of(&doc["jobs"][key]).contains(&"deny-list"),
+            "the job {key} of ci.yml does not need the scan of the deny list"
+        );
+    }
+    assert_eq!(recipe("deny-list"), ["scripts/dev/deny-list.sh"]);
+    let job_text = serde_yaml::to_string(job).unwrap();
+    for trace in ["set -x", "bash -x", "xtrace"] {
+        assert!(!job_text.contains(trace), "the job turns on a trace");
+    }
 }
 
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
@@ -1183,7 +1242,7 @@ fn permissions_asked(doc: &serde_yaml::Value) -> Vec<(String, String)> {
 fn the_observer_image_job_of_the_release_grants_what_the_called_workflow_needs() {
     let release = workflow("release.yml");
     let job = &release["jobs"]["observer-image"];
-    assert_eq!(job["needs"].as_str(), Some("release"));
+    assert_eq!(needs_of(job), ["release"]);
     assert_eq!(
         job["uses"].as_str(),
         Some("./.github/workflows/observer-image.yml")
