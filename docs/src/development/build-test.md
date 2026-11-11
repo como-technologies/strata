@@ -659,10 +659,12 @@ passed. The `docs` job builds the book once and passes it to the publish job, so
 no job builds it twice.
 
 No job that `Gate` needs runs `just adapter-test`, and no recipe of such a job
-runs it. `tests/workflows.rs` reads the `just` steps of each such job and of
-each workflow that it calls. It does not read the steps of an action in
-`.github/actions/`. The adapter needs knurl, a private repository. A job of
-knurl runs the recipe each day on the strata of `main`: see
+runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
+workflow that it calls, and of each action of `.github/actions/` that it uses.
+The test gives each input of an action the value of the `with` of the step, or
+else the default of the input. No workflow and no action names the recipe or
+the package of the adapter. The adapter needs knurl, a private repository. A
+job of knurl runs the recipe each day on the strata of `main`: see
 [The job of knurl](../automation/knurl.md#the-job-of-knurl).
 
 The checks are a workflow of their own because a caller cannot grant a called
