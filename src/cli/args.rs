@@ -605,6 +605,12 @@ mod tests {
         &["verify", "r.json"],
     ];
 
+    /// The commands that read no Palette, so they take no project.
+    ///
+    /// `preflight` runs `strata-preflight`, which reads the project from the environment.
+    /// `tests/projects.rs` keeps the same list, with `help`, which clap adds at the build.
+    const READS_NO_PALETTE: [&str; 3] = ["preflight", "report", "schema"];
+
     #[test]
     fn each_command_that_reads_palette_takes_one_project_by_uid_or_by_name() {
         let names: BTreeSet<&str> = READS_PALETTE.iter().map(|args| args[0]).collect();
@@ -613,11 +619,7 @@ mod tests {
             .map(|sub| sub.get_name().to_string())
             .filter(|name| !names.contains(name.as_str()))
             .collect();
-        // `preflight` runs `strata-preflight`, which reads the project from the environment
-        assert_eq!(
-            others,
-            BTreeSet::from(["preflight", "report", "schema"].map(String::from))
-        );
+        assert_eq!(others, BTreeSet::from(READS_NO_PALETTE.map(String::from)));
         for args in READS_PALETTE {
             let with = |more: &[&'static str]| [args, more].concat();
             assert!(parses(&with(&["--project", "p1"])), "{args:?}");
