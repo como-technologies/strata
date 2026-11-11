@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # The profile export test (#156): Palette exports a profile version as one file, and
-# `snapshot --from-candidate` reads that file as a candidate. It builds no cluster, creates no
+# `snapshot --from-candidate` reads that file as a candidate. Stage 4 reads the download of each
+# version, the file that `same-release --allow renumber` reads (#751). It builds no cluster, creates no
 # profile, and needs no OpenTofu: each request is a GET. So it runs whenever the key works.
 #
 #   examples/live/export.sh [STAGE]
@@ -11,11 +12,15 @@
 #   2  the export with format=json gives the same record as the export with format=yaml
 #   3  what the export route answers: a request that accepts JSON gets no file; and three
 #      exports at once, whose refusals the run records
+#   4  the download of each version: the layout of the file, the archive of each pack, the
+#      packs with no archive, and what the route answers to a request that accepts JSON and to
+#      two downloads at once
 #
 # PROFILES holds the versions, by <name>@<version>, in the project of the key. The default is the
 # three versions that `just live-up` publishes. Palette can refuse an export with HTTP 429 and
 # the message "only 1 request in 10 seconds is allowed", so the script waits 11 seconds before
-# each export.
+# each export. Palette takes one download of a version in 10 seconds too, so the script waits 11
+# seconds before each download.
 #
 # Results go under runs/<UTC time>/export/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -38,6 +43,36 @@ trap summary EXIT
 export_file() {
   sleep 11
   check "$1" 0 "$2" -- "$live/api.sh" export "$3" "$4"
+}
+
+# download_layout FILE RECORD LIST: the one metadata.json at the top of the download FILE names the
+# list of the packs, which goes to LIST. The list names each pack of RECORD with a registry at its
+# version, and no manifest pack by its name
+download_layout() {
+  local top path
+  top=$(tar -tzf "$1" | sed -n 's|^\([^/]*\)/metadata\.json$|\1|p')
+  [ "$(printf '%s\n' "$top" | grep -c .)" = 1 ] || { echo "no one metadata.json at the top" >&2; return 1; }
+  path=$(tar -xzOf "$1" "$top/metadata.json" | jq -r '.profiles[0].packsMetaFilePath') || return 1
+  tar -xzOf "$1" "$top/$path" > "$3" || return 1
+  echo "$top/$path" > "$3.path"
+  jq -e --slurpfile record "$2" '.packs as $list | $record[0].packs
+    | all(if .type == "manifest" then $list[.name] == null else $list[.name].version == .version end)' "$3"
+}
+
+# download_archives FILE LIST: each archive of a pack that the list LIST of the download FILE names
+# has one top folder, and its pack.json names the version of its entry. A chart of a Helm registry
+# has no pack.json, so the check reads the archives of the other packs
+download_archives() {
+  local folder name path version top
+  folder=$(dirname "$(cat "$2.path")")
+  while IFS=$'\t' read -r name path version; do
+    top=$(tar -xzOf "$1" "$folder/$path" | tar -tz | cut -d/ -f1 | sort -u)
+    [ "$(printf '%s\n' "$top" | grep -c .)" = 1 ] || { echo "$name: no one top folder" >&2; return 1; }
+    [ "$(tar -xzOf "$1" "$folder/$path" | tar -xzO "$top/pack.json" | jq -r .version)" = "$version" ] \
+      || { echo "$name: pack.json does not name $version" >&2; return 1; }
+    echo "$name $version: $top/pack.json"
+  done < <(jq -r '.packs[] | select(.filePath != "" and (.manifestName // "") == "" and .type != "helm")
+    | [.name, .filePath, .version] | @tsv' "$2")
 }
 
 # the record of each version gives its uid, and the root that the export must give
@@ -96,6 +131,38 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
   # records the exit code and the answers, and does not judge them
   check export-limit '?' '#156: three exports at once; exit 2 when Palette refused one or more' -- \
     bash -c 'refused=0; for i in 1 2 3; do "$1" export "$2" yaml > /dev/null || refused=2; done; exit $refused' _ \
+    "$live/api.sh" "$uid"
+fi
+
+if [ "$stage" = all ] || [ "$stage" = 4 ]; then
+  echo "== the download of each version (#751)" | tee -a steps.log
+  for ref in $profiles; do
+    name=${ref%@*}
+    uid=$(jq -r .source.uid "$name.version.json")
+    sleep 11
+    check "download-$name" 0 "#751: GET /v1/clusterprofiles/{uid}/spc/download gives the file of $ref" -- \
+      "$live/api.sh" download "$uid"
+    cp "download-$name.out" "$name.tgz"
+    check "download-layout-$name" 0 "#751: metadata.json at the top names the list of the packs, and the list names each pack of $ref with a registry at its version" -- \
+      download_layout "$name.tgz" "$name.version.json" "$name.list.json"
+    check "download-archive-$name" 0 "#751: each archive of a pack of $ref has one top folder, and its pack.json names the version of its entry" -- \
+      download_archives "$name.tgz" "$name.list.json"
+  done
+  # which packs have no archive, and why: the records name the registry of each pack, and the
+  # check records the entries and does not judge them
+  check download-no-archive '?' '#751: the entry of each pack with no archive: its name, its type, and isRegistryPrivate' -- \
+    bash -c 'for f in "$@"; do jq -r --arg f "$f" ".packs[] | select(.filePath == \"\" and (.manifestName // \"\") == \"\") | [\$f, .name, .type, .isRegistryPrivate] | @tsv" "$f"; done' _ ./*.list.json
+  ref=${profiles%% *}
+  name=${ref%@*}
+  uid=$(jq -r .source.uid "$name.version.json")
+  sleep 11
+  check download-accepts-json '?' '#751: a request that accepts JSON alone gets no file; the check records the status' -- \
+    "$live/api.sh" get-status "/v1/clusterprofiles/$uid/spc/download"
+  sleep 11
+  # two downloads of one version at once: Palette takes one in 10 seconds, and can refuse the
+  # second with HTTP 429 TooManyRequests. The check records the exit code, and does not judge it
+  check download-limit '?' '#751: two downloads of one version at once; exit 2 when Palette refused the second' -- \
+    bash -c 'refused=0; for i in 1 2; do "$1" download "$2" > /dev/null || refused=2; done; exit $refused' _ \
     "$live/api.sh" "$uid"
 fi
 

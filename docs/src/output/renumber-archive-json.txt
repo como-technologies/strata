@@ -1,0 +1,3 @@
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.2 --json | jq -c '.pairs[0] | .archivesCompared, .archivesChanged'
+["k8s/kubernetes"]
+[{"key":"csi/csi-aws-ebs","files":["values.yaml"]}]

@@ -124,6 +124,58 @@ that Palette mints, as for each candidate with a manifest layer.
 [export.sh](../../development/live-runs.md#exportsh) shows each fact of this
 section.
 
+## The download of a version
+
+`GET /v1/clusterprofiles/{uid}/spc/download` gives the published content of a
+profile version as one file: a tar archive that gzip compresses. At each
+request, Palette downloads each pack of the version from its registry. It puts
+the archive of each pack in the file. `same-release --allow renumber` reads the
+file: see
+[A release under new version numbers](../../commands/same-release.md#a-release-under-new-version-numbers).
+
+Each path of the file starts with the uid of the version:
+
+```text
+<uid>/metadata.json
+<uid>/spc.json
+<uid>/profiles/<uid>/packs-metadata.json
+<uid>/profiles/<uid>/packs/<name>/<name>-<version>.tar.gz
+<uid>/profiles/<uid>/packs/<name>/manifests/<manifest>.yaml
+```
+
+- `metadata.json` names the list of the packs in `profiles[].packsMetaFilePath`.
+- The list holds `packs`, with an entry for each pack by its name. An entry has
+  `name`, `version`, `type`, `isRegistryPrivate`, and `filePath`. `filePath` is
+  the path of the archive of the pack from the folder of the list. Each manifest
+  of a pack has an entry too, with `manifestName`.
+- The archive of a pack is a tar archive that gzip compresses, with one top
+  folder. The folder has the name of the pack and the first 12 hex digits of
+  its digest. The archive holds `pack.json`, `values.yaml`, and the other files
+  of the build. `pack.json` names the version of the build.
+- `spc.json` and the manifests hold the content with the value of each macro.
+  Strata reads the two lists and the archives of the packs, and no other file.
+
+The file holds no archive for these packs:
+
+- A pack of a pack registry or of a Helm registry that is private. Its entry
+  has `isRegistryPrivate` true, and an empty `filePath`.
+- A pack of an OCI registry of Helm charts or of Zarf packages. Its entry has
+  an empty `filePath`.
+- A manifest pack. The list names only its manifests.
+
+The list has no entry for a pack whose registry Palette cannot find. For a pack
+of a pack registry, the archive is the archive of the digest that the profile
+pins. For a pack of an OCI registry of packs, it is the archive of the tag of
+the version at the time of the request.
+
+Palette sends the file only to a request that accepts a file, such as
+`Accept: application/octet-stream`. The route reads the version by its uid, in
+the project of the request. Palette takes one download of a version in 10
+seconds. It refuses the next with HTTP 429, the code `TooManyRequests`, and the
+message "Too Many Requests, only 1 request in 10 seconds is allowed". It sends
+no `Retry-After`. [export.sh](../../development/live-runs.md#exportsh) shows
+each fact of this section.
+
 ## The audit log
 
 Palette logs each write to a profile, an app profile, a cluster, an edge host,

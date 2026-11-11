@@ -3186,6 +3186,15 @@ impl Stage {
         .unwrap();
     }
 
+    /// Palette answers `path` with the bytes `body` and status 200, such as a file of a download.
+    fn route_bytes(&self, path: &str, body: &[u8]) {
+        std::fs::write(
+            self.root.path().join("routes").join(Self::route_key(path)),
+            body,
+        )
+        .unwrap();
+    }
+
     /// Palette answers `path` with `status` and `body` to a request whose `ApiKey` is `key`.
     fn route_as(&self, path: &str, key: &str, status: u16, body: &str) {
         let route = self.root.path().join("routes");
@@ -12503,4 +12512,101 @@ fn each_script_of_the_live_example_that_a_recipe_runs_has_the_mode_100755_in_git
         "a recipe runs these scripts, and Git does not record them as 100755 \
          (git update-index --chmod=+x <file>): {wrong:?}"
     );
+}
+
+// ---- export.sh -------------------------------------------------------------------------------------
+
+/// A stage of `export.sh` 4 for the version `aws-stack@1.2.0`, whose download holds `packs`. The
+/// record names the Kubernetes pack at `1.36.2`, the CSI pack of a private registry, and a manifest
+/// pack.
+fn download_stage(packs: &[DownloadPack]) -> Stage {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("PROFILES", "aws-stack@1.2.0");
+    stage.strata(
+        "snapshot aws-stack@1.2.0 -q -o aws-stack.version.json",
+        0,
+        r#"{"source":{"uid":"u-1"},"packs":[
+            {"name":"kubernetes","type":"spectro","version":"1.36.2"},
+            {"name":"csi-aws-ebs","type":"spectro","version":"1.65.0"},
+            {"name":"platform-rules","type":"manifest","version":"1.0.0"}]}"#,
+    );
+    let file = profile_download("u-1", "aws-stack", packs);
+    stage.route_bytes(&download_route("u-1"), &file);
+    stage
+}
+
+/// The packs of the download of `aws-stack@1.2.0`: the archive of the build of the Kubernetes pack,
+/// whose `pack.json` names `built`, the CSI pack with no archive, and the manifest pack.
+fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
+    let none = |name, version, kind, private| DownloadPack {
+        name,
+        version,
+        kind,
+        private,
+        archive: None,
+        manifests: &[],
+    };
+    vec![
+        DownloadPack {
+            archive: Some(pack_archive(
+                "kubernetes",
+                built,
+                "k8s",
+                "kubernetes-0123456789ab",
+                &[("values.yaml", "pack: {}\n")],
+            )),
+            ..none("kubernetes", "1.36.2", SPECTRO, false)
+        },
+        none("csi-aws-ebs", "1.65.0", SPECTRO, true),
+        DownloadPack {
+            manifests: &[("extra-rules", "kind: ConfigMap\n")],
+            ..none("platform-rules", "1.0.0", MANIFEST, false)
+        },
+    ]
+}
+
+/// Stage 4 reads the layout of the download of each version, and the archive of each pack. It
+/// records the packs with no archive, the answer to a request that accepts JSON, and two downloads
+/// at once. A list or an archive that names another version fails its check.
+#[test]
+fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    passed(
+        &steps,
+        &[
+            "download-aws-stack",
+            "download-layout-aws-stack",
+            "download-archive-aws-stack",
+        ],
+    );
+    for id in [
+        "download-no-archive",
+        "download-accepts-json",
+        "download-limit",
+    ] {
+        assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
+    }
+    let none = std::fs::read_to_string(stage.path("out/download-no-archive.out")).unwrap();
+    assert_eq!(none, "./aws-stack.list.json\tcsi-aws-ebs\tspectro\ttrue\n");
+    let request = std::fs::read_to_string(
+        stage.path("routes/sent/GET_v1_clusterprofiles_u-1_spc_download.request"),
+    )
+    .unwrap();
+    assert!(
+        request.contains("Accept: application/octet-stream"),
+        "{request}"
+    );
+    // a build whose pack.json names another version
+    let stage = download_stage(&downloaded("1.36.2-rc.1"));
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    passed(&steps, &["download-layout-aws-stack"]);
+    failed(&steps, &["download-archive-aws-stack"]);
+    // a list that names another version of a pack of the record
+    let mut packs = downloaded("1.36.3");
+    packs[0].version = "1.36.3";
+    let stage = download_stage(&packs);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    failed(&steps, &["download-layout-aws-stack"]);
 }

@@ -508,6 +508,51 @@ facts:
     code:
       - examples/live/export.sh
 
+  # The download of a version. The answer is a file and no JSON document, so the stand-in serves
+  # no document for the request, and the weekly run skips it. The fields are those of the two
+  # lists in the file.
+  - id: profile-download
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}/spc/download
+    reads:
+      fields:
+        - profiles[].packsMetaFilePath
+        - packs.*.name
+        - packs.*.version
+        - packs.*.type
+        - packs.*.isRegistryPrivate
+        - packs.*.filePath
+        - packs.*.manifestName
+    stand_in: []
+    live:
+      - export.sh:download-<name>
+      - export.sh:download-layout-<name>
+      - export.sh:download-archive-<name>
+      - export.sh:download-no-archive
+      - export.sh:download-accepts-json
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#the-download-of-a-version
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/http.rs
+      - src/api/download.rs
+      - src/ops/same_release/archives.rs
+
+  - id: profile-download-limit
+    kind: behavior
+    reads:
+      codes:
+        - TooManyRequests
+    stand_in: []
+    live:
+      - export.sh:download-limit
+    pages:
+      - internals/palette/profiles.md#the-download-of-a-version
+    code:
+      - src/api/palette/profiles.rs
+      - src/error/mod.rs
+
   # The audit log.
   - id: audit-page-limit
     kind: behavior

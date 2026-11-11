@@ -51,6 +51,7 @@ use crate::tenant::{
     profile_route, validated_cloud,
 };
 
+mod download;
 mod report;
 pub use report::REPORT_ENDPOINT;
 use report::{REPORT_TAKEN, REPORT_TAKEN_STATUS};
@@ -99,14 +100,21 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         200 => "OK",
         204 => "No Content",
         403 => "Forbidden",
+        download::NOT_ACCEPTABLE => "Not Acceptable",
         409 => "Conflict",
         422 => "Unprocessable Entity",
         500 => "Internal Server Error",
         _ => "Not Found",
     };
+    // the file of a download is no JSON
+    let kind = if status == 200 && download::is_download(&request.target) {
+        download::FILE_TYPE
+    } else {
+        "application/json"
+    };
     write!(
         stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\n\
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: {kind}\r\n\
          Content-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     )?;
@@ -153,6 +161,9 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
     }
     if let Some(body) = export_reader(root, request) {
         return Ok((200, body));
+    }
+    if let Some(answer) = download::download(root, request) {
+        return Ok(answer);
     }
     let path = file_for(root, request.project.as_deref(), &request.target);
     let refusal = path.as_deref().and_then(refusal_of);

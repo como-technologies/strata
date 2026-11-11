@@ -109,3 +109,6 @@ pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
 pub(super) const RENUMBER_PRE: &str = "64e00000000000000000010e";
 pub(super) const RENUMBER_FINAL: &str = "64e00000000000000000010f";
 pub(super) const RENUMBER_EDITED: &str = "64e000000000000000000110";
+// aws-stack@1.2.2 of the use case of a renumber: the final build of the CSI pack has another default
+// value, and the profile gives the pin the same values
+pub(super) const RENUMBER_REBUILT: &str = "64e000000000000000000111";

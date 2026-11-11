@@ -1587,6 +1587,7 @@ name = "strata-fuzz"
 version = "0.32.2"
 dependencies = [
  "bolero",
+ "flate2",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1594,6 +1595,7 @@ dependencies = [
  "strata-palette",
  "strata-preflight",
  "strata-report-endpoint",
+ "tar",
  "tempfile",
 ]
 
@@ -2197,6 +2199,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "flate2",
  "proc-macro2",
  "regex",
  "serde",
@@ -2207,6 +2210,7 @@ dependencies = [
  "strata-preflight",
  "strata-report-endpoint",
  "syn 2.0.119",
+ "tar",
  "tempfile",
  "ureq",
 ]

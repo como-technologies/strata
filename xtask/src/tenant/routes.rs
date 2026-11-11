@@ -35,7 +35,7 @@ pub(super) const EDGE_HOSTS: &str = "v1/edgehosts";
 /// The app profile documents of a project, `v1/appProfiles/{uid}`.
 pub(super) const APP_PROFILES: &str = "v1/appProfiles";
 /// The pack registries of a scope, `GET /v1/registries/metadata`.
-pub(super) const REGISTRY_LISTING: &str = "v1/registries/metadata";
+pub(crate) const REGISTRY_LISTING: &str = "v1/registries/metadata";
 /// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
 pub(crate) const CLUSTER_LISTING: &str = "v1/dashboard/spectroclusters/meta";
 
@@ -58,7 +58,7 @@ pub(crate) fn profile_route(uid: &str) -> String {
 }
 
 /// The manifests of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/packs/manifests`.
-pub(super) fn manifests_route(uid: &str) -> String {
+pub(crate) fn manifests_route(uid: &str) -> String {
     format!("{}/packs/manifests", profile_route(uid))
 }
 
@@ -158,6 +158,18 @@ pub(super) fn resolved_values_file(route: &str) -> String {
     format!("{route}/packs/resolvedValues")
 }
 
+/// The segments of the download route of a profile version after its uid,
+/// `GET /v1/clusterprofiles/{uid}/spc/download`.
+const DOWNLOAD: &str = "spc/download";
+
+/// The profile route of the download route `path`, `v1/clusterprofiles/{uid}/spc/download`:
+/// `v1/clusterprofiles/{uid}`. `None` for any other path.
+pub fn downloaded_profile(path: &str) -> Option<&str> {
+    let profile = path.strip_suffix(DOWNLOAD)?.strip_suffix('/')?;
+    let uid = profile.strip_prefix(PROFILES)?.strip_prefix('/')?;
+    (!uid.is_empty() && !uid.contains('/')).then_some(profile)
+}
+
 /// The file of the export of the profile version `uid` as JSON,
 /// `GET /v1/clusterprofiles/{uid}/export?format=json`.
 pub(super) fn export_file(uid: &str) -> String {
@@ -238,6 +250,22 @@ mod tests {
             r#"{"items":[],"listmeta":{"continue":"","limit":100}}"#
         );
         assert!(audit_log_file("clusterprofile", "u1").ends_with("&limit=100"));
+    }
+
+    #[test]
+    fn the_download_route_names_the_profile_it_downloads() {
+        let download = format!("{}/spc/download", profile_route("u1"));
+        assert_eq!(downloaded_profile(&download), Some("v1/clusterprofiles/u1"));
+        for other in [
+            "v1/clusterprofiles/spc/download",
+            "v1/clusterprofiles//spc/download",
+            "v1/clusterprofiles/u1/download",
+            "v1/clusterprofiles/u1/spc/download/more",
+            "v1/spectroclusters/u1/spc/download",
+            "v1/clusterprofiles/u1",
+        ] {
+            assert_eq!(downloaded_profile(other), None, "{other}");
+        }
     }
 
     #[test]

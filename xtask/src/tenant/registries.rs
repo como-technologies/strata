@@ -322,6 +322,30 @@ impl Tenant {
         self.write(project, &path, &entity);
     }
 
+    /// Publish a copy of `version` of the pack `name` as `copy_version`, as
+    /// [`Tenant::copy_pack_version`] does, from another build: the text `from` of its default
+    /// values is `to`. The pin of a profile keeps the values that the profile gives it, so only the
+    /// archive of the build shows the change.
+    pub fn rebuild_pack_version(
+        &self,
+        project: &str,
+        name: &str,
+        (version, copy_version): (&str, &str),
+        (from, to): (&str, &str),
+    ) {
+        self.copy_pack_version(project, name, version, copy_version);
+        let path = pack_listing(name);
+        let mut listing = self.read(project, &path);
+        for item in listing["items"].as_array_mut().into_iter().flatten() {
+            if is_listed(item, PUBLIC_REPO, copy_version)
+                && let Some(values) = item["spec"]["values"].as_str()
+            {
+                item["spec"]["values"] = json!(values.replace(from, to));
+            }
+        }
+        self.write(project, &path, &listing);
+    }
+
     /// Give one version of a pack in the listing of the Public Repo the architectures
     /// `architectures`. The annotation `architecture` of the listing names them: `amd64`, or
     /// `amd64,arm64`. The Public Repo names them on most versions. A newer version can name fewer

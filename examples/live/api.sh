@@ -164,6 +164,11 @@
 #       Palette sends the file only to a request that accepts a file; to a request that accepts
 #       JSON, it sends `{"Reader":{}}`. Palette can refuse an export that follows another one
 #       at once with HTTP 429.
+#   api.sh download PROFILE_UID
+#       Print the download of a profile version: GET /v1/clusterprofiles/{uid}/spc/download, a
+#       tar archive that gzip compresses. A read. Palette sends the file only to a request that
+#       accepts a file, and takes one download of a version in 10 seconds: the next one in that
+#       time gets HTTP 429.
 #
 # The key comes from PALETTE_API_KEY or ~/.palette.env and is never printed; the address from
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
@@ -914,6 +919,8 @@ case "${1:-}" in
   app-version) shift; app_version "$@" ;;
   export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
     ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;
+  download) shift; [ -n "${1:-}" ] || die "usage: api.sh download PROFILE_UID"
+    ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/spc/download" ;;
   patch) shift; patch "$@" ;;
   put) shift; put "$@" ;;
   post) shift; post "$@" ;;
