@@ -566,6 +566,7 @@ maintainer only.
 |---|---|---|
 | `book-opens` | 0 | #65: the address of the book that `strata --help` prints answers 200 with no login. No result yet: the repository is private. |
 | `install-no-token`, `install-runs` | 0 | #65: the install command of the README, as it is, installs the latest release with no token, and both binaries run. No result yet: the repository is private. |
+| `gitlab-install-no-token` | 0 | #483: the install lines of the template `.strata` of the GitLab drop-in install the release of its `STRATA_VERSION` with no token, and the binary runs. The check omits the lines of `apt-get`, which need the image of the job. No result yet: the repository is private. |
 | `image-no-login`, `chart-no-login` | 0 | #65: the registry gives the image and the chart of the observer of that release for an anonymous token. No result yet: the packages are private. |
 | `repository-public` | 0 | #65: the API of GitHub shows the repository with no token, with a description and topics. No result yet: the repository is private. |
 | `advisory-form` | 0 | #65: private vulnerability reporting is on. No result yet: GitHub gives it to a public repository only. |

@@ -945,6 +945,15 @@ pub fn gitlab_drop_in() -> serde_yaml::Value {
         .unwrap_or_else(|e| panic!("{GITLAB_DROP_IN}: not YAML: {e}"))
 }
 
+/// The value of the variable `name` in the `variables` of the GitLab drop-in, such as the release
+/// of `STRATA_VERSION` that its jobs install.
+pub fn gitlab_drop_in_variable(name: &str) -> String {
+    gitlab_drop_in()["variables"][name]
+        .as_str()
+        .unwrap_or_else(|| panic!("{GITLAB_DROP_IN} gives {name} no text value"))
+        .to_string()
+}
+
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
 /// or one of `joins`. `--thresh` is not in `--threshold`, and `$NAME` is not in `$NAME_2`,
 /// although the longer text contains the shorter one.

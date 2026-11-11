@@ -6665,3 +6665,207 @@ fn the_page_of_your_own_pipeline_links_out_only_to_the_repository_of_strata() {
         );
     }
 }
+
+// ---- the findings of a real pipeline (#483) ----------------------------------------------------
+
+/// The issue template for a finding from a real pipeline, from the root of the repository.
+const REAL_PIPELINE_TEMPLATE: &str = ".github/ISSUE_TEMPLATE/real-pipeline.yml";
+
+/// The page of the rule of the names.
+const REAL_PIPELINE_PAGE: &str = "development/real-pipelines.md";
+
+/// The page of the review at the end of a wave, which reads the reports.
+const WAVE_REVIEW_PAGE: &str = "development/wave-review.md";
+
+/// The fields of the template, by their ids. The plan of #483 names the first four. The box is
+/// the rule of the names.
+const REAL_PIPELINE_FIELDS: [&str; 5] = ["job", "output", "expected", "version", "names"];
+
+/// The template [`REAL_PIPELINE_TEMPLATE`], parsed.
+fn real_pipeline_template() -> serde_yaml::Value {
+    serde_yaml::from_str(&repo_file(REAL_PIPELINE_TEMPLATE))
+        .unwrap_or_else(|e| panic!("{REAL_PIPELINE_TEMPLATE}: not YAML: {e}"))
+}
+
+/// The entries of the body of the template that a person fills: each entry that is not text.
+fn template_fields(template: &serde_yaml::Value) -> Vec<&serde_yaml::Value> {
+    template["body"]
+        .as_sequence()
+        .expect("the template has a body")
+        .iter()
+        .filter(|entry| entry["type"].as_str() != Some("markdown"))
+        .collect()
+}
+
+/// The template asks for the job or the command, the output with each name replaced, what the
+/// person expected, and the version of strata. Each field is required, and so is the box of the
+/// rule of the names. The template links the section of the book that states the rule, and the
+/// table of that page names each field.
+#[test]
+fn the_template_of_a_real_pipeline_asks_for_each_field_and_links_the_rule_of_the_names() {
+    let template = real_pipeline_template();
+    assert_eq!(
+        template["name"].as_str(),
+        Some("A finding from a real pipeline")
+    );
+    let fields = template_fields(&template);
+    let ids: Vec<&str> = fields.iter().map(|f| f["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, REAL_PIPELINE_FIELDS);
+    for field in &fields {
+        let required = field["validations"]["required"].as_bool() == Some(true)
+            || field["attributes"]["options"]
+                .as_sequence()
+                .is_some_and(|options| {
+                    options
+                        .iter()
+                        .all(|o| o["required"].as_bool() == Some(true))
+                });
+        assert!(required, "the field {:?} is not required", field["id"]);
+    }
+
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    let labels: Vec<&str> = fields
+        .iter()
+        .map(|f| f["attributes"]["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        first_cells(&page, "| Field |"),
+        labels,
+        "the table of {REAL_PIPELINE_PAGE} and the fields of the template"
+    );
+
+    assert!(page.contains("\n## The rule of the names\n"));
+    let link = format!(
+        "({}{}#the-rule-of-the-names)",
+        strata::BOOK_URL,
+        REAL_PIPELINE_PAGE.replace(".md", ".html")
+    );
+    let text = template["body"][0]["attributes"]["value"].as_str().unwrap();
+    assert!(
+        text.contains(&link),
+        "the template does not link {link}: {text}"
+    );
+
+    // the page names the file of the template, and links the form of a new issue with it
+    let file = REAL_PIPELINE_TEMPLATE.rsplit('/').next().unwrap();
+    for says in [
+        format!("`{REAL_PIPELINE_TEMPLATE}`"),
+        format!(
+            "({}/issues/new?template={file})",
+            env!("CARGO_PKG_REPOSITORY")
+        ),
+    ] {
+        assert!(page.contains(&says), "{REAL_PIPELINE_PAGE} lacks {says}");
+    }
+}
+
+/// The page states the rule of the names: each name is made up, such as `barney` or `fred`. A
+/// report holds no data of a client, no host, no account, and no key. The box of the template says
+/// the same.
+#[test]
+fn the_page_of_a_real_pipeline_states_the_rule_of_made_up_names_and_no_client_data() {
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    let rule = one_line(section(&page, "## The rule of the names", Some("\n## ")));
+    for says in [
+        "with a made-up name",
+        "`barney` and `fred`",
+        "a report holds no data of a client",
+        "Give no host, no address, no account, and no key.",
+        "Give no name of a person.",
+    ] {
+        assert!(rule.contains(says), "the rule does not say {says:?}");
+    }
+    let template = real_pipeline_template();
+    let names = template_fields(&template)
+        .into_iter()
+        .find(|f| f["id"].as_str() == Some("names"))
+        .expect("the template has the box of the rule of the names");
+    let tick = names["attributes"]["options"][0]["label"].as_str().unwrap();
+    for says in [
+        "Each name in this report is made up.",
+        "no data of a client, no host, no account, and no key",
+    ] {
+        assert!(tick.contains(says), "the box does not say {says:?}: {tick}");
+    }
+}
+
+/// The review at the end of a wave lists the reports with the label of the template, and makes the
+/// label. The two pages link each other, and the navigation lists both under Development.
+#[test]
+fn the_review_at_the_end_of_a_wave_reads_the_issues_of_the_template() {
+    let template = real_pipeline_template();
+    let label = template["labels"][0]
+        .as_str()
+        .expect("the template gives a label");
+    let repo = env!("CARGO_PKG_REPOSITORY")
+        .strip_prefix("https://github.com/")
+        .expect("the repository is on GitHub");
+    let review = read(&docs().join(WAVE_REVIEW_PAGE));
+    let reads = section(
+        &review,
+        "## Read the reports of real pipelines",
+        Some("\n## "),
+    );
+    let commands = one_line(
+        &common::code_blocks(reads, "bash")
+            .join("\n")
+            .replace("\\\n", " "),
+    );
+    for command in [
+        format!("gh issue list --repo {repo} --label {label} --state all"),
+        format!("gh label create {label} --repo {repo}"),
+    ] {
+        assert!(
+            commands.contains(&command),
+            "{WAVE_REVIEW_PAGE} does not run {command:?}: {commands}"
+        );
+    }
+    assert!(reads.contains("(./real-pipelines.md)"));
+
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    assert!(page.contains(&format!("the label `{label}`")));
+    assert!(page.contains("(./wave-review.md)"));
+
+    let summary = read(&docs().join("SUMMARY.md"));
+    let development = section(&summary, "\n# Development\n", None);
+    for listed in [REAL_PIPELINE_PAGE, WAVE_REVIEW_PAGE] {
+        assert!(
+            development.contains(&format!("(./{listed})")),
+            "Development does not list {listed}"
+        );
+    }
+}
+
+/// The two pages and the text of the template keep to the limits and the words of "The style
+/// rules".
+#[test]
+fn the_pages_and_the_template_of_a_real_pipeline_keep_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for page in [REAL_PIPELINE_PAGE, WAVE_REVIEW_PAGE] {
+        for block in blocks_of(&read(&docs().join(page))) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    let template = real_pipeline_template();
+    let mut texts: Vec<&str> = ["name", "description"]
+        .iter()
+        .filter_map(|key| template[*key].as_str())
+        .collect();
+    for entry in template["body"].as_sequence().unwrap() {
+        let attributes = &entry["attributes"];
+        texts.extend(
+            ["label", "description", "value"]
+                .iter()
+                .filter_map(|key| attributes[*key].as_str()),
+        );
+        for option in attributes["options"].as_sequence().into_iter().flatten() {
+            texts.extend(option["label"].as_str());
+        }
+    }
+    for text in texts {
+        faults.extend(sentence_faults(REAL_PIPELINE_TEMPLATE, text));
+        faults.extend(wording_faults(REAL_PIPELINE_TEMPLATE, text));
+    }
+    assert_no_faults(&faults);
+}
