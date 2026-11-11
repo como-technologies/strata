@@ -12535,8 +12535,8 @@ fn download_stage(packs: &[DownloadPack]) -> Stage {
     stage
 }
 
-/// The packs of the download of `aws-stack@1.2.0`: the archive of the build of the Kubernetes pack,
-/// whose `pack.json` names `built`, the CSI pack with no archive, and the manifest pack.
+/// The packs of the download of `aws-stack@1.2.0`. The `pack.json` of the archive of the Kubernetes
+/// pack names `built`. The CSI pack has no archive, and the manifest pack has none.
 fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
     let none = |name, version, kind, private| DownloadPack {
         name,

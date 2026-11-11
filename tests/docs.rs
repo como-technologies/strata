@@ -6702,8 +6702,8 @@ fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
             "{page}: the text includes no output of the chapter renumber"
         );
         assert!(
-            part.contains("renumber only") || part.contains("archive: not compared"),
-            "{page}: the text does not say what a renumber does not compare"
+            part.contains("renumber only") || part.contains("archive: same files"),
+            "{page}: the text does not say what strata compares of a renumber"
         );
         assert!(
             part.contains("archive"),
@@ -6718,8 +6718,16 @@ fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
     let allow = read(&docs().join("output/renumber-allow.txt"));
     assert!(
         allow.contains("\nRENUMBER ")
-            && allow.contains("(pre-release to final; archive: not compared)"),
+            && allow.contains("(pre-release to final; archive: same files)"),
         "{allow}"
+    );
+    // a new build with another file fails, and the reason names the file
+    let archive = read(&docs().join("output/renumber-archive.txt"));
+    assert!(
+        archive.contains("\nDIFFERENT ")
+            && archive.contains("(archive: other files)")
+            && archive.contains("pack csi/csi-aws-ebs archive: values.yaml differs"),
+        "{archive}"
     );
     let compare = read(&docs().join("output/renumber-compare.txt"));
     assert_eq!(

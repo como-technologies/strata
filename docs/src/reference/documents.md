@@ -495,9 +495,17 @@ of the secret does not show, because the two sides hold the mask: see
     pre-release `old`, in Semantic Versioning. A pair that fails for another
     reason lists its renumbers too. See
     [A release under new version numbers](../commands/same-release.md#a-release-under-new-version-numbers).
+  - `archivesCompared`, only when it is not empty: the key of each pack of
+    `renumbers[]` whose two archives strata compared. They hold the same files,
+    and `pack.json` differs only by its `version`. See
+    [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+  - `archivesChanged[]`, only when it is not empty: each pack of `renumbers[]`
+    whose two archives differ in another file, with `key` and `files[]`. The
+    pair is then `different`, and `reasons[]` names the files too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
-    `renumbers[]` whose archive can differ. Its digest changed, or Palette gives
-    none. Strata does not compare the files of the two archives.
+    `renumbers[]` whose archive can differ, and whose archives strata did not
+    compare. Its digest changed, or Palette gives none. Palette serves no
+    archive of the pack, or a record is no published version.
     A manifest pack has no archive, so it is never in the list.
   - `upstreamUnknown`, only when it is not empty: the packs with no upstream
     digest, also when `--allow no-digest` accepts them.

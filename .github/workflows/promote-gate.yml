@@ -35,7 +35,7 @@ on:
         description: Optional. A token that reads como-technologies/strata. When it is empty, the workflow reads that public repository with the token of the caller.
         required: false
       palette-api-key:
-        description: PALETTE_API_KEY. Records are files and need no key; a ref does.
+        description: PALETTE_API_KEY. Records are files and need no key; a ref does, and so does renumber in allow, which reads the archives of the packs.
         required: false
       palette-project-uid:
         description: PALETTE_PROJECT_UID, the project of a ref by its uid. It has priority over project.

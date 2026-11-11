@@ -287,9 +287,9 @@ fn candidate_files() -> Vec<Vec<u8>> {
 
 // ---- the download of a profile version ------------------------------------------------------
 
-/// Downloads of a profile version, as Palette writes them: a pack with its archive and a
-/// manifest, a pack of a private registry, and a manifest pack. Also a download with no list, a
-/// download whose archive of a pack is no gzip, and an answer that is JSON.
+/// Downloads of a profile version, as Palette writes them. The packs are a pack with its archive
+/// and a manifest, a pack of a private registry, and a manifest pack. The other seeds are a
+/// download with no list, an archive of a pack that is no gzip, and an answer that is JSON.
 fn downloads() -> Vec<Vec<u8>> {
     use crate::archive::{DownloadPack, MANIFEST, SPECTRO, pack_archive, profile_download, tgz};
     let uid = crate::support::UID;

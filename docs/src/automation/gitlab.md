@@ -55,7 +55,7 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | Variable | Needed for | Note |
 | --- | --- | --- |
 | `GITLAB_TOKEN` | the note, the label, the issues | A project or group access token with the `api` scope. **The job token cannot write notes or issues.** Mask it. |
-| `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, and a ref that is not a file | Mask it. |
+| `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, a ref that is not a file, and `renumber` in `STRATA_PROMOTE_ALLOW` | Mask it. |
 | `PALETTE_PROJECT_UID` | a ref in a project | |
 | `STRATA_REPAVE` | the comment | `true` asks Palette if the change repaves the cluster, and its answer decides the label. `false` by default. See [Pull request comments](./pr-comments.md#ask-palette-if-the-change-repaves). |
 | `STRATA_TOKEN` | the download | Optional: a GitHub token for the installer. See [Install](../install.md#one-command). Mask it. |

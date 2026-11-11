@@ -98,17 +98,54 @@ names that is not Semantic Versioning passes too, such as `1.2.0-build5` to
 {{#include ../output/renumber-json.txt}}
 ```
 
-**Check the archive of each new build in your pipeline.** Its `pack.json`
-holds the new version, so it has a new digest. Strata does not read the
-archive. So from the digest alone, it cannot show that only
-`pack.json` changed. Each such pack has `archive: not compared` on its line,
-and `pairs[].archivesNotCompared` names it.
-[#751](https://github.com/como-technologies/strata/issues/751) adds the
-compare of the archives. A manifest pack has no archive.
+### The archives of the two builds
 
-`compare` gives such a pack the impact `none` when its version keeps its
-numbers: see [A renumber](../reference/impact.md#a-renumber). See
-[A release gets new version numbers](../use-cases/renumber.md).
+The `pack.json` of a new build holds the new version, so the build has a new
+digest. The digest alone cannot show that only `pack.json` changed. So strata
+reads the archive of each such pack from Palette, and compares the files of
+the two archives. It does not compare `version` in `pack.json`. The line of
+each renumber gives what strata found:
+
+| Fact | What strata found |
+| --- | --- |
+| `archive: same files` | The two archives hold the same files, and `pack.json` differs only by its `version`. `pairs[].archivesCompared` names the pack. |
+| `archive: other files` | Another file differs. The pair fails, and a reason names the file. `pairs[].archivesChanged` names the pack and each file. |
+| `archive: not compared` | Palette serves no archive of the pack, or a record is not a published version. `pairs[].archivesNotCompared` names the pack. |
+
+A new build of a pack can change a file that the profile does not show, such
+as a default value of the pack. The values of the profile then stay the same,
+and only the archive shows the change:
+
+```text
+{{#include ../output/renumber-archive.txt}}
+```
+
+```text
+{{#include ../output/renumber-archive-json.txt}}
+```
+
+Strata reads the archives from the download of each profile version: see
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version).
+So `same-release --allow renumber` connects to Palette, also for two record
+files. It reads each version in the project of its record, and reads it once.
+It reads nothing when each renumber keeps its digest.
+
+**Check such an archive in your pipeline.** A line says
+`archive: not compared` when strata cannot read the two archives. Palette
+serves no archive of a pack of a private registry. It serves none of a pack of
+an OCI registry of Helm charts or of Zarf packages. A record of a candidate, a
+draft, or a cluster is no published version, so strata reads no download for
+it. A manifest pack has no archive. Its content is its manifests, and the
+records hold them.
+
+Palette takes one download of a version in 10 seconds. When another client
+read the version less than 10 seconds before, Palette refuses with HTTP 429 and
+the code `TooManyRequests`. Strata tries again as for each 429, and then stops
+with the error `api`. Run the command again after 10 seconds.
+
+`compare` reads no archive. It gives such a pack the impact `none` when its
+version keeps its numbers: see [A renumber](../reference/impact.md#a-renumber).
+See [A release gets new version numbers](../use-cases/renumber.md).
 
 ## A pack names another machine image
 

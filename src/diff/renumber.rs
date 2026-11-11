@@ -49,7 +49,8 @@ impl Renumber {
 /// The version differs. The name, the layer, the type, and the registry stay. The authored hash
 /// stays, so the values, the manifests, and the params are identical. The images that the values
 /// declare and the machine image in `imageId` stay too. The tag, the `packUid`, and the digest of
-/// the archive can differ. `same-release --allow renumber` reads this one rule.
+/// the archive can differ. `same-release --allow renumber` reads this one rule, and then compares
+/// the files of the two archives.
 pub(crate) fn renumbered(x: &Pack, y: &Pack) -> bool {
     x.version != y.version
         && x.hash.authored == y.hash.authored
@@ -62,9 +63,10 @@ pub(crate) fn renumbered(x: &Pack, y: &Pack) -> bool {
 /// True when the impact of `compare` is `none (renumber only)`: a renumber whose version keeps its
 /// numbers, see [`version::keeps_numbers`].
 ///
-/// Strata does not compare the archives. The values do not always name the content: `ubuntu-aws`
-/// `20.04` and `24.04` have the same values and are two releases of the OS. So a renumber to other
-/// numbers keeps the impact of its layer. See [`crate::diff::PackDiff::renumbered`].
+/// `compare` reads no archive. The values do not always name the content: `ubuntu-aws` `20.04`
+/// and `24.04` have the same values and are two releases of the OS. So a renumber to other numbers
+/// keeps the impact of its layer. `same-release --allow renumber` compares the archives. See
+/// [`crate::diff::PackDiff::renumbered`].
 pub(crate) fn renumber_only(x: &Pack, y: &Pack) -> bool {
     renumbered(x, y) && version::keeps_numbers(&x.version, &y.version)
 }

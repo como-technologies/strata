@@ -188,7 +188,7 @@ pub struct PackDiff {
     /// [`Renumber`](super::Renumber), from a pre-release to its final version, to another pre-release, or to other
     /// build data. The impact is then `none` with `renumber only`, and `IDENTITY` and `UPSTREAM`
     /// still count. A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
-    /// layer. Strata does not compare the archives, and the values do not always name the content.
+    /// layer. `compare` reads no archive, and the values do not always name the content.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub renumbered: bool,
     /// Which way the version of the pack moves from side A to side B. Absent when a side has no
