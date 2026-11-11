@@ -884,6 +884,20 @@ pub fn recipe(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// The commands that `just --dry-run` prints for the recipe and the arguments `args`. They are
+/// the lines of the recipe and of its dependencies, with each variable replaced. No command runs.
+/// `just` is the path that [`on_path`] gives.
+pub fn just_dry_run(just: &Path, args: &[&str]) -> String {
+    let o = Command::new(just)
+        .arg("--dry-run")
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "just {args:?}: {}", text(&o.stderr));
+    text(&o.stderr)
+}
+
 /// The text of the workflow `file` of `.github/workflows/`.
 pub fn workflow_text(file: &str) -> String {
     repo_file(&format!(".github/workflows/{file}"))

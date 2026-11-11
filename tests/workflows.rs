@@ -3,12 +3,13 @@
 //! it cannot parse; the reusable workflows never run here, so nothing else shows it. A
 //! colon and a space inside an unquoted description is the fault this found.
 
+use std::collections::BTreeSet;
 use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
-    one_line, recipe, repo_file, runs_of, script, steps, strings, text, toml_value, workflow,
-    workflow_files, workflow_text,
+    just_dry_run, on_path, one_line, recipe, repo_file, runs_of, script, steps, strings, text,
+    toml_value, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -1540,7 +1541,9 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 // ---- the knurl adapter (#705) -------------------------------------------------------------------
 
 /// A job of knurl tests the adapter, so no workflow of strata runs it. A failure of it blocks no
-/// merge and no release of strata. No recipe that the checks run builds the adapter.
+/// merge and no release of strata. No recipe that the checks run builds the adapter. The test
+/// reads the commands that `just --dry-run` prints for each of these recipes, with the commands of
+/// its dependencies. It also reads each recipe that a `just` command in them runs.
 #[test]
 fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
     for file in workflow_files() {
@@ -1550,17 +1553,31 @@ fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
         }
     }
     let checks = workflow("checks.yml");
-    let recipes: Vec<&str> = steps(&checks)
+    let mut recipes: Vec<String> = steps(&checks)
         .filter_map(|step| step["run"].as_str()?.strip_prefix("just "))
+        .map(str::to_string)
         .collect();
-    assert!(recipes.contains(&"test"), "{recipes:?}");
-    for name in recipes {
-        assert!(
-            !recipe(name)
-                .iter()
-                .any(|line| line.contains("strata-knurl")),
-            "the recipe {name} builds the adapter"
-        );
+    assert!(recipes.iter().any(|r| r == "test"), "{recipes:?}");
+    let Some(just) = on_path("just") else {
+        eprintln!("skipped: this machine has no just; CI reads the recipes");
+        return;
+    };
+    let mut read = BTreeSet::new();
+    while let Some(run) = recipes.pop() {
+        if !read.insert(run.clone()) {
+            continue;
+        }
+        let args: Vec<&str> = run.split_whitespace().collect();
+        let commands = just_dry_run(&just, &args);
+        for line in commands.lines() {
+            for name in ["adapter-test", "strata-knurl"] {
+                assert!(
+                    !line.contains(name),
+                    "the recipe {run} builds the adapter: {line}"
+                );
+            }
+            recipes.extend(line.trim().strip_prefix("just ").map(str::to_string));
+        }
     }
 }
 
