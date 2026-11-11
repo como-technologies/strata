@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
+use strata::BOOK_URL;
 use strata::api::{self, Palette, PaletteApi};
 use strata::closed_set::ClosedSet;
 use strata::config;
@@ -34,7 +35,7 @@ use strata_preflight::{TOOL_NAME, catalog};
     disable_help_flag = true,
     about = "Check that Palette can build a cluster, before the build",
     override_usage = "strata-preflight <SOURCE> [CHANGE] [OPTIONS]\n       strata-preflight --watch cluster:UID [OPTIONS]\n       strata-preflight --rules [OPTIONS]\n       strata-preflight --promotion [OPTIONS]",
-    after_help = "The book: https://legendary-train-pzq9ojj.pages.github.io/commands/preflight.html"
+    after_help = format!("The book: {BOOK_URL}commands/preflight.html")
 )]
 struct Cli {
     /// The body of a create as a file, or cluster:UID for a cluster as Palette holds it now

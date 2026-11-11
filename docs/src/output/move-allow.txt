@@ -1,3 +1,4 @@
 $ strata same-release --allow registry-move releases/1.1.1/dev.json releases/1.1.1/prod.json
 REGISTRY MOVE  releases/1.1.1/dev.json -> releases/1.1.1/prod.json   1 pack re-pinned, same configuration
+               project 64f20000000000000000a0d1 -> 64f20000000000000000a0f1
 SAME RELEASE: 1 pair passed

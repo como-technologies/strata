@@ -4,11 +4,13 @@ use super::DEV_ENV;
 use super::edits::{LATER_PROFILE_TYPE, RETAIN};
 use super::ids::{
     A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, A1112, AWS_STANDARD, DEV, DEVELOP_118,
-    DEVELOP_1110, DEVELOP_BUILD, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
+    DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, profile_exists_message};
 use serde_json::json;
+use strata::api::PROJECT_UID_HEADER;
+use strata::api::codes::PROFILE_EXISTS_CODE;
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
 
@@ -295,13 +297,15 @@ fn snapshot(r: &mut Runner) {
 
 /// The chapter `latest-develop`: a develop build beside two releases, as a field test found it
 /// (#616). Palette reads `1.1.8.develop` as `1.1.8`. Strata puts it below `1.1.8`, and `@latest`
-/// skips it.
+/// skips it. `1.2.develop` holds no three numbers. Strata reads it as a pre-release of `1.2.0`,
+/// above `1.1.10`, and `@latest` skips it too (#714).
 fn latest_develop(r: &mut Runner) {
     r.chapter("latest-develop", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, DEVELOP_118, "1.1.8", "aws-stack@1.1.1", &[]);
     r.profile(DEV, DEVELOP_BUILD, "1.1.8.develop", "aws-stack@1.1.1", &[]);
     r.profile(DEV, DEVELOP_1110, "1.1.10", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, DEVELOP_SHORT, "1.2.develop", "aws-stack@1.1.1", &[]);
     r.step("latest-develop-list", 0, false, "strata list profiles");
     r.step(
         "latest-develop",
@@ -364,7 +368,7 @@ fn candidate_export(r: &mut Runner) {
     // accepts a file, and its record has the root of the version (#156)
     r.tenant(|t| t.export(DEV, A111));
     r.quiet(&format!(
-        "curl -sS -H 'Accept: application/octet-stream' -H 'ProjectUid: {DEV}' \
+        "curl -sS -H 'Accept: application/octet-stream' -H '{PROJECT_UID_HEADER}: {DEV}' \
          \"$PALETTE_API/v1/clusterprofiles/{A111}/export?format=json\" -o aws-stack-export.json"
     ));
     r.step(
@@ -392,11 +396,8 @@ fn candidate_validate_names(r: &mut Runner) {
     // Palette's own checks before a create (#273). The candidate comes from aws-stack@1.1.1, which
     // the project holds, so the name route and the import validate route refuse it
     r.tenant(|t| t.profile_packs_answer(DEV, None, None));
-    let exists = (
-        409,
-        "ClusterProfileAlreadyExists",
-        "Cluster Profile with name 'aws-stack' and version '1.1.1' already exists",
-    );
+    let message = profile_exists_message("aws-stack", "1.1.1");
+    let exists = (409, PROFILE_EXISTS_CODE, message.as_str());
     r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.1.1"), Some(exists), Some(exists)));
     r.step(
         "candidate-validate-exists",

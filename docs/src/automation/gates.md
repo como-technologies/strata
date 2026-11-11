@@ -36,20 +36,17 @@ or the version as the input:
       records: ${{ inputs.promote }}
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 ```
 
 | Input | Gate | Function |
 | --- | --- | --- |
 | `records` | promotion | The records, in promotion order, separated by spaces. |
-| `allow` | promotion | The differences to accept, separated by spaces or new lines: `registry-move` for a promotion that moves packs to another registry, and `no-digest`. |
+| `allow` | promotion | The differences to accept, separated by spaces or new lines: `registry-move`, `renumber`, and `no-digest`. See [Which pairs pass](../commands/same-release.md#which-pairs-pass). |
 | `version` | retire | The version to retire, as `name@version` or a profile uid. |
 | `project` | both | The project that holds a ref such as `name@version`, by name; empty is tenant scope. A record that is a file needs none. |
 | `palette-api` | both | A self-hosted Palette; empty is `https://api.spectrocloud.com`. |
 | `strata-version` | both | The strata release, a tag of this repository. |
-
-While this repository is private, the caller needs the access setting as well as `strata-token`: see [While this repository is private](./pr-comments.md#while-this-repository-is-private).
 
 The promotion gate reads records, which are files, so it needs
 `palette-api-key` only when a record is a ref. A ref such as `name@version`

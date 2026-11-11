@@ -1,0 +1,5 @@
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0
+RENUMBER       aws-stack@1.2.0-rc.1 -> aws-stack@1.2.0   2 packs renumbered, same configuration
+               kubernetes  1.36.2-rc.1 -> 1.36.2 (pre-release to final; archive: not compared)
+               csi-aws-ebs  1.65.0-rc.1 -> 1.65.0 (pre-release to final; archive: not compared)
+SAME RELEASE: 1 pair passed

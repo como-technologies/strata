@@ -16,7 +16,7 @@ takes:
 
 | Page | What it holds |
 | --- | --- |
-| [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, and a version that replaces nodes. |
+| [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, a version that replaces nodes, and a version that only changes its numbers. |
 | [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, a profile version against a cluster that runs many profiles, and a cluster group against a member. |
 | [Ask Palette if the change repaves](compare/repave.md) | `--repave`: the answer of Palette for one cluster, beside the level of the table. |
 | [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: Palette checks the packs of the change on one cluster. |
@@ -29,6 +29,20 @@ takes:
 ```
 
 Exit `0`.
+
+## Two sides in two projects
+
+The line `project` follows `root` when the two sides are in two projects. It
+names the project of each side by uid, or `tenant scope` for a side with no
+project. `--project-a` and `--project-b`, or their names, read each side in its
+own project:
+
+```text
+{{#include ../output/projects-compare.txt}}
+```
+
+`a.projectUid` and `b.projectUid` of the JSON name the same projects. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
 
 ## Notes in the report
 
@@ -82,4 +96,6 @@ The markdown report writes the same line as a quotation.
 | `--full` | Adds a unified diff of the raw values and of each changed manifest. With `--json`, it adds the field `unified` to the document. | [See the full diff](compare/versions.md#see-the-full-diff) |
 | `--repave` | Asks Palette if the change repaves the cluster side. One side must be a cluster. | [Ask Palette if the change repaves](compare/repave.md) |
 | `--validate` | Asks Palette if it accepts the packs of the change on the cluster side. One side must be a cluster. | [Ask Palette if it accepts the packs](compare/validate.md) |
+| `--project`, `--project-name` | Reads each side that is not a record file in that project, in place of the configured project. `--project ''` is tenant scope. | [Two sides in two projects](#two-sides-in-two-projects) |
+| `--project-a`, `--project-name-a`, `--project-b`, `--project-name-b` | Reads side A, the first ref, or side B, the second ref, in that project. The flag of a side has priority over `--project`. | [Two sides in two projects](#two-sides-in-two-projects) |
 | `--format`, `--json`, `--compact`, `--color`, `--no-color`, `-q` (`--quiet`) | The output options that each report command takes. | [Output formats](./index.md#output-formats) |

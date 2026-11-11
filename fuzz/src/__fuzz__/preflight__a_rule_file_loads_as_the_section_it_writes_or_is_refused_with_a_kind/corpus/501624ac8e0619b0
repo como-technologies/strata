@@ -1,0 +1,105 @@
+section: profiles
+title: Profiles and packs
+about: |
+  The profiles of the entity: their order, their versions, their templates, and their variables.
+rules:
+- id: profile-order
+  title: The order of the add-on profiles means nothing
+  engines:
+  - all
+  tier: static
+  severity: note
+  status: seen
+  when: (.profiles | length) > 0
+  what: |
+    Palette stores the profiles in the order it receives, and the provider sends a set, so two
+    clusters from one configuration get two orders. The install order on the cluster is the pack
+    priority, not the profile order. Never compare the raw order. This note names an entity with
+    more than one add-on profile, where a reader can assume an order.
+  check:
+    kind: static
+    expr: |
+      [ .profiles | map(select((.source.type // "") == "add-on"))
+        | select(length > 1)
+        | "the entity names \(length) add-on profiles (\(map(.source.name) | join(", "))): their order means nothing, and the install order is the pack priority" ]
+  fix:
+    owner: palette
+    text: Sort the profiles by a stated key in the API; the provider keeps the configured order.
+  evidence:
+  - kind: run
+    ref: a live run
+    note: the provider discards the configured order
+  - kind: run
+    ref: a live run
+    note: the install order on the cluster does not depend on the profile order
+  - kind: source
+    note: the profiles are a set since v0.28.1
+  - kind: source
+    note: Palette orders the packs of the add-on profiles by the priority of each pack, not by the order of the profiles
+  tests:
+  - fault: fixtures/eks/two-addons.json
+    clean: fixtures/eks/full-records.json
+- id: position-zero
+  title: The profile at position 0 is the infrastructure profile
+  engines:
+  - all
+  tier: static
+  severity: warn
+  status: source
+  when: (.profiles | length) > 0 and (.entity.spec.profiles | length) > 0
+  what: |
+    Seven code paths in the console, in Palette, and in the agent read position 0 as the
+    infrastructure profile. Among them: the FIPS guard of the console, the `clusterProfileTemplate`
+    field of the dashboard API, and the repave check of CNI and CSI. The console puts
+    an add-on at position 0 on each cluster it creates with an add-on. On such a cluster, each of
+    these code paths reads the wrong profile. The check reads the record of the first profile of
+    the entity. Its `type` must be `cluster` or `infra`.
+  check:
+    kind: static
+    expr: |
+      .entity.spec.profiles[0].uid as $first
+      | [ .profiles[] | select(.source.uid == $first)
+          | select((.source.type // "") as $t | $t != "cluster" and $t != "infra")
+          | "profile \(.source.name) at position 0 is of type \(.source.type // "unknown"), not cluster or infra: the FIPS guard, the dashboard, and the repave check read the wrong profile" ]
+  fix:
+    owner: palette
+    text: Read the infrastructure profile by its type, not by its position.
+  evidence:
+  - kind: run
+    ref: a live run
+  - kind: run
+    ref: a live run
+    note: the FIPS guard of the console passes when position 0 is an add-on; reproduced against FIPS fixtures
+  - kind: source
+    note: the position-0 reads and the first-match pack lookups
+  - kind: source
+    note: the console of Palette guards the FIPS choice when it shows the details of a cluster
+  tests:
+  - fault: fixtures/eks/addon-first.json
+    clean: fixtures/eks/full-records.json
+- id: edit-in-place
+  title: A published profile version stays as published
+  engines:
+  - all
+  tier: race
+  severity: warn
+  status: seen
+  what: |
+    The API takes an edit of a published version: the version keeps its uid and its number, stays
+    published, and no new version appears. The `immutable-clusterprofiles` flag of the provider
+    stops the edit through the provider alone. The API, the console, and a push again of a pack
+    change the version whatever the flag says. No check before the build finds an edit. `strata
+    verify` on a record from before reports `DRIFT`, and the audit log names who changed it.
+  reproduce:
+  - strata verify <record.json> --who
+  fix:
+    owner: palette
+    text: Lock a published version on the server, as a setting.
+  evidence:
+  - kind: run
+    ref: strata live example
+    note: a PUT of a published version is accepted, and the version keeps its uid and its number
+  - kind: doc
+    ref: https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/
+  - kind: source
+    note: the immutable-clusterprofiles feature_preview flag is a check of the provider

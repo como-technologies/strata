@@ -508,6 +508,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
 | `compare`, `compare-names` | 1, 0 | #155: `compare <uid> <uid>@draft` exits `1`, and names the manifest pack with `AUTHORED` |
 | `route-list` | 0 | #155: `packs/manifests` gives the published content of the manifest while the draft waits |
+| `route-names` | 0 | #767: while the draft waits, the `metadata.name` of the answer of `packs/manifests` is the name of the profile. The `metadata.name` of each pack summary is the name of its pin in the draft. The check only reads. |
 | `route-entity` | 0 | #155: the route of one manifest gives the draft content beside the published content |
 | `no-has-draft` | 0 | #155: the profile document gives no `status.hasDraft` |
 | `draft-before-publish` | 1 | #155: the record of the draft reports `DRIFT` against the version before the publish |
@@ -541,6 +542,27 @@ source for
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
+## projects.sh
+
+Read-write. It needs the profiles, a second project of the tenant, and no
+cluster. The name of the second project is in `STRATA_LIVE_SECOND_PROJECT`. The
+script creates and publishes a copy of the release profile in that project, and
+it deletes the copy at its end. It deletes no project. This is the source for
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `copy-create` | 0 | #486: a `POST /v1/clusterprofiles` with the `ProjectUid` of the second project, and its publish, make a copy of the release in that project. The copy has the name and the version of the release. |
+| `record-a`, `record-a-project` | 0 | #486: `snapshot <name>@<version> --project-name <lab project>` records the release, and `source.projectUid` names the lab project. |
+| `record-b`, `record-b-project` | 0 | #486: the same ref with `--project-name <second project>` records the copy, and `source.projectUid` names the second project. |
+| `verify-both` | 0 | #486: one `verify` of the two records reads each record in the project that it names. |
+| `same-release`, `same-release-projects` | 0 | #486: `same-release` of the ref twice, with `--project-name-a` and `--project-name-b`, passes. `records[0].projectUid` names the lab project, and `records[1].projectUid` names the second project. |
+| `same-release-line` | 0 | #486: the terminal verdict has the line `project <lab uid> -> <second uid>` under the pair. |
+| `compare-projects` | 0 | #486: `compare` with a project for each side gives the project and the uid of each side in `a` and `b`, and `sameContent` is true. |
+| `records-same` | 0 | #486: `same-release` of the two record files passes. |
+| `other-project-read` | ? | #486: what Palette answers to a `GET` of the copy with the `ProjectUid` of the lab project. `other-project-read.out` holds the status and the error code, and the check records them. Palette refuses the read: HTTP 500, with the code `OperationForbidden`. |
+| `copy-delete` | 0 | #486: the delete of the copy, with the `ProjectUid` of the second project. |
+
 ## release.sh
 
 Read-only. It needs the key and nothing else: no profile and no cluster. It
@@ -552,6 +574,23 @@ This is the source for
 |---|---|---|
 | `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. |
 | `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. |
+
+## public.sh
+
+Read-only. It needs `gh` and the strata binary of the checkout, and it reads no
+tenant. Run it after the repository and its packages are public. Each
+request of a reader goes with no token and no login. The check of the advisory
+form reads with the login of `gh`, because GitHub shows that setting to a
+maintainer only.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `book-opens` | 0 | #65: the address of the book that `strata --help` prints answers 200 with no login. |
+| `install-no-token`, `install-runs` | 0 | #65: the install command of the README, as it is, installs the latest release with no token, and both binaries run. |
+| `gitlab-install-no-token` | 0 | #483: the install lines of the template `.strata` of the GitLab drop-in install the release of its `STRATA_VERSION` with no token, and the binary runs. The check omits the lines of `apt-get`, which need the image of the job. |
+| `image-no-login`, `chart-no-login` | 0 | #65: the registry gives the image and the chart of the observer of that release for an anonymous token. |
+| `repository-public` | 0 | #65: the API of GitHub shows the repository with no token, with a description and topics. |
+| `advisory-form` | 0 | #65: private vulnerability reporting is on. |
 
 ## contract.sh
 
@@ -1338,15 +1377,16 @@ needs the example at its baseline with cluster A.
 | `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
+| `same-release-renumber` | 0 | #730: `same-release --allow renumber` passes the same publish, and the pair names no renumber: no pack moved its version. |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
-| `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. No result yet: the live window of wave 16 runs it. |
-| `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. No result yet: the live window of wave 16 runs it. |
+| `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. |
+| `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. |
 | `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
-| `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. No result yet: the next live window runs it. |
-| `preflight-job-key`, `preflight-job-key-says` | 0 | #618: with the key of the lab where strata finds it, `preflight.sh` reads Palette. The log has no line that says that the run is offline, and the report says `tiers static, palette`. No result yet: the next live window runs it. |
+| `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. |
+| `preflight-job-key`, `preflight-job-key-says` | 0 | #618: with the key of the lab where strata finds it, `preflight.sh` reads Palette. The log has no line that says that the run is offline, and the report says `tiers static, palette`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
 | `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body. It makes one request for all its pools. The check passes. The type of the release body is offered in its zone |
 | `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes. On AWS it is `iaas-pod-identity`, which sends the key pair to the property route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
@@ -2149,9 +2189,8 @@ The ledger gives the gcp run as `passed` for the narrowed rule. Its events are i
 the fixture `watch-webhook-refused` that the tests of the rule replay. The ledger
 gives `caught` for the warning on gcp and on eks. The eks entry of the old rule
 is gone, because the cluster was deleted before the outcome was known. The
-findings report on the build runs,
-`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the eks
-delete and the source of each finding.
+findings report on the build runs holds the timeline of the eks delete and the
+source of each finding.
 
 ## A chart pushed again, on a cluster
 

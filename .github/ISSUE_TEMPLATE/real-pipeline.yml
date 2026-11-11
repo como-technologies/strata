@@ -1,0 +1,50 @@
+# The issue form for a finding from a real pipeline (#483). GitHub shows it on the page of a new
+# issue. docs/src/development/real-pipelines.md gives the rule of the names that the form links,
+# and docs/src/development/wave-review.md gives the review that reads each issue of its label.
+name: A finding from a real pipeline
+description: A job or a command of strata gave a result that you did not expect, on a change of your team.
+title: "A finding from a real pipeline: "
+labels:
+  - real-pipeline
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Each issue of this repository is public. Before you write, read [the rule of the names](https://como-technologies.github.io/strata/development/real-pipelines.html#the-rule-of-the-names). Replace each name with a made-up name, such as `barney` or `fred`. Give no data of a client, no host, no account, and no key.
+  - type: input
+    id: job
+    attributes:
+      label: The job or the command
+      description: The job of the drop-in, such as `strata-comment`, or the command line. Replace each name.
+      placeholder: strata verify releases/barney-addons.json
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: The output, with each name replaced
+      description: The lines that the job or the command printed. Copy only the lines that show the finding.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: What the job or the command must show, and why.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: The version of strata
+      description: The output of `strata --version`, or the value of `STRATA_VERSION` in the pipeline.
+    validations:
+      required: true
+  - type: checkboxes
+    id: names
+    attributes:
+      label: The rule of the names
+      options:
+        - label: Each name in this report is made up. The report holds no data of a client, no host, no account, and no key.
+          required: true

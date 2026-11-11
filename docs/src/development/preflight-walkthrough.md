@@ -15,7 +15,7 @@ the project are in `~/.palette.env`; the AWS profile of the lab is
 `spectro-admin`.
 
 ```bash
-cd ~/repos/spectrocloud/strata
+cd strata   # the root of your clone
 just build
 set -a; . ~/.palette.env; set +a; export AWS_PROFILE=spectro-admin
 P=target/release/strata-preflight

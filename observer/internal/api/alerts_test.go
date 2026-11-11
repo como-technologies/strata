@@ -2,62 +2,26 @@ package api
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/check"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // addressMarker is in the address of the webhook of these tests. It stands for the token that a real
 // address holds, and it must reach no route, no log, and no file of the state.
 const addressMarker = "TOKEN-SECRET"
 
-// webhook is a receiver that answers with a status and keeps the body of each request.
-type webhook struct {
-	*httptest.Server
-	mu     sync.Mutex
-	status int
-	bodies []string
-}
-
-func newWebhook(t *testing.T) *webhook {
-	t.Helper()
-	w := &webhook{status: http.StatusOK}
-	w.Server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		raw, _ := io.ReadAll(req.Body)
-		w.mu.Lock()
-		defer w.mu.Unlock()
-		w.bodies = append(w.bodies, string(raw))
-		rw.WriteHeader(w.status)
-	}))
-	t.Cleanup(w.Close)
-	return w
-}
-
-func (w *webhook) set(status int) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.status = status
-}
-
-func (w *webhook) got() string {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return strings.Join(w.bodies, "\n")
-}
-
 // alerting gives an observer of the rig that sends the alerts of the rules to the receiver, through the
 // real sender. The address is in a file, as a Secret gives it.
-func alerting(t *testing.T, r *rig, w *webhook, s check.Strata) *check.Observer {
+func alerting(t *testing.T, r *rig, w *testkit.Receiver, s check.Strata) *check.Observer {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "oncall")
 	if err := os.WriteFile(file, []byte(w.URL+"/"+addressMarker+"\n"), 0o600); err != nil {
@@ -76,7 +40,7 @@ func alerting(t *testing.T, r *rig, w *webhook, s check.Strata) *check.Observer 
 
 func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) {
 	r := newRig(t)
-	w := newWebhook(t)
+	w := testkit.NewReceiver(t)
 	o := alerting(t, r, w, &fakeStrata{dir: r.fixtures})
 	if _, err := o.Once(context.Background()); err != nil {
 		t.Fatal(err)
@@ -108,17 +72,17 @@ func TestAnObserverWithoutAlertsSaysSoOnTheRoute(t *testing.T) {
 // leave none in the message that the receiver got. The writer of the audit log stays out too.
 func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNoLogAndNoState(t *testing.T) {
 	r := newRig(t)
-	w := newWebhook(t)
-	w.set(http.StatusInternalServerError)
+	w := testkit.NewReceiver(t)
+	w.SetStatus(http.StatusInternalServerError)
 	o := alerting(t, r, w, &fakeStrata{dir: r.fixtures})
 	if _, err := o.Once(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	w.set(http.StatusOK)
+	w.SetStatus(http.StatusOK)
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	got := w.got()
+	got := strings.Join(w.Bodies(), "\n")
 	if !strings.Contains(got, "Drift") || !strings.Contains(got, "aws-stack@1.1.0") {
 		t.Fatalf("the receiver got %q", got)
 	}

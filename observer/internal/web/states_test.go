@@ -5,8 +5,6 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
@@ -18,7 +16,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below hold the splash on each screen. They run app.js with node, as the tests of web_test.go do. Each place that
+/* The tests below hold the splash on each screen. They run the scripts with node, as the tests of web_test.go do. Each place that
 had one gray line has a state with a tone, a title, a fact, and the next step when one exists. */
 
 // crawls holds the crawl of each set, so that the tests of the states run node once for each set.
@@ -278,19 +276,15 @@ func TestAPageWithAFindingAFailedReadOrACauseShowsNoCalmTone(t *testing.T) {
 	}
 }
 
-// The test above fails without the rule. A copy of the script whose gate of the calm tone always says yes shows a calm tone on
+// The test above fails without the rule. A copy of the scripts whose gate of the calm tone always says yes shows a calm tone on
 // the set ok with no events, which holds a finding and two causes: the card of the events says "All quiet". A place that one
 // check found the same takes the tone same, which is no claim about the page, so the set ok needs the empty list of events.
 func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 	gate := regexp.MustCompile(`(?m)^const calmOk = .*$`)
-	script := string(readPage(t, "app.js"))
-	if !gate.MatchString(script) {
-		t.Fatal("app.js has no line that starts with const calmOk")
+	if got := len(gate.FindAllString(readScripts(t), -1)); got != 1 {
+		t.Fatalf("the scripts have %d lines that start with const calmOk, want 1", got)
 	}
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "app.js"), []byte(gate.ReplaceAllString(script, "const calmOk = () => true;")), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	dir := copyScripts(t, func(script string) string { return gate.ReplaceAllString(script, "const calmOk = () => true;") })
 	quiet := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"events.json": func([]byte) []byte { return []byte(`{"events":[]}`) }})
 	var screens []screen
 	if err := json.Unmarshal(runNodeAssets(t, dir, quiet, "scratch"), &screens); err != nil {
@@ -304,7 +298,7 @@ func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := calmScreens(real); len(got) != 0 {
-		t.Errorf("the real script shows a calm tone on %q", got)
+		t.Errorf("the real scripts show a calm tone on %q", got)
 	}
 }
 
@@ -700,7 +694,7 @@ func TestEachFlagHasItsWordsAndALitFlagWithATabOpensIt(t *testing.T) {
 
 // The words of the flags are in one place in the script, and they are the words of the book.
 func TestTheWordsOfTheFlagsHaveOneCopyAndTheyComeFromTheBook(t *testing.T) {
-	defs, script := flagDefinitions(t), string(readPage(t, "app.js"))
+	defs, script := flagDefinitions(t), readScripts(t)
 	for _, f := range flagNames {
 		when := defs[f][0]
 		if got := strings.Count(script, `"`+when+`"`); got != 1 {
@@ -827,7 +821,7 @@ func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 			t.Errorf("scripts/ci/observer-records.sh no longer holds %q, and the first row of the card reads the key that it writes", want)
 		}
 	}
-	app := string(readPage(t, "app.js"))
+	app := readScripts(t)
 	if !strings.Contains(app, "replace(/[^A-Za-z0-9._-]/g, \"_\")") {
 		t.Error("the page writes the key of a record by another rule than the script of the records")
 	}

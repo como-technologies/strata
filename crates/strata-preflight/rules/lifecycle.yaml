@@ -28,8 +28,8 @@ rules:
     evidence:
       - kind: run
         ref: "#89"
-      - kind: report
-        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/eks/type-change.json
         clean: fixtures/eks/type-same.json
@@ -67,8 +67,8 @@ rules:
       - kind: run
         ref: "#89"
         note: the state stayed DeletingInfrastructure for more than 2 hours, with the event every 5 minutes
-      - kind: report
-        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F4
+      - kind: run
+        ref: a live run
       - kind: source
         note: the delete reads the one machine pool that the MachinePool references
     tests:
@@ -100,8 +100,8 @@ rules:
     evidence:
       - kind: run
         ref: "#90"
-      - kind: report
-        ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/gke/type-change.json
         clean: fixtures/gke/type-same.json
@@ -163,8 +163,8 @@ rules:
       - kind: run
         ref: "#90"
         note: GKE DELETE_NODE_POOL worker-pool at 23:15, no CREATE_NODE_POOL after it, and no Palette event until the delete
-      - kind: report
-        ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28 F2
+      - kind: run
+        ref: a live run
       - kind: source
         note: Palette replaces a GKE node pool when a fixed field of the pool changes
     tests:
@@ -205,8 +205,8 @@ rules:
     evidence:
       - kind: source
         note: the annotation spectrocloud.com/old-managed-machine-pool holds one name; the sweep runs after the readiness checks of each pool
-      - kind: report
-        ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F3
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/eks/two-pools-change.json
         clean: fixtures/eks/type-change.json
@@ -317,8 +317,8 @@ rules:
       owner: palette
       text: Cancel the repave on delete.
     evidence:
-      - kind: report
-        ref: palette-delete-pending-repave-findings-2026-09-25
+      - kind: run
+        ref: a live run
     tests:
       - fault: fixtures/eks/repave-pending.json
         clean: fixtures/eks/cluster-running.json
@@ -356,8 +356,8 @@ rules:
       owner: palette
       text: Name the macro in the repave record, and let validate/repave see a macro change.
     evidence:
-      - kind: report
-        ref: palette-macro-findings-2026-09-25 F3
+      - kind: run
+        ref: a live run
       - kind: run
         ref: "#72"
         note: macro-repave.sh, a macro in kubeadmconfig.postKubeadmCommands of the Kubernetes pack
@@ -392,8 +392,8 @@ rules:
       owner: palette
       text: Audit each macro write, and open a notification for each cluster the value reaches.
     evidence:
-      - kind: report
-        ref: palette-macro-findings-2026-09-25 F1, F2
+      - kind: run
+        ref: a live run
       - kind: run
         ref: "#72"
         note: macros.sh, the value inside the cluster 11 minutes after the change

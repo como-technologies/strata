@@ -200,7 +200,7 @@ the limit of the rate does not hold.
 
 The service writes issues with a token of GitHub. The token has the permission Issues: read and
 write on `como-technologies/strata`, and no other. It lives in Secret Manager, in the secret
-`strata-report-token` of the project `como-strata-test`. Cloud Run gives it to the service as
+`strata-report-token` of the project of the service. Cloud Run gives it to the service as
 `GITHUB_TOKEN` when the service starts. The token is never in the repository, in GitHub, in an image,
 or in a log. The `Debug` text of the settings and of the tracker prints `<redacted>` for it.
 
@@ -221,14 +221,15 @@ calls GitHub or Google. No test posts to the endpoint that the release names: se
 
 ## Deploy the endpoint
 
-The lead deploys the endpoint after the merge, on kadomony, after `gcloud auth login`. A session does
+The lead deploys the endpoint after the merge, on its host, after `gcloud auth login`. A session does
 not deploy it, because a session has no account of Google.
 
 1. Make sure that the project has the APIs `run`, `cloudbuild`, `artifactregistry`,
    `secretmanager`, and `iam`, and the secret `strata-report-token`.
 2. Make the two accounts, with the commands of [Make the two accounts](#make-the-two-accounts). A
    person who owns the project does this one time.
-3. Run `just report-deploy --dry-run`, and read the commands.
+3. Set `STRATA_REPORT_PROJECT` to the id of the project. The script has no default project. With
+   no project, it stops with exit 2. Run `just report-deploy --dry-run`, and read the commands.
 4. Move the issues of an older service to the label of this one, one time.
    See [Move the issues to the label of the service](#move-the-issues-to-the-label-of-the-service).
    Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
@@ -260,8 +261,9 @@ that keeps the CPU on after the answer and has less than 512 MiB of memory. The 
 memory < 512 Mi is not supported with cpu always allocated (unthrottled)`. A test of the deploy
 fails when the memory is less than 512 MiB with `--no-cpu-throttling`.
 
-The deploy script reads no secret and grants no role. `just report-deploy --project ID --region NAME`
-replaces the project and the region. To remove the service, run
+The deploy script reads no secret and grants no role. `--project ID` replaces
+`STRATA_REPORT_PROJECT`, and `--region NAME` replaces the region `us-central1`. To remove the
+service, run
 `gcloud run services delete strata-report --project ID --region NAME`.
 
 ### Move the issues to the label of the service
@@ -324,7 +326,7 @@ The person who runs the commands must own the project. An owner can act as both 
 them.
 
 ```bash
-project=como-strata-test
+project=${STRATA_REPORT_PROJECT:?the id of the project}
 region=us-central1
 service_account=strata-report@$project.iam.gserviceaccount.com
 build_account=strata-report-build@$project.iam.gserviceaccount.com

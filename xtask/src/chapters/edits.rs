@@ -56,3 +56,16 @@ pub(super) const PRODUCT_DIGEST_B: &[Edit] = &[Edit::Image {
     pack: "kubernetes",
     image: "vendor.example/product:2026.2@sha256:9999888877776666555544443333222211110000ffffeeeeddddccccbbbbaaaa",
 }];
+// The pins of a pre-release of aws-stack@1.1.1: the content of its Kubernetes pack and of its CSI
+// pack, built as pre-releases. The chapter copies each version first, so each build has its own
+// uid and digest.
+pub(super) const RC_PINS: &[Edit] = &[
+    Edit::Upgrade {
+        pack: "kubernetes",
+        version: "1.36.2-rc.1",
+    },
+    Edit::Upgrade {
+        pack: "csi-aws-ebs",
+        version: "1.65.0-rc.1",
+    },
+];

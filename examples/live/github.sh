@@ -1,5 +1,6 @@
-# What the scripts in examples/live read about GitHub: the project of a checkout, and the first line
-# of the body of an issue. Source it. It runs nothing and calls no host.
+# What the scripts in examples/live read about GitHub. They read the project of a checkout, the
+# repository of the workspace, and the first line of the body of an issue. Source it. It runs
+# nothing and calls no host.
 #
 # The scripts in scripts/ci/ do not source it. A user ships those scripts, so each one stands alone.
 
@@ -11,6 +12,13 @@ remote_repo() {
   git -C "${1:-.}" remote get-url origin 2> /dev/null \
     | sed -nE 's#^(https?|ssh|git)://([^/@]+@)?github\.com/([^/]+/[^/]+)$#\3#p; s#^[^/@:]+@github\.com:([^/]+/[^/]+)$#\1#p' \
     | sed -E 's#\.git$##' || true
+}
+
+# workspace_repo: print OWNER/REPO of the repository that the Cargo.toml of the root names. It reads
+# a local file and calls no host.
+workspace_repo() {
+  sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' \
+    "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../Cargo.toml"
 }
 
 # The jq function `first_line` gives the first line of the body of an issue, without a carriage

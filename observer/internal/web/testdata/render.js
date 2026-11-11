@@ -1,36 +1,37 @@
 "use strict";
 // Render each screen of the page with node, with no browser. web_test.go runs it and checks the markup.
 //
-//   node render.js ASSETS_DIR API_DIR STATE [poison]
+//   node render.js SCRIPTS API_DIR STATE [poison]
 //
-// It loads app.js in a sandbox with a fake document, and it answers each fetch from the files of one
-// set in API_DIR, as the server does. It starts at #overview and follows each link of each screen, so
-// it shows each screen that a person can reach. On each screen, it also shows each tab, each filter,
-// each folded part, and each side. It prints one JSON list: {hash, variant, html} for each screen, or
-// {hash, variant, error} for a screen that threw.
+// SCRIPTS names the files of the scripts of the screens, with a comma between two files. web_test.go reads
+// their order from index.html. render.js loads the scripts in that order, in a sandbox with a fake document.
+// It answers each fetch from the files of one set in API_DIR, as the server does. It starts at #overview and
+// follows each link of each screen, so it shows each screen that a person can reach. On each screen, it also
+// shows each tab, each filter, each folded part, and each side. It prints one JSON list: {hash, variant, html}
+// for each screen, or {hash, variant, error} for a screen that threw.
 //
 // With "poison", each name, path, and value of the data has the text of a markup injection in it.
 //
-//   node render.js ASSETS_DIR API_DIR STATE ago SECONDS...
+//   node render.js SCRIPTS API_DIR STATE ago SECONDS...
 //
 // With "ago", it prints no screen. It prints one JSON list: what ago() says for each age in seconds.
 //
-//   node render.js ASSETS_DIR API_DIR STATE retry HASH
+//   node render.js SCRIPTS API_DIR STATE retry HASH
 //
 // With "retry", the detail route answers 503 once. It shows the screen HASH two times, and it prints
 // one JSON list of the two renders. The second render must ask the route again.
 //
-//   node render.js ASSETS_DIR API_DIR STATE show HASH...
+//   node render.js SCRIPTS API_DIR STATE show HASH...
 //
 // With "show", it follows no link. It shows the screens HASH..., and it prints one JSON list of their
 // markup, in the same order.
 //
-//   node render.js ASSETS_DIR API_DIR STATE requests
+//   node render.js SCRIPTS API_DIR STATE requests
 //
 // With "requests", it does the crawl of the default mode, and it prints one JSON list of each request that
 // the page sent: {method, path, headers}. A page that nobody clicks sends no POST.
 //
-//   node render.js ASSETS_DIR API_DIR STATE click HASH STATUS CLICK...
+//   node render.js SCRIPTS API_DIR STATE click HASH STATUS CLICK...
 //
 // With "click", it shows the screen HASH. Each CLICK is a JSON object of data attributes ({"view":"split"} is
 // a click on an element with data-view="split"). It clicks twice on each element, in order. A question to
@@ -40,18 +41,18 @@
 // (jumps, by id). A click "Check now" waits for the gate too, and its answer says that the cycle starts.
 // STATUS is 0 for the answer that the set gives, an HTTP status for a failed POST, or "network".
 //
-//   node render.js ASSETS_DIR API_DIR STATE asksdown HASH [first]
+//   node render.js SCRIPTS API_DIR STATE asksdown HASH [first]
 //
 // With "asksdown", the route /v1/asks fails. It reads the routes two times, and it shows the screen HASH
 // after the second read. With "first", the route fails from the first read on. The list of answers must
 // stay as it was, and the page must not go offline.
 //
-//   node render.js ASSETS_DIR API_DIR STATE with HASH CODE
+//   node render.js SCRIPTS API_DIR STATE with HASH CODE
 //
 // With "with", it runs CODE in the page, for example S.side["id"] = "newer", and it shows the screen HASH. It prints the markup as one
 // JSON string.
 //
-//   node render.js ASSETS_DIR API_DIR STATE offline HASH
+//   node render.js SCRIPTS API_DIR STATE offline HASH
 //
 // With "offline", every request fails when the page starts. It prints {before, after}: the screen HASH while the observer cannot be
 // reached, and the screen after the requests work again and a click on "Try now" asked again.
@@ -59,7 +60,7 @@ const fs = require("fs");
 const path = require("path");
 const vm = require("vm");
 
-const [assetsDir, apiDir, state, mode, ...args] = process.argv.slice(2);
+const [scripts, apiDir, state, mode, ...args] = process.argv.slice(2);
 const EVIL = "<img src=x onerror=alert(1)>\"'&";
 
 // read gives a file of the set, or of its base. With a fallback, a file that neither holds gives the fallback.
@@ -211,7 +212,7 @@ async function fakeFetch(url, opts = {}) {
   return {ok: body !== null, status: body === null ? 404 : 200, json: async () => JSON.parse(JSON.stringify(body))};
 }
 
-// listeners holds the handlers that app.js adds to the document, by event type.
+// listeners holds the handlers that the scripts add to the document, by event type.
 const listeners = {};
 const elements = {};
 const element = id => elements[id] || (elements[id] = {id, innerHTML: "", dataset: {}, addEventListener() {}, focus() {}, setSelectionRange() {}, scrollIntoView() { jumps.push(id); }});
@@ -314,10 +315,10 @@ async function crawl() {
 }
 
 async function main() {
-  // The page reads the routes when it starts, so a route that fails from the first read on fails before the script runs.
+  // The page reads the routes when it starts, so a route that fails from the first read on fails before the scripts run.
   failAsks = mode === "asksdown" && args[1] === "first";
   fetchFails = mode === "offline";
-  run(fs.readFileSync(path.join(assetsDir, "app.js"), "utf8"));
+  for (const file of scripts.split(",")) vm.runInContext(fs.readFileSync(file, "utf8"), sandbox, {filename: path.basename(file)});
   if (mode === "ago") {
     // The clock stops, so that each age is the number of seconds that the caller names.
     run("(() => { const now = Date.now(); Date.now = () => now; })()");

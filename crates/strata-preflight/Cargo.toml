@@ -10,8 +10,9 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "preflight", "validation"]
 categories = ["command-line-utilities", "development-tools"]
-# As strata: a private repository publishes no crate. Another repository depends on this package by
-# its git address and its name, which `automation/library.md` in the book shows.
+# Only the package strata-palette goes to crates.io. This package depends on it by its path, so a
+# publish of this package needs strata-palette on crates.io first. Another repository depends on
+# this package by its git address and its name, which `automation/library.md` in the book shows.
 publish = false
 
 [lib]
@@ -25,7 +26,7 @@ path = "src/main.rs"
 [dependencies]
 # The Palette client, the records of profiles, and the error type come from strata. This crate
 # adds the rules and the checks; strata never depends on it.
-strata = { path = "../.." }
+strata = { path = "../..", package = "strata-palette" }
 clap = { version = "4", features = ["derive"] }
 # The checks of the rules are jq programs over one JSON document, so a person reads a rule with
 # the jq they know, and runs the same program by hand with `jq`. jaq is jq in Rust, with no

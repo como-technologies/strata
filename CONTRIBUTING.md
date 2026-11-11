@@ -8,6 +8,13 @@ that you keep to it.
 Open an issue first, or write in the issue that you want to take. Two people
 must not write the same change.
 
+## Report a finding from your pipeline
+
+When a job of strata gives a result that you do not expect, open an issue with
+the template "A finding from a real pipeline". Read
+[the rule of the names](docs/src/development/real-pipelines.md#the-rule-of-the-names)
+first: each name is made up, and the report holds no data of a client.
+
 ## Find the code
 
 [Where to look in the repository](docs/src/development/repository.md) gives each

@@ -47,7 +47,9 @@ where each module goes. The Go code of the observer follows
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
   `src/`, `xtask/src/`, `crates/strata-preflight/src/`, `fuzz/src/`, `crates/strata-report-endpoint/src/`, and
-  `benches/src/`. It checks the limit of 80 lines for each function of the six.
+  `benches/src/`. It checks the limit of 80 lines for each function of the six. It also
+  checks the limit of 800 lines for each file of Go and of JavaScript of `observer/`: see
+  [The Go of the observer](#the-go-of-the-observer).
 - The check parses each file, so it counts a function with any head, such as `async fn`.
   Code under `#[cfg(test)]` is out of the count, and the code after it is in. A file named
   `tests.rs` holds only tests, so it has no limit.
@@ -106,10 +108,20 @@ where each module goes. The Go code of the observer follows
   `version::numbers`, and `version::is_pre_release`. `xtask/` and
   `strata-preflight` use them too. Do not write a second parse.
 - A string that does not parse reads as its first three numbers, as Palette
-  reads it. `version::has_three_numbers` finds them. The natural order of the
-  text is only the fallback for a string with no three numbers, such as
-  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
-  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
+  reads it. `version::has_three_numbers` finds them. Where Palette gives no
+  order or reads no version, `version::compare` follows the order of the crate
+  `versions` 8.0.1. A string with no number at its start and no three numbers,
+  such as `LTS__24.x`, is below each version. The natural order of the text
+  orders such strings.
+- `tests/version_order.rs` compares the order with the crate, row by row. A row
+  where strata keeps a rule of Palette names the rule. Add a row for each new
+  form. The crate is a dev-dependency only, and its version is pinned.
+- The same file also makes a probe of strings with each form, and compares the
+  two orders on each pair. Each difference needs a rule that names it, and the
+  test holds the count of differences for each rule. Add each new form to the
+  probe.
+- No script uses `sort -V` for a version. A script reads the direction of a
+  move from strata, such as `versionMove` in `strata-diff/1`.
 - One order of a version lives outside strata: `oldest_first` in
   `examples/fetch-examples.sh`. The script runs offline, so it cannot ask
   strata. It keeps only a version of plain numbers and orders it by the
@@ -124,7 +136,9 @@ where each module goes. The Go code of the observer follows
 
 - Use one error type, `crate::error::Error`, with `Result<T>`. A new variant
   has a `kind()`, a `to_json()`, a `class()`, and a sample in the tests of
-  `error/`.
+  `error/`. The build of the tests fails until the list of samples holds one of
+  the new variant. A test fails until its kind is a row of the table in
+  `errors.md`.
 - Do not use `unwrap`, `expect`, or a slice index that can panic on input from
   a user or from Palette. Slice text at a `char` boundary only.
 - Do not discard an error. `unwrap_or_default()`, `.ok()`, and `let _ =` are
@@ -208,9 +222,21 @@ ASD-STE100.
   pins the text of a schema id on purpose can stay, with a comment that says so.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
-  uses. `answer.rs`, `closed_set.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`, `toml.rs`,
-  and `walk.rs` have such users. A file that uses some of the helpers allows `dead_code` on the
-  include.
+  uses. `answer.rs`, `closed_set.rs`, `code_span.rs`, `git.rs`, `palette.rs`, `process.rs`,
+  `route.rs`, `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that
+  uses some of the helpers allows `dead_code` on the include.
+- A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
+  `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new
+  variant until the list holds a value of it. The tests of `error/` and of
+  `xtask/src/tenant/edit.rs` use the macro. So does the test of `Check` in
+  `crates/strata-preflight/tests/closed_set.rs`, which also reads a text of each check.
+- A test or a check that reads a markdown table, of the book or of an output, uses
+  `tests/common/table.rs`. `table_rows` gives the rows of a table, and `first_cells` gives its
+  first column. `cells` gives the cells of one row, and keeps a `\|` in its cell. Do not split a
+  row by hand.
+- A test or a check that reads the code spans of a text uses `tests/common/code_span.rs`.
+  `code_spans` gives the text of each code span, and `without_code` gives the text outside them.
+  Do not split a text at its backticks by hand.
 - A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
   does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
   the two give the same route.
@@ -249,6 +275,10 @@ the Rust code, and these rules are for the Go code.
 
 - The observer uses the standard library only. `go.mod` has no `require` line,
   and `just lint` fails when it has one.
+- The rules of [The size of a module](#the-size-of-a-module) also hold for the Go and
+  the JavaScript of the observer. A file has 800 lines or fewer. A file whose name ends
+  in `_test.go`, and a file under `testdata/`, hold only tests, so they can be longer.
+  `cargo test -p xtask` checks the limit.
 - The code has no cgo, no `unsafe`, no `init` function, and no `panic`. A
   function that fails returns an `error`. The tests keep the rule: a fake
   returns an `error`, and a test calls `t.Fatal`.
@@ -360,6 +390,16 @@ the Rust code, and these rules are for the Go code.
   fails on a `max-width` on `.page`. Other tests of the package fail on a copy of the
   logo that differs from `assets/logo/`. They also fail on a `prefers-color-scheme`
   rule in `app.css`, and on a drift that is not white on `#c9252f`. See [The page](./observer-api.md#the-page).
+- The page has five scripts: `app.js`, `frame.js`, `screens.js`, `pack.js`, and
+  `routes.js`. Each one is a classic script, with no module and no build step. `index.html`
+  loads them in this order at the end of its body, and they share one scope. `app.js`
+  holds the template, so it loads first. `routes.js` starts the page, so it loads last. A
+  test of `internal/web` fails on a script of `assets/` that `index.html` does not load,
+  and on another first or last script.
+- `app.js` keeps its path and the largest part of the old script, so `git log --follow`
+  keeps its history. The other parts are new files beside it.
+- A test that reads the scripts as text reads all five, in the order of `index.html`. So
+  a count over the page, such as the one write of markup, stays a count over the page.
 - A value from the data reaches a copied command only through `shq()` in `app.js`.
   A test of `internal/web` gives the page names that a shell reads as code. It runs
   each command with `bash` and a stand-in for `strata`. It fails when a name splits
@@ -370,8 +410,11 @@ the Rust code, and these rules are for the Go code.
 - A server answers on a loopback address only. It sets the four headers on each
   answer, it refuses a `Host` that is not loopback, and it logs no request. It
   refuses a `POST` that has no header `Sec-Fetch-Site: same-origin`.
-- One worker holds the one slot for a `strata` process. A cycle, a request of the
-  detail tier, and a click take the slot in turn, so two processes never run together.
+- A pool of 4 tokens bounds the `strata` processes that run at one time, to keep the
+  memory of the pod in its limit. The content cycle, the versions cycle, and the detail
+  tier each have a slot of their own. So the two cycles run at the same time. A click
+  holds the slot of the versions, so no versions cycle moves the pin while Palette
+  answers. A test makes sure that no more processes run at one time than the pool has.
 - A test of a route has a line in the table of the sentinel test. The test fails
   when a route has none.
 - A test uses a table when it has more than two cases. A test that needs the
@@ -393,8 +436,11 @@ the Rust code, and these rules are for the Go code.
   never gives a server a port that it closed, and never asks a server that it
   closed. Another process can bind that port first, and answer in place of the
   server. A test of "no server" asks `testkit.PortZero`, because no server can
-  listen on port 0. Two tests make sure that no test calls `net.Listen`, and that
-  no test uses a server after it closes it.
+  listen on port 0. A test makes sure that no test calls `net.Listen`.
+- A second test makes sure that no test uses a name after a statement that calls
+  `Close` on it, such as `srv.Close()`. It does not find a server that a test stops with
+  a cancel of its context, such as the `stop` that `testkit.StartServer` gives. So after
+  a test calls that `stop`, it asks no address of the server.
 - No local name hides a package that its file imports, such as a variable `api` in
   a file that imports `internal/api`. A test makes sure of it.
 - `internal/testkit` holds each helper that the tests of two packages use, such

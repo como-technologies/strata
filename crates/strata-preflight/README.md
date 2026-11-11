@@ -15,9 +15,9 @@ strata-preflight --rules --cloud gke                # the rules
 
 The book has the command page, the use case, the rule format, and how the
 confidence of each rule is counted:
-<https://legendary-train-pzq9ojj.pages.github.io/commands/preflight.html>.
+<https://como-technologies.github.io/strata/commands/preflight.html>.
 
 `strata preflight ...` runs this binary when both are installed. Another
 repository depends on the crate by its git address and its name. The book shows
 the dependency and the items to start from:
-<https://legendary-train-pzq9ojj.pages.github.io/automation/library.html#use-strata-preflight-as-a-library>.
+<https://como-technologies.github.io/strata/automation/library.html#use-strata-preflight-as-a-library>.

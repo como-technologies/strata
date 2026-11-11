@@ -96,7 +96,7 @@ not edit them by hand. `go test` reads them, so it needs neither the binary nor
 the network, and the contract tests skip. The job `check` of CI runs
 `just observer-contract` after `just examples`.
 
-`just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
+`just lint` builds the rustdoc of `strata-palette`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build
 documents the public items, and it warns when a public item links to a private
 item. The second build documents all items, so it reads the comments of the
@@ -160,6 +160,8 @@ table gives the files.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs`, `tests/common/toml.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `crates/strata-preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. `common/toml.rs` holds the readers of a TOML file: the lines of a table, and the entries `key = "value"`. `xtask` and the tests of `strata-report-endpoint` include it. |
 | `tests/common/git.rs` | `common/git.rs` gives each git command of a test no setting of the machine and one author. The runner of the book in `xtask` includes it too, so a chapter of the book starts git with the same settings. |
 | `tests/common/route.rs` | `common/route.rs` matches a route of Palette with a pattern, such as `v1/clusterprofiles/{uid}`. `xtask` and the tests of `strata-preflight` include it, so each package matches a route in one way. |
+| `tests/common/variants.rs`, `tests/common/table.rs` | `common/variants.rs` holds the macro `one_of_each!`. It makes the list of one value of each variant of an enum. The build fails on a variant that the list does not hold. The tests of `src/error/`, of the edits of the stand-in in `xtask`, and of `Check` in `strata-preflight` include it. `common/table.rs` reads a markdown table: the cells of a row, the rows of a table, and the first cell of each row. The tests of the root package, the tests of `src/error/`, and the check of the facts in `xtask` use it. |
+| `tests/common/code_span.rs` | `common/code_span.rs` reads the code spans of a markdown text, and the text outside them. The tests of the root package and the check of the facts in `xtask` use it. So each package reads a code span in one way. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `crates/strata-knurl/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/kube`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
@@ -173,7 +175,7 @@ table gives the files.
 | `crates/strata-preflight/tests/` | `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes, with the checks of `tests/common/closed_set.rs`. `tests/common/mod.rs` of the package holds the stand-in for Palette that `tests/cli.rs` and `tests/catalog.rs` share. |
 | `crates/strata-report-endpoint/` | `strata-report-endpoint`, a package of its own in the workspace: the service that takes the report of the unknown values. `accept.rs` checks a request, and `limit.rs` limits the rate. `digest.rs` keeps the hash of each report that the service took, and `merge.rs` merges a report into the issues. `tracker.rs` writes to GitHub, and `server.rs` holds the rules and the loop. No release carries it: see [The endpoint of the report](./report-endpoint.md). |
 | `fuzz/` | `strata-fuzz`, a package of its own in the workspace: the fuzz targets and the property tests of `strata`, `strata-preflight`, and `strata-report-endpoint`, see [The fuzzing](#the-fuzzing). `src/` holds one module for each part, such as `mask.rs`, and `support.rs` holds what the targets share. `src/__fuzz__/<module>__<test>/` holds the corpus and the crashes of one target. The package has no code outside its tests. |
-| `fuzz/src/seed.rs`, `fuzz/src/seed/`, `fuzz/src/lib.rs` | `seed.rs` holds the table of the targets and their seed corpus. `seed/catalog.rs` holds the seeds that come from the catalog of `strata-preflight`, and `seed/regressions.rs` holds the regression cases. `seed/corpus.rs` writes the files of the corpus, and holds the checks of them. `lib.rs` includes `tests/common/palette.rs` and `tests/common/answer.rs` with `#[path]`, so the fuzz package has no second list of the routes and no second check of an answer. |
+| `fuzz/src/seed.rs`, `fuzz/src/seed/`, `fuzz/src/lib.rs` | `seed.rs` holds the table of the targets, their seed corpus, and `Case`, the one shape of a regression case. `seed/catalog.rs` holds the seeds that come from the catalog of `strata-preflight`, and `seed/regressions.rs` holds the regression cases. `seed/corpus.rs` writes the files of the corpus, and holds the checks of them. `lib.rs` includes `tests/common/palette.rs` and `tests/common/answer.rs` with `#[path]`, so the fuzz package has no second list of the routes and no second check of an answer. |
 
 `api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
 tests of their directory. In `crates/strata-preflight/src/`, `probe/`, `report/`, `rule/`,
@@ -183,12 +185,18 @@ A new read of Palette goes in `api/palette/`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot/`, outside the root unless it
 is content: see [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).
 
+A new command that reads Palette takes `--project` and `--project-name`. Add it
+to `READS_PALETTE` in the unit tests of `src/cli/args.rs`, and to `commands` in
+`tests/projects.rs`. Add a command that reads no Palette to `READS_NO_PALETTE`
+in the two files. The tests of each file fail on a command that its two lists
+do not name.
+
 ## Where a script goes
 
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `deny-list.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `crates/strata-knurl/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
@@ -208,6 +216,10 @@ The same test file checks that a script passes the options of `verify` and
 `behind` that a pipeline sets. `tests/workflows.rs` runs the `run` script of
 each such step with a stand-in for the tool, because `act` is not in every
 container. The expressions of GitHub (`${{ ... }}`) do not run there.
+
+`tests/ci_scripts.rs` also runs the install lines of the GitLab drop-in, as a
+job runs them. A stand-in `curl` serves the release, and the test gives no
+token.
 
 The development tooling is the `xtask` crate. A `just` recipe wraps each command
 that the book and the examples need, and `cargo xtask <command>` runs the same
@@ -280,6 +292,22 @@ no setting of the machine:
   gives the same settings, with the author `NAME`.
 - A test fails on another file of the tests, of xtask, or of `examples/live/` that sets
   `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, or the name of an author.
+
+### The waits of the live scripts in a test
+
+`tests/live_scripts.rs` runs a script of `examples/live/` with a stand-in for each tool. The
+stand-in `sleep` returns at once, so a test does not wait for the seconds of a live run. With
+these rules, a test gives the same result on each run, on a fast machine and on the runner of CI:
+
+- A wait that counts its looks ends in less than a second. On a test machine, the 30 looks of a
+  wait took 54 ms. So a count of looks limits a wait only when its state comes from an earlier step.
+- A wait for a process that runs in the background has a limit of time. `pf_start` of `lib.sh`
+  waits 30 seconds for the line `Forwarding from` of `kubectl port-forward`. In `observer.sh`, each
+  look for the observer that runs in the background waits up to 5 seconds in the stand-in `curl`.
+- `FAKE_PORT_FORWARD` of `tests/common/mod.rs` stands for each port-forward. It can print its line
+  half a second late, or end with no line. A test shows that each step still gets the right result.
+- A step that fails shows its output in the log of the test. The test prints the files `<id>.out`
+  and `<id>.err` of each check that failed, and the harness shows them when the test fails.
 
 ### The fuzzing
 
@@ -627,16 +655,23 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-CI does not run `just adapter-test`. The adapter needs knurl, a private
-repository, and CI has no key for it: see
-[The knurl adapter](../automation/knurl.md#test-it).
+`ci` adds three jobs of its own. `deny list` scans each tracked file and its
+path for the names that the public tree must not hold: see
+[The deny list](#the-deny-list). `Gate` needs the checks and `deny list`, and
+does no other work. It is the one check run that the verify reads: see
+[How a change lands](./changes.md#the-verify). `publish the book` needs the
+same two jobs and runs only on `main`, so the site is a build that every check
+passed. The `docs` job builds the book once and passes it to the publish job, so
+no job builds it twice.
 
-`ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
-it is the one check run that the verify reads (see
-[How a change lands](./changes.md#the-verify)). `publish the book` needs the
-checks and runs only on `main`, so the site is a build that every check passed.
-The `docs` job builds the book once and passes it to the publish job, so no job
-builds it twice.
+No job that `Gate` needs runs `just adapter-test`, and no recipe of such a job
+runs it. `tests/workflows.rs` reads the `just` steps of each such job, of each
+workflow that it calls, and of each action of `.github/actions/` that it uses.
+The test gives each input of an action the value of the `with` of the step, or
+else the default of the input. No workflow and no action names the recipe or
+the package of the adapter. The adapter needs knurl, a private repository. No
+job of CI builds or tests the adapter: see
+[The knurl adapter](../automation/knurl.md#test-it).
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
@@ -644,12 +679,154 @@ a release does not have. A release that called a workflow that asked for it
 failed before it started.
 
 Run the same recipes in a clean checkout before you push. A file that is not
-tracked can hide a failure:
+tracked can hide a failure. The checkout builds into a target directory of its
+own: see [A temporary worktree](#a-temporary-worktree).
 
 ```bash
 git worktree add --detach ../strata-check HEAD
-cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
+cd ../strata-check && export CARGO_TARGET_DIR="$PWD/target"
+just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
 ```
+
+### A temporary worktree
+
+Give each temporary worktree its own target directory. Set `CARGO_TARGET_DIR`
+to a directory in the worktree, never to the `target/` of the main tree. The
+rule is for each command that builds in a worktree. Examples are the clean
+checkout above, and a test that must fail without its fix.
+
+Cargo puts a build of the worktree and a build of the main tree in the same
+place of a shared `target/`. The build of the worktree is newer than the files
+of the main tree, so cargo does not build again in the main tree. The debug
+builds of `xtask`, `strata`, `strata-preflight`, and `strata-report-endpoint`
+then keep the path of the worktree. After you remove the worktree, `just
+docs-check` fails with "No such file or directory" for a fixture under that
+path.
+
+```bash
+d=$(mktemp -d) && git worktree add -q --detach "$d" HEAD
+(cd "$d" && CARGO_TARGET_DIR="$d/target" cargo test -p xtask)
+git worktree remove --force "$d"   # also removes the target directory of the worktree
+```
+
+When the shared `target/` already holds such a build, `cargo clean` removes it.
+
+### The deny list
+
+The repository is public, so a name in a tracked file, in its path, or in the
+target of a tracked symlink is public. The job `deny list` of the `ci` workflow
+scans the text and the path of each tracked file for each entry of a deny list.
+It also scans the target of each tracked symlink. The list holds the names that
+the tree must not hold. The notes of the lead give its classes. The job runs on
+each push to `main` and on each pull request.
+
+The list is the secret `STEP14_DENY` of the repository, with one entry on each
+line. It is not a file of the tree, because a public file names what it denies.
+The owner of the repository sets the secret. Write no entry in a file, a commit,
+an issue, a pull request, or a thread.
+
+The step gives the secret to `just deny-list` in a variable of the same name.
+The recipe runs `scripts/dev/deny-list.sh`. The script:
+
+- stops the trace of the shell, because a trace prints the value of a variable;
+- writes the list to a file under `$RUNNER_TEMP`, and removes the file at the
+  end;
+- removes each empty line, because an empty pattern matches each line;
+- removes the spaces at the two ends of an entry, also a carriage return;
+- matches each entry as a fixed string, with no difference of case, in the text
+  and in the path of each tracked file;
+- reads the target of each tracked symlink, which `git grep` does not read, and
+  matches it with the same rules;
+- counts a symlink whose target holds an entry as a path that holds one;
+- prints the number of tracked files that it scans;
+- prints the path and the line number of each hit in a text, or the path alone
+  for a hit in a binary file;
+- prints the number of tracked paths that hold an entry, and no such path or
+  target.
+
+A path that holds an entry is a hit, and the log must not show it. For a hit in
+the text of such a file, the script prints `<a path that holds an entry>` in
+place of the path. These lines follow the other hits, so their place does not
+show the start of the path. The script never prints an entry or the text of a
+line. It does not read the commit messages or the body of a pull request.
+
+| The list and the tree | The job |
+| --- | --- |
+| An entry in the text of a tracked file | Fails. |
+| An entry in a tracked path | Fails, and gives the number of such paths. |
+| An entry in the target of a symlink | Fails, as for an entry in a path. |
+| No entry in a file, a path, or a target | Passes. |
+| A list with no entry | Gives a notice that it did not scan, and passes. |
+
+When the job fails, GitHub skips `Gate`, so the verify of a pull request cannot
+pass. On `main`, `publish the book` does not run.
+
+The list has no entry before the owner sets the secret. It also has no entry on
+a pull request from a fork, because GitHub gives no secret to that run. A person
+who holds the list can run the same scan before a push:
+
+```bash
+STEP14_DENY="$(cat <file of the list>)" just deny-list
+```
+
+The log does not show a path that holds an entry. A person who holds the list
+finds each such path with the same match:
+
+```bash
+git ls-files -z | grep --null-data -F -i -f <file of the list> | tr '\0' '\n'
+```
+
+That match does not read the target of a symlink. This loop finds each tracked
+symlink whose target holds an entry. Without `-z`, Git puts quotes around a path
+with unusual characters, so the loop reads the index with `-z`, as the script
+does:
+
+```bash
+git ls-files -s -z | while IFS= read -r -d '' entry; do
+  # An entry is "<mode> <object> <stage>", a tab, and the path.
+  read -r mode object _ <<< "${entry%%$'\t'*}"
+  [ "$mode" = 120000 ] || continue  # 120000 is the mode of a symlink
+  if git cat-file blob "$object" | grep -q -F -i -f <file of the list>; then
+    printf '%s\n' "${entry#*$'\t'}"
+  fi
+done
+```
+
+Replace each hit with a made-up name, in the text, the path, or the target of a
+symlink. See
+[The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
+the branch made the name public, so also tell the lead.
+
+### Dependency updates
+
+`.github/dependabot.yml` asks Dependabot for pull requests of version updates
+each Monday. Each package ecosystem gets one pull request for its minor and
+patch updates, and one pull request for each major update.
+
+| Ecosystem | Folders |
+| --- | --- |
+| Cargo | the workspace at the root, `examples/library`, and `examples/library-preflight` |
+| Go | `observer` and `examples/live/count-requests` |
+| GitHub Actions | the workflows, and each action of `.github/actions/` |
+| Docker | `deploy/observer` and `deploy/report` |
+
+Dependabot reads no other package:
+
+- `crates/strata-knurl` needs knurl, a private repository.
+- `examples/live/terraform` pins the provider of Spectro Cloud. A new provider
+  needs a live run, and the contract run watches its releases.
+- `deploy/session` is the image of the riff sessions, and it follows riff.
+
+Two pins stay. The test of the order of versions compares strata with the crate
+`versions` at one exact release. A new minor release of `bolero` needs the same
+`CARGO_BOLERO_VERSION` in `.github/workflows/fuzz.yml`, so Dependabot proposes
+only its patch releases.
+
+The security updates of Dependabot are on in the settings of the repository, so
+an alert can also open a pull request. Each pull request of Dependabot goes to
+the milestone Backlog, so no wave counts it. riff does not take it, so it gets
+no `riff/verify`, which the ruleset of `main` needs. A maintainer merges it when
+its checks pass.
 
 ## A change to how strata reads Palette
 

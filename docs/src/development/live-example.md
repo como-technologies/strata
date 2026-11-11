@@ -26,7 +26,9 @@ show.
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. Stage 3 reads with a key that cannot read the audit log (#664), and needs `STRATA_LIVE_NO_AUDIT_KEY`. |
 | `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `scope.sh` | A profile of the tenant with the name and the version of the release profile: what the listing, the search, and the document of Palette say, and what `list` and `snapshot` do with the ref that two scopes answer (#113). It needs the profiles, and no cluster. |
+| `projects.sh` | A copy of the release profile in a second project of the tenant: a record of the version in each project, and `verify`, `same-release`, and `compare` with a project for each side (#486). It needs the profiles, the name of a second project in `STRATA_LIVE_SECOND_PROJECT`, and no cluster. It deletes only the copy that it makes, and never a project. |
 | `release.sh` | The route that gives the release of Palette: it answers a call with no key, and refuses a call with the key (#146). It needs the key and nothing else. |
+| `public.sh` | What a reader with no login gets from the public repository (#65). It opens the book, runs the install command of the README and the install lines of the GitLab drop-in, and reads the image and the chart of the observer. It also reads the description, the topics, and the setting of the advisory form. It needs `gh`, and it reads no tenant. |
 | `pending.sh` | When Palette says that an update waits for a cluster, what a record of `cluster:<uid>@pending` holds (#70, #78), and what `compare --repave` with it asks Palette (#276). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `image-digest.sh` | What cluster A pulls when a digest sits in the image list of a pack alone, and when it sits in the manifest that the workload reads (#630). It needs cluster A. |
@@ -209,6 +211,7 @@ each.
 | `route-bodies.sh` | nothing that stays: one add-on profile for each case, deleted after `validate-route.sh` ran on the bodies, and on a failure | the baseline |
 | `export.sh` | nothing; it only reads | the baseline |
 | `release.sh` | nothing; it only reads | the baseline |
+| `public.sh` | nothing; it only reads GitHub | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, a tag that it deletes and pushes again, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
@@ -287,6 +290,7 @@ back to false with the default variables (`apply_baseline`).
   [An EKS cluster](#an-eks-cluster).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
+- For `projects.sh` only: the name of a second project of the tenant in `STRATA_LIVE_SECOND_PROJECT`. The script makes one profile there, and deletes it at its end.
 - For `observer-role.sh` only: the key of a user with the role under test in `OBSERVER_ROLE_KEY`, and the name of the role in `OBSERVER_ROLE`. The script never prints the key.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
   `curl`, `helm`, `crane`, and a Rust toolchain.
@@ -579,7 +583,9 @@ just live-pack-states                                                          #
 just live-knurl                                                                # #66, read-only; the instance checks need just live-up
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
+just live-projects                                                             # #486, needs just live-profiles and STRATA_LIVE_SECOND_PROJECT; deletes the copy it makes
 just live-release                                                              # #146, needs only the key
+just live-public                                                               # #65, needs gh; reads no tenant
 just live-contract                                                             # #390, #391, #393, #576, needs the key and just examples; reads only, also the calls of the clouds; --with-cluster in a window with a cluster
 just live-report-send URL                                                      # #397, needs the address of the endpoint and a `gh` login; reads no tenant
 just live-validate-route BODIES                                                # #243, needs the key and a directory of bodies; no cluster
@@ -732,7 +738,7 @@ in Palette, which exists from the start of the creation.
 | --- | --- |
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | The workers have 4 cores or fewer in total. The default of two `t3.xlarge` workers has more. |
 | `snapshot-candidate` fails with `pack-not-found` that names a tag | A strata build from before the tag fix. The tag of the profile is the version. |
-| A flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | The state held `skip_destroy = false`, and the provider deletes a replaced version with the value in its state (provider 0.29.7, and `resourceClusterProfileDelete` in 0.30.1). Each script now runs `hold_versions` right after it checks the baseline. |
+| A flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | The state held `skip_destroy = false`, and the provider deletes a replaced version with the value in its state (provider 0.29.7 and 0.30.1). Each script now runs `hold_versions` right after it checks the baseline. |
 | A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, a run can use a binary that lacks an option the script needs, and fail every check that uses it. Run `just build`, then run the script again. |
 | `consumer-is-the-cluster` fails with state `unknown` | The key cannot read the cluster in its project. `consumers-release.out` prints the error next to the cluster. |
 | `only-the-edited-value` fails with two changed values | Somebody edited 1.0.1 in place and did not undo it. `baseline.sh` names it. |

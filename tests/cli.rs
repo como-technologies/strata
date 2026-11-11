@@ -1957,7 +1957,7 @@ fn a_name_in_the_file_under_a_uid_in_the_environment_starts_no_lookup() {
 }
 
 /// Strata reads `~/.palette.env` only from a `HOME` that is an absolute path. An empty or a
-/// relative `HOME` names a folder below the working folder, and a checkout can put a file there.
+/// relative `HOME` names a folder from the working folder, and a checkout can put a file there.
 /// Such a file gives no setting, so it cannot send the key of the environment to its address.
 #[test]
 fn an_empty_or_a_relative_home_reads_no_palette_env_of_the_working_folder() {

@@ -1,6 +1,7 @@
 $ strata compare releases/1.1.10/dev.json releases/1.1.10/prod.json
 aws-stack@1.1.10 (uid 64e0000000000000000000fd)  ->  aws-stack@1.1.10 (uid 64e1000000000000000000fd)
 root       7dbf0976d17a -> 7dbf0976d17a   IDENTICAL
+project    64f20000000000000000a0d1 -> 64f20000000000000000a0f1
 note       pack addon/cert-manager has a masked value at registryPassword: an equal root does not show an equal secret
 consumers  0 -> 0 clusters
 

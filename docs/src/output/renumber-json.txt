@@ -1,0 +1,24 @@
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.0 --json | jq '.pairs[0] | {status, renumbers, archivesNotCompared}'
+{
+  "status": "renumber",
+  "renumbers": [
+    {
+      "key": "k8s/kubernetes",
+      "name": "kubernetes",
+      "old": "1.36.2-rc.1",
+      "new": "1.36.2",
+      "preReleaseToFinal": true
+    },
+    {
+      "key": "csi/csi-aws-ebs",
+      "name": "csi-aws-ebs",
+      "old": "1.65.0-rc.1",
+      "new": "1.65.0",
+      "preReleaseToFinal": true
+    }
+  ],
+  "archivesNotCompared": [
+    "k8s/kubernetes",
+    "csi/csi-aws-ebs"
+  ]
+}

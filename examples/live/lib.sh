@@ -281,10 +281,9 @@ try_apply() {
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
 # flag-on version bump replaces the profile resource, and the provider deletes the replaced object with
-# the skip_destroy its state holds, not the new value (provider 0.30.1,
-# resourceClusterProfileDelete): without this, the bump asks Palette to delete the old version,
-# which Palette refuses while a cluster runs it (DeletionResourceInUseError, drift-report.sh on,
-# run 20260917T132642Z).
+# the skip_destroy its state holds, not the new value (provider 0.30.1): without this, the bump asks
+# Palette to delete the old version, which Palette refuses while a cluster runs it
+# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
 hold_versions() { tf_apply "$flag"; }
 # apply_baseline: the default variables with the flag off, which is the baseline's configuration;
 # skip_destroy goes back to false on every profile. A profile resource this removes stays in
@@ -463,26 +462,35 @@ pf_stop() {
   pf_pid= pf_user=
 }
 # pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The log is
-# port-forward.log.
+# port-forward.log. The wait ends at the line "Forwarding from" in the log, or at the end of the process.
+# Its limit is 30 seconds, not 30 looks: the stand-in sleep of the tests returns at once, so 30 looks take
+# less than a second there. When the function fails, it says why on standard error.
 pf_start() {
-  local _
+  local end why
   pf_stop
   if [ ! -s "$kubeconfig" ]; then
     kubeconfig=$(mktemp) || return 1
     if ! cluster_kubeconfig > "$kubeconfig" 2> /dev/null || [ ! -s "$kubeconfig" ]; then
       rm -f "$kubeconfig"
       kubeconfig=
+      echo "the port-forward got no kubeconfig of the cluster" >&2
       return 1
     fi
   fi
   kubectl --kubeconfig "$kubeconfig" ${1:+--as="$1"} -n "$ns" port-forward deploy/strata-observer "$port:8080" > port-forward.log 2>&1 < /dev/null &
   pf_pid=$! pf_user=${1:-}
-  for _ in $(seq 30); do
+  end=$((SECONDS + 30)) why="printed no line \"Forwarding from\" in 30 seconds"
+  while [ "$SECONDS" -lt "$end" ]; do
     grep -q 'Forwarding from' port-forward.log && return 0
     # the process can end after it prints its line, so the log gets a last look
-    kill -0 "$pf_pid" 2> /dev/null || { grep -q 'Forwarding from' port-forward.log; return; }
+    if ! kill -0 "$pf_pid" 2> /dev/null; then
+      grep -q 'Forwarding from' port-forward.log && return 0
+      why="ended with no line \"Forwarding from\""
+      break
+    fi
     sleep 1
   done
+  { echo "the port-forward $why. Its log:"; cat port-forward.log; } >&2
   return 1
 }
 # page PATH: the answer of the observer through the port-forward
@@ -495,7 +503,7 @@ images_read() {
 # pods_read: open the port-forward, and wait for the first read of the pods. $tries is the number of looks.
 # The output says what the observer reports about the read.
 pods_read() {
-  pf_start || { cat port-forward.log; return 1; }
+  pf_start || return 1
   poll "$tries" images_read || { jq '{pods, readAt, error, counts}' images.json; return 1; }
   jq '{pods, readAt, error, counts}' images.json
 }

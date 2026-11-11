@@ -40,4 +40,4 @@ Options:
   -h, --help               Print help
   -V, --version            Print version
 
-The book: https://legendary-train-pzq9ojj.pages.github.io/commands/preflight.html
+The book: https://como-technologies.github.io/strata/commands/preflight.html

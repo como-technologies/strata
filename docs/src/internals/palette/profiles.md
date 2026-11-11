@@ -247,8 +247,9 @@ A version that does not parse reads as the first three numbers that it holds
 with dots between them, at any place. Palette ignores the rest of the text,
 also a pre-release after the numbers. So `1.1.8.develop` reads as `1.1.8`, and
 `10.4.0.1` reads as `10.4.0`. Palette gives no order to two versions that read
-as one. A text with no three numbers, such as `LTS__24.x`, holds no version for
-Palette.
+as one. A text with no three numbers, such as `1.2.develop` or `LTS__24.x`,
+holds no version for Palette. A compare with such a text fails with
+`VersionParseFailure`.
 
 The create of a profile version refuses a version that does not parse, with
 `VersionParseFailure`: see
@@ -257,8 +258,9 @@ So such a profile version comes from before that rule. A registry can still
 list a pack version of that form.
 
 These rules come from the code of Palette. No run makes such a profile version,
-because Palette refuses the create. Strata reads the same numbers, and it adds
-an order for two versions that read as one: see
+because Palette refuses the create. Strata reads the same numbers, and the
+numbers decide first. Where Palette gives no order or reads no version, strata
+follows the order of the Rust crate `versions` 8.0.1: see
 [the rule of `@latest`](../../reference/refs.md#rules).
 
 ## Drafts
@@ -298,6 +300,20 @@ Palette serves the two templates as follows:
   content of neither template. A manifest that the draft adds has an empty
   content in it. Each manifest of a version that was never published has an
   empty content in it too.
+- The `PUT` writes the name and the version of its body to the profile at
+  once, and not to the draft. It refuses a name and a version that another
+  profile of the same project has, with HTTP 409 and
+  `ClusterProfileAlreadyExists`. For a profile of the tenant, it compares the
+  profiles of the tenant. The compare of the names ignores the case. The code
+  of Palette shows these facts. No live check tests them, because no check
+  changes the name or the version of a lab profile.
+- The answer of `packs/manifests` has two names. Its `metadata` is the
+  metadata of the profile, so its `metadata.name` is the name of the profile.
+  Each pack summary takes its `metadata.name` and its `spec.name` from its pin.
+  So while a draft waits, the profile and the answer have the new name. The
+  code of Palette shows these facts, and the check `route-names` of
+  [draft.sh](../../development/live-runs.md#draftsh) tests the two names. No
+  result yet: the live window of wave 16 runs it.
 - `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
   gives one manifest with `spec.draft.content` and `spec.published.content`.
   A draft content is empty when the draft did not change the manifest.

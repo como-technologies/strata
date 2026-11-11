@@ -133,6 +133,9 @@ neither value: a macro can hold a secret.
   [The promotion gate and the retire gate](../automation/gates.md).
 - Record a version whose content reads a macro with `snapshot --macros` in
   each project, so that `same-release` compares the macro values.
+- To ask Palette about the two projects in one run, with no record first, give
+  a project for each side: see
+  [Environments in the projects of one tenant](./projects.md).
 
 A pair can also differ for a reason that is not a content change:
 

@@ -11,8 +11,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
-    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, code_spans, first_cells,
+    gitlab_drop_in, one_line, recipe, repo_file, schema, script, table_rows, toml_entries,
+    toml_table, toml_value, version_of, walk, without_code,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -94,9 +95,9 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
     );
 }
 
-/// The version badge in the README is static, because shields.io cannot read a private
-/// repository. A badge that asks it for the version renders "repo not found". Static means it can
-/// drift, so the drift is a test failure instead of a wrong number on the front page.
+/// The version badge in the README is static, so it names the version of the commit and needs no
+/// request to GitHub. Static means it can drift, so the drift is a test failure instead of a wrong
+/// number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     let version = version_of("Cargo.toml");
@@ -106,6 +107,115 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
         readme.contains(&badge),
         "the README badge does not name version {version}: bump it with the version in Cargo.toml"
     );
+}
+
+/// The book is the Pages site of the repository, at the address that GitHub gives to a public
+/// repository. A reader with no login opens it (#65).
+#[test]
+fn the_address_of_the_book_is_the_public_pages_site_of_the_repository() {
+    let repository = env!("CARGO_PKG_REPOSITORY");
+    let path = repository
+        .strip_prefix("https://github.com/")
+        .expect("the repository is on GitHub");
+    let (owner, name) = path
+        .split_once('/')
+        .expect("the address names an owner and a repository");
+    assert_eq!(
+        strata::BOOK_URL,
+        format!("https://{owner}.github.io/{name}/")
+    );
+}
+
+/// GitHub gives the Pages site of a private repository an address on a host of its own. Only a
+/// member of the organization opens it. No tracked file names that host (#65). The text of the host
+/// is in two parts, so that this file does not name it.
+#[test]
+fn no_tracked_file_names_the_host_of_a_private_pages_site() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = concat!("pages", ".github.io");
+    let faults: Vec<String> = tracked_files(root, &[])
+        .into_iter()
+        .filter(|file| std::fs::read_to_string(file).is_ok_and(|text| text.contains(host)))
+        .map(|file| {
+            file.strip_prefix(root)
+                .unwrap_or(&file)
+                .display()
+                .to_string()
+        })
+        .collect();
+    assert!(
+        faults.is_empty(),
+        "these files name {host}; give the address of strata::BOOK_URL:\n{}",
+        faults.join("\n")
+    );
+}
+
+/// A reader outside the organization installs a release with one `curl` command, and with no token
+/// and no `gh` (#65). The README and the page "Install" give the same command.
+#[test]
+fn the_readme_and_the_book_give_one_install_command_with_curl_and_no_token() {
+    let readme = common::code_blocks(&common::page_section("README.md", "## Install"), "bash");
+    let book = common::code_blocks(
+        &common::page_section("docs/src/install.md", "### One command"),
+        "bash",
+    );
+    assert_eq!(readme.first(), book.first(), "the README and install.md");
+    let block = readme.first().expect("the README gives the command");
+    let command = one_line(&block.replace("\\\n", " "));
+    let download = format!(
+        "curl -fsSL {}/releases/latest/download/install-strata.sh | bash -s --",
+        env!("CARGO_PKG_REPOSITORY")
+    );
+    assert!(command.starts_with(&download), "{command}");
+    for word in ["gh ", "TOKEN", "token"] {
+        assert!(!command.contains(word), "{command} names {word:?}");
+    }
+}
+
+/// A package of strata carries the sources, the license, and the README, and not the book, the
+/// examples, or the tests. crates.io keeps each version that it takes, so the list is a test (#65).
+#[test]
+fn the_package_of_strata_carries_the_sources_the_license_and_the_readme_and_no_other_folder() {
+    let o = std::process::Command::new(env!("CARGO"))
+        .args([
+            "package",
+            "--list",
+            "--allow-dirty",
+            "--offline",
+            "-p",
+            env!("CARGO_PKG_NAME"),
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", common::text(&o.stderr));
+    let listed = common::text(&o.stdout);
+    let files: BTreeSet<&str> = listed.lines().collect();
+    for wanted in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "LICENSE",
+        "README.md",
+        "src/main.rs",
+    ] {
+        assert!(
+            files.contains(wanted),
+            "the package has no {wanted}:\n{listed}"
+        );
+    }
+    let cargo = [
+        "Cargo.toml",
+        "Cargo.toml.orig",
+        "Cargo.lock",
+        ".cargo_vcs_info.json",
+    ];
+    let other: Vec<&&str> = files
+        .iter()
+        .filter(|f| {
+            !f.starts_with("src/") && !cargo.contains(f) && !["LICENSE", "README.md"].contains(f)
+        })
+        .collect();
+    assert!(other.is_empty(), "the package carries {other:?}");
 }
 
 /// A release ships `strata` and `strata-preflight` together, and the book says that
@@ -186,16 +296,7 @@ fn codes_after(text: &str, anchor: &str) -> Vec<String> {
     let at = text
         .find(anchor)
         .unwrap_or_else(|| panic!("errors.md does not name {anchor}"));
-    let mut codes: Vec<String> = text[at..]
-        .lines()
-        .skip_while(|line| !line.starts_with("| Code |"))
-        .skip(2) // the header and the line under it
-        .take_while(|line| line.starts_with('|'))
-        .map(|row| {
-            let cell = row.split('|').nth(1).expect("a row has a first cell");
-            cell.trim().trim_matches('`').to_string()
-        })
-        .collect();
+    let mut codes = first_cells(&text[at..], "| Code |");
     codes.sort();
     codes
 }
@@ -368,11 +469,20 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
 
 /// The values that the generated help of `strata <command>` lists for one argument or option.
 /// The line of that argument or option starts with `name`, such as `<KIND>` or `--allow `.
+///
+/// The values are on that line, or on the next line. When the help of one option is too wide, clap
+/// puts the help of each option on the line after its name.
 fn possible_values(command: &str, name: &str) -> Vec<String> {
     let help = read(&docs().join(format!("output/help-{command}.txt")));
-    help.lines()
-        .find(|line| line.trim_start().starts_with(name))
-        .and_then(|line| line.split("[possible values: ").nth(1))
+    let lines: Vec<&str> = help.lines().collect();
+    lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(name))
+        .and_then(|at| {
+            lines[at..lines.len().min(at + 2)]
+                .iter()
+                .find_map(|line| line.split("[possible values: ").nth(1))
+        })
         .and_then(|rest| rest.split(']').next())
         .unwrap_or_else(|| panic!("the help of {command} lists no values of {name:?}"))
         .split(", ")
@@ -1081,11 +1191,7 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
 /// The sentences of a block. A table row has the sentences of each cell.
 fn block_sentences(block: &str) -> Vec<String> {
     if block.starts_with('|') {
-        return block
-            .trim_matches('|')
-            .split('|')
-            .flat_map(|cell| sentences(cell.trim()))
-            .collect();
+        return cells(block).into_iter().flat_map(sentences).collect();
     }
     sentences(block)
 }
@@ -1224,13 +1330,13 @@ const LEAVE_OUT_SCAN: [&str; 15] = [
     "justfile",
 ];
 
-/// The files of `LEAVE_OUT_SCAN` that Git tracks in the tree of `root`. A file that Git ignores is
-/// not one of them. A run of the live example writes such files to `examples/live/runs`, and they
-/// hold the text of a cluster, not the text of the repository. The option `safe.directory` lets Git
-/// read a tree that another user owns.
-fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
+/// The files under `paths` that Git tracks in the tree of `root`, or each tracked file when `paths`
+/// is empty. A file that Git ignores is not one of them. A run of the live example writes such
+/// files to `examples/live/runs`, and they hold the text of a cluster, not the text of the
+/// repository. The option `safe.directory` lets Git read a tree that another user owns.
+fn tracked_files(root: &Path, paths: &[&str]) -> Vec<PathBuf> {
     let mut args = vec!["-c", "safe.directory=*", "ls-files", "-z", "--"];
-    args.extend(LEAVE_OUT_SCAN);
+    args.extend(paths);
     let listing = common::git(root, &args).stdout;
     String::from_utf8(listing)
         .expect("Git lists paths in UTF-8")
@@ -1245,7 +1351,7 @@ fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
 /// `examples/packs/` too, which are the text of other projects.
 fn leave_out_faults(root: &Path) -> Vec<String> {
     let mut faults = Vec::new();
-    for file in tracked_files_to_scan(root) {
+    for file in tracked_files(root, &LEAVE_OUT_SCAN) {
         let path = file.strip_prefix(root).unwrap_or(&file).to_string_lossy();
         if path == "tests/docs.rs" || path.starts_with("examples/packs/") {
             continue;
@@ -1303,7 +1409,7 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
     write("docs/src/untracked.md", "Leave out the new page.\n");
 
-    let tracked: Vec<String> = tracked_files_to_scan(root)
+    let tracked: Vec<String> = tracked_files(root, &LEAVE_OUT_SCAN)
         .iter()
         .map(|p| p.strip_prefix(root).unwrap().display().to_string())
         .collect();
@@ -1313,6 +1419,74 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
         ["examples/live/run.sh: Leave out"],
         "the tracked file is a fault, and the ignored and the untracked file are not"
     );
+}
+
+/// The checks that part 1 of the live window of Wave 16 ran have their result in the book: draft.sh,
+/// projects.sh, and loop.sh. A row that says "no result yet" for one of them tells a reader that
+/// nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_that_the_wave_16_live_window_ran_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    for check in [
+        "route-names",
+        "copy-create",
+        "record-a",
+        "record-b",
+        "verify-both",
+        "same-release",
+        "same-release-line",
+        "compare-projects",
+        "records-same",
+        "copy-delete",
+        "same-release-renumber",
+        "cluster-plain",
+        "ask-repave-plain",
+        "preflight-job",
+        "preflight-job-key",
+        "other-project-read",
+        "ask-repave-plain-says",
+        "preflight-job-says",
+        "preflight-job-key-says",
+        "record-a-project",
+        "record-b-project",
+        "same-release-projects",
+    ] {
+        let row = page
+            .lines()
+            .find(|l| l.starts_with("| `") && l.contains(&format!("`{check}`")))
+            .unwrap_or_else(|| panic!("live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
+}
+
+/// The checks of public.sh ran after the repository and its packages became public (#65, #483). A
+/// row that says "no result yet" for one of them tells a reader that nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_of_public_sh_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    let public = section(&page, "## public.sh", Some("\n## "));
+    for check in [
+        "book-opens",
+        "install-no-token",
+        "install-runs",
+        "gitlab-install-no-token",
+        "image-no-login",
+        "chart-no-login",
+        "repository-public",
+        "advisory-form",
+    ] {
+        let row = public
+            .lines()
+            .find(|l| l.starts_with("| `") && l.contains(&format!("`{check}`")))
+            .unwrap_or_else(|| panic!("public.sh in live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
 }
 
 /// The checks that the live window of Wave 11 ran have their result in the book. A row that says
@@ -1376,7 +1550,7 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
             "the rule eks-ami-type left the catalog, and the table {name} names it"
         );
     }
-    let rows = table_rows(waits);
+    let rows = table_rows(waits, "|");
     assert!(!rows.is_empty(), "{waits}");
     for row in rows {
         assert!(
@@ -1412,25 +1586,6 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
 /// The text of `docs/src/loop.md`, and of `docs/src/walkthrough.md`, which holds each step of it.
 fn the_loop() -> String {
     read(&docs().join("loop.md")) + &read(&docs().join("walkthrough.md"))
-}
-
-/// The cells of each row of the first table in `text`, without the header and the rule line.
-fn table_rows(text: &str) -> Vec<Vec<String>> {
-    text.lines()
-        .filter(|l| l.starts_with('|'))
-        .skip(2)
-        .map(|l| {
-            l.trim_matches('|')
-                .split('|')
-                .map(|c| c.trim().to_string())
-                .collect()
-        })
-        .collect()
-}
-
-/// The code spans of `text`: the text between a pair of backticks.
-fn code_spans(text: &str) -> Vec<&str> {
-    text.split('`').skip(1).step_by(2).collect()
 }
 
 /// The words that start the command of a person: the commands of strata and the scripts of
@@ -1510,7 +1665,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
     );
 
     let names = command_words();
-    let rows = table_rows(part);
+    let rows = table_rows(part, "|");
     assert_eq!(rows.len(), 11, "the table of the day has eleven steps");
     for row in rows {
         assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
@@ -1583,7 +1738,11 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         .find(|l| l.starts_with('|'))
         .expect("the section has a table");
     assert_eq!(header, "| When | Who | The question | What runs | Page |");
-    assert_eq!(table_rows(part).len(), 13, "the table has thirteen jobs");
+    assert_eq!(
+        table_rows(part, "|").len(),
+        13,
+        "the table has thirteen jobs"
+    );
 
     let spans = code_spans(part);
     for command in [
@@ -1728,16 +1887,12 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_12_are_gone_from_the_book(
 }
 
 /// A user copies the drop-ins of the CI systems, so their comments are user text. The review at the
-/// end of Wave 12 named three comments that are over the limit: each sentence of them has 25 words
-/// at most.
+/// end of Wave 12 named three comments that are over the limit. The comment about the access to a
+/// private repository is gone (#65). Each sentence of the other two has 25 words at most.
 #[test]
 fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
     let comments = [
         ("examples/ci/github/strata.yml", "needed to read Palette"),
-        (
-            "examples/ci/github/strata.yml",
-            "A token does not give access",
-        ),
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
     assert_comments_keep_to_the_limit(&comments);
@@ -1767,7 +1922,7 @@ fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_
     let text = the_loop();
     let part = section(&text, "## Each step at a glance", Some("\n## "));
     let names = command_words();
-    for row in table_rows(part) {
+    for row in table_rows(part, "|") {
         let place = &row[2];
         assert!(
             !names.contains(place) && place != "preflight",
@@ -1865,12 +2020,7 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         .split(". ")
         .find(|s| s.ends_with(" have such users"))
         .expect("code.md names the files that other packages include");
-    let named: BTreeSet<String> = rule
-        .split('`')
-        .skip(1)
-        .step_by(2)
-        .map(String::from)
-        .collect();
+    let named: BTreeSet<String> = code_spans(rule).into_iter().map(String::from).collect();
     assert_eq!(named, included, "the rule of Tests in code.md: {rule}");
 
     let page = read(&docs().join("development/build-test.md"));
@@ -1879,14 +2029,11 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         "## Where the code goes",
         Some("## Where a script goes"),
     );
-    let rows: Vec<&str> = table
-        .lines()
-        .filter_map(|line| line.strip_prefix("| ")?.split(" | ").next())
-        .collect();
+    let rows = table_rows(table, "|");
     for file in &included {
         let cell = format!("`tests/common/{file}`");
         assert!(
-            rows.iter().any(|row| row.contains(&cell)),
+            rows.iter().any(|row| row[0].contains(&cell)),
             "the table Where the code goes of build-test.md has no row of {cell}"
         );
     }
@@ -1904,8 +2051,9 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
         (
             "src/reference/version.rs",
-            "A string with no three numbers keeps",
+            "Two strings with no version keep",
         ),
+        ("src/reference/version.rs", "Five forms are a pre-release:"),
         ("src/candidate/resolve.rs", "The documents are those that"),
         (
             "src/candidate/resolve.rs",
@@ -1968,17 +2116,17 @@ fn a_block_is_one_item_of_a_numbered_list_a_star_list_or_a_quote_and_one_paragra
     assert_eq!(block(text, "Row"), "| Row | Cell |");
 }
 
-/// The book has numbered items that the old reader joined into one block. The item of the
-/// setting of the access has its own block, and it holds the two sentences of the step.
+/// The book has numbered items that the old reader joined into one block. The first step of the
+/// reusable workflows has its own block, and it holds the sentence of the step alone.
 #[test]
 fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
-    let page = read(&docs().join("automation/pr-comments.md"));
-    let step = block(&page, "Accessible from repositories in the organization");
+    let page = read(&docs().join("install.md"));
+    let step = block(&page, "into `.strata`");
     assert!(
-        step.starts_with("In this repository, open Settings"),
+        step.starts_with("It checks out this repository at the tag"),
         "{step}"
     );
-    assert!(!step.contains("strata-token"), "{step}");
+    assert!(!step.contains("cosign-installer"), "{step}");
 }
 
 // ---- the release notes and the live results at the end of Wave 12 -------------------------------
@@ -2215,7 +2363,9 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 
 /// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
 /// with a comment that says what it holds. The book states where the copy is and how old it can
-/// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
+/// be. A session that finds no mount cannot read the code that rule 7 tells it to read. The
+/// repository is public, so the book names no path of the host: the notes of the lead give the
+/// clones and their refresh (#65).
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
@@ -2233,19 +2383,24 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "the mount has no comment that says what the volume holds"
     );
 
-    let page = one_line(&read(&docs().join("development/changes.md")));
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(&changes);
     for needle in [
         "A session reads the code of Palette at `$HOME/palette`.",
         "On another host, the volume is empty.",
         "so it can be some hours old.",
         "it asks the lead with `riff tell lead`.",
         "A session on the host itself, not in a container, has no `$HOME/palette`.",
-        "the copy comes from the clones in `~/repos/spectrocloud/`.",
-        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
-        "A session on the host runs it first, then reads the clones.",
+        "The notes of the lead give the place of the clones on the host, and the command that refreshes them.",
+        "A session on the host runs that command first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
+    let code = section(&changes, "\n## The code of Palette\n", Some("\n## "));
+    assert!(
+        !code.contains("`~/"),
+        "the section names a path of the host:\n{code}"
+    );
 }
 
 /// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
@@ -2346,16 +2501,6 @@ fn has_phrase(text: &str, phrase: &str) -> bool {
         let after = text[at + found.len()..].chars().next();
         !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
     })
-}
-
-/// `text` without the code spans: the text between two backticks.
-fn without_code(text: &str) -> String {
-    text.split('`')
-        .enumerate()
-        .filter(|(n, _)| n % 2 == 0)
-        .map(|(_, part)| part)
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 /// The page of the report states the address that the release names, so a person can read where
@@ -2563,6 +2708,30 @@ fn the_readme_has_one_line_for_the_observer_and_the_summary_lists_the_three_page
     }
 }
 
+/// A cell of the book can hold `\|`, as the flag `--host github\|gitlab` does. The read of a row
+/// keeps such a cell whole. It also reads a row with no `|` at its end, and an empty last cell.
+#[test]
+fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
+    assert_eq!(
+        cells(r"| `--host github\|gitlab` | The code host. |"),
+        [r"`--host github\|gitlab`", "The code host."]
+    );
+    assert_eq!(cells("| a | b"), ["a", "b"]);
+    assert_eq!(cells("| a | |"), ["a", ""]);
+}
+
+/// A code span is the text between a pair of backticks. The two reads of a text give its code
+/// spans and the text outside them, from one rule. A backtick with no pair starts a code span that
+/// continues to the end of the text.
+#[test]
+fn the_read_of_a_text_gives_its_code_spans_and_the_text_outside_them() {
+    let text = "Use `strata diff` with `--full`, and read `the rest";
+    assert_eq!(code_spans(text), ["strata diff", "--full", "the rest"]);
+    assert_eq!(without_code(text), "Use   with  , and read ");
+    assert!(code_spans("no span").is_empty());
+    assert_eq!(without_code("no span"), "no span");
+}
+
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
 /// link is lost, and the page shows the raw target. Code fences are skipped.
 fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
@@ -2576,8 +2745,8 @@ fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
             continue;
         }
         found.extend(
-            line.split('|')
-                .map(str::trim)
+            cells(line)
+                .into_iter()
                 .filter(|cell| {
                     ["(./", "(../", "(http://", "(https://"]
                         .iter()
@@ -3678,13 +3847,13 @@ fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() 
 
     let day = section(&text, "## Each step at a glance", Some("\n## "));
     assert!(
-        table_rows(day).iter().any(|row| row[0]
+        table_rows(day, "|").iter().any(|row| row[0]
             == "A job writes a note about a value that strata does not know"
             && row[1].contains("Strata sends nothing unless you choose the send.")),
         "the day of work has no row for the note"
     );
     let jobs = section(&text, "## The jobs and their commands", Some("\n## "));
-    let row = table_rows(jobs)
+    let row = table_rows(jobs, "|")
         .into_iter()
         .find(|row| row[0] == "A note of an unknown value")
         .expect("the table of the jobs has no row for the note");
@@ -4140,8 +4309,8 @@ fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
         .filter(|p| p.extension().is_some_and(|e| e == "md"))
     {
         for block in blocks_of(&read(path)).iter().filter(|b| b.starts_with('|')) {
-            for cell in block.trim_matches('|').split('|') {
-                let count = sentences(cell.trim()).len();
+            for cell in cells(block) {
+                let count = sentences(cell).len();
                 if count > MOST_SENTENCES {
                     faults.push(format!(
                         "{}: {count} sentences: {}",
@@ -4321,6 +4490,118 @@ fn the_book_states_that_a_version_that_does_not_parse_reads_as_its_first_three_n
     );
 }
 
+/// Issue #714. The book stated that a text with no three numbers, such as `1.2.develop`, is above
+/// each version. brett changed the answer: where Palette gives no order or reads no version, strata
+/// follows the crate `versions`, and the rules of Palette stay. The rule of `@latest`, the pages of
+/// Palette and of `behind`, the rules of the code, and the section of the release state it. They
+/// also state text right after a number, as in `1.2rc1`, `1.2.3rc1b`, and `1.2.3.4rc1`, and the
+/// rest after one text before the numbers.
+#[test]
+fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = release_section(&page, "0.33.0");
+    for needle in [
+        "**One or two numbers and a tail of text make a pre-release of the version of the numbers.**",
+        "`<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "So `behind --pre-release` names `1.2.develop` as newer than `1.1.10`.",
+        "**A text with no number at its start and no three numbers is below each version.**",
+        "`1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`.",
+        "`1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below `1.2.4`.",
+        "`chart-1.2.3` is above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release.",
+        "**A `v` in front of the three numbers does not count in a tie.**",
+        "A move from `1.2.develop` to `1.10.0` passes the gate now.",
+        "Where Palette gives no order or reads no version, `compare` follows the order of the crate `versions` 8.0.1.",
+        "It is true for one or two numbers and a tail of text, such as `1.2.develop` and `1.2rc1`.",
+        "`1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`.",
+        "So `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`.",
+        "the rest decides: `chart-1.2.3.develop` is below `chart-1.2.3-alpha`",
+        "So `1.2.3rc1b` is below `1.2.3.develop`.",
+        "`1.2.3rc1b` below `1.2.3.develop`,",
+        "So `1.2.0rc1b` is above `1.2rc1` and below `1.2.develop`.",
+        "It puts `1.2rc1` below `1.2.0rc1b`, and `1.2.0rc1b` below `1.2.develop`.",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of 0.33.0 lacks {needle:?}"
+        );
+    }
+    for old in [
+        "A text with no three numbers, such as `LTS__24.x`, keeps its order.",
+        "**A text with no three numbers is below each version.**",
+    ] {
+        assert!(
+            !release.contains(old),
+            "the section of 0.33.0 still states {old:?}"
+        );
+    }
+
+    let refs = one_line(&read(&docs().join("reference/refs.md")));
+    for needle in [
+        "There, strata follows the order of the Rust crate `versions` 8.0.1.",
+        "2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.",
+        "Text right after the fourth number puts the version below it: `1.2.0.1rc1` is below `1.2.0.1`.",
+        "So `1.2rc1` holds two numbers, and `1.2a1b` holds one number and the tail `2a1b`.",
+        "Palette also ignores the text before the numbers.",
+        "The crate gives no total order to digits and text in a part that is not the last",
+        "Strata puts letters with no number after them below the same letters with a number",
+        "6. A fourth number, as in `1.2.0.1`.",
+        "`@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`.",
+        "Strata puts it below `1.1.8-alpha`, as the crate does.",
+        "A `v` in front does not count, so `v1.1.8.1` equals `1.1.8.1`.",
+        "Palette finds the numbers at any place, so `chart-1.2.3` is above `1.2.2`.",
+        "The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`.",
+        "For each count of numbers, text right after the last number is below a tail after a dot.",
+        "`1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.",
+        "So `1.2rc1` is below `1.2.0rc1b`, and `1.2.0rc1b` is below `1.2.develop`.",
+        "3. A tail of text after a dot after the three numbers, as in `1.2.0.develop`.",
+    ] {
+        assert!(refs.contains(needle), "refs.md lacks {needle:?}");
+    }
+    for old in [
+        "Such a text is above each version.",
+        "It is below each version, also below a pre-release.",
+        "The crate gives no total order to text right after the numbers",
+        "3. A tail of text after the three numbers, as in `1.2.0rc1b`",
+    ] {
+        assert!(!refs.contains(old), "refs.md still states {old:?}");
+    }
+    for (path, needle) in [
+        (
+            "internals/palette/profiles.md",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
+        ),
+        (
+            "internals/palette/limits.md",
+            "strata follows the order of the Rust crate `versions` 8.0.1: see",
+        ),
+        (
+            "commands/behind.md",
+            "So `--pre-release` names it as newer than `1.65.0`.",
+        ),
+        (
+            "development/code.md",
+            "`tests/version_order.rs` compares the order with the crate, row by row.",
+        ),
+        (
+            "development/code.md",
+            "Each difference needs a rule that names it, and the test holds the count of differences for each rule.",
+        ),
+    ] {
+        let text = one_line(&read(&docs().join(path)));
+        assert!(text.contains(needle), "{path} lacks {needle:?}");
+    }
+    let listed = read(&docs().join("output/latest-develop-list.txt"));
+    assert!(
+        listed.contains("\n  aws-stack@1.1.10 ") && listed.ends_with(" aws\n"),
+        "the playground does not list the profiles: {listed}"
+    );
+    let last = listed.lines().last().unwrap_or_default();
+    assert!(
+        last.starts_with("  aws-stack@1.2.develop "),
+        "the playground does not list 1.2.develop last: {listed}"
+    );
+}
+
 /// The fuzz package is the newest code, and the review at the end of Wave 12 found 42 comment
 /// sentences in it over the limit. Each sentence of each comment in `fuzz/` has 25 words at most,
 /// so the next wave cannot add one.
@@ -4361,7 +4642,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
         ("src/api/palette/mod.rs", "The walk ends at a page"),
         (
             "src/reference/version.rs",
-            "Of two pre-releases, the first identifier",
+            "The identifiers of two pre-releases decide",
         ),
         (
             "scripts/ci/merge-gate.sh",
@@ -5186,10 +5467,8 @@ fn the_rules_that_compatibility_names_for_the_new_nouns_are_rules_of_the_catalog
         "  - The rules are `aws-region-not-enabled`",
         Some("\n  - Six messages"),
     );
-    let ids: Vec<&str> = item
-        .split('`')
-        .skip(1)
-        .step_by(2)
+    let ids: Vec<&str> = code_spans(item)
+        .into_iter()
         .filter(|word| word.contains('-'))
         .collect();
     assert_eq!(ids.len(), 17, "{ids:?}");
@@ -6367,6 +6646,16 @@ fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_s
             "reference/palette-api.md",
             "Eight of the ten `POST` requests change nothing",
         ),
+        // the sentence above the table of the checks of strata-preflight, and the row of the
+        // three checks that send `validate/repave` (#756)
+        (
+            "reference/palette-api.md",
+            "Each request below changes nothing, except `validate/repave`",
+        ),
+        (
+            "reference/palette-api.md",
+            "`engine-repave-rules`, `eks-repave-answers`, `gke-repave-answers`",
+        ),
         (
             "reference/documents.md",
             "Each line reads, and changes nothing",
@@ -6448,7 +6737,7 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
         fits < ideas && ideas < sample,
         "the section for your own pipeline does not come before the sample pipeline"
     );
-    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")));
+    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")), "|");
     for (event, command) in [
         ("A publish", "strata snapshot"),
         ("A promotion", "strata same-release"),
@@ -6488,6 +6777,11 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
         sample.contains("It is one opinionated example, and not a rule."),
         "the page does not name the sample pipeline as one opinionated example"
     );
+    // The repository is public, so the page names no decision record of the team (#65).
+    assert!(
+        !sample.contains("ADR-"),
+        "the page names a decision record of the team"
+    );
 }
 
 /// The page names `--allow renumber` and its item as open while `same-release` does not take the
@@ -6515,6 +6809,87 @@ fn the_page_names_the_renumber_as_open_while_same_release_does_not_take_it() {
             "the page does not name the item of the renumber"
         );
     }
+}
+
+/// The text of a renumber: the use case, and its section in each page that says what a renumber
+/// is. Each one is a page, the heading of its text, and the heading after it.
+const RENUMBER_TEXT: [(&str, &str, Option<&str>); 4] = [
+    (
+        "use-cases/renumber.md",
+        "# A release gets new version numbers",
+        None,
+    ),
+    (
+        "commands/same-release.md",
+        "## A release under new version numbers",
+        Some("\n## "),
+    ),
+    (
+        "commands/compare/versions.md",
+        "## A version that only changes its numbers",
+        Some("\n## "),
+    ),
+    ("reference/impact.md", "## A renumber", Some("\n## ")),
+];
+
+/// The text of a renumber keeps to the limits and the words of "The style rules".
+#[test]
+fn the_text_of_a_renumber_keeps_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        for block in blocks_of(section(&text, from, to)) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// The book shows a renumber with the outputs of the chapter `renumber` of the runner. They are in
+/// the pages of `same-release`, of `compare`, and of the impact, and in a use case with its
+/// playground. Each one names the archive that strata does not compare.
+#[test]
+fn the_book_shows_a_renumber_with_the_outputs_of_the_runner() {
+    assert!(
+        possible_values("same-release", "--allow ")
+            .iter()
+            .any(|v| v == "renumber"),
+        "the help of same-release does not name renumber"
+    );
+    for (page, from, to) in RENUMBER_TEXT {
+        let text = read(&docs().join(page));
+        let part = one_line(section(&text, from, to));
+        assert!(
+            part.contains("{{#include ../") && part.contains("output/renumber-"),
+            "{page}: the text includes no output of the chapter renumber"
+        );
+        assert!(
+            part.contains("renumber only") || part.contains("archive: not compared"),
+            "{page}: the text does not say what a renumber does not compare"
+        );
+        assert!(
+            part.contains("archive"),
+            "{page}: the text does not name the archive"
+        );
+    }
+    let use_case = read(&docs().join("use-cases/renumber.md"));
+    assert!(
+        use_case.contains("`just playground renumber`"),
+        "the use case has no playground"
+    );
+    let allow = read(&docs().join("output/renumber-allow.txt"));
+    assert!(
+        allow.contains("\nRENUMBER ")
+            && allow.contains("(pre-release to final; archive: not compared)"),
+        "{allow}"
+    );
+    let compare = read(&docs().join("output/renumber-compare.txt"));
+    assert_eq!(
+        compare.matches("impact: none (renumber only)").count(),
+        2,
+        "{compare}"
+    );
 }
 
 /// The page states that the gap of the order of versions is closed, and its outputs show it.
@@ -6560,4 +6935,208 @@ fn the_page_of_your_own_pipeline_links_out_only_to_the_repository_of_strata() {
             &text[start..text.len().min(at + 40)]
         );
     }
+}
+
+// ---- the findings of a real pipeline (#483) ----------------------------------------------------
+
+/// The issue template for a finding from a real pipeline, from the root of the repository.
+const REAL_PIPELINE_TEMPLATE: &str = ".github/ISSUE_TEMPLATE/real-pipeline.yml";
+
+/// The page of the rule of the names.
+const REAL_PIPELINE_PAGE: &str = "development/real-pipelines.md";
+
+/// The page of the review at the end of a wave, which reads the reports.
+const WAVE_REVIEW_PAGE: &str = "development/wave-review.md";
+
+/// The fields of the template, by their ids. The plan of #483 names the first four. The box is
+/// the rule of the names.
+const REAL_PIPELINE_FIELDS: [&str; 5] = ["job", "output", "expected", "version", "names"];
+
+/// The template [`REAL_PIPELINE_TEMPLATE`], parsed.
+fn real_pipeline_template() -> serde_yaml::Value {
+    serde_yaml::from_str(&repo_file(REAL_PIPELINE_TEMPLATE))
+        .unwrap_or_else(|e| panic!("{REAL_PIPELINE_TEMPLATE}: not YAML: {e}"))
+}
+
+/// The entries of the body of the template that a person fills: each entry that is not text.
+fn template_fields(template: &serde_yaml::Value) -> Vec<&serde_yaml::Value> {
+    template["body"]
+        .as_sequence()
+        .expect("the template has a body")
+        .iter()
+        .filter(|entry| entry["type"].as_str() != Some("markdown"))
+        .collect()
+}
+
+/// The template asks for the job or the command, the output with each name replaced, what the
+/// person expected, and the version of strata. Each field is required, and so is the box of the
+/// rule of the names. The template links the section of the book that states the rule, and the
+/// table of that page names each field.
+#[test]
+fn the_template_of_a_real_pipeline_asks_for_each_field_and_links_the_rule_of_the_names() {
+    let template = real_pipeline_template();
+    assert_eq!(
+        template["name"].as_str(),
+        Some("A finding from a real pipeline")
+    );
+    let fields = template_fields(&template);
+    let ids: Vec<&str> = fields.iter().map(|f| f["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, REAL_PIPELINE_FIELDS);
+    for field in &fields {
+        let required = field["validations"]["required"].as_bool() == Some(true)
+            || field["attributes"]["options"]
+                .as_sequence()
+                .is_some_and(|options| {
+                    options
+                        .iter()
+                        .all(|o| o["required"].as_bool() == Some(true))
+                });
+        assert!(required, "the field {:?} is not required", field["id"]);
+    }
+
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    let labels: Vec<&str> = fields
+        .iter()
+        .map(|f| f["attributes"]["label"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        first_cells(&page, "| Field |"),
+        labels,
+        "the table of {REAL_PIPELINE_PAGE} and the fields of the template"
+    );
+
+    assert!(page.contains("\n## The rule of the names\n"));
+    let link = format!(
+        "({}{}#the-rule-of-the-names)",
+        strata::BOOK_URL,
+        REAL_PIPELINE_PAGE.replace(".md", ".html")
+    );
+    let text = template["body"][0]["attributes"]["value"].as_str().unwrap();
+    assert!(
+        text.contains(&link),
+        "the template does not link {link}: {text}"
+    );
+
+    // the page names the file of the template, and links the form of a new issue with it
+    let file = REAL_PIPELINE_TEMPLATE.rsplit('/').next().unwrap();
+    for says in [
+        format!("`{REAL_PIPELINE_TEMPLATE}`"),
+        format!(
+            "({}/issues/new?template={file})",
+            env!("CARGO_PKG_REPOSITORY")
+        ),
+    ] {
+        assert!(page.contains(&says), "{REAL_PIPELINE_PAGE} lacks {says}");
+    }
+}
+
+/// The page states the rule of the names: each name is made up, such as `barney` or `fred`. A
+/// report holds no data of a client, no host, no account, and no key. The box of the template says
+/// the same.
+#[test]
+fn the_page_of_a_real_pipeline_states_the_rule_of_made_up_names_and_no_client_data() {
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    let rule = one_line(section(&page, "## The rule of the names", Some("\n## ")));
+    for says in [
+        "with a made-up name",
+        "`barney` and `fred`",
+        "a report holds no data of a client",
+        "Give no host, no address, no account, and no key.",
+        "Give no name of a person.",
+    ] {
+        assert!(rule.contains(says), "the rule does not say {says:?}");
+    }
+    let template = real_pipeline_template();
+    let names = template_fields(&template)
+        .into_iter()
+        .find(|f| f["id"].as_str() == Some("names"))
+        .expect("the template has the box of the rule of the names");
+    let tick = names["attributes"]["options"][0]["label"].as_str().unwrap();
+    for says in [
+        "Each name in this report is made up.",
+        "no data of a client, no host, no account, and no key",
+    ] {
+        assert!(tick.contains(says), "the box does not say {says:?}: {tick}");
+    }
+}
+
+/// The review at the end of a wave lists the reports with the label of the template, and makes the
+/// label. The two pages link each other, and the navigation lists both under Development.
+#[test]
+fn the_review_at_the_end_of_a_wave_reads_the_issues_of_the_template() {
+    let template = real_pipeline_template();
+    let label = template["labels"][0]
+        .as_str()
+        .expect("the template gives a label");
+    let repo = env!("CARGO_PKG_REPOSITORY")
+        .strip_prefix("https://github.com/")
+        .expect("the repository is on GitHub");
+    let review = read(&docs().join(WAVE_REVIEW_PAGE));
+    let reads = section(
+        &review,
+        "## Read the reports of real pipelines",
+        Some("\n## "),
+    );
+    let commands = one_line(
+        &common::code_blocks(reads, "bash")
+            .join("\n")
+            .replace("\\\n", " "),
+    );
+    for command in [
+        format!("gh issue list --repo {repo} --label {label} --state all"),
+        format!("gh label create {label} --repo {repo}"),
+    ] {
+        assert!(
+            commands.contains(&command),
+            "{WAVE_REVIEW_PAGE} does not run {command:?}: {commands}"
+        );
+    }
+    assert!(reads.contains("(./real-pipelines.md)"));
+
+    let page = read(&docs().join(REAL_PIPELINE_PAGE));
+    assert!(page.contains(&format!("the label `{label}`")));
+    assert!(page.contains("(./wave-review.md)"));
+
+    let summary = read(&docs().join("SUMMARY.md"));
+    let development = section(&summary, "\n# Development\n", None);
+    for listed in [REAL_PIPELINE_PAGE, WAVE_REVIEW_PAGE] {
+        assert!(
+            development.contains(&format!("(./{listed})")),
+            "Development does not list {listed}"
+        );
+    }
+}
+
+/// The two pages and the text of the template keep to the limits and the words of "The style
+/// rules".
+#[test]
+fn the_pages_and_the_template_of_a_real_pipeline_keep_to_the_style_rules() {
+    let mut faults = Vec::new();
+    for page in [REAL_PIPELINE_PAGE, WAVE_REVIEW_PAGE] {
+        for block in blocks_of(&read(&docs().join(page))) {
+            faults.extend(block_faults(page, &block));
+            faults.extend(wording_faults(page, &block));
+        }
+    }
+    let template = real_pipeline_template();
+    let mut texts: Vec<&str> = ["name", "description"]
+        .iter()
+        .filter_map(|key| template[*key].as_str())
+        .collect();
+    for entry in template["body"].as_sequence().unwrap() {
+        let attributes = &entry["attributes"];
+        texts.extend(
+            ["label", "description", "value"]
+                .iter()
+                .filter_map(|key| attributes[*key].as_str()),
+        );
+        for option in attributes["options"].as_sequence().into_iter().flatten() {
+            texts.extend(option["label"].as_str());
+        }
+    }
+    for text in texts {
+        faults.extend(sentence_faults(REAL_PIPELINE_TEMPLATE, text));
+        faults.extend(wording_faults(REAL_PIPELINE_TEMPLATE, text));
+    }
+    assert_no_faults(&faults);
 }

@@ -208,3 +208,7 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --manifest-path crates/strata-knurl
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-core.path='$K/knurl-core'" \
   --config "patch.'ssh://git@github.com/como-technologies/knurl.git'.knurl-ports.path='$K/knurl-ports'"
 ```
+
+No job of CI builds or tests the adapter. `just adapter-test` runs on a machine
+that can read knurl. So a change of strata can break the adapter, and no check
+of a pull request or of a release shows it.

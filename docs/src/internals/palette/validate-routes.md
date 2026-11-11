@@ -643,7 +643,5 @@ these, and prints `NOT CHECKED` with the command for the rest: see
 
 The code of Palette gives the checks of each route, the codes of the
 refusals, and the shape of each answer. Each fact that names a live run comes
-from that run. The findings report
-`palette-precreate-validation-gaps-findings-2026-09-28` lists each check that
-no route runs, and proposes the ones that fit a validate route to Spectro
-Cloud.
+from that run. The findings report of a live run lists each check that no route
+runs, and proposes the ones that fit a validate route to Spectro Cloud.

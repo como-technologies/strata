@@ -25,7 +25,8 @@ program can use the same parts. `strata-preflight` is a library too: see
 | `reference::Ref` | What a ref means. A ref is a record file, `<name>@<version>`, a uid, `cluster:<name>` with `@pending` or not, `edgehost:<name>`, `clustergroup:<name>`, `appprofile:<name>@<version>`, or `pack:<name>@<version>`. A ref can also be a set of clusters, `tag:<key>=<value>` or `filter:<name>` (`Ref::ClusterSet`). |
 | `ops::snapshot_for`, `ops::SnapshotOptions` | A record of what a ref names, through a `Palette` that a closure gives. The options add what the options of `snapshot` add: `macros`, `shape`, `raw_dir`, and `validate`. An option that does not fit the ref is a `usage` error before any request. The example in the crate documentation starts here. |
 | `ops::SnapshotRequest`, `ops::SnapshotSource`, `ops::ObjectSource`, `ops::snapshot_object`, `ops::snapshot_for_candidate` | What `snapshot` and `candidate` read. `SnapshotRequest::source` chooses it from the ref and the flags: a set of clusters, a candidate file, saved answers, or a ref. It refuses a wrong use with `Error::Usage` or `Error::RecordNotASource`, before any request. `snapshot_object` reads the record of an object. `snapshot_for_candidate` reads the profile version or the record file that `candidate` writes from, and refuses another ref with `Error::ProfileRefRequired`. |
-| `ops::snapshot_pair` | The two sides of `compare`. When one side is a cluster group, the `cluster:` ref of the other side holds only the profiles that the group pins. |
+| `ops::snapshot_pair` | The two sides of `compare`. When one side is a cluster group, the `cluster:` ref of the other side holds only the profiles that the group pins. Its `connect` gets the `diff::Side` that it reads, so each side can read its own project. |
+| `ops::SideProjects` | The project of each side of `compare` and `same-release`: `of` gives the flag of a side, else the flag of both sides. `check` refuses a flag of one side for a count of refs other than two, with `Error::Usage`, before any request. |
 | `ops::PaletteQuestions` | What `compare` asks Palette about its cluster side: `repave` and `validate`. `check` refuses a pair of refs that a question cannot take, with `Error::Usage`, before any request. It reads a record file, and that read is no request. `ops::palette_repave` and `ops::palette_validation` keep the same rules for records. |
 | `api::Palette::with_pending` | The documents of a cluster after it takes the update that waits: the profiles of `profileUpdates` in place of its templates. `Snapshot::mark_pending` marks the record. |
 | `api::Palette::fetch_subject`, `edge_hosts`, `cluster_group_members` | A cluster, an edge host, or a cluster group in the shape of a cluster, by uid or by name. Also the edge hosts of the scope, and the virtual clusters of a group. `Snapshot::with_kind` and `snapshot::SubjectKind` say which object a record holds. `ops::cluster_group_snapshot` gives the record of a group with its members. `RawCluster::save_dir` saves the document of a group with `********` over each password of its values, as the record holds them. |
@@ -46,7 +47,7 @@ program can use the same parts. `strata-preflight` is a library too: see
 | `ops` | The operations of the commands: `snapshot_for`, `compare`, `verify`, `verify_many`, `same_release`, `consumers`, `behind`, `list`, `registry_packs`, and the rows above. Each command has a module of its own under `ops`. `fleet` and `repave` hold the queries of labels and the answer of Palette on a repave. |
 | `ops::verify_with`, `ops::VerifyOptions` | `verify`, with what the options of the command add. `who` reads the audit log for a record that drifted. `allow_no_digest` accepts a pack with no upstream digest. `verify_many` takes the same options. With `full`, `verify_many` gives the diff of each row the field `unified`. `verify_with` ignores `full`. |
 | `ops::check_verifiable` | Make sure from the record alone that `verify` can check it. `Error::NoUid` is the error for a record with no uid. `Error::Usage` is the error for an object of a kind that a later release wrote. `verify_with` and `verify_many` make the same check. A caller that connects first calls it before it connects. |
-| `ops::same_release_with` | `same_release`, and `true` accepts a pair that holds a pack with no upstream digest, as `--allow no-digest` does. |
+| `ops::same_release_with`, `ops::SameReleaseOptions` | `same_release`, with each value of `--allow`. `policy` is `Policy::RegistryMove` for `--allow registry-move`. `allow_no_digest` accepts a pair that holds a pack with no upstream digest, as `--allow no-digest` does. `allow_renumber` accepts a pack whose version alone changed, as `--allow renumber` does. |
 | `Snapshot::content_digest` | The digest of what a version is. See [The content digest](../internals/hashes.md#the-content-digest). |
 | `Snapshot::pins` | Each pack that a version takes from a registry: its name, its version, and its digest as Palette lists it. [The pack-ref digest](../internals/palette/packs.md#the-pack-ref-digest) says what that digest is for each kind of registry. `Pack::registry_provider_type` names the kind of registry that a pack came from. |
 | `Snapshot::each_from_cluster` | A snapshot for each profile that a cluster applies, from one read of the cluster. |
@@ -77,23 +78,14 @@ digests to another tool, behind a trait of that tool.
 
 ## Add the dependency
 
-Pin a release tag. The repository is private, so Cargo must fetch it with the
-git command line, which uses your SSH configuration:
+The package is `strata-palette`, and Rust code names the crate `strata`. The
+name `strata` on crates.io belongs to another crate, so `cargo add strata` gets
+the wrong one. A dependency pins a release tag and names the package:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
 ```
-
-```bash
-CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build
-```
-
-`git-fetch-with-cli = true` under `[net]` in `.cargo/config.toml` does the same.
-Without it, the git of Cargo fails with "no authentication methods succeeded".
-
-The crate is not on crates.io. The name `strata` there belongs to another crate,
-so `cargo add strata` gets the wrong one.
 
 ## Use strata-preflight as a library
 
@@ -106,15 +98,14 @@ Give `strata-preflight` and `strata` the same git address and the same tag:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
-strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.32.2" }
+strata = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2", package = "strata-palette" }
+strata-preflight = { git = "https://github.com/como-technologies/strata.git", tag = "v0.32.2" }
 ```
 
 The package is `strata-preflight`, and Rust code names the crate
 `strata_preflight`. A run takes a `strata::term::progress::Progress`, so the
 program needs `strata` too. With one tag, Cargo builds one copy of `strata`.
-[Add the dependency](#add-the-dependency) says how Cargo fetches the private
-repository. The crate is not on crates.io.
+`strata-preflight` is not on crates.io.
 
 A program starts from these items:
 

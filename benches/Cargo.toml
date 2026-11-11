@@ -48,7 +48,7 @@ harness = false
 
 [dependencies]
 # The code under measurement, and the generator of its input, are in the same repository.
-strata = { path = ".." }
+strata = { path = "..", package = "strata-palette" }
 strata-preflight = { path = "../crates/strata-preflight" }
 serde_json = "1"
 tempfile = "3"

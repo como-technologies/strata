@@ -65,8 +65,9 @@ in_file() {
 for name in "${names[@]}"; do
   [ -z "${!name:-}" ] || exit 0
 done
-# An empty or a relative HOME names a folder below the working folder, such as the checkout of
-# the job, and not a folder of the person.
+# A relative HOME, such as ../home, names a folder from the working folder, and not a folder of
+# the person. For strata, an empty HOME names the working folder, which can be the checkout of the
+# job. So the script, as strata, reads the file only from an absolute HOME.
 case ${HOME:-} in
   /*) file=$HOME/.palette.env ;;
   *) file= ;;

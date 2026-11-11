@@ -230,5 +230,9 @@ and how to write a file by hand.
 {{#include ../output/help-candidate.txt}}
 ```
 
+`--project <uid>` or `--project-name <name>` reads the version in that project,
+in place of the configured project. `--project ''` is tenant scope. A record
+file sends no request.
+
 `-o` (`--output`) writes the candidate file, and without it the file goes to
 standard output. `-q` (`--quiet`) drops the progress messages.

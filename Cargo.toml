@@ -25,7 +25,10 @@ rust-version = "1.88"
 repository = "https://github.com/como-technologies/strata"
 
 [package]
-name = "strata"
+# The name `strata` on crates.io belongs to another crate, so the package is strata-palette (#65).
+# `[lib]` and `[[bin]]` keep the name `strata`: Rust code names the crate `strata`, and a person
+# types the command `strata`.
+name = "strata-palette"
 version = "0.32.2"
 edition = "2024"
 rust-version.workspace = true
@@ -35,14 +38,11 @@ repository.workspace = true
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "drift", "diff"]
 categories = ["command-line-utilities", "development-tools"]
-# The book and the examples belong to this repository, and a package a consumer builds needs
-# neither. `.cargo/` goes with them: its alias names the xtask package, which a published package
-# does not carry, so the alias would fail for whoever unpacks one.
-exclude = ["docs/", "examples/", ".github/", ".cargo/"]
-# crates.io carries no private crate, and this repository is private, so a publish would make the
-# sources public. Two things must happen before this line goes: the repository becomes public, and
-# the package takes another name, because `strata` on crates.io belongs to another crate.
-publish = false
+# A package carries the sources of the library and of the binary, the license, and the README.
+# Cargo adds the manifest and Cargo.lock. The book, the examples, the tests, the observer, and the
+# tools of the development need the rest of this repository. So a package carries none of them.
+# A list of what goes in keeps a new folder of the repository out of the package.
+include = ["/src/", "/LICENSE", "/README.md"]
 # The tests under tests/ are one crate, tests/main.rs: each file is a module of it. So a helper of
 # tests/common/mod.rs with no caller in any test warns as dead code. 14 crates with a copy of the
 # module each could not show that.
@@ -80,6 +80,9 @@ ureq = { version = "3", features = ["json"] }
 
 [dev-dependencies]
 tempfile = "3"
+# The test of the order of versions compares strata with this crate (#714). Pin it, so that a
+# new release of the crate does not change the order under the test.
+versions = "=8.0.1"
 
 [lints.rust]
 unsafe_code = "forbid"

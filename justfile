@@ -20,7 +20,7 @@ default: build
 # Build the release binaries at target/release/strata and target/release/strata-preflight
 [group('build')]
 build:
-    cargo build --release -p strata -p strata-preflight
+    cargo build --release -p strata-palette -p strata-preflight
 
 # The observer is a Go program in observer/. The build is static (no cgo), and the version is that of Cargo.toml.
 
@@ -87,8 +87,8 @@ build-target target:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
-      *linux*) cross build --release --target "{{target}}" -p strata -p strata-preflight ;;
-      *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
+      *linux*) cross build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
+      *) cargo build --release --target "{{target}}" -p strata-palette -p strata-preflight ;;
     esac
 
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
@@ -128,7 +128,7 @@ bench-short:
 # strata-report-endpoint, and strata-fuzz, and runs the command a second time with all items. The
 # build of the public items does not read the comment of a private item. The build of all items does not warn when a public item links to a private item.
 # So `just lint` needs both.
-rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
+rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata-palette -p strata-preflight'
 
 # The last two lines fail when a module enters observer/go.mod or the go.mod of the request counter: both use the standard library only.
 
@@ -151,6 +151,14 @@ lint:
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
     cargo run --quiet --manifest-path examples/library-preflight/Cargo.toml --target-dir target/library-example
+
+# The job `deny list` of CI runs this recipe with the secret STEP14_DENY. See "The deny list" in
+# docs/src/development/build-test.md.
+
+# Scan the text and the path of each tracked file for each entry of STEP14_DENY, and print no entry
+[group('check')]
+deny-list:
+    scripts/dev/deny-list.sh
 
 # knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
 # its own package: `cargo build` and `cargo test` at the root never build it, and no release
@@ -497,10 +505,20 @@ live-draft: build
 live-scope: build
     examples/live/scope.sh
 
+# The projects test: a copy of the release profile in a second project, and same-release and compare with a project for each side (#486). Needs live-profiles, STRATA_LIVE_SECOND_PROJECT, and no cluster. Deletes the copy.
+[group('live checks')]
+live-projects: build
+    examples/live/projects.sh
+
 # The release test: the route that gives the release of Palette answers a call with no key, and refuses a call with the key (#146). Needs only the key; writes nothing.
 [group('live checks')]
 live-release: build
     examples/live/release.sh
+
+# The public repository (#65): with no login, the book opens, the install command of the README installs a release, and the registry gives the image and the chart of the observer. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
+[group('live checks')]
+live-public: build
+    examples/live/public.sh
 
 # The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). --with-cluster holds the floor of a window with a cluster: a skipped fact of the floor is an error. Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
 [group('contract')]
@@ -536,9 +554,9 @@ contract-timer-remove:
 contract-timer-status:
     deploy/contract/timer.sh status
 
-# The lead runs this on kadomony after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
+# The lead runs this on its host after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
 
-# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login. --dry-run prints the gcloud commands and runs none.
+# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login, and the project in STRATA_REPORT_PROJECT or --project ID. --dry-run prints the gcloud commands and runs none.
 [group('report-endpoint')]
 report-deploy *args:
     deploy/report/deploy.sh {{args}}

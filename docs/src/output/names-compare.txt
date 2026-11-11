@@ -1,6 +1,7 @@
 $ strata compare dev-payments.json prod-payments.json
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000f1)
 root       088136c929bd -> 78a86f401545   CHANGED
+project    64f20000000000000000a0d1 -> 64f20000000000000000a0f1
 
   variables unchanged
   cluster tiers applied CHANGED, policy unchanged, running CHANGED, labels unchanged

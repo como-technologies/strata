@@ -239,6 +239,11 @@ marks each edge host, each cluster template, and each app deployment.
 {{#include ../output/help-consumers.txt}}
 ```
 
+`--project <uid>` or `--project-name <name>` reads the version in that project,
+in place of the configured project. `--project ''` is tenant scope. Strata
+reads a record that names a project in that project. See
+[Environments in the projects of one tenant](../use-cases/projects.md#7-can-i-delete-this-version).
+
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see
 [Output formats](./index.md#output-formats).

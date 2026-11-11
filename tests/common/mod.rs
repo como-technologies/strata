@@ -37,19 +37,23 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
+mod code_span;
 mod git;
 mod palette;
 mod process;
 mod stand_in;
+mod table;
 mod toml;
 mod walk;
 
 pub use answer::*;
 pub use closed_set::schema_values;
+pub use code_span::*;
 pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
+pub use table::*;
 pub use toml::*;
 pub use walk::walk;
 
@@ -152,6 +156,15 @@ pub const PUBLISHED_RULES: &str =
 /// The content of the manifest `rules` in the draft template of the tests of a draft.
 pub const DRAFT_RULES: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
+
+/// The options of `same-release --allow no-digest`: the exact policy, and a pack with no upstream
+/// digest can pass.
+pub fn no_digest_allowed() -> strata::ops::SameReleaseOptions {
+    strata::ops::SameReleaseOptions {
+        allow_no_digest: true,
+        ..strata::ops::SameReleaseOptions::default()
+    }
+}
 
 /// The JSON document in the file at `path`.
 pub fn read_json(path: &Path) -> Value {
@@ -706,6 +719,18 @@ printf '%s' "${FAKE_OUT-}"
 exit "${FAKE_EXIT:-0}"
 "#;
 
+/// A stand-in for `kubectl port-forward`, named `fake-port-forward` on the `PATH`. Each stand-in
+/// `kubectl` of a live script runs it for a port-forward.
+///
+/// It prints the line of a port-forward that is ready, and stops. `FAKE_FORWARD_LATE` gives a wait
+/// in seconds before the line. The wait is real, because the stand-in `sleep` of a stage returns at
+/// once. With `FAKE_FORWARD_FAILS`, it prints an error and no line, and exits with 1.
+pub const FAKE_PORT_FORWARD: &str = r#"#!/usr/bin/env bash
+[ -z "${FAKE_FORWARD_FAILS-}" ] || { echo "error: lost connection to pod" >&2; exit 1; }
+[ -z "${FAKE_FORWARD_LATE-}" ] || command -p sleep "$FAKE_FORWARD_LATE"
+echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080"
+"#;
+
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `crates/strata-preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
@@ -868,6 +893,20 @@ pub fn recipe(name: &str) -> Vec<String> {
         .collect()
 }
 
+/// The commands that `just --dry-run` prints for the recipe and the arguments `args`. They are
+/// the lines of the recipe and of its dependencies, with each variable replaced. No command runs.
+/// `just` is the path that [`on_path`] gives.
+pub fn just_dry_run(just: &Path, args: &[&str]) -> String {
+    let o = Command::new(just)
+        .arg("--dry-run")
+        .args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "just {args:?}: {}", text(&o.stderr));
+    text(&o.stderr)
+}
+
 /// The text of the workflow `file` of `.github/workflows/`.
 pub fn workflow_text(file: &str) -> String {
     repo_file(&format!(".github/workflows/{file}"))
@@ -889,6 +928,16 @@ pub fn workflow_files() -> Vec<String> {
 /// The workflow `file` of `.github/workflows/`, parsed.
 pub fn workflow(file: &str) -> serde_yaml::Value {
     serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
+/// The names of the strings in a YAML sequence.
+pub fn strings(value: &serde_yaml::Value) -> Vec<&str> {
+    value
+        .as_sequence()
+        .unwrap_or_else(|| panic!("not a sequence: {value:?}"))
+        .iter()
+        .map(|v| v.as_str().unwrap_or_else(|| panic!("not a string: {v:?}")))
+        .collect()
 }
 
 /// The steps of each job of the workflow `doc`, in order.
@@ -928,6 +977,21 @@ pub fn gitlab_drop_in() -> serde_yaml::Value {
     serde_yaml::from_str(&repo_file(GITLAB_DROP_IN))
         .unwrap_or_else(|e| panic!("{GITLAB_DROP_IN}: not YAML: {e}"))
 }
+
+/// The value of the variable `name` in the `variables` of the GitLab drop-in, such as the release
+/// of `STRATA_VERSION` that its jobs install.
+///
+/// `gitlab` is the drop-in from [`gitlab_drop_in`]. A caller that reads many variables parses
+/// the file one time.
+pub fn gitlab_drop_in_variable<'a>(gitlab: &'a serde_yaml::Value, name: &str) -> &'a str {
+    gitlab["variables"][name]
+        .as_str()
+        .unwrap_or_else(|| panic!("{GITLAB_DROP_IN} gives {name} no text value"))
+}
+
+/// The variables that `scripts/ci/install-strata.sh` reads a token from. A test of the installer
+/// removes each one, so that no request gets a token of the machine.
+pub const INSTALLER_TOKENS: [&str; 3] = ["STRATA_TOKEN", "GITHUB_TOKEN", "GH_TOKEN"];
 
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
 /// or one of `joins`. `--thresh` is not in `--threshold`, and `$NAME` is not in `$NAME_2`,

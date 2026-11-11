@@ -63,10 +63,9 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
 > The job `observer-image` of `release.yml` sets `contents: read`, `packages:
 > write`, and `id-token: write`. `tests/workflows.rs` requires the three.
 
-The image is in a private repository. A team that pulls it makes a Secret of the
-registry and names it in `imagePullSecrets`. The token in that Secret needs only the
-scope `read:packages`. Steps 2 and 6 of [Install](../automation/observer.md#install)
-make the Secret and name it.
+The image and the chart are public, so a pod pulls the image with no Secret. A team
+that keeps a copy of the image in a registry with a login names a pull Secret in
+`imagePullSecrets`. The value `image.pullSecret` of the chart does it.
 
 ## The manifests
 
@@ -94,16 +93,14 @@ The pod mounts three volumes:
   them.
 - `state` is on the disk of the node. It holds no value.
 
-A team makes three objects that the kustomization does not hold:
+A team makes two objects that the kustomization does not hold:
 
-- The pull Secret `ghcr-pull`, of the type `kubernetes.io/dockerconfigjson`.
 - The ConfigMap `strata-observer` with the keys `cluster-uid`, `palette-api`,
   and `project-uid`.
 - The Secret `strata-observer-key` with the key `api-key`.
 
-A kustomization of the team sets the image tag and a patch that adds
-`imagePullSecrets`. The key of Palette is never a profile variable. A profile
-variable is in clear in the copy of the cluster.
+A kustomization of the team sets the image tag. The key of Palette is never a
+profile variable. A profile variable is in clear in the copy of the cluster.
 
 ## The component that reads the pods
 
@@ -355,10 +352,10 @@ names the image of the observer, and the image must hold the code of the commit
 that you test. The script installs the observer with the component. Cluster A is
 billable until `just live-down`.
 
-The image of the observer stays on its private package. The nodes pull it with the
-Secret `ghcr-pull`, as in [Check a real cluster](#check-a-real-cluster). The script
-never pushes that image to another registry. A pull request that changes the
-observer builds the image with the tag `test-<short sha>`.
+The nodes pull the image of the observer with the Secret `ghcr-pull`, as in
+[Check a real cluster](#check-a-real-cluster). The script never pushes that image
+to another registry. A pull request that changes the observer builds the image
+with the tag `test-<short sha>`.
 
 A throwaway tag on `ttl.sh` holds one image, and then another. The images on
 `ttl.sh` are copies of public images. The script runs pods on the tag and makes

@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       allow:
-        description: 'The differences to accept, as a list separated by spaces or new lines: registry-move, for a promotion that moves packs to another registry, and no-digest. Empty accepts none.'
+        description: 'The differences to accept, as a list separated by spaces or new lines: registry-move, for a promotion that moves packs to another registry, renumber, for a release under new version numbers, and no-digest. Empty accepts none.'
         default: ""
         type: string
       project:
@@ -32,7 +32,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
+        description: Optional. A token that reads como-technologies/strata. When it is empty, the workflow reads that public repository with the token of the caller.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY. Records are files and need no key; a ref does.

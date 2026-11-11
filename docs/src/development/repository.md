@@ -6,7 +6,8 @@ This page tells where each part of strata is. Find your task in
 
 ## The folders
 
-The root package is the strata app. Each other part has a folder of its own.
+The root package, `strata-palette`, is the strata app. Each other part has a folder of its
+own.
 
 | Folder | What it holds |
 | --- | --- |
@@ -25,6 +26,7 @@ The root package is the strata app. Each other part has a folder of its own.
 | `scripts/ci/` | The scripts that a pipeline runs. |
 | `scripts/dev/` | The scripts that a maintainer runs. |
 | `.github/workflows/` | CI, the release, and the workflows that other repositories call. |
+| `.github/ISSUE_TEMPLATE/` | The issue template for [a finding from a real pipeline](./real-pipelines.md). |
 
 A release carries the binaries `strata` and `strata-preflight`, the image of
 the observer, and the scripts for a pipeline from `scripts/ci/`. The other

@@ -482,7 +482,7 @@ const WRAPPERS: [Wrapper; 9] = [
         job: "strata-promote-gate",
         tool: Listed::Command("same-release"),
         reaches: &[reach("--allow", "allow", "STRATA_PROMOTE_ALLOW")],
-        left: &[PRINTING],
+        left: &[PRINTING, PROJECT, SIDES],
     },
     Wrapper {
         workflow: "observer-propose.yml",
@@ -523,6 +523,7 @@ const WRAPPERS: [Wrapper; 9] = [
         reaches: &[],
         left: &[
             PRINTING,
+            PROJECT,
             Left {
                 flags: &["--list-only"],
                 why: "the gate reads each cluster, because the list of Palette can omit a consumer",
@@ -704,6 +705,16 @@ const PROJECT: Left = Left {
     why: "the project comes from PALETTE_PROJECT_UID or PALETTE_PROJECT",
 };
 
+const SIDES: Left = Left {
+    flags: &[
+        "--project-a",
+        "--project-name-a",
+        "--project-b",
+        "--project-name-b",
+    ],
+    why: "a record names its project, so a gate over two projects reads a record of each",
+};
+
 const FORMATS: Left = Left {
     flags: &["--json", "--color", "--no-color", "--compact"],
     why: "the script asks for the format that it reads",
@@ -794,6 +805,7 @@ const PASSES: [Passes; 4] = [
         ],
         left: &[
             FORMATS,
+            PROJECT,
             Left {
                 flags: &["--pin"],
                 why: "the report covers each pin, and this option limits the run to one pack",
@@ -925,12 +937,7 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
 #[test]
 fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without_a_watch() {
     let gitlab = gitlab_drop_in();
-    let lines: Vec<&str> = gitlab["strata-preflight"]["script"]
-        .as_sequence()
-        .expect("the job has script lines")
-        .iter()
-        .map(|l| l.as_str().unwrap())
-        .collect();
+    let lines = strings(&gitlab["strata-preflight"]["script"]);
     let run = |tier: &str, watch: &str| -> String {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir(dir.path().join(".strata")).unwrap();
@@ -1027,8 +1034,8 @@ fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
 fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_file() {
     let gitlab = gitlab_drop_in();
     assert_eq!(
-        gitlab["variables"]["STRATA_SAVE"].as_str(),
-        Some(""),
+        gitlab_drop_in_variable(&gitlab, "STRATA_SAVE"),
+        "",
         "the default saves no file"
     );
     let plain = &gitlab["strata-upstream"];
@@ -2247,21 +2254,26 @@ fn pr_comment_preflight_posts_and_updates_one_marked_note_on_gitlab() {
 // ---- install-strata.sh -------------------------------------------------------------------------
 
 /// A `curl` for the release API of a code host: the release document, and each asset by its id.
+/// The page of the release gives each asset by its name. The log has each address, with the header
+/// `Authorization` when the request has one.
 const FAKE_RELEASE_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
-out=""; url=""
+out=""; url=""; auth=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out=$2; shift 2 ;;
-    -H) shift 2 ;;
+    -H) case "$2" in Authorization:*) auth=" ($2)" ;; esac; shift 2 ;;
     -*) shift ;;
     *) url=$1; shift ;;
   esac
 done
-echo "$url" >> "$FAKE_REL/curl.log"
+echo "$url$auth" >> "$FAKE_REL/curl.log"
 case "$url" in
   */releases/tags/*|*/releases/latest) cp "$FAKE_REL/release.json" "$out" ;;
   */releases/assets/*) cp "$FAKE_REL/assets/${url##*/}" "$out" ;;
+  */releases/download/*)
+    id=$(jq -r --arg n "${url##*/}" '.assets[] | select(.name == $n) | .id' "$FAKE_REL/release.json")
+    cp "$FAKE_REL/assets/$id" "$out" ;;
   *) echo "no such URL: $url" >&2; exit 22 ;;
 esac
 "#;
@@ -2313,11 +2325,13 @@ fn tools_without_cosign(d: &Path) -> PathBuf {
 
 /// A release with the four files a job downloads, the checksums over them, and the bundle that
 /// signs the checksums. The bundle of the stand-in `cosign` is the digest of the file it signs.
+/// The installer of the release is the installer of this tree.
 fn release() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
     let assets = d.join("assets");
     std::fs::create_dir(&assets).unwrap();
+    let installer = std::fs::read_to_string(script("ci/install-strata.sh")).unwrap();
     let files = [
         (
             "1",
@@ -2326,7 +2340,7 @@ fn release() -> tempfile::TempDir {
         ),
         ("2", "pr-comment.sh", "#!/bin/sh\necho comment\n"),
         ("3", "verify-report.sh", "#!/bin/sh\necho report\n"),
-        ("4", "install-strata.sh", "#!/bin/sh\necho installer\n"),
+        ("4", "install-strata.sh", installer.as_str()),
         ("6", "merge-gate.sh", "#!/bin/sh\necho gate\n"),
         ("7", "upstream-report.sh", "#!/bin/sh\necho upstream\n"),
         (
@@ -2364,31 +2378,38 @@ fn release() -> tempfile::TempDir {
     dir
 }
 
+/// A `bash` with the environment that each install in the release `d` of [`release`] gets. The
+/// `PATH` has only the folders `bin` and `tools` of `d`, and `FAKE_REL` names `d`. The command
+/// removes `STRATA_QUIET` and each variable of [`INSTALLER_TOKENS`].
+fn bash_for_install(d: &Path) -> Command {
+    let mut c = Command::new("bash");
+    c.env(
+        "PATH",
+        format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
+    )
+    .env("FAKE_REL", d)
+    .env_remove("STRATA_QUIET");
+    for name in INSTALLER_TOKENS {
+        c.env_remove(name);
+    }
+    c
+}
+
 fn install(d: &Path, args: &[&str]) -> Output {
     install_with(d, args, &[])
 }
 
 /// The installer with the variables `envs` set after the others of the test.
 fn install_with(d: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut c = Command::new("bash");
-    c.arg(script("ci/install-strata.sh"))
+    bash_for_install(d)
+        .arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
-        .env(
-            "PATH",
-            format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
-        )
-        .env("FAKE_REL", d)
         .env("STRATA_API", "https://host.example/api")
         .env("STRATA_REPO", "o/r")
-        .env_remove("STRATA_QUIET")
-        .env_remove("STRATA_TOKEN")
-        .env_remove("GITHUB_TOKEN")
-        .env_remove("GH_TOKEN");
-    for (k, v) in envs {
-        c.env(k, v);
-    }
-    c.output_locked().unwrap()
+        .envs(envs.iter().copied())
+        .output_locked()
+        .unwrap()
 }
 
 #[test]
@@ -2886,6 +2907,93 @@ fn install_strata_requires_a_bundle_in_the_release_when_asked_to() {
     );
 }
 
+/// A `uname` for a runner of GitLab on Linux and x86-64, the target of the binary of [`release`].
+const FAKE_UNAME: &str = "#!/bin/sh\ncase \"$1\" in -s) echo Linux ;; -m) echo x86_64 ;; esac\n";
+
+/// Run the lines of the template `.strata` of the GitLab drop-in, then `"$STRATA_BIN" --version`,
+/// as a job of the drop-in runs them. The job gets each variable of the drop-in, then `envs`, and
+/// no token. Its project folder is `project` in the release `d`. `apt-get` is a stand-in.
+fn gitlab_install(d: &Path, envs: &[(&str, &str)]) -> Output {
+    let gitlab = gitlab_drop_in();
+    let mut lines = strings(&gitlab[".strata"]["before_script"]);
+    lines.push(r#""$STRATA_BIN" --version"#);
+    fake_bin(d, &[("apt-get", "#!/bin/sh\n"), ("uname", FAKE_UNAME)]);
+    let project = d.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let mut c = bash_for_install(d);
+    c.args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
+        .arg(lines.join("\n"))
+        .current_dir(&project)
+        .env("CI_PROJECT_DIR", &project)
+        .env_remove("STRATA_API");
+    for name in gitlab["variables"]
+        .as_mapping()
+        .expect("the drop-in has variables")
+        .keys()
+    {
+        let name = name.as_str().unwrap();
+        c.env(name, gitlab_drop_in_variable(&gitlab, name));
+    }
+    c.envs(envs.iter().copied()).output_locked().unwrap()
+}
+
+/// The repository is public, so a job of the GitLab drop-in installs strata with no token of strata
+/// (#483). The page of the release gives the installer, and the API of GitHub gives the release, to
+/// a request with no token. With `STRATA_TOKEN`, the log shows the token, so the log can show one.
+#[test]
+fn the_gitlab_drop_in_installs_strata_with_no_token() {
+    let r = release();
+    let d = r.path();
+    let o = gitlab_install(d, &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout).lines().last(),
+        Some("strata 9.9.9"),
+        "the job runs the binary of STRATA_BIN"
+    );
+    assert!(d.join("project/.strata/merge-gate.sh").exists());
+
+    let gitlab = gitlab_drop_in();
+    let (repo, version) = (
+        gitlab_drop_in_variable(&gitlab, "STRATA_REPO"),
+        gitlab_drop_in_variable(&gitlab, "STRATA_VERSION"),
+    );
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    let calls: Vec<&str> = calls.lines().collect();
+    assert_eq!(
+        calls.first().copied(),
+        Some(
+            format!("https://github.com/{repo}/releases/download/{version}/install-strata.sh")
+                .as_str()
+        ),
+        "the job downloads the installer from the page of the release"
+    );
+    assert_eq!(
+        calls.get(1).copied(),
+        Some(format!("https://api.github.com/repos/{repo}/releases/tags/{version}").as_str()),
+        "the installer reads the release of STRATA_VERSION"
+    );
+    let with_token: Vec<&&str> = calls
+        .iter()
+        .filter(|l| l.contains("Authorization"))
+        .collect();
+    assert!(
+        with_token.is_empty(),
+        "a request has a token: {with_token:?}"
+    );
+
+    std::fs::remove_file(d.join("curl.log")).unwrap();
+    let o = gitlab_install(d, &[("STRATA_TOKEN", "a-token")]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    assert!(
+        calls.contains(&format!(
+            "/releases/tags/{version} (Authorization: Bearer a-token)"
+        )),
+        "{calls}"
+    );
+}
+
 // ---- merge-gate.sh ----------------------------------------------------------------------------
 
 /// A repository with a main branch that holds `releases/dev.json`, and a branch `work` that
@@ -3110,6 +3218,8 @@ fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_versi
 }
 
 /// Issue #616. A version that does not parse reads as its first three numbers, as in Palette.
+/// Issue #714: one or two numbers and a tail of text are a pre-release of the version of their
+/// numbers.
 #[test]
 fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_rest_as_a_move_back()
 {
@@ -3130,9 +3240,24 @@ fn merge_gate_reads_a_version_that_does_not_parse_by_its_three_numbers_and_the_r
         Some(1),
         "1.1.8.develop is below 1.1.10:\n{out}"
     );
-    // a version with no three numbers is still above each version
+    // one or two numbers and a tail of text are below the version of the numbers, and above a
+    // lower version
     let (o, out) = gate_for_pin_move("1.2.x", "1.3.0");
-    assert_eq!(o.status.code(), Some(1), "1.3.0 is below 1.2.x:\n{out}");
+    assert!(o.status.success(), "1.3.0 is above 1.2.x:\n{out}");
+    let (o, out) = gate_for_pin_move("1.1.10", "1.2.develop");
+    assert!(o.status.success(), "1.2.develop is above 1.1.10:\n{out}");
+    let (o, out) = gate_for_pin_move("1.2.0-rc.1", "1.2.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.2.develop is below 1.2.0-rc.1:\n{out}"
+    );
+    let (o, out) = gate_for_pin_move("1.10.0", "1.2.develop");
+    assert_eq!(
+        o.status.code(),
+        Some(1),
+        "1.2.develop is below 1.10.0:\n{out}"
+    );
 }
 
 /// A branch that deliberately returns the record to the release that main pinned before.
@@ -4561,12 +4686,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))
             .unwrap();
-        let cell = row
-            .split(" | ")
-            .nth(4)
-            .unwrap()
-            .strip_prefix("bump to ")
-            .unwrap();
+        let cell = cells(row)[4].strip_prefix("bump to ").unwrap();
         let o = u.run(&["releases/*.json", "--dry-run"]);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
         let body = text(&o.stdout);
@@ -5317,7 +5437,7 @@ fn palette_key_sh_finds_a_key_in_each_place_that_strata_reads_and_names_the_plac
 /// no file, and the script must agree too.
 #[test]
 fn palette_key_sh_reads_the_file_as_strata_reads_it() {
-    // An empty or a relative home names a folder below the working folder, such as a checkout.
+    // An empty or a relative home names a folder from the working folder, such as a checkout.
     // Neither one reads the file there. The absolute path of the same folder reads it.
     let work = tempfile::tempdir().unwrap();
     std::fs::create_dir(work.path().join("home")).unwrap();

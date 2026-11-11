@@ -1,0 +1,10 @@
+$ strata consumers aws-stack@1.1.0 --project-name prod
+strata: looking up project prod
+strata: listing consumers of profile 64e1000000000000000000b2
+strata: searching the clusters that run the version
+strata: reading the virtual clusters of the cluster groups that pin the version
+strata: reading each edge host for the profiles bound to it
+aws-stack@1.1.0 (uid 64e1000000000000000000b2): 1 consumer
+  payments  64f1000000000000000000f1  project prod (uid 64f20000000000000000a0f1)  Running
+  second reading: the cluster search names 1 other cluster with the profile, 1 read
+  edge hosts: 0 read

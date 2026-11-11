@@ -119,7 +119,10 @@ text of a hash, not the time of the build, orders `1.0.1-g0123456789ab` and
 
 A develop build such as `1.66.0.develop` is a pre-release too: it is below
 `1.66.0`. A version with four numbers is not: `1.65.0.1` is above `1.65.0`, and
-below `1.66.0`. See [the rule of `@latest`](../reference/refs.md#rules).
+below `1.66.0`. A text with two numbers and a tail of text, such as
+`1.66.develop`, is a pre-release of `1.66.0`. So `--pre-release` names it as
+newer than `1.65.0`. It is below `1.66.0.develop`. See
+[the rule of `@latest`](../reference/refs.md#rules).
 
 ## Palette accepts the move, or refuses it
 
@@ -324,6 +327,11 @@ A scheduled job that keeps one issue open for each pack that is behind is
 ```text
 {{#include ../output/help-behind.txt}}
 ```
+
+`--project <uid>` or `--project-name <name>` gives the project of a record from
+tenant scope, which names no project. Strata reads a record that names a project
+in that project. `--project ''` is tenant scope. See
+[The project](../configure.md#the-project).
 
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see

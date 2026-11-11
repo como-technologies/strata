@@ -135,9 +135,9 @@ resource "spectrocloud_cluster_eks" "cluster" {
     delete = "45m"
   }
 
-  # Provider 0.30.1 does not read cloud_config.azs back from Palette (flattenClusterConfigsEKS
-  # sets no azs), and azs forces a new resource. Without this line each plan after the create
-  # replaces the cluster, whatever else it changes.
+  # Provider 0.30.1 does not read cloud_config.azs back from Palette, and azs forces a new
+  # resource. Without this line each plan after the create replaces the cluster, whatever else it
+  # changes.
   lifecycle {
     ignore_changes = [cloud_config[0].azs]
   }

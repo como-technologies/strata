@@ -168,7 +168,7 @@ pod_hardened() {
 # reaches_palette: the first content cycle ends well, so the pod reaches Palette. When it does not,
 # the output names lastError, the kind and the status of the failed cycle.
 reaches_palette() {
-  pf_start || { echo "no port-forward: $(cat port-forward.log)"; return 1; }
+  pf_start || return 1
   if poll "$tries" page_ok; then
     jq '{page, checkedAt: .content.checkedAt}' page.json
     return 0
@@ -203,7 +203,7 @@ reader_role() {
 }
 # reader_can_open: the user opens the page with kubectl port-forward, and the page names the cluster
 reader_can_open() {
-  pf_start "$reader_user" || { cat port-forward.log; return 1; }
+  pf_start "$reader_user" || return 1
   [ "$(page /healthz)" = ok ] && page /v1/cluster | jq -e --arg c "$C" '.cluster.uid == $c' > /dev/null
 }
 # reader_cannot_read: the user reads no Secret and runs no exec
