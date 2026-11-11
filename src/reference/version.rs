@@ -585,7 +585,8 @@ mod tests {
     }
 
     #[test]
-    fn two_versions_keep_their_numbers_when_only_the_pre_release_or_the_build_data_differs() {
+    fn two_versions_keep_their_numbers_when_a_missing_number_is_zero_and_only_the_pre_release_or_the_build_data_differs()
+     {
         for (a, b) in [
             ("1.66.0-g0123456789ab", "1.66.0"),
             ("1.66.0-rc.1", "1.66.0-rc.2"),

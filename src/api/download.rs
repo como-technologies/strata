@@ -477,7 +477,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_that_is_not_a_download_is_refused_with_what_strata_could_not_read() {
+    fn a_file_that_is_not_a_download_is_refused_with_what_strata_cannot_read() {
         assert!(!refusal(b"{\"Reader\":{}}").is_empty());
         let no_metadata = tgz(&[(format!("{UID}/spc.json"), b"{}".to_vec())]);
         assert_eq!(refusal(&no_metadata), "no metadata.json at the top");
