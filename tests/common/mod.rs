@@ -1558,7 +1558,8 @@ pub fn same_release_served(
 }
 
 /// The files of the archive of the build of a pack, beside `pack.json`: the path and the content of
-/// each. None for a pack whose download holds no archive.
+/// each. For a Helm chart, they are all the files of the chart. None for a pack whose download
+/// holds no archive.
 pub type BuildFiles<'a> =
     dyn Fn(&strata::snapshot::Pack) -> Option<Vec<(&'static str, String)>> + 'a;
 
@@ -1566,8 +1567,10 @@ pub type BuildFiles<'a> =
 /// writes it: see [`profile_download`].
 ///
 /// The download names each pack of a record that has a registry. The archive of the pack holds
-/// `pack.json` and each file that `files` gives for the pack: its path and its content. A pack
-/// for which `files` gives None has no archive in the download, as a pack of a private registry.
+/// `pack.json` and each file that `files` gives for the pack: its path and its content. The
+/// archive of a Helm chart holds only the files that `files` gives, as a Helm registry serves the
+/// chart: see [`chart_archive`]. A pack for which `files` gives None has no archive in the
+/// download, as a pack of a private registry.
 pub fn serve_downloads(
     api: strata::api::MemoryApi,
     records: &[(String, strata::snapshot::Snapshot)],
@@ -1584,6 +1587,9 @@ pub fn serve_downloads(
                     .map(|(path, text)| (*path, text.as_str()))
                     .collect();
                 let kind = PackType::parse(&p.kind)?;
+                if kind == PackType::Helm {
+                    return Some(chart_archive(&p.name, &files));
+                }
                 let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
                 Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
             })

@@ -12985,8 +12985,8 @@ fn download_stage(packs: &[DownloadPack]) -> Stage {
 const FILE_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
 
 /// The packs of the download of `aws-stack@1.2.0`. The `pack.json` of the archive of the Kubernetes
-/// pack names `built`. The CSI pack has no archive, and the manifest pack has none. The chart of a
-/// Helm registry has an archive with no `pack.json`.
+/// pack names `built`. The CSI pack has no archive, and the manifest pack has none. The chart
+/// `nginx` of a Helm registry is the last pack, and its `Chart.yaml` names its version.
 fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
     let none = |name, version, kind, private| DownloadPack {
         name,
@@ -13013,13 +13013,45 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
             ..none("platform-rules", "1.0.0", PackType::Manifest, false)
         },
         DownloadPack {
-            archive: Some(tgz(&[(
-                "nginx/Chart.yaml".to_string(),
-                b"name: nginx\nversion: 25.1.5\n".to_vec(),
-            )])),
-            ..none("nginx", "25.1.5", PackType::Helm, false)
+            archive: Some(chart_archive(
+                "nginx",
+                &[("Chart.yaml", &chart_file("nginx", "15.0.0", None))],
+            )),
+            ..none("nginx", "15.0.0", PackType::Helm, false)
         },
     ]
+}
+
+/// Stage 4 reads the chart of a Helm registry (#817). The archive has one top folder and no
+/// `pack.json`, and its `Chart.yaml` names the version of its entry. A chart that names another
+/// version, a chart with `pack.json`, and a download with no chart fail the check.
+#[test]
+fn export_sh_stage_4_reads_the_chart_of_a_helm_registry_by_the_version_in_its_chart_yaml() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    passed(&steps, &["download-chart"]);
+    let out = std::fs::read_to_string(stage.path("out/download-chart.out")).unwrap();
+    assert_eq!(out, "nginx 15.0.0: nginx/Chart.yaml\n");
+    let chart = |files: &[(&str, &str)]| {
+        let mut packs = downloaded("1.36.2");
+        packs[3].archive = Some(chart_archive("nginx", files));
+        packs
+    };
+    let (named, other) = (
+        chart_file("nginx", "15.0.0", None),
+        chart_file("nginx", "15.0.1", None),
+    );
+    let mut private = downloaded("1.36.2");
+    (private[3].archive, private[3].private) = (None, true);
+    for packs in [
+        chart(&[("Chart.yaml", &other)]),
+        chart(&[("Chart.yaml", &named), ("pack.json", "{}")]),
+        private,
+    ] {
+        let (_, steps) = download_stage(&packs).run("export.sh", &["4"]);
+        passed(&steps, &["download-archive-aws-stack"]);
+        failed(&steps, &["download-chart"]);
+    }
 }
 
 /// Stage 4 reads the layout of the download of each version, and the archive of each pack. A

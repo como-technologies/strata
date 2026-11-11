@@ -8,6 +8,10 @@
 //! values of the version that it copies. So two builds of one content differ only by the version
 //! in `pack.json`.
 //!
+//! A pack of a Helm registry is the chart as the registry serves it, with no `pack.json`. Its
+//! `Chart.yaml` holds the name and the version of the pin, and `values.yaml` follows it. So two
+//! builds of one chart differ only by the line `version` of `Chart.yaml`.
+//!
 //! The download holds no archive of a pack of a private pack registry or Helm registry, or of a
 //! manifest pack. It holds none of a pack of an OCI registry of Helm charts or of Zarf packages.
 //! The list of the packs names such a pack with an empty `filePath`, and a manifest pack only by
@@ -34,7 +38,9 @@ use crate::tenant::{REGISTRY_LISTING, downloaded_profile, manifests_route, pack_
 #[path = "../../../tests/common/download.rs"]
 mod written;
 
-use written::{DownloadPack, archive_top, pack_archive, profile_download};
+use written::{
+    DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download,
+};
 
 /// The media type of the file of a download. The stand-in models Palette, and not the client that it
 /// tests, so it keeps its own copy of the type.
@@ -140,6 +146,14 @@ impl Built {
                 .find(|item| item["metadata"]["uid"] == pin["packUid"])
                 .and_then(|item| item["spec"]["values"].as_str());
             let files: Vec<(&str, &str)> = values.map(|v| ("values.yaml", v)).into_iter().collect();
+            if kind == PackType::Helm {
+                let chart = chart_file(&name, &version, None);
+                let files: Vec<(&str, &str)> = [("Chart.yaml", chart.as_str())]
+                    .into_iter()
+                    .chain(files)
+                    .collect();
+                return chart_archive(&name, &files);
+            }
             let top = archive_top(kind, &name, &version, &text("digest"));
             pack_archive(&name, &version, &text("layer"), &top, &files)
         });
@@ -230,7 +244,8 @@ mod tests {
     }
 
     /// The stand-in serves a gzip tar at the route, and strata reads it. The pack of the Public
-    /// Repo has its archive, with the default values of its listing. The pack of a private
+    /// Repo has its archive, with the default values of its listing. The chart of a Helm registry
+    /// has `Chart.yaml` and no `pack.json`, under the top folder `nginx`. The pack of a private
     /// registry and the manifest pack have none. The pack of a private OCI registry of packs has
     /// an archive, whose top folder has the name and the version of the pack. A request that
     /// accepts JSON alone gets `{"Reader":{}}`, and not the file.
@@ -254,7 +269,8 @@ mod tests {
                     pin("kubernetes", "spectro", "reg-public", "pk-1"),
                     pin("private-pack", "spectro", "reg-private", "pk-2"),
                     pin("rules", "manifest", "", "pk-3"),
-                    pin("argocd", "oci", "reg-private", "pk-4")]}}}),
+                    pin("argocd", "oci", "reg-private", "pk-4"),
+                    pin("nginx", "helm", "reg-public", "pk-5")]}}}),
         );
         write(
             "v1/clusterprofiles/u1/packs/manifests",
@@ -277,14 +293,12 @@ mod tests {
         let download = Palette::new(&api).profile_download("u1").unwrap();
         let k8s = download.pack("kubernetes").unwrap();
         assert_eq!(k8s.version, "1.36.2");
-        let paths: Vec<&str> = k8s
-            .archive
-            .as_ref()
-            .unwrap()
-            .files()
-            .map(|(path, _)| path)
-            .collect();
-        assert_eq!(paths, ["pack.json", "values.yaml"]);
+        let paths = |name: &str| -> Vec<String> {
+            let archive = download.pack(name).unwrap().archive.as_ref().unwrap();
+            archive.files().map(|(path, _)| path.to_string()).collect()
+        };
+        assert_eq!(paths("kubernetes"), ["pack.json", "values.yaml"]);
+        assert_eq!(paths("nginx"), ["Chart.yaml"]);
         assert_eq!(download.pack("private-pack").unwrap().archive, None);
         assert!(download.pack("rules").is_none());
         assert!(download.pack("argocd").unwrap().archive.is_some());
@@ -298,6 +312,10 @@ mod tests {
                 "u1/profiles/u1/packs/kubernetes/kubernetes-1.36.2.tar.gz"
             ),
             ["kubernetes-0123456789ab"]
+        );
+        assert_eq!(
+            tops(&file, "u1/profiles/u1/packs/nginx/nginx-1.36.2.tgz"),
+            ["nginx"]
         );
         // a request that accepts JSON alone gets `{"Reader":{}}`, as for the export, and each
         // other request gets the file. A version that the tenant does not hold has no download

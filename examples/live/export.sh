@@ -13,8 +13,9 @@
 #   3  what the export route answers: a request that accepts JSON gets no file; and three
 #      exports with no wait between them, whose refusals the run records
 #   4  the download of each version: the layout of the file, the archive of each pack and its
-#      top folder, the packs with no archive, and what the route answers to a request that
-#      accepts JSON and to two downloads at once
+#      top folder, the packs with no archive, the archive of each chart of a Helm registry
+#      (#817), and what the route answers to a request that accepts JSON and to two downloads
+#      at once
 #
 # PROFILES holds the versions, by <name>@<version>, in the project of the key. The default is the
 # three versions that `just live-up` publishes. Palette can refuse an export with HTTP 429 and
@@ -59,14 +60,20 @@ download_layout() {
     | all(if .type == "manifest" then $list[.name] == null else $list[.name].version == .version end)' "$3"
 }
 
+# archive_files FILE PATH: the paths in the archive PATH in the download FILE, one on each line
+archive_files() {
+  tar -xzOf "$1" "$2" | tar -tz
+}
+
 # archive_tops FILE PATH: the top folders of the archive PATH in the download FILE, one on each line
 archive_tops() {
-  tar -xzOf "$1" "$2" | tar -tz | cut -d/ -f1 | sort -u
+  archive_files "$1" "$2" | cut -d/ -f1 | sort -u
 }
 
 # download_archives FILE LIST: each archive of a pack that the list LIST of the download FILE names
 # has one top folder, and its pack.json names the version of its entry. A chart of a Helm registry
-# has no pack.json, so the check reads the archives of the other packs
+# has no pack.json, so the check reads the archives of the other packs, and download_charts reads
+# the charts
 download_archives() {
   local folder name path version top
   folder=$(dirname "$(cat "$2.path")")
@@ -119,6 +126,32 @@ download_at_once() {
     rm -f "download-limit.$i"
   done
   return "$refused"
+}
+
+# download_charts LIST...: each chart of a Helm registry with an archive in the lists LIST has one
+# top folder and no pack.json. The line version of its Chart.yaml names the version of its entry.
+# The download of LIST is the file NAME.tgz beside NAME.list.json. With no such chart, it fails
+download_charts() {
+  local list file folder name path version files top charts=0
+  for list in "$@"; do
+    file=${list%.list.json}.tgz
+    folder=$(dirname "$(cat "$list.path")")
+    while IFS=$'\t' read -r name path version; do
+      files=$(archive_files "$file" "$folder/$path") || { echo "$name: no archive" >&2; return 1; }
+      top=$(archive_tops "$file" "$folder/$path")
+      [ "$(printf '%s\n' "$top" | grep -c .)" = 1 ] || { echo "$name: no one top folder" >&2; return 1; }
+      if printf '%s\n' "$files" | grep -qx "$top/pack.json"; then
+        echo "$name: the chart holds pack.json" >&2
+        return 1
+      fi
+      [ "$(tar -xzOf "$file" "$folder/$path" | tar -xzO "$top/Chart.yaml" \
+        | sed -n 's/^version:[[:space:]]*//p' | tr -d "\"'\r")" = "$version" ] \
+        || { echo "$name: Chart.yaml does not name $version" >&2; return 1; }
+      echo "$name $version: $top/Chart.yaml"
+      charts=$((charts + 1))
+    done < <(jq -r '.packs[] | select(.type == "helm" and .filePath != "") | [.name, .filePath, .version] | @tsv' "$list")
+  done
+  [ "$charts" -gt 0 ] || { echo "no list names a chart of a Helm registry with an archive" >&2; return 1; }
 }
 
 # the record of each version gives its uid, and the root that the export must give
@@ -201,6 +234,10 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
   # check records the entries and does not judge them
   check download-no-archive '?' '#751: the entry of each pack with no archive: its name, its type, and isRegistryPrivate' -- \
     bash -c 'for f in "$@"; do jq -r --arg f "$f" ".packs[] | select(.filePath == \"\" and (.manifestName // \"\") == \"\") | [\$f, .name, .type, .isRegistryPrivate] | @tsv" "$f"; done' _ ./*.list.json
+  # Palette puts the chart of a Helm registry that is not private in the file as the registry
+  # serves it. same-release does not compare the line version of its Chart.yaml (#817)
+  check download-chart 0 '#817: each chart of a Helm registry has one top folder and no pack.json, and its Chart.yaml names the version of its entry' -- \
+    download_charts ./*.list.json
   ref=${profiles%% *}
   name=${ref%@*}
   uid=$(jq -r .source.uid "$name.version.json")

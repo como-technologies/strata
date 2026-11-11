@@ -32,9 +32,13 @@ const PACKS_METADATA: &str = "packs-metadata.json";
 /// The file of a pack archive that names the pack and its version.
 const PACK_FILE: &str = "pack.json";
 
-/// The field of [`PACK_FILE`] that names the version. The build of a pack under another version
-/// changes only this field: strata does not compare it.
-const PACK_VERSION: &str = "version";
+/// The file of a Helm chart that names the chart and its version. Palette puts the chart of a Helm
+/// registry in the download as the registry serves it, with no [`PACK_FILE`].
+const CHART_FILE: &str = "Chart.yaml";
+
+/// The field of [`PACK_FILE`] and of [`CHART_FILE`] that names the version. The build of a pack or
+/// of a chart under another version changes only this field: strata does not compare it.
+const VERSION_FIELD: &str = "version";
 
 /// The ends of the name of an archive in a download: a pack archive and a Helm chart.
 const ARCHIVE_ENDS: [&str; 2] = [".tar.gz", ".tgz"];
@@ -64,8 +68,9 @@ pub struct DownloadedPack {
 /// The files of the archive of one pack: the path of each file under its top folder, with a
 /// digest of the file.
 ///
-/// The digest of `pack.json` covers its JSON with no `version`. So two builds of one content under
-/// two versions have the same files.
+/// The digest of `pack.json` covers its JSON with no `version`. The digest of `Chart.yaml` covers
+/// its lines with no line `version`. So two builds of one content under two versions have the same
+/// files.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PackArchive {
     files: BTreeMap<String, String>,
@@ -215,7 +220,8 @@ fn json_file(files: &BTreeMap<String, Vec<u8>>, path: &str) -> std::result::Resu
 /// The files of the pack archive `gz`, by their path under its top folder, with a digest of each.
 ///
 /// The paths keep the top folder when the files do not share one. The digest of `pack.json`
-/// covers its JSON with no `version`, when the file is a JSON object.
+/// covers its JSON with no `version`, when the file is a JSON object. The digest of `Chart.yaml`
+/// covers its lines with no line `version`.
 fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchive, String> {
     let files = unpack(gz, budget, |_| true)?;
     let top = files
@@ -231,10 +237,10 @@ fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchi
                 Some(under) => under.to_string(),
                 None => path,
             };
-            let digest = if path == PACK_FILE {
-                pack_file_digest(&bytes)
-            } else {
-                sha256_digest(&bytes)
+            let digest = match path.as_str() {
+                PACK_FILE => pack_file_digest(&bytes),
+                CHART_FILE => chart_file_digest(&bytes),
+                _ => sha256_digest(&bytes),
             };
             (path, digest)
         })
@@ -247,11 +253,32 @@ fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchi
 fn pack_file_digest(bytes: &[u8]) -> String {
     match serde_json::from_slice::<Value>(bytes) {
         Ok(Value::Object(mut fields)) => {
-            fields.remove(PACK_VERSION);
+            fields.remove(VERSION_FIELD);
             sha256_digest(&canonical_json(&Value::Object(fields)))
         }
         _ => sha256_digest(bytes),
     }
+}
+
+/// The digest of the bytes of `Chart.yaml` with no line of its top field `version`.
+///
+/// Each other line keeps its bytes and its place. So a change of `appVersion`, of a comment, of
+/// the order of the lines, or of the `version` of a dependency changes the digest.
+fn chart_file_digest(bytes: &[u8]) -> String {
+    let kept: Vec<u8> = bytes
+        .split_inclusive(|b| *b == b'\n')
+        .filter(|line| !is_version_line(line))
+        .flatten()
+        .copied()
+        .collect();
+    sha256_digest(&kept)
+}
+
+/// True when the line `line` of a YAML file sets the top field `version`: the line starts with
+/// the key, with no indent.
+fn is_version_line(line: &[u8]) -> bool {
+    line.strip_prefix(VERSION_FIELD.as_bytes())
+        .is_some_and(|rest| rest.trim_ascii_start().starts_with(b":"))
 }
 
 /// Each regular file of the tar archive that gzip compresses in `gz`, whose path `keep` takes, by
@@ -300,7 +327,9 @@ mod written;
 
 #[cfg(test)]
 mod tests {
-    use super::written::{DownloadPack, archive_top, pack_archive, profile_download, tgz};
+    use super::written::{
+        DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download, tgz,
+    };
     use super::*;
     use crate::api::download_path;
 
@@ -434,6 +463,65 @@ mod tests {
         let a = a.pack("csi-aws-ebs").unwrap().archive.as_ref().unwrap();
         let b = b.pack("csi-aws-ebs").unwrap().archive.as_ref().unwrap();
         assert_eq!(a.changed_files(b), ["pack.json"]);
+    }
+
+    /// The archive of the chart `nginx` of a Helm registry at `version`, read from a download. Its
+    /// files are `files`, under the top folder `nginx`.
+    fn chart(version: &str, files: &[(&str, &str)]) -> PackArchive {
+        let download = read(&[DownloadPack {
+            name: "nginx",
+            version,
+            kind: PackType::Helm,
+            private: false,
+            archive: Some(chart_archive("nginx", files)),
+            manifests: &[],
+        }]);
+        download.pack("nginx").unwrap().archive.clone().unwrap()
+    }
+
+    #[test]
+    fn two_builds_of_one_chart_differ_only_by_the_line_version_of_chart_yaml() {
+        let values = ("values.yaml", "replicaCount: 1\n");
+        let file = |version: &str, app: Option<&str>| chart_file("nginx", version, app);
+        let a = chart(
+            "15.0.0-rc.1",
+            &[("Chart.yaml", &file("15.0.0-rc.1", Some("1.27.0"))), values],
+        );
+        let b = chart(
+            "15.0.0",
+            &[("Chart.yaml", &file("15.0.0", Some("1.27.0"))), values],
+        );
+        let paths: Vec<&str> = a.files().map(|(path, _)| path).collect();
+        assert_eq!(paths, ["Chart.yaml", "values.yaml"]);
+        assert!(a.changed_files(&b).is_empty(), "{a:?} {b:?}");
+        assert_eq!(a, b);
+        // each other line of Chart.yaml counts: the version of the app, a comment, and the version
+        // of a dependency, which has an indent
+        let top = file("15.0.0", Some("1.27.0"));
+        let dependency =
+            |version: &str| format!("{top}dependencies:\n- name: common\n  version: {version}\n");
+        for (one, other) in [
+            (top.clone(), file("15.0.0", Some("1.28.0"))),
+            (top.clone(), file("15.0.0", None)),
+            (top.clone(), format!("{top}# the chart of the web tier\n")),
+            (dependency("2.0.0"), dependency("2.1.0")),
+        ] {
+            let one = chart("15.0.0", &[("Chart.yaml", &one), values]);
+            let other = chart("15.0.0", &[("Chart.yaml", &other), values]);
+            assert_eq!(one.changed_files(&other), ["Chart.yaml"], "{other:?}");
+        }
+        // the Chart.yaml of a chart in the chart keeps its version
+        let sub = |version: &str| {
+            let sub = chart_file("common", version, None);
+            chart(
+                "15.0.0",
+                &[("Chart.yaml", &top), ("charts/common/Chart.yaml", &sub)],
+            )
+        };
+        assert_eq!(
+            sub("2.0.0").changed_files(&sub("2.1.0")),
+            ["charts/common/Chart.yaml"]
+        );
     }
 
     #[test]

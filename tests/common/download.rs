@@ -20,6 +20,10 @@
 //! pack archive is a tar archive that gzip compresses, with one top folder. For a pack of a pack
 //! registry, the folder has the name of the pack and the first 12 hex digits of its digest. For a
 //! pack of an OCI registry of packs, it has the name and the version of the pack.
+//!
+//! The archive of a chart of a Helm registry is the file that the registry serves, and its name
+//! ends in `.tgz`. The top folder has the name of the chart. `Chart.yaml` names the version, and
+//! the archive holds no `pack.json`.
 
 use serde_json::{Value, json};
 
@@ -82,6 +86,23 @@ pub fn pack_archive(
             .map(|(path, content)| (format!("{top}/{path}"), content.as_bytes().to_vec())),
     );
     tgz(&entries)
+}
+
+/// The archive of the chart `name`, as a Helm registry serves it: each of `files` under the top
+/// folder `name`, and no `pack.json`. Give it `Chart.yaml` from [`chart_file`].
+pub fn chart_archive(name: &str, files: &[(&str, &str)]) -> Vec<u8> {
+    let entries: Vec<(String, Vec<u8>)> = files
+        .iter()
+        .map(|(path, content)| (format!("{name}/{path}"), content.as_bytes().to_vec()))
+        .collect();
+    tgz(&entries)
+}
+
+/// The `Chart.yaml` of the chart `name` at `version`. `app_version` is the version of the app that
+/// the chart installs, when the chart names one.
+pub fn chart_file(name: &str, version: &str, app_version: Option<&str>) -> String {
+    let app = app_version.map_or(String::new(), |app| format!("appVersion: {app}\n"));
+    format!("apiVersion: v2\n{app}name: {name}\ntype: application\nversion: {version}\n")
 }
 
 /// The path of the archive of `pack` from the folder of the list of the packs, as Palette names it.
