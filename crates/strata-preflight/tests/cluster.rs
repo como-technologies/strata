@@ -306,10 +306,10 @@ fn reports(mut report: Report) -> [(&'static str, String); 3] {
     .map(|(file, format)| (file, report::render(&report, format, false, &Paint::off())))
 }
 
-/// Palette gives a refusal of a variable or of a CIDR of the body the response type of a server
-/// fault, HTTP 500. `palette-validate` reads it as the answer of the route, as it reads HTTP 400.
-/// The verdict is `failed`, and the message is the message of Palette with a mark in place of
-/// each value. Strata sends the body one time (#816).
+/// The route refuses a variable or a CIDR of the body with HTTP 500. The code of Palette shows it;
+/// no live run shows it yet. `palette-validate` reads it as the answer of the route, as it reads
+/// HTTP 400. The verdict is `failed`, and the message is the message of Palette with a mark in
+/// place of each value. Strata sends the body one time (#816).
 #[test]
 fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400()
  {

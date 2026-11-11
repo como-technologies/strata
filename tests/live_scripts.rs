@@ -7035,8 +7035,8 @@ const CIDR_CASE: &str = "cidr-overlap";
 /// writes it.
 const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
 
-/// The answer of the validate route to the body of `CIDR_CASE`. The code of Palette gives it
-/// HTTP 500, and strata reads it as a refusal.
+/// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
+/// shows it; no live run shows it yet. Strata reads it as a refusal.
 fn cidr_overlap_answer() -> String {
     serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
 }
@@ -7757,9 +7757,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     }
 }
 
-/// The check `cidr-overlap-code` holds the answer that the code of Palette gives: HTTP 500 and
-/// `K8SCidrOverlap`. Another status, another code, or a body that the route takes fails it, and
-/// `cidr-overlap-status.out` holds that answer (#816).
+/// The check `cidr-overlap-code` expects HTTP 500 and `K8SCidrOverlap`. The code of Palette shows
+/// that answer; no live run shows it yet. Another status, another code, or a body that the route
+/// takes fails the check, and `cidr-overlap-status.out` holds that answer (#816).
 #[test]
 fn route_bodies_sh_fails_cidr_overlap_code_when_the_route_gives_another_answer() {
     let other_code = r#"{"code":"InternalError","message":"boom"}"#;

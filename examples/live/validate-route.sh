@@ -130,8 +130,8 @@ fault pack-state-deleted aws 'deleted' -
 fault profile-cloud-mismatch aws 'ClusterProfilesNotSupported' -
 takes pack-cloud-support aws
 # cidr-overlap: the pod CIDR of the Kubernetes pack overlaps the CIDR of the VPC of the body. The
-# code of Palette refuses it with HTTP 500 and K8SCidrOverlap, and palette-validate reads it as a
-# refusal (#816).
+# route refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run
+# shows it yet. palette-validate reads the refusal as an answer (#816).
 fault cidr-overlap aws 'K8SCidrOverlap' -
 # vsphere-static-ip-pool: a static network with no pool, and a DHCP cluster with a static network
 network='(.spec.cloudConfig.placement.network, (.spec.machinepoolconfig[].cloudConfig.placements[]?.network))'

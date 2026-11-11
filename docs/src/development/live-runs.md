@@ -1096,7 +1096,7 @@ CIDR, or when the Kubernetes pack has no `podCIDR`.
 | `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. |
 | `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. |
 | `cidr-overlap-body` | 0 | #816: `cidr-overlap.json` names a VPC of the region. The Kubernetes pack of the release profile has the CIDR of that VPC as its pod CIDR. A case that is skipped has no check. No result yet: no live window ran the case. |
-| `cidr-overlap-status`, `cidr-overlap-code` | 0, 0 | #816: the route answers the body of `cidr-overlap`, and `cidr-overlap-status.out` holds the status and the answer. The code of Palette refuses the body with HTTP `500` and `K8SCidrOverlap`. No result yet: no live window ran the case. |
+| `cidr-overlap-status`, `cidr-overlap-code` | 0, 0 | #816: the route answers the body of `cidr-overlap`, and `cidr-overlap-status.out` holds the status and the answer. The route refuses the body with HTTP `500` and `K8SCidrOverlap`: the code of Palette shows it. No result yet: no live window ran the case. |
 | `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. |
 | `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
 

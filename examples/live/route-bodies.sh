@@ -35,8 +35,9 @@
 # One more case makes no profile (#816). cidr-overlap.json is the clean body with the first VPC
 # of the region that has a CIDR. It also holds the values of the Kubernetes pack of the release
 # profile, with that CIDR as the pod CIDR. The script sends it to the route with api.sh
-# post-status, and records the status and the code. The code of Palette refuses it with HTTP 500
-# and K8SCidrOverlap. cidr-overlap.json stays, as aws-clean.json does. The script skips the case
+# post-status, and records the status and the code. The route refuses it with HTTP 500 and
+# K8SCidrOverlap: the code of Palette shows it; no live run shows it yet. cidr-overlap.json stays,
+# as aws-clean.json does. The script skips the case
 # when Palette lists no VPC with a CIDR, or the Kubernetes pack has no podCIDR.
 #
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of

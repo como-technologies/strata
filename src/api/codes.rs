@@ -168,16 +168,16 @@ const PROFILE_CLOUD: Check = &["ClusterProfilesNotSupported"];
 ///
 /// Of the validate routes, only the cluster validate route runs it. A label that is not an option
 /// of a dropdown variable is `InvalidDropDownVariable`. A value that the format or the pattern of
-/// its variable refuses is `InvalidVariable`. The code of Palette gives both refusals the response
-/// type of a server fault, HTTP 500. No live run shows them yet.
+/// its variable refuses is `InvalidVariable`. The route refuses each one with HTTP 500. The code of
+/// Palette shows it; no live run shows it yet.
 const BODY_VARIABLES: Check = &["InvalidDropDownVariable", "InvalidVariable"];
 
 /// For AWS with a VPC, the pod CIDR and the service CIDR of the Kubernetes pack are CIDRs. Neither
 /// one overlaps the CIDR of the VPC.
 ///
 /// Only the cluster validate route runs it. A value that is not a CIDR is `CidrParseError`, and a
-/// CIDR that overlaps is `K8SCidrOverlap`. The code of Palette gives both refusals the response
-/// type of a server fault, HTTP 500. No live run shows them yet.
+/// CIDR that overlaps is `K8SCidrOverlap`. The route refuses each one with HTTP 500. The code of
+/// Palette shows it; no live run shows it yet.
 const VPC_CIDRS: Check = &["K8SCidrOverlap", "CidrParseError"];
 
 /// A validate route of Palette.

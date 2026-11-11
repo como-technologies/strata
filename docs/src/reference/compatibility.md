@@ -1249,12 +1249,12 @@ field, a value, an input, or an option is in the sections above.
 - **`compare` gives the impact `none` to `1.2-rc.1` to `1.2.0`.** A number that a version omits
   is `0`, as Palette reads it. So such a renumber keeps its numbers, and the impact is
   `none (renumber only)`. Before, the move had the level of its layer.
-- **`palette-validate`, for a variable or a CIDR that Palette refuses.** The code of Palette
-  gives HTTP `500` to these refusals: `InvalidDropDownVariable`, `InvalidVariable`,
-  `K8SCidrOverlap`, and `CidrParseError`. Strata now reads such a refusal as the answer of the
-  route, and does not send the request again. The verdict is `failed`, with the message of
-  Palette. Before, the verdict was `error` and the exit code was `2`. Now the exit code is `0`,
-  or `1` with `--strict`. See
+- **`palette-validate`, for a variable or a CIDR that Palette refuses.** The route refuses such a
+  body with HTTP `500` and `InvalidDropDownVariable`, `InvalidVariable`, `K8SCidrOverlap`, or
+  `CidrParseError`. The code of Palette shows it; no live run shows it yet. Strata now reads such
+  a refusal as the answer of the route, and does not send the request again. The verdict is
+  `failed`, with the message of Palette, and the exit code is `0`, or `1` with `--strict`.
+  Before, the verdict was `error`, and the exit code was `2`. See
   [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate).
 
 ### For a user of the CI drop-ins
