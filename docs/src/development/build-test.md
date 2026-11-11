@@ -706,8 +706,8 @@ The repository is public, so a name in a tracked file, in its path, or in the
 target of a tracked symlink is public. The job `deny list` of the `ci` workflow
 scans the text and the path of each tracked file for each entry of a deny list.
 It also scans the target of each tracked symlink. The list holds the names that
-the tree must not hold. The notes of the lead give its classes. The job runs on each
-push to `main` and on each pull request.
+the tree must not hold. The notes of the lead give its classes. The job runs on
+each push to `main` and on each pull request.
 
 The list is the secret `STEP14_DENY` of the repository, with one entry on each
 line. It is not a file of the tree, because a public file names what it denies.
@@ -718,7 +718,8 @@ The step gives the secret to `just deny-list` in a variable of the same name.
 The recipe runs `scripts/dev/deny-list.sh`. The script:
 
 - stops the trace of the shell, because a trace prints the value of a variable;
-- writes the list to a file under `$RUNNER_TEMP`, and removes the file at the end;
+- writes the list to a file under `$RUNNER_TEMP`, and removes the file at the
+  end;
 - removes each empty line, because an empty pattern matches each line;
 - removes the spaces at the two ends of an entry, also a carriage return;
 - matches each entry as a fixed string, with no difference of case, in the text
@@ -740,11 +741,14 @@ line. It does not read the commit messages or the body of a pull request.
 
 | The list and the tree | The job |
 | --- | --- |
-| An entry in the text of a tracked file | Fails. GitHub skips `Gate`, so the verify of a pull request cannot pass. On `main`, `publish the book` does not run. |
-| An entry in a tracked path | Fails in the same way, and gives the number of such paths. |
-| An entry in the target of a tracked symlink | Fails in the same way, and counts the symlink as a path that holds an entry. |
-| No entry in a tracked file, a tracked path, or the target of a tracked symlink | Passes. |
+| An entry in the text of a tracked file | Fails. |
+| An entry in a tracked path | Fails, and gives the number of such paths. |
+| An entry in the target of a symlink | Fails, as for an entry in a path. |
+| No entry in a file, a path, or a target | Passes. |
 | A list with no entry | Gives a notice that it did not scan, and passes. |
+
+When the job fails, GitHub skips `Gate`, so the verify of a pull request cannot
+pass. On `main`, `publish the book` does not run.
 
 The list has no entry before the owner sets the secret. It also has no entry on
 a pull request from a fork, because GitHub gives no secret to that run. A person
@@ -762,16 +766,23 @@ git ls-files -z | grep --null-data -F -i -f <file of the list> | tr '\0' '\n'
 ```
 
 That match does not read the target of a symlink. This loop finds each tracked
-symlink whose target holds an entry:
+symlink whose target holds an entry. Without `-z`, Git puts quotes around a path
+with unusual characters, so the loop reads the index with `-z`, as the script
+does:
 
 ```bash
-git ls-files -s | grep '^120000' | cut -f2- | while IFS= read -r link; do
-  git cat-file blob ":$link" | grep -q -F -i -f <file of the list> && echo "$link"
+git ls-files -s -z | while IFS= read -r -d '' entry; do
+  # An entry is "<mode> <object> <stage>", a tab, and the path.
+  read -r mode object _ <<< "${entry%%$'\t'*}"
+  [ "$mode" = 120000 ] || continue  # 120000 is the mode of a symlink
+  if git cat-file blob "$object" | grep -q -F -i -f <file of the list>; then
+    printf '%s\n' "${entry#*$'\t'}"
+  fi
 done
 ```
 
-When the job finds a hit, replace the name with a made-up name, in the text or
-in the path. See
+Replace each hit with a made-up name, in the text, the path, or the target of a
+symlink. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
 
