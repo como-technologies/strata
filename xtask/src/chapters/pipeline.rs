@@ -5,7 +5,8 @@ use super::DEV_ENV;
 use super::edits::{RC_PINS, REBUILT_PIN, RETAIN};
 use super::ids::{
     A111, DEV, PAYMENTS, RENUMBER_EDITED, RENUMBER_FINAL, RENUMBER_PRE, RENUMBER_REBUILT,
-    SAMPLE_CANDIDATE, SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE, SAMPLE_PRE,
+    SAMPLE_CANDIDATE, SAMPLE_FINAL, SAMPLE_PIN_FINAL, SAMPLE_PIN_PRE, SAMPLE_PRE, WEB_ADDONS_NEW,
+    WEB_ADDONS_OLD,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -19,6 +20,7 @@ const CSI_FINAL: &str = "1.66.0";
 pub(super) fn run(r: &mut Runner) {
     sample_pipeline(r);
     renumber(r);
+    renumber_chart(r);
 }
 
 /// The chapter `sample-pipeline`: a merge request publishes a candidate, a merge publishes a
@@ -280,5 +282,27 @@ fn renumber(r: &mut Runner) {
         1,
         false,
         "strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.2 --json | jq -c '.pairs[0] | .archivesCompared, .archivesChanged'",
+    );
+}
+
+/// The part of the chapter `renumber` for a chart whose file in the download is no archive (#828).
+/// The add-on profile `web-addons` pins the chart `nginx` of Bitnami, at 25.1.5 in 1.0.0 and at
+/// 25.1.6 in 1.0.1, with the same values. The host of the charts refuses each file, so Palette puts
+/// its error answer in the download in place of the chart.
+fn renumber_chart(r: &mut Runner) {
+    r.tenant(|t| t.bitnami(DEV, &["25.1.5", "25.1.6"]));
+    r.tenant(|t| t.bitnami_profile(DEV, WEB_ADDONS_OLD, "1.0.0", "25.1.5"));
+    r.tenant(|t| t.bitnami_profile(DEV, WEB_ADDONS_NEW, "1.0.1", "25.1.6"));
+    r.step(
+        "renumber-not-readable",
+        1,
+        false,
+        "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1",
+    );
+    r.step(
+        "renumber-not-readable-json",
+        1,
+        false,
+        "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --json | jq -c '.pairs[0].archivesNotReadable[]'",
     );
 }

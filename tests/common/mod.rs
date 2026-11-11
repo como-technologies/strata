@@ -1576,24 +1576,36 @@ pub fn serve_downloads(
     records: &[(String, strata::snapshot::Snapshot)],
     files: &BuildFiles,
 ) -> strata::api::MemoryApi {
+    serve_pack_files(api, records, &|p| build_archive(p, files))
+}
+
+/// The archive of the build of the pack `p`, as [`serve_downloads`] puts it in a download, with
+/// the files that `files` gives. None when `files` gives none.
+pub fn build_archive(p: &strata::snapshot::Pack, files: &BuildFiles) -> Option<Vec<u8>> {
+    let files = files(p)?;
+    let files: Vec<(&str, &str)> = files
+        .iter()
+        .map(|(path, text)| (*path, text.as_str()))
+        .collect();
+    let kind = PackType::parse(&p.kind)?;
+    if kind == PackType::Helm {
+        return Some(chart_archive(&p.name, &files));
+    }
+    let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
+    Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
+}
+
+/// `api`, which also serves the download of the profile version of each of `records`. The file
+/// of each pack is the one that `file` gives, such as an archive from [`build_archive`] or an
+/// error answer of the host of a chart. A pack for which `file` gives None has no file in the
+/// download, as a pack of a private registry.
+pub fn serve_pack_files(
+    api: strata::api::MemoryApi,
+    records: &[(String, strata::snapshot::Snapshot)],
+    file: &dyn Fn(&strata::snapshot::Pack) -> Option<Vec<u8>>,
+) -> strata::api::MemoryApi {
     records.iter().fold(api, |api, (_, s)| {
-        let archives: Vec<Option<Vec<u8>>> = s
-            .packs
-            .iter()
-            .map(|p| {
-                let files = files(p)?;
-                let files: Vec<(&str, &str)> = files
-                    .iter()
-                    .map(|(path, text)| (*path, text.as_str()))
-                    .collect();
-                let kind = PackType::parse(&p.kind)?;
-                if kind == PackType::Helm {
-                    return Some(chart_archive(&p.name, &files));
-                }
-                let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
-                Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
-            })
-            .collect();
+        let archives: Vec<Option<Vec<u8>>> = s.packs.iter().map(file).collect();
         let packs: Vec<DownloadPack> = s
             .packs
             .iter()

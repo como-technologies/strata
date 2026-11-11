@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::collections::btree_map::{BTreeMap, Entry};
 
-use crate::api::{PackArchive, Palette, PaletteApi, ProfileDownload};
+use super::ArchiveNotReadable;
+use crate::api::{PackFile, Palette, PaletteApi, ProfileDownload};
 use crate::error::Result;
 use crate::ops::{connected, scope_of};
 use crate::snapshot::{Pack, Snapshot, Template};
@@ -17,6 +18,10 @@ pub(super) enum ArchiveCheck {
     Same,
     /// The path of each file that differs between the two archives.
     Changed(Vec<String>),
+    /// The file of the pack in the download of a side is not a tar archive that gzip compresses:
+    /// each such side, with its reason. Strata cannot show that the files of the two builds are
+    /// the same.
+    NotReadable(Vec<ArchiveNotReadable>),
     /// Strata did not compare the archives. A side is no published version of a cluster profile,
     /// or its download holds no archive of the pack at the version of the record.
     NotCompared,
@@ -63,15 +68,31 @@ where
         };
         self.read(&va, a)?;
         self.read(&vb, b)?;
-        let archives = (
-            self.files.get(&va).and_then(|d| archive_of(d, x)),
-            self.files.get(&vb).and_then(|d| archive_of(d, y)),
-        );
-        Ok(match archives {
-            (Some(ax), Some(ay)) => match ax.changed_files(ay) {
-                files if files.is_empty() => ArchiveCheck::Same,
-                files => ArchiveCheck::Changed(files),
-            },
+        let sides = [
+            (self.files.get(&va).and_then(|d| file_of(d, x)), x),
+            (self.files.get(&vb).and_then(|d| file_of(d, y)), y),
+        ];
+        let not_readable: Vec<ArchiveNotReadable> = sides
+            .iter()
+            .filter_map(|(file, p)| match file {
+                Some(PackFile::NotReadable(reason)) => Some(ArchiveNotReadable {
+                    key: p.key.clone(),
+                    version: p.version.clone(),
+                    reason: reason.clone(),
+                }),
+                _ => None,
+            })
+            .collect();
+        if !not_readable.is_empty() {
+            return Ok(ArchiveCheck::NotReadable(not_readable));
+        }
+        Ok(match sides.map(|(file, _)| file) {
+            [Some(PackFile::Archive(ax)), Some(PackFile::Archive(ay))] => {
+                match ax.changed_files(ay) {
+                    files if files.is_empty() => ArchiveCheck::Same,
+                    files => ArchiveCheck::Changed(files),
+                }
+            }
             _ => ArchiveCheck::NotCompared,
         })
     }
@@ -106,11 +127,11 @@ fn version_of(s: &Snapshot) -> Option<VersionAt> {
     })
 }
 
-/// The archive of the pack `p` in the download `d`, when the download holds one at the version of
-/// `p`. A download of a version that changed since its record can hold another version.
-fn archive_of<'d>(d: &'d ProfileDownload, p: &Pack) -> Option<&'d PackArchive> {
+/// The file of the pack `p` in the download `d`, when the list of the download names the pack at
+/// the version of `p`. A download of a version that changed since its record can hold another
+/// version.
+fn file_of<'d>(d: &'d ProfileDownload, p: &Pack) -> Option<&'d PackFile> {
     d.pack(&p.name)
-        .filter(|q| q.version == p.version)?
-        .archive
-        .as_ref()
+        .filter(|q| q.version == p.version)
+        .map(|q| &q.file)
 }

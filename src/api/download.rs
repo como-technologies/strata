@@ -6,7 +6,9 @@
 //! `type`, and its `filePath`. `filePath` is the path of the archive of the pack from the folder of
 //! the list.
 //! The archive of a pack is a tar archive that gzip compresses, with one top folder. An empty
-//! `filePath` means that the download holds no archive of the pack.
+//! `filePath` means that the download holds no archive of the pack. The file of a pack can also be
+//! another file, such as an error answer of the host of a Helm chart: see [`PackFile::NotReadable`].
+//! Strata keeps each other pack of such a download.
 //!
 //! Palette resolves the macros in the other files of the download, so they can hold the value of
 //! a macro. Strata reads the two lists and the archives of the packs, and no other file. It keeps
@@ -21,6 +23,7 @@ use super::Method;
 use crate::content::canon::{canonical_json, sha256_digest};
 use crate::error::{Error, Result};
 use crate::json::{arr, object_at, opt_str, str_at};
+use crate::text::plural;
 
 /// The file at the top of a download that names the list of the packs of each profile.
 const METADATA: &str = "metadata.json";
@@ -48,6 +51,10 @@ const ARCHIVE_ENDS: [&str; 2] = [".tar.gz", ".tgz"];
 /// memory.
 const UNPACKED_LIMIT: u64 = 1024 * 1024 * 1024;
 
+/// The most characters of a file or of an error that the reason of [`PackFile::NotReadable`]
+/// shows.
+const REASON_TEXT: usize = 120;
+
 /// The download of one profile version: each pack that its list names, by the name of the pack.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProfileDownload {
@@ -59,10 +66,27 @@ pub struct ProfileDownload {
 pub struct DownloadedPack {
     /// The version of the pack, as the list gives it.
     pub version: String,
-    /// The archive of the pack. None when the download holds no archive of the pack. Palette serves
+    /// What the download holds for the pack: its archive, no archive, or a file that strata cannot
+    /// read.
+    pub file: PackFile,
+}
+
+/// What the download holds for one pack.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PackFile {
+    /// The download holds no archive of the pack: its entry has an empty `filePath`. Palette serves
     /// none for a pack of a private pack registry or Helm registry, or of an OCI registry of Helm
     /// charts or of Zarf packages.
-    pub archive: Option<PackArchive>,
+    NoArchive,
+    /// The archive of the pack.
+    Archive(PackArchive),
+    /// The file of the pack is not a tar archive that gzip compresses: the reason.
+    ///
+    /// The reason gives the size of the file. When the file is text, it gives the start of the
+    /// text on one line, such as `263 bytes of text: <?xml ...`. Else it gives the error of the
+    /// read. Palette puts the answer of the host of a Helm chart in the download in place of the
+    /// chart, also an error answer, and the route answers HTTP 200.
+    NotReadable(String),
 }
 
 /// The files of the archive of one pack: the path of each file under its top folder, with a
@@ -90,11 +114,21 @@ impl ProfileDownload {
 
     /// Read `file`, the download that `path` gave.
     pub(crate) fn read(path: &str, file: &[u8]) -> Result<ProfileDownload> {
-        read_download(file).map_err(|message| Error::NotArchive {
+        read_download(file, UNPACKED_LIMIT).map_err(|message| Error::NotArchive {
             method: Method::Get,
             path: path.to_string(),
             message,
         })
+    }
+}
+
+impl DownloadedPack {
+    /// The archive of the pack, when the download holds one that strata reads.
+    pub fn archive(&self) -> Option<&PackArchive> {
+        match &self.file {
+            PackFile::Archive(archive) => Some(archive),
+            PackFile::NoArchive | PackFile::NotReadable(_) => None,
+        }
     }
 }
 
@@ -131,29 +165,50 @@ struct Budget(u64);
 
 impl Budget {
     /// Take `size` bytes, or fail when fewer are left.
-    fn take(&mut self, size: u64) -> std::result::Result<(), String> {
-        self.0 = self.0.checked_sub(size).ok_or_else(|| {
-            format!(
-                "the files hold more than {} MiB",
-                UNPACKED_LIMIT / 1024 / 1024
-            )
-        })?;
+    fn take(&mut self, size: u64) -> std::result::Result<(), Fault> {
+        self.0 = self.0.checked_sub(size).ok_or(Fault::Limit)?;
         Ok(())
     }
 }
 
-/// Read the download `file`: the two lists, and the archive of each pack.
+/// Why strata cannot read a tar archive that gzip compresses.
+#[derive(Debug, PartialEq, Eq)]
+enum Fault {
+    /// The files of the download hold more bytes than [`UNPACKED_LIMIT`]. Strata refuses the whole
+    /// download, also for the file of one pack.
+    Limit,
+    /// The bytes are not a tar archive that gzip compresses: the error of the read.
+    Format(String),
+}
+
+impl std::fmt::Display for Fault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Fault::Limit => write!(
+                f,
+                "the files hold more than {} MiB",
+                UNPACKED_LIMIT / 1024 / 1024
+            ),
+            Fault::Format(error) => f.write_str(error),
+        }
+    }
+}
+
+/// Read the download `file`: the two lists, and the archive of each pack. Strata reads `limit`
+/// bytes at most from its files: see [`UNPACKED_LIMIT`].
 ///
 /// The steps: unpack the lists and the archives, and no other file. Find the one `metadata.json`
 /// at the top. Read the list of the packs that it names. Then read each archive that the list
-/// names, from the folder of the list.
-fn read_download(file: &[u8]) -> std::result::Result<ProfileDownload, String> {
-    let mut budget = Budget(UNPACKED_LIMIT);
+/// names, from the folder of the list. A file of a pack that is not an archive gets its reason,
+/// and the other packs stay.
+fn read_download(file: &[u8], limit: u64) -> std::result::Result<ProfileDownload, String> {
+    let mut budget = Budget(limit);
     let files = unpack(file, &mut budget, |path| {
         file_name(path) == METADATA
             || file_name(path) == PACKS_METADATA
             || ARCHIVE_ENDS.iter().any(|end| path.ends_with(end))
-    })?;
+    })
+    .map_err(|fault| fault.to_string())?;
     let mut tops = files
         .keys()
         .filter_map(|path| path.strip_suffix(METADATA)?.strip_suffix('/'))
@@ -186,8 +241,8 @@ fn read_download(file: &[u8]) -> std::result::Result<ProfileDownload, String> {
         if !str_at(entry, "/manifestName").is_empty() || str_at(entry, "/name") != name.as_str() {
             continue;
         }
-        let archive = match str_at(entry, "/filePath") {
-            "" => None,
+        let file = match str_at(entry, "/filePath") {
+            "" => PackFile::NoArchive,
             path => {
                 let at = format!("{folder}/{path}");
                 let Some(bytes) = files.get(&at) else {
@@ -195,13 +250,59 @@ fn read_download(file: &[u8]) -> std::result::Result<ProfileDownload, String> {
                         "{list} names {path}, which the download does not hold"
                     ));
                 };
-                Some(pack_archive(bytes, &mut budget).map_err(|e| format!("{path}: {e}"))?)
+                pack_file(bytes, &mut budget).map_err(|fault| format!("{path}: {fault}"))?
             }
         };
         let version = str_at(entry, "/version").to_string();
-        packs.insert(name.clone(), DownloadedPack { version, archive });
+        packs.insert(name.clone(), DownloadedPack { version, file });
     }
     Ok(ProfileDownload { packs })
+}
+
+/// The file `bytes` of one pack: its archive, or the reason when it is not a tar archive that gzip
+/// compresses. Only [`Fault::Limit`] is an error, because it refuses the whole download.
+fn pack_file(bytes: &[u8], budget: &mut Budget) -> std::result::Result<PackFile, Fault> {
+    match pack_archive(bytes, budget) {
+        Ok(archive) => Ok(PackFile::Archive(archive)),
+        Err(Fault::Format(error)) => Ok(PackFile::NotReadable(not_readable(bytes, &error))),
+        Err(Fault::Limit) => Err(Fault::Limit),
+    }
+}
+
+/// The reason of the file `bytes` of a pack, whose read gave `error`: its size, and the start of
+/// its text when it is text, else `error`.
+///
+/// The file is text when it is UTF-8 with no control character other than white space. An example
+/// is `263 bytes of text: <?xml version="1.0" ...`. See [`one_line`] for the form of the text.
+fn not_readable(bytes: &[u8], error: &str) -> String {
+    let size = format!("{} {}", bytes.len(), plural(bytes.len(), "byte", "bytes"));
+    let text = std::str::from_utf8(bytes)
+        .ok()
+        .filter(|text| !text.chars().any(|c| c.is_control() && !c.is_whitespace()))
+        .map(one_line)
+        .filter(|line| !line.is_empty());
+    match text {
+        Some(line) => format!("{size} of text: {line}"),
+        None => format!("{size}: {}", one_line(error)),
+    }
+}
+
+/// The start of `text` on one line, as a reason shows it.
+///
+/// Each run of white space becomes one space, and strata drops each other control character. The
+/// line holds [`REASON_TEXT`] characters at most, and `...` follows a cut. So the answer of the
+/// host of a chart moves no cursor in a terminal.
+fn one_line(text: &str) -> String {
+    let mut chars = text
+        .split_whitespace()
+        .flat_map(|word| std::iter::once(' ').chain(word.chars()))
+        .filter(|c| !c.is_control())
+        .skip(1);
+    let start: String = chars.by_ref().take(REASON_TEXT).collect();
+    match chars.next() {
+        Some(_) => format!("{start}..."),
+        None => start,
+    }
 }
 
 /// The last segment of `path`.
@@ -222,7 +323,7 @@ fn json_file(files: &BTreeMap<String, Vec<u8>>, path: &str) -> std::result::Resu
 /// The paths keep the top folder when the files do not share one. The digest of `pack.json`
 /// covers its JSON with no `version`, when the file is a JSON object. The digest of `Chart.yaml`
 /// covers its lines with no line `version`.
-fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchive, String> {
+fn pack_archive(gz: &[u8], budget: &mut Budget) -> std::result::Result<PackArchive, Fault> {
     let files = unpack(gz, budget, |_| true)?;
     let top = files
         .keys()
@@ -291,15 +392,16 @@ fn unpack(
     gz: &[u8],
     budget: &mut Budget,
     keep: impl Fn(&str) -> bool,
-) -> std::result::Result<BTreeMap<String, Vec<u8>>, String> {
+) -> std::result::Result<BTreeMap<String, Vec<u8>>, Fault> {
+    let format = |e: std::io::Error| Fault::Format(e.to_string());
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(gz));
     let mut files = BTreeMap::new();
-    for entry in archive.entries().map_err(|e| e.to_string())? {
-        let mut entry = entry.map_err(|e| e.to_string())?;
+    for entry in archive.entries().map_err(format)? {
+        let mut entry = entry.map_err(format)?;
         if !entry.header().entry_type().is_file() {
             continue;
         }
-        let path = entry.path().map_err(|e| e.to_string())?;
+        let path = entry.path().map_err(format)?;
         let path = path.to_string_lossy();
         let path = path.strip_prefix("./").unwrap_or(&path).to_string();
         if !keep(&path) {
@@ -311,7 +413,7 @@ fn unpack(
         (&mut entry)
             .take(size)
             .read_to_end(&mut bytes)
-            .map_err(|e| format!("{path}: {e}"))?;
+            .map_err(|e| Fault::Format(format!("{path}: {e}")))?;
         files.insert(path, bytes);
     }
     Ok(files)
@@ -396,7 +498,7 @@ mod tests {
             (a.version.as_str(), b.version.as_str()),
             ("1.36.2-rc.1", "1.36.2")
         );
-        let (a, b) = (a.archive.as_ref().unwrap(), b.archive.as_ref().unwrap());
+        let (a, b) = (a.archive().unwrap(), b.archive().unwrap());
         // the top folder differs between the two builds, so the paths are those under it
         let paths: Vec<&str> = a.files().map(|(path, _)| path).collect();
         assert_eq!(paths, ["README.md", "pack.json", "values.yaml"]);
@@ -409,8 +511,8 @@ mod tests {
             download
                 .pack("kubernetes")
                 .unwrap()
-                .archive
-                .clone()
+                .archive()
+                .cloned()
                 .unwrap()
         };
         let (c, d) = (oci("1.36.2-rc.1"), oci("1.36.2"));
@@ -433,10 +535,10 @@ mod tests {
             &[("values.yaml", "a: 2\n"), ("presets.yaml", "b: 1\n")],
         )]);
         let (a, b) = (
-            &a.pack("kubernetes").unwrap().archive,
-            &b.pack("kubernetes").unwrap().archive,
+            a.pack("kubernetes").unwrap().archive(),
+            b.pack("kubernetes").unwrap().archive(),
         );
-        let (a, b) = (a.as_ref().unwrap(), b.as_ref().unwrap());
+        let (a, b) = (a.unwrap(), b.unwrap());
         assert_eq!(
             a.changed_files(b),
             ["charts/k8s.tgz", "presets.yaml", "values.yaml"]
@@ -460,8 +562,8 @@ mod tests {
             }])
         };
         let (a, b) = (pack("csi"), pack("storage"));
-        let a = a.pack("csi-aws-ebs").unwrap().archive.as_ref().unwrap();
-        let b = b.pack("csi-aws-ebs").unwrap().archive.as_ref().unwrap();
+        let a = a.pack("csi-aws-ebs").unwrap().archive().unwrap();
+        let b = b.pack("csi-aws-ebs").unwrap().archive().unwrap();
         assert_eq!(a.changed_files(b), ["pack.json"]);
     }
 
@@ -476,7 +578,7 @@ mod tests {
             archive: Some(chart_archive("nginx", files)),
             manifests: &[],
         }]);
-        download.pack("nginx").unwrap().archive.clone().unwrap()
+        download.pack("nginx").unwrap().archive().cloned().unwrap()
     }
 
     #[test]
@@ -549,7 +651,11 @@ mod tests {
             },
         ]);
         for name in ["private-pack", "private-chart", "zarf-package"] {
-            assert_eq!(download.pack(name).unwrap().archive, None, "{name}");
+            assert_eq!(
+                download.pack(name).unwrap().file,
+                PackFile::NoArchive,
+                "{name}"
+            );
         }
         assert!(download.pack("platform-rules").is_none());
         // a manifest of a pack with an archive is no file of the archive
@@ -563,12 +669,7 @@ mod tests {
                 "zarf-package"
             ]
         );
-        let k8s = download
-            .pack("kubernetes")
-            .unwrap()
-            .archive
-            .as_ref()
-            .unwrap();
+        let k8s = download.pack("kubernetes").unwrap().archive().unwrap();
         assert_eq!(k8s.files().count(), 1);
     }
 
@@ -609,30 +710,112 @@ mod tests {
         );
     }
 
+    /// The chart `nginx` of a Helm registry whose file in the download is `file`.
+    fn chart_file_of(file: &[u8]) -> DownloadPack<'static> {
+        DownloadPack {
+            name: "nginx",
+            version: "25.1.5",
+            kind: PackType::Helm,
+            private: false,
+            archive: Some(file.to_vec()),
+            manifests: &[],
+        }
+    }
+
+    /// The criterion of #828: the download holds the error answer of the host of a chart in place
+    /// of the chart. Strata keeps the other packs with their archives, and gives the chart no
+    /// archive and a reason.
     #[test]
-    fn an_archive_of_a_pack_that_is_not_gzip_is_refused_and_names_its_path() {
-        let download = profile_download(
+    fn a_pack_file_that_is_not_an_archive_gets_a_reason_and_the_other_packs_keep_their_archives() {
+        let download = read(&[
+            built(
+                "kubernetes",
+                "1.36.2",
+                "kubernetes-0123456789ab",
+                &[("values.yaml", "a: 1\n")],
+            ),
+            chart_file_of(written::CHART_HOST_REFUSAL.as_bytes()),
+        ]);
+        let k8s = download.pack("kubernetes").unwrap().archive().unwrap();
+        let paths: Vec<&str> = k8s.files().map(|(path, _)| path).collect();
+        assert_eq!(paths, ["pack.json", "values.yaml"]);
+        let nginx = download.pack("nginx").unwrap();
+        assert_eq!(nginx.version, "25.1.5");
+        assert_eq!(nginx.archive(), None);
+        assert_eq!(
+            nginx.file,
+            PackFile::NotReadable(
+                "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
+                 <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3Z..."
+                    .to_string()
+            )
+        );
+    }
+
+    /// A file that is not text gets its size and the error of the read. A file with a control
+    /// character other than white space is not text, so no escape of a terminal reaches the reason.
+    #[test]
+    fn a_pack_file_that_is_not_text_gets_its_size_and_the_error_of_the_read() {
+        for file in [&b"\xff\xfe\x00\x01 not an archive"[..], b"\x1b[2J<Error/>"] {
+            let download = read(&[chart_file_of(file)]);
+            let PackFile::NotReadable(reason) = &download.pack("nginx").unwrap().file else {
+                panic!("{download:?}");
+            };
+            let size = format!("{} bytes: ", file.len());
+            assert!(reason.starts_with(&size), "{reason}");
+            assert!(reason.len() > size.len(), "{reason}");
+            assert!(!reason.chars().any(char::is_control), "{reason:?}");
+        }
+        let download = read(&[chart_file_of(b"x")]);
+        let PackFile::NotReadable(reason) = &download.pack("nginx").unwrap().file else {
+            panic!("{download:?}");
+        };
+        assert_eq!(reason, "1 byte of text: x");
+    }
+
+    #[test]
+    fn the_text_of_a_reason_is_one_line_of_120_characters_at_most_with_no_control_character() {
+        assert_eq!(one_line(" a\n\tb\u{1b} c\r\n"), "a b c");
+        assert_eq!(one_line("\n \t"), "");
+        // a cut falls between two characters, also in a character of more than one byte
+        let long = "é".repeat(REASON_TEXT + 1);
+        let line = one_line(&long);
+        assert_eq!(line, format!("{}...", "é".repeat(REASON_TEXT)));
+        assert_eq!(one_line(&"é".repeat(REASON_TEXT)), "é".repeat(REASON_TEXT));
+    }
+
+    /// The budget covers the files of each pack archive too. A pack archive that holds more bytes
+    /// than the budget has left refuses the whole download, and gets no reason.
+    #[test]
+    fn a_pack_archive_over_the_budget_refuses_the_whole_download() {
+        let large = "a".repeat(100_000);
+        let file = profile_download(
             UID,
             "aws-stack",
-            &[DownloadPack {
-                archive: Some(br#"{"code":"NotFound"}"#.to_vec()),
-                ..built("kubernetes", "1.36.2", "kubernetes-0123456789ab", &[])
-            }],
+            &[built(
+                "kubernetes",
+                "1.36.2",
+                "kubernetes-0123456789ab",
+                &[("values.yaml", &large)],
+            )],
         );
-        let message = refusal(&download);
-        assert!(
-            message.starts_with("packs/kubernetes/kubernetes-1.36.2.tar.gz: "),
-            "{message}"
+        assert!(file.len() < 50_000, "the files compress well");
+        let message = read_download(&file, 50_000).unwrap_err();
+        assert_eq!(
+            message,
+            "packs/kubernetes/kubernetes-1.36.2.tar.gz: the files hold more than 1024 MiB"
         );
+        assert!(read_download(&file, UNPACKED_LIMIT).is_ok());
     }
 
     #[test]
     fn the_budget_refuses_more_bytes_than_it_has() {
         let mut budget = Budget(10);
         assert!(budget.take(6).is_ok());
+        assert_eq!(budget.take(5), Err(Fault::Limit));
         assert_eq!(
-            budget.take(5),
-            Err("the files hold more than 1024 MiB".to_string())
+            Fault::Limit.to_string(),
+            "the files hold more than 1024 MiB"
         );
     }
 

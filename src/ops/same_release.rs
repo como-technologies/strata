@@ -116,7 +116,7 @@ impl Described for PairStatus {
                 "The roots differ only because a pack moved to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
             }
             Self::Renumber => {
-                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this when the archives agree. Strata compares the archives of each such pack in the downloads of Palette. archivesCompared names each pack whose archives differ only by the version in pack.json, or by the line version of Chart.yaml for a Helm chart. archivesNotCompared names each pack whose archive the pipeline must check."
+                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this when the archives agree. Strata compares the archives of each such pack in the downloads of Palette. archivesCompared names each pack whose archives differ only by the version in pack.json, or by the line version of Chart.yaml for a Helm chart. archivesNotReadable names each pack whose file in a download is no archive, and the pair fails. archivesNotCompared names each pack whose archive the pipeline must check."
             }
             Self::Different => {
                 "This is not the same release. The field reasons lists each difference."
@@ -179,6 +179,11 @@ pub struct Pair {
     /// The pair is then `different`, and `reasons` names the files too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub archives_changed: Vec<ArchiveChange>,
+    /// Each pack of `renumbers` whose file in the download of a side is not a tar archive that gzip
+    /// compresses, once for each such side. Strata cannot show that the two builds hold the same
+    /// files. The pair is then `different`, and `reasons` names the pack too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives_not_readable: Vec<ArchiveNotReadable>,
     /// The key of each pack of `renumbers` whose archive can differ, and whose two archives strata
     /// did not compare. Its digest changed, or Palette gives none. A side is no published version
     /// of a cluster profile, or its download holds no archive of the pack. So the pipeline must
@@ -222,6 +227,30 @@ pub struct ArchiveChange {
     /// The path of each file that differs, under the top folder of the archive, in the order of
     /// the paths. A file that only one archive holds differs too.
     pub files: Vec<String>,
+}
+
+/// One side of a renumbered pack whose file in the download is not a tar archive that gzip
+/// compresses. Palette can put an error answer of the host of a Helm chart there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveNotReadable {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// The version of the pack on the side whose file strata cannot read.
+    pub version: String,
+    /// What the file holds: its size, and the start of its text when it is text, else the error
+    /// of the read. An example is `263 bytes of text: <?xml version="1.0" ...`.
+    pub reason: String,
+}
+
+impl ArchiveNotReadable {
+    /// The reason of the pair: `pack <key> <version> archive: not readable: <reason>`.
+    pub(crate) fn sentence(&self) -> String {
+        format!(
+            "pack {} {} archive: not readable: {}",
+            self.key, self.version, self.reason
+        )
+    }
 }
 
 /// Counts over the pairs.
@@ -342,6 +371,8 @@ struct PairReasons {
     archives_compared: Vec<String>,
     /// Each accepted renumber whose two archives differ in another file.
     archives_changed: Vec<ArchiveChange>,
+    /// Each side of an accepted renumber whose file in the download is no archive.
+    archives_not_readable: Vec<ArchiveNotReadable>,
     /// The key of each accepted renumber whose archive can differ, and that strata did not
     /// compare.
     archives_not_compared: Vec<String>,
@@ -419,7 +450,7 @@ impl PairReasons {
     /// The new build of a pack has a new digest, because its `pack.json` holds the new version.
     /// The digest alone cannot show that only that file changed. So `check` compares the files of
     /// the two archives, for a renumber whose digest changed or that has no digest. A file that
-    /// differs is a reason.
+    /// differs is a reason, and so is a file of a side that is no archive.
     fn renumbered<E>(
         &mut self,
         pd: &PackDiff,
@@ -439,6 +470,11 @@ impl PairReasons {
                     key: pd.key.clone(),
                     files,
                 });
+            }
+            ArchiveCheck::NotReadable(sides) => {
+                self.reasons
+                    .extend(sides.iter().map(ArchiveNotReadable::sentence));
+                self.archives_not_readable.extend(sides);
             }
             ArchiveCheck::NotCompared => self.archives_not_compared.push(pd.key.clone()),
         }
@@ -520,6 +556,7 @@ fn build_pair<E>(
         renumbers,
         archives_compared,
         archives_changed,
+        archives_not_readable,
         archives_not_compared,
     } = pair_reasons(&d, a, b, options, check)?;
     // The root does not cover the annotations, so two records with one root can boot their nodes
@@ -557,6 +594,7 @@ fn build_pair<E>(
         renumbers,
         archives_compared,
         archives_changed,
+        archives_not_readable,
         archives_not_compared,
         reasons,
         minted_uid_only: d

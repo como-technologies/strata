@@ -4,14 +4,16 @@
 use strata::model::pack_type::PackType;
 
 use crate::archive::{
-    DownloadPack, chart_archive, chart_file, pack_archive, profile_download, tgz,
+    CHART_HOST_REFUSAL, DownloadPack, chart_archive, chart_file, pack_archive, profile_download,
+    tgz,
 };
 use crate::support::UID;
 
 /// Downloads of a profile version, as Palette writes them. The packs are a pack with its archive
 /// and a manifest, a pack of a private registry, and a manifest pack. Another seed holds the chart
-/// of a Helm registry. The other seeds are a download with no list, an archive of a pack that is
-/// no gzip, and an answer that is JSON.
+/// of a Helm registry, and one more holds the error answer of the host of a chart in place of the
+/// chart. The other seeds are a download with no list, an archive of a pack that is no gzip, and
+/// an answer that is JSON.
 pub(super) fn files() -> Vec<Vec<u8>> {
     let none = |name, kind, private| DownloadPack {
         name,
@@ -75,12 +77,33 @@ pub(super) fn files() -> Vec<Vec<u8>> {
         )),
         ..none("nginx", PackType::Helm, false)
     }];
+    // the host of the chart refused the file, so the download holds its answer in place of the
+    // chart, beside the archive of another pack
+    let refused = [
+        DownloadPack {
+            version: "1.36.2",
+            archive: Some(pack_archive(
+                "kubernetes",
+                "1.36.2",
+                "k8s",
+                "kubernetes-0123456789ab",
+                &[],
+            )),
+            ..none("kubernetes", PackType::Spectro, false)
+        },
+        DownloadPack {
+            version: "25.1.5",
+            archive: Some(CHART_HOST_REFUSAL.as_bytes().to_vec()),
+            ..none("nginx", PackType::Helm, false)
+        },
+    ];
     vec![
         profile_download(UID, "aws-stack", &packs),
         profile_download(UID, "aws-stack", &packs[2..]),
         profile_download(UID, "aws-stack", &flat),
         profile_download(UID, "aws-stack", &labeled),
         profile_download(UID, "aws-stack", &charted),
+        profile_download(UID, "aws-stack", &refused),
         profile_download(UID, "aws-stack", &not_gzip),
         tgz(&[(format!("{UID}/spc.json"), b"{}".to_vec())]),
         br#"{"Reader":{}}"#.to_vec(),

@@ -9,7 +9,9 @@ use serde_json::{Value, json};
 use strata::api::MemoryApi;
 use strata::diff::{self, ImpactLevel, Renumber};
 use strata::model::pack_type::PackType;
-use strata::ops::{self, ArchiveChange, Chain, PairStatus, Policy, SameReleaseOptions};
+use strata::ops::{
+    self, ArchiveChange, ArchiveNotReadable, Chain, PairStatus, Policy, SameReleaseOptions,
+};
 use strata::snapshot::{Pack, Snapshot, Template};
 
 use crate::common;
@@ -724,6 +726,92 @@ fn allow_renumber_passes_a_helm_chart_whose_archives_differ_only_in_the_version_
             }]
         );
     }
+}
+
+/// The criterion of #828: the download of a side holds the error answer of the host of a chart in
+/// place of the chart. The renumber of the chart names the version and the reason, and does not
+/// pass. The other renumber keeps the compare of its archives.
+#[test]
+fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_renumber() {
+    let dir = fixtures();
+    let helm = |profile: &mut Value, _: &mut Value| {
+        for p in pack_refs(profile, "csi-aws-ebs") {
+            p["type"] = json!(PackType::Helm);
+        }
+    };
+    let builds = |k8s, csi| [("kubernetes", k8s), ("csi-aws-ebs", csi)];
+    let records = pair(
+        release(
+            dir.path(),
+            UID_OLD,
+            "1.4.0-rc.1",
+            &builds("1.29.4-rc.1", "1.28.0-rc.1"),
+            &helm,
+        ),
+        release(
+            dir.path(),
+            UID_NEW,
+            "1.4.0",
+            &builds("1.29.4", "1.28.0"),
+            &helm,
+        ),
+    );
+    // the host of the chart refuses the file of the final version
+    let same = |p: &Pack| chart_build(p, "1.28.0", &[]);
+    let refused = |p: &Pack| match (p.name.as_str(), p.version.as_str()) {
+        ("csi-aws-ebs", "1.28.0") => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
+        _ => common::build_archive(p, &same),
+    };
+    let api = common::serve_pack_files(MemoryApi::new(), &records, &refused);
+    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let p = &c.pairs[0];
+    assert_eq!(p.status, PairStatus::Different);
+    assert_eq!(c.exit_code(), 1);
+    let reason = "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
+        <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3Z...";
+    assert_eq!(
+        p.archives_not_readable,
+        [ArchiveNotReadable {
+            key: "csi/csi-aws-ebs".to_string(),
+            version: "1.28.0".to_string(),
+            reason: reason.to_string(),
+        }]
+    );
+    assert_eq!(
+        p.reasons,
+        [format!(
+            "pack csi/csi-aws-ebs 1.28.0 archive: not readable: {reason}"
+        )]
+    );
+    assert_eq!(p.archives_compared, ["k8s/kubernetes"]);
+    assert!(p.archives_not_compared.is_empty());
+    let text = common::terminal().render_chain(&c).unwrap();
+    for line in [
+        "               kubernetes  1.29.4-rc.1 -> 1.29.4 (pre-release to final; archive: same files)",
+        "               csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not readable)",
+        &format!("               pack csi/csi-aws-ebs 1.28.0 archive: not readable: {reason}"),
+    ] {
+        assert!(text.lines().any(|l| l == line), "{line:?} in\n{text}");
+    }
+    let json: Value = serde_json::to_value(&c).unwrap();
+    assert_eq!(
+        json["pairs"][0]["archivesNotReadable"],
+        json!([{"key": "csi/csi-aws-ebs", "version": "1.28.0", "reason": reason}])
+    );
+    // each side whose file is no archive has its own reason
+    let both = |p: &Pack| match p.name.as_str() {
+        "csi-aws-ebs" => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
+        _ => common::build_archive(p, &same),
+    };
+    let api = common::serve_pack_files(MemoryApi::new(), &records, &both);
+    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let versions: Vec<&str> = c.pairs[0]
+        .archives_not_readable
+        .iter()
+        .map(|n| n.version.as_str())
+        .collect();
+    assert_eq!(versions, ["1.28.0-rc.1", "1.28.0"]);
+    assert_eq!(c.pairs[0].reasons.len(), 2);
 }
 
 /// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of
