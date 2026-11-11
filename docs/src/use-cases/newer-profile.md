@@ -4,10 +4,10 @@
 
 A pipeline has three levels of versions. A pack goes to a registry, a profile
 version pins the packs, and the definition of a cluster pins the profile
-versions. The pipeline of the team publishes a new version of a profile. Each
-record of the old version still verifies, because Palette still holds what the
-record holds. A pin that is behind names a pack, and not the profile. So no check
-says that the new version of the profile exists.
+versions. The pipeline of the team publishes a new version of a profile.
+`verify` still passes on each record of the old version, because Palette still
+holds what the record holds. A pin that is behind names a pack, and not the
+profile. So no check says that the new version of the profile exists.
 
 In this example, the record of `dev` holds `aws-stack@1.0.0`. The pipeline
 published 1.1.0 and the pre-release 1.2.0-rc.1 in `dev`. The project `prod` holds

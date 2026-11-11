@@ -186,7 +186,7 @@ pub struct Pin {
     pub registry_sync_error: Option<String>,
 }
 
-/// A record that pins a pack version.
+/// A record that pins a pack version, or that holds a profile version.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PinnedBy {
@@ -195,6 +195,20 @@ pub struct PinnedBy {
     /// What the record holds, as its title: `aws-stack@1.1.1`, or `aws-stack@1.1.1 on cluster
     /// payments`.
     pub subject: String,
+}
+
+impl PinnedBy {
+    /// Add the record at `path`, whose title is `subject`, to the records `by`. A record that `by`
+    /// names already is not added again.
+    fn add(by: &mut Vec<PinnedBy>, path: &Path, subject: &str) {
+        let path = path.display().to_string();
+        if !by.iter().any(|b| b.path == path) {
+            by.push(PinnedBy {
+                path,
+                subject: subject.to_string(),
+            });
+        }
+    }
 }
 
 /// One newer version of a pack.
@@ -391,6 +405,7 @@ struct Check<'a> {
 }
 
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
+///
 /// Also report the profile versions that `records` hold, and the newer published versions of each
 /// profile.
 ///
@@ -486,13 +501,7 @@ fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
             if pinned.holders.last() != Some(&loaded.len()) {
                 pinned.holders.push(loaded.len());
             }
-            let by = PinnedBy {
-                path: path.display().to_string(),
-                subject: subject.clone(),
-            };
-            if !pinned.pin.pinned_by.iter().any(|b| b.path == by.path) {
-                pinned.pin.pinned_by.push(by);
-            }
+            PinnedBy::add(&mut pinned.pin.pinned_by, path, &subject);
         }
         loaded.push(snap);
     }

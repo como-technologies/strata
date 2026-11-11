@@ -360,7 +360,7 @@ function packNews(x, subject, ms) {
   if (!ms.length) return "";
   if (ms.length === 1) {
     const row = newerRowOf(subject, ms[0]);
-    return h`${move(ms[0].name, ms[0].version, ms[0].newer)}${row && row.new ? h` <span class="badge fresh">new</span>` : ""}`;
+    return h`${move(ms[0].name, ms[0].version, ms[0].newer)}${newChip(row && row.new)}`;
   }
   const rows = D.newer.filter(r => r.profiles.includes(subject));
   const repave = rows.filter(r => r.impact === "repave").length, may = rows.filter(r => r.impact === "may-repave").length;
@@ -368,11 +368,11 @@ function packNews(x, subject, ms) {
 }
 
 // profileVersionNews tells the newest published version of the profile itself, when it is newer than the record. Its words differ
-// from the words of a pack that has a newer version, so a person can tell the two apart. It is "" when the profile has none.
+// from the words of a pack that has a newer version, so a person can see the difference. It is "" when the profile has none.
 function profileVersionNews(x) {
   const n = x.newerVersion;
   if (!n) return "";
-  return h`Newer profile version ${ref(x.name, n.version)}.${n.new ? h` <span class="badge fresh">new</span>` : ""}`;
+  return h`Newer profile version ${ref(x.name, n.version)}.${newChip(n.new)}`;
 }
 
 // notCheckedLine tells why a profile was not fully checked, from the rows of /v1/notchecked.

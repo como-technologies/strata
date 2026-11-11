@@ -1673,8 +1673,8 @@ func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 	mustHold(t, "the row", row, `traefik<span class="ver">@38.0.1</span>`, "<div>vendor-product ran another digest in pods than the first one seen.</div>")
 }
 
-// Issue #707. The row of a profile names the newer published version of the profile itself, in words
-// that differ from the words of a pack with a newer version. The tile of the newer versions counts it,
+// Issue #707. The row of a profile names the newer published version of the profile itself. Its words
+// differ from the words of a pack with a newer version. The tile of the newer versions counts it,
 // and the filter "Newer" holds it.
 func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T) {
 	screens := render(t, devdata.StateOK, false)

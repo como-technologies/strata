@@ -4,7 +4,7 @@ Report the pack versions that records pin, and the newer versions that the
 registries offer. Also report the profile versions that records hold, and the
 newer versions of each profile that Palette holds. `verify` asks whether Palette
 still has what a record holds. `behind` asks the other question: whether the
-registry or the pipeline has moved on since.
+registry or the pipeline has a newer version since then.
 
 The examples use the project `dev`, whose records hold `aws-stack@1.0.0` and
 `aws-stack@1.1.1`.
@@ -91,11 +91,9 @@ profile, the version that the records hold, and the scope of the version. Then i
 names the newer versions, newest first. The line under it gives the time that
 Palette created the newest version. Palette gives no time of the publish.
 
-- **Palette selects the versions.** The document of a version lists the published
-  versions of its profile. They have the same name and the same project, or the
-  tenant scope for a profile of the tenant. So `behind` does not name 1.3.0 of
-  `prod` or 2.0.0 of the tenant. A version that nobody published is not in the
-  list. See [The versions of a profile](../internals/palette/profiles.md#the-versions-of-a-profile).
+- **Palette selects the versions** of the same name in the scope of the version.
+  So `behind` does not name 1.3.0 of `prod` or 2.0.0 of the tenant. See
+  [The versions of a profile](../internals/palette/profiles.md#the-versions-of-a-profile).
 - **Strata orders the versions,** as it orders the versions of a pin: see
   [A pre-release](#a-pre-release). Palette gives the list in no order, and no route
   says that a version is newer. See

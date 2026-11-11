@@ -4,6 +4,11 @@ use super::{count_of, registry_sync_suffix};
 use crate::model::validation::answer_lines;
 use crate::text::and_list;
 
+/// The status of a pin or of a profile version that strata could not check.
+const NOT_CHECKED: &str = "not checked";
+/// The status of a pin or of a profile version with no newer version.
+const CURRENT: &str = "current";
+
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
 /// versions that arrived when there are any. When the records hold a profile version, the line
 /// ends with `; 2 profile versions: 1 behind`, and the profile versions not checked.
@@ -44,14 +49,14 @@ pub(crate) fn behind_heading(r: &crate::ops::BehindReport) -> String {
 /// newer versions are newest first, as for a pin.
 pub(crate) fn profile_status(p: &crate::ops::ProfilePin) -> String {
     if p.error.is_some() {
-        "not checked".to_string()
+        NOT_CHECKED.to_string()
     } else if p.gone {
         "gone".to_string()
     } else if p.behind {
         let newer: Vec<&str> = p.newer.iter().map(|n| n.version.as_str()).collect();
         format!("behind: {}", newer.join(", "))
     } else {
-        "current".to_string()
+        CURRENT.to_string()
     }
 }
 
@@ -68,12 +73,12 @@ pub(crate) fn created_since(p: &crate::ops::ProfilePin) -> Option<String> {
 /// its state and what a move to it drops: `1.64.0 (deprecated, drops arm64)`.
 pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     let mut text = if pin.error.is_some() {
-        "not checked".to_string()
+        NOT_CHECKED.to_string()
     } else if pin.behind {
         let newer: Vec<String> = pin.newer.iter().map(newer_version).collect();
         format!("behind: {}", newer.join(", "))
     } else {
-        "current".to_string()
+        CURRENT.to_string()
     };
     if pin.floating {
         let now = pin

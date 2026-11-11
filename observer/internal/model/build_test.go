@@ -460,7 +460,8 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 		t.Errorf("counts %+v", s.Counts)
 	}
 	got := reasons(s.Events)
-	if !slices.Contains(got, "newer NewProfileVersion barney-addons@1.3.1") || slices.Contains(got, "newer NewProfileVersion barney-base@1.5.0") {
+	addonsEvent, baseEvent := "newer "+reasonNewProfile+" barney-addons@1.3.1", "newer "+reasonNewProfile+" barney-base@1.5.0"
+	if !slices.Contains(got, addonsEvent) || slices.Contains(got, baseEvent) {
 		t.Errorf("events %q", got)
 	}
 	for _, e := range s.Events {

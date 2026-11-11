@@ -1001,6 +1001,23 @@ pub fn snapshot_of_ref(
     )
 }
 
+/// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted. The
+/// report has the time `2026-09-26T00:00:00Z`, with no progress output.
+pub fn behind_of(
+    api: &strata::api::MemoryApi,
+    records: &[std::path::PathBuf],
+    options: &strata::ops::BehindOptions,
+) -> strata::ops::BehindReport {
+    strata::ops::behind(
+        records,
+        options,
+        |_| Ok(strata::api::Palette::new(api)),
+        "2026-09-26T00:00:00Z",
+        &strata::term::progress::Progress::silent(),
+    )
+    .unwrap()
+}
+
 /// A snapshot of the candidate file `file`, resolved against the in-memory Palette `api` and
 /// fetched at `t0`, with no validation and no progress output.
 pub fn candidate_snapshot(

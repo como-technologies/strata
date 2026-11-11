@@ -711,7 +711,7 @@ of the secret does not show, because the two sides hold the mask: see
   Each entry has:
   - `name`, `version`, and `uid`.
   - `scope`: `project`, `tenant`, or `system`, from the document of the version.
-    Absent when strata could not read the document.
+    Absent when strata could not read the document, or the document does not give it.
   - `pinnedBy[]`: `path` and `subject` of each record that holds it.
   - `newer[]`: the newer published versions of the profile, newest first, by the
     order of the pins. Palette lists the versions of the same name in the scope

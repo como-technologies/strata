@@ -65,6 +65,13 @@ check annotation-tenant 0 '#113: in the project, the document of the tenant vers
   bash -c "\"$live/api.sh\" get /v1/clusterprofiles/$T | jq -e '.metadata.annotations.scope == \"tenant\"'"
 check annotation-project 0 '#113: the document of the release version gives the scope project' -- \
   bash -c "\"$live/api.sh\" get /v1/clusterprofiles/$R | jq -e '.metadata.annotations.scope == \"project\"'"
+# the versions of a profile are the versions of its name in its own scope (#707)
+check versions-tenant 0 '#707: the versions in the document of the tenant version name the tenant uid, and not the project uid' -- \
+  bash -c "\"$live/api.sh\" get /v1/clusterprofiles/$T | jq -e --arg r '$R' --arg t '$T' \
+    '[.spec.versions[].uid] | (index(\$t) != null) and (index(\$r) == null)'"
+check versions-project 0 '#707: the versions in the document of the release version name the project uid, and not the tenant uid' -- \
+  bash -c "\"$live/api.sh\" get /v1/clusterprofiles/$R | jq -e --arg r '$R' --arg t '$T' \
+    '[.spec.versions[].uid] | (index(\$r) != null) and (index(\$t) == null)'"
 
 echo "== what strata says" | tee -a steps.log
 check list-scope 0 '#113: list --json gives scope tenant for the tenant version and project for the release version' -- \

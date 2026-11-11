@@ -1092,8 +1092,9 @@ field, a value, an input, or an option is in the sections above.
   - A profile version that strata cannot read makes the exit `2`. A version that Palette no
     longer holds is `gone`, and the exit does not change.
   - The terminal report ends with one `[profile]` line for each profile version. Its first
-    line ends with `; <n> profile versions: <m> behind`. The markdown report has a second
-    table. A script that reads the text must read the new lines, or read `--json`.
+    line ends with `; <n> profile versions: <m> behind`, and `, <k> not checked` after a failed
+    read. The markdown report has a second table. A script that reads the text must read the
+    new lines, or read `--json`.
   - `behind` sends one more request for each profile version, and one for the newest version
     of each profile version that is behind. With `--pin`, it sends none of them.
 - **The observer gives the status `newer` to a profile with a newer version.** Before, such

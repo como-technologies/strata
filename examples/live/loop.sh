@@ -117,8 +117,8 @@ if stage 3 "the publish"; then
     in_repo "$strata" same-release candidate.json releases/1.0.1.json
   check commit-publish 0 'main records the published version' -- \
     in_repo bash -c 'git add releases && git commit -qm "record 1.0.1"'
-  # the publish of the next version: Palette lists it with the release, so behind names it for the
-  # record of the release and for the record of cluster A, which runs the release
+  # the publish of the next version: Palette lists it with the release. So behind names it for the
+  # record of the release, and for the record of cluster A, which runs the release
   check behind-profile 1 "#707: behind on the records of the release and of cluster A exits 1: $NAME has a newer version" -- \
     "$strata" behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json
   check behind-profile-names 0 "#707: behind names $NAME@1.0.1 as a newer version of $NAME@1.0.0, for the two records" -- \

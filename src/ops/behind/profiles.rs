@@ -2,10 +2,10 @@
 //! each profile.
 //!
 //! No route of Palette says that a newer version of a profile exists. The document of a version
-//! gives the published versions of its profile in `spec.versions[]`: the versions of the same
-//! name in the scope of the version. Palette selects them, so strata does not copy that rule. The
-//! list has no order, so strata orders it with [`version::compare`], as it orders the pins. When
-//! Palette gives the newer versions of a profile, strata reads that answer and drops this order.
+//! gives the published versions of its profile in `spec.versions[]`. They have the same name, in
+//! the scope of the version. Palette selects them, so strata does not copy that rule. The list has
+//! no order, so strata orders it with [`version::compare`], as it orders the pins. When Palette
+//! gives the newer versions of a profile, strata reads that answer and drops this order.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -148,19 +148,14 @@ pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, pa
             },
             project: source.project_uid.clone(),
         });
-        let by = PinnedBy {
-            path: path.display().to_string(),
-            subject: source.title(),
-        };
-        if !entry.profile.pinned_by.iter().any(|b| b.path == by.path) {
-            entry.profile.pinned_by.push(by);
-        }
+        PinnedBy::add(&mut entry.profile.pinned_by, path, &source.title());
     }
 }
 
-/// Give `profile` its scope and the newer published versions of its profile, with the connection
-/// `palette` to the project of its first record. `pre_release` also names a pre-release above a
-/// version that is not one: see [`is_newer`].
+/// Give `profile` its scope and the newer published versions of its profile.
+///
+/// `palette` is the connection to the project of its first record. `pre_release` also names a
+/// pre-release above a version that is not one: see [`is_newer`].
 ///
 /// A version that Palette no longer holds is `gone`. Each other failed read is the error of
 /// `profile`, with no newer version.
@@ -208,11 +203,9 @@ fn newer_of<A: PaletteApi>(
         })
         .filter(|n| !n.uid.is_empty() && is_newer(&n.version, &profile.version, pre_release))
         .collect();
-    newer.sort_by(|a, b| {
-        version::compare(&b.version, &a.version)
-            .then_with(|| b.version.cmp(&a.version))
-            .then_with(|| a.uid.cmp(&b.uid))
-    });
+    // newest first. Palette gives the list in no order, so the uid orders two equal versions
+    newer.sort_by(|a, b| a.uid.cmp(&b.uid));
+    newer.sort_by(|a, b| version::compare(&b.version, &a.version));
     if let Some(newest) = newer.first_mut() {
         let newest_doc = palette.profile_document(&newest.uid)?;
         newest.created = text(&newest_doc, "/metadata/creationTimestamp");

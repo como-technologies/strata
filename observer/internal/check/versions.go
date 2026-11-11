@@ -104,11 +104,7 @@ func mergeBehind(answers []docs.Behind) docs.Behind {
 				out.Pins = append(out.Pins, p)
 				continue
 			}
-			by := append(slices.Clone(out.Pins[i].PinnedBy), p.PinnedBy...)
-			if out.Pins[i].Error != nil && p.Error == nil {
-				out.Pins[i] = p
-			}
-			out.Pins[i].PinnedBy = uniquePinnedBy(by)
+			joinRead(&out.Pins[i], p, func(p docs.Pin) bool { return p.Error != nil }, func(p *docs.Pin) *[]docs.PinnedBy { return &p.PinnedBy })
 		}
 	}
 	slices.SortStableFunc(out.Pins, func(a, b docs.Pin) int {
@@ -216,11 +212,18 @@ func mergeProfiles(out, more []docs.ProfilePin) []docs.ProfilePin {
 			out = append(out, p)
 			continue
 		}
-		by := append(slices.Clone(out[i].PinnedBy), p.PinnedBy...)
-		if out[i].Error != nil && p.Error == nil {
-			out[i] = p
-		}
-		out[i].PinnedBy = uniquePinnedBy(by)
+		joinRead(&out[i], p, func(p docs.ProfilePin) bool { return p.Error != nil }, func(p *docs.ProfilePin) *[]docs.PinnedBy { return &p.PinnedBy })
 	}
 	return out
+}
+
+// joinRead joins the read of another answer into an entry with the same key. The read with no error
+// takes the place of a read that failed. The entry keeps each record that pins it or holds it, once.
+// failed says that a read has an error, and records gives the records of an entry.
+func joinRead[T any](entry *T, read T, failed func(T) bool, records func(*T) *[]docs.PinnedBy) {
+	by := append(slices.Clone(*records(entry)), *records(&read)...)
+	if failed(*entry) && !failed(read) {
+		*entry = read
+	}
+	*records(entry) = uniquePinnedBy(by)
 }

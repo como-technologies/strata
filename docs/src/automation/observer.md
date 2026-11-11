@@ -505,7 +505,7 @@ wrote. An apply keeps the keys of the seed.
 
 ## The pods of the cluster
 
-The observer can read the pods of its cluster. It then answers a sixth question:
+The observer can read the pods of its cluster. It then answers the last question:
 which digest does each tag run as on this cluster? No route of Palette gives that
 digest, so the read repeats nothing that Palette answers. See [The pods of a
 cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).

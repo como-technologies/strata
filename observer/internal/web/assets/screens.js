@@ -80,7 +80,7 @@ function newerTable(groups) {
       const unread = moveUnread(g.subject, k), same = !unread && buildOnly(r);
       const count = v => unread ? DASH : same ? mut(DASH) : v;
       const settings = same ? h`<span class="mut" title="Only the build of the pack changes: the values stay the same">same</span>` : h`<b>${count(r.fold.settings)}</b>`;
-      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${r.new ? h` <span class="badge fresh">new</span>` : ""}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
+      return h`<tr class="link" data-go="${href}"><td class="m"><a href="${href}">${r.name}</a></td><td class="m nw">${r.version}${ARROW}${r.newest}</td><td>${impactCell(g.subject, k, r)}</td><td class="n">${settings}</td><td class="n narrow-hide">${count(r.images)}</td><td class="n narrow-hide">${count(r.charts)}</td><td class="m mut narrow-hide nw">${day(r.listed)}${newChip(r.new)}</td><td class="narrow-hide">${k ? askCell(g.subject, k) : ""}</td></tr>`;
     })];
   }) : none}</tbody></table></div>`;
 }

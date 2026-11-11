@@ -65,14 +65,15 @@ impl Tenant {
         self.write_cluster_searches(&scopes, &every_cluster);
     }
 
-    /// Give each profile document of the scope `scope` in the directory `dir` the versions of its
-    /// profile, as `GET /v1/clusterprofiles/{uid}` gives them in `spec.versions[]`. Also give a
-    /// document with no `metadata.creationTimestamp` the time of its create.
+    /// Give each profile document of `dir` the versions of its profile, in `spec.versions[]`.
     ///
-    /// As in Palette, the versions are the published versions of the same name in the same
-    /// scope, and the compare of the names ignores the case. A version that nobody published is
-    /// not one. Palette gives the list in no order. Here the list keeps the order of the files,
-    /// the order of the uids, so the order of the versions says nothing.
+    /// `scope` is the scope of the documents that get the list. A document with no
+    /// `metadata.creationTimestamp` also gets the time of its create.
+    ///
+    /// As in Palette, the versions are the published versions of the same name in the same scope.
+    /// The compare of the names ignores the case. A version that nobody published is not one.
+    /// Palette gives the list in no order. Here the list has the order of the files, so the order
+    /// of the versions says nothing.
     fn profile_versions(&self, dir: &str, scope: ProfileScope) {
         let docs: Vec<Value> = self
             .documents_in(dir, PROFILES)

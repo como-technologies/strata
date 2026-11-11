@@ -65,6 +65,8 @@ facts:
       - who.sh:edit-last-modified
       - registry.sh:del-doc-fields
       - loop.sh:behind-profile-names
+      - scope.sh:versions-tenant
+      - scope.sh:versions-project
     pages:
       - reference/palette-api.md#a-profile-version
       - internals/palette/profiles.md#the-scope-of-a-version

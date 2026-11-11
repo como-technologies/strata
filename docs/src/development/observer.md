@@ -426,11 +426,13 @@ answer of Palette about it stays: see [The answers of Palette](#the-answers-of-p
 
 The answer of `behind` also holds `profiles[]`: each profile version of the
 records, with the newer published versions of its profile. The cycle joins the
-answers of the records by `name@version`, as it joins the pins. A profile version
-with `behind` true and no `error` gives its row `newerVersion`. It holds the
-`version` and the `created` time of `newer[0]`. `new` is true when `created` is in
-the last 7 days. The profile has the status `newer`, unless a finding makes it
-`drift`. `counts.newerProfileVersions` counts the rows that hold `newerVersion`.
+answers of the records by `name@version`, as it joins the pins.
+
+A profile version with `behind` true and no `error` gives its row `newerVersion`.
+It holds the `version` and the `created` time of `newer[0]`. `new` is true when
+`created` is in the last 7 days. The profile has the status `newer`, unless a
+finding makes it `drift`. `counts.newerProfileVersions` counts the rows that hold
+`newerVersion`.
 
 The observer orders no version: `behind` gives the newest one first. A profile
 version that strata could not check gives no `newerVersion` and no cause. The

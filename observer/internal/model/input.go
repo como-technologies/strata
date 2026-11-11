@@ -127,8 +127,8 @@ func MoveOf(d docs.Diff) Move {
 	return m
 }
 
-// newestProfile gives the newest published version of the profile of p, when strata read the versions
-// and one is newer than the version of the record.
+// newestProfile gives the newest published version of the profile of p. It gives one only when strata
+// read the versions, and one is newer than the version of the record.
 func newestProfile(p docs.ProfilePin) (docs.NewerProfile, bool) {
 	if p.Error != nil || !p.Behind || len(p.Newer) == 0 {
 		return docs.NewerProfile{}, false

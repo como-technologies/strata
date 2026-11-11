@@ -437,6 +437,8 @@ const filterBox = (key, words) => h`<input class="search" id="q-${key}" data-q="
 const matches = (key, ...texts) => { const q = (S.qs[key] || "").toLowerCase(); return !q || texts.some(t => String(t).toLowerCase().includes(q)); };
 
 const badge = (cls, text) => h`<span class="badge ${cls}">${text}</span>`;
+// newChip is the chip "new" after a version of the last 7 days, or "" when the version is older.
+const newChip = on => on ? h` <span class="badge fresh">new</span>` : "";
 // badgeOf draws the badge of a word from one of the tables above. A word that the table lacks shows as it is.
 const badgeOf = (table, key) => { const [c, t] = table[key] || ["y", key]; return badge(c, t); };
 const statusBadge = st => badgeOf(BADGE, st);

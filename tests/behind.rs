@@ -5,14 +5,13 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
-use strata::api::{MemoryApi, Palette};
+use strata::api::MemoryApi;
 use strata::model::scope::ProfileScope;
 use strata::ops;
 use strata::snapshot::{AppliedProfile, ClusterSource, Snapshot};
-use strata::term::progress::Progress;
 
 use crate::common::{
-    self, PROFILE_LISTING, no_manifests, no_variables, profile_document, profile_route,
+    self, PROFILE_LISTING, behind_of, no_manifests, no_variables, profile_document, profile_route,
     serve_profile, snapshot_of, template,
 };
 
@@ -72,22 +71,6 @@ fn record_of(api: &MemoryApi, uid: &str, dir: &Path, name: &str) -> PathBuf {
     let path = dir.join(name);
     common::write_snapshot(&path, &snapshot_of(api, uid).unwrap(), false);
     path
-}
-
-/// `behind` on `records` against `api`, read at a fixed time.
-fn behind_of(
-    api: &MemoryApi,
-    records: &[PathBuf],
-    options: &ops::BehindOptions,
-) -> ops::BehindReport {
-    ops::behind(
-        records,
-        options,
-        |_| Ok(Palette::new(api)),
-        "2026-11-10T00:00:00Z",
-        &Progress::silent(),
-    )
-    .unwrap()
 }
 
 /// The newer versions of the first profile version of `r`, newest first.
@@ -153,7 +136,7 @@ fn behind_names_the_newer_published_version_of_a_profile_and_a_pre_release_only_
     assert!(r.profiles[0].newer[1].created.is_empty(), "only the newest");
 }
 
-/// Issue #616. A version that does not parse reads as its first three numbers: a tail of numbers
+/// Issue #616. A version that does not parse reads as its first three numbers. A tail of numbers
 /// is above them, and a tail of text is a pre-release.
 #[test]
 fn behind_orders_the_versions_of_a_profile_by_the_rule_of_the_pins() {
@@ -356,7 +339,7 @@ fn the_json_and_the_markdown_of_behind_hold_the_profile_versions() {
     let doc = serde_json::to_value(&r).unwrap();
     assert_eq!(
         doc["profiles"],
-        json!([{"name": "barney-addons", "version": "1.3.1", "uid": HELD, "scope": "project",
+        json!([{"name": "barney-addons", "version": "1.3.1", "uid": HELD, "scope": ProfileScope::Project,
             "pinnedBy": [{"path": record.display().to_string(), "subject": "barney-addons@1.3.1"}],
             "newer": [{"version": "1.4.0", "uid": BARNEY[0].0, "created": CREATED}],
             "behind": true}])
@@ -367,7 +350,7 @@ fn the_json_and_the_markdown_of_behind_hold_the_profile_versions() {
         doc["summary"].get("profileErrors").is_none(),
         "a count of 0 is absent"
     );
-    // the document reads back, as `--since` reads it
+    // `--since` reads the document again
     let back: ops::BehindReport = serde_json::from_value(doc).unwrap();
     assert_eq!(back.profiles[0].newer[0].version, "1.4.0");
 

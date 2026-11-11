@@ -456,13 +456,13 @@ them:
 - The heads of the columns of Profiles, Newer versions, Images, and Recent events sort
   the table: a click sorts up, a second click sorts down, and a third gives back the
   order of the page. Two triangles beside the head show the order, and the triangle of
-  the order lights. A version sorts in the order of strata: see [The order of
+  the order lights. Newer versions and Images have a filter by name, as Profiles has.
+- A version sorts in the order of strata: see [The order of
   versions](../internals/palette/profiles.md#the-order-of-versions). The page keeps a
   copy of the order in `versionCmp` of `app.js`, because it cannot ask strata to order
   the versions of two packs. The file `testdata/versions.json` of `internal/web`
-  holds the cases. A test of strata and a test of the page sort them, so a change of
-  one order fails a test until the other order is the same. Newer versions and Images
-  have a filter by name, as Profiles has.
+  holds the cases. A test of strata and a test of the page sort them. So a change of
+  one order fails a test until the other order is the same.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
 - The page of the newer versions opens with four tiles: packs behind, moves that

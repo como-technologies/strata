@@ -152,8 +152,8 @@ fn behind_refused(r: &mut Runner) {
 
 /// The chapter `behind-profiles`: the newer published versions of a profile that a record holds.
 fn behind_profiles(r: &mut Runner) {
-    // the pipeline of the team published aws-stack 1.1.0 and the pre-release 1.2.0-rc.1 in dev after
-    // the record of 1.0.0. prod and the tenant hold later versions of the same name
+    // the pipeline of the team published aws-stack 1.1.0 and the pre-release 1.2.0-rc.1 in dev,
+    // after the record of 1.0.0. prod and the tenant hold later versions of the same name
     r.chapter("behind-profiles", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.tenant(|t| t.registries(DEV));

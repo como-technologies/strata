@@ -396,9 +396,13 @@ runs. The notifications of a cluster come from an edit of a version that the
 cluster runs, and from a change of a pack. A new version has a
 new uid that no cluster runs, so its publish notifies no cluster.
 
-The code of Palette shows these facts. The check `behind-profile-names` of
-[loop.sh](../../development/live-runs.md#loopsh) tests the list on the live
-tenant. No result yet: the live window of wave 16 runs it. The command page is
+The code of Palette shows these facts. On the live tenant, the checks
+`versions-tenant` and `versions-project` of
+[scope.sh](../../development/live-runs.md#scopesh) test the scope. The check
+`behind-profile-names` of [loop.sh](../../development/live-runs.md#loopsh)
+tests a new version of the same project. No result yet: the live window of wave
+16 runs them. The compare of the names and the deleted versions have no live
+check. The command page is
 [Newer versions of a profile](../../commands/behind.md#newer-versions-of-a-profile).
 
 ## The lock of a cluster template
