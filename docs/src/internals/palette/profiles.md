@@ -167,8 +167,7 @@ file, the download holds the error answer of the host in place of the chart.
 The answer has the name of the chart, the list names it as a chart, and the
 route answers HTTP 200. A live run shows it for the chart `nginx` 25.1.5 of the
 public registry Bitnami. The file is an XML error of 263 bytes, with the code
-`AccessDenied`. The code of Palette shows the same for the archive of a pack of
-a pack registry; no live run shows it yet.
+`AccessDenied`.
 
 Strata reads each other pack of such a download. It gives the pack no archive
 and a reason: see
