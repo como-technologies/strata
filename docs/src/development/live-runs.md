@@ -1111,7 +1111,7 @@ states what stage 4 checks.
 | `download-layout-<name>` | 0 | #751: the one `metadata.json` at the top names the list of the packs. The list names each pack of the record with a registry at its version, and no manifest pack by its name. No result yet: no live window ran stage 4. |
 | `download-archive-<name>` | 0 | #751: each archive of a pack in the list has one top folder, and its `pack.json` names the version of its entry. No result yet: no live window ran stage 4. |
 | `download-no-archive` | ? | #751: the name, the type, and `isRegistryPrivate` of each entry with no archive, for the Helm pack and the OCI pack of the registries version. No result yet: no live window ran stage 4. |
-| `download-accepts-json` | ? | #751: the status of the answer to a request that accepts JSON alone. No result yet: no live window ran stage 4. |
+| `download-accepts-json`, `download-accepts-json-no-file` | 0 | #751: to a request with `Accept: application/json`, Palette sends `{"Reader":{}}`, and not the file, as for the export. No result yet: no live window ran stage 4. |
 | `download-limit` | ? | #751: two downloads of one version at once. Exit 2 when Palette refused the second with HTTP 429, `TooManyRequests`. No result yet: no live window ran stage 4. |
 
 ## registry-kinds.sh

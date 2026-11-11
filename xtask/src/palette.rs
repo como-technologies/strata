@@ -28,9 +28,10 @@
 //! that names a project. The answer is HTTP 403 with the code `ProjectUidIsNotEmpty`, whatever
 //! the query, as Palette gives it: see `project_refusal`.
 //!
-//! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, reads the `Accept`
-//! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
-//! `export_reader`. Any other `Accept`, or none, gets the file.
+//! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, and its download route,
+//! `GET /v1/clusterprofiles/{uid}/spc/download`, read the `Accept` header. To
+//! `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see the module
+//! `reader`. Any other `Accept`, or none, gets the file.
 //!
 //! The route `POST /strata-report` is no route of Palette. It is a stand-in for the endpoint of the
 //! report, so that a page can show the send of strata: see `REPORT_ENDPOINT`.
@@ -48,12 +49,14 @@ use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROJECT_SCOPE_CODE;
 
 use crate::tenant::{
-    AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, exported_profile,
-    profile_route, validated_cloud,
+    AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, profile_route,
+    validated_cloud,
 };
 
 mod download;
+mod reader;
 mod report;
+use reader::{accepts_json, file_reader};
 pub use report::REPORT_ENDPOINT;
 use report::{REPORT_TAKEN, REPORT_TAKEN_STATUS};
 
@@ -101,14 +104,14 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
         200 => "OK",
         204 => "No Content",
         403 => "Forbidden",
-        download::NOT_ACCEPTABLE => "Not Acceptable",
         409 => "Conflict",
         422 => "Unprocessable Entity",
         500 => "Internal Server Error",
         _ => "Not Found",
     };
     // the file of a download is no JSON
-    let kind = if status == 200 && download::is_download(&request.target) {
+    let kind = if status == 200 && download::is_download(&request.target) && !accepts_json(&request)
+    {
         download::FILE_TYPE
     } else {
         "application/json"
@@ -160,7 +163,7 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
     if request.target == REPORT_ENDPOINT {
         return Ok((REPORT_TAKEN_STATUS, REPORT_TAKEN.to_vec()));
     }
-    if let Some(body) = export_reader(root, request) {
+    if let Some(body) = file_reader(root, request) {
         return Ok((200, body));
     }
     if let Some(answer) = download::download(root, request) {
@@ -194,29 +197,6 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
             .into_bytes(),
         ),
     })
-}
-
-/// The answer of the export route to a request that accepts JSON: `{"Reader":{}}`, and not the
-/// file. Palette sends the file only to a request that accepts a file, such as
-/// `Accept: application/octet-stream`.
-const EXPORT_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
-
-/// The body of the answer to a request for the export of a profile that exists, when the request
-/// accepts JSON: [`EXPORT_FOR_JSON`], for each `format`. `None` when `request` is another request,
-/// or when it accepts a file: the file answers it.
-fn export_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
-    let accept = request.accept.as_deref()?;
-    if !accept.trim().eq_ignore_ascii_case("application/json") {
-        return None;
-    }
-    let path = request
-        .target
-        .split_once('?')
-        .map_or(request.target.as_str(), |(path, _)| path);
-    let profile = exported_profile(path.trim_start_matches('/'))?;
-    file_for(root, request.project.as_deref(), profile)?
-        .is_file()
-        .then(|| EXPORT_FOR_JSON.to_vec())
 }
 
 /// The refusal of the validate route of a create for a body with a profile of another cloud type,
@@ -701,58 +681,6 @@ mod tests {
             refusal("/v1/spectroclusters/aws/validate/packs", &["u-gcp"]),
             None
         );
-    }
-
-    /// The export route gives the file to a request that accepts a file. It gives `{"Reader":{}}`
-    /// to a request that accepts JSON, as a live run shows (#156). The answer for JSON needs the
-    /// profile, and not the file, and it does not depend on the query.
-    #[test]
-    fn the_export_route_answers_a_request_that_accepts_json_with_a_reader_and_not_the_file() {
-        let temp = tempfile::tempdir().unwrap();
-        let dir = temp.path();
-        let profiles = dir.join("p1/v1/clusterprofiles");
-        fs::create_dir_all(profiles.join("u1")).unwrap();
-        fs::write(profiles.join("u1.json"), "{}").unwrap();
-        fs::write(
-            profiles.join("u1/export@format=json.json"),
-            r#"{"spec":{}}"#,
-        )
-        .unwrap();
-        let answer = |target: &str, accept: Option<&str>| {
-            let request = Request {
-                target: target.to_string(),
-                project: Some("p1".to_string()),
-                accept: accept.map(str::to_string),
-                body: Vec::new(),
-            };
-            let (status, body) = served(dir, &request).unwrap();
-            (status, String::from_utf8(body).unwrap())
-        };
-        let file = (200, r#"{"spec":{}}"#.to_string());
-        let reader = (200, r#"{"Reader":{}}"#.to_string());
-        let route = "/v1/clusterprofiles/u1/export?format=json";
-        assert_eq!(answer(route, Some("application/json")), reader);
-        assert_eq!(answer(route, Some(" Application/JSON ")), reader);
-        assert_eq!(
-            answer(
-                "/v1/clusterprofiles/u1/export?format=yaml",
-                Some("application/json")
-            ),
-            reader
-        );
-        assert_eq!(answer(route, Some("application/octet-stream")), file);
-        assert_eq!(answer(route, None), file);
-        // another route under the same profile gives its own file, and a profile with no
-        // document has no export
-        assert_eq!(
-            answer("/v1/clusterprofiles/u1", Some("application/json")).1,
-            "{}"
-        );
-        let missing = answer(
-            "/v1/clusterprofiles/u2/export?format=json",
-            Some("application/json"),
-        );
-        assert_eq!(missing.0, 404);
     }
 
     /// A file of a refusal gives its status, and the first status of [`REFUSALS`] wins.

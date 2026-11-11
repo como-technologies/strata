@@ -529,7 +529,6 @@ facts:
       - export.sh:download-layout-<name>
       - export.sh:download-archive-<name>
       - export.sh:download-no-archive
-      - export.sh:download-accepts-json
     pages:
       - reference/palette-api.md#a-profile-version
       - internals/palette/profiles.md#the-download-of-a-version
@@ -538,6 +537,20 @@ facts:
       - src/api/http.rs
       - src/api/download.rs
       - src/ops/same_release/archives.rs
+
+  - id: profile-download-accept
+    kind: behavior
+    reads:
+      fields:
+        - Reader
+    stand_in: []
+    live:
+      - export.sh:download-accepts-json
+      - export.sh:download-accepts-json-no-file
+    pages:
+      - internals/palette/profiles.md#the-download-of-a-version
+    code:
+      - src/api/http.rs
 
   - id: profile-download-limit
     kind: behavior

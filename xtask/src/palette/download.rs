@@ -12,6 +12,9 @@
 //! none of a pack of an OCI registry of Helm charts or of Zarf packages. The list of the packs
 //! names such a pack with an empty `filePath`, and a manifest pack only by its manifests.
 //!
+//! A request that accepts JSON alone gets `{"Reader":{}}`, as for the export: see `super::reader`.
+//! Each other request gets the file.
+//!
 //! The server does not model the limit of Palette, one download of a version in 10 seconds. With
 //! the limit, a step of the book waits for the step before it. A live check shows the limit.
 
@@ -31,13 +34,6 @@ mod written;
 
 use written::{DownloadPack, pack_archive, pack_top, profile_download};
 
-/// The status of the answer to a request for the download that accepts no file.
-pub(super) const NOT_ACCEPTABLE: u16 = 406;
-
-/// The body of the answer to a request for the download that accepts no file, as the framework of
-/// the API of Palette writes it. Its `code` is a number, and not a code of Palette.
-const FILE_ONLY: &[u8] = br#"{"code":406,"message":"unsupported media type requested, only [application/octet-stream] are available"}"#;
-
 /// The media type of the file of a download. The stand-in models Palette, and not the client that it
 /// tests, so it keeps its own copy of the type.
 pub(super) const FILE_TYPE: &str = "application/octet-stream";
@@ -48,20 +44,10 @@ pub(super) fn is_download(target: &str) -> bool {
     downloaded_profile(path.trim_start_matches('/')).is_some()
 }
 
-/// True when a request with the header `Accept: accept` takes the file: it accepts
-/// `application/octet-stream` or each type, or it sends no `Accept`.
-fn accepts_file(accept: Option<&str>) -> bool {
-    accept.is_none_or(|accept| {
-        accept.split(',').any(|kind| {
-            let kind = kind.split(';').next().unwrap_or_default().trim();
-            kind == FILE_TYPE || kind == "*/*"
-        })
-    })
-}
-
 /// The status and the body of the answer to `request`, when it asks for the download of a profile
 /// version that the tenant holds. `None` for another request, and for a version that the tenant
-/// does not hold: the server then answers 404.
+/// does not hold: the server then answers 404. The server answers a request that accepts JSON
+/// before it asks for the file.
 pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)> {
     let path = request
         .target
@@ -73,9 +59,6 @@ pub(super) fn download(root: &Path, request: &Request) -> Option<(u16, Vec<u8>)>
         serde_json::from_slice(&std::fs::read(file).ok()?).ok()
     };
     let profile = read(profile_path)?;
-    if !accepts_file(request.accept.as_deref()) {
-        return Some((NOT_ACCEPTABLE, FILE_ONLY.to_vec()));
-    }
     let uid = profile["metadata"]["uid"].as_str().unwrap_or_default();
     let name = profile["metadata"]["name"].as_str().unwrap_or_default();
     let manifests = read(&manifests_route(uid)).unwrap_or_default();
@@ -221,7 +204,8 @@ mod tests {
 
     /// The stand-in serves a gzip tar at the route, and strata reads it. The pack of the Public
     /// Repo has its archive, with the default values of its listing. The pack of a private
-    /// registry and the manifest pack have none.
+    /// registry and the manifest pack have none. A request that accepts JSON alone gets
+    /// `{"Reader":{}}`, and not the file.
     #[test]
     fn the_download_route_serves_a_file_that_strata_reads() {
         let temp = tempfile::tempdir().unwrap();
@@ -274,15 +258,17 @@ mod tests {
         assert_eq!(paths, ["pack.json", "values.yaml"]);
         assert_eq!(download.pack("private-pack").unwrap().archive, None);
         assert!(download.pack("rules").is_none());
-        // a request that accepts JSON alone gets no file, and a version that the tenant does not
-        // hold has no download
+        // a request that accepts JSON alone gets `{"Reader":{}}`, as for the export, and each
+        // other request gets the file. A version that the tenant does not hold has no download
         assert_eq!(
-            answer(temp.path(), "u1", Some("application/json")).0,
-            NOT_ACCEPTABLE
+            answer(temp.path(), "u1", Some("application/json")),
+            (200, br#"{"Reader":{}}"#.to_vec())
         );
-        assert_eq!(answer(temp.path(), "u1", Some("*/*")).0, 200);
-        assert_eq!(answer(temp.path(), "u1", None).0, 200);
+        let served_file = answer(temp.path(), "u1", Some(FILE_TYPE));
+        assert_eq!(answer(temp.path(), "u1", Some("*/*")), served_file);
+        assert_eq!(answer(temp.path(), "u1", None), served_file);
         assert_eq!(answer(temp.path(), "u2", Some(FILE_TYPE)).0, 404);
+        assert_eq!(answer(temp.path(), "u2", Some("application/json")).0, 404);
         assert!(is_download(&format!("/{}", download_route("u1"))));
         assert!(!is_download("/v1/clusterprofiles/u1/export"));
     }

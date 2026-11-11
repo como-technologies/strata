@@ -3188,13 +3188,26 @@ impl Stage {
         .unwrap();
     }
 
-    /// Palette answers `path` with the bytes `body` and status 200, such as a file of a download.
-    fn route_bytes(&self, path: &str, body: &[u8]) {
-        std::fs::write(
-            self.root.path().join("routes").join(Self::route_key(path)),
-            body,
-        )
-        .unwrap();
+    /// Palette answers the GET of `path`, a route of a file such as the download of a profile, with
+    /// status 200. A request with `Accept: application/json` gets `for_json`, and each other
+    /// request gets the bytes `file`.
+    fn route_file(&self, path: &str, file: &[u8], for_json: &[u8]) {
+        let routes = self.root.path().join("routes");
+        let key = Self::route_key(path);
+        std::fs::write(routes.join(format!("{key}.file")), file).unwrap();
+        std::fs::write(routes.join(format!("{key}.for-json")), for_json).unwrap();
+        executable(
+            &routes.join(format!("{key}.sh")),
+            &format!(
+                r#"#!/usr/bin/env bash
+if grep -qix 'Accept: application/json' "$FAKE_ROUTES/sent/GET_{key}.request"; then
+  cat "$FAKE_ROUTES/{key}.for-json"
+else
+  cat "$FAKE_ROUTES/{key}.file"
+fi
+"#
+            ),
+        );
     }
 
     /// Palette answers `path` with `status` and `body` to a request whose `ApiKey` is `key`.
@@ -12698,9 +12711,12 @@ fn download_stage(packs: &[DownloadPack]) -> Stage {
             {"name":"platform-rules","type":"manifest","version":"1.0.0"}]}"#,
     );
     let file = profile_download("u-1", "aws-stack", packs);
-    stage.route_bytes(&download_route("u-1"), &file);
+    stage.route_file(&download_route("u-1"), &file, FILE_FOR_JSON);
     stage
 }
+
+/// The answer of Palette to a request for a file that accepts JSON alone, as the export shows.
+const FILE_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
 
 /// The packs of the download of `aws-stack@1.2.0`. The `pack.json` of the archive of the Kubernetes
 /// pack names `built`. The CSI pack has no archive, and the manifest pack has none.
@@ -12732,9 +12748,10 @@ fn downloaded(built: &str) -> Vec<DownloadPack<'_>> {
     ]
 }
 
-/// Stage 4 reads the layout of the download of each version, and the archive of each pack. It
-/// records the packs with no archive, the answer to a request that accepts JSON, and two downloads
-/// at once. A list or an archive that names another version fails its check.
+/// Stage 4 reads the layout of the download of each version, and the archive of each pack. A
+/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the packs
+/// with no archive and two downloads at once. A list or an archive that names another version
+/// fails its check, and so does the file as the answer to a request that accepts JSON.
 #[test]
 fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
     let stage = download_stage(&downloaded("1.36.2"));
@@ -12746,13 +12763,11 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
             "download-aws-stack",
             "download-layout-aws-stack",
             "download-archive-aws-stack",
+            "download-accepts-json",
+            "download-accepts-json-no-file",
         ],
     );
-    for id in [
-        "download-no-archive",
-        "download-accepts-json",
-        "download-limit",
-    ] {
+    for id in ["download-no-archive", "download-limit"] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
     let none = std::fs::read_to_string(stage.path("out/download-no-archive.out")).unwrap();
@@ -12776,4 +12791,12 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
     let stage = download_stage(&packs);
     let (_, steps) = stage.run("export.sh", &["4"]);
     failed(&steps, &["download-layout-aws-stack"]);
+    // a route that gives the file also to a request that accepts JSON alone
+    let packs = downloaded("1.36.2");
+    let stage = download_stage(&packs);
+    let file = profile_download("u-1", "aws-stack", &packs);
+    stage.route_file(&download_route("u-1"), &file, &file);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    passed(&steps, &["download-accepts-json"]);
+    failed(&steps, &["download-accepts-json-no-file"]);
 }

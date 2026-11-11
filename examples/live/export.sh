@@ -156,8 +156,10 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
   name=${ref%@*}
   uid=$(jq -r .source.uid "$name.version.json")
   sleep 11
-  check download-accepts-json '?' '#751: a request that accepts JSON alone gets no file; the check records the status' -- \
-    "$live/api.sh" get-status "/v1/clusterprofiles/$uid/spc/download"
+  check download-accepts-json 0 '#751: a request that accepts JSON gets an answer' -- \
+    "$live/api.sh" get "/v1/clusterprofiles/$uid/spc/download"
+  check download-accepts-json-no-file 0 '#751: the answer is {"Reader":{}}, and not the file, as for the export' -- \
+    grep -qx '{"Reader":{}}' download-accepts-json.out
   sleep 11
   # two downloads of one version at once: Palette takes one in 10 seconds, and can refuse the
   # second with HTTP 429 TooManyRequests. The check records the exit code, and does not judge it
