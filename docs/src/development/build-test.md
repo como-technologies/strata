@@ -160,6 +160,7 @@ table gives the files.
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs`, `tests/common/toml.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `crates/strata-preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. `common/toml.rs` holds the readers of a TOML file: the lines of a table, and the entries `key = "value"`. `xtask` and the tests of `strata-report-endpoint` include it. |
 | `tests/common/git.rs` | `common/git.rs` gives each git command of a test no setting of the machine and one author. The runner of the book in `xtask` includes it too, so a chapter of the book starts git with the same settings. |
 | `tests/common/route.rs` | `common/route.rs` matches a route of Palette with a pattern, such as `v1/clusterprofiles/{uid}`. `xtask` and the tests of `strata-preflight` include it, so each package matches a route in one way. |
+| `tests/common/variants.rs`, `tests/common/table.rs` | `common/variants.rs` holds the macro `one_of_each!`. It makes the list of one value of each variant of an enum. The build fails on a variant that the list does not hold. The tests of `src/error/`, of the edits of the stand-in in `xtask`, and of `Check` in `strata-preflight` include it. `common/table.rs` reads a markdown table: the cells of a row, the rows of a table, and the first cell of each row. The tests of the root package, the tests of `src/error/`, and the check of the facts in `xtask` use it. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `crates/strata-knurl/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/kube`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
@@ -173,7 +174,7 @@ table gives the files.
 | `crates/strata-preflight/tests/` | `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes, with the checks of `tests/common/closed_set.rs`. `tests/common/mod.rs` of the package holds the stand-in for Palette that `tests/cli.rs` and `tests/catalog.rs` share. |
 | `crates/strata-report-endpoint/` | `strata-report-endpoint`, a package of its own in the workspace: the service that takes the report of the unknown values. `accept.rs` checks a request, and `limit.rs` limits the rate. `digest.rs` keeps the hash of each report that the service took, and `merge.rs` merges a report into the issues. `tracker.rs` writes to GitHub, and `server.rs` holds the rules and the loop. No release carries it: see [The endpoint of the report](./report-endpoint.md). |
 | `fuzz/` | `strata-fuzz`, a package of its own in the workspace: the fuzz targets and the property tests of `strata`, `strata-preflight`, and `strata-report-endpoint`, see [The fuzzing](#the-fuzzing). `src/` holds one module for each part, such as `mask.rs`, and `support.rs` holds what the targets share. `src/__fuzz__/<module>__<test>/` holds the corpus and the crashes of one target. The package has no code outside its tests. |
-| `fuzz/src/seed.rs`, `fuzz/src/seed/`, `fuzz/src/lib.rs` | `seed.rs` holds the table of the targets and their seed corpus. `seed/catalog.rs` holds the seeds that come from the catalog of `strata-preflight`, and `seed/regressions.rs` holds the regression cases. `seed/corpus.rs` writes the files of the corpus, and holds the checks of them. `lib.rs` includes `tests/common/palette.rs` and `tests/common/answer.rs` with `#[path]`, so the fuzz package has no second list of the routes and no second check of an answer. |
+| `fuzz/src/seed.rs`, `fuzz/src/seed/`, `fuzz/src/lib.rs` | `seed.rs` holds the table of the targets, their seed corpus, and `Case`, the one shape of a regression case. `seed/catalog.rs` holds the seeds that come from the catalog of `strata-preflight`, and `seed/regressions.rs` holds the regression cases. `seed/corpus.rs` writes the files of the corpus, and holds the checks of them. `lib.rs` includes `tests/common/palette.rs` and `tests/common/answer.rs` with `#[path]`, so the fuzz package has no second list of the routes and no second check of an answer. |
 
 `api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
 tests of their directory. In `crates/strata-preflight/src/`, `probe/`, `report/`, `rule/`,
@@ -280,6 +281,22 @@ no setting of the machine:
   gives the same settings, with the author `NAME`.
 - A test fails on another file of the tests, of xtask, or of `examples/live/` that sets
   `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, or the name of an author.
+
+### The waits of the live scripts in a test
+
+`tests/live_scripts.rs` runs a script of `examples/live/` with a stand-in for each tool. The
+stand-in `sleep` returns at once, so a test does not wait for the seconds of a live run. With
+these rules, a test gives the same result on each run, on a fast machine and on the runner of CI:
+
+- A wait that counts its looks ends in less than a second. On a test machine, the 30 looks of a
+  wait took 54 ms. So a count of looks limits a wait only when its state comes from an earlier step.
+- A wait for a process that runs in the background has a limit of time. `pf_start` of `lib.sh`
+  waits 30 seconds for the line `Forwarding from` of `kubectl port-forward`. In `observer.sh`, each
+  look for the observer that runs in the background waits up to 5 seconds in the stand-in `curl`.
+- `FAKE_PORT_FORWARD` of `tests/common/mod.rs` stands for each port-forward. It can print its line
+  half a second late, or end with no line. A test shows that each step still gets the right result.
+- A step that fails shows its output in the log of the test. The test prints the files `<id>.out`
+  and `<id>.err` of each check that failed, and the harness shows them when the test fails.
 
 ### The fuzzing
 
@@ -644,12 +661,37 @@ a release does not have. A release that called a workflow that asked for it
 failed before it started.
 
 Run the same recipes in a clean checkout before you push. A file that is not
-tracked can hide a failure:
+tracked can hide a failure. The checkout builds into a target directory of its
+own: see [A temporary worktree](#a-temporary-worktree).
 
 ```bash
 git worktree add --detach ../strata-check HEAD
-cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
+cd ../strata-check && export CARGO_TARGET_DIR="$PWD/target"
+just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && just observer-contract
 ```
+
+### A temporary worktree
+
+Give each temporary worktree its own target directory. Set `CARGO_TARGET_DIR`
+to a directory in the worktree, never to the `target/` of the main tree. The
+rule is for each command that builds in a worktree. Examples are the clean
+checkout above, and a test that must fail without its fix.
+
+Cargo puts a build of the worktree and a build of the main tree in the same
+place of a shared `target/`. The build of the worktree is newer than the files
+of the main tree, so cargo does not build again in the main tree. The debug
+builds of `xtask`, `strata`, `strata-preflight`, and `strata-report-endpoint`
+then keep the path of the worktree. After you remove the worktree, `just
+docs-check` fails with "No such file or directory" for a fixture under that
+path.
+
+```bash
+d=$(mktemp -d) && git worktree add -q --detach "$d" HEAD
+(cd "$d" && CARGO_TARGET_DIR="$d/target" cargo test -p xtask)
+git worktree remove --force "$d"   # also removes the target directory of the worktree
+```
+
+When the shared `target/` already holds such a build, `cargo clean` removes it.
 
 ## A change to how strata reads Palette
 

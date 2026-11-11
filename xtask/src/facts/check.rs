@@ -10,7 +10,9 @@ use regex::Regex;
 use super::cloud;
 use super::model::{Fact, Kind, Piece, is_placeholder, pieces, unread};
 use super::sets;
-use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, query_names, shape};
+use super::sources::{
+    API_PAGE, FACT_PAGES, RULES_HEADING, Sources, method_pattern, query_names, shape,
+};
 use super::subjects;
 use crate::route::route_matches;
 
@@ -33,6 +35,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(code_exists(sources));
     bad.extend(codes_stated(sources));
     bad.extend(requests_listed(sources));
+    bad.extend(rule_requests_tabled(sources));
     bad.extend(rules_agree(sources));
     bad.extend(queries_held(sources));
     bad.extend(sections_stated(sources));
@@ -301,6 +304,38 @@ fn requests_listed(sources: &Sources) -> Vec<String> {
             bad.push(format!(
                 "the rules {} send `{request}`, and no fact has this request",
                 rules.join(", ")
+            ));
+        }
+    }
+    bad
+}
+
+/// Each request that a rule of strata-preflight sends has a row in the table of [`RULES_HEADING`].
+///
+/// The row names each rule that sends the request, and no other rule. A row of a request that no
+/// rule sends is a fault too. So a reader of the table sees each request of strata-preflight.
+fn rule_requests_tabled(sources: &Sources) -> Vec<String> {
+    let table = format!("the table of \"{RULES_HEADING}\" in {API_PAGE}");
+    let mut bad = Vec::new();
+    for (request, sent) in &sources.rule_requests {
+        match sources.rule_rows.get(request) {
+            None => {
+                let rules: Vec<&str> = sent.iter().map(String::as_str).collect();
+                bad.push(format!(
+                    "the rules {} send `{request}`, and {table} has no row of it",
+                    rules.join(", ")
+                ));
+            }
+            Some(named) if named != sent => bad.push(format!(
+                "{table}: the row of `{request}` names {named:?}, and the rules that send it are {sent:?}"
+            )),
+            Some(_) => {}
+        }
+    }
+    for request in sources.rule_rows.keys() {
+        if !sources.rule_requests.contains_key(request) {
+            bad.push(format!(
+                "{table} has a row of `{request}`, and no rule sends it"
             ));
         }
     }
