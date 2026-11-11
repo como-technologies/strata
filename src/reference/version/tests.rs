@@ -214,6 +214,21 @@ fn a_tail_of_text_after_three_numbers_is_below_each_pre_release_of_them() {
         "1.2.3rc10",
         "1.2.3.develop",
     ]);
+    // Issue #714, call 9: the crate reads `1.2.0rc1b` as `1.2` and the tail `0rc1b`. Strata put
+    // it above `1.2.develop`.
+    ascending(&[
+        "1.1.10",
+        "1.2rc1",
+        "1.2.0a1b",
+        "1.2.0rc1b",
+        "1.2.0x1y",
+        "1.2.develop",
+        "1.2.rc1b",
+        "1.2.x",
+        "1.2.0.develop",
+        "1.2.0-0",
+    ]);
+    ascending(&["1.0rc1", "1.0.0rc1b", "1.0.develop", "1.0.0.develop"]);
 }
 
 /// Text before the three numbers, as in `chart-1.2.3`: Palette finds the numbers at any place,

@@ -46,8 +46,10 @@ A ref names the thing that a command reads.
   - For one set of numbers, the forms go from the lowest to the highest:
     1. Text before the numbers, as in `chart-1.2.0`.
     2. One or two numbers and a tail of text, as in `1.2rc1` and `1.2.develop`.
-       A missing number is `0`, so `1.2.develop` is above `1.1.10`.
-    3. A tail of text after the three numbers, as in `1.2.0rc1b` and
+       A missing number is `0`, so `1.2.develop` is above `1.1.10`. Text right
+       after the third number is such a tail too, as the crate reads it:
+       `1.2.0rc1b` is `1.2` and the tail `0rc1b`.
+    3. A tail of text after a dot after the three numbers, as in
        `1.2.0.develop`.
     4. A pre-release, as in `1.2.0-rc.1`.
     5. The version, `1.2.0`.
@@ -58,12 +60,16 @@ A ref names the thing that a command reads.
   - A part between dots is a number when it holds only digits, as the crate
     reads it. In the last part, the digits in front of letters are a number too,
     as in `2rc1`. So `1.2rc1` holds two numbers, and `1.2a1b` holds one number
-    and the tail `2a1b`.
+    and the tail `2a1b`. The three numbers that Palette reads still decide
+    first, so `1.2.3rc1b` is above `1.2.develop`.
   - Of two texts with one form, the crate orders the tails. For each count of
     numbers, text right after the last number is below a tail after a dot. So
     `1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.
     Digits with letters right after them are below the digits alone, so
     `1.2.0.1rc1` is below `1.2.0.1`. Build data after `+` does not count.
+  - The tail `0rc1b` of `1.2.0rc1b` is a tail after a dot, as the crate reads
+    it. So `1.2rc1` is below `1.2.0rc1b`, and `1.2.0rc1b` is below
+    `1.2.develop`.
   - Each form with text is a pre-release. So `1.1.8.develop` is below `1.1.8`,
     and `@latest` gives `1.1.10` over `1.2.0.develop`. `@latest` on
     `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. A tail of numbers, as

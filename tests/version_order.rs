@@ -7,13 +7,14 @@
 //! from the crate without a failed test. The crate is a dev-dependency only.
 
 use std::cmp::Ordering::{self, Equal, Greater, Less};
+use std::collections::BTreeMap;
 
 use strata::reference::LATEST;
 use strata::reference::version::{compare, is_pre_release, pick};
 use versions::Versioning;
 
 /// A rule of Palette that strata keeps where the crate gives another order.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum PaletteRule {
     /// One `v` in front of the numbers does not count: `v1.2.3` equals `1.2.3`.
     VInFront,
@@ -23,6 +24,10 @@ enum PaletteRule {
     /// orders two strings with one text before the numbers. The crate reads `1.2.3` there as a
     /// pre-release of the text `chart`.
     TextBefore,
+    /// Palette reads the first three numbers of a text that does not parse, and the numbers decide
+    /// first: `1.2.3a1b` reads as `1.2.3`, above `1.2.develop`. The crate reads `3a1b` as one text
+    /// after the two numbers `1.2`.
+    ThreeNumbers,
 }
 
 /// Who decides the order of a row.
@@ -37,7 +42,7 @@ enum Source {
     NoRead,
 }
 
-use PaletteRule::{MissingNumber, TextBefore, VInFront};
+use PaletteRule::{MissingNumber, TextBefore, ThreeNumbers, VInFront};
 use Source::{Crate, NoRead, Palette};
 
 /// The rows of the probe of the changed answer, in the comment on #714, in its order.
@@ -200,6 +205,16 @@ const FORMS: &[(&str, Ordering, &str, Source)] = &[
     ("1.2.3rc1b", Less, "1.2.3x1y", Crate),
     ("1.2.3rc1b-1", Greater, "1.2.3rc1b", Crate),
     ("1.2.3rc1b+5", Equal, "1.2.3rc1b", Crate),
+    // a third number of `0` with text right after it: the crate reads `1.2` and the tail `0rc1b`
+    ("1.2.0rc1b", Less, "1.2.develop", Crate),
+    ("1.2.0x1y", Less, "1.2.x", Crate),
+    ("1.2.0a1b", Less, "1.2.rc1b", Crate),
+    ("1.0.0rc1b", Less, "1.0.develop", Crate),
+    ("1.2.0rc1b", Greater, "1.2rc1", Crate),
+    ("1.2.0rc1b", Less, "1.2.0.develop", Crate),
+    ("1.2.0rc1b", Greater, "1.1.10", Crate),
+    ("1.0.0rc1b", Greater, "1.0rc1", Crate),
+    ("1.2.0rc1b", Less, "1.2.0-0", Crate),
     // one or two numbers with text right after the last number: below a tail after a dot
     ("1.2rc1", Less, "1.2.develop", Crate),
     ("1.2rc1", Less, "1.2.rc1", Crate),
@@ -413,4 +428,260 @@ fn the_crate_has_no_order_for_letters_with_no_number_after_them_so_strata_puts_t
         }
     }
     assert_eq!(compare("1.2rc", "1.2rc0"), Less);
+}
+
+/// Each tail of a string of the generated probe: no text, text right after the last number, a tail
+/// after a dot, and text right after the last number with a tail after a dot. The crate reads
+/// `2rc1`, `2rc`, and `2a1b` as three kinds of part: a number with letters and a number after
+/// them, a number with letters, and a text.
+const TAILS: &[&str] = &[
+    "",
+    "rc1",
+    "rc",
+    "a1b",
+    ".develop",
+    ".rc1",
+    "rc1.develop",
+    "a1b.develop",
+];
+
+/// Each end of a string of the generated probe: no end, two tails after `-`, and build data.
+const ENDS: &[&str] = &["", "-0", "-rc.1", "+5"];
+
+/// The parts of a string of the generated probe: see [`probe`].
+struct Probe {
+    /// Text before the numbers: empty, or `chart-`.
+    before: &'static str,
+    /// One to four numbers.
+    numbers: Vec<u64>,
+    /// One of [`TAILS`].
+    tail: &'static str,
+    /// One of [`ENDS`].
+    end: &'static str,
+}
+
+impl Probe {
+    fn text(&self) -> String {
+        format!("{}{}", self.before, self.rest(&self.numbers))
+    }
+
+    /// The numbers, the tail, and the end, with no text before the numbers.
+    fn rest(&self, numbers: &[u64]) -> String {
+        let numbers: Vec<String> = numbers.iter().map(u64::to_string).collect();
+        format!("{}{}{}", numbers.join("."), self.tail, self.end)
+    }
+
+    /// The text that the crate orders by the rules of Palette. Two strings with a version have the
+    /// same text before the numbers here, so it is no part of the text. A string that parses has
+    /// three numbers, as a missing number is `0`.
+    fn crate_text(&self) -> String {
+        let mut numbers = self.numbers.clone();
+        if self.tail.is_empty() && numbers.len() < 3 {
+            numbers.resize(3, 0);
+        }
+        self.rest(&numbers)
+    }
+
+    /// False for a text with no number at its start and no three numbers, as brett's rule names
+    /// it: text before fewer than three numbers, as in `chart-1.2`, and one number with a text
+    /// right after it, as in `1a1b` and `1rc1.develop`. A part is a number as the crate reads it:
+    /// the crate reads `1rc1` as a number only in the last part.
+    fn holds_version(&self) -> bool {
+        match self.numbers.len() {
+            1 | 2 if !self.before.is_empty() => false,
+            1 => self.tail != "a1b" && !self.text_in_a_part_not_last(),
+            _ => true,
+        }
+    }
+
+    /// The three numbers that decide first. Palette reads the first three numbers, and the crate
+    /// reads a last number with a text right after it as part of the text, as in `1.2a1b`.
+    fn read(&self) -> [u64; 3] {
+        let mut numbers = self.numbers.clone();
+        if numbers.len() < 3 && self.tail == "a1b" {
+            numbers.pop();
+        }
+        numbers.resize(3, 0);
+        [numbers[0], numbers[1], numbers[2]]
+    }
+
+    /// True when the crate reads the third number and the text right after it as one text, as in
+    /// `1.2.3a1b`, and Palette reads the three numbers.
+    fn third_with_text(&self) -> bool {
+        self.numbers.len() == 3 && self.tail == "a1b"
+    }
+
+    /// True when the crate reads the third number and the letters right after it as a number with
+    /// text, as in `1.2.3rc1`. The crate gives no total order there.
+    fn third_with_letters(&self) -> bool {
+        self.numbers.len() == 3 && matches!(self.tail, "rc1" | "rc")
+    }
+
+    /// True when a part that is not the last holds digits and text, as in `1.2rc1.develop`. The
+    /// crate gives no total order there.
+    fn text_in_a_part_not_last(&self) -> bool {
+        !self.tail.starts_with('.') && self.tail.contains('.')
+    }
+}
+
+/// The strings of the generated probe. Each string has one to four numbers, and each number is
+/// `0` or not `0`. Each string has one of [`TAILS`] and one of [`ENDS`], and no text or `chart-`
+/// before the numbers. A number that is not `0` is its place, as in `1.0.3`.
+fn probe() -> Vec<Probe> {
+    let mut probe = Vec::new();
+    for count in 1..=4 {
+        for zeros in 0..1u32 << count {
+            let numbers: Vec<u64> = (0..count)
+                .map(|i| if zeros & (1 << i) == 0 { i + 1 } else { 0 })
+                .collect();
+            for before in ["", "chart-"] {
+                for &tail in TAILS {
+                    for &end in ENDS {
+                        let numbers = numbers.clone();
+                        probe.push(Probe {
+                            before,
+                            numbers,
+                            tail,
+                            end,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    probe
+}
+
+/// Who orders a pair of the generated probe where strata does not follow the crate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Rule {
+    /// A rule of Palette.
+    Palette(PaletteRule),
+    /// A text with no number at its start and no three numbers holds no version. brett's rule
+    /// puts it below each version, and two such texts keep the natural order.
+    NoVersion,
+    /// The crate has a cycle for a number with letters right after the third number, as in
+    /// `1.2.3rc1`. The test of the cycle of text right after three numbers shows it.
+    ThirdWithLetters,
+    /// The crate has a cycle for digits and text in a part that is not the last, as in
+    /// `1.2rc1.develop`. The test of the cycle of such a part shows it.
+    PartNotLast,
+    /// The crate puts `1.2rc` equal to `1.2rc1` and to `1.2rc2`. The test of letters with no
+    /// number after them shows it.
+    LettersWithNoNumber,
+}
+
+/// How a pair of the generated probe is ordered.
+enum Order {
+    /// The crate orders the two texts of [`Probe::crate_text`].
+    Crate,
+    /// A rule gives this order.
+    Rule(Rule, Ordering),
+    /// A rule orders the pair, and a unit test or a test of a cycle of the crate shows the order.
+    Named(Rule),
+}
+
+/// How the pair `a` and `b` is ordered.
+fn order(a: &Probe, b: &Probe) -> Order {
+    if a.text_in_a_part_not_last() || b.text_in_a_part_not_last() {
+        return Order::Named(Rule::PartNotLast);
+    }
+    match (a.holds_version(), b.holds_version()) {
+        (true, true) => {}
+        (false, false) => return Order::Named(Rule::NoVersion),
+        (x, y) => return Order::Rule(Rule::NoVersion, x.cmp(&y)),
+    }
+    if a.before != b.before {
+        // the numbers decide first, and then the text before them is lower
+        let ord = a.read().cmp(&b.read());
+        let ord = ord.then(a.before.is_empty().cmp(&b.before.is_empty()));
+        return Order::Rule(Rule::Palette(TextBefore), ord);
+    }
+    if a.third_with_letters() || b.third_with_letters() {
+        return Order::Named(Rule::ThirdWithLetters);
+    }
+    if a.numbers == b.numbers && matches!((a.tail, b.tail), ("rc", "rc1") | ("rc1", "rc")) {
+        let ord = if a.tail == "rc" { Less } else { Greater };
+        return Order::Rule(Rule::LettersWithNoNumber, ord);
+    }
+    if (a.third_with_text() || b.third_with_text()) && a.read() != b.read() {
+        return Order::Rule(Rule::Palette(ThreeNumbers), a.read().cmp(&b.read()));
+    }
+    Order::Crate
+}
+
+/// The pairs of the generated probe where the crate gives another order than strata, for each
+/// rule that orders them. A pair of [`Order::Crate`] counts for the rule of Palette that changes
+/// its text.
+const DIFFERENCES: &[(Rule, usize)] = &[
+    (Rule::Palette(VInFront), 936),
+    (Rule::Palette(MissingNumber), 976),
+    (Rule::Palette(TextBefore), 198_544),
+    (Rule::Palette(ThreeNumbers), 2_016),
+    (Rule::NoVersion, 62_546),
+    (Rule::ThirdWithLetters, 6_360),
+    (Rule::PartNotLast, 227_666),
+    (Rule::LettersWithNoNumber, 242),
+];
+
+/// brett's rule: where Palette reads no version, or gives no order, the crate decides. This test
+/// compares the two orders on each pair of the generated probe, and fails on each difference that
+/// no rule names. It also fails when a rule names another count of differences than
+/// [`DIFFERENCES`], so a change of `version.rs` cannot drift in a rule either.
+#[test]
+fn the_order_of_strata_is_the_order_of_the_crate_on_each_pair_of_a_probe_where_no_rule_decides() {
+    let probe = probe();
+    let texts: Vec<String> = probe.iter().map(Probe::text).collect();
+    let read = |texts: &[String]| -> Vec<Option<Versioning>> {
+        texts.iter().map(Versioning::new).collect()
+    };
+    let crate_texts: Vec<String> = probe.iter().map(Probe::crate_text).collect();
+    let (raw, normal) = (read(&texts), read(&crate_texts));
+    let crate_cmp = |v: &[Option<Versioning>], i: usize, j: usize| match (&v[i], &v[j]) {
+        (Some(x), Some(y)) => Some(x.cmp(y)),
+        _ => None,
+    };
+    let mut faults = Vec::new();
+    let mut differences: BTreeMap<Rule, usize> = BTreeMap::new();
+    for (i, a) in probe.iter().enumerate() {
+        for (j, b) in probe.iter().enumerate().skip(i + 1) {
+            let (x, y) = (&texts[i], &texts[j]);
+            let strata = compare(x, y);
+            let (want, rule) = match order(a, b) {
+                Order::Crate => (crate_cmp(&normal, i, j), None),
+                Order::Rule(rule, ord) => (Some(ord), Some(rule)),
+                Order::Named(rule) => (Some(strata), Some(rule)),
+            };
+            if want != Some(strata) {
+                let by = rule.map_or("the crate".to_string(), |rule| format!("{rule:?}"));
+                faults.push(format!(
+                    "{x:?} is {strata:?} to {y:?}, but {by} gives {want:?}"
+                ));
+            } else if crate_cmp(&raw, i, j) != Some(strata) {
+                // a rule of Palette makes the text that the crate orders
+                let palette = if a.before.is_empty() {
+                    MissingNumber
+                } else {
+                    TextBefore
+                };
+                *differences
+                    .entry(rule.unwrap_or(Rule::Palette(palette)))
+                    .or_default() += 1;
+            }
+        }
+    }
+    // one `v` in front of the numbers does not count
+    for (p, text) in probe.iter().zip(&texts) {
+        if p.before.is_empty() && p.holds_version() {
+            let v = format!("v{text}");
+            if compare(&v, text) != Equal {
+                faults.push(format!("{v:?} is {:?} to {text:?}", compare(&v, text)));
+            } else if crate_order(&v, text) != Some(Equal) {
+                *differences.entry(Rule::Palette(VInFront)).or_default() += 1;
+            }
+        }
+    }
+    assert!(faults.is_empty(), "{}", faults.join("\n"));
+    let differences: Vec<(Rule, usize)> = differences.into_iter().collect();
+    assert_eq!(differences, DIFFERENCES, "{} strings", probe.len());
 }

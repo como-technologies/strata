@@ -23,8 +23,9 @@ use crate::reference::LATEST;
 /// For the numbers `1.2.0`, the forms go from the lowest to the highest:
 ///
 /// 1. Text before the three numbers: `chart-1.2.0`.
-/// 2. One or two numbers and a tail of text: `1.2rc1` or `1.2.develop`. A missing number is `0`.
-/// 3. A tail of text after the three numbers: `1.2.0rc1b` or `1.2.0.develop`.
+/// 2. One or two numbers and a tail of text: `1.2rc1`, `1.2.0rc1b`, or `1.2.develop`. A missing
+///    number is `0`. The crate reads `1.2.0rc1b` as `1.2` and the tail `0rc1b`.
+/// 3. A tail of text after a dot after the three numbers: `1.2.0.develop`.
 /// 4. A pre-release: `1.2.0-rc.1`.
 /// 5. The version: `1.2.0`.
 /// 6. A fourth number: `1.2.0.1`. Text right after it puts the string below it: `1.2.0.1rc1`. A
@@ -32,13 +33,14 @@ use crate::reference::LATEST;
 ///
 /// A part between dots is a number when it holds only digits, as the crate reads it. In the last
 /// part, the digits in front of letters are a number too, as in `2rc1` or `2rc`. So `1.2rc1` holds
-/// two numbers, and `1.2a1b` holds one number and the tail `2a1b`.
+/// two numbers, and `1.2a1b` holds one number and the tail `2a1b`. The three numbers that Palette
+/// reads still decide first, so `1.2.3rc1b` is above `1.2.develop`.
 ///
 /// The natural order of the text before the numbers orders two strings of the first form. When
 /// that text is the same, the rest decides: `chart-1.2.0.develop` is below `chart-1.2.0-rc.1`. Of
-/// two strings of the second form, the string with fewer numbers is lower. In the second and the
-/// third form, text right after the last number is then lower than a tail after a dot. So `1rc1` is
-/// below `1.develop`, and `1.2.0rc1b` is below `1.2.0.develop`.
+/// two strings of the second form, the string with fewer numbers before its tail is lower. Text
+/// right after the last number is then lower than a tail after a dot. So `1rc1` is below
+/// `1.develop`, and `1.2rc1` is below `1.2.0rc1b`.
 ///
 /// Each other tail orders part by part, at its dots, as the crate orders it. A part of digits is
 /// above a text, and two parts of digits compare as numbers. Digits with letters right after them,
@@ -178,12 +180,12 @@ struct Version<'a> {
     before: &'a str,
     /// The three numbers. A number that the version omits is `0`.
     numbers: [u64; 3],
-    /// How many numbers the version writes before its tail, from one to three.
+    /// How many numbers the version writes before its tail, from one to three, as the crate reads
+    /// them. The crate reads `3rc1b` of `1.2.3rc1b` as one part, so that version has two.
     count: usize,
     /// The form of the text around the numbers.
     form: Form,
-    /// True when the tail starts right after the last number, as in `1.2rc1` or `1.2.3rc1b`, and
-    /// not after a dot. A fourth number has no such tail.
+    /// True when the tail starts right after the last number, as in `1.2rc1`, and not after a dot.
     attached: bool,
     /// The identifiers of the pre-release after `-`. Empty for a version with no pre-release.
     pre: Vec<&'a str>,
@@ -198,9 +200,11 @@ struct Version<'a> {
 /// lowest version to the highest.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Form {
-    /// One or two numbers and a tail of text, as in `1.2.develop` or `1.2rc1`.
+    /// One or two numbers and a tail of text, as in `1.2.develop` or `1.2rc1`. Text right after
+    /// the third number is such a tail too, as the crate reads it: `1.2.0rc1b` is `1.2` and the
+    /// tail `0rc1b`.
     Short,
-    /// A tail of text right after the three numbers, as in `1.1.8.develop` or `1.2.3rc1`.
+    /// A tail of text after a dot after the three numbers, as in `1.1.8.develop`.
     Text,
     /// A version that parses.
     Parsed,
@@ -239,19 +243,26 @@ impl<'a> Version<'a> {
             Some((first, _)) => is_digits(first),
             None => number_and_text(tail).is_some(),
         });
-        let attached = tail.is_none() && !rest.is_empty();
-        // the crate reads the third number and the text right after it as one part, as in `3rc1b`
+        // text right after the third number: the crate reads that number and the text as one part,
+        // as in `3rc1b`, so it reads two numbers and a tail after a dot
+        let joined = tail.is_none() && !rest.is_empty();
         let third = v[..found.end].rfind('.').map_or(found.start, |dot| dot + 1);
         Some(Version {
             before: "",
             numbers,
-            count: 3,
-            form: if fourth { Form::More } else { Form::Text },
-            attached,
+            count: if joined { 2 } else { 3 },
+            form: if fourth {
+                Form::More
+            } else if joined {
+                Form::Short
+            } else {
+                Form::Text
+            },
+            attached: false,
             pre,
             tail: match tail {
                 Some(tail) => tail,
-                None if attached => &v[third..found.end + rest.len()],
+                None if joined => &v[third..found.end + rest.len()],
                 None => rest,
             },
         })
@@ -346,9 +357,9 @@ impl<'a> Version<'a> {
     /// pre-releases. The identifiers of two pre-releases decide, as item 11.4 says.
     ///
     /// The crate `versions` orders two versions of another form. Of two versions with one or two
-    /// numbers, fewer numbers are lower. With one to three numbers, a tail right after the last
-    /// number is then lower. Then the tails decide: see [`tails`]. Then a pre-release is above no
-    /// pre-release, and the identifiers decide.
+    /// numbers, fewer numbers are lower. A tail right after the last number is then lower. Then
+    /// the tails decide: see [`tails`]. Then a pre-release is above no pre-release, and the
+    /// identifiers decide.
     fn precedence(&self, other: &Self) -> Ordering {
         let tails = || {
             tails(self.tail, other.tail)
@@ -366,8 +377,7 @@ impl<'a> Version<'a> {
                     .cmp(&other.count)
                     .then_with(|| other.attached.cmp(&self.attached))
                     .then_with(tails),
-                Form::Text => other.attached.cmp(&self.attached).then_with(tails),
-                Form::More => tails(),
+                Form::Text | Form::More => tails(),
                 Form::Parsed => self
                     .pre
                     .is_empty()

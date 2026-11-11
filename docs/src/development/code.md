@@ -116,6 +116,10 @@ where each module goes. The Go code of the observer follows
 - `tests/version_order.rs` compares the order with the crate, row by row. A row
   where strata keeps a rule of Palette names the rule. Add a row for each new
   form. The crate is a dev-dependency only, and its version is pinned.
+- The same file also makes a probe of strings with each form, and compares the
+  two orders on each pair. Each difference needs a rule that names it, and the
+  test holds the count of differences for each rule. Add each new form to the
+  probe.
 - No script uses `sort -V` for a version. A script reads the direction of a
   move from strata, such as `versionMove` in `strata-diff/1`.
 - One order of a version lives outside strata: `oldest_first` in

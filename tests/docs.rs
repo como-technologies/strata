@@ -4467,6 +4467,8 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "the rest decides: `chart-1.2.3.develop` is below `chart-1.2.3-alpha`",
         "So `1.2.3rc1b` is below `1.2.3.develop`.",
         "`1.2.3rc1b` below `1.2.3.develop`,",
+        "So `1.2.0rc1b` is above `1.2rc1` and below `1.2.develop`.",
+        "It puts `1.2rc1` below `1.2.0rc1b`, and `1.2.0rc1b` below `1.2.develop`.",
     ] {
         assert!(
             release.contains(needle),
@@ -4500,6 +4502,8 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "The crate gives no total order to `1.2.3rc1` and `1.0.0-a_b`: it puts `1.2.3rc1` equal to `1.2.3` and to `1.2.3-rc.1`.",
         "For each count of numbers, text right after the last number is below a tail after a dot.",
         "`1.2rc1` is below `1.2.develop`, and `1.2.3rc1b` is below `1.2.3.develop`.",
+        "So `1.2rc1` is below `1.2.0rc1b`, and `1.2.0rc1b` is below `1.2.develop`.",
+        "3. A tail of text after a dot after the three numbers, as in `1.2.0.develop`.",
     ] {
         assert!(refs.contains(needle), "refs.md lacks {needle:?}");
     }
@@ -4507,6 +4511,7 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         "Such a text is above each version.",
         "It is below each version, also below a pre-release.",
         "The crate gives no total order to text right after the numbers",
+        "3. A tail of text after the three numbers, as in `1.2.0rc1b`",
     ] {
         assert!(!refs.contains(old), "refs.md still states {old:?}");
     }
@@ -4526,6 +4531,10 @@ fn the_book_states_the_order_of_the_crate_versions_where_palette_gives_none() {
         (
             "development/code.md",
             "`tests/version_order.rs` compares the order with the crate, row by row.",
+        ),
+        (
+            "development/code.md",
+            "Each difference needs a rule that names it, and the test holds the count of differences for each rule.",
         ),
     ] {
         let text = one_line(&read(&docs().join(path)));
