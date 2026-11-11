@@ -523,7 +523,10 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
         )],
         &[],
     );
-    expect_2(&d, "OCI registry r-zot has the type 'zot', not ecr or basic");
+    expect_2(
+        &d,
+        "OCI registry r-zot has the type 'zot', not ecr or basic",
+    );
     assert!(d.log.is_empty(), "crane is not run: {}", d.log);
 
     let d = tenant_digest(
