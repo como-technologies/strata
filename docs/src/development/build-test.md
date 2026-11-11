@@ -649,9 +649,9 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of the workspace in `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 | benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
-CI does not run `just adapter-test`. The adapter needs knurl, a private
-repository, and CI has no key for it: see
-[The knurl adapter](../automation/knurl.md#test-it).
+The checks do not run `just adapter-test`. The adapter needs knurl, a private
+repository. A job of knurl runs the recipe each day on the strata of `main`: see
+[The job of knurl](../automation/knurl.md#the-job-of-knurl).
 
 `ci` adds three jobs of its own. `deny list` scans each tracked file and its
 path for the names that the public tree must not hold: see
