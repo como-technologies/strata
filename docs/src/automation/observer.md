@@ -33,7 +33,7 @@ alone, so that you can run the commands below.
 | Does this cluster run its release? | A finding `cluster-differs` or `image-id-changed`. The cluster copy of each profile. | `strata snapshot` and `strata compare` |
 | Who changed it? | The field `who` of a finding. | `strata verify --who` |
 | Does the registry have newer versions of what we pin? | The list of newer versions, and the button "Ask Palette" on each move. | `strata behind`. The button runs `strata behind --pin`. |
-| Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". | `strata behind` |
+| Does Palette have a newer version of the profile that we run? | The row of the profile: "Newer profile version", and its count on the tile "Newer versions". The card "Move to" of the profile page, and the choice "Record → Newest version" of the dropdown "Compare" of a pack page. | `strata behind`, and `strata compare` of the record and the newest version |
 | What changed between two pack versions? | The detail of a newer version, with the text of the diff. | `strata compare pack:...` |
 | Which digest does each tag run as on this cluster? | The Images screen, and a finding `image-moved` or `image-split`. Only with `--read-pods`. | No `strata` command. It lists the pods through the Kubernetes API. |
 
@@ -47,7 +47,8 @@ finding, and each state of the page.
   holds for the cluster. With `--read-pods`, it lists the pods first.
 - **A versions cycle** runs every 6 hours. It asks which pins have newer versions
   in the registry, and compares each pin with its newest version. It also asks which
-  profile versions of the records have a newer published version.
+  profile versions of the records have a newer published version, and compares the
+  record of each one with the newest version.
 - **A click** on "Ask Palette" runs `strata behind` for one pack. No timer starts it.
 - **A click on the pill of a cycle** opens its menu. "Check the content now" or "Read
   the versions now" runs that cycle at once, and not at the end of its period.
@@ -122,6 +123,24 @@ newer version, as `counts.newerProfileVersions`. The filter "Newer" of the
 profiles holds both kinds. A newer profile version gives the event
 `NewProfileVersion` at the time of its create. When strata cannot read the versions
 of a profile, the row names no newer profile version.
+
+The versions cycle also compares the record with the newer version, as
+`strata compare record.json aws-stack@1.1.0` does. `newerVersion.move` holds the
+impact level and the flags of the move. Then it holds each pack that the move
+changes, adds, or removes, with its two versions and `valuesChanged`:
+
+```text
+{{#include ../output/observer-profile-move.txt}}
+```
+
+The page of the profile shows the move in the card "Move to", with the impact level
+and the five flags. Its table lists each pack whose version changes, as `old → new`,
+each pack that the move adds or removes, and each pack whose values change. A pack
+of the record links to its page. There, the dropdown "Compare" has the choice
+"Record → Newest version", with the full diff of the pack, as "Record → Published
+now" has. The card "Check this yourself" gives the command of the same compare. When
+the compare fails, the card says that strata could not compare the two, and the
+dropdown has no such choice.
 
 The summary holds the status of each profile, and the limits of the check:
 
@@ -361,9 +380,9 @@ A Secret with no record is empty. The next apply then removes the old content.
 The pipeline of your team runs the script in its publish step, so the records are
 the files that the team approved.
 
-A live run applied these steps to a cluster that Palette built. The run took the
-token from a file and bound the role to one user. It also set short periods for the
-two cycles, and it applied the output of `kubectl kustomize`.
+A live run applied these steps to a cluster that Palette built. The run bound the
+role to one user. It also set short periods for the two cycles, and it applied the
+output of `kubectl kustomize`.
 
 The pod passed the `restricted` standard and became Ready. Its first cycle reached
 Palette, so a workload cluster reaches the API. A user with only the reader role
@@ -379,7 +398,10 @@ yet.
 1. **A tenant admin adds the registry once.** It is an OCI registry of the type
    `basic`, with the provider `helm`, for `ghcr.io/orgs/como-technologies`. It uses a
    classic token with the scope `read:packages`. Palette lets only a role at tenant
-   scope add a registry. A project role can then use it.
+   scope add a registry, and a project role can then use it. The API of Palette also
+   takes the auth type `noAuth` for this public chart. No live run shows yet that
+   Palette syncs the chart with no login, so the step keeps the token: see
+   [observer-chart.sh](../development/live-runs.md#observer-chartsh).
 2. **Make the Secret of the key with `kubectl`**, as in steps 1 and 2 of
    [Install with Helm](#install-with-helm). A value of a layer reaches the
    cluster in clear, so the profile holds no key and no token.

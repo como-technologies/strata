@@ -81,7 +81,7 @@ func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, newerProfiles: map[string]bool{},
 		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
 	if in.Versions != nil {
-		v.readNewerVersions(in.Versions.Profiles, utc(in.Now))
+		v.readNewerVersions(in.Versions, utc(in.Now))
 		for _, pin := range in.Versions.Pins {
 			if pin.Registry != "" {
 				v.registries[pin.RegistryUID] = pin.Registry
@@ -115,16 +115,24 @@ func newView(in Input, c *causes) *view {
 	return v
 }
 
-// readNewerVersions keeps the newest published version of each profile that is behind. A profile
-// version that strata could not check has none: the page then says nothing about a newer version.
-func (v *view) readNewerVersions(profiles []docs.ProfilePin, now time.Time) {
-	for _, p := range profiles {
-		newest, ok := newestProfile(p)
+// readNewerVersions keeps the newest published version of each profile that is behind, with the move
+// to it. A profile version that strata could not check has none: the page then says nothing about a
+// newer version.
+func (v *view) readNewerVersions(vs *Versions, now time.Time) {
+	for _, p := range vs.Profiles {
+		newest, ok := NewestProfile(p)
 		if !ok {
 			continue
 		}
+		n := NewerVersion{Version: newest.Version, Created: newest.Created, New: listedWithin(newest.Created, now)}
+		subject := Subject(p.Name, p.Version)
+		if d, ok := vs.ProfileMoves[subject]; ok {
+			move := ProfileMoveOf(d)
+			n.Move = &move
+		}
+		n.Unread = vs.ProfileUnread[subject]
 		for _, by := range p.PinnedBy {
-			v.newerVersions[by.Subject] = NewerVersion{Version: newest.Version, Created: newest.Created, New: listedWithin(newest.Created, now)}
+			v.newerVersions[by.Subject] = n
 		}
 	}
 }

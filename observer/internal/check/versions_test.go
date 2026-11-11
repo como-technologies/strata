@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -188,5 +189,81 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 	rows := o.Summary().NotChecked
 	if len(rows) != 1 || rows[0].Cause != model.OlderRegistryCopy || rows[0].Registry != "Public Repo" || rows[0].Packs[0] != "addon/cert-manager" {
 		t.Errorf("notChecked %+v", rows)
+	}
+}
+
+// Issue #708. The versions cycle compares the record of each profile version that is behind with the
+// newest version of its profile, by the uid of that version. The row holds the move, and the newest
+// side of the detail tier gives a pack of the diff with its values. A compare that fails names the
+// newer version with no move, and the other versions keep theirs. Each cycle compares again, because
+// a published version can change in place, and the state holds no move of a profile.
+func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *testing.T) {
+	r, w := withBehind(t)
+	r.record("barney-addons", "1.3.1", "addon/fred-compositions")
+	r.record("barney-base", "1.5.0", "csi/csi-aws-ebs")
+	r.record("wilma-gateway", "3.1.2", "addon/cert-manager")
+	held := func(name, version, newest, uid string) docs.ProfilePin {
+		p := docs.ProfilePin{Name: name, Version: version, PinnedBy: []docs.PinnedBy{{Subject: name + "@" + version}}}
+		if newest != "" {
+			p.Behind, p.Newer = true, []docs.NewerProfile{{Version: newest, UID: uid}}
+		}
+		return p
+	}
+	w.behind.Profiles = []docs.ProfilePin{held("barney-addons", "1.3.1", "1.4.0", "u-140"), held("barney-base", "1.5.0", "1.6.0", "u-160"), held("wilma-gateway", "3.1.2", "", "")}
+	fred := docs.Pack{Key: "addon/fred-compositions", Status: docs.PackChanged, Identity: true, A: &docs.PackSide{Version: "0.1.0"}, B: &docs.PackSide{Version: "0.2.0"},
+		Values: docs.Values{Changed: true, Diff: []docs.Leaf{{Op: "changed", Path: "compositions", Old: sentinel, New: "x"}}}}
+	w.profileMoves = map[string]docs.Diff{"barney-addons@1.3.1 u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
+	w.profileMoveErrs = map[string]error{"barney-base@1.5.0 u-160": failure(docs.KindAPI)}
+	o := r.observer(w)
+	ctx := context.Background()
+	// the rows of the profiles come from a content cycle
+	if err := o.RunContent(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.RunVersions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]model.Profile{}
+	for _, p := range o.Summary().Profiles {
+		byName[p.Name] = p
+	}
+	addons, base, gateway := byName["barney-addons"].NewerVersion, byName["barney-base"].NewerVersion, byName["wilma-gateway"].NewerVersion
+	want := model.MovePack{Key: "addon/fred-compositions", Status: docs.PackChanged, From: "0.1.0", To: "0.2.0", Flags: []string{docs.FlagIdentity}, ValuesChanged: true}
+	if addons == nil || addons.Move == nil || addons.Move.Impact != "in-place" || len(addons.Move.Packs) != 1 || !reflect.DeepEqual(addons.Move.Packs[0], want) {
+		t.Fatalf("barney-addons: %+v", addons)
+	}
+	if base == nil || base.Move != nil || !base.Unread || gateway != nil {
+		t.Errorf("barney-base %+v, wilma-gateway %+v", base, gateway)
+	}
+	if got := w.countProfileMoves(); got != 2 {
+		t.Errorf("%d compares of a record with a profile version", got)
+	}
+	pack, ok, err := o.PackDiff(ctx, "barney-addons@1.3.1", "addon/fred-compositions", model.SideNewest)
+	if err != nil || !ok || pack.Values.Diff[0].Old != sentinel {
+		t.Errorf("the newest side: %+v %v %v", pack, ok, err)
+	}
+	for _, c := range []struct{ name, subject, key string }{
+		{"a version whose compare failed", "barney-base@1.5.0", "csi/csi-aws-ebs"},
+		{"a version that is current", "wilma-gateway@3.1.2", "addon/cert-manager"},
+		{"a pack that is not in the move", "barney-addons@1.3.1", "addon/nope"},
+	} {
+		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, model.SideNewest); ok || err != nil {
+			t.Errorf("%s: %v %v", c.name, ok, err)
+		}
+	}
+	if err := o.RunVersions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.countProfileMoves(); got != 4 {
+		t.Errorf("%d compares after two cycles", got)
+	}
+	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{sentinel, "u-140", "fred-compositions"} {
+		if strings.Contains(string(raw), banned) {
+			t.Errorf("the state holds %q", banned)
+		}
 	}
 }

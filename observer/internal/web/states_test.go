@@ -369,6 +369,12 @@ func expectedSides(set *devdata.Set, x api.ProfileView, k model.Pack) (options [
 	if k.Status == model.StatusDrift && ofRecord == 0 {
 		changed["published"] = true
 	}
+	// issue #708: the record against the newest version of its profile, when strata compared the two
+	if n := x.NewerVersion; n != nil && n.Move != nil {
+		options = append(options, "newest")
+		labels["newest"] = "Record → Newest version"
+		changed["newest"] = slices.ContainsFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key == k.Key })
+	}
 	open = "published"
 	for _, side := range options {
 		if changed[side] {

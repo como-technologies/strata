@@ -11,10 +11,8 @@ use crate::common::{
     path_with, repo_file, text, walk,
 };
 
-/// The key of Palette and the pull token of a run. A run must show neither in an argument of
-/// `kubectl` or in a file.
+/// The key of Palette in a run. A run must not show it in an argument of `kubectl` or in a file.
 const KEY_MARKER: &str = "key-marker-8f3a1c";
-const TOKEN_MARKER: &str = "token-marker-91bc7e";
 
 /// The `api.sh` of the tree: it gives a kubeconfig for a cluster uid, and logs the call with the
 /// project of the request. `FAKE_NO_KUBECONFIG` makes Palette refuse.
@@ -44,12 +42,11 @@ case "$1 $2" in
 esac
 "##;
 
-/// The `gh` of the run: the user of the pull Secret, and the newest release (`v9.9.9`).
+/// The `gh` of the run: the newest release (`v9.9.9`). It refuses each other call.
 /// `FAKE_NO_RELEASE` makes the read of the release fail.
 const FAKE_GH: &str = r##"#!/usr/bin/env bash
 echo "$*" >> "$FAKE/gh.log"
 case "$*" in
-  "api user --jq .login") echo tester ;;
   "release view --json tagName --jq .tagName")
     [ -z "${FAKE_NO_RELEASE-}" ] || { echo "no release" >&2; exit 1; }
     echo v9.9.9 ;;
@@ -58,18 +55,19 @@ esac
 "##;
 
 /// The `kubectl` of the run. It logs each call with the `KUBECONFIG` of the call to `$FAKE/args.log`,
-/// and it looks in `$HOME` and `$TMPDIR` for the two markers at each call: a file that holds one is
-/// in `$FAKE/leak.log`. What a `create` reads from standard input goes to `$FAKE/stdin.log`, and what
-/// an `apply` sends goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the cluster
-/// is in the files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A delete of a
-/// name that is absent fails with `NotFound` unless `--ignore-not-found` is there. A delete with a
-/// selector never fails, as `kubectl` does.
+/// and it looks in `$HOME` and `$TMPDIR` for the marker of the key at each call: a file that holds
+/// it is in `$FAKE/leak.log`. What a `create` reads from standard input goes to `$FAKE/stdin.log`, and
+/// what an `apply` sends goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the
+/// cluster is in the files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A
+/// delete of a name that is absent fails with `NotFound` unless `--ignore-not-found` is there. A
+/// delete with a selector never fails, as `kubectl` does. `FAKE_NAMESPACE_FAILS` makes the apply of
+/// the namespace fail.
 ///
 /// A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL: &str = r##"#!/usr/bin/env bash
 fake=$FAKE
 echo "[${KUBECONFIG-}] $*" >> "$fake/args.log"
-grep -rlF -e "$KEY_MARKER" -e "$TOKEN_MARKER" "$HOME" "$TMPDIR" >> "$fake/leak.log" 2> /dev/null
+grep -rlF -e "$KEY_MARKER" "$HOME" "$TMPDIR" >> "$fake/leak.log" 2> /dev/null
 notfound() { echo "Error from server (NotFound): $1 \"$2\" not found" >&2; exit 1; }
 case "$*" in
   "kustomize .")
@@ -90,7 +88,9 @@ case "$*" in
     cat >> "$fake/applied.yaml"; echo "---" >> "$fake/applied.yaml" ;;
   "apply --server-side --force-conflicts -f -")
     cat > "$fake/records.yaml" ;;
-  *"apply -f "*"/namespace.yaml") touch "$fake/ns" ;;
+  *"apply -f "*"/namespace.yaml")
+    [ -z "${FAKE_NAMESPACE_FAILS-}" ] || { echo "the namespace is refused" >&2; exit 1; }
+    touch "$fake/ns" ;;
   "apply -f observer.yaml")
     touch "$fake/ns" "$fake/deploy"
     ! grep -qx 'kind: ClusterRole' observer.yaml || touch "$fake/clusterrole"
@@ -163,12 +163,9 @@ impl Up {
                 ("fake-port-forward", FAKE_PORT_FORWARD),
             ],
         );
-        for d in ["home", "tmp", "fake", "secrets"] {
+        for d in ["home", "tmp", "fake"] {
             std::fs::create_dir(up.path(d)).unwrap();
         }
-        let token = up.path("secrets/ghcr-pull-token");
-        std::fs::write(&token, format!("{TOKEN_MARKER}\n")).unwrap();
-        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
         let listed: Vec<serde_json::Value> = clusters
             .iter()
             .map(|(name, uid, project)| {
@@ -205,8 +202,6 @@ impl Up {
             .env("STRATA_BIN", &strata)
             .env("PALETTE_API_KEY", KEY_MARKER)
             .env("KEY_MARKER", KEY_MARKER)
-            .env("TOKEN_MARKER", TOKEN_MARKER)
-            .env("GHCR_PULL_TOKEN_FILE", self.path("secrets/ghcr-pull-token"))
             .env("KUBECONFIG", "/elsewhere/another-cluster.yaml");
         for (key, value) in envs {
             command.env(key, value);
@@ -427,69 +422,57 @@ fn a_kubeconfig_that_palette_refuses_stops_the_script_and_keeps_the_old_file() {
 }
 
 #[test]
-fn the_key_and_the_token_reach_no_argument_of_kubectl_and_no_file_of_the_run() {
+fn the_key_reaches_no_argument_of_kubectl_and_no_file_of_the_run() {
     let up = Up::new(&[("alpha", "c-1", "p-1")]);
     succeeded(&up.run(&["--tag", "v0.29.0", "--read-pods"]));
 
-    // both reached the cluster, through standard input
+    // the key reached the cluster, through standard input
     let sent = up.log("stdin.log");
     assert!(
         sent.contains(KEY_MARKER),
         "the key did not reach the Secret"
     );
-    assert!(
-        sent.contains(TOKEN_MARKER),
-        "the token did not reach the pull Secret"
-    );
 
-    // no argument of kubectl, gh, strata, or api.sh holds one
+    // no argument of kubectl, gh, strata, or api.sh holds it
     for log in ["args.log", "gh.log", "strata.log", "api.log"] {
         let calls = up.log(log);
-        for marker in [KEY_MARKER, TOKEN_MARKER] {
-            assert!(!calls.contains(marker), "{marker} is in {log}:\n{calls}");
-        }
+        assert!(!calls.contains(KEY_MARKER), "the key is in {log}:\n{calls}");
     }
-    // no file under the home folder or the temporary folder held one at a call of kubectl
-    assert_eq!(up.log("leak.log"), "", "a file of the run held a marker");
-    // and none holds one at the end. The files of the stand-ins are the cluster, and the token file
-    // is the file of the person.
+    // no file under the home folder or the temporary folder held it at a call of kubectl
+    assert_eq!(up.log("leak.log"), "", "a file of the run held the key");
+    // and none holds it at the end. The files of the stand-ins are the cluster.
     for root in ["home", "tmp"] {
         for file in walk(&up.path(root)) {
             let body = std::fs::read(&file).unwrap();
             let body = text(&body);
             assert!(
-                !body.contains(KEY_MARKER) && !body.contains(TOKEN_MARKER),
-                "{} holds a marker",
+                !body.contains(KEY_MARKER),
+                "{} holds the key",
                 file.display()
             );
         }
     }
-    let output = format!("{}{}", up.log("applied.yaml"), up.log("records.yaml"));
-    assert!(!output.contains(TOKEN_MARKER));
-    // the output of the script shows neither
+    // the output of the script does not show it
     let o = up.run(&["--tag", "v0.29.0"]);
     let shown = format!("{}{}", text(&o.stdout), text(&o.stderr));
-    assert!(
-        !shown.contains(KEY_MARKER) && !shown.contains(TOKEN_MARKER),
-        "{shown}"
-    );
+    assert!(!shown.contains(KEY_MARKER), "{shown}");
 }
 
 #[test]
-fn the_overlay_holds_the_tag_the_pull_secret_and_the_two_periods() {
+fn the_overlay_holds_the_tag_and_the_two_periods_and_no_pull_secret() {
     let up = Up::new(&[("alpha", "c-1", "p-1")]);
     succeeded(&up.run(&["--tag", "v0.29.0"]));
     let overlay = up.overlay();
     for line in [
         "newName: ghcr.io/como-technologies/strata-observer",
         "newTag: v0.29.0",
-        "- name: ghcr-pull",
         "value: --content-every=1m",
         "value: --versions-every=5m",
     ] {
         assert!(overlay.contains(line), "{line}:\n{overlay}");
     }
     assert!(!overlay.contains("components:"), "{overlay}");
+    assert!(!overlay.contains("imagePullSecrets"), "{overlay}");
     assert!(!up.path("fake/overlay/pods").exists());
     assert!(up.path("fake/overlay/base/deployment.yaml").is_file());
 }
@@ -533,7 +516,6 @@ fn kubectl_kustomize_renders_the_overlay_with_and_without_the_component() {
         assert_eq!(kinds, objects, "{rendered}");
         for line in [
             "image: ghcr.io/como-technologies/strata-observer:v0.29.0",
-            "- name: ghcr-pull",
             "- --content-every=1m",
             "- --versions-every=5m",
         ] {
@@ -541,6 +523,7 @@ fn kubectl_kustomize_renders_the_overlay_with_and_without_the_component() {
         }
         assert_eq!(rendered.contains("- --read-pods"), role, "{rendered}");
         assert_eq!(rendered.contains("kind: ClusterRoleBinding"), role);
+        assert!(!rendered.contains("imagePullSecrets"), "{rendered}");
     }
 }
 
@@ -593,14 +576,13 @@ fn a_second_run_works_and_each_object_is_made_by_create_and_sent_by_apply() {
     succeeded(&up.run(&["--tag", "v0.29.0"]));
     let calls = up.kubectl_calls();
     let creates: Vec<&String> = calls.iter().filter(|c| c.contains(" create ")).collect();
-    assert_eq!(creates.len(), 6, "{creates:?}: three objects, two runs");
+    assert_eq!(creates.len(), 4, "{creates:?}: two objects, two runs");
     for call in &creates {
         assert!(call.ends_with("--dry-run=client -o yaml"), "{call}");
     }
     for object in [
         "create configmap strata-observer",
         "create secret generic strata-observer-key",
-        "create secret generic ghcr-pull",
     ] {
         assert_eq!(
             creates.iter().filter(|c| c.contains(object)).count(),
@@ -610,7 +592,7 @@ fn a_second_run_works_and_each_object_is_made_by_create_and_sent_by_apply() {
     }
     // each create has its apply: the two run in a pipe, so their lines come in any order
     let applies = calls.iter().filter(|c| c.ends_with("] apply -f -")).count();
-    assert_eq!(applies, 6, "{calls:?}");
+    assert_eq!(applies, 4, "{calls:?}");
     // the namespace is applied from its file, and the manifests from the render
     assert_eq!(
         calls
@@ -678,13 +660,17 @@ fn the_end_of_up_prints_the_commands_that_open_the_page_on_port_18080() {
 #[test]
 fn a_failed_step_stops_up_and_says_which_step_failed() {
     let up = Up::new(&[("alpha", "c-1", "p-1")]);
-    // no token file: the first step stops, and nothing changes in the cluster
-    std::fs::remove_file(up.path("secrets/ghcr-pull-token")).unwrap();
-    let o = up.run(&["--tag", "v0.29.0"]);
+    // the cluster refuses the namespace: the first step stops, and nothing else changes in the cluster
+    let o = up.run_with(&["--tag", "v0.29.0"], &[("FAKE_NAMESPACE_FAILS", "1")]);
     assert_eq!(o.status.code(), Some(2));
+    // kubectl in the cluster prints its errors on standard output, and the step names itself
+    let said = text(&o.stdout);
+    assert!(said.contains("the namespace is refused"), "{said}");
     let error = text(&o.stderr);
-    assert!(error.contains("no token in"), "{error}");
-    assert!(error.contains("the pull Secret"), "{error}");
+    assert!(
+        error.contains("the namespace strata-observer failed"),
+        "{error}"
+    );
     assert!(up.log("applied.yaml").is_empty());
     assert!(!up.path("fake/ns").exists(), "the namespace is not made");
 }
@@ -898,7 +884,6 @@ fn the_live_example_names_the_script_and_the_three_recipes_with_what_each_needs(
         .nth(1)
         .expect("the page has the section A test cluster");
     for needle in [
-        "a token file with only the scope `read:packages`",
         "`kubectl`",
         "`gh`",
         "The key of Palette",

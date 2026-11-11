@@ -508,11 +508,11 @@ pods_read() {
   jq '{pods, readAt, error, counts}' images.json
 }
 
-# The image of the observer, and the pull Secret for it. The image is on a private package of GitHub, so
-# a run never pushes it to another registry: it pulls it with a token that has only read:packages.
+# The image of the observer. It is on a public package of GitHub, so a node pulls it with no pull
+# Secret. A run never pushes it to another registry, so the pod runs the image that CI built.
 # observer_image [TAG]: set $image from OBSERVER_IMAGE (default: the image with the tag TAG, or with the
-# tag of the version in Cargo.toml), $image_name and $image_pin for a kustomization, and $pull_file from
-# GHCR_PULL_TOKEN_FILE. It stops the script for an image with neither a tag nor a digest.
+# tag of the version in Cargo.toml), and $image_name and $image_pin for a kustomization. It stops the
+# script for an image with neither a tag nor a digest.
 observer_image() {
   local version
   version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)
@@ -523,50 +523,24 @@ observer_image() {
     *) die "OBSERVER_IMAGE needs a tag or a digest" ;;
   esac
   case "${image##*:}" in */*) die "OBSERVER_IMAGE needs a tag or a digest" ;; esac
-  pull_file=${GHCR_PULL_TOKEN_FILE:-$HOME/.config/strata/ghcr-pull-token}
 }
-# pull_token: the pull token on standard output, from the token file. The file holds a token with only
-# the scope read:packages. When the file is absent, empty, or open to a group or to others, the
-# function prints one line on standard error and fails.
-pull_token() {
-  local token mode
-  token=$(tr -d '[:space:]' 2> /dev/null < "$pull_file")
-  if [ -z "$token" ]; then
-    echo "no token in $pull_file: it must hold a token with only the scope read:packages" >&2
-    return 1
-  fi
-  mode=$(stat -c %a "$pull_file" 2> /dev/null || stat -f %Lp "$pull_file") \
-    || { echo "cannot read the mode of $pull_file" >&2; return 1; }
-  if [ $((8#$mode & 077)) != 0 ]; then
-    echo "$pull_file has the mode $mode: run chmod 600 on it. It must hold a token with only the scope read:packages" >&2
-    return 1
-  fi
-  printf %s "$token"
+# observer_namespace [FLAG...]: apply the namespace of the observer from its file, with each FLAG, such
+# as --server-side. The namespace has the label of the restricted standard. The ConfigMap and the
+# Secret of the key go into it.
+observer_namespace() { kc apply "$@" -f "$root/deploy/observer/namespace.yaml"; }
+# no_pull_secret: the pod of the observer runs the image of the run, and it names no pull Secret. So a
+# node pulled the image from the public package with no login. pull.json keeps the pod, and the output
+# shows the image, the image id, and the pull Secrets.
+no_pull_secret() {
+  kj -n "$ns" get pod -l app.kubernetes.io/name=strata-observer -o json > pull.json || return 1
+  jq '.items[0] | {image: .spec.containers[0].image, imageID: .status.containerStatuses[0].imageID,
+    imagePullSecrets: (.spec.imagePullSecrets // [])}' pull.json
+  jq -e --arg i "$image" '.items[0] | (.spec.imagePullSecrets // [] | length == 0)
+    and .spec.containers[0].image == $i and (.status.containerStatuses[0].imageID // "") != ""' pull.json > /dev/null
 }
-# pull_secret: the Secret ghcr-pull from the token file. The token goes through standard input. The
-# function reads the file first, so a file that fails changes nothing in the cluster. The Secret
-# needs the namespace, so the function applies it.
-pull_secret() {
-  local token user
-  token=$(pull_token) || return 1
-  kc apply -f "$root/deploy/observer/namespace.yaml" || return 1
-  user=$(gh api user --jq .login 2> /dev/null)
-  printf %s "$token" \
-    | jq -Rs --arg u "${user:-strata-observer}" \
-      '. as $t | {auths: {"ghcr.io": {username: $u, password: $t, auth: ("\($u):\($t)" | @base64)}}}' \
-    | create_apply secret generic ghcr-pull --type=kubernetes.io/dockerconfigjson --from-file=.dockerconfigjson=/dev/stdin
-}
-# pull_secret_stop: after a failed check pull-secret, the first check of a run that installs the observer,
-# print why and end the script with exit 1. A token file that fails changes nothing in the cluster, so
-# there is nothing to undo: the function sets $undone then.
-pull_secret_stop() {
-  pull_token > /dev/null 2>&1 || undone=1
-  { cat pull-secret.err; echo "the run stops: the pull Secret needs the token file"; } | tee -a steps.log
-  exit 1
-}
-# observer_overlay ARG...: base/ is a copy of deploy/observer. kustomization.yaml sets the image and the
-# pull Secret, and adds each ARG to the arguments of the pod, such as --content-every=1m, so that a run
-# takes minutes. observer_image sets the image first.
+# observer_overlay ARG...: base/ is a copy of deploy/observer. kustomization.yaml sets the image, and adds
+# each ARG to the arguments of the pod, such as --content-every=1m, so that a run takes minutes.
+# observer_image sets the image first.
 observer_overlay() {
   local arg
   mkdir -p base && cp "$root"/deploy/observer/*.yaml base/ || return 1
@@ -580,16 +554,8 @@ images:
   - name: ghcr.io/como-technologies/strata-observer
     newName: $image_name
     $image_pin
-patches:
-  - target:
-      kind: Deployment
-      name: strata-observer
-    patch: |-
-      - op: add
-        path: /spec/template/spec/imagePullSecrets
-        value:
-          - name: ghcr-pull
 YAML
+    [ $# = 0 ] || printf 'patches:\n  - target:\n      kind: Deployment\n      name: strata-observer\n    patch: |-\n'
     for arg in "$@"; do
       printf '      - op: add\n        path: /spec/template/spec/containers/0/args/-\n        value: %s\n' "$arg"
     done

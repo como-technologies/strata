@@ -97,8 +97,10 @@ type Impact struct {
 }
 
 // Values holds the changes of the pack values. Only the detail tier sends Diff and Unified. Unified is
-// the text of the values as `--full` prints it, in the unified form.
+// the text of the values as `--full` prints it, in the unified form. Changed says that the values
+// differ, and it holds no value.
 type Values struct {
+	Changed   bool   `json:"changed"`
 	Parseable bool   `json:"parseable"`
 	Diff      []Leaf `json:"diff"`
 	Unified   string `json:"unified"`
@@ -181,9 +183,11 @@ type ProfilePin struct {
 }
 
 // NewerProfile is one newer published version of a profile. Created is the time that Palette gives
-// the create of the newest one, and it is empty for the others.
+// the create of the newest one, and it is empty for the others. The observer compares a record with
+// the newest version by its UID.
 type NewerProfile struct {
 	Version string `json:"version"`
+	UID     string `json:"uid"`
 	Created string `json:"created"`
 }
 

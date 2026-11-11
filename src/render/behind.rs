@@ -155,10 +155,7 @@ pub(crate) fn palette_lines(pin: &crate::ops::Pin) -> Vec<String> {
 /// latest`.
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
-    let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
-    for f in &b.flags {
-        line.push_str(&format!(" {}", f.as_str()));
-    }
+    let mut line = bump_text(b);
     if let Some(n) = pin
         .newer
         .iter()
@@ -167,4 +164,19 @@ pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
         line.push_str(&format!("; Palette calls {} the latest", n.version));
     }
     Some(line)
+}
+
+/// `bump to 1.4.0: in-place IDENTITY AUTHORED`, for a profile version with a bump: the impact
+/// level and the flags of the packs that the move changes.
+pub(crate) fn profile_bump_line(p: &crate::ops::ProfilePin) -> Option<String> {
+    p.bump.as_ref().map(bump_text)
+}
+
+/// `bump to <version>: <impact> <flags>`: the words that a pin and a profile version share.
+fn bump_text(b: &crate::ops::Bump) -> String {
+    let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
+    for f in &b.flags {
+        line.push_str(&format!(" {}", f.as_str()));
+    }
+    line
 }

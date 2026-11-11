@@ -750,8 +750,24 @@ of the secret does not show, because the two sides hold the mask: see
     of the version. Each has `version`, `uid`, and `created` on the newest one:
     when Palette created that version.
   - `behind`: `true` when `newer` is not empty.
+  - `bump`, for a version that is behind, unless `--no-impact`: what a move to
+    the newest version does, from `compare` of the two versions. See
+    [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+    - `to`, the newest version, and `impact`, the most severe impact level of the
+      comparison.
+    - `flags[]`: each flag that a pack of the comparison holds, in the order of
+      the legend.
+    - `packs[]`: each pack that the move changes, adds, or removes, in the order
+      of `compare`. Each has `key`, `status` (`changed`, `added`, or `removed`),
+      `from` and `to`, its versions on the two sides, and `flags[]` when it is not
+      empty. `from` is absent for a pack that the move adds, and `to` for a pack
+      that it removes.
+      `valuesChanged` is there, only when true, for a pack whose values change.
+    - A bump of a profile version has no `paletteValidation`: strata does not
+      ask Palette about the move of a profile.
   - `gone`, only when true: Palette no longer holds the version.
-  - `error`, when strata could not read the versions.
+  - `error`, when strata could not read the versions, or could not compare the
+    move.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`. Also
   `profiles`, `profilesBehind`, and `profileErrors`, the counts of `profiles[]`.
   Each of these three is absent when it is 0.

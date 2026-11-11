@@ -105,12 +105,20 @@
 #       with OciSyncInProgress: then wait, and ask again. Exit 2 when Palette refuses the request
 #       for five minutes, or when the sync does not end in five minutes.
 #   api.sh sync KIND REGISTRY_UID
-#       The same for a registry of KIND. KIND is oci-ecr, oci-basic (an OCI registry with basic
-#       auth), helm, or pack (a Spectro pack registry).
+#       The same for a registry of KIND. KIND is oci-ecr, oci-basic (an OCI registry of the type
+#       basic), helm, or pack (a Spectro pack registry).
 #   KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER
 #       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
-#   api.sh pack-registry-delete REGISTRY_UID
-#       Remove a Spectro pack registry.
+#   api.sh oci-registry-create NAME ENDPOINT BASE_PATH
+#       Make an OCI registry of the tenant, and print its uid. The registry has the type basic,
+#       the provider helm, the auth type noAuth, and the sync on. ENDPOINT, such as
+#       https://ghcr.io/orgs/OWNER, and BASE_PATH, such as charts, name the charts.
+#   api.sh registry-delete KIND REGISTRY_UID
+#       Remove a registry of the tenant. KIND is a kind of api.sh sync. A registry that is gone
+#       is no error.
+#   api.sh registry-path KIND REGISTRY_UID
+#       Print the path of a registry of the tenant. KIND is a kind of api.sh sync. A script
+#       reads the registry with api.sh get-status and this path.
 #   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]
 #       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name. The pin
 #       has no pack uid, as the console does for a registry that Palette does not synchronize.
@@ -714,13 +722,8 @@ SYNC_WAIT=${SYNC_WAIT:-5}
 # then wait until a run newer than the last one has ended
 sync_registry() {
   local kind=${1:-} uid=${2:-} base before status after
-  case "$kind" in
-    oci-ecr) base=/v1/registries/oci/$uid/ecr ;;
-    oci-basic) base=/v1/registries/oci/$uid/basic ;;
-    helm) base=/v1/registries/helm/$uid ;;
-    pack) base=/v1/registries/pack/$uid ;;
-    *) die "usage: api.sh sync KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack" ;;
-  esac
+  base=$(registry_base "$kind" "$uid") \
+    || die "usage: api.sh sync KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
   [ -n "$uid" ] || die "usage: api.sh sync KIND REGISTRY_UID"
   before=$(call GET "$base/sync/status" | jq -r '.lastRunTime // ""') || return 2
   sync_start "$base" "$uid" || return 2
@@ -763,16 +766,37 @@ pack_registry_create() {
   PROJECT="" call POST /v1/registries/pack "$body" | jq -r '.uid'
 }
 
-# pack_registry_delete UID: remove a Spectro pack registry; one that is gone is not an error
-pack_registry_delete() {
-  local uid=${1:-}
-  [ -n "$uid" ] || die "usage: api.sh pack-registry-delete REGISTRY_UID"
-  if PROJECT="" call GET "/v1/registries/pack/$uid" > /dev/null 2>&1; then
-    PROJECT="" call DELETE "/v1/registries/pack/$uid" > /dev/null || return 2
-    echo "deleted pack registry $uid"
+# oci_registry_create NAME ENDPOINT BASE_PATH: an OCI registry of the type basic, with the provider
+# helm, the auth type noAuth, and the sync on. Palette reads ENDPOINT at the create, so a registry
+# that refuses a read with no login fails the create. The registry is of the tenant. Prints the uid.
+oci_registry_create() {
+  local name=${1:-} endpoint=${2:-} path=${3:-} body
+  [ -n "$path" ] || die "usage: api.sh oci-registry-create NAME ENDPOINT BASE_PATH"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -n --arg n "$name" --arg e "$endpoint" --arg b "$path" \
+    '{metadata: {name: $n}, spec: {endpoint: $e, baseContentPath: $b, providerType: "helm",
+      isSyncSupported: true, auth: {type: "noAuth", tls: {enabled: true, insecureSkipVerify: false}}}}' > "$body"
+  PROJECT="" call POST /v1/registries/oci/basic "$body" | jq -r '.uid'
+}
+
+# registry_delete KIND UID: remove the registry UID of KIND, a kind of registry_base, from the
+# tenant. One that is gone is not an error.
+registry_delete() {
+  local kind=${1:-} uid=${2:-} path
+  path=$(registry_base "$kind" "$uid") && [ -n "$uid" ] \
+    || die "usage: api.sh registry-delete KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
+  if PROJECT="" call GET "$path" > /dev/null 2>&1; then
+    PROJECT="" call DELETE "$path" > /dev/null || return 2
+    echo "deleted $kind registry $uid"
   else
-    echo "pack registry $uid: not found"
+    echo "$kind registry $uid: not found"
   fi
+}
+
+# registry_path KIND UID: the path of registry_base, for a script that reads the registry
+registry_path() {
+  [ -n "${2:-}" ] && registry_base "$1" "$2" \
+    || die "usage: api.sh registry-path KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
 }
 
 # pin_profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]: create and publish
@@ -928,7 +952,9 @@ case "${1:-}" in
   sync-oci) shift; sync_oci "$@" ;;
   sync) shift; sync_registry "$@" ;;
   pack-registry-create) shift; pack_registry_create "$@" ;;
-  pack-registry-delete) shift; pack_registry_delete "$@" ;;
+  oci-registry-create) shift; oci_registry_create "$@" ;;
+  registry-delete) shift; registry_delete "$@" ;;
+  registry-path) shift; registry_path "$@" ;;
   pin-profile) shift; pin_profile "$@" ;;
   manifest-profile) shift; manifest_profile "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;

@@ -49,12 +49,14 @@ any other command and any other flag.
 | Content | 4 | `compare <record> side-<n>.json --full --json --compact -q` | 0 or 1 |
 | Versions | 1 | `behind <record> --no-impact --json --compact -q` | 0, 1, or 2 with a document |
 | Versions | 2 | `compare pack:<registryUid>/<name>@<version> pack:<registryUid>/<name>@<newest> --full --json --compact -q` | 0 or 1 |
+| Versions | 3 | `compare <record> <uid> --full --json --compact -q` | 0 or 1 |
 | Click | 1 | `behind <record> --pin <layer>/<name> --json --compact -q` | 0, 1, or 2 with a document |
 
 Steps 3 and 4 run for each record that the cluster runs. The side comes from
 the raw answers of step 2, so these two steps make no request.
 Step 1 of the versions cycle runs for each record, and step 2 runs for each pin that
-is behind and has no cached move.
+is behind and has no cached move. Step 3 runs for each profile version that is
+behind: see [The move to the newest version of a profile](#the-move-to-the-newest-version-of-a-profile).
 
 `--full` adds the unified text of the changes to the document of `verify` and of
 `compare`. The text stays in memory: see [The text of a
@@ -82,7 +84,8 @@ the pods](#the-read-of-the-pods).
   minutes.
 - A content cycle compares the side of each record at the same time. A versions
   cycle runs `behind` on each record at the same time, and then compares each move
-  that it does not know at the same time, as many as the pool lets. It joins the
+  that it does not know at the same time, as many as the pool lets. Then it compares
+  the record of each profile version that is behind, in the same way. It joins the
   answers of `behind` into one: one pin for each pack name, registry, pinned version,
   and tag, with each record that pins it. A pack that many records pin gets one read
   for each record.
@@ -435,8 +438,24 @@ finding makes it `drift`. `counts.newerProfileVersions` counts the rows that hol
 `newerVersion`.
 
 The observer orders no version: `behind` gives the newest one first. A profile
-version that strata could not check gives no `newerVersion` and no cause. The
-compare of a move is for the packs only, so the profile version has no counts.
+version that strata could not check gives no `newerVersion` and no cause.
+
+### The move to the newest version of a profile
+
+The cycle runs `behind` with `--no-impact`, so its answer holds no `bump` of a
+profile version. For each profile version with a `newerVersion`, the cycle
+compares the record with the newest version, by the uid of that version:
+`strata compare <record> <uid> --full --json`. The row then holds
+`newerVersion.move`: the impact level of the compare, each change flag of its
+packs, and each pack that the move changes, adds, or removes. A pack holds its
+key, its status, its version on each side, its flags, and `valuesChanged`. The
+compare gives each field, so the observer adds no rule of a change.
+
+A published version can change in place, so the move of a profile has no cache.
+Each cycle compares it again. The memory holds the diff for the side `newest` of
+the detail tier, and the state never holds it. A compare that fails gives
+`newerVersion.unread`, with no move. It does not fail the cycle, and the next
+cycle asks again.
 
 ## The answers of Palette
 

@@ -36,7 +36,34 @@ are in another scope, so Palette does not list them for this version. See
 The check `behind-profile-names` of [loop.sh](../development/live-runs.md#loopsh)
 tests the list of Palette on the live tenant.
 
-## 2. The record of the cluster
+## 2. What the move changes
+
+`behind` also compares 1.0.0 with the newest version, as `compare` of the two
+versions does. The line `bump to` names the impact level and the change flags of
+the move:
+
+```text
+{{#include ../output/behind-profile-move-lines.txt}}
+```
+
+The level is `repave`, a hint of the table in
+[The impact levels](../reference/impact.md#the-impact-levels). `compare` of the two
+versions gives the same level:
+
+```text
+{{#include ../output/behind-profile-move-compare.txt}}
+```
+
+The JSON names each pack that the move changes, with its two versions, and
+`valuesChanged` when its values change:
+
+```text
+{{#include ../output/behind-profile-move-json.txt}}
+```
+
+See [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
+
+## 3. The record of the cluster
 
 ```text
 {{#include ../output/behind-profile-cluster-lines.txt}}
@@ -45,7 +72,7 @@ tests the list of Palette on the live tenant.
 The record of `payments` holds each profile that the cluster runs. So the same
 line names the version that the cluster can move to.
 
-## 3. In a script
+## 4. In a script
 
 ```text
 {{#include ../output/behind-profile-json.txt}}
@@ -53,9 +80,11 @@ line names the version that the cluster can move to.
 
 ## What to do
 
-- Compare the two versions before a move:
-  `strata compare aws-stack@1.0.0 aws-stack@1.1.0`. See
-  [strata compare](../commands/compare.md).
+- Read the full diff of the move before you move a cluster:
+  `strata compare aws-stack@1.0.0 aws-stack@1.1.0 --full`. See
+  [strata compare](../commands/compare.md). The
+  [observer](../automation/observer.md#run-it-once) shows the same move on the page
+  of the profile.
 - Ask Palette about the move of the cluster:
   `strata compare cluster:payments aws-stack@1.1.0 --repave`. See
   [Ask Palette if the change repaves](../commands/compare/repave.md).
