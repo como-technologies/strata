@@ -1412,6 +1412,33 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
 }
 
+/// The checks of public.sh ran after the repository and its packages became public (#65, #483). A
+/// row that says "no result yet" for one of them tells a reader that nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_of_public_sh_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    let public = section(&page, "## public.sh", Some("\n## "));
+    for check in [
+        "book-opens",
+        "install-no-token",
+        "install-runs",
+        "gitlab-install-no-token",
+        "image-no-login",
+        "chart-no-login",
+        "repository-public",
+        "advisory-form",
+    ] {
+        let row = public
+            .lines()
+            .find(|l| l.starts_with("| `") && l.contains(&format!("`{check}`")))
+            .unwrap_or_else(|| panic!("public.sh in live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
+}
+
 /// The checks that the live window of Wave 11 ran have their result in the book. A row that says
 /// "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]
