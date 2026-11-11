@@ -469,11 +469,20 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
 
 /// The values that the generated help of `strata <command>` lists for one argument or option.
 /// The line of that argument or option starts with `name`, such as `<KIND>` or `--allow `.
+///
+/// The values are on that line, or on the next line. When the help of one option is too wide, clap
+/// puts the help of each option on the line after its name.
 fn possible_values(command: &str, name: &str) -> Vec<String> {
     let help = read(&docs().join(format!("output/help-{command}.txt")));
-    help.lines()
-        .find(|line| line.trim_start().starts_with(name))
-        .and_then(|line| line.split("[possible values: ").nth(1))
+    let lines: Vec<&str> = help.lines().collect();
+    lines
+        .iter()
+        .position(|line| line.trim_start().starts_with(name))
+        .and_then(|at| {
+            lines[at..lines.len().min(at + 2)]
+                .iter()
+                .find_map(|line| line.split("[possible values: ").nth(1))
+        })
         .and_then(|rest| rest.split(']').next())
         .unwrap_or_else(|| panic!("the help of {command} lists no values of {name:?}"))
         .split(", ")

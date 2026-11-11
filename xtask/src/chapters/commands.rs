@@ -9,6 +9,7 @@ use super::ids::{
 use crate::book::Runner;
 use crate::tenant::{Edit, profile_exists_message};
 use serde_json::json;
+use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROFILE_EXISTS_CODE;
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
@@ -367,7 +368,7 @@ fn candidate_export(r: &mut Runner) {
     // accepts a file, and its record has the root of the version (#156)
     r.tenant(|t| t.export(DEV, A111));
     r.quiet(&format!(
-        "curl -sS -H 'Accept: application/octet-stream' -H 'ProjectUid: {DEV}' \
+        "curl -sS -H 'Accept: application/octet-stream' -H '{PROJECT_UID_HEADER}: {DEV}' \
          \"$PALETTE_API/v1/clusterprofiles/{A111}/export?format=json\" -o aws-stack-export.json"
     ));
     r.step(

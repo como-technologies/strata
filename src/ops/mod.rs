@@ -1,7 +1,8 @@
 //! The operations the CLI exposes, without argument parsing, printing, or exit codes.
 //!
 //! This module takes a snapshot and compares two. Each other command has a module of its own:
-//! `verify`, `same_release`, `consumers`, `list`, `packs`, and `report`.
+//! `verify`, `same_release`, `consumers`, `list`, `packs`, and `report`. `sides` gives the project
+//! of each side of `compare` and `same-release`.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -9,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::candidate::pack::pack_snapshot;
-use crate::diff::{self, Diff};
+use crate::diff::{self, Diff, Side};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
 use crate::reference::Ref;
@@ -26,6 +27,7 @@ mod packs;
 mod repave;
 mod report;
 mod same_release;
+mod sides;
 mod source;
 mod validate;
 mod verify;
@@ -39,6 +41,7 @@ pub use packs::*;
 pub use repave::*;
 pub use report::*;
 pub use same_release::*;
+pub use sides::*;
 pub use source::*;
 pub use validate::*;
 pub use verify::*;
@@ -498,8 +501,9 @@ fn held_snapshot<A: PaletteApi>(
 /// That is the profile with the uid of the version, else with its name. Else, for a version that
 /// builds a cluster, it is the profile that builds the cluster. The question is whether the
 /// cluster runs the pin or the version, and not what else it runs. So the function reads the other side first. Two clusters
-/// stay whole. `connect` gives the [`Palette`] for each side that a request answers, and
-/// `fetched_at` is the time of the read, in RFC 3339.
+/// stay whole. `connect` gives the [`Palette`] of a [`Side`], for each side that a request
+/// answers, so each side can read its own project. `fetched_at` is the time of the read, in
+/// RFC 3339.
 ///
 /// # Errors
 ///
@@ -513,17 +517,17 @@ pub fn snapshot_pair<A, F>(
 ) -> Result<(Snapshot, Snapshot)>
 where
     A: PaletteApi,
-    F: FnMut() -> Result<Palette<A>>,
+    F: FnMut(Side) -> Result<Palette<A>>,
 {
     let open = |r: &Ref| matches!(r, Ref::Cluster { profile: None, .. });
     let content = SnapshotOptions::default();
     if open(a) && !open(b) {
-        let sb = snapshot_for(b, &content, &mut connect, fetched_at, progress)?;
-        let sa = side_beside(a, &sb, &mut connect, fetched_at, progress)?;
+        let sb = snapshot_for(b, &content, || connect(Side::B), fetched_at, progress)?;
+        let sa = side_beside(a, &sb, || connect(Side::A), fetched_at, progress)?;
         Ok((sa, sb))
     } else {
-        let sa = snapshot_for(a, &content, &mut connect, fetched_at, progress)?;
-        let sb = side_beside(b, &sa, &mut connect, fetched_at, progress)?;
+        let sa = snapshot_for(a, &content, || connect(Side::A), fetched_at, progress)?;
+        let sb = side_beside(b, &sa, || connect(Side::B), fetched_at, progress)?;
         Ok((sa, sb))
     }
 }

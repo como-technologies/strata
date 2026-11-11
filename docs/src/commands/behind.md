@@ -328,6 +328,11 @@ A scheduled job that keeps one issue open for each pack that is behind is
 {{#include ../output/help-behind.txt}}
 ```
 
+`--project <uid>` or `--project-name <name>` gives the project of a record from
+tenant scope, which names no project. Strata reads a record that names a project
+in that project. `--project ''` is tenant scope. See
+[The project](../configure.md#the-project).
+
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see
 [Output formats](./index.md#output-formats).

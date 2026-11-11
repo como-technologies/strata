@@ -161,8 +161,8 @@ impl QuietArgs {
     }
 }
 
-/// `--project` and `--project-name`, for each command that works in one project.
-#[derive(Args)]
+/// `--project` and `--project-name`, for each command that reads Palette.
+#[derive(Args, Clone)]
 pub(crate) struct ProjectArgs {
     /// Use this project, by uid; '' is tenant scope
     #[arg(long)]
@@ -170,6 +170,48 @@ pub(crate) struct ProjectArgs {
     /// The same, by project name
     #[arg(long, conflicts_with = "project")]
     pub(crate) project_name: Option<String>,
+}
+
+impl ProjectArgs {
+    /// The flags, when one of them names a project.
+    fn given(self) -> Option<ProjectArgs> {
+        (self.project.is_some() || self.project_name.is_some()).then_some(self)
+    }
+}
+
+/// `--project-a` and `--project-b`, with their names, for each command that reads two sides.
+#[derive(Args)]
+pub(crate) struct SideProjectArgs {
+    /// Read side A, the first ref, in this project, by uid; '' is tenant scope
+    #[arg(long)]
+    pub(crate) project_a: Option<String>,
+    /// The same, by project name
+    #[arg(long, conflicts_with = "project_a")]
+    pub(crate) project_name_a: Option<String>,
+    /// Read side B, the second ref, in this project, by uid; '' is tenant scope
+    #[arg(long)]
+    pub(crate) project_b: Option<String>,
+    /// The same, by project name
+    #[arg(long, conflicts_with = "project_b")]
+    pub(crate) project_name_b: Option<String>,
+}
+
+impl SideProjectArgs {
+    /// The project of each side: the flags of the side, else `both`, the flags of `--project`.
+    pub(crate) fn projects(&self, both: &ProjectArgs) -> ops::SideProjects<ProjectArgs> {
+        let side = |project: &Option<String>, project_name: &Option<String>| {
+            ProjectArgs {
+                project: project.clone(),
+                project_name: project_name.clone(),
+            }
+            .given()
+        };
+        ops::SideProjects {
+            both: both.clone().given(),
+            a: side(&self.project_a, &self.project_name_a),
+            b: side(&self.project_b, &self.project_name_b),
+        }
+    }
 }
 
 /// The format that `--json` and `--format` select: `--json` has priority, and the terminal is the
@@ -220,6 +262,10 @@ pub(crate) struct CompareArgs {
     #[arg(long)]
     pub(crate) validate: bool,
     #[command(flatten)]
+    pub(crate) project: ProjectArgs,
+    #[command(flatten)]
+    pub(crate) sides: SideProjectArgs,
+    #[command(flatten)]
     pub(crate) out: OutputArgs,
 }
 
@@ -229,6 +275,8 @@ pub(crate) struct SnapshotArgs {
     pub(crate) r#ref: Option<String>,
     #[command(flatten)]
     pub(crate) file: OutputFileArgs,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     /// Also save the raw API answers in this directory
     #[arg(long)]
     pub(crate) raw_dir: Option<PathBuf>,
@@ -331,6 +379,8 @@ pub(crate) struct CandidateArgs {
     pub(crate) r#ref: String,
     #[command(flatten)]
     pub(crate) file: OutputFileArgs,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     /// Write the values and the manifests to files in this directory
     #[arg(long, requires = "output")]
     pub(crate) files_dir: Option<PathBuf>,
@@ -370,6 +420,10 @@ pub(crate) struct SameReleaseArgs {
     #[arg(long, value_enum)]
     pub(crate) allow: Vec<Allow>,
     #[command(flatten)]
+    pub(crate) project: ProjectArgs,
+    #[command(flatten)]
+    pub(crate) sides: SideProjectArgs,
+    #[command(flatten)]
     pub(crate) out: OutputArgs,
 }
 
@@ -392,6 +446,8 @@ pub(crate) struct BehindArgs {
     #[arg(long)]
     pub(crate) pre_release: bool,
     #[command(flatten)]
+    pub(crate) project: ProjectArgs,
+    #[command(flatten)]
     pub(crate) out: OutputArgs,
 }
 
@@ -403,6 +459,8 @@ pub(crate) struct ConsumersArgs {
     /// but it does not find a consumer that the list omits
     #[arg(long)]
     pub(crate) list_only: bool,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     #[command(flatten)]
     pub(crate) out: OutputArgs,
 }
@@ -429,6 +487,8 @@ pub(crate) struct PacksArgs {
     /// latest when it differs
     #[arg(long)]
     pub(crate) latest: bool,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     #[command(flatten)]
     pub(crate) out: OutputArgs,
 }
@@ -508,6 +568,7 @@ pub(crate) enum SchemaKind {
 mod tests {
     use super::*;
     use clap::CommandFactory;
+    use std::collections::BTreeSet;
 
     fn parses(args: &[&str]) -> bool {
         Cli::try_parse_from(std::iter::once(&TOOL_NAME).chain(args)).is_ok()
@@ -531,10 +592,114 @@ mod tests {
         assert!(!parses(&["list", "--project", "p", "--project-name", "n"]));
     }
 
+    /// Each command that reads Palette, with the arguments that it needs beside a flag.
+    const READS_PALETTE: [&[&str]; 9] = [
+        &["behind", "r.json"],
+        &["candidate", "aws-stack@1.0.0"],
+        &["compare", "aws-stack@1.0.0", "aws-stack@1.1.0"],
+        &["consumers", "aws-stack@1.0.0"],
+        &["list"],
+        &["packs", "cert-manager"],
+        &["same-release", "aws-stack@1.0.0", "aws-stack@1.1.0"],
+        &["snapshot", "aws-stack@1.0.0"],
+        &["verify", "r.json"],
+    ];
+
+    #[test]
+    fn each_command_that_reads_palette_takes_one_project_by_uid_or_by_name() {
+        let names: BTreeSet<&str> = READS_PALETTE.iter().map(|args| args[0]).collect();
+        let others: BTreeSet<String> = Cli::command()
+            .get_subcommands()
+            .map(|sub| sub.get_name().to_string())
+            .filter(|name| !names.contains(name.as_str()))
+            .collect();
+        // `preflight` runs `strata-preflight`, which reads the project from the environment
+        assert_eq!(
+            others,
+            BTreeSet::from(["preflight", "report", "schema"].map(String::from))
+        );
+        for args in READS_PALETTE {
+            let with = |more: &[&'static str]| [args, more].concat();
+            assert!(parses(&with(&["--project", "p1"])), "{args:?}");
+            assert!(parses(&with(&["--project", ""])), "{args:?}: tenant scope");
+            assert!(parses(&with(&["--project-name", "dev"])), "{args:?}");
+            assert!(
+                !parses(&with(&["--project", "p1", "--project-name", "dev"])),
+                "{args:?}: one project"
+            );
+        }
+    }
+
+    #[test]
+    fn compare_and_same_release_take_one_project_for_each_side() {
+        for command in ["compare", "same-release"] {
+            let args = [command, "aws-stack@1.1.1", "aws-stack@1.1.1"];
+            let with = |more: &[&'static str]| [&args[..], more].concat();
+            assert!(parses(&with(&[
+                "--project-name-a",
+                "dev",
+                "--project-name-b",
+                "prod"
+            ])));
+            assert!(parses(&with(&["--project-a", "p1", "--project-b", ""])));
+            assert!(parses(&with(&[
+                "--project-name",
+                "dev",
+                "--project-b",
+                "p2"
+            ])));
+            for both in [
+                ["--project-a", "p1", "--project-name-a", "dev"],
+                ["--project-b", "p2", "--project-name-b", "prod"],
+            ] {
+                assert!(!parses(&with(&both)), "{command}: one project for a side");
+            }
+        }
+        assert!(!parses(&[
+            "snapshot",
+            "aws-stack@1.1.1",
+            "--project-a",
+            "p1"
+        ]));
+    }
+
+    #[test]
+    fn the_flag_of_a_side_names_its_project_and_the_other_side_keeps_project() {
+        let Cmd::Compare(a) = Cli::try_parse_from([
+            TOOL_NAME,
+            "compare",
+            "x",
+            "y",
+            "--project-name",
+            "dev",
+            "--project-name-b",
+            "prod",
+        ])
+        .unwrap()
+        .cmd
+        else {
+            panic!("compare")
+        };
+        let sides = a.sides.projects(&a.project);
+        let name = |side| sides.of(side).and_then(|p| p.project_name.as_deref());
+        assert_eq!(name(strata::diff::Side::A), Some("dev"));
+        assert_eq!(name(strata::diff::Side::B), Some("prod"));
+        assert!(sides.a.is_none(), "side A has no flag of its own");
+    }
+
     #[test]
     fn a_flag_that_commands_share_has_one_help_text() {
         let command = Cli::command();
-        for flag in ["project", "project_name", "compact", "quiet"] {
+        for flag in [
+            "project",
+            "project_name",
+            "project_a",
+            "project_name_a",
+            "project_b",
+            "project_name_b",
+            "compact",
+            "quiet",
+        ] {
             let texts: std::collections::BTreeSet<Option<String>> = command
                 .get_subcommands()
                 .filter_map(|sub| sub.get_arguments().find(|a| a.get_id() == flag))

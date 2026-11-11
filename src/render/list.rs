@@ -80,13 +80,32 @@ pub(crate) fn query_line(l: &Listing) -> Option<String> {
     Some(format!("the clusters with {}, {how}", and_list(&parts)))
 }
 
+/// The words of a report for the scope of the tenant, which has no project.
+const TENANT_SCOPE_TEXT: &str = "tenant scope";
+
 /// `project lab (uid p1)`, `project p1` when the name is unknown, or `tenant scope`.
 pub(crate) fn list_scope(l: &Listing) -> String {
     if l.project_uid.is_empty() {
-        "tenant scope".to_string()
+        TENANT_SCOPE_TEXT.to_string()
     } else {
         format!("project {}", project_label(&l.project_uid, &l.project_name))
     }
+}
+
+/// The projects of two sides, by uid, when the two differ, such as the two records of a
+/// comparison. A side with no project is `tenant scope`.
+///
+/// A record names its project by uid alone, so a comparison of two files names no project by
+/// name. `strata list projects` names each uid.
+pub(crate) fn side_projects<'a>(a: &'a str, b: &'a str) -> Option<(&'a str, &'a str)> {
+    let shown = |uid: &'a str| {
+        if uid.is_empty() {
+            TENANT_SCOPE_TEXT
+        } else {
+            uid
+        }
+    };
+    (a != b).then(|| (shown(a), shown(b)))
 }
 
 /// A cluster's project, in the shape the scope line uses: `dev (uid 64f2...)`, or the uid alone

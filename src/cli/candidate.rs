@@ -6,12 +6,16 @@ use strata::error::Result;
 use strata::{candidate, ops, render};
 
 use super::args::CandidateArgs;
-use super::{connect, now_utc};
+use super::{connect_to, now_utc};
 
 pub(crate) fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     let progress = a.quiet.progress();
-    let snap =
-        ops::snapshot_for_candidate(&a.r#ref, || connect(progress, None), &now_utc(), &progress)?;
+    let snap = ops::snapshot_for_candidate(
+        &a.r#ref,
+        || connect_to(progress, Some(&a.project)),
+        &now_utc(),
+        &progress,
+    )?;
     let c = candidate::Candidate::from_snapshot(&snap)?;
     match &a.file.output {
         Some(path) => {
