@@ -1260,8 +1260,8 @@ field, a value, an input, or an option is in the sections above.
   `failed`, with the message of Palette, and the exit code is `0`, or `1` with `--strict`.
   Before, the verdict was `error`, and the exit code was `2`. See
   [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate).
-- **`palette-validate`, for a machine pool with no subnet.** For AWS with a `vpcId`, the route
-  refuses a pool with no subnet with HTTP `500` and `RequiredParam`. A live run shows it. Strata
+- **`palette-validate`, for a pool with no subnet.** For AWS with a `vpcId`, the route refuses
+  such a pool with HTTP `500` and `RequiredParam`. A live run shows it. Strata
   now reads such a refusal as the answer of the route, and does not send the request again. The
   verdict is `failed`, with the message of Palette, and the exit code is `0`, or `1` with
   `--strict`. Before, the verdict was `error`, and the exit code was `2`. On each other route,
