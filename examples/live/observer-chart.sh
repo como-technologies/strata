@@ -55,8 +55,8 @@ registry_sync() {
   jq '{status, message, lastSyncedTime}' sync.json
   jq -e '.status == "Completed"' sync.json > /dev/null
 }
-# chart_listed: the packs of the registry hold the chart. An empty registry also syncs with the status
-# Completed, so only this check shows that Palette read the chart. The output is the first pack.
+# chart_listed: the packs of the registry hold the chart. A status of Completed alone does not show
+# that Palette read the chart, so only this check shows it. The output is the first pack.
 chart_listed() {
   "$live/api.sh" packs-where --name "$chart" --arg r "$registry" '.spec.registryUid == $r' > chart.json || return 1
   jq '{name: .spec.name, version: .spec.version, registryUid: .spec.registryUid}' chart.json

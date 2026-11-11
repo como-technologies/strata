@@ -1701,9 +1701,9 @@ registry holds a random suffix. Palette reads the address when it makes the
 registry, so a refusal of that read fails the create. The output of each check
 holds the answer of Palette, with its code or its message.
 
-An empty registry also syncs with the status `Completed`. So only `chart-no-login`
-shows that Palette read the chart. The end deletes the registry, also after a failed
-check or an error. The checks with `?` record what Palette does and do not judge it.
+A status of `Completed` alone does not show that Palette read the chart. So only
+`chart-no-login` shows it. The end deletes the registry, also after a failed check
+or an error. The checks with `?` record what Palette does and do not judge it.
 
 | Check | Expected exit | What it shows |
 |---|---|---|

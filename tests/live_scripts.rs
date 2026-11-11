@@ -10261,14 +10261,14 @@ fn observer_images_sh_installs_the_observer_with_the_component_and_no_pull_secre
             .any(|l| l.starts_with("apply -f ") && l.ends_with("/deploy/observer/namespace.yaml")),
         "{kubectl}"
     );
-    let secrets: Vec<&str> = kubectl
+    let creates: Vec<&str> = kubectl
         .lines()
         .filter(|l| l.contains("create secret"))
         .collect();
-    assert_eq!(secrets.len(), 1, "{secrets:?}");
+    assert_eq!(creates.len(), 1, "{creates:?}");
     assert!(
-        secrets[0].contains("create secret generic strata-observer-key"),
-        "{secrets:?}"
+        creates[0].contains("create secret generic strata-observer-key"),
+        "{creates:?}"
     );
     // the key reaches the Secret through standard input, and no other file or call shows it
     assert_eq!(observer_log(&stage, "key.seen"), OBSERVER_KEY);
@@ -11292,15 +11292,15 @@ fn observer_sh_installs_with_a_plain_apply_and_sets_the_image_and_the_periods_an
     }
 
     // the one Secret that the run makes holds the key, and it holds the right key at the end
-    let secrets: Vec<&str> = kubectl
+    let creates: Vec<&str> = kubectl
         .lines()
         .filter(|l| l.contains("create secret"))
         .collect();
     assert!(
-        secrets
+        creates
             .iter()
             .all(|l| l.contains("create secret generic strata-observer-key")),
-        "{secrets:?}"
+        "{creates:?}"
     );
     assert_eq!(observer_log(&stage, "key.current"), OBSERVER_KEY);
     assert_eq!(
