@@ -797,6 +797,37 @@ symlink. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
 
+### Dependency updates
+
+`.github/dependabot.yml` asks Dependabot for pull requests of version updates
+each Monday. Each package ecosystem gets one pull request for its minor and
+patch updates, and one pull request for each major update.
+
+| Ecosystem | Folders |
+| --- | --- |
+| Cargo | the workspace at the root, `examples/library`, and `examples/library-preflight` |
+| Go | `observer` and `examples/live/count-requests` |
+| GitHub Actions | the workflows, and each action of `.github/actions/` |
+| Docker | `deploy/observer` and `deploy/report` |
+
+Dependabot reads no other package:
+
+- `crates/strata-knurl` needs knurl, a private repository.
+- `examples/live/terraform` pins the provider of Spectro Cloud. A new provider
+  needs a live run, and the contract run watches its releases.
+- `deploy/session` is the image of the riff sessions, and it follows riff.
+
+Two pins stay. The test of the order of versions compares strata with the crate
+`versions` at one exact release. A new minor release of `bolero` needs the same
+`CARGO_BOLERO_VERSION` in `.github/workflows/fuzz.yml`, so Dependabot proposes
+only its patch releases.
+
+The security updates of Dependabot are on in the settings of the repository, so
+an alert can also open a pull request. Each pull request of Dependabot goes to
+the milestone Backlog, so no wave counts it. riff does not take it, so it gets
+no `riff/verify`, which the ruleset of `main` needs. A maintainer merges it when
+its checks pass.
+
 ## A change to how strata reads Palette
 
 The fixtures follow the shapes of the Palette API, but only a real tenant proves

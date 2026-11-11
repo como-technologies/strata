@@ -1,0 +1,75 @@
+# The version updates of Dependabot. "Dependency updates" in docs/src/development/build-test.md says
+# what it reads and why it skips the rest. The security updates are on in the settings of the
+# repository, so an alert can also open a pull request.
+#
+# Each pull request goes to the milestone Backlog (number 1), so no wave counts it. riff does not
+# take it: it gets no riff/verify, so a maintainer merges it when its checks pass.
+#
+# Not read here: crates/strata-knurl (it needs knurl, a private repository), examples/live/terraform
+# (the live example pins the Spectro Cloud provider, and a new one needs a live run; the contract
+# run watches its releases), and deploy/session (the image of the riff sessions follows riff).
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /examples/library
+      - /examples/library-preflight
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    milestone: 1
+    groups:
+      cargo-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # The test of the order of versions compares strata with this exact release (#714).
+      - dependency-name: versions
+      # A new minor of bolero needs the same CARGO_BOLERO_VERSION in .github/workflows/fuzz.yml.
+      - dependency-name: bolero
+        update-types: [version-update:semver-major, version-update:semver-minor]
+
+  - package-ecosystem: gomod
+    directories:
+      - /observer
+      - /examples/live/count-requests
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    milestone: 1
+    groups:
+      go-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/build
+      - /.github/actions/mdbook
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    milestone: 1
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories:
+      - /deploy/observer
+      - /deploy/report
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    milestone: 1
+    groups:
+      images-minor-and-patch:
+        update-types: [minor, patch]
