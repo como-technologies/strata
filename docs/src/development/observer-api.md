@@ -475,12 +475,15 @@ them:
   order fails a test until the other order is the same.
 - In Recent events, each profile and each image in the column Object is a link to its
   page.
-- The page of the newer versions opens with four tiles: packs behind, moves that
-  repave, new this week, and versions behind. The head of its card holds a switch,
-  Table or Timeline, and the filter. The table indents each pack under the row of its
-  profile, on a guide line. A move that changes only the build says "same" in the
-  column Settings. The timeline gives each pack one lane: the pinned version, each
-  version that the registry listed after it, and the newest, with the day of each.
+- The page of the newer versions opens with four tiles. They are packs with a newer
+  version, moves that repave, new this week, and versions newer than the pins. No text
+  of the page says "behind" for a newer version, because a newer version is a choice
+  and not a fault.
+- The head of the card of the newer versions holds a switch, Table or Timeline, and
+  the filter. The table indents each pack under the row of its profile, on a guide
+  line. A move that changes only the build says "same" in the column Settings. The
+  timeline gives each pack one lane: the pinned version, each version that the
+  registry listed after it, and the newest, with the day of each.
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the

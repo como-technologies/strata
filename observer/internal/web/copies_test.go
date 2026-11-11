@@ -100,6 +100,22 @@ func TestEachCopyOfTheScriptHasOneHome(t *testing.T) {
 	}
 }
 
+var behindWord = regexp.MustCompile(`(?i)\bbehind\b`)
+
+// A newer version stays neutral, as #643 asks: the page names it "Newer version", and never "behind". Only the command
+// `strata behind` and the row "Image behind a tag" of what a check does not cover hold the word.
+func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
+	page := jsComment.ReplaceAllString(string(readPage(t, "index.html"))+"\n"+readScripts(t), "")
+	for _, l := range strings.Split(page, "\n") {
+		for _, kept := range []string{"strata behind ", "Image behind a tag"} {
+			l = strings.ReplaceAll(l, kept, "")
+		}
+		if behindWord.MatchString(l) {
+			t.Errorf("a line of the page says \"behind\": %s", strings.TrimSpace(l))
+		}
+	}
+}
+
 // The check of a copy of this cluster writes the badge of "same-content" in the words of the book, "Same content", in the card of the
 // versions and in the card "Check this yourself". It is not a drift, and it does not read OK.
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {

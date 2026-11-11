@@ -1220,6 +1220,10 @@ field, a value, an input, or an option is in the sections above.
   the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
   of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
   badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
+- **The tiles of the page of the newer versions say "newer", and not "behind".** The tile
+  "Packs behind" is now "Packs with a newer version". The tile "Versions behind" is now
+  "Versions newer than the pins". The numbers and the lines under them stay the same. A check
+  that reads the words of the page must read the new labels.
 - **Strata reads `~/.palette.env` only from an absolute `HOME`.** Before, an empty
   `HOME` read the file of the working folder. A relative `HOME`, such as `../home`,
   read the file of a folder from the working folder. So a file of a checkout could
