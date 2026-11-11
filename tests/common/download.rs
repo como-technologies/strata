@@ -17,8 +17,9 @@
 //! ```
 //!
 //! `metadata.json` names the list of the packs, and the list names the archive of each pack. A
-//! pack archive is a tar archive that gzip compresses, with one top folder. The folder has the name
-//! of the pack and the first 12 hex digits of its digest.
+//! pack archive is a tar archive that gzip compresses, with one top folder. For a pack of a pack
+//! registry, the folder has the name of the pack and the first 12 hex digits of its digest. For a
+//! pack of an OCI registry of packs, it has the name and the version of the pack.
 
 use serde_json::{Value, json};
 
@@ -172,7 +173,8 @@ pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8
 
 /// The top folder of the archive of the pack `name` with the digest `digest`, as a pack registry
 /// names it. It holds the name and the first 12 hex digits of the digest. A pack with no digest
-/// gets 12 zeros.
+/// gets 12 zeros. An OCI registry of packs names the folder by the name and the version of the
+/// pack.
 pub fn pack_top(name: &str, digest: &str) -> String {
     let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
     let short: String = hex.chars().chain(std::iter::repeat('0')).take(12).collect();

@@ -149,9 +149,11 @@ Each path of the file starts with the uid of the version:
   the path of the archive of the pack from the folder of the list. Each manifest
   of a pack has an entry too, with `manifestName`.
 - The archive of a pack is a tar archive that gzip compresses, with one top
-  folder. The folder has the name of the pack and the first 12 hex digits of
-  its digest. The archive holds `pack.json`, `values.yaml`, and the other files
-  of the build. `pack.json` names the version of the build.
+  folder. For a pack of a pack registry, the folder has the name of the pack
+  and the first 12 hex digits of its digest. For a pack of an OCI registry of
+  packs, the folder has the name and the version of the pack. The archive
+  holds `pack.json`, `values.yaml`, and the other files of the build.
+  `pack.json` names the version of the build.
 - `spc.json` and the manifests hold the content with the value of each macro.
   Strata reads the two lists and the archives of the packs, and no other file.
 
@@ -163,16 +165,20 @@ The file holds no archive for these packs:
   an empty `filePath`.
 - A manifest pack. The list names only its manifests.
 
-The list has no entry for a pack whose registry Palette cannot find.
+When Palette cannot find the registry of a pack, it refuses the whole
+download. Strata then stops with the error `api`.
 
 Palette sends the file only to a request that accepts a file, such as
-`Accept: application/octet-stream`. The route reads the version by its uid, in
-the project of the request. Palette takes one download of a version in 10
-seconds. It refuses the next with HTTP 429, the code `TooManyRequests`, and the
-message "Too Many Requests, only 1 request in 10 seconds is allowed". After
-such a refusal, strata waits 10 seconds before the next download of the
-version. Stage 4 of [export.sh](../../development/live-runs.md#exportsh) checks
-the facts of this section.
+`Accept: application/octet-stream`. To a request with `Accept:
+application/json`, it answers HTTP 200 with `{"Reader":{}}`, as for the
+export. The route reads the version by its uid, in the project of the request.
+
+Palette takes one download of a version in 10 seconds. It refuses the next
+with HTTP 429, the code `TooManyRequests`, and the message "Too Many Requests,
+only 1 request in 10 seconds is allowed". After such a refusal, strata waits 10
+seconds before the next download of the version. Stage 4 of
+[export.sh](../../development/live-runs.md#exportsh) checks the facts of this
+section.
 
 ## The audit log
 
