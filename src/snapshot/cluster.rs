@@ -14,7 +14,7 @@ use super::{
 };
 use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
-use crate::content::canon::{canonical_json, sha256_hex};
+use crate::content::canon::{canonical_json, sha256_digest, sha256_hex};
 use crate::json::{arr, flag, object_at, str_at, text};
 use crate::model::profile_type::ProfileType;
 use crate::model::repave::PendingRepave;
@@ -458,7 +458,7 @@ fn digests_in(maps: &[&Value], names: &[String]) -> BTreeMap<String, String> {
             let digest = maps
                 .iter()
                 .find_map(|m| m.get(&key).and_then(Value::as_str))
-                .map(|v| format!("sha256:{}", sha256_hex(v)))
+                .map(sha256_digest)
                 .unwrap_or_else(|| "unresolved".to_string());
             (name.clone(), digest)
         })

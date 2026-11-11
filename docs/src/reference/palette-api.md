@@ -11,8 +11,9 @@ setting of a cluster. But Palette can save the address that the console
 of a pack of virtual machines forwards to: see
 [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves).
 
-Each request has the headers `ApiKey` and `Accept: application/json`. A request
-in a project has the header `ProjectUid` too. The
+Each request has the headers `ApiKey` and `Accept: application/json`. The
+download of a version accepts `application/octet-stream` in place of JSON. A
+request in a project has the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape
 of each response.
 
@@ -27,6 +28,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | Only for a version with a draft, once for each manifest of its two templates: `spec.published.content` and `spec.draft.content`. While a draft waits, `packs/manifests` gives the content of neither template. See [Drafts](../internals/palette/profiles.md#drafts). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. In a project, it holds the profiles of the project and the profiles of the tenant. |
 | `POST /v1/dashboard/clusterprofiles?limit=50` | The profile search, with the filter `scope`: one item for each profile name of that scope, with the uid of each version in `specSummary.versions[]`. `list` reads it for the scope of each version. In a project, it reads the tenant versions and the system versions. At tenant scope, it reads the system versions. Palette gives 50 names on a page, and strata raises `offset` as for `/v1/packs`. A Palette with no profile search answers HTTP 404 or 405, and the scopes stay unknown. |
+| `GET /v1/clusterprofiles/{uid}/spc/download` | Only for `same-release --allow renumber`, once for each published version of a renumber whose digest changed: the archive of each pack of the version. The request has the header `Accept: application/octet-stream`. Palette takes one download of a version in 10 seconds. See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). |
 | `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. `behind` also sends it for a record of a profile version. For a record of a cluster, it sends the uid of the profile version that the cluster runs: see [behind](../commands/behind.md#palette-accepts-the-move-or-refuses-it). `compare --validate` sends it for a profile version that the cluster runs. The request changes nothing. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no

@@ -447,20 +447,24 @@ fn only_a_version_with_a_pre_release_is_one() {
 }
 
 #[test]
-fn two_versions_keep_their_numbers_when_only_the_pre_release_or_the_build_data_differs() {
+fn two_versions_keep_their_numbers_when_a_missing_number_is_zero_and_only_the_pre_release_or_the_build_data_differs()
+ {
     for (a, b) in [
         ("1.66.0-g0123456789ab", "1.66.0"),
         ("1.66.0-rc.1", "1.66.0-rc.2"),
         ("1.2.0-mr12.345", "1.2.0"),
         ("1.2.0+build.5", "1.2.0"),
         ("v1.2.0", "1.2.0"),
+        ("1.2", "1.2.0"),
+        ("1.2-rc.1", "1.2.0"),
+        ("1", "1.0.0+build.5"),
     ] {
         assert!(keeps_numbers(a, b), "{a} and {b}");
     }
     for (a, b) in [
         ("20.04", "24.04"),
         ("1.2.0-build5", "2026.11.0"),
-        ("1.2", "1.2.0"),
+        ("1.2", "1.2.1"),
         ("1.1.8.develop", "1.1.8"),
         ("LTS__24.x", "LTS__24.x"),
         ("", ""),

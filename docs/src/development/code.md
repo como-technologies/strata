@@ -230,8 +230,8 @@ ASD-STE100.
   pins the text of a schema id on purpose can stay, with a comment that says so.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
-  uses. `answer.rs`, `closed_set.rs`, `code_span.rs`, `git.rs`, `palette.rs`, `process.rs`,
-  `route.rs`, `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that
+  uses. `answer.rs`, `closed_set.rs`, `code_span.rs`, `download.rs`, `git.rs`, `palette.rs`,
+  `process.rs`, `route.rs`, `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that
   uses some of the helpers allows `dead_code` on the include.
 - A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
   `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new

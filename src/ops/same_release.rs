@@ -1,17 +1,26 @@
 //! `same-release`: whether records in promotion order are one release.
 
 use std::collections::BTreeMap;
+use std::convert::Infallible;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::api::{Palette, PaletteApi};
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
 use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Renumber, Status};
+use crate::error::Result;
 use crate::render::changes::{VALUES_UNPARSED, manifest_change};
 use crate::render::notes::no_upstream_digest;
 use crate::snapshot::{Pack, Snapshot, Tool};
+use crate::term::progress::Progress;
+use crate::text::plural;
 use crate::timestamp::Rfc3339;
+
+mod archives;
+
+use archives::{ArchiveCheck, Downloads};
 
 /// Schema id of the document `same-release` writes.
 pub const CHAIN_SCHEMA: &str = "strata-chain/1";
@@ -68,7 +77,8 @@ pub enum PairStatus {
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
     /// The roots differ only because the version of packs changed, with the same values,
-    /// manifests, params, and images: see [`Renumber`]. `--allow renumber` accepts it.
+    /// manifests, params, and images: see [`Renumber`]. `--allow renumber` accepts it when no two
+    /// archives of such a pack differ in another file.
     Renumber,
     /// Not the same release; `reasons` says why.
     Different,
@@ -106,7 +116,7 @@ impl Described for PairStatus {
                 "The roots differ only because a pack moved to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
             }
             Self::Renumber => {
-                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this. Strata does not compare the archives: archivesNotCompared names each pack whose archive the pipeline must check."
+                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this when the archives agree. Strata compares the archives of each such pack in the downloads of Palette. archivesCompared names each pack whose archives differ only by the version in pack.json. archivesNotCompared names each pack whose archive the pipeline must check."
             }
             Self::Different => {
                 "This is not the same release. The field reasons lists each difference."
@@ -160,8 +170,18 @@ pub struct Pair {
     /// another reason lists them too.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub renumbers: Vec<Renumber>,
-    /// The key of each pack of `renumbers` whose archive can differ: its digest changed, or Palette
-    /// gives none. Strata does not compare the files of the two archives, so the pipeline must
+    /// The key of each pack of `renumbers` whose two archives strata compared: they hold the same
+    /// files, and `pack.json` differs only by its `version`. Strata reads them from the download
+    /// of each profile version.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives_compared: Vec<String>,
+    /// Each pack of `renumbers` whose two archives differ in another file, with each such file.
+    /// The pair is then `different`, and `reasons` names the files too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub archives_changed: Vec<ArchiveChange>,
+    /// The key of each pack of `renumbers` whose archive can differ, and whose two archives strata
+    /// did not compare. Its digest changed, or Palette gives none. A side is no published version
+    /// of a cluster profile, or its download holds no archive of the pack. So the pipeline must
     /// check them. A manifest pack has no archive.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub archives_not_compared: Vec<String>,
@@ -190,6 +210,17 @@ pub struct Pair {
     /// either record uses. Strata does not compare their values.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub macros_not_compared: Vec<String>,
+}
+
+/// One renumbered pack whose two archives differ in a file that is not the version in `pack.json`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ArchiveChange {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// The path of each file that differs, under the top folder of the archive, in the order of
+    /// the paths. A file that only one archive holds differs too.
+    pub files: Vec<String>,
 }
 
 /// Counts over the pairs.
@@ -289,6 +320,12 @@ fn identity_detail(x: &Pack, y: &Pack) -> String {
     "identity hash differs".to_string()
 }
 
+/// The compare of the two archives of one renumber: the pack `x` of the record `a`, and the pack
+/// `y` of the record `b`. A compare that sends no request cannot fail: its error is
+/// [`Infallible`].
+type CheckArchives<'c, E> =
+    dyn FnMut((&Snapshot, &Pack), (&Snapshot, &Pack)) -> std::result::Result<ArchiveCheck, E> + 'c;
+
 /// What the difference between two records says about their release.
 #[derive(Default)]
 struct PairReasons {
@@ -300,14 +337,26 @@ struct PairReasons {
     retagged: usize,
     /// The packs whose version alone changed, when `--allow renumber` accepts them.
     renumbers: Vec<Renumber>,
-    /// The key of each accepted renumber whose archive can differ.
+    /// The key of each accepted renumber whose two archives hold the same files.
+    archives_compared: Vec<String>,
+    /// Each accepted renumber whose two archives differ in another file.
+    archives_changed: Vec<ArchiveChange>,
+    /// The key of each accepted renumber whose archive can differ, and that strata did not
+    /// compare.
     archives_not_compared: Vec<String>,
 }
 
 impl PairReasons {
     /// Add the reasons and the counts for the changed pack `pd`. `x` and `y` are the pack in the
-    /// first record and in the second record.
-    fn changed_pack(&mut self, pd: &PackDiff, x: &Pack, y: &Pack, options: SameReleaseOptions) {
+    /// first record `a` and in the second record `b`. `check` compares the archives of a renumber.
+    fn changed_pack<E>(
+        &mut self,
+        pd: &PackDiff,
+        (a, x): (&Snapshot, &Pack),
+        (b, y): (&Snapshot, &Pack),
+        options: SameReleaseOptions,
+        check: &mut CheckArchives<'_, E>,
+    ) -> std::result::Result<(), E> {
         // a packUid that Palette mints is not part of the release
         let minted = diff::pack::minted_uid_pair(x, y);
         // The type follows the registry (spectro, helm, oci), so a move may change it; a
@@ -333,7 +382,7 @@ impl PairReasons {
                     ));
                 }
             } else if options.allow_renumber && diff::renumber::renumbered(x, y) {
-                self.renumbered(pd, x, y);
+                self.renumbered(pd, (a, x), (b, y), check)?;
             } else {
                 self.reasons.push(format!(
                     "pack {} {}: {}",
@@ -360,26 +409,68 @@ impl PairReasons {
                 y.hash.upstream_raw
             ));
         }
+        Ok(())
     }
 
-    /// Accept the renumber of the pack `pd`, from `x` in the first record to `y` in the second.
-    /// The versions can change their numbers: the user asks for the renumber.
+    /// Accept the renumber of the pack `pd`, from `x` in the first record `a` to `y` in the second
+    /// record `b`. The versions can change their numbers: the user asks for the renumber.
     ///
     /// The new build of a pack has a new digest, because its `pack.json` holds the new version.
-    /// The digest alone cannot show that only that file changed, and strata reads no archive. So a
-    /// renumber whose digest changed, or that has no digest, keeps the archive to the pipeline.
-    fn renumbered(&mut self, pd: &PackDiff, x: &Pack, y: &Pack) {
-        self.renumbers.push(Renumber::of(x, y));
-        if pd.upstream || pd.upstream_unknown {
-            self.archives_not_compared.push(pd.key.clone());
+    /// The digest alone cannot show that only that file changed. So `check` compares the files of
+    /// the two archives, for a renumber whose digest changed or that has no digest. A file that
+    /// differs is a reason.
+    fn renumbered<E>(
+        &mut self,
+        pd: &PackDiff,
+        a: (&Snapshot, &Pack),
+        b: (&Snapshot, &Pack),
+        check: &mut CheckArchives<'_, E>,
+    ) -> std::result::Result<(), E> {
+        self.renumbers.push(Renumber::of(a.1, b.1));
+        if !pd.upstream && !pd.upstream_unknown {
+            return Ok(());
         }
+        match check(a, b)? {
+            ArchiveCheck::Same => self.archives_compared.push(pd.key.clone()),
+            ArchiveCheck::Changed(files) => {
+                self.reasons.push(archive_reason(&pd.key, &files));
+                self.archives_changed.push(ArchiveChange {
+                    key: pd.key.clone(),
+                    files,
+                });
+            }
+            ArchiveCheck::NotCompared => self.archives_not_compared.push(pd.key.clone()),
+        }
+        Ok(())
+    }
+}
+
+/// The reason of a renumber whose two archives differ in `files`, which is not empty. Examples
+/// are `pack <key> archive: values.yaml differs` and
+/// `pack <key> archive: presets.yaml and 2 more files differ`.
+fn archive_reason(key: &str, files: &[String]) -> String {
+    match files {
+        [file] => format!("pack {key} archive: {file} differs"),
+        [file, more @ ..] => format!(
+            "pack {key} archive: {file} and {} more {} differ",
+            more.len(),
+            plural(more.len(), "file", "files")
+        ),
+        [] => format!("pack {key} archive differs"),
     }
 }
 
 /// The differences between the records `a` and `b` that `options` does not accept. It also counts
 /// the clean registry re-pins and the packs pinned under another tag name with nothing else
-/// changed, and it lists each accepted renumber. `d` is their comparison.
-fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, options: SameReleaseOptions) -> PairReasons {
+/// changed, and it lists each accepted renumber. `d` is their comparison. `check` compares the
+/// archives of a renumber.
+fn pair_reasons<E>(
+    d: &Diff,
+    a: &Snapshot,
+    b: &Snapshot,
+    options: SameReleaseOptions,
+    check: &mut CheckArchives<'_, E>,
+) -> std::result::Result<PairReasons, E> {
     let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
     let mut out = PairReasons::default();
     if d.variables.changed {
@@ -391,7 +482,8 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, options: SameReleaseOption
             Status::Added => out.reasons.push(format!("pack {} added", pd.key)),
             Status::Removed => out.reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
-                out.changed_pack(pd, pa[pd.key.as_str()], pb[pd.key.as_str()], options);
+                let key = pd.key.as_str();
+                out.changed_pack(pd, (a, pa[key]), (b, pb[key]), options, check)?;
             }
         }
     }
@@ -407,24 +499,28 @@ fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, options: SameReleaseOption
     {
         out.reasons.push("roots differ".to_string());
     }
-    out
+    Ok(out)
 }
 
-/// The verdict on two consecutive records `(label, record)`, under `options`.
-fn build_pair(
+/// The verdict on two consecutive records `(label, record)`, under `options`. `check` compares
+/// the archives of a renumber.
+fn build_pair<E>(
     (la, a): &(String, Snapshot),
     (lb, b): &(String, Snapshot),
     options: SameReleaseOptions,
     generated_at: &str,
-) -> Pair {
+    check: &mut CheckArchives<'_, E>,
+) -> std::result::Result<Pair, E> {
     let d = diff::compute(a, b, generated_at, None);
     let PairReasons {
         mut reasons,
         repinned: packs_repinned,
         retagged: packs_retagged,
         renumbers,
+        archives_compared,
+        archives_changed,
         archives_not_compared,
-    } = pair_reasons(&d, a, b, options);
+    } = pair_reasons(&d, a, b, options, check)?;
     // The root does not cover the annotations, so two records with one root can boot their nodes
     // from two machine images.
     let mut status = if !d.image_ids_changed.is_empty() {
@@ -449,7 +545,7 @@ fn build_pair(
             status = PairStatus::UnknownUpstream;
         }
     }
-    Pair {
+    Ok(Pair {
         a: la.clone(),
         b: lb.clone(),
         status,
@@ -458,6 +554,8 @@ fn build_pair(
         packs_repinned,
         packs_retagged,
         renumbers,
+        archives_compared,
+        archives_changed,
         archives_not_compared,
         reasons,
         minted_uid_only: d
@@ -474,20 +572,28 @@ fn build_pair(
         } else {
             d.macros
         },
-    }
+    })
 }
 
 /// Compare consecutive records, in the order given, and decide whether they are one release
 /// under `policy`. Fewer than two records is an empty chain that passes.
 ///
-/// Each of `records` is the path of a record, as the report names it, and the record itself.
-/// `generated_at` is the time of the report, in RFC 3339.
+/// It sends no request: [`same_release_with`] with `--allow renumber` reads the archives from
+/// Palette. Each of `records` is the path of a record, as the report names it, and the record
+/// itself. `generated_at` is the time of the report, in RFC 3339.
 pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at: &str) -> Chain {
     let options = SameReleaseOptions {
         policy,
         ..SameReleaseOptions::default()
     };
-    same_release_with(records, options, generated_at)
+    // without `--allow renumber` no pair has a renumber, so no pair compares an archive
+    let mut none = |_: (&Snapshot, &Pack), _: (&Snapshot, &Pack)| {
+        Ok::<_, Infallible>(ArchiveCheck::NotCompared)
+    };
+    match chain(records, options, generated_at, &mut none) {
+        Ok(chain) => chain,
+        Err(never) => match never {},
+    }
 }
 
 /// [`same_release`] with each value of `--allow`: see [`SameReleaseOptions`].
@@ -496,17 +602,49 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
 /// such a pair is `unknown-upstream`. A move from a registry that gives a digest to one that gives
 /// none loses what the root can show. With `allow_renumber`, a pair whose packs differ only by
 /// their versions is `renumber`. `generated_at` is the time of the report, in RFC 3339.
-pub fn same_release_with(
+///
+/// With `allow_renumber`, strata compares the two archives of each renumber whose digest changed.
+/// It reads them from the download of each profile version, once for each version: see
+/// [`Palette::profile_download`]. `connect` gives the client of the project of a record, once for
+/// each project. A record that is no published version of a cluster profile sends no request,
+/// and its archives stay not compared. `progress` announces each download.
+///
+/// # Errors
+///
+/// An error of `connect`, such as `missing-credential`. An error of a download: an error of the
+/// request, or [`crate::Error::NotArchive`]. An example is HTTP 429, when another client read the
+/// version less than 10 seconds before.
+pub fn same_release_with<A, F>(
+    records: &[(String, Snapshot)],
+    options: SameReleaseOptions,
+    connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<Chain>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let mut downloads = Downloads::new(connect, progress);
+    chain(records, options, generated_at, &mut |a, b| {
+        downloads.check(a, b)
+    })
+}
+
+/// The document of the chain of `records` under `options`. `check` compares the archives of a
+/// renumber.
+fn chain<E>(
     records: &[(String, Snapshot)],
     options: SameReleaseOptions,
     generated_at: &str,
-) -> Chain {
-    let pairs: Vec<Pair> = records
+    check: &mut CheckArchives<'_, E>,
+) -> std::result::Result<Chain, E> {
+    let pairs = records
         .windows(2)
-        .map(|w| build_pair(&w[0], &w[1], options, generated_at))
-        .collect();
+        .map(|w| build_pair(&w[0], &w[1], options, generated_at, check))
+        .collect::<std::result::Result<Vec<Pair>, E>>()?;
     let passed = pairs.iter().filter(|p| p.status.passed()).count();
-    Chain {
+    Ok(Chain {
         schema: CHAIN_SCHEMA.to_string(),
         tool: Tool::current(),
         generated_at: generated_at.to_string(),
@@ -535,5 +673,5 @@ pub fn same_release_with(
             })
             .collect(),
         pairs,
-    }
+    })
 }

@@ -204,7 +204,8 @@ strata-upstream-save:
 # The records of a promotion are one release, before a cluster moves. A manual job: run it from the
 # pipeline view, with STRATA_PROMOTE set to the records in promotion order. STRATA_PROMOTE_ALLOW
 # lists the differences to accept. A ref such as name@version reads PALETTE_PROJECT (a name) or
-# PALETTE_PROJECT_UID, which a CI/CD variable sets.
+# PALETTE_PROJECT_UID, which a CI/CD variable sets. A ref, and renumber in STRATA_PROMOTE_ALLOW,
+# need PALETTE_API_KEY: strata reads the archives of the renumbered packs from Palette.
 strata-promote-gate:
   extends: .strata
   stage: test

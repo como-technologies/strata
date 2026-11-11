@@ -120,6 +120,9 @@ pub(super) const DEVELOP_SHORT: &str = "64e000000000000000000111";
 pub(super) const A120_RC: &str = "64e000000000000000000112";
 pub(super) const A130_PROD: &str = "64e100000000000000000110";
 pub(super) const A200_TENANT: &str = "64e400000000000000000111";
+// aws-stack@1.2.2 of the use case of a renumber: the final build of the CSI pack has another default
+// value, and the profile gives the pin the same values
+pub(super) const RENUMBER_REBUILT: &str = "64e000000000000000000113";
 
 #[cfg(test)]
 mod tests {
@@ -204,7 +207,10 @@ mod tests {
         assert!(faults.is_empty(), "{}", faults.join("\n"));
         // the scan reads this file: it finds the first const and the last const
         let by_uid = consts(text).by_uid;
-        for (uid, name) in [(super::DEV, "DEV"), (super::DEVELOP_SHORT, "DEVELOP_SHORT")] {
+        for (uid, name) in [
+            (super::DEV, "DEV"),
+            (super::RENUMBER_REBUILT, "RENUMBER_REBUILT"),
+        ] {
             assert_eq!(by_uid.get(uid), Some(&vec![name.to_string()]));
         }
     }

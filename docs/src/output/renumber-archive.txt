@@ -1,0 +1,6 @@
+$ strata same-release --allow renumber aws-stack@1.2.0-rc.1 aws-stack@1.2.2
+DIFFERENT      aws-stack@1.2.0-rc.1 -> aws-stack@1.2.2   root 5608b33990f7 -> b0b1ff38cd6d
+               kubernetes  1.36.2-rc.1 -> 1.36.2 (pre-release to final; archive: same files)
+               csi-aws-ebs  1.65.0-rc.1 -> 1.65.1 (archive: other files)
+               pack csi/csi-aws-ebs archive: values.yaml differs
+NOT THE SAME RELEASE: 1 of 1 pair failed

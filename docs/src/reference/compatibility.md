@@ -333,8 +333,9 @@ is as before. With `verify --summary --full --json`, the `diff` of each drifted 
 says what the text holds.
 
 After 0.32.2, `strata-chain/1` has the new value `renumber` of `pairs[].status`, and the new
-fields `allowRenumber`, `pairs[].renumbers`, and `pairs[].archivesNotCompared`. Strata writes
-the fields only with `same-release --allow renumber`. Each document has the new key `renumber`
+fields `allowRenumber`, `pairs[].renumbers`, `pairs[].archivesCompared`,
+`pairs[].archivesChanged`, and `pairs[].archivesNotCompared`. Strata writes the fields only
+with `same-release --allow renumber`. Each document has the new key `renumber`
 in `legend.status`, because the legend names each status. `strata-diff/1` has the new field
 `packs[].renumbered`, and `legend.impact.none` has a new text. The ids stay.
 
@@ -946,6 +947,10 @@ After 0.29.0, two options are new, and both only add:
   pins from a registry gives the error `usage` and exit `2`, before any request. `--pin` with
   `--no-impact` gives a usage error of the command line and exit `2`.
 
+After 0.32.2, the error kind `not-archive` is new. `same-release --allow renumber` gives it when
+Palette answers the download of a profile version with a file that strata cannot read. See
+[Errors](./errors.md).
+
 After 0.32.2, each command that reads Palette takes `--project <uid>` and `--project-name
 <name>`, and each one only adds. Before, `list` and `verify` alone took them. `compare` and
 `same-release` also take `--project-a`, `--project-name-a`, `--project-b`, and
@@ -1189,12 +1194,32 @@ field, a value, an input, or an option is in the sections above.
   - A move to other numbers keeps its level, also with the same values. `ubuntu-aws` `20.04` to
     `24.04` stays `repave`.
 
+- **`same-release --allow renumber` compares the archives of the packs.** It reads them from
+  Palette for each renumber whose digest changed. See
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+  - A renumber whose two archives differ in a file that is not the version in `pack.json` fails.
+    The pair is `different`, and a reason names the file. Before, the pair passed, and the line
+    said `archive: not compared`.
+  - The line of a renumber says `archive: same files` when the two archives agree, and
+    `pairs[].archivesCompared` names the pack.
+  - The command connects to Palette, also for two record files. Without a key, it stops with
+    `missing-credential` and exit `2` when a renumber has a new digest. Give the key to the job.
+  - Palette takes one download of a version in 10 seconds, and refuses the next with HTTP 429
+    and the code `TooManyRequests`. Strata then waits 10 seconds before the next download, for
+    each retry of `STRATA_RETRIES`. After the last retry, it stops with the error `api`.
+- **`compare` gives the impact `none` to `1.2-rc.1` to `1.2.0`.** A number that a version omits
+  is `0`, as Palette reads it. So such a renumber keeps its numbers, and the impact is
+  `none (renumber only)`. Before, the move had the level of its layer.
+
 ### For a user of the CI drop-ins
 
 - **`pr-comment.sh` adds no label of an impact for a renumber.** The script reads
   `summary.maxImpact` of `compare`. A change whose packs only move from a pre-release to its
   final version has the maximum impact `none`, so the job adds no label `repave`. The report of
   `upstream-report.sh` gives such a bump the level `none` too.
+- **The promotion gate needs the key of Palette when `allow` holds `renumber`.** Strata reads the
+  archives of the renumbered packs from Palette. Give the secret `palette-api-key` to
+  `promote-gate.yml`, or `PALETTE_API_KEY` to the GitLab job.
 - **The reusable workflows read this repository with the token of the caller.** The
   repository is public, so the secret `strata-token` is optional. A call that gives
   it still works. A caller can remove it, and the secret `STRATA_READ_TOKEN` of its
@@ -1283,10 +1308,20 @@ field, a value, an input, or an option is in the sections above.
 - `ops::same_release_with` takes `ops::SameReleaseOptions` in place of a `Policy` and a `bool`.
   `SameReleaseOptions { policy, allow_no_digest, ..SameReleaseOptions::default() }` gives the
   result of 0.32.2. The new field `allow_renumber` is `--allow renumber`.
+- `ops::same_release_with` takes `connect` and `progress`, and returns a `Result`. `connect`
+  gives the client of the project of a record, as for `ops::verify_many`. It connects only for a
+  renumber whose digest changed. Without `allow_renumber`, it sends no request. `ops::same_release`
+  sends none, as before.
 - `ops::PairStatus` has the new value `Renumber`. A `match` with no wildcard arm must name it.
-- `ops::Pair` has the new fields `renumbers` and `archives_not_compared`, `ops::Chain` has
-  `allow_renumber`, and `diff::PackDiff` has `renumbered`. A struct literal must name them.
-  `diff::Renumber` is new.
+- `ops::Pair` has the new fields `renumbers`, `archives_compared`, `archives_changed`, and
+  `archives_not_compared`. `ops::Chain` has `allow_renumber`, and `diff::PackDiff` has
+  `renumbered`. A struct literal must name them. `diff::Renumber` and `ops::ArchiveChange` are
+  new.
+- `api::PaletteApi` has the new method `get_file`, with a default that gives
+  `Error::Transport`. A type that wraps another API must forward it, so that a download reaches
+  Palette. `api::Palette::profile_download`, `api::ProfileDownload`, `api::DownloadedPack`,
+  `api::PackArchive`, and `api::MemoryApi::with_file` are new.
+- `Error::NotArchive` is new. A `match` with no wildcard arm must name it.
 
 ### For a user of the library of strata-preflight
 

@@ -12,6 +12,16 @@ pub const API_KEY_HEADER: &str = "ApiKey";
 /// The header that carries the uid of the project.
 pub const PROJECT_UID_HEADER: &str = "ProjectUid";
 
+/// The media type of a JSON document, for `Accept` and for the body of a `POST`.
+const JSON_TYPE: &str = "application/json";
+
+/// The media type that a request for a file accepts. Palette sends a file, such as the download of
+/// a profile version, only to a request that accepts a file.
+const FILE_TYPE: &str = "application/octet-stream";
+
+/// The most bytes that strata reads of one answer.
+const BODY_LIMIT: u64 = 256 * 1024 * 1024;
+
 /// The HTTP implementation. One attempt per call; wrap it in [`Retry`](super::Retry) for more.
 pub struct HttpApi {
     config: Config,
@@ -31,24 +41,24 @@ impl HttpApi {
 }
 
 impl HttpApi {
-    /// The headers every request carries: the key, JSON, and the project when there is one.
-    fn headers<B>(&self, req: ureq::RequestBuilder<B>) -> ureq::RequestBuilder<B> {
+    /// The headers every request carries: the key, `accept`, and the project when there is one.
+    fn headers<B>(&self, req: ureq::RequestBuilder<B>, accept: &str) -> ureq::RequestBuilder<B> {
         let req = req
             .header(API_KEY_HEADER, self.config.api_key.as_str())
-            .header("Accept", "application/json");
+            .header("Accept", accept);
         match &self.config.project_uid {
             Some(p) => req.header(PROJECT_UID_HEADER, p.as_str()),
             None => req,
         }
     }
 
-    /// The JSON of a response, or the error it stands for: a status out of 2xx, a body that could
-    /// not be read, or a body that is not JSON.
-    fn read(
+    /// The status and the body of an answer with a 2xx status. Else the error that the answer
+    /// stands for: a status out of 2xx, or a body that strata cannot read.
+    fn body(
         method: Method,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
-    ) -> Result<Value> {
+    ) -> Result<(u16, Vec<u8>)> {
         let mut resp = answer.map_err(|e| Error::Transport {
             method,
             path: path.to_string(),
@@ -63,8 +73,8 @@ impl HttpApi {
         let body = resp
             .body_mut()
             .with_config()
-            .limit(256 * 1024 * 1024)
-            .read_to_string()
+            .limit(BODY_LIMIT)
+            .read_to_vec()
             .map_err(|e| Error::Transport {
                 method,
                 path: path.to_string(),
@@ -77,17 +87,28 @@ impl HttpApi {
                 method,
                 path: path.to_string(),
                 status,
-                body: body.replace(['\n', '\r'], " "),
+                body: String::from_utf8_lossy(&body).replace(['\n', '\r'], " "),
                 retry_after,
             });
         }
+        Ok((status, body))
+    }
+
+    /// The JSON of a response, or the error it stands for: the errors of [`HttpApi::body`], or a
+    /// body that is not JSON.
+    fn read(
+        method: Method,
+        path: &str,
+        answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
+    ) -> Result<Value> {
+        let (status, body) = Self::body(method, path, answer)?;
         // a 204 No Content, which the validate routes of the clouds answer, is an answer with no
         // body: null, and not a body that is not JSON. A 200 with no body stays the error it
         // was: a proxy or an outage page, not an answer of Palette
         if status == 204 {
             return Ok(Value::Null);
         }
-        serde_json::from_str(&body).map_err(|source| Error::NotJson {
+        serde_json::from_slice(&body).map_err(|source| Error::NotJson {
             method,
             path: path.to_string(),
             source,
@@ -101,16 +122,22 @@ impl PaletteApi for HttpApi {
         Self::read(
             Method::Get,
             path,
-            self.headers(self.agent.get(url.as_str())).call(),
+            self.headers(self.agent.get(url.as_str()), JSON_TYPE).call(),
         )
     }
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
         let url = format!("{}{}", self.config.base_url, path);
         let req = self
-            .headers(self.agent.post(url.as_str()))
-            .header("Content-Type", "application/json");
+            .headers(self.agent.post(url.as_str()), JSON_TYPE)
+            .header("Content-Type", JSON_TYPE);
         Self::read(Method::Post, path, req.send(body.to_string()))
+    }
+
+    fn get_file(&self, path: &str) -> Result<Vec<u8>> {
+        let url = format!("{}{}", self.config.base_url, path);
+        let answer = self.headers(self.agent.get(url.as_str()), FILE_TYPE).call();
+        Self::body(Method::Get, path, answer).map(|(_, body)| body)
     }
 
     fn project_uid(&self) -> Option<&str> {
@@ -126,23 +153,61 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::download_path;
 
     /// One answer from a server on this machine, so the reading of a body needs no network.
     fn serve_once(status_line: &str, body: &str) -> String {
+        serve_bytes(status_line, body.as_bytes()).0
+    }
+
+    /// One answer with the bytes `body`, from a server on this machine. The receiver gives the
+    /// head of the request that the server read.
+    fn serve_bytes(status_line: &str, body: &[u8]) -> (String, std::sync::mpsc::Receiver<String>) {
         use std::io::{Read, Write};
         let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
-        let answer = format!(
-            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        let mut answer = format!(
+            "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
             body.len()
-        );
+        )
+        .into_bytes();
+        answer.extend_from_slice(body);
+        let (sent, request) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let (mut s, _) = listener.accept().unwrap();
             let mut buf = [0u8; 4096];
-            let _ = s.read(&mut buf);
-            s.write_all(answer.as_bytes()).unwrap();
+            let n = s.read(&mut buf).unwrap_or(0);
+            let _ = sent.send(String::from_utf8_lossy(&buf[..n]).to_string());
+            s.write_all(&answer).unwrap();
         });
-        format!("http://{addr}")
+        (format!("http://{addr}"), request)
+    }
+
+    #[test]
+    fn a_file_is_the_bytes_of_the_body_of_a_request_that_accepts_a_file() {
+        let file = [0x1f, 0x8b, 0x08, 0x00, 0xff, 0x00];
+        let (url, request) = serve_bytes("200 OK", &file);
+        let api = HttpApi::new(Config::new(url, "k"));
+        assert_eq!(api.get_file(&download_path("u1")).unwrap(), file);
+        let head = request.recv().unwrap().to_ascii_lowercase();
+        assert!(head.contains("accept: application/octet-stream"), "{head}");
+        assert!(!head.contains("application/json"), "{head}");
+    }
+
+    #[test]
+    fn a_file_that_palette_refuses_carries_its_status_and_body() {
+        let (url, _) = serve_bytes(
+            "429 Too Many Requests",
+            br#"{"code":"TooManyRequests","message":"only 1 request in 10 seconds is allowed"}"#,
+        );
+        let api = HttpApi::new(Config::new(url, "k"));
+        match api.get_file(&download_path("u1")) {
+            Err(Error::Api { status, body, .. }) => {
+                assert_eq!(status, 429);
+                assert!(body.contains("TooManyRequests"), "{body}");
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

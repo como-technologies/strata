@@ -123,7 +123,7 @@ pages of `development/`, which describe the recipe to a maintainer.
 
 `xtask` runs each command against a local stand-in for the Palette API, which is
 `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
-request. It answers an export request that accepts JSON with `{"Reader":{}}`,
+request. It answers an export or a download request that accepts JSON with `{"Reader":{}}`,
 as Palette does. Each chapter of the runner builds the tenant that one page needs, from
 the real pack data in `examples/`. It changes the tenant between commands as
 Palette does.
