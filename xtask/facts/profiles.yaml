@@ -99,6 +99,7 @@ facts:
       - v1/clusterprofiles/{uid}/packs/manifests
     live:
       - draft.sh:route-list
+      - draft.sh:route-names
     pages:
       - reference/palette-api.md#a-profile-version
       - internals/palette/profiles.md#drafts

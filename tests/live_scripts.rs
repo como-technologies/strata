@@ -5669,10 +5669,11 @@ fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval
     );
 }
 
-/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits. It has the
-/// metadata of the profile, and one pack summary with the name `summary` and the manifest `m-1`.
-fn draft_manifests(summary: &str) -> String {
-    serde_json::json!({"metadata": {"name": "strata-live-addon", "uid": "ad-1"},
+/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits. Its metadata has
+/// the uid of the profile and the name `name`. It has one pack summary with the name `summary`
+/// and the manifest `m-1`.
+fn draft_manifests(name: &str, summary: &str) -> String {
+    serde_json::json!({"metadata": {"name": name, "uid": "ad-1"},
         "spec": {"packs": [{"metadata": {"name": summary, "uid": "pk-1"},
             "spec": {"name": summary, "manifests": [
                 {"name": "config", "uid": "m-1", "digest": "d", "content": "edited: \"no\"\n"}]}}]}})
@@ -5716,7 +5717,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
     );
     stage.route(
         "/v1/clusterprofiles/ad-1/packs/manifests",
-        &draft_manifests("config"),
+        &draft_manifests("strata-live-addon", "config"),
     );
     stage.route("/v1/clusterprofiles", r#"{"uid":"un-1"}"#);
     stage.route(
@@ -5797,7 +5798,18 @@ fn draft_sh_reads_the_two_names_of_packs_manifests_while_the_draft_waits() {
     let stage = unpublished_stage(false);
     stage.route(
         "/v1/clusterprofiles/ad-1/packs/manifests",
-        &draft_manifests("config-pack"),
+        &draft_manifests("strata-live-addon", "config-pack"),
+    );
+    let (o, steps) = stage.run("draft.sh", &[]);
+    failed(&steps, &["route-names"]);
+    passed(&steps, &["route-list"]);
+    assert_ne!(o.status.code(), Some(0));
+
+    // an answer with the name of another profile
+    let stage = unpublished_stage(false);
+    stage.route(
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+        &draft_manifests("strata-live-profile", "config"),
     );
     let (o, steps) = stage.run("draft.sh", &[]);
     failed(&steps, &["route-names"]);
