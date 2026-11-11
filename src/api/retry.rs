@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use super::PaletteApi;
+use super::{DOWNLOAD_INTERVAL_SECONDS, PaletteApi, is_download_limit};
 use crate::config::Config;
 use crate::error::{Error, FailureClass, Result};
 use crate::term::progress::Progress;
@@ -104,7 +104,8 @@ fn is_transient(e: &Error) -> bool {
 impl<A: PaletteApi> Retry<A> {
     /// Run `call` until it succeeds, fails for a reason that does not pass, or runs out of
     /// retries. A GET, a GET of a file, and a POST of a question retry the same way. A POST to
-    /// `validate/repave` again saves the same address again.
+    /// `validate/repave` again saves the same address again. A 429 of the download of a profile
+    /// version with no `Retry-After` waits [`DOWNLOAD_INTERVAL_SECONDS`], the limit of Palette.
     fn attempts<T>(&self, path: &str, call: impl Fn() -> Result<T>) -> Result<T> {
         let mut attempt = 0;
         loop {
@@ -127,7 +128,12 @@ impl<A: PaletteApi> Retry<A> {
                             limit,
                         });
                     }
-                    let delay = self.policy.delay(attempt, retry_after);
+                    let delay = match (&e, retry_after) {
+                        (Error::Api { status, .. }, None) if is_download_limit(*status, path) => {
+                            Duration::from_secs(DOWNLOAD_INTERVAL_SECONDS)
+                        }
+                        _ => self.policy.delay(attempt, retry_after),
+                    };
                     attempt += 1;
                     self.progress.note(&format!(
                         "{e}; retry {attempt} of {} in {delay:?}",
@@ -162,6 +168,7 @@ impl<A: PaletteApi> PaletteApi for Retry<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::api::MemoryApi;
 
     #[test]
     fn retry_policy_backs_off_exponentially_up_to_the_maximum() {
@@ -171,5 +178,34 @@ mod tests {
         assert_eq!(p.delay(2, None), Duration::from_secs(4));
         assert_eq!(p.delay(9, None), p.max_delay);
         assert_eq!(p.delay(0, Some(7)), Duration::from_secs(7));
+    }
+
+    /// The waits of a [`Retry`] over `api` until `call` gives the answer.
+    fn waits<T>(api: MemoryApi, call: impl Fn(&Retry<MemoryApi>) -> Result<T>) -> Vec<Duration> {
+        let slept = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let s = slept.clone();
+        let retry = Retry::with_sleep(api, RetryPolicy::new(3), Progress::silent(), move |d| {
+            s.borrow_mut().push(d)
+        });
+        assert!(call(&retry).is_ok());
+        slept.take()
+    }
+
+    /// Palette takes one download of a version in 10 seconds. So strata waits 10 seconds after
+    /// its 429, and a `Retry-After` has priority. A 429 of another route waits 1 second first.
+    #[test]
+    fn the_429_of_a_download_waits_the_limit_of_palette_before_the_next_download() {
+        let download = crate::api::download_path("u1");
+        let refused = |api: MemoryApi, path: &str| {
+            api.failing_n_times(path, 1, 429, r#"{"code":"TooManyRequests"}"#)
+        };
+        let file = || refused(MemoryApi::new().with_file(&download, vec![1]), &download);
+        let get_file = |r: &Retry<MemoryApi>| r.get_file(&download);
+        assert_eq!(waits(file(), get_file), [Duration::from_secs(10)]);
+        let told = file().with_retry_after(&download, 3);
+        assert_eq!(waits(told, get_file), [Duration::from_secs(3)]);
+        let other = "/v1/clusterprofiles/u1";
+        let json = refused(MemoryApi::new().with(other, Value::Null), other);
+        assert_eq!(waits(json, |r| r.get_json(other)), [Duration::from_secs(1)]);
     }
 }

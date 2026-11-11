@@ -537,7 +537,7 @@ fn status_hint(status: u16, path: &str, body: &str) -> String {
     if names_project {
         "; the route is of the tenant scope, and the request named a project: ask it with no project"
             .to_string()
-    } else if status == 429 && crate::api::is_download_path(path) {
+    } else if crate::api::is_download_limit(status, path) {
         format!(
             "; Palette takes one download of a profile version in {} seconds: run the command again later",
             crate::api::DOWNLOAD_INTERVAL_SECONDS

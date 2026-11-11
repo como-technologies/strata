@@ -165,16 +165,16 @@ The file holds no archive for these packs:
 
 The list has no entry for a pack whose registry Palette cannot find. For a pack
 of a pack registry, the archive is the archive of the digest that the profile
-pins. For a pack of an OCI registry of packs, it is the archive of the tag of
-the version at the time of the request.
+pins.
 
 Palette sends the file only to a request that accepts a file, such as
 `Accept: application/octet-stream`. The route reads the version by its uid, in
 the project of the request. Palette takes one download of a version in 10
 seconds. It refuses the next with HTTP 429, the code `TooManyRequests`, and the
-message "Too Many Requests, only 1 request in 10 seconds is allowed". It sends
-no `Retry-After`. [export.sh](../../development/live-runs.md#exportsh) shows
-each fact of this section.
+message "Too Many Requests, only 1 request in 10 seconds is allowed". After
+such a refusal, strata waits 10 seconds before the next download of the
+version. [export.sh](../../development/live-runs.md#exportsh) checks the facts
+of this section.
 
 ## The audit log
 

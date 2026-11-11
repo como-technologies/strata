@@ -551,6 +551,7 @@ facts:
       - internals/palette/profiles.md#the-download-of-a-version
     code:
       - src/api/palette/profiles.rs
+      - src/api/retry.rs
       - src/error/mod.rs
 
   # The audit log.

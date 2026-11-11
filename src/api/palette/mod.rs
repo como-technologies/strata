@@ -20,7 +20,7 @@ mod profiles;
 
 #[cfg(test)]
 pub(crate) use profiles::download_path;
-pub(crate) use profiles::{DOWNLOAD_INTERVAL_SECONDS, is_download_path};
+pub(crate) use profiles::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit};
 
 pub use clusters::{
     cloud_account_path, cloud_config_path, cluster_events_path, cluster_summary_path, subject_path,

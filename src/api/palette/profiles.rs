@@ -566,8 +566,8 @@ impl<A: PaletteApi> Palette<A> {
 const DOWNLOAD: [&str; 2] = ["spc", "download"];
 
 /// The seconds between two downloads of one profile version that Palette takes. It refuses a
-/// download in that time with HTTP 429 and the code `TooManyRequests`, and sends no
-/// `Retry-After`.
+/// download in that time with HTTP 429 and the code `TooManyRequests`. Strata waits this time
+/// before the next download of the version.
 pub(crate) const DOWNLOAD_INTERVAL_SECONDS: u64 = 10;
 
 /// The route of the download of the profile version `uid`: see [`Palette::profile_download`].
@@ -577,8 +577,14 @@ pub(crate) fn download_path(uid: &str) -> String {
     route(PROFILES, &segments)
 }
 
+/// True when HTTP `status` at `path` is the refusal of the limit: a 429 of the download of a
+/// profile version. See [`DOWNLOAD_INTERVAL_SECONDS`].
+pub(crate) fn is_download_limit(status: u16, path: &str) -> bool {
+    status == 429 && is_download_path(path)
+}
+
 /// True when `path` is the route of the download of a profile version.
-pub(crate) fn is_download_path(path: &str) -> bool {
+fn is_download_path(path: &str) -> bool {
     path.strip_prefix(PROFILES)
         .and_then(|rest| rest.strip_prefix('/'))
         .and_then(|rest| rest.split_once('/'))

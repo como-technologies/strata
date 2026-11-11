@@ -41,6 +41,9 @@ a setting of the send.
 
 The wait before a retry starts at one second, doubles, and stops at 30 seconds.
 Strata obeys a `Retry-After` in seconds, and ignores one that gives a date.
+After HTTP 429 for the download of a profile version with no `Retry-After`, the
+wait is 10 seconds. Palette takes one download of a version in 10 seconds: see
+[The download of a version](../internals/palette/profiles.md#the-download-of-a-version).
 
 Each request times out after two minutes. No variable changes that time. A
 request that times out is the error `transport`.
