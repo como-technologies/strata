@@ -59,9 +59,11 @@ commit only. A new push needs a new verify.
 
 The tool that sets the status reads the check `Gate` of the head commit first,
 and sets no success while `Gate` has none. `Gate` is a job of the `ci`
-workflow. It needs the four checks and does no other work. GitHub runs it only
-when each check passed, and skips it when one failed. So one check run names
-the full result of a commit, and the ruleset of `main` needs no change for it.
+workflow. It needs the four checks and
+[the scan of the deny list](./build-test.md#the-deny-list), and does no other
+work. GitHub runs it only when each check passed, and skips it when one failed.
+So one check run names the full result of a commit, and the ruleset of `main`
+needs no change for it.
 
 ## The merge
 
