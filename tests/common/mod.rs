@@ -1586,10 +1586,11 @@ pub fn serve_downloads(
                     .iter()
                     .map(|(path, text)| (*path, text.as_str()))
                     .collect();
-                if PackType::parse(&p.kind) == Some(PackType::Helm) {
+                let kind = PackType::parse(&p.kind)?;
+                if kind == PackType::Helm {
                     return Some(chart_archive(&p.name, &files));
                 }
-                let top = pack_top(&p.name, &p.ref_digest);
+                let top = archive_top(kind, &p.name, &p.version, &p.ref_digest);
                 Some(pack_archive(&p.name, &p.version, &p.layer, &top, &files))
             })
             .collect();

@@ -76,6 +76,11 @@
 //! # Ok::<(), strata::Error>(())
 //! ```
 
+// A unit test includes `tests/common/palette.rs` with `#[path]`, and that file names this crate
+// `strata`, as each other package does.
+#[cfg(test)]
+extern crate self as strata;
+
 pub mod api;
 pub mod candidate;
 pub mod closed_set;

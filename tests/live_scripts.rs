@@ -13260,9 +13260,10 @@ fn export_sh_stage_4_reads_the_chart_of_a_helm_registry_by_the_version_in_its_ch
 }
 
 /// Stage 4 reads the layout of the download of each version, and the archive of each pack. A
-/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the packs
-/// with no archive and two downloads at once. A list or an archive that names another version
-/// fails its check. The file as the answer to a request that accepts JSON fails its check too.
+/// request that accepts JSON gets `{"Reader":{}}`, and not the file. The stage records the top
+/// folders of each archive, a Helm chart too, the packs with no archive, and two downloads at once.
+/// A list or an archive that names another version fails its check. The file as the answer to a
+/// request that accepts JSON fails its check too.
 #[test]
 fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pack() {
     let stage = download_stage(&downloaded("1.36.2"));
@@ -13278,9 +13279,19 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
             "download-accepts-json-no-file",
         ],
     );
-    for id in ["download-no-archive", "download-limit"] {
+    for id in [
+        "download-top-folders",
+        "download-no-archive",
+        "download-limit",
+    ] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
+    let tops = std::fs::read_to_string(stage.path("out/download-top-folders.out")).unwrap();
+    assert_eq!(
+        tops,
+        "./aws-stack.list.json\tkubernetes\tspectro\tkubernetes-0123456789ab\n\
+         ./aws-stack.list.json\tnginx\thelm\tnginx\n"
+    );
     let none = std::fs::read_to_string(stage.path("out/download-no-archive.out")).unwrap();
     assert_eq!(none, "./aws-stack.list.json\tcsi-aws-ebs\tspectro\ttrue\n");
     let request = std::fs::read_to_string(
@@ -13310,4 +13321,67 @@ fn export_sh_stage_4_reads_the_layout_of_the_download_and_the_archive_of_each_pa
     let (_, steps) = stage.run("export.sh", &["4"]);
     passed(&steps, &["download-accepts-json"]);
     failed(&steps, &["download-accepts-json-no-file"]);
+}
+
+/// `download-limit` starts its two downloads before it waits for either, and records the status
+/// of each. A refusal of Palette gives exit 2, and the record names its code and its message.
+#[test]
+fn export_sh_stage_4_starts_the_two_downloads_of_download_limit_before_either_ends() {
+    let stage = download_stage(&downloaded("1.36.2"));
+    let key = Stage::route_key(&download_route("u-1"));
+    // the route logs `start` and `end` for each request that accepts a file. The download of the
+    // version is the first such request, and the two of download-limit follow it. The route holds
+    // the second request until a third starts, for 10 seconds at most. So two downloads one after
+    // the other log `start` and `end` for each in turn
+    executable(
+        &stage.path("routes").join(format!("{key}.sh")),
+        &format!(
+            r#"#!/usr/bin/env bash
+if grep -qix 'Accept: application/json' "$FAKE_ROUTES/sent/GET_{key}.request"; then
+  cat "$FAKE_ROUTES/{key}.for-json"
+  exit 0
+fi
+order="$FAKE_ROUTES/{key}.order"
+echo start >> "$order"
+if [ "$(grep -c start "$order")" -ge 2 ]; then
+  for _ in $(seq 200); do
+    [ "$(grep -c start "$order")" -ge 3 ] && break
+    command -p sleep 0.05
+  done
+fi
+cat "$FAKE_ROUTES/{key}.file"
+echo end >> "$order"
+"#
+        ),
+    );
+    let (o, steps) = stage.run("export.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    assert!(has_verdict(&steps, "SEEN", "download-limit"), "{steps}");
+    let order = std::fs::read_to_string(stage.path(&format!("routes/{key}.order"))).unwrap();
+    assert_eq!(
+        order, "start\nend\nstart\nstart\nend\nend\n",
+        "the two downloads of download-limit start before either ends"
+    );
+    let record = std::fs::read_to_string(stage.path("out/download-limit.out")).unwrap();
+    assert_eq!(record, "download 1: HTTP 200\ndownload 2: HTTP 200\n");
+    // Palette refuses each download
+    let stage = download_stage(&downloaded("1.36.2"));
+    stage.route_as(&download_route("u-1"), "k", 429, DOWNLOAD_LIMIT_REFUSAL);
+    let (_, steps) = stage.run("export.sh", &["4"]);
+    let line = step_line(&steps, "download-limit");
+    assert!(
+        line.starts_with("SEEN ") && line.ends_with("got 2"),
+        "{steps}"
+    );
+    let answer: serde_json::Value = serde_json::from_str(DOWNLOAD_LIMIT_REFUSAL).unwrap();
+    let refused = format!(
+        "HTTP 429 {}: {}",
+        answer["code"].as_str().unwrap(),
+        answer["message"].as_str().unwrap()
+    );
+    let record = std::fs::read_to_string(stage.path("out/download-limit.out")).unwrap();
+    assert_eq!(
+        record,
+        format!("download 1: {refused}\ndownload 2: {refused}\n")
+    );
 }
