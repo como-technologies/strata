@@ -37,6 +37,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
+mod code_span;
 mod git;
 mod palette;
 mod process;
@@ -47,6 +48,7 @@ mod walk;
 
 pub use answer::*;
 pub use closed_set::schema_values;
+pub use code_span::*;
 pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
