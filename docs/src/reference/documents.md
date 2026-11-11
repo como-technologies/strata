@@ -258,6 +258,11 @@ A comparison of two sides, `a` and `b`.
   no profile can hold only the profiles that the other side asks about. Then
   `ref` names them, as `cluster:<cluster>/<profile>`: see
   [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
+  - `a.projectUid` and `b.projectUid`: the project of each side. Strata reads
+    a side in the project of `--project-a` or `--project-b`, else of
+    `--project`, else of the configuration. A side from a record file keeps
+    the project of the record. Empty is tenant scope. See
+    [Two sides in two projects](../commands/compare.md#two-sides-in-two-projects).
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
   manifest packs and the tag names of the same builds. The variables and the
@@ -484,6 +489,11 @@ of the secret does not show, because the two sides hold the mask: see
 - `same`: each pair passed.
 - `summary`: `pairs`, `passed`, and `failed`.
 - `records[]`: `label`, `name`, `version`, `uid`, `projectUid`, and `root`.
+  `projectUid` is the project of the record, and empty is tenant scope. The
+  first ref is side A of `--project-a`, and the second is side B of
+  `--project-b`. The pair `pairs[n]` compares `records[n]` with
+  `records[n+1]`, so these two give the project of each side of the pair. See
+  [Two projects in one run](../commands/same-release.md#two-projects-in-one-run).
 - `pairs[]`: `a`, `b`, `status` (`identical`, `same-content`, `registry-move`,
   `renumber`, `different`, or `unknown-upstream`), `rootA`, `rootB`,
   `packsRepinned`, `packsRetagged`, and `reasons[]`. A pack that names another

@@ -288,6 +288,11 @@ message of a `reproduce` line that runs no `curl`, because the key of Palette ho
 has the filter `saves_comment`, named by `jq::SAVES_COMMENT`: see
 [Release 0.33.0](#release-0330-changes-that-need-action).
 
+After 0.32.2, `ops::SideProjects` is new. It gives the project of each side of `compare` and
+`same-release`. `SideProjects::check` refuses a flag of one side for a count of refs other than
+two. `ops::snapshot_pair` gives its `connect` the side that it reads: see
+[Release 0.33.0](#release-0330-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -941,6 +946,13 @@ After 0.32.2, the error kind `not-archive` is new. `same-release --allow renumbe
 Palette answers the download of a profile version with a file that strata cannot read. See
 [Errors](./errors.md).
 
+After 0.32.2, each command that reads Palette takes `--project <uid>` and `--project-name
+<name>`, and each one only adds. Before, `list` and `verify` alone took them. `compare` and
+`same-release` also take `--project-a`, `--project-name-a`, `--project-b`, and
+`--project-name-b`, the project of each side. Each side flag of `same-release` takes two refs:
+with three refs or more, it gives the error `usage` and exit `2`, before any request. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -994,6 +1006,9 @@ Three more results follow from the order:
 Release 0.33.0 follows the order of Palette for a version that does not parse.
 The code of Palette gives that order, and no live run shows it: see
 [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
+Where Palette gives no order or reads no version, release 0.33.0 follows the
+order of the Rust crate `versions` 8.0.1. So `1.2.develop` is a pre-release of
+`1.2.0`, and `develop` is below each version.
 
 `strata-diff/1` has the new field `versionMove`, in the document and in each
 entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
@@ -1016,11 +1031,24 @@ field, a value, an input, or an option is in the sections above.
 - **A version that does not parse reads as its first three numbers.** Palette reads it so too.
   Before, strata put such a version above each version that parses. See
   [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
-  - A tail of text puts the version below its numbers, and makes it a pre-release.
-    `1.1.8.develop` is below `1.1.8`. So `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
+  - A tail of text right after the numbers puts the version below each pre-release of its
+    numbers, and makes it a pre-release. `1.1.8.develop` is below `1.1.8-alpha` and `1.1.8`. So
+    `<name>@latest` gives `1.1.10` over `1.1.8.develop`.
     Before, it recorded the develop build. `pack:<name>@latest` skips such a version too.
+  - Text right after the third number is below a tail after a dot, as the crate `versions`
+    orders it. So `1.2.3rc1b` is below `1.2.3.develop`. The crate reads `1.2.0rc1b` as the two
+    numbers `1.2` and the tail `0rc1b`. So `1.2.0rc1b` is above `1.2rc1` and below `1.2.develop`.
   - A tail of numbers puts the version above its numbers. `10.4.0.1` is above `10.4.0` and
     below `10.5.0`. So `@latest` gives `10.5.0`. Before, it kept `10.4.0.1`.
+  - A tail after `-` or a dot after a fourth number puts the version above its four numbers, as
+    the crate `versions` orders it. `1.2.3.4` is below `1.2.3.4-rc1`, and `1.2.3.4-rc1` is below
+    `1.2.4`. Text right after the fourth number puts the version below its four numbers and above
+    its three: `1.2.3.4rc1` is above `1.2.3` and below `1.2.3.4`. Text after the fourth number
+    still makes a pre-release.
+  - Text before the numbers reads as the numbers too, as Palette reads it. `chart-1.2.3` is
+    above `1.2.2` and below `1.2.3-alpha`, and it is a pre-release. Of two versions with the
+    same text before the numbers, the rest decides: `chart-1.2.3.develop` is below
+    `chart-1.2.3-alpha`, and `chart-1.2.3+5` equals `chart-1.2.3`.
   - `strata list` and `strata packs` list such a version in the new order. `latest` of
     `strata packs` marks the version that `@latest` records.
   - `behind` names `10.5.0` as newer than the pin `10.4.0.1`. Before, it named nothing. It
@@ -1028,9 +1056,36 @@ field, a value, an input, or an option is in the sections above.
     pre-release.
   - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.3.4` to `1.3.0` is
     `forward` now.
-  - A text with no three numbers, such as `LTS__24.x`, keeps its order.
   - A record that `@latest` wrote before can name a develop build. Take the record again to
     pin the version that `@latest` gives now.
+- **One or two numbers and a tail of text make a pre-release of the version of the numbers.** An
+  example is `1.2.develop`. A missing number is `0`, so it is above `1.1.10` and below
+  `1.2.0-0`. Palette reads no version in such a text, and strata follows the order of the crate
+  `versions`. Before, strata put it above each version. See
+  [the rule of `@latest`](./refs.md#rules).
+  - Text right after the last number is below a tail after a dot, as the crate orders it. So
+    `1.2rc1` is below `1.2.develop`, and `1rc1` is below `1.develop`. The crate reads such a
+    number only in the last part. So `1.2a1b` holds one number and the tail `2a1b`, and `1a1b`
+    holds no version.
+  - `<name>@latest` on `1.2.develop`, `1.10.0`, and `1.9.0` gives `1.10.0`. Before, it recorded
+    `1.2.develop`. `@latest` skips such a text while the name has a version that is no
+    pre-release. This holds for `pack:<name>@latest` too.
+  - `strata list` and `strata packs` list such a text by its numbers. `latest` of
+    `strata packs` marks the version that `@latest` records.
+  - `behind` names such a text as newer only with `--pre-release`, or for a pin that is a
+    pre-release. So `behind --pre-release` names `1.2.develop` as newer than `1.1.10`.
+  - `versionMove` of `strata-diff/1` follows the new order. A move from `1.2.develop` to
+    `1.10.0` is `forward` now, and a move from `1.2.0-rc.1` to `1.2.develop` is `back`.
+  - A record that `@latest` wrote before can name such a text. Take the record again.
+- **A text with no number at its start and no three numbers is below each version.** Examples
+  are `develop` and `LTS__24.x`. Before, strata put it above each version. Two such texts keep
+  the natural order: `LTS__24.x` is above `LTS__22.04`.
+- **A `v` in front of the three numbers does not count in a tie.** Palette reads `v1.1.8.1`,
+  `1.1.8.1`, `v1.1.8`, and `1.1.8` as `1.1.8`. Now `v1.1.8.1` equals `1.1.8.1`, as `v1.1.8`
+  equals `1.1.8`. Before, `v1.1.8.1` was above `1.1.8.1`.
+  - When both are the highest versions of a name, `<name>@latest` gives
+    `profile-name-ambiguous`. Before, it recorded `v1.1.8.1`.
+  - `versionMove` is absent for such a pair.
 - **`strata preflight`: no `reproduce` line deletes or changes anything, and none
   names `examples/live`.** Each line reads. See
   [The reproduce lines](./preflight-rules.md#the-reproduce-lines).
@@ -1097,6 +1152,14 @@ field, a value, an input, or an option is in the sections above.
   Now strata reads no file then, and the environment gives each setting. A job with
   a relative `HOME` must set an absolute path, or give the settings in the
   environment. See [Settings](./settings.md).
+- **`compare` and `same-release` name the project of each side in two projects.** The terminal
+  report of `compare` has the line `project <a> -> <b>` after `root`. The markdown table has the
+  row `project`. Under a pair of `same-release`, the line `project <a> -> <b>` comes first. Each
+  project is a uid, or `tenant scope`. See
+  [Two sides in two projects](../commands/compare.md#two-sides-in-two-projects).
+  - A script that reads the line after `root`, or the line after a pair, must skip the new
+    line. Read `a.projectUid`, `b.projectUid`, and `records[].projectUid` of the JSON in its
+    place: the JSON does not change.
 - **`compare` gives a renumber the impact `none`.** A renumber keeps the values, the
   manifests, the params, and the images of a pack. Its version keeps its numbers, such as
   `1.66.0-g4f1c2a9b7d30` to `1.66.0`. The impact is `none (renumber only)` on each layer, and
@@ -1153,6 +1216,9 @@ field, a value, an input, or an option is in the sections above.
   - A move from `1.3.0` to `1.2.3.4`, or from `1.1.10` to `1.1.8.develop`, fails the gate
     with `BEHIND` now. Add the line `Rollback: <record> to <name>@<version>` to a commit, or pin
     a final version.
+  - A move from `1.2.develop` to `1.10.0` passes the gate now. A move from `1.10.0` or from
+    `1.2.0-rc.1` to `1.2.develop` fails with `BEHIND` now. Before, these verdicts were the other
+    way.
 - **`preflight.sh` finds the key in the places where strata looks for it.** Before,
   it read `PALETTE_API_KEY` alone. Without that variable, the job ran offline and
   said nothing.
@@ -1184,12 +1250,29 @@ field, a value, an input, or an option is in the sections above.
 - `BOOK_URL` is `https://como-technologies.github.io/strata/`, the public address of the book.
 - `reference::version::compare` reads a version that does not parse by its first three numbers.
   `reference::version::pick` follows that order.
+  - Where Palette gives no order or reads no version, `compare` follows the order of the crate
+    `versions` 8.0.1. It puts `1.2.develop` above `1.1.10` and below `1.2.0-0`, and
+    `1.1.8.develop` below `1.1.8-0`. It puts `1.2rc1` below `1.2.0rc1b`, and `1.2.0rc1b` below
+    `1.2.develop`. It puts `1.2.3rc1b` below `1.2.3.develop`, and `1.2.3.4rc1` above `1.2.3` and
+    below `1.2.3.4`. Before, it put each such text above each version.
+  - `compare` puts a text with no number at its start and no three numbers, such as `develop`,
+    below each version.
+  - A `v` in front of the three numbers does not count in a tie, so `v1.1.8.1` equals `1.1.8.1`.
+  - For `latest`, `pick` skips a pre-release while an item has a version that is no pre-release.
+    It gives a text with no version only when no item holds a version.
 - `reference::version::is_pre_release` is true for a text with a tail of text after its three
-  numbers, such as `1.1.8.develop` and `1.2.3.4-rc1`. It was false for each text that does not
-  parse.
+  numbers, such as `1.1.8.develop`, `1.2.3rc1`, `1.2.3.4-rc1`, and `1.2.3.4rc1`. It is also true
+  for a text with other text before its three numbers, such as `chart-1.2.3`. One `v` in front
+  is no such text. It is true for one or two numbers and a tail of text, such as `1.2.develop`
+  and `1.2rc1`. A tail of
+  numbers, as in `10.4.0.1`, makes no pre-release. It was false for each text that does not
+  parse, and it stays false for a text with no version, such as `develop`.
 - `ops::snapshot_pair` of one version of a cluster profile and a `Ref::Cluster` with no
   `profile` gives a cluster record of the profile that the version replaces. Its
-  `source.reference` names that profile. The signature stays.
+  `source.reference` names that profile.
+- `ops::snapshot_pair` gives `connect` the `diff::Side` that it reads, so that each side can
+  read its own project. Its `connect` is `FnMut(Side) -> Result<Palette<A>>`, not
+  `FnMut() -> Result<Palette<A>>`. Give `|_| connect()` to get the result of 0.32.2.
 - `config::Config::from_env` reads no `~/.palette.env` when `HOME` is empty or relative.
   Before, it read the file of the working folder, or of a folder from the working
   folder.

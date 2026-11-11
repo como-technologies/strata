@@ -193,6 +193,9 @@ include a version that strata omits. See
 {{#include ../output/help-packs.txt}}
 ```
 
+`--project <uid>` or `--project-name <name>` reads the registries in that
+project, in place of the configured project. `--project ''` is tenant scope.
+
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see
 [Output formats](./index.md#output-formats).

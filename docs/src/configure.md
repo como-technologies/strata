@@ -31,7 +31,9 @@ PALETTE_PROJECT=dev
 A profile version and a cluster belong to a project. Strata uses the project in
 this order:
 
-1. `--project <uid>` or `--project-name <name>`, on `list` and `verify`.
+1. `--project <uid>` or `--project-name <name>`, on each command that reads
+   Palette. `compare` and `same-release` also take a project for each side:
+   see [Environments in the projects of one tenant](./use-cases/projects.md).
 2. `PALETTE_PROJECT_UID`.
 3. `PALETTE_PROJECT`. Strata finds its uid at tenant scope, one time for each
    command. An unknown name is an error that lists the projects that the key can
@@ -67,7 +69,12 @@ months.
 A snapshot file records the project uid. `strata verify` checks each record in
 its own project, so one scheduled job checks the records of all projects. A
 record from tenant scope has no project uid, so `verify` checks it in the
-configured project.
+configured project. `behind` and `consumers` read a record in its project in
+the same way. `verify --project` is the one exception: it checks each record in
+the project of the flag.
+
+`strata preflight` runs `strata-preflight`, which takes no project flag. It
+reads the project from `PALETTE_PROJECT_UID` and `PALETTE_PROJECT`.
 
 ## A self-hosted Palette
 

@@ -12,8 +12,9 @@ The examples use the projects `dev` and `prod`, which each hold a copy of
 {{#include ../output/promote-same.txt}}
 ```
 
-Exit `0`: dev and prod have the same release. Give the records in promotion
-order, for example `dev.json test.json prod.json`.
+Exit `0`: dev and prod have the same release. The line `project` names the
+project of each record, by uid, when the two differ. Give the records in
+promotion order, for example `dev.json test.json prod.json`.
 
 ## A pair that fails
 
@@ -26,6 +27,21 @@ names the first changed value, or the first changed manifest. It uses the words
 of `compare`, for example `manifest extra-rules changed` or `values changed (not
 parseable as YAML on one side)`. See
 [Promote a release to another project](../use-cases/promote.md).
+
+## Two projects in one run
+
+Give a project for each side, and strata reads each ref in its own project:
+
+```text
+{{#include ../output/projects-same.txt}}
+```
+
+`--project-a` or `--project-name-a` gives the project of the first ref.
+`--project-b` or `--project-name-b` gives the project of the second ref. The
+flag of a side has priority over `--project`. These flags take two refs. For a
+chain of three projects, give a record file for each ref, which
+`strata snapshot --project-name` writes. See
+[Environments in the projects of one tenant](../use-cases/projects.md).
 
 ## Which pairs pass
 
@@ -209,8 +225,9 @@ fact. See [A secret changes in a pack value](../use-cases/masked-value.md).
 
 Each side is a ref: a snapshot file, a profile uid, `<name>@<version>`,
 `<name>@latest`, a cluster, or `pack:<name>@<version>`. Strata reads a uid, a
-name, or a cluster in the configured project. To compare two projects, give two
-files. [Refs](../reference/refs.md) lists each form.
+name, or a cluster in the configured project, or in the project of a flag. To
+compare two projects, give a project for each side, or two files.
+[Refs](../reference/refs.md) lists each form.
 
 ## What to expect
 
@@ -227,6 +244,12 @@ files. [Refs](../reference/refs.md) lists each form.
 ```text
 {{#include ../output/help-same-release.txt}}
 ```
+
+`--project <uid>` or `--project-name <name>` reads each ref in that project, in
+place of the configured project. `--project ''` is tenant scope. A record file
+sends no request. `--project-a`, `--project-name-a`, `--project-b`, and
+`--project-name-b` give the project of one side: see
+[Two projects in one run](#two-projects-in-one-run).
 
 `--format`, `--json`, `--compact`, `--color`, `--no-color`, and `-q`
 (`--quiet`) are the output options that each report command takes: see

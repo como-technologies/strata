@@ -3,13 +3,13 @@
 //! it cannot parse; the reusable workflows never run here, so nothing else shows it. A
 //! colon and a space inside an unquoted description is the fault this found.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::process::Command;
 
 use crate::common::{
     CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, MACHINE_GIT_USER, executable, git, isolate_git,
     just_dry_run, on_path, one_line, recipe, repo_file, runs_of, script, steps, strings, text,
-    toml_value, workflow, workflow_files, workflow_text,
+    toml_value, walk, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -53,6 +53,112 @@ fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
     }
 }
 
+/// The job named `Gate` of the parsed `ci.yml` in `ci`: the one check run that the verify reads.
+fn gate_of(ci: &serde_yaml::Value) -> &serde_yaml::Value {
+    ci["jobs"]
+        .as_mapping()
+        .expect("ci.yml has jobs")
+        .values()
+        .find(|job| job["name"].as_str() == Some("Gate"))
+        .expect("ci.yml has a job named Gate")
+}
+
+/// The arguments of each `just` command in the `run` steps of the job `job`, in order.
+///
+/// A job that calls a workflow of this repository with `uses` gives the commands of each job of
+/// that workflow. The function also reads each workflow that such a job calls in turn. A step
+/// that uses an action of this repository gives the commands of that action: see
+/// [`just_runs_in`].
+fn just_runs_of(job: &serde_yaml::Value) -> Vec<String> {
+    if let Some(called) = job["uses"].as_str() {
+        let file = called
+            .strip_prefix("./.github/workflows/")
+            .unwrap_or_else(|| {
+                panic!("the job calls {called}, which is not a workflow of this repository")
+            });
+        let doc = workflow(file);
+        return doc["jobs"]
+            .as_mapping()
+            .unwrap_or_else(|| panic!("{file} has no jobs"))
+            .values()
+            .flat_map(just_runs_of)
+            .collect();
+    }
+    just_runs_in(&job["steps"], &BTreeMap::new())
+}
+
+/// The arguments of each `just` command in the `run` steps of the sequence `list`, in order.
+///
+/// A step that uses an action of `.github/actions/` gives the commands of the steps of that
+/// action, and of each action that they use in turn. `inputs` holds the value of each input of
+/// the action that holds `list`. Each `${{ inputs.<name> }}` of a command becomes its value.
+///
+/// # Panics
+///
+/// When a command holds an expression of GitHub that `inputs` does not give. The dry run of the
+/// command cannot read the expression.
+fn just_runs_in(list: &serde_yaml::Value, inputs: &BTreeMap<String, String>) -> Vec<String> {
+    let mut runs = Vec::new();
+    for step in list.as_sequence().into_iter().flatten() {
+        let used = step["uses"].as_str().unwrap_or_default();
+        if let Some(name) = used.strip_prefix("./.github/actions/") {
+            let action = local_action(name);
+            let given = inputs_of(&action, step, inputs);
+            runs.extend(just_runs_in(&action["runs"]["steps"], &given));
+        }
+        for line in step["run"].as_str().into_iter().flat_map(str::lines) {
+            let Some(args) = line.trim().strip_prefix("just ") else {
+                continue;
+            };
+            let args = with_inputs(args, inputs);
+            assert!(
+                !args.contains("${{"),
+                "the test cannot give a value to an expression of `just {args}`"
+            );
+            runs.push(args);
+        }
+    }
+    runs
+}
+
+/// The value of each input of the action `action` for the step `step` that uses it.
+///
+/// The value is the text that the `with` of the step gives, or else the default of the input.
+/// `outer` holds the inputs of the action that holds `step`, for an expression in the value. An
+/// input that has no text gets no value, so a command that reads it makes [`just_runs_in`] panic.
+fn inputs_of(
+    action: &serde_yaml::Value,
+    step: &serde_yaml::Value,
+    outer: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    action["inputs"]
+        .as_mapping()
+        .into_iter()
+        .flatten()
+        .filter_map(|(name, input)| {
+            let name = name.as_str().expect("the name of an input is a string");
+            let value = match &step["with"][name] {
+                serde_yaml::Value::Null => &input["default"],
+                given => given,
+            };
+            Some((name.to_string(), with_inputs(value.as_str()?, outer)))
+        })
+        .collect()
+}
+
+/// `text` with each `${{ inputs.<name> }}` replaced by the value that `inputs` gives for `<name>`.
+fn with_inputs(text: &str, inputs: &BTreeMap<String, String>) -> String {
+    inputs.iter().fold(text.to_string(), |text, (name, value)| {
+        text.replace(&format!("${{{{ inputs.{name} }}}}"), value)
+    })
+}
+
+/// The action `name` of `.github/actions/`, parsed from its `action.yml`.
+fn local_action(name: &str) -> serde_yaml::Value {
+    let path = format!(".github/actions/{name}/action.yml");
+    serde_yaml::from_str(&repo_file(&path)).unwrap_or_else(|e| panic!("{path}: not YAML: {e}"))
+}
+
 /// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
 /// success while that run has none. The job needs `checks` and `deny-list`, and has no `if`. So
 /// GitHub runs it only when each check passed, and skips it when one failed. A renamed job, a lost
@@ -61,10 +167,7 @@ fn needs_of(job: &serde_yaml::Value) -> Vec<&str> {
 fn the_gate_job_of_ci_needs_the_checks_and_the_deny_list_and_has_no_condition() {
     let doc = workflow("ci.yml");
     let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
-    let gate = jobs
-        .values()
-        .find(|job| job["name"].as_str() == Some("Gate"))
-        .expect("ci.yml has a job named Gate");
+    let gate = gate_of(&doc);
     let needs = needs_of(gate);
     assert_eq!(needs.len(), 2, "the Gate needs {needs:?}");
     assert!(
@@ -1599,24 +1702,40 @@ fn the_observer_propose_step_sets_the_author_also_when_the_machine_gives_git_ano
 
 // ---- the knurl adapter (#705) -------------------------------------------------------------------
 
-/// A job of knurl tests the adapter, so no workflow of strata runs it. A failure of it blocks no
-/// merge and no release of strata. No recipe that the checks run builds the adapter. The test
-/// reads the commands that `just --dry-run` prints for each of these recipes, with the commands of
-/// its dependencies. It also reads each recipe that a `just` command in them runs.
+/// The names that build the adapter: its recipe and its package.
+const ADAPTER_NAMES: [&str; 2] = ["adapter-test", "strata-knurl"];
+
+/// A job of knurl tests the adapter, so no workflow or action of strata runs it. A failure of it
+/// blocks no merge and no release of strata.
+///
+/// No recipe of a job that `Gate` needs builds the adapter. The test reads the `just` commands of
+/// each such job, of each workflow that the job calls, and of each action that a step uses. Then
+/// it reads the commands that `just --dry-run` prints for each recipe, with the commands of its
+/// dependencies. It also reads each recipe that a `just` command in them runs.
 #[test]
-fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
-    for file in workflow_files() {
-        let text = workflow_text(&file);
-        for name in ["adapter-test", "strata-knurl"] {
-            assert!(!text.contains(name), "{file} names {name}");
+fn no_workflow_or_action_of_strata_and_no_recipe_of_a_job_that_the_gate_needs_runs_the_adapter() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    for dir in [".github/workflows", ".github/actions"] {
+        for path in walk(&root.join(dir)) {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let file = path.strip_prefix(root).unwrap().display();
+            for name in ADAPTER_NAMES {
+                assert!(!text.contains(name), "{file} names {name}");
+            }
         }
     }
-    let checks = workflow("checks.yml");
-    let mut recipes: Vec<String> = steps(&checks)
-        .filter_map(|step| step["run"].as_str()?.strip_prefix("just "))
-        .map(str::to_string)
+    let ci = workflow("ci.yml");
+    let mut recipes: Vec<String> = needs_of(gate_of(&ci))
+        .into_iter()
+        .flat_map(|need| just_runs_of(&ci["jobs"][need]))
         .collect();
-    assert!(recipes.iter().any(|r| r == "test"), "{recipes:?}");
+    for needed in [
+        "test",
+        "deny-list",
+        "build-target x86_64-unknown-linux-musl",
+    ] {
+        assert!(recipes.iter().any(|r| r == needed), "{recipes:?}");
+    }
     let Some(just) = on_path("just") else {
         eprintln!("skipped: this machine has no just; CI reads the recipes");
         return;
@@ -1629,7 +1748,7 @@ fn no_workflow_of_strata_and_no_recipe_of_the_checks_runs_the_adapter() {
         let args: Vec<&str> = run.split_whitespace().collect();
         let commands = just_dry_run(&just, &args);
         for line in commands.lines() {
-            for name in ["adapter-test", "strata-knurl"] {
+            for name in ADAPTER_NAMES {
                 assert!(
                     !line.contains(name),
                     "the recipe {run} builds the adapter: {line}"

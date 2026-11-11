@@ -1,4 +1,5 @@
 $ strata same-release releases/1.1.1/dev.json releases/1.1.1/prod.json
 DIFFERENT      releases/1.1.1/dev.json -> releases/1.1.1/prod.json   root 088136c929bd -> 30a4e5a6cd42
+               project 64f20000000000000000a0d1 -> 64f20000000000000000a0f1
                pack csi/csi-aws-ebs moved registry 5eecc89d0b150045ae661cef -> 64ec000000000000000000a1
 NOT THE SAME RELEASE: 1 of 1 pair failed

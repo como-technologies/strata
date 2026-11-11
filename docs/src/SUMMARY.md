@@ -48,6 +48,7 @@
 - [What changed between two pack versions](./use-cases/pack-versions.md)
 - [Review a change before you publish it](./use-cases/review.md)
 - [The same names in two projects](./use-cases/same-names.md)
+- [Environments in the projects of one tenant](./use-cases/projects.md)
 - [Find the profiles that carry a pack](./use-cases/find-a-pack.md)
 - [A cluster does not run its release](./use-cases/cluster-release.md)
 - [Clusters give variables different values](./use-cases/cluster-values.md)

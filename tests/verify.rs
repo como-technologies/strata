@@ -178,6 +178,8 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
 
 /// Issue #616. A field test recorded a develop build, such as `1.2.0.develop`, for `@latest`, with
 /// exit 0. Palette reads it as `1.2.0`. Strata puts it below `1.2.0`, and `@latest` skips it.
+/// Issue #714: `1.4.develop` holds no three numbers. Strata put it above each version. Now it is a
+/// pre-release of `1.4.0`, above `1.3.0`, and `@latest` skips it because it is a pre-release.
 #[test]
 fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_text() {
     let dir = tempfile::tempdir().unwrap();
@@ -187,6 +189,7 @@ fn name_at_latest_records_the_highest_version_and_not_a_build_with_a_tail_of_tex
         {"metadata": {"name": "lab-profile", "uid": "uid-dev-2"}, "spec": {"version": "1.2.0.develop"}},
         {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.3.0"}},
         {"metadata": {"name": "lab-profile", "uid": "uid-dev-4"}, "spec": {"version": "1.4.0.develop"}},
+        {"metadata": {"name": "lab-profile", "uid": "uid-dev-5"}, "spec": {"version": "1.4.develop"}},
     ]});
     let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
     let api = serve_fixture(api, dir.path(), "b", UID_B).with(PROFILE_LISTING, listing);
@@ -3701,12 +3704,14 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
 }
 
 /// Issue #616. `list` reads a version that does not parse by its first three numbers, as
-/// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`.
+/// `@latest` does: `1.1.8.develop` is below `1.1.8`, and `10.4.0.1` is above `10.4.0`. Issue #714:
+/// `1.2.develop` is a pre-release of `1.2.0`, so it is above `1.1.10`.
 #[test]
 fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
     let listing = serde_json::json!({"items": [
         listed_profile("barney", "1.1.10", "u1"),
         listed_profile("barney", "1.1.8.develop", "u2"),
+        listed_profile("barney", "1.2.develop", "u7"),
         listed_profile("barney", "1.1.8", "u3"),
         listed_profile("four", "10.5.0", "u4"),
         listed_profile("four", "10.4.0.1", "u5"),
@@ -3732,6 +3737,7 @@ fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
             "barney@1.1.8.develop",
             "barney@1.1.8",
             "barney@1.1.10",
+            "barney@1.2.develop",
             "four@10.4.0",
             "four@10.4.0.1",
             "four@10.5.0",
@@ -12685,7 +12691,7 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     let member = cluster_ref(CLUSTER_UID, None, false);
     let group_ref = Ref::parse("clustergroup:g1");
     for (a, b) in [(&group_ref, &member), (&member, &group_ref)] {
-        let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+        let (sa, sb) = ops::snapshot_pair(a, b, |_| connect(), "t1", &Progress::silent()).unwrap();
         assert_eq!(sa.root, sb.root, "the member runs the pin");
         let side = if matches!(a, Ref::Cluster { .. }) {
             &sa
@@ -12710,7 +12716,7 @@ fn a_cluster_group_record_holds_the_pin_and_compares_against_a_member() {
     let (_, whole) = ops::snapshot_pair(
         &group_ref,
         &Ref::parse(&format!("cluster:{CLUSTER_UID}/{infra}")),
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )
@@ -12737,7 +12743,8 @@ fn beside_the_cluster(api: &MemoryApi, version: &str) -> Vec<(Snapshot, strata::
     [(&version, &cluster), (&cluster, &version)]
         .into_iter()
         .map(|(a, b)| {
-            let (sa, sb) = ops::snapshot_pair(a, b, connect, "t1", &Progress::silent()).unwrap();
+            let (sa, sb) =
+                ops::snapshot_pair(a, b, |_| connect(), "t1", &Progress::silent()).unwrap();
             let d = ops::compare(&sa, &sb, "t1");
             let side = if sa.source.cluster.is_some() { sa } else { sb };
             (side, d)
@@ -12823,7 +12830,8 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     // two clusters stay whole
     let connect = || Ok(Palette::new(api.clone()));
     let whole = cluster_ref(CLUSTER_UID, None, false);
-    let (sa, sb) = ops::snapshot_pair(&whole, &whole, connect, "t1", &Progress::silent()).unwrap();
+    let (sa, sb) =
+        ops::snapshot_pair(&whole, &whole, |_| connect(), "t1", &Progress::silent()).unwrap();
     for side in [&sa, &sb] {
         assert_eq!(covered(side).0, [infra.as_str(), addon.as_str()]);
     }
@@ -12831,7 +12839,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     let (_, selected) = ops::snapshot_pair(
         &Ref::parse(UID_ADDONS),
         &cluster_ref(CLUSTER_UID, Some("lab-profile"), false),
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )
@@ -12842,7 +12850,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
     let (_, pending) = ops::snapshot_pair(
         &Ref::parse(UID_ADDONS),
         &cluster_ref(CLUSTER_UID, None, true),
-        || Ok(Palette::new(waits.clone())),
+        |_| Ok(Palette::new(waits.clone())),
         "t1",
         &Progress::silent(),
     )
@@ -13044,7 +13052,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     let (sa, sb) = ops::snapshot_pair(
         &Ref::parse("clustergroup:g1"),
         &member,
-        connect,
+        |_| connect(),
         "t1",
         &Progress::silent(),
     )
@@ -14282,10 +14290,16 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     );
 }
 
-/// A registry with 1.63.1 and 1.65.0, and three versions that do not parse: 1.63.1.1, with a tail
-/// of numbers, and the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text.
+/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
+/// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
+/// 1.66.develop, with two numbers and a tail of text.
 fn serve_develop_builds() -> MemoryApi {
-    let more = ["1.63.1.1", "1.65.0.develop", "1.66.0.develop"];
+    let more = [
+        "1.63.1.1",
+        "1.65.0.develop",
+        "1.66.0.develop",
+        "1.66.develop",
+    ];
     let mut entity = public_entity();
     for v in more {
         entity = with_tag(entity, v, &format!("pk-{v}"));
@@ -14313,7 +14327,8 @@ fn newer_than_in_develop_builds(pin: &str, pre_release: bool) -> Vec<String> {
 }
 
 /// Issue #616. `pack:<name>@latest` and `packs` read a version that does not parse by its first
-/// three numbers. A tail of text is a pre-release, so neither picks a develop build.
+/// three numbers. A tail of text is a pre-release, so neither picks a develop build. Issue #714:
+/// `1.66.develop` is a pre-release of `1.66.0`, below `1.66.0.develop`, so neither picks it.
 #[test]
 fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_below_the_next_version()
 {
@@ -14330,6 +14345,7 @@ fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_belo
         order,
         [
             ("1.66.0.develop", false),
+            ("1.66.develop", false),
             ("1.65.0", true),
             ("1.65.0.develop", false),
             ("1.63.1.1", false),
@@ -14339,7 +14355,9 @@ fn a_pack_at_latest_and_packs_skip_a_develop_build_and_read_a_fourth_number_belo
 }
 
 /// Issue #616. With `10.4.0.1` and `10.5.0`, `behind` said nothing. Now `1.65.0` is newer than the
-/// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release.
+/// pin `1.63.1.1`, and a develop build is newer only when the option asks for a pre-release. Issue
+/// #714: `1.66.develop` is a pre-release of `1.66.0`, so `--pre-release` names it as newer than
+/// `1.65.0`.
 #[test]
 fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop_build_as_a_pre_release()
  {
@@ -14350,12 +14368,27 @@ fn behind_reads_a_version_that_does_not_parse_by_its_three_numbers_and_a_develop
     );
     assert_eq!(
         newer_than_in_develop_builds("1.63.1", true),
-        ["1.66.0.develop", "1.65.0", "1.65.0.develop", "1.63.1.1"]
+        [
+            "1.66.0.develop",
+            "1.66.develop",
+            "1.65.0",
+            "1.65.0.develop",
+            "1.63.1.1"
+        ]
     );
     // a pin of a develop build follows the pre-releases, as a pin of `1.65.0-rc.1` does
     assert_eq!(
         newer_than_in_develop_builds("1.65.0.develop", false),
-        ["1.66.0.develop", "1.65.0"]
+        ["1.66.0.develop", "1.66.develop", "1.65.0"]
+    );
+    assert!(newer_than_in_develop_builds("1.65.0", false).is_empty());
+    assert_eq!(
+        newer_than_in_develop_builds("1.65.0", true),
+        ["1.66.0.develop", "1.66.develop"]
+    );
+    assert_eq!(
+        newer_than_in_develop_builds("1.66.develop", false),
+        ["1.66.0.develop"]
     );
 }
 

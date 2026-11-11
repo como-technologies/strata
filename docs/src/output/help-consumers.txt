@@ -7,11 +7,13 @@ Arguments:
   <REF>  A profile version or an app profile version, by ref or by record
 
 Options:
-      --list-only        Read the consumer list that Palette computes, and not each cluster of the fleet. Faster, but it does not find a consumer that the list omits
-      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
-      --json             The same as --format json
-      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
-      --no-color         The same as --color=never
-      --compact          Write the JSON on one line
-  -q, --quiet            No progress messages, no note of an unknown value, and no warning of the send
-  -h, --help             Print help
+      --list-only                    Read the consumer list that Palette computes, and not each cluster of the fleet. Faster, but it does not find a consumer that the list omits
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>  The same, by project name
+      --format <FORMAT>              The report format: terminal, markdown, or json [default: terminal]
+      --json                         The same as --format json
+      --color [<COLOR>]              Color the report: auto, always, or never [default: auto]
+      --no-color                     The same as --color=never
+      --compact                      Write the JSON on one line
+  -q, --quiet                        No progress messages, no note of an unknown value, and no warning of the send
+  -h, --help                         Print help

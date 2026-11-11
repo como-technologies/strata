@@ -4,6 +4,7 @@
 use std::collections::BTreeSet;
 
 use super::changes::status_word;
+use super::list::side_projects;
 use super::notes::{macros_changed_note, macros_not_compared_note, masked_sentence};
 use super::{count_of, short};
 use crate::diff::{Diff, Status};
@@ -91,6 +92,14 @@ const ARCHIVE_CHANGED: &str = "archive: other files";
 
 /// The fact of a renumber whose two archives strata did not compare.
 const ARCHIVE_NOT_COMPARED: &str = "archive: not compared";
+
+/// `project <a> -> <b>`: the projects of the two records of the pair at `index` of `c`, when
+/// the two differ. See [`side_projects`]. The pair at `index` compares the record at `index`
+/// with the record after it.
+pub(crate) fn pair_projects(c: &Chain, index: usize) -> Option<String> {
+    let (a, b) = (c.records.get(index)?, c.records.get(index + 1)?);
+    side_projects(&a.project_uid, &b.project_uid).map(|(a, b)| format!("project {a} -> {b}"))
+}
 
 /// One line for each renumber of a pair: `<name>  <old> -> <new>`, with its facts in brackets.
 ///

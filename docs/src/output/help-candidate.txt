@@ -7,7 +7,9 @@ Arguments:
   <REF>  A profile version, by ref or by record
 
 Options:
-  -o, --output <OUTPUT>        Write to this file, not to standard output
-      --files-dir <FILES_DIR>  Write the values and the manifests to files in this directory
-  -q, --quiet                  No progress messages, no note of an unknown value, and no warning of the send
-  -h, --help                   Print help
+  -o, --output <OUTPUT>              Write to this file, not to standard output
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
+      --project-name <PROJECT_NAME>  The same, by project name
+      --files-dir <FILES_DIR>        Write the values and the manifests to files in this directory
+  -q, --quiet                        No progress messages, no note of an unknown value, and no warning of the send
+  -h, --help                         Print help

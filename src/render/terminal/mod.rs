@@ -7,7 +7,8 @@ use super::consumers::{
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_heading, version_note, virtual_line, virtual_note,
+    profile_marks, project_label, registry_heading, side_projects, version_note, virtual_line,
+    virtual_note,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
@@ -15,7 +16,8 @@ use super::notes::{
 };
 use super::report::report_heading;
 use super::same_release::{
-    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word, renumber_lines,
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
+    renumber_lines,
 };
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
@@ -79,6 +81,9 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
             }
         ),
     ));
+    if let Some((a, b)) = side_projects(&d.a.project_uid, &d.b.project_uid) {
+        out.push(key_line("project", format!("{a} -> {b}")));
+    }
     for note in diff_notes(d) {
         match note {
             DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&text))),
@@ -202,7 +207,7 @@ impl Renderer for TerminalRenderer {
     fn render_chain(&self, c: &Chain) -> Result<String> {
         let p = &self.paint;
         let mut out = String::new();
-        for pair in &c.pairs {
+        for (index, pair) in c.pairs.iter().enumerate() {
             let word = format!("{:<13}", pair_word(pair.status));
             let word = match pair.status {
                 PairStatus::Identical | PairStatus::SameContent => p.bgreen(&word),
@@ -215,7 +220,10 @@ impl Renderer for TerminalRenderer {
                 pair.b,
                 p.dim(&pair_detail(pair))
             ));
-            for line in renumber_lines(pair) {
+            for line in pair_projects(c, index)
+                .into_iter()
+                .chain(renumber_lines(pair))
+            {
                 out.push_str(&format!("               {line}\n"));
             }
             for r in &pair.reasons {
