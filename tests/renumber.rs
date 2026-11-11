@@ -724,8 +724,8 @@ fn strata_reads_one_download_for_each_published_version_and_none_for_another_rec
     for p in &c.pairs {
         assert_eq!(p.archives_compared, ["csi/csi-aws-ebs"]);
     }
-    for uid in [UID_OLD, UID_NEW] {
-        assert_eq!(api.calls(&common::download_route(uid)), 1, "{uid}");
+    for (side, version) in [("old", UID_OLD), ("new", UID_NEW)] {
+        assert_eq!(api.calls(&common::download_route(version)), 1, "{side}");
     }
     // a candidate of the old version: no uid, no download
     let mut candidate = old.clone();
