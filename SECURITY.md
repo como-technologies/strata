@@ -5,13 +5,9 @@
 Do not open a public issue for a security problem, and do not put one in a pull
 request.
 
-This repository is private today, so send the report to
-<security@comotechnologies.io>.
-
-When the repository becomes public, use the private advisory form at
-<https://github.com/como-technologies/strata/security/advisories/new>. GitHub
-gives that form only to a public repository, and an owner must first turn on
-private vulnerability reporting in the repository settings.
+Use the private advisory form at
+<https://github.com/como-technologies/strata/security/advisories/new>. Only the
+maintainers and you can read the report.
 
 In a report, say what the problem is, which version of strata you found it in,
 and the steps that show it.

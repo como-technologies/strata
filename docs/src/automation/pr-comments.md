@@ -159,7 +159,6 @@ jobs:
       b: releases/1.1.1/dev.json
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}     # while this repository is private
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}   # only when a ref is not a snapshot file
 ```
 
@@ -174,7 +173,6 @@ jobs:
 
 | Secret | Needed for |
 | --- | --- |
-| `strata-token` | A read token for this repository, while it is private. |
 | `palette-api-key` | A ref that is not a snapshot file, and `repave`. |
 | `palette-project-uid` | A ref that is not a snapshot file, in a project, and `repave`. |
 
@@ -182,28 +180,3 @@ The workflow installs the release binary with `install-strata.sh`, which checks 
 signature of `SHA256SUMS` and the binary against it. Then it runs the script with
 the token of the caller. [The reusable workflows](../install.md#the-reusable-workflows)
 tell what each job checks. Another CI system installs strata and runs the script.
-
-## While this repository is private
-
-A workflow of another repository can call this workflow only after two steps:
-
-1. In this repository, open Settings, Actions, General, Access. Select
-   "Accessible from repositories in the organization".
-2. Give `strata-token`: a fine-grained token or a GitHub App token that can read
-   the contents of this repository. The token of the caller cannot read another
-   private repository, so without it the checkout and the download fail.
-
-A token does not give access to a reusable workflow of a private repository. The
-access setting of that repository does. So `strata-token` and the setting are
-two different steps, and the call needs both. Without the setting, no other
-repository can call the workflows, also when it has a token.
-
-To see the setting, ask GitHub. The answer `{"access_level":"none"}` means that
-no other repository can call the workflows:
-
-```bash
-gh api repos/como-technologies/strata/actions/permissions/access
-```
-
-The GitHub page "Sharing actions and workflows from your private repository"
-describes the setting.

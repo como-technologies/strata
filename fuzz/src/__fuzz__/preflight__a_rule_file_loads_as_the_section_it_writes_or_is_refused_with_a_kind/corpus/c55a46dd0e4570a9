@@ -1,0 +1,132 @@
+section: networking
+title: Networking
+about: |
+  The zones, the subnets, the CIDRs, the routes, and the endpoints that a build needs. The section
+  with the most rows and the least evidence: the lab runs go here first.
+rules:
+- id: eks-one-zone
+  title: EKS needs subnets in two zones
+  engines:
+  - eks
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    EKS needs subnets in two availability zones or more. Palette checks the count of the control
+    plane subnets, not the count of distinct zones. So a cluster with one zone passes each check
+    of Palette and fails during the build.
+  check:
+    kind: static
+    expr: |
+      def zones: [ (.cloudConfig.azs // [])[], (.cloudConfig.subnets // [])[].az ] | map(select(. != null and . != "")) | unique;
+      [ .entity.spec.machinepoolconfig[]
+        | select((.cloudConfig.azs // []) != [] or (.cloudConfig.subnets // []) != [])
+        | select((zones | length) < 2)
+        | "pool \(.poolConfig.name) names \(zones | length | count_of("zone")) (\(zones | join(", "))); EKS needs 2 or more" ]
+  fix:
+    owner: palette
+    text: Check the count of distinct zones in the EKS validate route.
+  reproduce:
+  - aws ec2 describe-subnets --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} --query 'Subnets[].AvailabilityZone' --output text | tr '\t' '\n' | sort -u
+  evidence:
+  - kind: run
+    ref: a live run
+  - kind: source
+    note: no minimum count of zones for EKS
+  tests:
+  - fault: fixtures/eks/one-zone.json
+    clean: fixtures/eks/clean.json
+- id: eks-unsupported-zone
+  title: Each zone of the pools takes an EKS cluster
+  engines:
+  - eks
+  tier: cloud
+  severity: fail
+  status: inferred
+  what: |
+    EKS takes no cluster subnet in the zones use1-az3 (us-east-1), usw1-az2 (us-west-1), and
+    cac1-az3 (ca-central-1), and none in a Local Zone or a Wavelength Zone. The build fails with
+    `UnsupportedAvailabilityZoneException`. The zone id behind a name such as us-east-1e differs
+    for each account, so the check asks EC2 for the ids of the zones the pools name. Palette does
+    not check the zone.
+
+    The zone route of Palette (`GET /v1/clouds/aws/regions/{region}/availabilityzones`) lists each
+    zone of the account with `name`, `state`, and `zoneId`. It lists no zone type, and the test for a
+    Local Zone or a Wavelength Zone reads the zone type. So the check stays at the cloud tier.
+  when: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | length) > 0
+  check:
+    kind: exec
+    needs:
+    - aws
+    argv:
+    - aws
+    - ec2
+    - describe-availability-zones
+    - --region
+    - '{{ .entity.spec.cloudConfig.region }}'
+    - --filters
+    - Name=zone-name,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | join(",") }}
+    - --output
+    - json
+    expr: |
+      def zones: [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique;
+      .entity.spec.cloudConfig.region as $region | zones as $want
+      | if .exec.exit != 0 then ["aws ec2 describe-availability-zones failed: \(.exec.stderr | .[:200])"]
+        else (.exec.stdout.AvailabilityZones // []) as $z
+          | ["use1-az3", "usw1-az2", "cac1-az3"] as $refused
+          | [ ($want[] | select(. as $n | ($z | map(.ZoneName) | index($n)) == null) | "zone \(.) is not in region \($region) for this account"),
+              ($z[] | . as $zone | select(($refused | index($zone.ZoneId)) != null) | "zone \(.ZoneName) is \(.ZoneId): EKS takes no cluster subnet in it"),
+              ($z[] | select((.ZoneType // "availability-zone") != "availability-zone") | "zone \(.ZoneName) is a \(.ZoneType): EKS takes no cluster subnet in a Local Zone or a Wavelength Zone"),
+              ($z[] | select((.State // "available") != "available") | "zone \(.ZoneName) is \(.State), not available") ]
+        end
+  reproduce:
+  - aws ec2 describe-availability-zones --region {{ .entity.spec.cloudConfig.region }} --query 'AvailabilityZones[].[ZoneName,ZoneId,ZoneType,State]' --output table
+  fix:
+    owner: palette
+    text: Check the zone ids of the pools against the list of EKS in the validate route.
+  evidence:
+  - kind: doc
+    ref: https://docs.aws.amazon.com/eks/latest/userguide/network-reqs.html
+    note: the table of disallowed zone ids, and no Outposts or Wavelength subnet for the cluster
+  tests:
+  - fault: fixtures/eks/zone-use1-az3.json
+    clean: fixtures/eks/static-vpc-clean.json
+- id: aws-dynamic-cidr-overlap
+  title: The pod and service CIDRs stay outside the VPC of dynamic placement
+  engines:
+  - aws
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    For dynamic placement (no vpcId) Palette makes the VPC with 10.0.0.0/16. A pod CIDR or a
+    service CIDR of the Kubernetes pack inside it breaks the routes of the nodes. Palette checks
+    the CIDRs against the VPC for static placement alone, and skips the check when vpcId is
+    empty. The check reads `pack.podCIDR` and `pack.serviceClusterIpRange`, or the
+    kubeadm `networking.podSubnet` and `serviceSubnet`, of the Kubernetes pack.
+  when: (.profiles | length) > 0
+  check:
+    kind: static
+    expr: |
+      def is_cidr: type == "string" and test("^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$");
+      def ip($s): $s | split(".") | map(tonumber) | reduce .[] as $o (0; . * 256 + $o);
+      def net($cidr; $p): ip($cidr | split("/")[0]) as $n | reduce range(0; 32 - $p) as $i ($n; (. / 2) | floor);
+      def overlaps($a; $b): ([($a | split("/")[1] | tonumber), ($b | split("/")[1] | tonumber)] | min) as $p | net($a; $p) == net($b; $p);
+      def k8s_cidrs: [ .profiles[]? | .packs[]? | select(.layer == "k8s") | .name as $n | .valuesCanon as $v
+        | {name: $n, field: "pack.podCIDR", cidr: ($v.pack.podCIDR // $v.kubeadmconfig.clusterConfiguration.networking.podSubnet)},
+          {name: $n, field: "pack.serviceClusterIpRange", cidr: ($v.pack.serviceClusterIpRange // $v.kubeadmconfig.clusterConfiguration.networking.serviceSubnet)}
+        | select(.cidr | is_cidr) ];
+      if (.entity.spec.cloudConfig.vpcId // "") != "" then []
+      else [ k8s_cidrs[] | select(overlaps(.cidr; "10.0.0.0/16"))
+             | "pack \(.name) sets \(.field) \(.cidr), which overlaps the VPC CIDR 10.0.0.0/16 of dynamic placement; Palette skips this check when vpcId is empty" ] end
+  fix:
+    owner: palette
+    text: Run the CIDR check against 10.0.0.0/16 for dynamic placement too.
+  evidence:
+  - kind: source
+    note: Palette skips the CIDR check when vpcId is empty; for static placement it tests the VPC CIDR against pack.podCIDR and pack.serviceClusterIpRange
+  - kind: source
+    note: 10.0.0.0/16, which Palette uses for the VPC of dynamic placement
+  tests:
+  - fault: fixtures/aws/pod-cidr-in-vpc.json
+    clean: fixtures/aws/clean.json

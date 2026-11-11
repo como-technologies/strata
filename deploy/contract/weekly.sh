@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# The weekly contract run on kadomony. It updates the checkout, builds what the run needs, and runs
-# the contract run against the real tenant. Then it writes the result as issues, and keeps it.
+# The weekly contract run on the host of the lead. It updates the checkout, builds what the run
+# needs, and runs the contract run against the real tenant. Then it writes the result as issues, and
+# keeps it.
 #
 #   deploy/contract/weekly.sh
 #

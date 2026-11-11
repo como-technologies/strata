@@ -6,7 +6,8 @@ This page tells where each part of strata is. Find your task in
 
 ## The folders
 
-The root package is the strata app. Each other part has a folder of its own.
+The root package, `strata-palette`, is the strata app. Each other part has a folder of its
+own.
 
 | Folder | What it holds |
 | --- | --- |

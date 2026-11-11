@@ -1,0 +1,58 @@
+section: tools
+title: Client tools
+about: |
+  Rules of the tool that makes the entity, such as the provider, and of the lab. They are out of
+  scope for strata-preflight, and they stay in the catalog so that each fault of the live runs has
+  a row. A lab row with a check that a command on this machine can answer runs as a cloud check.
+rules:
+- id: provider-timeout-success
+  title: The provider gives exit 0 at its create timeout
+  engines:
+  - all
+  tier: tool
+  severity: fail
+  status: seen
+  what: |
+    At its create timeout the provider gives a warning and exit 0 ("Creation complete") while the
+    cluster still builds. Gate on `Running`, or run `strata-preflight --watch`.
+  fix:
+    owner: provider
+    text: An error, or an opt-in warning.
+  evidence:
+  - kind: run
+    ref: '#89, #90'
+- id: provider-eks-azs
+  title: The provider reads cloud_config.azs back on EKS
+  engines:
+  - eks
+  tier: tool
+  severity: fail
+  status: seen
+  what: |
+    Provider 0.30.1 does not read `cloud_config.azs` back, and the field forces a new resource:
+    each apply replaces the cluster. Found after one apply of 55 minutes.
+  fix:
+    owner: provider
+    text: Read the field.
+  evidence:
+  - kind: run
+    ref: a live run
+- id: provider-delete-timeout
+  title: A destroy waits until the cluster is gone
+  engines:
+  - all
+  tier: tool
+  severity: warn
+  status: seen
+  what: |
+    `tofu destroy` ends with `context deadline exceeded` while Palette still deletes the cluster.
+    The provider sends one plain delete and waits for its own deadline. A pipeline sees an error
+    with no reason it can read. Read the state of the cluster after the error.
+  reproduce:
+  - 'strata-preflight --watch cluster:{{ .clusterUid // "<cluster uid>" }}   # the conditions and the events of the delete'
+  fix:
+    owner: none
+  evidence:
+  - kind: run
+    ref: a live run
+    note: the destroy failed with `context deadline exceeded`; a second destroy sent the delete again and completed

@@ -8,9 +8,9 @@
 | `strata-preflight` | The preflight checks; `strata preflight` runs it from the same directory. One static binary, in every release from the one after v0.15.0. |
 | A Palette API key | Reads the profiles and clusters. |
 | `curl`, `jq` | Read the JSON documents in scripts and in this book, and fetch a release. |
-| `gh` | Downloads a release while this repository is private. Also posts pull request comments and drift issues. |
+| `gh` | Posts pull request comments and drift issues. |
 | `cosign` 3 or later | Checks the signature of `SHA256SUMS`. Optional, unless you give `--require-signature`. |
-| Rust, `just` | Build from source. `cross` builds another target. |
+| Rust, `just` | Install with Cargo, or build from source. `cross` builds another target. |
 
 ## Download a release
 
@@ -34,12 +34,12 @@ Each release has these files:
 `install-strata.sh` is in every release. It reads the release and finds the
 binary for this machine. It checks the signature of `SHA256SUMS` when `cosign` 3 or
 later is on the `PATH`. It checks each file against `SHA256SUMS`. It puts the two
-binaries and the CI scripts in the directory. Then it prints the path of
-the strata binary:
+binaries in the directory, and without `--bin-only` also the CI scripts. Then it
+prints the path of the strata binary:
 
 ```bash
-gh release download --repo como-technologies/strata --pattern install-strata.sh -O - \
-  | GH_TOKEN=$(gh auth token) bash -s -- --dir ~/.local/bin
+curl -fsSL https://github.com/como-technologies/strata/releases/latest/download/install-strata.sh \
+  | bash -s -- --bin-only --dir ~/.local/bin
 ```
 
 | Option | Effect |
@@ -51,33 +51,18 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 | `--target TARGET` | Overrides the target this machine detects. |
 | `--require-signature` | Stops with exit `2` before any download when `cosign` 3 or later is not on the `PATH`. Also stops when the release has no signature. |
 
-The repository is private, so an anonymous download fails. The installer reads a
-token from `STRATA_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. The
-token must read this repository.
-
-`gh release download` uses your GitHub login to
-get the installer. A piped shell does not inherit that login, so `GH_TOKEN`
-gives the token to the installer. The token of a job in another repository
-cannot read this one, so a pipeline sets a token of its own. The drop-in passes
-it as `STRATA_READ_TOKEN` on GitHub and as `STRATA_TOKEN` on GitLab.
-
-On GitHub, a token does not open the reusable workflows of a private repository.
-The access setting does: see
-[While this repository is private](./automation/pr-comments.md#while-this-repository-is-private).
-
-When the repository becomes public, the same script needs no token. `curl` then
-gets it directly:
-
-```bash
-curl -fsSL https://github.com/como-technologies/strata/releases/latest/download/install-strata.sh \
-  | bash -s -- --dir ~/.local/bin
-```
+The installer needs no token. It reads the release from the API of GitHub. When
+`STRATA_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN` is set, it sends the first of them.
+GitHub limits the requests that have no token for each address, and the runners
+of a pipeline can share one. So give a token in a pipeline. A private fork in
+`--repo` also needs a token.
 
 ### One file by hand
 
 ```bash
 v=v0.32.2; t=x86_64-unknown-linux-musl
-gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
+url=https://github.com/como-technologies/strata/releases/download/$v
+curl -fsSL -O "$url/strata-$t" -O "$url/SHA256SUMS"
 sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
 chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
 ```
@@ -108,10 +93,11 @@ the issuer is the OIDC service of GitHub Actions:
 | Identity | `https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/<tag>` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
-To check by hand, download the list with its bundle:
+To check by hand, download the list with its bundle. `$v` and `$url` are those of
+[One file by hand](#one-file-by-hand):
 
 ```bash
-gh release download $v --repo como-technologies/strata --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
+curl -fsSL -O "$url/SHA256SUMS" -O "$url/SHA256SUMS.sigstore.json"
 cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
   --certificate-identity https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$v \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
@@ -150,6 +136,18 @@ v0.24.0 and before has no `--require-signature`, so with such a `strata-version`
 the job stops with `unknown option`. An organization that limits the actions of
 its repositories must allow `actions/checkout` and `sigstore/cosign-installer`.
 `preflight-comment.yml` installs no binary: it runs one script from the tag.
+
+## Install with Cargo
+
+The package of strata on crates.io is `strata-palette`. It gives the command
+`strata`:
+
+```bash
+cargo install --locked strata-palette
+```
+
+The package does not give `strata-preflight`. So `strata preflight` needs the
+binaries of a release.
 
 ## Build from source
 

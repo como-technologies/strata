@@ -11,7 +11,7 @@ import (
 )
 
 /* The tests below hold the words that the book quotes from the page. The book names a headline, a button, or a question of the
-card, and app.js writes it. A word of the book that app.js lacks is a word that a person looks for and does not find. */
+card, and the scripts write it. A word of the book that the scripts lack is a word that a person looks for and does not find. */
 
 const (
 	servicePage = "../../../docs/src/automation/observer.md"
@@ -61,7 +61,7 @@ func tableRows(t *testing.T, text string) [][]string {
 	return rows
 }
 
-// headlineIn gives the way a headline appears in app.js: in double quotes, or in a template when it holds the name of the cluster.
+// headlineIn gives the way a headline appears in the scripts: in double quotes, or in a template when it holds the name of the cluster.
 func headlineIn(headline string) string {
 	if strings.Contains(headline, "`<cluster>`") {
 		return "`" + strings.ReplaceAll(headline, "`<cluster>`", "${clusterName()}") + "`"
@@ -69,7 +69,7 @@ func headlineIn(headline string) string {
 	return `"` + headline + `"`
 }
 
-// words gives the part of a cell of the book that app.js must hold: no code span, nothing from a placeholder on, and no end mark.
+// words gives the part of a cell of the book that the scripts must hold: no code span, nothing from a placeholder on, and no end mark.
 func words(cell string) string {
 	cell = strings.ReplaceAll(cell, "`", "")
 	if i := strings.Index(cell, "<"); i >= 0 {
@@ -79,10 +79,10 @@ func words(cell string) string {
 }
 
 // The section "The states of the page" of the page of the service gives the headline of each state, and it quotes the buttons and
-// the pages that the next step names. Each of them is a word of app.js. The note of a lost page and of a failed read of the pods
-// names a key or a role only for a refusal, as app.js does.
+// the pages that the next step names. Each of them is a word of the scripts. The note of a lost page and of a failed read of the pods
+// names a key or a role only for a refusal, as the scripts do.
 func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) {
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	rows := tableRows(t, sectionOf(t, servicePage, "## The states of the page"))
 	if len(rows) < 13 {
 		t.Fatalf("the table of the states has %d rows", len(rows))
@@ -92,10 +92,10 @@ func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) 
 		if len(row) != 3 {
 			t.Fatalf("a row of the table of the states has %d cells: %q", len(row), row)
 		}
-		mustHold(t, "app.js", script, headlineIn(row[0]))
+		mustHold(t, "the scripts", script, headlineIn(row[0]))
 		for _, cell := range row[1:] {
 			for _, m := range quoted.FindAllStringSubmatch(cell, -1) {
-				mustHold(t, "app.js", script, m[1])
+				mustHold(t, "the scripts", script, m[1])
 			}
 		}
 	}
@@ -103,10 +103,10 @@ func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) 
 		switch row[0] {
 		case "We lost the signal from Palette":
 			mustHold(t, "the next step of the lost page", row[2], "For HTTP 401 and 403, check the key in the Secret `strata-observer-key`", "For another error, check that the observer reaches Palette")
-			mustHold(t, "app.js", script, "Check the key in the Secret", "Check that the observer can reach Palette, then read the log.")
+			mustHold(t, "the scripts", script, "Check the key in the Secret", "Check that the observer can reach Palette, then read the log.")
 		case "The pods stay silent":
 			mustHold(t, "the next step of the pods", row[2], "For HTTP 401 and 403, ask the API server if the role of the observer can list pods", "For another error, read the log")
-			mustHold(t, "app.js", script, "Ask the API server if the role of the observer can list pods.", `next("Read the log."`)
+			mustHold(t, "the scripts", script, "Ask the API server if the role of the observer can list pods.", `next("Read the log."`)
 		}
 	}
 }
@@ -138,10 +138,10 @@ func TestALostPageNamesTheKeyOnlyForARefusal(t *testing.T) {
 // The third fact of "All quiet" has the words of the other two: a count and a short label, for one line each. It reads "newer
 // version" for one, as the first fact reads "profile matches its record".
 func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
-	script := string(readPage(t, "app.js"))
-	mustNotHold(t, "app.js", script, "a choice and not a fault")
+	script := readScripts(t)
+	mustNotHold(t, "the scripts", script, "a choice and not a fault")
 	// The screen of the newer versions keeps the sentence that a newer version is a choice.
-	mustHold(t, "app.js", script, "A choice, not a fault, so they stay out of Needs attention.")
+	mustHold(t, "the scripts", script, "A choice, not a fault, so they stay out of Needs attention.")
 	for _, c := range []struct {
 		newer int
 		want  string
@@ -153,9 +153,9 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 	}
 }
 
-// The page of the service and the page of the server give the same questions as the card "Check this yourself", in the words of app.js.
+// The page of the service and the page of the server give the same questions as the card "Check this yourself", in the words of the scripts.
 func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	table := tableRows(t, sectionOf(t, serverPage, "### Check this yourself"))
 	if len(table) != 7 {
 		t.Fatalf("the table of the card has %d rows", len(table))
@@ -163,29 +163,29 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 	useCase := strings.Join(strings.Fields(string(readFile(t, useCasePage))), " ")
 	for _, row := range table {
 		question := strings.TrimSuffix(row[0], ".")
-		mustHold(t, "app.js", script, `["`+question+`"`)
+		mustHold(t, "the scripts", script, `["`+question+`"`)
 		mustHold(t, "the use case", useCase, question)
 	}
 }
 
 // The column "Palette" of the table of the newer versions, and the card "Move to", give an answer of Palette in words. The page of the
-// service quotes both. The words of the button and of each verdict are words of app.js.
+// service quotes both. The words of the button and of each verdict are words of the scripts.
 func TestTheBookQuotesTheWordsOfTheColumnPaletteAndOfTheCardMoveTo(t *testing.T) {
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	rows := tableRows(t, sectionOf(t, servicePage, "## Ask Palette about a move"))
 	if len(rows) != 4 {
 		t.Fatalf("the table of the answers has %d rows", len(rows))
 	}
 	for _, row := range rows {
-		mustHold(t, "app.js", script, words(row[0]), words(row[1]))
+		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 	}
-	mustHold(t, "app.js", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, "Ask again", "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
+	mustHold(t, "the scripts", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, "Ask again", "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
 }
 
-// The table of the splashes in the page of the server holds the headline of each splash of app.js, and no other. A place with a
+// The table of the splashes in the page of the server holds the headline of each splash of the scripts, and no other. A place with a
 // splash that the table omits is a place that a person cannot find in the book.
 func TestTheTableOfTheSplashesHoldsEachHeadlineOfTheScript(t *testing.T) {
-	script := string(readPage(t, "app.js"))
+	script := readScripts(t)
 	section := sectionOf(t, serverPage, "### The splash")
 	rows := tableRows(t, section[strings.Index(section, "These places have a splash:"):])
 	inTable := map[string]bool{}
@@ -203,18 +203,18 @@ func TestTheTableOfTheSplashesHoldsEachHeadlineOfTheScript(t *testing.T) {
 		}
 		for _, headline := range headlines {
 			inTable[headline] = true
-			mustHold(t, "app.js", script, headlineIn(headline))
+			mustHold(t, "the scripts", script, headlineIn(headline))
 		}
 	}
 	titles := regexp.MustCompile("splash\\((?:TONE\\.[A-Z]+|settledTone\\(\\)|quietTone\\(\\)), (\"[^\"]+\"|`[^`]+`)").FindAllStringSubmatch(script, -1)
 	titles = append(titles, regexp.MustCompile(`\{title: ("[^"]+"), name[:,]`).FindAllStringSubmatch(script, -1)...)
 	if len(titles) < 25 {
-		t.Fatalf("the test found %d splashes in app.js", len(titles))
+		t.Fatalf("the test found %d splashes in the scripts", len(titles))
 	}
 	for _, m := range titles {
 		headline := strings.ReplaceAll(m[1][1:len(m[1])-1], "${clusterName()}", "`<cluster>`")
 		if !inTable[headline] {
-			t.Errorf("app.js has a splash %q, and the table of the splashes in the page of the server omits it", headline)
+			t.Errorf("the scripts have a splash %q, and the table of the splashes in the page of the server omits it", headline)
 		}
 	}
 }

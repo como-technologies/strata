@@ -100,7 +100,7 @@ fn just_lint_builds_the_rustdoc_of_each_package_with_the_public_items_and_with_a
     for line in &docs {
         assert!(line.contains(r#"RUSTDOCFLAGS="-D warnings""#), "{line}");
         let words: Vec<&str> = line.split_whitespace().collect();
-        for package in ["strata", "strata-preflight", "xtask"] {
+        for package in ["strata-palette", "strata-preflight", "xtask"] {
             assert!(
                 words.windows(2).any(|pair| pair == ["-p", package]),
                 "{line}"

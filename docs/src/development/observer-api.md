@@ -67,19 +67,28 @@ the status codes. This page tells how the code keeps them.
 
 ## The page
 
-The route `/` serves the dashboard. The page is four files, two icons, and two fonts,
+The route `/` serves the dashboard. The page is eight files, two icons, and two fonts,
 and the program carries them. A person opens it through the port-forward of
 [the gate](#the-gate). `observer/internal/web/assets/` holds these files:
 
 | File | What it holds |
 | --- | --- |
 | `index.html` | The frame: the nav, the control of the theme, the top bar, and the place of each screen. |
-| `app.js` | The routes, the screens, and the read of the API. |
+| `app.js` | The template, the words of the API, the state, the read of the API, the helpers, the splash, and the question to Palette. |
+| `frame.js` | The links of the nav, the top bar, the menus of the cycles, the alert bars, and the cards of the overview. |
+| `screens.js` | The screens, the stack of the packs, the images, and the alerts. |
+| `pack.js` | The screen of a pack: the comparison, and the card "Check this yourself". |
+| `routes.js` | The routes, the write of markup, and the events. It starts the page. |
 | `theme.js` | The choice of a theme. It runs in the head, before the first paint. |
 | `app.css` | The style, the colors, and the two `@font-face` rules. |
 | `favicon-light.svg`, `favicon-dark.svg` | The mark of the logo, one file for each color scheme. |
 | `fonts/` | Public Sans and Roboto Mono, as variable Latin files. |
 | `LICENSES.md` | The version, the checksum, and the license of each font. |
+
+The five scripts from `app.js` to `routes.js` are the scripts of the screens.
+`index.html` loads them at the end of its body, in the order of the table, and they
+share one scope. [The Go of the observer](./code.md#the-go-of-the-observer) gives the
+rules of this order.
 
 The page reads nine routes at the start, and again each 30 seconds: the eight
 summary routes `/v1/cluster`, `/v1/findings`, `/v1/profiles`, `/v1/newer`,
@@ -386,7 +395,7 @@ The choice stays in the `localStorage` of this browser. It goes nowhere else.
 When a browser refuses the storage, the choice lasts for the page. When a person
 chooses Auto again, the page removes the stored value.
 
-`theme.js` is a file of its own in the head, and it is not part of `app.js`. It
+`theme.js` is a file of its own in the head, and it is not a script of the screens. It
 runs before the first paint, so a person who chose Dark sees no white flash. The
 policy allows it because it is a file of the server. It sets `data-theme` on the
 root, and `app.css` reads that attribute.
@@ -425,9 +434,9 @@ them:
 - No address of another host: no `http://` and no `https://`, except in `LICENSES.md`
   and in the `xmlns` of an icon.
 - No inline style and no inline script: no `style=`, no `<style>`, and no `<script>`
-  with content. No event attribute in `index.html`, in an icon, or in a string of `app.js`.
-- One write of markup. `app.js` writes in one function, `put`, and every value
-  passes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
+  with content. No event attribute in `index.html`, in an icon, or in a string of a script.
+- One write of markup. The scripts of the screens write in one function, `put`, and
+  every value passes through `e()`, which escapes `&`, `<`, `>`, and both kinds of quote. A name
   that holds `<img src=x>` shows as text. `theme.js` writes no markup, and it sets
   only the attributes `data-theme` and `aria-pressed`.
 - No `max-width` on `.page`, `.main`, `.app`, or `body`. The content fills the window.
@@ -443,7 +452,7 @@ them:
   with the class `narrow-hide`. In the events table, the object moves under the
   message.
 - The nav, the tiles, and the facts of a calm splash keep one order: findings,
-  images, newer versions, not checked, and profiles. `ORDER` in `app.js` holds it.
+  images, newer versions, not checked, and profiles. `ORDER` in `frame.js` holds it.
 - The heads of the columns of Profiles, Newer versions, Images, and Recent events sort
   the table: a click sorts up, a second click sorts down, and a third gives back the
   order of the page. Two triangles beside the head show the order, and the triangle of
@@ -545,8 +554,8 @@ the page are those of the data.
 
 A test decodes each file of each set into the type of its route, and it refuses a
 field that the type lacks. So the test data cannot drift from the API. When `node` is on the
-`PATH`, `go test` also renders each screen of each set with `app.js`. It fails on
-a screen that throws, and on a value that reaches the page as markup. It skips
+`PATH`, `go test` also renders each screen of each set with the scripts of the screens.
+It fails on a screen that throws, and on a value that reaches the page as markup. It skips
 these tests when `node` is not there. It cannot see the layout, so a person looks
 at the render.
 

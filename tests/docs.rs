@@ -11,9 +11,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, code_spans, first_cells, gitlab_drop_in,
-    one_line, recipe, repo_file, schema, script, table_rows, toml_entries, toml_table, toml_value,
-    version_of, walk, without_code,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, code_spans, first_cells,
+    gitlab_drop_in, one_line, recipe, repo_file, schema, script, table_rows, toml_entries,
+    toml_table, toml_value, version_of, walk, without_code,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -95,9 +95,9 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
     );
 }
 
-/// The version badge in the README is static, because shields.io cannot read a private
-/// repository. A badge that asks it for the version renders "repo not found". Static means it can
-/// drift, so the drift is a test failure instead of a wrong number on the front page.
+/// The version badge in the README is static, so it names the version of the commit and needs no
+/// request to GitHub. Static means it can drift, so the drift is a test failure instead of a wrong
+/// number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     let version = version_of("Cargo.toml");
@@ -107,6 +107,115 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
         readme.contains(&badge),
         "the README badge does not name version {version}: bump it with the version in Cargo.toml"
     );
+}
+
+/// The book is the Pages site of the repository, at the address that GitHub gives to a public
+/// repository. A reader with no login opens it (#65).
+#[test]
+fn the_address_of_the_book_is_the_public_pages_site_of_the_repository() {
+    let repository = env!("CARGO_PKG_REPOSITORY");
+    let path = repository
+        .strip_prefix("https://github.com/")
+        .expect("the repository is on GitHub");
+    let (owner, name) = path
+        .split_once('/')
+        .expect("the address names an owner and a repository");
+    assert_eq!(
+        strata::BOOK_URL,
+        format!("https://{owner}.github.io/{name}/")
+    );
+}
+
+/// GitHub gives the Pages site of a private repository an address on a host of its own. Only a
+/// member of the organization opens it. No tracked file names that host (#65). The text of the host
+/// is in two parts, so that this file does not name it.
+#[test]
+fn no_tracked_file_names_the_host_of_a_private_pages_site() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = concat!("pages", ".github.io");
+    let faults: Vec<String> = tracked_files(root, &[])
+        .into_iter()
+        .filter(|file| std::fs::read_to_string(file).is_ok_and(|text| text.contains(host)))
+        .map(|file| {
+            file.strip_prefix(root)
+                .unwrap_or(&file)
+                .display()
+                .to_string()
+        })
+        .collect();
+    assert!(
+        faults.is_empty(),
+        "these files name {host}; give the address of strata::BOOK_URL:\n{}",
+        faults.join("\n")
+    );
+}
+
+/// A reader outside the organization installs a release with one `curl` command, and with no token
+/// and no `gh` (#65). The README and the page "Install" give the same command.
+#[test]
+fn the_readme_and_the_book_give_one_install_command_with_curl_and_no_token() {
+    let readme = common::code_blocks(&common::page_section("README.md", "## Install"), "bash");
+    let book = common::code_blocks(
+        &common::page_section("docs/src/install.md", "### One command"),
+        "bash",
+    );
+    assert_eq!(readme.first(), book.first(), "the README and install.md");
+    let block = readme.first().expect("the README gives the command");
+    let command = one_line(&block.replace("\\\n", " "));
+    let download = format!(
+        "curl -fsSL {}/releases/latest/download/install-strata.sh | bash -s --",
+        env!("CARGO_PKG_REPOSITORY")
+    );
+    assert!(command.starts_with(&download), "{command}");
+    for word in ["gh ", "TOKEN", "token"] {
+        assert!(!command.contains(word), "{command} names {word:?}");
+    }
+}
+
+/// A package of strata carries the sources, the license, and the README, and not the book, the
+/// examples, or the tests. crates.io keeps each version that it takes, so the list is a test (#65).
+#[test]
+fn the_package_of_strata_carries_the_sources_the_license_and_the_readme_and_no_other_folder() {
+    let o = std::process::Command::new(env!("CARGO"))
+        .args([
+            "package",
+            "--list",
+            "--allow-dirty",
+            "--offline",
+            "-p",
+            env!("CARGO_PKG_NAME"),
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", common::text(&o.stderr));
+    let listed = common::text(&o.stdout);
+    let files: BTreeSet<&str> = listed.lines().collect();
+    for wanted in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "LICENSE",
+        "README.md",
+        "src/main.rs",
+    ] {
+        assert!(
+            files.contains(wanted),
+            "the package has no {wanted}:\n{listed}"
+        );
+    }
+    let cargo = [
+        "Cargo.toml",
+        "Cargo.toml.orig",
+        "Cargo.lock",
+        ".cargo_vcs_info.json",
+    ];
+    let other: Vec<&&str> = files
+        .iter()
+        .filter(|f| {
+            !f.starts_with("src/") && !cargo.contains(f) && !["LICENSE", "README.md"].contains(f)
+        })
+        .collect();
+    assert!(other.is_empty(), "the package carries {other:?}");
 }
 
 /// A release ships `strata` and `strata-preflight` together, and the book says that
@@ -1212,13 +1321,13 @@ const LEAVE_OUT_SCAN: [&str; 15] = [
     "justfile",
 ];
 
-/// The files of `LEAVE_OUT_SCAN` that Git tracks in the tree of `root`. A file that Git ignores is
-/// not one of them. A run of the live example writes such files to `examples/live/runs`, and they
-/// hold the text of a cluster, not the text of the repository. The option `safe.directory` lets Git
-/// read a tree that another user owns.
-fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
+/// The files under `paths` that Git tracks in the tree of `root`, or each tracked file when `paths`
+/// is empty. A file that Git ignores is not one of them. A run of the live example writes such
+/// files to `examples/live/runs`, and they hold the text of a cluster, not the text of the
+/// repository. The option `safe.directory` lets Git read a tree that another user owns.
+fn tracked_files(root: &Path, paths: &[&str]) -> Vec<PathBuf> {
     let mut args = vec!["-c", "safe.directory=*", "ls-files", "-z", "--"];
-    args.extend(LEAVE_OUT_SCAN);
+    args.extend(paths);
     let listing = common::git(root, &args).stdout;
     String::from_utf8(listing)
         .expect("Git lists paths in UTF-8")
@@ -1233,7 +1342,7 @@ fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
 /// `examples/packs/` too, which are the text of other projects.
 fn leave_out_faults(root: &Path) -> Vec<String> {
     let mut faults = Vec::new();
-    for file in tracked_files_to_scan(root) {
+    for file in tracked_files(root, &LEAVE_OUT_SCAN) {
         let path = file.strip_prefix(root).unwrap_or(&file).to_string_lossy();
         if path == "tests/docs.rs" || path.starts_with("examples/packs/") {
             continue;
@@ -1291,7 +1400,7 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
     write("docs/src/untracked.md", "Leave out the new page.\n");
 
-    let tracked: Vec<String> = tracked_files_to_scan(root)
+    let tracked: Vec<String> = tracked_files(root, &LEAVE_OUT_SCAN)
         .iter()
         .map(|p| p.strip_prefix(root).unwrap().display().to_string())
         .collect();
@@ -1701,16 +1810,12 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_12_are_gone_from_the_book(
 }
 
 /// A user copies the drop-ins of the CI systems, so their comments are user text. The review at the
-/// end of Wave 12 named three comments that are over the limit: each sentence of them has 25 words
-/// at most.
+/// end of Wave 12 named three comments that are over the limit. The comment about the access to a
+/// private repository is gone (#65). Each sentence of the other two has 25 words at most.
 #[test]
 fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
     let comments = [
         ("examples/ci/github/strata.yml", "needed to read Palette"),
-        (
-            "examples/ci/github/strata.yml",
-            "A token does not give access",
-        ),
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
     assert_comments_keep_to_the_limit(&comments);
@@ -1933,17 +2038,17 @@ fn a_block_is_one_item_of_a_numbered_list_a_star_list_or_a_quote_and_one_paragra
     assert_eq!(block(text, "Row"), "| Row | Cell |");
 }
 
-/// The book has numbered items that the old reader joined into one block. The item of the
-/// setting of the access has its own block, and it holds the two sentences of the step.
+/// The book has numbered items that the old reader joined into one block. The first step of the
+/// reusable workflows has its own block, and it holds the sentence of the step alone.
 #[test]
 fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
-    let page = read(&docs().join("automation/pr-comments.md"));
-    let step = block(&page, "Accessible from repositories in the organization");
+    let page = read(&docs().join("install.md"));
+    let step = block(&page, "into `.strata`");
     assert!(
-        step.starts_with("In this repository, open Settings"),
+        step.starts_with("It checks out this repository at the tag"),
         "{step}"
     );
-    assert!(!step.contains("strata-token"), "{step}");
+    assert!(!step.contains("cosign-installer"), "{step}");
 }
 
 // ---- the release notes and the live results at the end of Wave 12 -------------------------------
@@ -2180,7 +2285,9 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 
 /// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
 /// with a comment that says what it holds. The book states where the copy is and how old it can
-/// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
+/// be. A session that finds no mount cannot read the code that rule 7 tells it to read. The
+/// repository is public, so the book names no path of the host: the notes of the lead give the
+/// clones and their refresh (#65).
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
@@ -2198,19 +2305,24 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "the mount has no comment that says what the volume holds"
     );
 
-    let page = one_line(&read(&docs().join("development/changes.md")));
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(&changes);
     for needle in [
         "A session reads the code of Palette at `$HOME/palette`.",
         "On another host, the volume is empty.",
         "so it can be some hours old.",
         "it asks the lead with `riff tell lead`.",
         "A session on the host itself, not in a container, has no `$HOME/palette`.",
-        "the copy comes from the clones in `~/repos/spectrocloud/`.",
-        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
-        "A session on the host runs it first, then reads the clones.",
+        "The notes of the lead give the place of the clones on the host, and the command that refreshes them.",
+        "A session on the host runs that command first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
+    let code = section(&changes, "\n## The code of Palette\n", Some("\n## "));
+    assert!(
+        !code.contains("`~/"),
+        "the section names a path of the host:\n{code}"
+    );
 }
 
 /// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
@@ -6474,6 +6586,11 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
     assert!(
         sample.contains("It is one opinionated example, and not a rule."),
         "the page does not name the sample pipeline as one opinionated example"
+    );
+    // The repository is public, so the page names no decision record of the team (#65).
+    assert!(
+        !sample.contains("ADR-"),
+        "the page names a decision record of the team"
     );
 }
 
