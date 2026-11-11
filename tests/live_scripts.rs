@@ -1441,6 +1441,35 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
 }
 
 #[test]
+fn api_sh_registry_path_prints_the_path_of_each_kind_and_refuses_another_kind() {
+    let root = tempfile::tempdir().unwrap();
+    for (kind, path) in [
+        ("oci-ecr", "/v1/registries/oci/r-1/ecr"),
+        ("oci-basic", "/v1/registries/oci/r-1/basic"),
+        ("helm", "/v1/registries/helm/r-1"),
+        ("pack", "/v1/registries/pack/r-1"),
+    ] {
+        let o = run_live("api.sh", &["registry-path", kind, "r-1"], root.path(), &[]);
+        assert_eq!(o.status.code(), Some(0), "{kind}: {}", text(&o.stderr));
+        assert_eq!(text(&o.stdout).trim_end(), path, "{kind}");
+    }
+    for args in [
+        &["registry-path", "git", "r-1"][..],
+        &["registry-path", "oci-basic"][..],
+    ] {
+        let o = run_live("api.sh", args, root.path(), &[]);
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        assert!(
+            text(&o.stderr).contains(
+                "usage: api.sh registry-path KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack"
+            ),
+            "{}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
 fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     let ids = [
         "release-no-key",
@@ -12258,7 +12287,7 @@ fn observer_chart_sh_records_a_refusal_of_the_create_with_its_code_and_deletes_n
         r#"{"code":"InvalidRegistryCredentials","message":"the registry refused the read"}"#,
     )
     .unwrap();
-    std::fs::write(stage.path("routes/v1_registries_oci_basic.status"), "400").unwrap();
+    std::fs::write(stage.path("routes/v1_registries_oci_basic.status"), "500").unwrap();
     let (o, steps) = stage.run("observer-chart.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert_eq!(

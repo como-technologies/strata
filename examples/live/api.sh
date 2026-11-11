@@ -116,6 +116,9 @@
 #   api.sh registry-delete KIND REGISTRY_UID
 #       Remove a registry of the tenant. KIND is a kind of api.sh sync. A registry that is gone
 #       is no error.
+#   api.sh registry-path KIND REGISTRY_UID
+#       Print the path of a registry of the tenant. KIND is a kind of api.sh sync. A script
+#       reads the registry with api.sh get-status and this path.
 #   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]
 #       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name. The pin
 #       has no pack uid, as the console does for a registry that Palette does not synchronize.
@@ -708,6 +711,9 @@ sync_oci() {
 }
 
 # The seconds between two requests about a sync. A test sets it to 0.
+
+# The kinds of registry_base, for a usage line.
+REGISTRY_KINDS="oci-ecr, oci-basic, helm, or pack"
 SYNC_WAIT=${SYNC_WAIT:-5}
 
 # registry_base KIND UID: the path of the registry UID of KIND: oci-ecr, oci-basic (an OCI registry
@@ -727,7 +733,7 @@ registry_base() {
 sync_registry() {
   local kind=${1:-} uid=${2:-} base before status after
   base=$(registry_base "$kind" "$uid") \
-    || die "usage: api.sh sync KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack"
+    || die "usage: api.sh sync KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
   [ -n "$uid" ] || die "usage: api.sh sync KIND REGISTRY_UID"
   before=$(call GET "$base/sync/status" | jq -r '.lastRunTime // ""') || return 2
   sync_start "$base" "$uid" || return 2
@@ -788,13 +794,19 @@ oci_registry_create() {
 registry_delete() {
   local kind=${1:-} uid=${2:-} path
   path=$(registry_base "$kind" "$uid") && [ -n "$uid" ] \
-    || die "usage: api.sh registry-delete KIND REGISTRY_UID, where KIND is oci-ecr, oci-basic, helm, or pack"
+    || die "usage: api.sh registry-delete KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
   if PROJECT="" call GET "$path" > /dev/null 2>&1; then
     PROJECT="" call DELETE "$path" > /dev/null || return 2
     echo "deleted $kind registry $uid"
   else
     echo "$kind registry $uid: not found"
   fi
+}
+
+# registry_path KIND UID: the path of registry_base, for a script that reads the registry
+registry_path() {
+  [ -n "${2:-}" ] && registry_base "$1" "$2" \
+    || die "usage: api.sh registry-path KIND REGISTRY_UID, where KIND is $REGISTRY_KINDS"
 }
 
 # pin_profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]: create and publish
@@ -952,6 +964,7 @@ case "${1:-}" in
   pack-registry-create) shift; pack_registry_create "$@" ;;
   oci-registry-create) shift; oci_registry_create "$@" ;;
   registry-delete) shift; registry_delete "$@" ;;
+  registry-path) shift; registry_path "$@" ;;
   pin-profile) shift; pin_profile "$@" ;;
   manifest-profile) shift; manifest_profile "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;

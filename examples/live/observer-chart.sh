@@ -64,12 +64,12 @@ chart_listed() {
 # registry_gone: the registry of the run is deleted, and a read of it answers HTTP 404. A run whose
 # create failed has no registry.
 registry_gone() {
-  local uid
+  local uid path
   [ -f registry.uid ] || { echo "the run made no registry"; return 0; }
   uid=$(cat registry.uid)
   "$live/api.sh" registry-delete oci-basic "$uid" || return 1
-  [ "$("$live/api.sh" get-status "/v1/registries/oci/$uid/basic" | head -n 1)" = "HTTP 404" ] \
-    && rm -f registry.uid
+  path=$("$live/api.sh" registry-path oci-basic "$uid") || return 1
+  [ "$("$live/api.sh" get-status "$path" | head -n 1)" = "HTTP 404" ] && rm -f registry.uid
 }
 
 summary() {
