@@ -7538,9 +7538,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         serde_json::json!([{"uid": "r-1", "packValues": [], "variables": []}])
     );
 
-    // the body of cidr-overlap is the clean body with the VPC that has a CIDR, and the values of
-    // the Kubernetes pack with that CIDR as the pod CIDR. The script sent it to the route, and
-    // asked for the VPCs of the account of the lab (#816)
+    // the body of cidr-overlap is the clean body with the VPC that has a CIDR. Its Kubernetes pack
+    // has that CIDR as the pod CIDR. The script sent it to the route, and asked for the VPCs of the
+    // account of the lab (#816)
     let cidr_file = bodies.join(format!("{CIDR_CASE}.json"));
     let mut cidr = read_json(&cidr_file);
     assert_eq!(cidr["spec"]["cloudConfig"]["vpcId"], "vpc-1");

@@ -1538,7 +1538,7 @@ fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
 
 /// A rule that waits for a call of the route says why (#409). A rule that a live run showed the
 /// route answers waits no more. The lab has cloud accounts of AWS and GCP only, so the cases of the
-/// other clouds have no result.
+/// other clouds have no result. A case of AWS that no live window ran yet says so (#816).
 #[test]
 fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_does_not_wait() {
     let page = read(&docs().join("reference/preflight-rules.md"));
@@ -1577,7 +1577,9 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
         .filter(|l| l.starts_with('|') && l.to_lowercase().contains("no result yet"))
     {
         assert!(
-            row.contains("the lab has no cloud account of"),
+            ["the lab has no cloud account of", "no live window ran"]
+                .iter()
+                .any(|reason| row.contains(reason)),
             "a case with no result gives no reason: {row}"
         );
     }

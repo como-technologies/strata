@@ -1236,7 +1236,7 @@ field, a value, an input, or an option is in the sections above.
   is `0`, as Palette reads it. So such a renumber keeps its numbers, and the impact is
   `none (renumber only)`. Before, the move had the level of its layer.
 - **`palette-validate`, for a variable or a CIDR that Palette refuses.** The code of Palette
-  gives these refusals of the body HTTP `500`: `InvalidDropDownVariable`, `InvalidVariable`,
+  gives HTTP `500` to these refusals: `InvalidDropDownVariable`, `InvalidVariable`,
   `K8SCidrOverlap`, and `CidrParseError`. Strata now reads such a refusal as the answer of the
   route, and does not send the request again. The verdict is `failed`, with the message of
   Palette. Before, the verdict was `error` and the exit code was `2`. Now the exit code is `0`,

@@ -172,8 +172,8 @@ const PROFILE_CLOUD: Check = &["ClusterProfilesNotSupported"];
 /// type of a server fault, HTTP 500. No live run shows them yet.
 const BODY_VARIABLES: Check = &["InvalidDropDownVariable", "InvalidVariable"];
 
-/// For AWS with a VPC, the pod CIDR and the service CIDR of the Kubernetes pack are CIDRs, and
-/// neither one overlaps the CIDR of the VPC.
+/// For AWS with a VPC, the pod CIDR and the service CIDR of the Kubernetes pack are CIDRs. Neither
+/// one overlaps the CIDR of the VPC.
 ///
 /// Only the cluster validate route runs it. A value that is not a CIDR is `CidrParseError`, and a
 /// CIDR that overlaps is `K8SCidrOverlap`. The code of Palette gives both refusals the response

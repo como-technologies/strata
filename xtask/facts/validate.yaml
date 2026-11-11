@@ -165,8 +165,8 @@ facts:
     rules:
       - palette-validate
 
-  # For AWS with a VPC, the route refuses a pod CIDR or a service CIDR of the Kubernetes pack that
-  # overlaps the CIDR of the VPC, or that is not a CIDR, with HTTP 500 (#816).
+  # For AWS with a VPC, the route refuses a CIDR of the Kubernetes pack with HTTP 500 (#816). The
+  # CIDR overlaps the CIDR of the VPC, or it is not a CIDR.
   - id: validate-create-vpc-cidr
     kind: behavior
     reads:
