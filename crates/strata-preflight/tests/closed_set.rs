@@ -7,24 +7,30 @@
 use std::path::Path;
 
 use serde_json::Value;
+use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::{Described, legend};
 use strata_preflight::confidence::RunResult;
 use strata_preflight::curl::Saves;
 use strata_preflight::probe::Verdict;
 use strata_preflight::rule::{
-    Check, CheckKind, EvidenceKind, Level, Owner, Severity, Status, Tier,
+    Check, CheckKind, EvidenceKind, ExecCheck, Level, Owner, PaletteCheck, Severity, Status, Tier,
 };
 use strata_preflight::world::cloud_list;
 
 #[path = "../../../tests/common/closed_set.rs"]
 mod closed_set;
+// The macro that ties the list of a test to each variant of an enum. The tests of the errors of
+// strata and of the edits of the stand-in use it too, so the lists keep one rule.
+#[path = "../../../tests/common/variants.rs"]
+mod variants;
 #[path = "../../../tests/common/walk.rs"]
 mod walk;
 
 use closed_set::{
     Set, check_all_in_order, check_listed, check_one_text_for_each_value, check_released, set,
 };
+use variants::one_of_each;
 
 /// Each closed set of the crate, with the text of each value that a release wrote.
 ///
@@ -99,19 +105,49 @@ fn the_legend_of_the_report_describes_each_value_of_its_set_by_the_text_of_the_j
     }
 }
 
+/// The texts of the rule files give one check of each kind. [`one_of_each!`] ties the list to
+/// each variant of [`Check`], so the build fails on a new variant until the list holds a check
+/// of it. The texts must then give the list, so the test fails until they hold a text of it.
 #[test]
 fn the_kind_of_a_check_is_the_tag_that_the_rule_files_write() {
-    let checks = [
+    let checks = one_of_each![
+        Check::Static {
+            expr: "true".into()
+        },
+        Check::Palette(PaletteCheck {
+            method: Method::Get,
+            path: "/v1/x".into(),
+            body: None,
+            each: None,
+            refusal_codes: Vec::new(),
+            saves: None,
+            expr: "true".into(),
+        }),
+        Check::Exec(ExecCheck {
+            argv: vec!["aws".into()],
+            needs: Vec::new(),
+            timeout: None,
+            palette: None,
+            also: Vec::new(),
+            expr: "true".into(),
+        }),
+        Check::Watch { expr: "[]".into() },
+    ];
+    let texts = [
         "kind: static\nexpr: 'true'",
         "kind: palette\npath: /v1/x\nexpr: 'true'",
         "kind: exec\nargv: [aws]\nexpr: 'true'",
         "kind: watch\nexpr: '[]'",
     ];
-    for text in checks {
-        let check: Check = serde_yaml::from_str(text).unwrap();
-        let tag = serde_json::to_value(&check).unwrap()["kind"].clone();
-        assert_eq!(tag, Value::from(check.kind().as_str()), "{text}");
-        assert_eq!(check.tier(), check.kind().tier(), "{text}");
+    let read: Vec<Check> = texts
+        .iter()
+        .map(|text| serde_yaml::from_str(text).unwrap())
+        .collect();
+    assert_eq!(read, checks, "the texts give one check of each kind");
+    for check in &checks {
+        let tag = serde_json::to_value(check).unwrap()["kind"].clone();
+        assert_eq!(tag, Value::from(check.kind().as_str()), "{check:?}");
+        assert_eq!(check.tier(), check.kind().tier(), "{check:?}");
     }
 }
 

@@ -88,7 +88,10 @@ The fourth lists each call of a cloud.
    file, or in the place that the book orders.
 2. Write the request exactly as the table of [Palette API requests](../reference/palette-api.md)
    writes it. Write the query that strata sends, such as `?filterType=tag`. Add each name that a
-   rule of the fact sends in its path. If the page has no row for it, add the row first.
+   rule of the fact sends in its path. If the page has no row for it, add the row first. A
+   request of a rule has its row in
+   [The checks of `strata preflight`](../reference/palette-api.md#the-checks-of-strata-preflight),
+   with the rules that send it.
 3. Name the route of the stand-in. If the stand-in serves no document for the fact, leave `stand_in`
    empty. A request with a placeholder needs a source in `xtask/src/facts/subjects.rs`. Without one,
    the run skips the fact.
@@ -121,6 +124,7 @@ the fact.
 | A fact without a GET request has `absent_codes`. | The run sends GET requests only, so the key does nothing. |
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
 | A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. The read of Palette that a command check makes first is such a request. | The rules and the list disagree. |
+| A rule of strata-preflight sends a request that has no row in [The checks of `strata preflight`](../reference/palette-api.md#the-checks-of-strata-preflight). A row does not name each rule that sends its request, or it names another rule. A row has a request that no rule sends. | A reader of the table does not see each request of strata-preflight, or the rules that send it. |
 | A rule of a fact sends a query in its path, and the request of the fact lacks that query. | The fact does not state the request that the rule sends. Palette can refuse the request without the query. |
 | A `##` heading of `internals/palette/` is on no fact. | The book states a fact that the list does not hold. |
 | A GET fact reads a field that no document of the stand-in holds. | The contract run has no type to compare, and reports a difference for each tenant that gives the field. |
@@ -155,9 +159,9 @@ the documents that the stand-in serves, and they make the three rules of the sta
 
 The three places of a fact can agree with each other and still disagree with Palette. The contract
 run finds that. It asks a real tenant the requests of the facts, and compares each answer with the
-stand-in. A timer on kadomony runs it each week. It opens an issue for each fact that differs, and for
-each closed set that holds a value which strata does not know.
-kadomony is the machine of the maintainers that holds the key of the lab tenant.
+stand-in. A timer on the host of the lead runs it each week. It opens an issue for each fact that
+differs, and for each closed set that holds a value which strata does not know. The host of the
+lead is the machine of the maintainers that holds the key of the lab tenant.
 
 The run sends GET requests only. It builds no cluster, and it changes nothing in the tenant. It
 also sends the read-only calls of the clouds: see [The facts of the clouds](#the-facts-of-the-clouds).
@@ -553,7 +557,7 @@ tenant. It reads the key from `~/.palette.env` through `tf.sh`, and never prints
 
 `just contract-profiles up` needs AWS credentials on the machine. The `aws` provider reads its
 default chain also when no resource uses it. So `up` needs the credentials, and it makes no AWS
-resource. `AWS_PROFILE=spectro-admin` gives them on kadomony.
+resource. `AWS_PROFILE=spectro-admin` gives them on the host of the lead.
 
 The live scripts find their objects by the exact name or uid. The profiles of the set have other
 names, so they change no result of a live script. Each listing of the profiles in a live script
@@ -576,7 +580,7 @@ or under `OUT`. `just contract-report` takes the path of `contract.json`, and th
 
 ### The timer
 
-The timer is a systemd user timer on kadomony. `deploy/contract/weekly.sh` is the job. It updates
+The timer is a systemd user timer on the host of the lead. `deploy/contract/weekly.sh` is the job. It updates
 the checkout with `git pull --ff-only`, builds the examples, runs the contract run, and runs the
 report. Install the timer from a clone of `main` that nothing else uses:
 

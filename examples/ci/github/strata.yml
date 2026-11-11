@@ -13,7 +13,6 @@
 #   PALETTE_API_KEY     needed to read Palette. A job needs it for a ref that is not a
 #                       snapshot file, for `repave: true`, and for the verify of the merge
 #                       gate. The drift and upstream reports need it too.
-#   STRATA_READ_TOKEN   a token that can read the strata repository, while it is private.
 #   OBSERVER_KUBECONFIG a kubeconfig of the role publisher of the chart of the observer, for the
 #                       two jobs of the observer.
 #   STRATA_PR_TOKEN     a token of a person or of a GitHub App that opens the pull request of the
@@ -23,11 +22,6 @@
 # workflow gets no variable from this file, so set it in a job of your own that runs strata. The log
 # is in the state folder of the runner, so save the folder when the runner does not stay.
 # docs/src/automation/scripts.md says more.
-#
-# A token does not give access to a reusable workflow of a private repository. While the strata
-# repository is private, its access setting must also allow your repository. In the strata
-# repository, open Settings, Actions, General, Access. Select "Accessible from repositories in the
-# organization". docs/src/automation/pr-comments.md describes both steps.
 #
 # Make the gate the check that the merge button waits for: Settings, Branches, the rule for the
 # default branch, "Require status checks to pass" with "Require branches to be up to date".
@@ -72,7 +66,6 @@ jobs:
       # repave: true               # a cluster against a version: the answer of Palette decides the label
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 
   # can Palette build the cluster this pull request changes? The static tier, with the records of
@@ -95,8 +88,6 @@ jobs:
       # every: "30"                 #   reads the build every 30 seconds
       # limit: "3600"               #   for 3600 seconds at most
       strata-version: v0.32.2
-    secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the report of the preflight as one comment on the pull request, updated on each push. Remove
   # the comment marks to use it. The condition runs the job also after a failed preflight,
@@ -107,8 +98,6 @@ jobs:
   #   uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.32.2
   #   with:
   #     strata-version: v0.32.2
-  #   secrets:
-  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the records of the merge result, against the default branch as it is now
   gate:
@@ -119,7 +108,6 @@ jobs:
       # allow-no-digest: true       # accept a pack from a registry that lists no digest
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 
   # one issue per record that drifted or could not be checked
@@ -132,7 +120,6 @@ jobs:
       # who: true                   # name who changed a record that drifted, from the audit log
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 
   # one issue per pack that a record pins behind a newer version of its registry. Behind is a
@@ -146,7 +133,6 @@ jobs:
       # save: behind.json           # keep the report of the run as the artifact strata-behind
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 
   # the records of a promotion are one release, before a cluster moves
@@ -159,7 +145,6 @@ jobs:
       # project: dev                     # the project of a ref such as name@version
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
       # palette-project-uid: ${{ secrets.PALETTE_PROJECT_UID }}   # the project by uid
 
@@ -171,7 +156,6 @@ jobs:
       version: ${{ inputs.retire }}
       strata-version: v0.32.2
     secrets:
-      strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
 
   # the first-seen records of the observer as one pull request, so that a review approves them.
@@ -190,7 +174,6 @@ jobs:
   #   secrets:
   #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
   #     pr-token: ${{ secrets.STRATA_PR_TOKEN }}
-  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the approved records of the observer after the merge, with the revision of the merge
   # observer-publish:
@@ -201,4 +184,3 @@ jobs:
   #     strata-version: v0.32.2
   #   secrets:
   #     kubeconfig: ${{ secrets.OBSERVER_KUBECONFIG }}
-  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}

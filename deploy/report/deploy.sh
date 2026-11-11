@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Deploy the endpoint of the report to Cloud Run, in the project of the lab.
 #
-#   deploy/report/deploy.sh [--project ID] [--region NAME] [--dry-run]
+#   STRATA_REPORT_PROJECT=ID deploy/report/deploy.sh [--region NAME] [--dry-run]
+#   deploy/report/deploy.sh --project ID [--region NAME] [--dry-run]
 #
-# The lead runs this on kadomony after the merge, with a gcloud login. The script builds the image
+# The lead runs this on the host of the lead after the merge, with a gcloud login. The script builds the image
 # on Cloud Build, and deploys it as the service strata-report. Then it prints the address of the
 # service. The script reads no secret. The token of GitHub stays in Secret Manager, and Cloud Run
 # gives it to the service as GITHUB_TOKEN when the service starts.
@@ -27,7 +28,7 @@
 #     repository or the bucket exists is harmless. "Make the two accounts" in
 #     docs/src/development/report-endpoint.md gives the same commands.
 #
-#       project=como-strata-test
+#       project=${STRATA_REPORT_PROJECT:?the id of the project}
 #       region=us-central1
 #       service_account=strata-report@$project.iam.gserviceaccount.com
 #       build_account=strata-report-build@$project.iam.gserviceaccount.com
@@ -56,8 +57,9 @@
 # The service takes one instance and 8 requests at a time. One instance keeps the limits of the
 # rate in one place. A second instance splits the count of an issue.
 #
-# --project and --region replace the defaults, which are the project of the lab and us-central1.
-# --dry-run prints each gcloud command and runs none.
+# --project names the project, and replaces STRATA_REPORT_PROJECT. The script has no default
+# project, so it stops with exit 2 when neither names one. --region replaces the default,
+# us-central1. --dry-run prints each gcloud command and runs none.
 set -Eeuo pipefail
 
 script=deploy
@@ -65,7 +67,7 @@ repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 # shellcheck source=examples/live/common.sh
 . "$repo/examples/live/common.sh"
 
-project="${STRATA_REPORT_PROJECT:-como-strata-test}"
+project="${STRATA_REPORT_PROJECT:-}"
 region="${STRATA_REPORT_REGION:-us-central1}"
 service=strata-report
 secret=strata-report-token
@@ -80,6 +82,7 @@ while [ $# -gt 0 ]; do
     *) die "unknown option $1" ;;
   esac
 done
+[ -n "$project" ] || die "no project: give --project ID, or set STRATA_REPORT_PROJECT"
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)

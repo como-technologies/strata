@@ -13,8 +13,8 @@ use super::from_text;
 use super::model::{SCHEMA, load};
 use super::sets::{Set, SetRead};
 use super::sources::{
-    Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
-    section_headings, section_rows, shape,
+    API_PAGE, RULES_HEADING, Sources, api_requests, book_rows, calls_of, query_names, rule_queries,
+    rule_requests, rule_rows, section_headings, section_rows, shape,
 };
 use crate::route::route_matches;
 
@@ -72,6 +72,10 @@ fn world() -> Sources {
         files: set(&["src/api/palette/profiles.rs"]),
         rule_ids: set(&["template-outside"]),
         rule_requests: BTreeMap::from([(
+            "GET /v1/clusterprofiles/{}".to_string(),
+            set(&["template-outside"]),
+        )]),
+        rule_rows: BTreeMap::from([(
             "GET /v1/clusterprofiles/{}".to_string(),
             set(&["template-outside"]),
         )]),
@@ -277,12 +281,47 @@ fn a_request_of_the_api_page_with_no_fact_is_a_fault() {
 #[test]
 fn a_request_of_a_rule_with_no_fact_is_a_fault() {
     let mut sources = world();
-    sources
-        .rule_requests
-        .insert("GET /v1/overlords/{}".to_string(), set(&["pcg-running"]));
+    for requests in [&mut sources.rule_requests, &mut sources.rule_rows] {
+        requests.insert("GET /v1/overlords/{}".to_string(), set(&["pcg-running"]));
+    }
     assert_one_fault(
         &sources,
         "send `GET /v1/overlords/{}`, and no fact has this request",
+    );
+}
+
+#[test]
+fn a_request_of_a_rule_with_no_row_in_the_table_of_the_checks_is_a_fault() {
+    let mut sources = world();
+    sources.rule_rows.clear();
+    assert_one_fault(
+        &sources,
+        &format!(
+            "the rules template-outside send `GET /v1/clusterprofiles/{{}}`, and the table of \"{RULES_HEADING}\" in {API_PAGE} has no row of it"
+        ),
+    );
+}
+
+#[test]
+fn a_row_of_the_table_of_the_checks_names_each_rule_that_sends_its_request_and_no_other() {
+    for named in [&[][..], &["template-outside", "variables-in-use"]] {
+        let mut sources = world();
+        sources
+            .rule_rows
+            .insert("GET /v1/clusterprofiles/{}".to_string(), set(named));
+        assert_one_fault(&sources, "the row of `GET /v1/clusterprofiles/{}` names");
+    }
+}
+
+#[test]
+fn a_row_of_the_table_of_the_checks_whose_request_no_rule_sends_is_a_fault() {
+    let mut sources = world();
+    sources
+        .rule_rows
+        .insert("GET /v1/overlords/{}".to_string(), set(&["pcg-running"]));
+    assert_one_fault(
+        &sources,
+        "has a row of `GET /v1/overlords/{}`, and no rule sends it",
     );
 }
 
@@ -356,6 +395,7 @@ fn a_fact_with_no_code_and_no_rule_is_a_fault() {
     sources.facts[0].code.clear();
     sources.facts[0].rules.clear();
     sources.rule_requests.clear();
+    sources.rule_rows.clear();
     sources.requests.clear();
     sources.facts[0].request = None;
     sources.facts[0].kind = super::model::Kind::Behavior;
@@ -455,6 +495,7 @@ fn only_a_request_fact_has_a_request_and_each_request_fact_has_one() {
     sources.facts[0].request = None;
     sources.requests.clear();
     sources.rule_requests.clear();
+    sources.rule_rows.clear();
     let found = faults_of(&sources);
     assert!(
         found
@@ -678,6 +719,42 @@ fn the_rows_of_a_section_are_the_names_in_the_first_column_up_to_the_next_sectio
     assert_eq!(section_rows(page, "## one.sh"), set(&["a1", "a1-addon"]));
     assert_eq!(section_rows(page, "## two.sh"), set(&["b1"]));
     assert!(section_rows(page, "## three.sh").is_empty());
+}
+
+#[test]
+fn the_rules_of_a_row_of_the_checks_are_the_code_spans_of_the_second_column_of_its_section() {
+    let page = "\
+## A cluster
+
+| Request | Gives |
+| --- | --- |
+| `GET /v1/spectroclusters/{uid}` | `not-a-rule` |
+
+## The checks of `strata preflight`
+
+| Request | Read by | Gives |
+| --- | --- | --- |
+| `GET /v1/clouds/{aws,gcp}/regions?cloudAccountUid=` | `instance-offering`, `aws-quotas` | The regions, and `not-a-rule`. |
+| `POST /v1/spectroclusters/{uid}/validate/repave` | `engine-repave-rules` | The answer. |
+
+## Other reads
+
+| `GET /v1/overlords/{uid}` | `pcg-running` | x |
+";
+    assert_eq!(
+        rule_rows(page),
+        BTreeMap::from([
+            (
+                "GET /v1/clouds/{}/regions".to_string(),
+                set(&["instance-offering", "aws-quotas"])
+            ),
+            (
+                "POST /v1/spectroclusters/{}/validate/repave".to_string(),
+                set(&["engine-repave-rules"])
+            ),
+        ])
+    );
+    assert!(rule_rows("| `GET /v1/overlords/{uid}` | `pcg-running` | x |\n").is_empty());
 }
 
 #[test]

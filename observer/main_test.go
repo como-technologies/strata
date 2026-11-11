@@ -157,8 +157,8 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 // loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, the seed, which
 // gets and updates the four Secrets of the records, and the alerts, which send one POST of a message to the
 // webhook of a team. Only internal/api, internal/kube, and
-// internal/alert import a package of the network, and so does the stand-in for the API server in
-// internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
+// internal/alert import a package of the network, and so do the stand-in for the API server and the
+// webhook of the tests in internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
 func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string
@@ -240,7 +240,8 @@ func TestNoTestGivesAServerAPortThatItClosed(t *testing.T) {
 
 // The kernel can give the port of a closed server to another process at once, and a server there can
 // answer. So no test uses a name after a statement that closes it, such as srv.Close(). A test of "no
-// server" asks testkit.PortZero.
+// server" asks testkit.PortZero. This test finds only a call of Close. It does not find a server that a
+// test stops with a cancel of its context, such as the stop of testkit.StartServer.
 func TestNoTestAsksAServerThatItClosed(t *testing.T) {
 	fset, files := parsedFiles(t)
 	for path, f := range files {

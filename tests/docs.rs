@@ -11,8 +11,9 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use common::{
-    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, code_of, gitlab_drop_in, one_line, recipe, repo_file,
-    schema, script, toml_entries, toml_table, toml_value, version_of, walk,
+    CommandExt, GITLAB_DROP_IN, INSTALLING_WORKFLOWS, cells, code_of, first_cells, gitlab_drop_in,
+    one_line, recipe, repo_file, schema, script, table_rows, toml_entries, toml_table, toml_value,
+    version_of, walk,
 };
 use strata::TOOL_NAME;
 use strata::api::codes::ValidateRoute;
@@ -94,9 +95,9 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
     );
 }
 
-/// The version badge in the README is static, because shields.io cannot read a private
-/// repository. A badge that asks it for the version renders "repo not found". Static means it can
-/// drift, so the drift is a test failure instead of a wrong number on the front page.
+/// The version badge in the README is static, so it names the version of the commit and needs no
+/// request to GitHub. Static means it can drift, so the drift is a test failure instead of a wrong
+/// number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     let version = version_of("Cargo.toml");
@@ -106,6 +107,115 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
         readme.contains(&badge),
         "the README badge does not name version {version}: bump it with the version in Cargo.toml"
     );
+}
+
+/// The book is the Pages site of the repository, at the address that GitHub gives to a public
+/// repository. A reader with no login opens it (#65).
+#[test]
+fn the_address_of_the_book_is_the_public_pages_site_of_the_repository() {
+    let repository = env!("CARGO_PKG_REPOSITORY");
+    let path = repository
+        .strip_prefix("https://github.com/")
+        .expect("the repository is on GitHub");
+    let (owner, name) = path
+        .split_once('/')
+        .expect("the address names an owner and a repository");
+    assert_eq!(
+        strata::BOOK_URL,
+        format!("https://{owner}.github.io/{name}/")
+    );
+}
+
+/// GitHub gives the Pages site of a private repository an address on a host of its own. Only a
+/// member of the organization opens it. No tracked file names that host (#65). The text of the host
+/// is in two parts, so that this file does not name it.
+#[test]
+fn no_tracked_file_names_the_host_of_a_private_pages_site() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let host = concat!("pages", ".github.io");
+    let faults: Vec<String> = tracked_files(root, &[])
+        .into_iter()
+        .filter(|file| std::fs::read_to_string(file).is_ok_and(|text| text.contains(host)))
+        .map(|file| {
+            file.strip_prefix(root)
+                .unwrap_or(&file)
+                .display()
+                .to_string()
+        })
+        .collect();
+    assert!(
+        faults.is_empty(),
+        "these files name {host}; give the address of strata::BOOK_URL:\n{}",
+        faults.join("\n")
+    );
+}
+
+/// A reader outside the organization installs a release with one `curl` command, and with no token
+/// and no `gh` (#65). The README and the page "Install" give the same command.
+#[test]
+fn the_readme_and_the_book_give_one_install_command_with_curl_and_no_token() {
+    let readme = common::code_blocks(&common::page_section("README.md", "## Install"), "bash");
+    let book = common::code_blocks(
+        &common::page_section("docs/src/install.md", "### One command"),
+        "bash",
+    );
+    assert_eq!(readme.first(), book.first(), "the README and install.md");
+    let block = readme.first().expect("the README gives the command");
+    let command = one_line(&block.replace("\\\n", " "));
+    let download = format!(
+        "curl -fsSL {}/releases/latest/download/install-strata.sh | bash -s --",
+        env!("CARGO_PKG_REPOSITORY")
+    );
+    assert!(command.starts_with(&download), "{command}");
+    for word in ["gh ", "TOKEN", "token"] {
+        assert!(!command.contains(word), "{command} names {word:?}");
+    }
+}
+
+/// A package of strata carries the sources, the license, and the README, and not the book, the
+/// examples, or the tests. crates.io keeps each version that it takes, so the list is a test (#65).
+#[test]
+fn the_package_of_strata_carries_the_sources_the_license_and_the_readme_and_no_other_folder() {
+    let o = std::process::Command::new(env!("CARGO"))
+        .args([
+            "package",
+            "--list",
+            "--allow-dirty",
+            "--offline",
+            "-p",
+            env!("CARGO_PKG_NAME"),
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", common::text(&o.stderr));
+    let listed = common::text(&o.stdout);
+    let files: BTreeSet<&str> = listed.lines().collect();
+    for wanted in [
+        "Cargo.toml",
+        "Cargo.lock",
+        "LICENSE",
+        "README.md",
+        "src/main.rs",
+    ] {
+        assert!(
+            files.contains(wanted),
+            "the package has no {wanted}:\n{listed}"
+        );
+    }
+    let cargo = [
+        "Cargo.toml",
+        "Cargo.toml.orig",
+        "Cargo.lock",
+        ".cargo_vcs_info.json",
+    ];
+    let other: Vec<&&str> = files
+        .iter()
+        .filter(|f| {
+            !f.starts_with("src/") && !cargo.contains(f) && !["LICENSE", "README.md"].contains(f)
+        })
+        .collect();
+    assert!(other.is_empty(), "the package carries {other:?}");
 }
 
 /// A release ships `strata` and `strata-preflight` together, and the book says that
@@ -186,16 +296,7 @@ fn codes_after(text: &str, anchor: &str) -> Vec<String> {
     let at = text
         .find(anchor)
         .unwrap_or_else(|| panic!("errors.md does not name {anchor}"));
-    let mut codes: Vec<String> = text[at..]
-        .lines()
-        .skip_while(|line| !line.starts_with("| Code |"))
-        .skip(2) // the header and the line under it
-        .take_while(|line| line.starts_with('|'))
-        .map(|row| {
-            let cell = row.split('|').nth(1).expect("a row has a first cell");
-            cell.trim().trim_matches('`').to_string()
-        })
-        .collect();
+    let mut codes = first_cells(&text[at..], "| Code |");
     codes.sort();
     codes
 }
@@ -1081,11 +1182,7 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
 /// The sentences of a block. A table row has the sentences of each cell.
 fn block_sentences(block: &str) -> Vec<String> {
     if block.starts_with('|') {
-        return block
-            .trim_matches('|')
-            .split('|')
-            .flat_map(|cell| sentences(cell.trim()))
-            .collect();
+        return cells(block).into_iter().flat_map(sentences).collect();
     }
     sentences(block)
 }
@@ -1224,13 +1321,13 @@ const LEAVE_OUT_SCAN: [&str; 15] = [
     "justfile",
 ];
 
-/// The files of `LEAVE_OUT_SCAN` that Git tracks in the tree of `root`. A file that Git ignores is
-/// not one of them. A run of the live example writes such files to `examples/live/runs`, and they
-/// hold the text of a cluster, not the text of the repository. The option `safe.directory` lets Git
-/// read a tree that another user owns.
-fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
+/// The files under `paths` that Git tracks in the tree of `root`, or each tracked file when `paths`
+/// is empty. A file that Git ignores is not one of them. A run of the live example writes such
+/// files to `examples/live/runs`, and they hold the text of a cluster, not the text of the
+/// repository. The option `safe.directory` lets Git read a tree that another user owns.
+fn tracked_files(root: &Path, paths: &[&str]) -> Vec<PathBuf> {
     let mut args = vec!["-c", "safe.directory=*", "ls-files", "-z", "--"];
-    args.extend(LEAVE_OUT_SCAN);
+    args.extend(paths);
     let listing = common::git(root, &args).stdout;
     String::from_utf8(listing)
         .expect("Git lists paths in UTF-8")
@@ -1245,7 +1342,7 @@ fn tracked_files_to_scan(root: &Path) -> Vec<PathBuf> {
 /// `examples/packs/` too, which are the text of other projects.
 fn leave_out_faults(root: &Path) -> Vec<String> {
     let mut faults = Vec::new();
-    for file in tracked_files_to_scan(root) {
+    for file in tracked_files(root, &LEAVE_OUT_SCAN) {
         let path = file.strip_prefix(root).unwrap_or(&file).to_string_lossy();
         if path == "tests/docs.rs" || path.starts_with("examples/packs/") {
             continue;
@@ -1303,7 +1400,7 @@ fn the_scan_for_leave_out_reads_the_tracked_files_and_not_the_runs_of_the_live_e
     );
     write("docs/src/untracked.md", "Leave out the new page.\n");
 
-    let tracked: Vec<String> = tracked_files_to_scan(root)
+    let tracked: Vec<String> = tracked_files(root, &LEAVE_OUT_SCAN)
         .iter()
         .map(|p| p.strip_prefix(root).unwrap().display().to_string())
         .collect();
@@ -1376,7 +1473,7 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
             "the rule eks-ami-type left the catalog, and the table {name} names it"
         );
     }
-    let rows = table_rows(waits);
+    let rows = table_rows(waits, "|");
     assert!(!rows.is_empty(), "{waits}");
     for row in rows {
         assert!(
@@ -1412,20 +1509,6 @@ fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_do
 /// The text of `docs/src/loop.md`, and of `docs/src/walkthrough.md`, which holds each step of it.
 fn the_loop() -> String {
     read(&docs().join("loop.md")) + &read(&docs().join("walkthrough.md"))
-}
-
-/// The cells of each row of the first table in `text`, without the header and the rule line.
-fn table_rows(text: &str) -> Vec<Vec<String>> {
-    text.lines()
-        .filter(|l| l.starts_with('|'))
-        .skip(2)
-        .map(|l| {
-            l.trim_matches('|')
-                .split('|')
-                .map(|c| c.trim().to_string())
-                .collect()
-        })
-        .collect()
 }
 
 /// The code spans of `text`: the text between a pair of backticks.
@@ -1510,7 +1593,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
     );
 
     let names = command_words();
-    let rows = table_rows(part);
+    let rows = table_rows(part, "|");
     assert_eq!(rows.len(), 11, "the table of the day has eleven steps");
     for row in rows {
         assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
@@ -1583,7 +1666,11 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         .find(|l| l.starts_with('|'))
         .expect("the section has a table");
     assert_eq!(header, "| When | Who | The question | What runs | Page |");
-    assert_eq!(table_rows(part).len(), 13, "the table has thirteen jobs");
+    assert_eq!(
+        table_rows(part, "|").len(),
+        13,
+        "the table has thirteen jobs"
+    );
 
     let spans = code_spans(part);
     for command in [
@@ -1728,16 +1815,12 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_12_are_gone_from_the_book(
 }
 
 /// A user copies the drop-ins of the CI systems, so their comments are user text. The review at the
-/// end of Wave 12 named three comments that are over the limit: each sentence of them has 25 words
-/// at most.
+/// end of Wave 12 named three comments that are over the limit. The comment about the access to a
+/// private repository is gone (#65). Each sentence of the other two has 25 words at most.
 #[test]
 fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
     let comments = [
         ("examples/ci/github/strata.yml", "needed to read Palette"),
-        (
-            "examples/ci/github/strata.yml",
-            "A token does not give access",
-        ),
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
     assert_comments_keep_to_the_limit(&comments);
@@ -1767,7 +1850,7 @@ fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_
     let text = the_loop();
     let part = section(&text, "## Each step at a glance", Some("\n## "));
     let names = command_words();
-    for row in table_rows(part) {
+    for row in table_rows(part, "|") {
         let place = &row[2];
         assert!(
             !names.contains(place) && place != "preflight",
@@ -1879,14 +1962,11 @@ fn the_book_names_each_file_of_tests_common_that_another_package_includes() {
         "## Where the code goes",
         Some("## Where a script goes"),
     );
-    let rows: Vec<&str> = table
-        .lines()
-        .filter_map(|line| line.strip_prefix("| ")?.split(" | ").next())
-        .collect();
+    let rows = table_rows(table, "|");
     for file in &included {
         let cell = format!("`tests/common/{file}`");
         assert!(
-            rows.iter().any(|row| row.contains(&cell)),
+            rows.iter().any(|row| row[0].contains(&cell)),
             "the table Where the code goes of build-test.md has no row of {cell}"
         );
     }
@@ -1968,17 +2048,17 @@ fn a_block_is_one_item_of_a_numbered_list_a_star_list_or_a_quote_and_one_paragra
     assert_eq!(block(text, "Row"), "| Row | Cell |");
 }
 
-/// The book has numbered items that the old reader joined into one block. The item of the
-/// setting of the access has its own block, and it holds the two sentences of the step.
+/// The book has numbered items that the old reader joined into one block. The first step of the
+/// reusable workflows has its own block, and it holds the sentence of the step alone.
 #[test]
 fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
-    let page = read(&docs().join("automation/pr-comments.md"));
-    let step = block(&page, "Accessible from repositories in the organization");
+    let page = read(&docs().join("install.md"));
+    let step = block(&page, "into `.strata`");
     assert!(
-        step.starts_with("In this repository, open Settings"),
+        step.starts_with("It checks out this repository at the tag"),
         "{step}"
     );
-    assert!(!step.contains("strata-token"), "{step}");
+    assert!(!step.contains("cosign-installer"), "{step}");
 }
 
 // ---- the release notes and the live results at the end of Wave 12 -------------------------------
@@ -2215,7 +2295,9 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 
 /// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
 /// with a comment that says what it holds. The book states where the copy is and how old it can
-/// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
+/// be. A session that finds no mount cannot read the code that rule 7 tells it to read. The
+/// repository is public, so the book names no path of the host: the notes of the lead give the
+/// clones and their refresh (#65).
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
     let riff = repo_file("riff.toml");
@@ -2233,19 +2315,24 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "the mount has no comment that says what the volume holds"
     );
 
-    let page = one_line(&read(&docs().join("development/changes.md")));
+    let changes = read(&docs().join("development/changes.md"));
+    let page = one_line(&changes);
     for needle in [
         "A session reads the code of Palette at `$HOME/palette`.",
         "On another host, the volume is empty.",
         "so it can be some hours old.",
         "it asks the lead with `riff tell lead`.",
         "A session on the host itself, not in a container, has no `$HOME/palette`.",
-        "the copy comes from the clones in `~/repos/spectrocloud/`.",
-        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
-        "A session on the host runs it first, then reads the clones.",
+        "The notes of the lead give the place of the clones on the host, and the command that refreshes them.",
+        "A session on the host runs that command first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
+    let code = section(&changes, "\n## The code of Palette\n", Some("\n## "));
+    assert!(
+        !code.contains("`~/"),
+        "the section names a path of the host:\n{code}"
+    );
 }
 
 /// The value of `key` in the table `table`, such as `[session.env]`, of `riff`: the text of
@@ -2563,6 +2650,18 @@ fn the_readme_has_one_line_for_the_observer_and_the_summary_lists_the_three_page
     }
 }
 
+/// A cell of the book can hold `\|`, as the flag `--host github\|gitlab` does. The read of a row
+/// keeps such a cell whole. It also reads a row with no `|` at its end, and an empty last cell.
+#[test]
+fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
+    assert_eq!(
+        cells(r"| `--host github\|gitlab` | The code host. |"),
+        [r"`--host github\|gitlab`", "The code host."]
+    );
+    assert_eq!(cells("| a | b"), ["a", "b"]);
+    assert_eq!(cells("| a | |"), ["a", ""]);
+}
+
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
 /// link is lost, and the page shows the raw target. Code fences are skipped.
 fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
@@ -2576,8 +2675,8 @@ fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
             continue;
         }
         found.extend(
-            line.split('|')
-                .map(str::trim)
+            cells(line)
+                .into_iter()
                 .filter(|cell| {
                     ["(./", "(../", "(http://", "(https://"]
                         .iter()
@@ -3678,13 +3777,13 @@ fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() 
 
     let day = section(&text, "## Each step at a glance", Some("\n## "));
     assert!(
-        table_rows(day).iter().any(|row| row[0]
+        table_rows(day, "|").iter().any(|row| row[0]
             == "A job writes a note about a value that strata does not know"
             && row[1].contains("Strata sends nothing unless you choose the send.")),
         "the day of work has no row for the note"
     );
     let jobs = section(&text, "## The jobs and their commands", Some("\n## "));
-    let row = table_rows(jobs)
+    let row = table_rows(jobs, "|")
         .into_iter()
         .find(|row| row[0] == "A note of an unknown value")
         .expect("the table of the jobs has no row for the note");
@@ -4140,8 +4239,8 @@ fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
         .filter(|p| p.extension().is_some_and(|e| e == "md"))
     {
         for block in blocks_of(&read(path)).iter().filter(|b| b.starts_with('|')) {
-            for cell in block.trim_matches('|').split('|') {
-                let count = sentences(cell.trim()).len();
+            for cell in cells(block) {
+                let count = sentences(cell).len();
                 if count > MOST_SENTENCES {
                     faults.push(format!(
                         "{}: {count} sentences: {}",
@@ -6367,6 +6466,16 @@ fn each_page_that_says_a_request_changes_nothing_says_what_validate_repave_can_s
             "reference/palette-api.md",
             "Eight of the ten `POST` requests change nothing",
         ),
+        // the sentence above the table of the checks of strata-preflight, and the row of the
+        // three checks that send `validate/repave` (#756)
+        (
+            "reference/palette-api.md",
+            "Each request below changes nothing, except `validate/repave`",
+        ),
+        (
+            "reference/palette-api.md",
+            "`engine-repave-rules`, `eks-repave-answers`, `gke-repave-answers`",
+        ),
         (
             "reference/documents.md",
             "Each line reads, and changes nothing",
@@ -6448,7 +6557,7 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
         fits < ideas && ideas < sample,
         "the section for your own pipeline does not come before the sample pipeline"
     );
-    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")));
+    let rows = table_rows(section(&text, "## Where strata fits", Some("\n## ")), "|");
     for (event, command) in [
         ("A publish", "strata snapshot"),
         ("A promotion", "strata same-release"),
@@ -6487,6 +6596,11 @@ fn the_page_gives_a_command_for_each_event_before_the_sample_pipeline() {
     assert!(
         sample.contains("It is one opinionated example, and not a rule."),
         "the page does not name the sample pipeline as one opinionated example"
+    );
+    // The repository is public, so the page names no decision record of the team (#65).
+    assert!(
+        !sample.contains("ADR-"),
+        "the page names a decision record of the team"
     );
 }
 

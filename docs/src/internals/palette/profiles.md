@@ -298,6 +298,20 @@ Palette serves the two templates as follows:
   content of neither template. A manifest that the draft adds has an empty
   content in it. Each manifest of a version that was never published has an
   empty content in it too.
+- The `PUT` writes the name and the version of its body to the profile at
+  once, and not to the draft. It refuses a name and a version that another
+  profile of the same project has, with HTTP 409 and
+  `ClusterProfileAlreadyExists`. For a profile of the tenant, it compares the
+  profiles of the tenant. The compare of the names ignores the case. The code
+  of Palette shows these facts. No live check tests them, because no check
+  changes the name or the version of a lab profile.
+- The answer of `packs/manifests` has two names. Its `metadata` is the
+  metadata of the profile, so its `metadata.name` is the name of the profile.
+  Each pack summary takes its `metadata.name` and its `spec.name` from its pin.
+  So while a draft waits, the profile and the answer have the new name. The
+  code of Palette shows these facts, and the check `route-names` of
+  [draft.sh](../../development/live-runs.md#draftsh) tests the two names. No
+  result yet: the live window of wave 16 runs it.
 - `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}`
   gives one manifest with `spec.draft.content` and `spec.published.content`.
   A draft content is empty when the draft did not change the manifest.

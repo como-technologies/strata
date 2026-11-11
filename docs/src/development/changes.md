@@ -22,9 +22,11 @@ work starts.
    comes from `just docs-examples`.
 3. Give each item of the `Done when:` line a test, when a test can show it.
    Remove the new code temporarily. Make sure that the test fails. Then restore
-   the code.
+   the code. When you remove the code in a temporary worktree, give the worktree
+   its own target directory: see
+   [A temporary worktree](./build-test.md#a-temporary-worktree).
 4. Run each check of CI in a clean worktree of the commit, not only in the tree
-   you work in:
+   you work in. Give that worktree its own target directory too:
 
    ```bash
    just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
@@ -156,16 +158,16 @@ writes under `$HOME/.local`. Each session has a container of its own, so its
 
 A session reads the code of Palette at `$HOME/palette`. `riff.toml` mounts it
 as the volume `strata-palette`. On the host of the lead, the volume holds a copy
-of nine repositories of Palette. On another host, the volume is empty. A session
+of the repositories of Palette. On another host, the volume is empty. A session
 writes nothing to the copy.
 
-Read the route and the model in `hapi`, the API definitions. Read the behavior
-in `hubble`, the API server.
+Read the route and the model in the API definitions. Read the behavior in the
+API server.
 
-A session on the host itself, not in a container, has no `$HOME/palette`. On the
-host of the lead, the copy comes from the clones in `~/repos/spectrocloud/`. The
-script `palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes
-the copy. A session on the host runs it first, then reads the clones.
+A session on the host itself, not in a container, has no `$HOME/palette`. The
+notes of the lead give the place of the clones on the host, and the command that
+refreshes them. A session on the host runs that command first, then reads the
+clones.
 
 The lead refreshes the copy, so it can be some hours old. When a session needs a
 newer copy, it asks the lead with `riff tell lead`. Rule 7 of

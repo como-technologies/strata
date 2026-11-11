@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -1478,6 +1478,191 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     );
 }
 
+/// A `curl` for `public.sh`. It answers each address that a line `<glob> <status> <file>` of
+/// `$FAKE_WEB/routes` names, and any other address with 404. It logs each address, with the header
+/// `Authorization` when the request has one. `-w` prints the status, and `-f` fails on a status of
+/// 400 or more.
+const FAKE_WEB_CURL: &str = r#"#!/usr/bin/env bash
+out=""; url=""; write=""; fail=""; auth=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out=$2; shift 2 ;;
+    -w) write=$2; shift 2 ;;
+    -H) case "$2" in Authorization:*) auth=" ($2)" ;; esac; shift 2 ;;
+    -*f*) fail=1; shift ;;
+    -*) shift ;;
+    *) url=$1; shift ;;
+  esac
+done
+echo "$url$auth" >> "$FAKE_WEB/curl.log"
+status=404; body=/dev/null
+while read -r glob code file; do
+  [[ "$url" == $glob ]] || continue
+  status=$code; body="$FAKE_WEB/$file"; break
+done < "$FAKE_WEB/routes"
+if [ -n "$out" ]; then cat "$body" > "$out"; else cat "$body"; fi
+[ -z "$write" ] || printf '%s' "$status"
+[ -z "$fail" ] || [ "$status" -lt 400 ] || exit 22
+"#;
+
+/// The installer of a release, for `public.sh`. It writes the tokens that it got to
+/// `install.tokens`, and two binaries that print their versions into `--dir`.
+const FAKE_PUBLIC_INSTALLER: &str = r#"#!/usr/bin/env bash
+dir=""
+while [ $# -gt 0 ]; do case "$1" in --dir) dir=$2; shift 2 ;; *) shift ;; esac; done
+mkdir -p "$dir"
+echo "${STRATA_TOKEN-}${GITHUB_TOKEN-}${GH_TOKEN-}" > "$FAKE_WEB/install.tokens"
+printf '#!/bin/sh\necho strata 9.9.9\n' > "$dir/strata"
+printf '#!/bin/sh\necho strata-preflight 9.9.9\n' > "$dir/strata-preflight"
+chmod +x "$dir/strata" "$dir/strata-preflight"
+"#;
+
+/// The answers of GitHub and of its registry for the repository `o/r` to a reader with no login.
+/// The repository and its packages are public. `book` is the status of the book.
+fn public_web(dir: &Path, book: u16) {
+    let web = dir.join("web");
+    std::fs::create_dir_all(&web).unwrap();
+    let files = [
+        ("book.html", "<html>the book</html>".to_string()),
+        ("installer.sh", FAKE_PUBLIC_INSTALLER.to_string()),
+        ("token.json", r#"{"token":"anonymous"}"#.to_string()),
+        ("manifest.json", r#"{"schemaVersion":2}"#.to_string()),
+        (
+            "repo.json",
+            r#"{"private":false,"description":"d","topics":["palette"]}"#.to_string(),
+        ),
+        ("advisories.json", r#"{"enabled":true}"#.to_string()),
+    ];
+    for (name, body) in files {
+        std::fs::write(web.join(name), body).unwrap();
+    }
+    let routes = [
+        format!("https://o.github.io/r/ {book} book.html"),
+        format!(
+            "{}/releases/latest/download/install-strata.sh 200 installer.sh",
+            env!("CARGO_PKG_REPOSITORY")
+        ),
+        "https://ghcr.io/token* 200 token.json".into(),
+        "https://ghcr.io/v2/o/strata-observer/manifests/v9.9.9 200 manifest.json".into(),
+        "https://ghcr.io/v2/o/charts/strata-observer/manifests/9.9.9 200 manifest.json".into(),
+        "https://api.github.com/repos/o/r 200 repo.json".into(),
+    ];
+    std::fs::write(web.join("routes"), routes.join("\n") + "\n").unwrap();
+}
+
+/// Run `public.sh` with `args` for the repository `o/r`, against the answers of `public_web`, with a
+/// token of GitHub in the environment. Gives the output and steps.log.
+fn run_public(dir: &Path, args: &[&str]) -> (Output, String) {
+    let bin = fake_bin(
+        dir,
+        &[
+            ("curl", FAKE_WEB_CURL),
+            (
+                "gh",
+                "#!/usr/bin/env bash\ncat \"$FAKE_WEB/advisories.json\"\n",
+            ),
+            (
+                "fake-strata",
+                "#!/usr/bin/env bash\ncase \"$1\" in --help) echo 'The book: https://o.github.io/r/' ;; *) echo strata 9.9.9 ;; esac\n",
+            ),
+        ],
+    );
+    let o = Command::new("bash")
+        .arg(live_script("public.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("HOME", dir)
+        .env("STRATA_BIN", bin.join("fake-strata"))
+        .env("OUT", dir.join("out"))
+        .env("REPO", "o/r")
+        .env("FAKE_WEB", dir.join("web"))
+        .env("GH_TOKEN", "the-token-of-gh")
+        .output_locked()
+        .unwrap();
+    let steps = std::fs::read_to_string(dir.join("out/steps.log")).unwrap_or_default();
+    (o, steps)
+}
+
+#[test]
+fn public_sh_shows_what_a_reader_with_no_login_gets_from_the_public_repository() {
+    let ids = [
+        "book-opens",
+        "install-no-token",
+        "install-runs",
+        "image-no-login",
+        "chart-no-login",
+        "repository-public",
+        "advisory-form",
+    ];
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 200);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &ids);
+
+    // the install gets no token, and the registry gets the anonymous token alone
+    let web = dir.path().join("web");
+    let tokens = std::fs::read_to_string(web.join("install.tokens")).unwrap();
+    assert_eq!(tokens.trim(), "", "the installer got a token");
+    let log = std::fs::read_to_string(web.join("curl.log")).unwrap();
+    assert!(!log.contains("the-token-of-gh"), "{log}");
+    for line in log.lines().filter(|l| l.contains("Authorization")) {
+        assert!(
+            line.ends_with("(Authorization: Bearer anonymous)"),
+            "{line}"
+        );
+    }
+}
+
+/// The routes of `public_web` in `dir` without each route whose line holds one of `gone`. GitHub
+/// answers such an address with 404.
+fn drop_routes(dir: &Path, gone: &[&str]) {
+    let file = dir.join("web/routes");
+    let routes = std::fs::read_to_string(&file).unwrap();
+    let kept: Vec<&str> = routes
+        .lines()
+        .filter(|l| !gone.iter().any(|g| l.contains(g)))
+        .collect();
+    std::fs::write(file, kept.join("\n") + "\n").unwrap();
+}
+
+#[test]
+fn public_sh_fails_the_checks_of_a_reader_while_the_repository_or_its_packages_are_private() {
+    // a private repository: the book sends a reader to a login, and the release and the API
+    // answer 404
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 302);
+    drop_routes(dir.path(), &["/releases/", "https://api.github.com/"]);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(
+        &steps,
+        &[
+            "book-opens",
+            "install-no-token",
+            "install-runs",
+            "repository-public",
+        ],
+    );
+
+    // a public repository with private packages: the registry refuses the anonymous token
+    let dir = tempfile::tempdir().unwrap();
+    public_web(dir.path(), 200);
+    drop_routes(dir.path(), &["/manifests/"]);
+    let (o, steps) = run_public(dir.path(), &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    failed(&steps, &["image-no-login", "chart-no-login"]);
+    passed(&steps, &["book-opens", "install-runs", "repository-public"]);
+
+    let (o, _) = run_public(dir.path(), &["--help"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("The public repository (#65)"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
 /// A `kubectl` that logs its arguments and the kubeconfig it was given, and answers only when
 /// that kubeconfig is the one the fake Palette serves. With `$FAKE_KUBE_PUT`, it answers as a
 /// cluster that runs the Deployment in the body of that PUT of a profile. The image field is the
@@ -2924,6 +3109,10 @@ fn tofu_output_json(outputs: &serde_json::Value) -> String {
 
 /// One run of a stage of a live script against the stand-ins. A test gives the OpenTofu outputs,
 /// the answers of strata, and the routes of Palette.
+///
+/// The stage puts two stand-ins on the `PATH`: a `sleep` that returns at once, and
+/// [`FAKE_PORT_FORWARD`]. So a wait that counts its looks ends in less than a second. A wait for a
+/// process that runs in the background limits its time, as `pf_start` of `lib.sh` does.
 struct Stage {
     root: tempfile::TempDir,
     answers: usize,
@@ -2940,6 +3129,7 @@ impl Stage {
                 ("tofu", FAKE_TOFU_STAGE),
                 ("fake-strata", FAKE_STRATA_STAGE),
                 ("sleep", "#!/usr/bin/env bash\nexit 0\n"),
+                ("fake-port-forward", FAKE_PORT_FORWARD),
             ],
         );
         for d in ["routes", "strata", "aws"] {
@@ -3080,6 +3270,9 @@ fi
             .unwrap();
         let o = run_live(script, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
+        // the harness shows the standard output of a test that fails, so its log holds the output
+        // of each step that failed
+        print!("{}", failed_outputs(&root.join("out"), &steps));
         (o, steps)
     }
 
@@ -3108,11 +3301,86 @@ fi
     }
 }
 
-/// True when `steps` has a line of the check `id` that starts with `verdict`: `PASS` or `FAIL`.
+/// The output and the errors of each check that failed in `steps`, a `steps.log`. They are the
+/// files `<id>.out` and `<id>.err` that `check` of `lib.sh` writes in `out`.
+fn failed_outputs(out: &Path, steps: &str) -> String {
+    let mut shown = String::new();
+    for id in ids_with(steps, &["FAIL"]) {
+        for file in [format!("{id}.out"), format!("{id}.err")] {
+            let body = std::fs::read_to_string(out.join(&file)).unwrap_or_default();
+            shown.push_str(&format!("---- the failed check {id}: {file}\n{body}"));
+            if !body.is_empty() && !body.ends_with('\n') {
+                shown.push('\n');
+            }
+        }
+    }
+    shown
+}
+
+#[test]
+fn the_log_of_a_test_shows_the_output_and_the_errors_of_each_check_that_failed() {
+    let out = tempfile::tempdir().unwrap();
+    for (file, body) in [
+        ("alert-route.out", "the port-forward ended"),
+        ("alert-route.err", "error: lost connection to pod\n"),
+        ("alert-edit.out", "the output of a check that passed\n"),
+    ] {
+        std::fs::write(out.path().join(file), body).unwrap();
+    }
+    let steps = "== stage 8: the alerts\n\
+        FAIL  alert-route                      expected 0, got 1\n\
+        PASS  alert-edit                       expected 0, got 0\n\
+        FAIL  alert-open                       expected 0, got 1\n";
+    assert_eq!(
+        failed_outputs(out.path(), steps),
+        "---- the failed check alert-route: alert-route.out\n\
+         the port-forward ended\n\
+         ---- the failed check alert-route: alert-route.err\n\
+         error: lost connection to pod\n\
+         ---- the failed check alert-open: alert-open.out\n\
+         ---- the failed check alert-open: alert-open.err\n"
+    );
+    assert_eq!(
+        failed_outputs(out.path(), "PASS  alert-edit  expected 0, got 0\n"),
+        ""
+    );
+}
+
+/// The words that `check` of `lib.sh` writes at the start of the line of a check in `steps.log`.
+const VERDICTS: [&str; 3] = ["PASS", "FAIL", "SEEN"];
+
+/// The verdict and the id of `line` of a `steps.log`, or `None` when it is not the line of a check.
+fn verdict_and_id(line: &str) -> Option<(&str, &str)> {
+    let mut words = line.split_whitespace();
+    let verdict = words.next().filter(|w| VERDICTS.contains(w))?;
+    Some((verdict, words.next()?))
+}
+
+/// True when `steps` has a line of the check `id` with `verdict`, one of [`VERDICTS`].
 fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
+    ids_with(steps, &[verdict]).any(|i| i == id)
+}
+
+/// The id of each check in `steps` with one of `verdicts`, in the order of the lines.
+fn ids_with<'a>(steps: &'a str, verdicts: &'a [&str]) -> impl Iterator<Item = &'a str> {
     steps
         .lines()
-        .any(|l| l.starts_with(verdict) && l.split_whitespace().nth(1) == Some(id))
+        .filter_map(verdict_and_id)
+        .filter(move |(verdict, _)| verdicts.contains(verdict))
+        .map(|(_, id)| id)
+}
+
+/// The ids of the checks in `steps`, in the order that they ran.
+fn check_ids(steps: &str) -> Vec<&str> {
+    ids_with(steps, &VERDICTS).collect()
+}
+
+/// The line of `steps` for the check `id`.
+fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
+    steps
+        .lines()
+        .find(|l| verdict_and_id(l).is_some_and(|(_, i)| i == id))
+        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
 }
 
 /// Each check of `ids` passed.
@@ -3137,6 +3405,15 @@ fn a_verdict_line_matches_its_verdict_and_the_whole_id_of_the_check() {
     assert!(!has_verdict(steps, "PASS", "a"));
     assert!(!has_verdict(steps, "FAIL", "a-b"));
     assert!(!has_verdict(steps, "FAIL", "a-"));
+    // the heading of a stage is not the line of a check, also when its second word is an id
+    let steps = "== stage 1: the checks\n\
+        PASS  a-b      expected 0, got 0\n\
+        SEEN  stage    expected ?, got 2\n";
+    assert_eq!(check_ids(steps), ["a-b", "stage"]);
+    assert_eq!(
+        step_line(steps, "stage"),
+        "SEEN  stage    expected ?, got 2"
+    );
 }
 
 /// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
@@ -3346,8 +3623,8 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
             "limited-message",
         ],
     );
-    for seen in ["limited-code ", "limited-record ", "limited-record-errors "] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["limited-code", "limited-record", "limited-record-errors"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
@@ -3892,13 +4169,8 @@ fn registry_sh_step_3b_deletes_the_tag_that_the_profile_pins_and_pushes_it_again
             "sync-del-4",
         ],
     );
-    for seen in [
-        "del-flag ",
-        "del-doc-fields ",
-        "del-verify ",
-        "del-cleared ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["del-flag", "del-doc-fields", "del-verify", "del-cleared"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let fields = std::fs::read_to_string(stage.path("out/del-doc-fields.out")).unwrap();
     assert!(
@@ -4347,13 +4619,8 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "var-undone",
         ],
     );
-    for seen in [
-        "var-strata ",
-        "var-strata-answer ",
-        "var-none ",
-        "var-default ",
-    ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+    for seen in ["var-strata", "var-strata-answer", "var-none", "var-default"] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let variables: Vec<_> = stage
         .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
@@ -5538,14 +5805,14 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         ],
     );
     for seen in [
-        "move-compare ",
-        "move-impact ",
-        "move-palette ",
-        "move-reasons ",
-        "replaced ",
-        "waits ",
+        "move-compare",
+        "move-impact",
+        "move-palette",
+        "move-reasons",
+        "replaced",
+        "waits",
     ] {
-        assert!(steps.contains(&format!("SEEN  {seen}")), "{seen}: {steps}");
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
     let applies: Vec<&str> = stage
         .tofu_calls()
@@ -5587,8 +5854,20 @@ fn registry_move_nodes_sh_stops_before_the_undo_when_a_repave_waits_for_approval
     );
 }
 
+/// The answer of `packs/manifests` for the add-on `ad-1` while its draft waits. Its metadata has
+/// the uid of the profile and the name `name`. It has one pack summary with the name `summary`
+/// and the manifest `m-1`.
+fn draft_manifests(name: &str, summary: &str) -> String {
+    serde_json::json!({"metadata": {"name": name, "uid": "ad-1"},
+        "spec": {"packs": [{"metadata": {"name": summary, "uid": "pk-1"},
+            "spec": {"name": summary, "manifests": [
+                {"name": "config", "uid": "m-1", "digest": "d", "content": "edited: \"no\"\n"}]}}]}})
+    .to_string()
+}
+
 /// A stage of draft.sh where Palette has the add-on `ad-1`, and the create of the copy with no
 /// publish answers the uid `un-1`. strata says `published` for `un-1` in the JSON of the list.
+/// The add-on has a draft with the pin `config`, and `packs/manifests` gives its two names.
 fn unpublished_stage(un_published: bool) -> Stage {
     let mut stage = baseline_stage();
     stage.strata(
@@ -5611,16 +5890,19 @@ fn unpublished_stage(un_published: bool) -> Stage {
         "  strata-live-addon@1.0.0        ad-1  all  add-on  no consumers\n  \
          strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
     );
+    let pins = r#"[{"name":"config","tag":"1.0.0","type":"manifest","layer":"addon",
+        "packUid":"pk-1","values":""}]"#;
     stage.route(
         &profile_route("ad-1"),
-        r#"{"metadata":{"name":"strata-live-addon","uid":"ad-1"},"spec":{"version":"1.0.0",
-            "published":{"type":"add-on","cloudType":"all","packs":[{"name":"config",
-            "tag":"1.0.0","type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
+        &format!(
+            r#"{{"metadata":{{"name":"strata-live-addon","uid":"ad-1"}},"spec":{{"version":"1.0.0",
+                "published":{{"type":"add-on","cloudType":"all","packs":{pins}}},
+                "draft":{{"type":"add-on","cloudType":"all","packs":{pins}}}}}}}"#
+        ),
     );
     stage.route(
         "/v1/clusterprofiles/ad-1/packs/manifests",
-        r#"{"metadata":{},"spec":{"packs":[{"metadata":{},"spec":{"name":"config","manifests":[
-            {"name":"config","uid":"m-1","digest":"d","content":"edited: \"no\"\n"}]}}]}}"#,
+        &draft_manifests("strata-live-addon", "config"),
     );
     stage.route("/v1/clusterprofiles", r#"{"uid":"un-1"}"#);
     stage.route(
@@ -5674,6 +5956,49 @@ fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
     let stage = unpublished_stage(true);
     let (o, steps) = stage.run("draft.sh", &[]);
     failed(&steps, &["unpublished-listed"]);
+    assert_ne!(o.status.code(), Some(0));
+}
+
+#[test]
+fn draft_sh_reads_the_two_names_of_packs_manifests_while_the_draft_waits() {
+    let stage = unpublished_stage(false);
+    let (_, steps) = stage.run("draft.sh", &[]);
+    passed(&steps, &["route-list", "route-names"]);
+    // the checks only read while the draft waits: each request between the PUT of the draft and
+    // the publish is a GET
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let waits: Vec<&str> = calls
+        .lines()
+        .skip_while(|l| *l != "PUT /v1/clusterprofiles/ad-1")
+        .skip(1)
+        .take_while(|l| *l != "PATCH /v1/clusterprofiles/ad-1/publish")
+        .collect();
+    assert!(
+        waits.contains(&"GET /v1/clusterprofiles/ad-1/packs/manifests"),
+        "{calls}"
+    );
+    assert!(waits.iter().all(|l| l.starts_with("GET ")), "{calls}");
+
+    // a pack summary with a name that is not the name of its pin
+    let stage = unpublished_stage(false);
+    stage.route(
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+        &draft_manifests("strata-live-addon", "config-pack"),
+    );
+    let (o, steps) = stage.run("draft.sh", &[]);
+    failed(&steps, &["route-names"]);
+    passed(&steps, &["route-list"]);
+    assert_ne!(o.status.code(), Some(0));
+
+    // an answer with the name of another profile
+    let stage = unpublished_stage(false);
+    stage.route(
+        "/v1/clusterprofiles/ad-1/packs/manifests",
+        &draft_manifests("strata-live-profile", "config"),
+    );
+    let (o, steps) = stage.run("draft.sh", &[]);
+    failed(&steps, &["route-names"]);
+    passed(&steps, &["route-list"]);
     assert_ne!(o.status.code(), Some(0));
 }
 
@@ -6053,8 +6378,10 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     stage.strata_err(
         "snapshot --from-candidate exists.yaml --validate *",
         2,
-        "palette    refuses: ClusterProfileAlreadyExists: Cluster Profile with name \
-         'strata-live-profile' and version '1.0.0' already exists\n",
+        &format!(
+            "palette    refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
+             'strata-live-profile' and version '1.0.0' already exists\n"
+        ),
     );
 
     let (o, steps) = stage.run("validate-packs.sh", &["3"]);
@@ -7772,7 +8099,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         "repeat-2",
         "repeat-count",
     ] {
-        assert!(steps.contains(&format!("PASS  {id} ")), "{id}:\n{steps}");
+        assert!(has_verdict(&steps, "PASS", id), "{id}:\n{steps}");
     }
     assert!(steps.contains("the issue is o/r#7"), "{steps}");
     // the repeat posts one report twice with one key of 64 hex characters
@@ -7900,8 +8227,7 @@ fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
     );
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
     let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
-    assert!(steps.contains("FAIL  send-1-says "), "{steps}");
-    assert!(steps.contains("FAIL  issue "), "{steps}");
+    failed(&steps, &["send-1-says", "issue"]);
 }
 
 #[test]
@@ -8136,9 +8462,7 @@ fn image_digest_sh_deletes_the_deployment_that_stays_after_the_content_drops_it(
         "the check records its result:\n{steps}"
     );
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("undo-gone") && l.ends_with("got 1")),
+        step_line(&steps, "undo-gone").ends_with("got 1"),
         "the Deployment stayed, so the wait ended with 1:\n{steps}"
     );
     passed(&steps, &["undo-delete", "undo-clean", "undo-baseline"]);
@@ -8267,7 +8591,8 @@ fn api_sh_manifest_profile_sends_the_uid_that_palette_asks_of_a_manifest_pack() 
 ///
 /// The reader can open a port-forward and nothing else. `FAKE_READER_SECRETS` lets the reader read
 /// a Secret. `FAKE_REACHED` lets a pod of another namespace reach the page. A pod of the mirror prints
-/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away.
+/// `mirror-id.json` or `mirror-string.json`, and `FAKE_NO_MIRROR_POD` takes it away. A port-forward
+/// runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_OBSERVER: &str = r#"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -8307,7 +8632,7 @@ case "$*" in
       *"get secrets"*) [ -z "${FAKE_READER_SECRETS-}" ] || { echo yes; exit 0; } ;;
     esac
     echo no; exit 1 ;;
-  *"port-forward"*) echo "Forwarding from 127.0.0.1:${PORT:-18080} -> 8080" ;;
+  *"port-forward"*) exec fake-port-forward ;;
   *" run "*) if [ -n "${FAKE_REACHED-}" ]; then echo reached; else echo refused; fi ;;
 esac
 exit 0
@@ -8899,6 +9224,39 @@ fn observer_kind_sh_fails_the_refusal_when_a_pod_of_another_namespace_reaches_th
     failed(&steps, &["other-pod-refused"]);
 }
 
+/// The checks of observer-kind.sh that open a port-forward with `pf_start` of `lib.sh`.
+const OBSERVER_KIND_FORWARDS: [&str; 3] = ["reader-forward", "component-read", "alert-route"];
+
+#[test]
+fn observer_kind_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &OBSERVER_KIND_CHECKS);
+}
+
+#[test]
+fn observer_kind_sh_fails_each_port_forward_that_ends_with_no_line_and_says_why() {
+    let mut stage = observer_kind_stage();
+    stage.env("FAKE_FORWARD_FAILS", "1");
+    let (o, steps) = run_kind(&stage);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &OBSERVER_KIND_FORWARDS);
+    passed(&steps, &["reader-health", "alert-edit", "kind-delete"]);
+    for check in OBSERVER_KIND_FORWARDS {
+        let said = std::fs::read_to_string(stage.path(&format!("out/{check}.err"))).unwrap();
+        for line in [
+            "the port-forward ended with no line \"Forwarding from\". Its log:",
+            "error: lost connection to pod",
+        ] {
+            assert!(said.contains(line), "{check}: {line}\n{said}");
+        }
+    }
+}
+
 #[test]
 fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_the_image() {
     let mut stage = observer_kind_stage();
@@ -8918,14 +9276,6 @@ fn observer_kind_sh_keeps_the_cluster_when_keep_cluster_is_1_and_stops_without_t
         text(&o.stderr)
     );
     assert_eq!(observer_log(&stage, "kind.log"), "", "no cluster was made");
-}
-
-/// The line of `steps` for the check `id`.
-fn step_line<'a>(steps: &'a str, id: &str) -> &'a str {
-    steps
-        .lines()
-        .find(|l| l.split_whitespace().nth(1) == Some(id))
-        .unwrap_or_else(|| panic!("no line for {id}:\n{steps}"))
 }
 
 #[test]
@@ -8991,7 +9341,7 @@ fn observer_kind_sh_removes_the_registry_and_the_cluster_when_the_script_ends_in
     stage.env("FAKE_DIE_AT_NODES", "1");
     let (o, steps) = run_kind(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  mirror-registry"), "{steps}");
+    passed(&steps, &["mirror-registry"]);
     assert!(
         !steps.contains("mirror-clean"),
         "the script ended first:\n{steps}"
@@ -9184,7 +9534,7 @@ esac
 ///
 /// The role of the observer gets and lists pods. `FAKE_ROLE_WIDE` adds a verb to the role.
 /// `FAKE_NEVER_HAS_ID` gives the pod that cannot pull an image id. `FAKE_POLICY_STAYS` keeps
-/// `IfNotPresent`.
+/// `IfNotPresent`. A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_IMAGES: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -9255,7 +9605,7 @@ case "$*" in
     [ -f "$obs/ns.$n" ] || notfound namespaces "$n"
     echo "$n Active" ;;
   *"get clusterrole"*) [ -f "$obs/role.exists" ] || notfound clusterroles strata-observer-pods; echo found ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -9837,7 +10187,7 @@ fn observer_images_sh_undoes_the_run_when_the_script_ends_in_stage_1() {
     stage.env("FAKE_DIE_AFTER_EDIT", "1");
     let (o, steps) = run_images(&stage);
     assert_ne!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
-    assert!(steps.contains("PASS  tag-first"), "{steps}");
+    passed(&steps, &["tag-first"]);
     assert!(
         !steps.contains("namespaces"),
         "the script ended first:\n{steps}"
@@ -10031,19 +10381,13 @@ fn script_check_ids(script: &str) -> Vec<String> {
         .collect()
 }
 
-/// The ids that the rows of a section of `live-runs.md` name: each name in backticks in the first cell.
+/// The ids that the rows of the table of checks of a section of `live-runs.md` name: each name in
+/// backticks in the first cell.
 fn page_check_ids(script: &str) -> Vec<String> {
-    page_section("docs/src/development/live-runs.md", &format!("## {script}"))
-        .lines()
-        .filter(|l| l.starts_with("| `"))
-        .flat_map(|l| {
-            let cell = l.trim_start_matches('|').split('|').next().unwrap_or("");
-            cell.split('`')
-                .skip(1)
-                .step_by(2)
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
+    let section = page_section("docs/src/development/live-runs.md", &format!("## {script}"));
+    table_rows(&section, "| Check |")
+        .iter()
+        .flat_map(|row| row[0].split('`').skip(1).step_by(2).map(str::to_string))
         .collect()
 }
 
@@ -10144,7 +10488,8 @@ fi
 /// The `kubectl` of observer.sh. It logs each call to `$FAKE_OBS/kubectl.log`. The state of the
 /// cluster is in files of `$FAKE_OBS`: `ns.exists`, `deploy.exists`, `restarts`, and
 /// `first-load-pending`. The key goes to `key.current`, and the pull Secret to `pull.seen`.
-/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults.
+/// `FAKE_READER_SECRETS`, `FAKE_REACHED`, and `FAKE_LOG_LEAK` give the faults. A port-forward runs
+/// [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL_FRED: &str = r##"#!/usr/bin/env bash
 obs=$FAKE_OBS
 echo "$*" >> "$obs/kubectl.log"
@@ -10196,7 +10541,7 @@ case "$*" in
   *" logs "*)
     echo 'time=2026-11-04T10:00:00Z level=INFO msg=strata command=verify exit=0 duration=2s'
     [ -z "${FAKE_LOG_LEAK-}" ] || echo "value strata live example" ;;
-  *port-forward*) echo "Forwarding from 127.0.0.1:18080 -> 8080" ;;
+  *port-forward*) exec fake-port-forward ;;
 esac
 exit 0
 "##;
@@ -10598,15 +10943,6 @@ const OBSERVER_CHECKS: [&str; 61] = [
     "undo-baseline",
 ];
 
-/// The ids of the checks in `steps`, in the order that they ran.
-fn check_ids(steps: &str) -> Vec<&str> {
-    steps
-        .lines()
-        .filter(|l| l.starts_with("PASS") || l.starts_with("FAIL") || l.starts_with("SEEN"))
-        .filter_map(|l| l.split_whitespace().nth(1))
-        .collect()
-}
-
 #[test]
 fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     let stage = observer_stage();
@@ -10622,6 +10958,18 @@ fn observer_sh_runs_the_stages_in_order_and_each_check_passes() {
     ] {
         assert!(has_verdict(&steps, "SEEN", id), "{id}:\n{steps}");
     }
+}
+
+#[test]
+fn observer_sh_waits_for_a_port_forward_that_prints_its_line_late() {
+    // each port-forward prints its line half a second late. A wait of 30 looks ends before the line,
+    // because the stand-in sleep returns at once. ask-words opens one port-forward.
+    let mut stage = observer_stage();
+    stage.env("FAKE_FORWARD_LATE", "0.5");
+    let (o, steps) = run_observer(&stage, &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    assert_eq!(check_ids(&steps), OBSERVER_CHECKS, "{steps}");
 }
 
 /// What the files of `dir` hold, joined, for a search of a secret
@@ -11077,11 +11425,10 @@ fn observer_sh_records_what_palette_did_to_the_machines_without_judging_it() {
     stage.env("FAKE_REPAVE", "1");
     let (o, steps) = run_observer(&stage, &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "no-repave");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("no-repave") && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     let said = std::fs::read_to_string(stage.path("out/no-repave.out")).unwrap();
     assert!(
@@ -11097,11 +11444,10 @@ fn observer_sh_records_a_counter_that_does_not_build_fails_the_count_of_the_clic
     let (o, steps) = run_observer(&stage, &[]);
     // the count of a cycle only records a result, but the count of a click judges one
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    let line = step_line(&steps, "requests-counted");
     assert!(
-        steps.lines().any(|l| l.starts_with("SEEN")
-            && l.contains("requests-counted ")
-            && l.contains("got 1")),
-        "{steps}"
+        line.starts_with("SEEN") && line.ends_with("got 1"),
+        "{line}"
     );
     failed(&steps, &["ask-one-post"]);
     passed(
@@ -11749,10 +12095,9 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
     assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
+    let line = step_line(&steps, "role-audits");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("SEEN") && l.contains("role-audits") && l.ends_with("got 1")),
+        line.starts_with("SEEN") && line.ends_with("got 1"),
         "a refusal is recorded as a failed request:\n{steps}"
     );
     passed(
@@ -11859,10 +12204,9 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
         let (o, steps) = stage.run("observer-role.sh", &[]);
         assert_eq!(o.status.code(), Some(0), "{status}:\n{steps}");
         passed(&steps, &["control-validate-packs"]);
+        let line = step_line(&steps, "role-validate-packs");
         assert!(
-            steps.lines().any(|l| l.starts_with("SEEN")
-                && l.contains("role-validate-packs")
-                && l.ends_with("got 1")),
+            line.starts_with("SEEN") && line.ends_with("got 1"),
             "a refusal is recorded as a failed request:\n{steps}"
         );
         let said = std::fs::read_to_string(stage.path("out/role-validate-packs.out")).unwrap();

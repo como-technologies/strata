@@ -32,7 +32,7 @@ on:
         description: A token that pushes the branch and opens the pull request. A pull request that the token of the workflow opens starts no workflow, so the checks of the pull request run only with a token of a person or of a GitHub App. Empty means the token of the workflow.
         required: false
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private.
+        description: Optional. A token that reads como-technologies/strata. When it is empty, the workflow reads that public repository with the token of the caller.
         required: false
 
 permissions:

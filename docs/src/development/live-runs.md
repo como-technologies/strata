@@ -508,6 +508,7 @@ version with no publish, lists it, and deletes it. This is the source for
 | `version-record` | 0 | #155: a record of the version, read while the draft waits, holds the published manifest |
 | `compare`, `compare-names` | 1, 0 | #155: `compare <uid> <uid>@draft` exits `1`, and names the manifest pack with `AUTHORED` |
 | `route-list` | 0 | #155: `packs/manifests` gives the published content of the manifest while the draft waits |
+| `route-names` | 0 | #767: while the draft waits, the `metadata.name` of the answer of `packs/manifests` is the name of the profile. The `metadata.name` of each pack summary is the name of its pin in the draft. The check only reads. No result yet: the live window of wave 16 runs it. |
 | `route-entity` | 0 | #155: the route of one manifest gives the draft content beside the published content |
 | `no-has-draft` | 0 | #155: the profile document gives no `status.hasDraft` |
 | `draft-before-publish` | 1 | #155: the record of the draft reports `DRIFT` against the version before the publish |
@@ -552,6 +553,22 @@ This is the source for
 |---|---|---|
 | `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. |
 | `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. |
+
+## public.sh
+
+Read-only. It needs `gh` and the strata binary of the checkout, and it reads no
+tenant. Run it after the repository and its packages are public. Each
+request of a reader goes with no token and no login. The check of the advisory
+form reads with the login of `gh`, because GitHub shows that setting to a
+maintainer only.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `book-opens` | 0 | #65: the address of the book that `strata --help` prints answers 200 with no login. No result yet: the repository is private. |
+| `install-no-token`, `install-runs` | 0 | #65: the install command of the README, as it is, installs the latest release with no token, and both binaries run. No result yet: the repository is private. |
+| `image-no-login`, `chart-no-login` | 0 | #65: the registry gives the image and the chart of the observer of that release for an anonymous token. No result yet: the packages are private. |
+| `repository-public` | 0 | #65: the API of GitHub shows the repository with no token, with a description and topics. No result yet: the repository is private. |
+| `advisory-form` | 0 | #65: private vulnerability reporting is on. No result yet: GitHub gives it to a public repository only. |
 
 ## contract.sh
 
@@ -2150,9 +2167,8 @@ The ledger gives the gcp run as `passed` for the narrowed rule. Its events are i
 the fixture `watch-webhook-refused` that the tests of the rule replay. The ledger
 gives `caught` for the warning on gcp and on eks. The eks entry of the old rule
 is gone, because the cluster was deleted before the outcome was known. The
-findings report on the build runs,
-`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the eks
-delete and the source of each finding.
+findings report on the build runs holds the timeline of the eks delete and the
+source of each finding.
 
 ## A chart pushed again, on a cluster
 
