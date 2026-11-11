@@ -20,8 +20,10 @@ serde_json = "1"
 # The list of the facts of Palette is YAML, as the rules of strata-preflight are.
 serde_yaml = "0.9"
 # The stand-in makes the uid and the digest of a new pack version with a hash. Its rule does not
-# change with the Rust version, so each run of the book gives the same uids.
+# change with the Rust version, so each run of the book gives the same uids. `hex` writes the hash
+# as lowercase hex, as strata does.
 sha2 = "0.11"
+hex = "0.4"
 # The run reads the latest release of two repositories from GitHub, with the HTTP client of strata.
 ureq = { version = "3", features = ["json"] }
 # The stand-in serves the download of a profile version: a tar archive that gzip compresses.

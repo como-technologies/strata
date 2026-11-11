@@ -36,7 +36,7 @@ pub(super) const OCI_CSI_DIGEST: &str =
 fn made_version(name: &str, registry: &str, version: &str) -> Value {
     let hash = |part: &str| {
         let text = format!("{part} {registry}/{name}@{version}");
-        format!("{:x}", Sha256::digest(text))
+        hex::encode(Sha256::digest(text))
     };
     let digest = format!("sha256:{}", hash("digest"));
     json!({"metadata": {"uid": hash("uid")[..24]},
