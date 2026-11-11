@@ -1356,6 +1356,7 @@ needs the example at its baseline with cluster A.
 | `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
+| `behind-profile`, `behind-profile-names` | 1, 0 | #707: after the publish of the next version, `behind` on the records of the release and of cluster A exits `1`. One entry of `profiles` holds the release for the two records, and its newer versions hold the next version. No result yet: the live window of wave 16 runs it. |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. No result yet: the live window of wave 16 runs it. |

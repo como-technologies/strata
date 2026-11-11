@@ -412,3 +412,70 @@ fn search_row(doc: &Value, project_name: &str, virtual_summary: Option<&Value>) 
         "status": status
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    /// Put the profile version `uid`, `name` at `version`, of the scope `scope` in the directory
+    /// `dir`. A version that ends in `-draft` is a version that nobody published.
+    fn put_version(tenant: &Tenant, dir: &str, version: (&str, &str, &str), scope: ProfileScope) {
+        let (uid, name, version) = version;
+        let published = !version.ends_with("-draft");
+        let doc = json!({"metadata": {"uid": uid, "name": name,
+                "annotations": {"scope": scope.as_str()}},
+            "spec": {"version": version}, "status": {"isPublished": published}});
+        tenant.put(dir, &profile_route(uid), &doc);
+    }
+
+    /// The versions that the document of `uid` in `dir` lists in `spec.versions[]`, sorted.
+    fn listed(tenant: &Tenant, dir: &str, uid: &str) -> Vec<String> {
+        let doc = tenant.read(dir, &profile_route(uid));
+        let mut versions: Vec<String> = doc["spec"]["versions"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|v| v["version"].as_str().unwrap_or_default().to_string())
+            .collect();
+        versions.sort();
+        versions
+    }
+
+    /// As in Palette, the document of a version lists the published versions of its name in its
+    /// scope, with no regard to case. A version of another project, of the other scope, or that
+    /// nobody published is not in the list. Each document gets the time of its create (#707).
+    #[test]
+    fn the_document_of_a_version_lists_the_published_versions_of_its_name_in_its_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), Path::new("/nowhere"));
+        let project = ProfileScope::Project;
+        put_version(&tenant, "dev", ("u1", "aws-stack", "1.0.0"), project);
+        put_version(&tenant, "dev", ("u2", "AWS-Stack", "1.1.0"), project);
+        put_version(&tenant, "dev", ("u3", "aws-stack", "1.2.0-draft"), project);
+        put_version(&tenant, "dev", ("u4", "other", "9.0.0"), project);
+        put_version(&tenant, "prod", ("u5", "aws-stack", "1.3.0"), project);
+        put_version(
+            &tenant,
+            TENANT,
+            ("u6", "aws-stack", "2.0.0"),
+            ProfileScope::Tenant,
+        );
+        tenant.listings();
+
+        assert_eq!(listed(&tenant, "dev", "u1"), ["1.0.0", "1.1.0"]);
+        assert_eq!(listed(&tenant, "dev", "u3"), ["1.0.0", "1.1.0"]);
+        assert_eq!(listed(&tenant, "dev", "u4"), ["9.0.0"]);
+        assert_eq!(listed(&tenant, "prod", "u5"), ["1.3.0"]);
+        // the copy of the profile of the tenant in a project lists the versions of the tenant
+        assert_eq!(listed(&tenant, "dev", "u6"), ["2.0.0"]);
+        let created =
+            |uid| tenant.read("dev", &profile_route(uid))["metadata"]["creationTimestamp"].clone();
+        assert!(created("u1").is_string() && created("u1") != created("u2"));
+        // a second rebuild keeps the time of each create
+        let before = created("u2");
+        tenant.listings();
+        assert_eq!(created("u2"), before);
+    }
+}

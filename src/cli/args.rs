@@ -42,7 +42,7 @@ impl Cli {
 #[derive(Subcommand)]
 // In alphabetical order, which is the order `strata --help` lists them in.
 pub(crate) enum Cmd {
-    /// Report the pack versions that records pin, and the newer versions the registries offer
+    /// Report the pack versions and the profile versions that records hold, and the newer versions of each
     Behind(BehindArgs),
     /// Write a candidate file from a profile version or a record
     Candidate(CandidateArgs),
@@ -385,10 +385,10 @@ pub(crate) struct BehindArgs {
     #[arg(long)]
     pub(crate) no_impact: bool,
     /// Report only the pack LAYER/NAME, such as addon/cert-manager. Compare its move and ask
-    /// Palette about it, and read no other pack
+    /// Palette about it, and read no other pack and no profile version
     #[arg(long, value_name = "LAYER/NAME", conflicts_with = "no_impact")]
     pub(crate) pin: Option<String>,
-    /// Name a pre-release as a newer version of a pin that is not a pre-release
+    /// Name a pre-release as a newer version of a pin or a profile version that is not a pre-release
     #[arg(long)]
     pub(crate) pre_release: bool,
     #[command(flatten)]

@@ -1,0 +1,2 @@
+$ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null | jq -c '.profiles[] | select(.newerVersion) | {name, version, status, newerVersion}'
+{"name":"aws-stack","version":"1.0.0","status":"drift","newerVersion":{"version":"1.1.0","created":"2026-09-15T08:01:00.000Z","new":false}}

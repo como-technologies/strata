@@ -1,8 +1,10 @@
 # strata behind
 
 Report the pack versions that records pin, and the newer versions that the
-registries offer. `verify` asks whether Palette still has what a record holds.
-`behind` asks the other question: whether the registry has moved on since.
+registries offer. Also report the profile versions that records hold, and the
+newer versions of each profile that Palette holds. `verify` asks whether Palette
+still has what a record holds. `behind` asks the other question: whether the
+registry or the pipeline has moved on since.
 
 The examples use the project `dev`, whose records hold `aws-stack@1.0.0` and
 `aws-stack@1.1.1`.
@@ -57,10 +59,76 @@ under a pin name each record that pins it.
   the tenant, says so, as `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.
 
+The last lines name the profile versions of the records: see
+[Newer versions of a profile](#newer-versions-of-a-profile).
+
 `--no-impact` skips the comparison of each bump and the question to Palette. The
 comparison costs two pack reads for each pin that is behind.
-`--pre-release` names a pre-release as a newer version of a pin that is not a
-pre-release. `--pin` reports one pack: see [One pack](#one-pack).
+`--pre-release` names a pre-release as a newer version of a pin or of a profile
+version that is not a pre-release. `--pin` reports one pack: see [One pack](#one-pack).
+
+## Newer versions of a profile
+
+A pipeline publishes the versions of a profile, and the definition of a cluster
+pins the version that the cluster runs. `behind` names the newer versions of each
+profile version that a record holds:
+
+- A record of a profile version holds that version.
+- A record of a cluster, an edge host, or a cluster group holds each profile that
+  it runs.
+- A candidate, a pack record, and a record of an app profile hold none.
+
+Here the pipeline published `aws-stack` 1.1.0 and the pre-release 1.2.0-rc.1 in
+the project `dev`, after the record of 1.0.0. The project `prod` holds 1.3.0, and
+the tenant holds 2.0.0:
+
+```text
+{{#include ../output/behind-profile-lines.txt}}
+```
+
+Exit `1`: a profile version is behind, as a pin is. The line `[profile]` names the
+profile, the version that the records hold, and the scope of the version. Then it
+names the newer versions, newest first. The line under it gives the time that
+Palette created the newest version. Palette gives no time of the publish.
+
+- **Palette selects the versions.** The document of a version lists the published
+  versions of its profile. They have the same name and the same project, or the
+  tenant scope for a profile of the tenant. So `behind` does not name 1.3.0 of
+  `prod` or 2.0.0 of the tenant. A version that nobody published is not in the
+  list. See [The versions of a profile](../internals/palette/profiles.md#the-versions-of-a-profile).
+- **Strata orders the versions,** as it orders the versions of a pin: see
+  [A pre-release](#a-pre-release). Palette gives the list in no order, and no route
+  says that a version is newer. See
+  [A newer version of a profile](../internals/palette/profiles.md#a-newer-version-of-a-profile).
+- **A version that Palette no longer holds** is `gone`. Its document answers HTTP
+  404, so strata cannot read the other versions. `verify` says that the record is
+  gone. The exit does not change.
+- **A version that strata cannot read** is `not checked`. The line under it gives
+  the error, and the exit is `2`.
+
+`--pre-release` names the pre-release too:
+
+```text
+{{#include ../output/behind-profile-pre-release-lines.txt}}
+```
+
+The record of a cluster holds each profile that the cluster runs. The cluster
+`payments` runs `aws-stack@1.0.0`:
+
+```text
+{{#include ../output/behind-profile-cluster-lines.txt}}
+```
+
+`--json` gives each profile version in `profiles[]`: see
+[`strata-behind/1`](../reference/documents.md#strata-behind1).
+
+```text
+{{#include ../output/behind-profile-json.txt}}
+```
+
+Strata reads the document of each profile version one time, and the document of
+its newest version for the time of its create. With `--pin`, it reads no profile
+version. `--no-impact` does not change these reads.
 
 ## One pack
 
@@ -297,17 +365,17 @@ A scheduled job that keeps one issue open for each pack that is behind is
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | No pin is behind. |
-| `1` | A pin is behind. |
-| `2` | Strata could not check a pin, or could not read a record. |
+| `0` | No pin and no profile version is behind. |
+| `1` | A pin or a profile version is behind. |
+| `2` | Strata could not check a pin or a profile version, or could not read a record. |
 
 - The records are record files, or quoted patterns such as
   `'releases/**/*.json'`: strata expands them. A record gives the pins of its
   packs. The record can be of a profile, a cluster, an edge host, a cluster
   group, an app profile, or a pack.
-- Strata connects one time for each project of the pins. A pin is in the
-  project of the first record that pins it. For each project, strata reads each
-  listing of the registries one time.
+- Strata connects one time for each project of the pins and of the profile
+  versions. A pin or a profile version is in the project of the first record that
+  holds it. For each project, strata reads each listing of the registries one time.
 - Strata reads each pack of each registry one time, in the project of the
   first record that pins it. It reads the paged listing of the versions, and the
   tags of the pack in the registry. With `--pin`, it reads the one pack of the

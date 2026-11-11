@@ -206,6 +206,15 @@ asks if that is what the reviewer read:
 `IDENTICAL` means that the content is the same, by its digest, and not by a tag or
 a name. A difference fails the job.
 
+The record of the release that the clusters run now has a newer published version.
+`behind` names it, and the exit is `1` until each record moves to it:
+
+```text
+{{#include output/loop-behind-profile.txt}}
+```
+
+See [Newer versions of a profile](./commands/behind.md#newer-versions-of-a-profile).
+
 When your team runs [the observer](./automation/observer.md), the publish step also
 writes the records into the cluster. Name the records of the project of the cluster, one for each
 version. Here the observer watches the cluster `payments` of `dev`, so these are the

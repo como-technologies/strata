@@ -103,3 +103,9 @@ pub(super) const SAMPLE_FINAL: &str = "64e00000000000000000010b";
 // the pre-release that pins the pre-release of the pack, and the final version that pins its final
 pub(super) const SAMPLE_PIN_PRE: &str = "64e00000000000000000010c";
 pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
+// aws-stack in the chapter behind-profiles (#707): the pre-release 1.2.0-rc.1 in dev, 1.3.0 in prod,
+// and 2.0.0 at tenant scope, each with the content of 1.1.1. Only 1.1.0 of dev is a newer version
+// of 1.0.0 of dev
+pub(super) const A120_RC: &str = "64e00000000000000000010e";
+pub(super) const A130_PROD: &str = "64e100000000000000000110";
+pub(super) const A200_TENANT: &str = "64e400000000000000000111";

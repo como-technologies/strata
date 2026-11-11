@@ -1,18 +1,19 @@
 # The checks of the observer
 
 `strata-observer` runs the `strata` binary on two timers and keeps the last
-answer of each. It answers six questions:
+answer of each. It answers seven questions:
 
 - Does Palette still have the version that I recorded?
 - Does this cluster run its release?
 - Who changed it?
 - Does the registry have newer versions of what we pin?
+- Does Palette have a newer version of the profile that we run?
 - What changed between two pack versions?
 - Which digest does each tag run as on this cluster?
 
 The observer holds no rule about a profile. It reads the answers of `strata`
 through the allow-list of `internal/docs`, and it writes nothing to Palette. The
-sixth question needs `--read-pods`. It comes from the Kubernetes API, not from
+last question needs `--read-pods`. It comes from the Kubernetes API, not from
 `strata`: see [The read of the pods](#the-read-of-the-pods). A cycle sends `GET`
 requests only. One click on the page sends one `POST` to Palette, through `strata`:
 see [The answers of Palette](#the-answers-of-palette).
@@ -421,6 +422,20 @@ the pin stays in the list with no counts and no impact, and the cause
 asks again for that move only. The move still counts as used in that cycle, so the
 answer of Palette about it stays: see [The answers of Palette](#the-answers-of-palette).
 
+### The newer versions of a profile
+
+The answer of `behind` also holds `profiles[]`: each profile version of the
+records, with the newer published versions of its profile. The cycle joins the
+answers of the records by `name@version`, as it joins the pins. A profile version
+with `behind` true and no `error` gives its row `newerVersion`. It holds the
+`version` and the `created` time of `newer[0]`. `new` is true when `created` is in
+the last 7 days. The profile has the status `newer`, unless a finding makes it
+`drift`. `counts.newerProfileVersions` counts the rows that hold `newerVersion`.
+
+The observer orders no version: `behind` gives the newest one first. A profile
+version that strata could not check gives no `newerVersion` and no cause. The
+compare of a move is for the packs only, so the profile version has no counts.
+
 ## The answers of Palette
 
 A click on "Ask Palette" asks Palette about the move of one pack to its newest
@@ -490,7 +505,7 @@ of a variable, no text of a diff, and no answer of Palette.
 | `content`, `versions` | `checkedAt` or `readAt`, `every`, `failedRuns`, and `lastError`: the kind and the status, or `null`. While a cycle runs, `running`: `startedAt`, `done`, and `total`. |
 | `counts` | The numbers at the top of the page. |
 | `findings` | The findings of the table above. |
-| `profiles` | Each profile: `status`, `published`, `clusterCopy`, and its packs. |
+| `profiles` | Each profile: `status`, `published`, `clusterCopy`, `newerVersion`, and its packs. |
 | `newer` | One row for each pin that is behind. |
 | `notChecked` | One row for each cause. |
 | `limits` | `imagesNamedByATag`, `helmPacks`, and `maskedPaths`. |
@@ -532,10 +547,12 @@ severity.
 | `info` | `ProfileUpdated` | A finding holds `who`. One event for each write. | `time` of the write. |
 | `info` | `AuditUnread` | A finding has `whoUnread` true. The message is "The audit log could not be read, so this does not say who made the change." | `lastSeen` of the finding. |
 | `newer` | `NewVersion` | A pin is behind. | `listed` of the newest version. |
+| `newer` | `NewProfileVersion` | A profile version has a newer published version. The message is "`<name>@<newest>` is a newer version of the profile." | `created` of the newest version. |
 | `not-checked` | `OldCopy` | A pin has `registrySync`. One event for each registry. | `lastSyncedTime` of the registry. |
 
 The `object` is the profile. For `NewVersion` and `OldCopy`, it is the profiles
-that the pins name, separated by commas. A finding stays in `findings` when its
+that the pins name, separated by commas. For `NewProfileVersion`, it is the
+profiles of the records that hold the version. A finding stays in `findings` when its
 event is older than 7 days.
 
 The two messages of the pods are:

@@ -16,14 +16,21 @@ const OBSERVER_REPORTS: [&str; 2] = [
     "observer/internal/docs/testdata/ask-behind.json",
 ];
 
-/// The report of the run of the target with `since` as `--since`. Each path of the record is the
-/// name of its file, so that the seed is the same on each machine. The report names
-/// [`SEED_VERSION`](super::SEED_VERSION), so that it is the same in each release.
+/// The report of the run of the target with `since` as `--since`. Each path of the record, under a
+/// pin and under a profile version, is the name of its file, so that the seed is the same on each
+/// machine. The report names [`SEED_VERSION`](super::SEED_VERSION), so that it is the same in each
+/// release.
 fn report(since: Option<BehindReport>) -> BehindReport {
     let mut report = run(&scratch(), since);
     pin_version(&mut report.tool);
     report.records = vec![RECORD_FILE.to_string()];
-    for by in report.pins.iter_mut().flat_map(|pin| &mut pin.pinned_by) {
+    let held = report.profiles.iter_mut().flat_map(|p| &mut p.pinned_by);
+    for by in report
+        .pins
+        .iter_mut()
+        .flat_map(|pin| &mut pin.pinned_by)
+        .chain(held)
+    {
         by.path = RECORD_FILE.to_string();
     }
     report

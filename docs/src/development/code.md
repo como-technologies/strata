@@ -112,12 +112,19 @@ where each module goes. The Go code of the observer follows
   text is only the fallback for a string with no three numbers, such as
   `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
   direction of a move from strata, such as `versionMove` in `strata-diff/1`.
-- One order of a version lives outside strata: `oldest_first` in
-  `examples/fetch-examples.sh`. The script runs offline, so it cannot ask
-  strata. It keeps only a version of plain numbers and orders it by the
-  numbers. The test `the_examples_fetch_orders_plain_versions_as_strata_does`
-  fails when this order differs from `version::compare`. Add no other
-  exception.
+- Two orders of a version live outside strata, and each has a test against
+  `version::compare`. Add no other exception.
+  - `oldest_first` in `examples/fetch-examples.sh`. The script runs offline, so it
+    cannot ask strata. It keeps only a version of plain numbers and orders it by
+    the numbers. The test `the_examples_fetch_orders_plain_versions_as_strata_does`
+    fails when this order differs from `version::compare`.
+  - `versionCmp` in `observer/internal/web/assets/app.js`, the sort of a column of
+    versions on the page of the observer. A column holds the versions of many
+    packs, and no answer of strata orders them. The file
+    `observer/internal/web/testdata/versions.json` holds the cases.
+    `the_cases_of_the_version_sort_of_the_observer_page_are_in_the_order_of_strata`
+    sorts them with `version::compare`, and
+    `TestTheVersionSortOfThePageGivesTheOrderOfStrata` with `versionCmp`.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).
@@ -325,7 +332,9 @@ the Rust code, and these rules are for the Go code.
   and after a failed cycle.
 - The one compare of versions in the Go code is the major and minor number of
   `tool.version`, in `model.ReBaselineNeeded`. The observer does not order pack
-  versions: `behind` gives the order in `newer[0]`.
+  versions or profile versions: `behind` gives the order in `newer[0]`. The sort of
+  a column of the page is the one order in the scripts: see [Types and
+  data](#types-and-data).
 - `internal/api` serves the summary and the detail tiers: see
   [The server of the observer](./observer-api.md). The summary tier uses types of
   its own, and none has a field of type `docs.Leaf`. Only `PackDiff` of the

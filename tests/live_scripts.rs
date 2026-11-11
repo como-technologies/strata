@@ -7800,6 +7800,38 @@ fn loop_sh_stage_3_checks_that_a_cluster_ref_with_no_profile_holds_the_release_a
     }
 }
 
+/// Issue #707. After the publish of the next version, `behind` names it as a newer version of the
+/// release, in one entry that both records hold. A report that names no newer version fails.
+#[test]
+fn loop_sh_stage_3_checks_that_behind_names_the_next_version_as_a_newer_version_of_the_release() {
+    for newer in ["1.0.1", ""] {
+        let mut stage = lab_stage();
+        let versions = if newer.is_empty() {
+            String::new()
+        } else {
+            format!(r#"{{"version":"{newer}"}}"#)
+        };
+        let report = format!(
+            r#"{{"schema":"strata-behind/1","pins":[],"profiles":[
+                {{"name":"strata-live-profile","version":"1.0.0","pinnedBy":[{{}},{{}}],"newer":[{versions}]}},
+                {{"name":"strata-live-addon","version":"1.0.0","pinnedBy":[{{}}],"newer":[]}}]}}"#
+        );
+        let exit = if newer.is_empty() { 0 } else { 1 };
+        stage.strata(
+            "behind repo/releases/1.0.0.json repo/runs/a.json --no-impact --json",
+            exit,
+            &report,
+        );
+        let (_, steps) = stage.run("loop.sh", &["3"]);
+        let checks = ["behind-profile", "behind-profile-names"];
+        if newer.is_empty() {
+            failed(&steps, &checks);
+        } else {
+            passed(&steps, &checks);
+        }
+    }
+}
+
 #[test]
 fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
     let mut stage = lab_stage();
