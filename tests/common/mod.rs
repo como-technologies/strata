@@ -41,6 +41,7 @@ mod git;
 mod palette;
 mod process;
 mod stand_in;
+mod table;
 mod toml;
 mod walk;
 
@@ -50,6 +51,7 @@ pub use git::isolate_git;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
+pub use table::*;
 pub use toml::*;
 pub use walk::walk;
 

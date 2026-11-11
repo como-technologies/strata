@@ -333,6 +333,7 @@ mod tests {
     use super::super::registries::PUBLIC_REPO;
     use super::super::routes::{manifests_route, profile_route, variables_route};
     use super::*;
+    use crate::variants::one_of_each;
 
     /// The pack listing of a project that lists no pack.
     fn no_listing(_: &str) -> Value {
@@ -651,26 +652,9 @@ mod tests {
         (doc, manifests)
     }
 
-    /// Make the `Vec` of the edits of the list, in order, and tie the list to each variant of
-    /// [`Edit`].
-    ///
-    /// Write each edit with the path of its variant, as `Edit::Reclaim("Retain")`. A `match` names
-    /// the variant of each edit, and has no `_` arm. So the build fails on a new variant until the
-    /// list holds an edit of it. A variant that the list holds two times gives an unreachable arm,
-    /// and `just lint` fails.
-    macro_rules! one_of_each {
-        ($(Edit::$variant:ident $(($($tuple:tt)*))? $({$($fields:tt)*})?),+ $(,)?) => {{
-            fn _the_list_holds_each_variant(edit: &Edit) {
-                match edit {
-                    $(Edit::$variant { .. } => {})+
-                }
-            }
-            vec![$(Edit::$variant $(($($tuple)*))? $({$($fields)*})?),+]
-        }};
-    }
-
     /// One edit of each kind, on the packs of [`pinned_profile`]. The CSI upgrade comes after the
-    /// OCI edit, so in this order the upgrade reads the registry of the move.
+    /// OCI edit, so in this order the upgrade reads the registry of the move. [`one_of_each!`]
+    /// ties the list to each variant of [`Edit`].
     fn each_kind_of_edit() -> Vec<Edit> {
         one_of_each![
             Edit::Reclaim("Retain"),

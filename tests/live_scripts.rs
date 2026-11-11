@@ -10184,19 +10184,13 @@ fn script_check_ids(script: &str) -> Vec<String> {
         .collect()
 }
 
-/// The ids that the rows of a section of `live-runs.md` name: each name in backticks in the first cell.
+/// The ids that the rows of the table of checks of a section of `live-runs.md` name: each name in
+/// backticks in the first cell.
 fn page_check_ids(script: &str) -> Vec<String> {
-    page_section("docs/src/development/live-runs.md", &format!("## {script}"))
-        .lines()
-        .filter(|l| l.starts_with("| `"))
-        .flat_map(|l| {
-            let cell = l.trim_start_matches('|').split('|').next().unwrap_or("");
-            cell.split('`')
-                .skip(1)
-                .step_by(2)
-                .map(str::to_string)
-                .collect::<Vec<_>>()
-        })
+    let section = page_section("docs/src/development/live-runs.md", &format!("## {script}"));
+    table_rows(&section, "| Check |")
+        .iter()
+        .flat_map(|row| row[0].split('`').skip(1).step_by(2).map(str::to_string))
         .collect()
 }
 
