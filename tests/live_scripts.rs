@@ -1443,7 +1443,7 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     std::fs::write(routes.join("v1_x_found"), r#"{"items":[]}"#).unwrap();
     std::fs::write(
         routes.join("v1_x_refused"),
-        error_body(Denial::Project.as_str(), "access denied"),
+        error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     )
     .unwrap();
     std::fs::write(routes.join("v1_x_refused.status"), "500").unwrap();
@@ -1459,7 +1459,7 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
         text(&o.stdout),
         format!(
             "HTTP 500\n{}",
-            error_body(Denial::Project.as_str(), "access denied")
+            error_body(Denial::Project.as_str(), &project_denied_message("p-1"))
         )
     );
     assert_eq!(text(&o.stderr), "");
@@ -3737,7 +3737,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
         rbacs,
         "limited-k",
         500,
-        &error_body(Denial::Project.as_str(), "Project 'p-1' access denied"),
+        &error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
 
