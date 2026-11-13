@@ -9222,16 +9222,17 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
     let refusal = format!(
         r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden"}}"#
     );
-    for route in &routes {
-        let answer = Error::Api {
+    let classes = routes.clone().map(|path| {
+        Error::Api {
             method: Method::Get,
-            path: route.clone(),
+            path,
             status: 500,
             body: refusal.clone(),
             retry_after: None,
-        };
-        assert_eq!(answer.class(), FailureClass::Terminal, "{route}");
-    }
+        }
+        .class()
+    });
+    assert_eq!(classes, [FailureClass::Terminal; 3]);
     let (raw, calls, slept) = fetch(&refusal);
     assert_eq!(calls, [1, 1, 1], "a refusal gets no second request");
     assert_eq!(slept, 0, "strata does not wait to ask again");
