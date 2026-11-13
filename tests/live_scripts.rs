@@ -5421,7 +5421,7 @@ jq -c '{templates} as $t
        end"#
         }
     };
-    let profiles = format!("{}/profiles", cluster_route(uid));
+    let profiles = cluster_profiles_route(uid);
     let key = Stage::route_key(&profiles);
     // the stand-in of curl logs the method of the request before it runs the route
     executable(
@@ -5513,7 +5513,7 @@ fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_clus
         }
     }
     // the add gives the new profile first in the body, and Palette puts it last
-    let puts = stage.sent("PUT", "/v1/spectroclusters/c-a/profiles");
+    let puts = stage.sent("PUT", &cluster_profiles_route("c-a"));
     let uids = |body: &serde_json::Value| -> Vec<String> {
         body["profiles"]
             .as_array()
@@ -5525,7 +5525,7 @@ fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_clus
     assert_eq!(uids(&puts[0]), ["x-1", "r-1", "ad-1"]);
     assert_eq!(uids(&puts[1]), ["ad-1", "r-1"], "the detach of the profile");
     // the upgrade and its undo name one profile, and the profile that it replaces
-    let patches = stage.sent("PATCH", "/v1/spectroclusters/c-a/profiles");
+    let patches = stage.sent("PATCH", &cluster_profiles_route("c-a"));
     let replaces: Vec<(Vec<String>, &str)> = patches
         .iter()
         .map(|p| {
@@ -6240,8 +6240,8 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         "/v1/cloudconfigs/aws/cc-1",
         r#"{"spec":{"machinePoolConfig":[]}}"#,
     );
-    stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
-    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(&cluster_manifests_route("c-a"), "{}");
+    stage.route(&cluster_profiles_route("c-a"), "{}");
     stage.route(
         &profile_route("r-1"),
         r#"{"metadata":{"uid":"r-1"},"spec":{"published":{"packs":[{"name":"ubuntu-aws","tag":"24.04","type":"oci"}]}}}"#,
@@ -6314,7 +6314,7 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         .collect();
     assert_eq!(applies, ["move", "back"], "{}", stage.tofu_calls());
     assert_eq!(
-        stage.sent("PUT", "/v1/spectroclusters/c-a/profiles").len(),
+        stage.sent("PUT", &cluster_profiles_route("c-a")).len(),
         2,
         "cluster A takes the move, then the release back"
     );
@@ -9350,11 +9350,8 @@ fn image_digest_stage(list_images: &str) -> Stage {
         "/v1/spectroclusters/c-a/assets/kubeconfig",
         "apiVersion: v1 # fake-kubeconfig\n",
     );
-    stage.route(
-        "/v1/spectroclusters/c-a/profiles/packs/manifests",
-        r#"{"profiles":[]}"#,
-    );
-    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(&cluster_manifests_route("c-a"), r#"{"profiles":[]}"#);
+    stage.route(&cluster_profiles_route("c-a"), "{}");
     let manifests = r#"{"spec":{"packs":[{"spec":{"name":"strata-live-config","manifests":[
         {"name":"strata-live-config","uid":"m-1","content":"edited: \"no\"\n"}]}}]}}"#;
     stage.published("ad-1", ADDON_PACK, manifests);
