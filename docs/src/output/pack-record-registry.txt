@@ -1,0 +1,7 @@
+$ jq '.packs[] | select(.name == "csi-aws-ebs") | {key, version, registryUid, registryName}' aws-stack-1.1.18.json
+{
+  "key": "csi/csi-aws-ebs",
+  "version": "1.65.0",
+  "registryUid": "64ec000000000000000000a1",
+  "registryName": "Palette Registry"
+}

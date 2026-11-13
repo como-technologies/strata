@@ -21,6 +21,12 @@ Palette answered:
 `scope.json` keeps the project. A directory with no `scope.json` builds a
 snapshot at tenant scope.
 
+`registries.json` keeps the registry listing of Palette, when the record read
+it for the name of the registry of each pack. So `--from-raw` gives each pack
+the same `registryName`. A directory with no `registries.json` builds a record
+with no `registryName`, and the same root. See
+[The registry of each pack](profile-version.md#the-registry-of-each-pack).
+
 `notifications.json` keeps the notifications of a cluster. Palette serves the
 full values of a pack in each event, and these values can hold a password.
 Before the save, strata writes `********` in place of each `packValues`,

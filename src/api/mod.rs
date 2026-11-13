@@ -48,7 +48,7 @@ pub use palette::{
     cluster_summary_path, subject_path,
 };
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
-pub(crate) use raw::{recorded_packs, recorded_template};
+pub(crate) use raw::{recorded_packs, recorded_template, save_registries, saved_registries};
 pub use retry::{Retry, RetryPolicy};
 
 /// The method of a request that strata sends to Palette.

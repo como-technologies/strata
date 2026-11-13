@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
-use crate::json::{arr, flag, opt_text, str_at, value_or_null};
+use crate::json::{arr, flag, opt_text, str_at, take_items, value_or_null};
 use crate::snapshot::Template;
 
 /// The raw API responses that a profile snapshot is built from.
@@ -245,6 +245,33 @@ fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
         crate::file::write_file(&dir.join(name), &serde_json::to_string_pretty(v)?)?;
     }
     Ok(())
+}
+
+/// The file of a raw directory that holds the registries that the key can see, when the record
+/// read them for the name of the registry of each pack.
+const REGISTRIES_FILE: &str = "registries.json";
+
+/// Write `registries`, the items of `GET /v1/registries/metadata`, under `dir` as a listing, so
+/// that `--from-raw` gives each pack the name of its registry.
+///
+/// # Errors
+///
+/// [`Error::Io`] when strata cannot write the file, and [`Error::Serialize`] when it cannot write
+/// the document.
+pub(crate) fn save_registries(dir: &Path, registries: &[Value]) -> Result<()> {
+    let listing = serde_json::json!({ "items": registries });
+    write_json_files(dir, &[(REGISTRIES_FILE, &listing)])
+}
+
+/// The registries that [`save_registries`] wrote under `dir`. `None` for a directory with no such
+/// file: the record read no registry, or an older build saved the directory.
+///
+/// # Errors
+///
+/// [`Error::EmptyFile`], [`Error::FileNotJson`], and [`Error::Io`] for a file that strata cannot
+/// read.
+pub(crate) fn saved_registries(dir: &Path) -> Result<Option<Vec<Value>>> {
+    Ok(read_optional(dir, REGISTRIES_FILE)?.map(take_items))
 }
 
 impl RawProfile {

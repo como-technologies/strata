@@ -105,7 +105,7 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | Request | Read by | Gives |
 | --- | --- | --- |
 | `GET /v1/dashboard/projects/metadata` | `list projects`; the name in `PALETTE_PROJECT` or `--project-name`; the warning when `PALETTE_PROJECT_UID` and `PALETTE_PROJECT` name two projects; `list` and `consumers`, to name each project | Every project the key can see: name and uid. |
-| `GET /v1/registries/metadata` | `packs`, `behind`, a `pack:` ref, and `verify` on a pack record. `snapshot --from-candidate` when a layer names its registry by name, or when the listing does not have the version of a layer. `snapshot --from-candidate --validate`, for the registry of each pack in the body of the import validate route. | The registries the key can see: name and uid. Also `kind` and `isPrivate`: Palette does not sync a Helm registry that is private. |
+| `GET /v1/registries/metadata` | `packs`, `behind`, a `pack:` ref, and `verify` on a pack record. `snapshot --from-candidate` when a layer names its registry by name, or when the listing does not have the version of a layer. `snapshot --from-candidate --validate`, for the registry of each pack in the body of the import validate route. Each record that Palette answers, when a pack names a registry: `snapshot`, and each side of `compare` and `same-release`. `list --packs` and `list --pack`, when a listed pack names a registry. | The registries the key can see: name and uid. Also `kind` and `isPrivate`: Palette does not sync a Helm registry that is private. A record and a pack row of `list` take the name of a registry from it, because the pack ref gives the uid alone. A 404 or a 405 gives no name, and another error, such as a 403, stops them: see [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack). |
 | `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry. A version has the pack uid, the layer, the type, the default values, and the digest when the registry gives one. It also has the time when Palette first listed the version, and the architectures that it supports. |
 | `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | The tags of the pack in one registry, with its values and its layer. |
 | `GET /v1/packs/<name>/registries/<uid>?states=deprecated,disabled,deleted` | `packs` and `behind`, when the listing shows a `disabled` or a `deleted` version in the registry | The tags of the retired versions only. The request with no query does not include the disabled and the deleted versions. See [Pack states](../internals/palette/packs.md#pack-states). |
@@ -119,8 +119,8 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `appprofile`, `edgehost`, or `clustergroup`. For a cluster record, strata sends no `resourceKind`: the uid alone finds the entries of `spectrocluster` and of `virtualCluster`. Strata also reads the log of each profile of `profilesOverwritten`, as `clusterprofile`. A page has 100 entries, the most that Palette serves. After an error, such as a 403 or a 5xx, the verdict stays: `verify.whoError` gives the reason. |
 
 - `list --packs`, and `list --pack`, read `GET /v1/clusterprofiles/{uid}` for
-  each profile version. Without them, `list` reads the profile search for the
-  scope of each version.
+  each profile version, and the registry listing one time. Without them, `list`
+  reads the profile search for the scope of each version.
 - `list clusters --applied`, and `list --cluster`, read
   `GET /v1/spectroclusters/{uid}` for each cluster.
 - `consumers` reads each cluster that the profile lists, in its own project.
@@ -147,7 +147,8 @@ entries it got, until a page is short or `offset` reaches `listmeta.count`.
 `variablesUnavailable`. So `--from-raw` rebuilds the same record, with the same
 fetch time and the same flag. For a cluster, it also saves the notifications,
 with the values of each pack masked. It also saves the role bindings and the
-namespaces. See
+namespaces. When the record read the registry listing, it saves the listing as
+`registries.json`: see
 [The saved answers of Palette](../commands/snapshot/no-network.md#the-saved-answers-of-palette).
 
 ## The checks of `strata preflight`
