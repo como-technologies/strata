@@ -1,0 +1,2 @@
+$ strata behind payments.json --no-impact --json | jq -c '.pins[0].pinnedBy[0]'
+{"path":"payments.json","subject":"4 profiles on cluster payments","owner":"aws-stack@1.0.0 on cluster payments"}

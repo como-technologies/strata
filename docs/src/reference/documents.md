@@ -714,7 +714,11 @@ of the secret does not show, because the two sides hold the mask: see
   - `pinnedState`: `deprecated`, `disabled`, or `deleted`, as `state` of
     `strata-packs/1`. It is `absent` when the registry no longer lists the
     pinned version, or does not serve it in this tenant.
-  - `pinnedBy[]`: `path` and `subject` of each record that pins it.
+  - `pinnedBy[]`: `path` and `subject` of each record that pins it. `subject` is the
+    title of the record. A record of more than one profile, such as a cluster, also
+    gives `owner`. It is the title with only the profile that holds the pack, as
+    `aws-stack@1.0.0 on cluster payments`. It comes from the tier `running` of the
+    record, so it is absent when that tier does not name the pack.
   - `newer[]`: the newer versions that a person can move to, newest first, by
     the order of Semantic Versioning. A pre-release is a newer version of a pin that
     is not a pre-release only with `--pre-release`. Each has:
@@ -778,7 +782,9 @@ of the secret does not show, because the two sides hold the mask: see
   - `name`, `version`, and `uid`.
   - `scope`: `project`, `tenant`, or `system`, from the document of the version.
     Absent when strata could not read the document, or the document does not give it.
-  - `pinnedBy[]`: `path` and `subject` of each record that holds it.
+  - `pinnedBy[]`: `path` and `subject` of each record that holds it. `owner` is
+    there for a record of more than one profile: the title with only this profile
+    version.
   - `newer[]`: the newer published versions of the profile, newest first, by the
     order of the pins. Palette lists the versions of the same name in the scope
     of the version. Each has `version`, `uid`, and `created` on the newest one:
@@ -804,7 +810,10 @@ of the secret does not show, because the two sides hold the mask: see
     move.
 - `summary`: `pins`, `behind`, `floating`, `errors`, and `arrived`. Also
   `profiles`, `profilesBehind`, and `profileErrors`, the counts of `profiles[]`.
-  Each of these three is absent when it is 0.
+  Each of these three is absent when it is 0. `behind` counts each pin with a newer
+  version, also a pin in `errors` whose comparison failed. The first line of the
+  report counts such a pin as `not checked` alone: see
+  [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
 
 ## strata-set/1
 

@@ -27,6 +27,6 @@ pub(crate) fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
         &now_utc(),
         &progress,
     )?;
-    print!("{}", a.out.renderer().render_behind(&r)?);
+    print!("{}", a.out.renderer().render_behind(&r, a.behind_only)?);
     Ok(ExitCode::from(r.exit_code()))
 }

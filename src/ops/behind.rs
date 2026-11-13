@@ -206,17 +206,25 @@ pub struct PinnedBy {
     /// What the record holds, as its title: `aws-stack@1.1.1`, `aws-stack@1.1.1 on cluster
     /// payments`, or `4 profiles on cluster payments`.
     pub subject: String,
+    /// For a record of more than one profile, such as a cluster: the title with only the profile
+    /// that holds the pack, or that is the profile version, as
+    /// `monitoring@1.4.0 on cluster payments`. Absent for a record of one profile, and when the
+    /// record does not name the profile of the pack.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
 }
 
 impl PinnedBy {
-    /// Add the record at `path`, whose title is `subject`, to the records `by`. A record that `by`
-    /// names already is not added again.
-    fn add(by: &mut Vec<PinnedBy>, path: &Path, subject: &str) {
+    /// Add the record at `path`, whose title is `subject`, to the records `by`. `owner` is the
+    /// title of the record with only the profile that holds the entry. A record that `by` names
+    /// already is not added again.
+    fn add(by: &mut Vec<PinnedBy>, path: &Path, subject: &str, owner: Option<String>) {
         let path = path.display().to_string();
         if !by.iter().any(|b| b.path == path) {
             by.push(PinnedBy {
                 path,
                 subject: subject.to_string(),
+                owner,
             });
         }
     }
@@ -477,7 +485,8 @@ fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
             if pinned.holders.last() != Some(&loaded.len()) {
                 pinned.holders.push(loaded.len());
             }
-            PinnedBy::add(&mut pinned.pin.pinned_by, path, &subject);
+            let owner = snap.source.title_of_pack(&p.name);
+            PinnedBy::add(&mut pinned.pin.pinned_by, path, &subject, owner);
         }
         loaded.push(snap);
     }

@@ -4670,7 +4670,7 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
     // the sync of Bitnami stays in progress: the line names the sync, and the JSON carries it
     let steps = packs_stale(
         r#"{"status":"InProgress","lastSyncedTime":"2026-08-29T00:00:11.032Z","lastRunTime":"2026-10-05T18:04:27.776Z","isSyncSupported":true}"#,
-        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current; a sync of the \
+        "1 pin from 1 record: 0 behind, 1 current\n  [addon] nginx  25.1.5  Bitnami  current; a sync of the \
          registry is in progress since 2026-10-05T18:04:27.776Z, and the last complete sync of \
          the registry started 2026-08-29T00:00:11.032Z\n",
         r#"{"pins":[{"registrySync":{"status":"InProgress"}}]}"#,
@@ -4690,7 +4690,7 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
     // the last sync failed: the line names the last complete sync and the failure
     let steps = packs_stale(
         r#"{"status":"Failed","lastSyncedTime":"2025-10-16T00:00:11.742Z","message":"invalid helm registry http status 404","isSyncSupported":true}"#,
-        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current; the last \
+        "1 pin from 1 record: 0 behind, 1 current\n  [addon] nginx  25.1.5  Bitnami  current; the last \
          complete sync of the registry started 2025-10-16T00:00:11.742Z; the last sync of the \
          registry failed: invalid helm registry http status 404\n",
         r#"{"pins":[{"registrySync":{"status":"Failed"}}]}"#,
@@ -4700,7 +4700,7 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
     // the last sync completed: the pin has no note
     let steps = packs_stale(
         r#"{"status":"Completed","lastSyncedTime":"2026-10-05T00:00:14.200Z","lastRunTime":"2026-10-05T00:00:14.200Z","isSyncSupported":true}"#,
-        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current\n",
+        "1 pin from 1 record: 0 behind, 1 current\n  [addon] nginx  25.1.5  Bitnami  current\n",
         r#"{"pins":[{}]}"#,
     );
     passed(&steps, &["stale-current", "stale-no-note"]);
@@ -4709,7 +4709,7 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
     // a line with no note while the last sync did not complete fails the check
     let steps = packs_stale(
         r#"{"status":"Failed","lastSyncedTime":"2025-10-16T00:00:11.742Z","isSyncSupported":true}"#,
-        "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current\n",
+        "1 pin from 1 record: 0 behind, 1 current\n  [addon] nginx  25.1.5  Bitnami  current\n",
         r#"{"pins":[{}]}"#,
     );
     failed(&steps, &["stale-note"]);
