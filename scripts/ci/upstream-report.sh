@@ -44,10 +44,9 @@ quietly() {
 }
 
 # The jq functions that write a text into the markdown of an issue, as strata writes it. `html` is
-# `text::html_text`: each `&`, `<`, and `>` is an entity, so a text that strata quotes from an
-# answer shows each tag of HTML as text. `cell` is `text::markdown_cell`: also each `|` escaped,
-# and each line break as a space. `fence` is the fence of `text::code_block`: three backticks, or
-# more than the longest run of backticks in the text, so that no line of the text ends the block.
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`: it also escapes each `|`, and writes a line break as a space. `fence` is
+# the fence of `text::code_block`, so that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def cell: html | split("|") | join("\\|") | split("\n") | join(" ");
   def fence: ([scan("`+") | length] | max // 0) as $n | [range([$n + 1, 3] | max)] | map("`") | join("");'
@@ -247,8 +246,8 @@ while IFS= read -r group <&3; do
   body="$work/body.md"
   {
     echo "<!-- strata-behind: $name $uid -->"
-    # The pins hold texts of the answers. So each `<`, `>`, and `&` of the JSON is an escape of
-    # JSON: a text cannot end the comment, and the next run reads the same JSON.
+    # The pins hold texts of the answers. So the JSON writes each `<`, `>`, and `&` as an escape of
+    # JSON. Then a text cannot end the comment, and the next run reads the same JSON.
     echo "<!-- strata-behind-state: $(jq -r --arg at "$(jq -r .generatedAt "$work/report.json")" \
       '{generatedAt: $at, pins: [.pins[] | del(.arrived)]} | tojson
         | split("<") | join("\\u003c") | split(">") | join("\\u003e") | split("&") | join("\\u0026")' <<<"$group") -->"

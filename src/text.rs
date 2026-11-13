@@ -173,8 +173,8 @@ pub fn code_span(text: &str) -> String {
 ///
 /// The fence has three backticks, or more when the text holds a run of three or more. So a line of
 /// the text cannot end the block. The last line of the text gets a line break when it has none.
-/// Each block of a markdown output of strata and of `strata-preflight` is written here. So a text
-/// of an answer, such as the values of a pack, stays in its block.
+/// Strata and `strata-preflight` write each block of a markdown output here. So a text of an
+/// answer, such as the values of a pack, stays in its block.
 pub fn code_block(info: &str, text: &str) -> String {
     let fence = "`".repeat((longest_backticks(text) + 1).max(3));
     let end = if text.is_empty() || text.ends_with('\n') {
