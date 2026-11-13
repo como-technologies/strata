@@ -1,5 +1,5 @@
 $ strata behind releases/1.0.0/dev.json --no-impact
-5 pins from 1 record: 5 behind, 1 floating; 1 profile version: 1 behind
+5 pins (1 with a floating tag) from 1 record: 5 behind; 1 profile version: 1 behind
 ~ [addon] cert-manager    1.21.1  Public Repo  behind: 1.22.0
 ...
       no newer version of aws-stack@1.0.0 carries a newer cert-manager
