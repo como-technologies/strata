@@ -2,12 +2,12 @@ use super::*;
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
-use answer_tags::{ANSWER_TAGS, assert_only_strata_tags};
+use answer_tags::{ANSWER_TAGS, assert_only_strata_tags, outside_code_blocks};
 use std::time::Duration;
 use strata::api::Method;
 
-// The text of an answer with tags of HTML, and the check of the tags, in the file that the tests
-// of strata use. A test here uses only those two, so the other checks are dead code here.
+// The text of an answer with tags of HTML, and the checks of the tags, in the file that the tests
+// of strata use. A test here uses some of them, so the others are dead code here.
 #[allow(dead_code)]
 #[path = "../../../../tests/common/answer_tags.rs"]
 mod answer_tags;
@@ -1303,7 +1303,8 @@ fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
             outcome,
         ));
         assert!(md.contains(&line), "{line:?} in\n{md}");
-        assert_only_strata_tags(&md);
+        // a block of the report holds a command of the shell, and a code block shows it as text
+        assert_only_strata_tags(&outside_code_blocks(&md));
     }
 }
 
