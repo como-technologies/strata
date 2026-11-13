@@ -3199,8 +3199,8 @@ fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
 /// `strata report` adds two changes that break code outside the crate. One is a required method of
 /// the public trait `Renderer`. The other is a variant of `Error`, which is not
 /// `#[non_exhaustive]`. The section of release 0.27.0 sits above the one of release 0.26.0. The
-/// opening of the page links to all four sections, and the section gives the action for each
-/// change.
+/// opening of the page links to each section of a release, and the section gives the action for
+/// each change.
 #[test]
 fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_of_the_report() {
     let page = read(&docs().join("reference/compatibility.md"));

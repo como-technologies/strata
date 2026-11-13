@@ -418,8 +418,9 @@ pub enum Error {
         /// registry only while a profile pins the pack.
         unsynced: Vec<String>,
     },
-    /// A pack version is in more than one visible registry, and the ref named none.
-    #[error("pack '{name}' at version '{version}' is in several registries: {}; name one, as in pack:<registry>/{name}@{version}", registries.join(", "))]
+    /// A pack version is in more than one visible registry, and the ref named none. The message
+    /// points to `list --pack`, which names the registry that each profile version takes it from.
+    #[error("pack '{name}' at version '{version}' is in several registries: {}; name one, as in pack:<registry>/{name}@{version}. `strata list --pack {name}` names the registry of the pack in each profile version", registries.join(", "))]
     PackInSeveralRegistries {
         /// Pack name.
         name: String,

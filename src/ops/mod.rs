@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
+use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::candidate::pack::pack_snapshot;
 use crate::diff::{self, Diff, Side};
@@ -206,7 +207,8 @@ where
 {
     options.check(reference)?;
     let text = reference.to_string();
-    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, read);
+    let raw_dir = options.raw_dir.as_deref();
+    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, raw_dir, read);
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(names_a_set(reference)),
@@ -268,9 +270,11 @@ where
 }
 
 /// The record that `read` makes through the [`Palette`] that `connect` returns. A ref that a
-/// request answers connects first, and the record names the project of the client.
+/// request answers connects first, and the record names the project of the client and the
+/// registry of each pack. `raw_dir` is the directory of `--raw-dir`, which keeps the registries.
 fn read_live<A, F>(
     connect: F,
+    raw_dir: Option<&Path>,
     read: impl FnOnce(&Palette<A>) -> Result<Snapshot>,
 ) -> Result<Snapshot>
 where
@@ -278,7 +282,9 @@ where
     F: FnOnce() -> Result<Palette<A>>,
 {
     let palette = connect()?;
-    Ok(read(&palette)?.with_project(palette.project_uid()))
+    let mut snap = read(&palette)?;
+    source::name_registries(&mut Registries::new(&palette), &mut snap, raw_dir)?;
+    Ok(snap.with_project(palette.project_uid()))
 }
 
 /// A record of the published template of the profile `uid`, with what `options` add.
@@ -550,7 +556,7 @@ where
             uid,
             profile: None,
             pending,
-        } if other.source.is_profile_version() => read_live(connect, |palette| {
+        } if other.source.is_profile_version() => read_live(connect, None, |palette| {
             cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
         }),
         _ => snapshot_for(

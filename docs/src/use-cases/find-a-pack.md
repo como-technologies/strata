@@ -29,6 +29,10 @@ finds `cni-cilium-oss`. Each version shows its consumers and its packs, so the
 listing answers "which versions" and "how urgent" together. Here 1.0.0 carries
 the old Cilium and no cluster runs it.
 
+Each pack row ends with the registry that the version takes the pack from. A
+fault can be in the build of one registry alone: see
+[The registry of each pack](../commands/list.md#the-registry-of-each-pack).
+
 ## 2. Search every project
 
 ```text

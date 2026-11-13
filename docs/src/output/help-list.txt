@@ -9,7 +9,7 @@ Arguments:
 Options:
       --project <PROJECT>            Use this project, by uid; '' is tenant scope
       --project-name <PROJECT_NAME>  The same, by project name
-      --packs                        Also read each version for its packs, its consumers, and whether it is published
+      --packs                        Also read each version for its packs and their registries, its consumers, and whether it is published
       --pack <TEXT>                  Keep the versions with a pack whose name holds TEXT; sets --packs
       --applied                      Also read each cluster for the profiles it applies
       --tag <KEY=VALUE>              Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label. Palette searches every project the key can read

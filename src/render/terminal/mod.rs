@@ -6,9 +6,9 @@ use super::consumers::{
     consumers_sentence, edge_hosts_line, second_reading_line,
 };
 use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_heading, side_projects, version_note, virtual_line,
-    virtual_note,
+    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
+    pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
+    virtual_line, virtual_note,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
@@ -460,7 +460,12 @@ fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedPro
             .packs
             .iter()
             .flatten()
-            .map(|pk| vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)])
+            .map(|pk| {
+                let mut row = vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)];
+                // a pack with no registry ends at its version, with no space after it
+                row.extend(pack_registry(pk).map(str::to_string));
+                row
+            })
             .collect();
         let pack_widths = column_widths(&packs);
         for row in &packs {

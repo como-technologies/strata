@@ -12,9 +12,9 @@ use super::consumers::{
     consumers_sentence, edge_hosts_line, second_reading_line,
 };
 use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_heading, side_projects, version_note, virtual_group,
-    virtual_line,
+    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
+    pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
+    virtual_group, virtual_line,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
@@ -564,7 +564,12 @@ fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
                 .packs
                 .iter()
                 .flatten()
-                .map(|pk| format!("{}/{} {}", pk.layer, pk.name, pack_version(pk)))
+                .map(|pk| {
+                    let registry = pack_registry(pk)
+                        .map(|r| format!(" in {r}"))
+                        .unwrap_or_default();
+                    format!("{}/{} {}{registry}", pk.layer, pk.name, pack_version(pk))
+                })
                 .collect::<Vec<_>>()
                 .join("<br>"),
         };

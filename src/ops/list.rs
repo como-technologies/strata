@@ -8,23 +8,24 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{
-    PROFILE_TEMPLATE, Palette, PaletteApi, named_entries, profile_versions, recorded_packs,
-    recorded_template,
-};
+use crate::api::{Palette, PaletteApi, named_entries};
 use crate::closed_set::Open;
-use crate::error::{ErrorDocument, Result, served};
+use crate::error::{ErrorDocument, Result};
 use crate::model::cloud::Cloud;
 use crate::model::profile_type::ProfileType;
 use crate::model::scope::ProfileScope;
-use crate::reference::{Ref, name_version, version};
+use crate::reference::Ref;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
-use crate::json::{first_nonempty, items, opt_flag, opt_set, str_at, text, text_map};
+use crate::json::{first_nonempty, items, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
+
+mod profiles;
+
+use profiles::list_profiles;
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -90,6 +91,7 @@ impl ListOptions {
 
 /// One pack of a listed profile.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ListedPack {
     /// Palette's layer name, for example `cni`.
     pub layer: String,
@@ -99,6 +101,14 @@ pub struct ListedPack {
     pub tag: String,
     /// Pack version.
     pub version: String,
+    /// The uid of the registry that the profile takes the pack from. Empty for a pack with no
+    /// registry.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub registry_uid: String,
+    /// The name of that registry, from the registry listing. Empty when the key cannot see the
+    /// registry.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub registry: String,
 }
 
 /// One profile version.
@@ -303,7 +313,8 @@ pub struct Listing {
     /// With `--cluster`: the text the cluster names and uids were matched against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster: Option<String>,
-    /// Profile versions, by name and then by version, in the order of [`version::compare`].
+    /// Profile versions, by name and then by version, in the order of
+    /// [`version::compare`](crate::reference::version::compare).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<ListedProfile>>,
     /// Clusters, by name.
@@ -508,111 +519,6 @@ fn scope_name<A: PaletteApi>(
         .find(|p| p.uid == project_uid)
         .map(|p| p.name.clone())
         .unwrap_or_default()
-}
-
-fn list_profiles<A: PaletteApi>(
-    palette: &Palette<A>,
-    options: &ListOptions,
-    progress: &Progress,
-) -> Result<Vec<ListedProfile>> {
-    let mut profiles: Vec<ListedProfile> = profile_versions(&palette.profile_listing()?)
-        .map(|v| ListedProfile {
-            reference: name_version(&v.name, &v.version),
-            uid: v.uid,
-            cloud_type: v.cloud_type,
-            name: v.name,
-            version: v.version,
-            scope: None,
-            profile_type: None,
-            consumers: None,
-            consumers_by_kind: None,
-            packs: None,
-            published: None,
-            error: None,
-        })
-        .collect();
-    profiles.sort_by(|a, b| {
-        a.name
-            .cmp(&b.name)
-            .then_with(|| version::compare(&a.version, &b.version))
-            .then_with(|| a.uid.cmp(&b.uid))
-    });
-    if !options.packs && options.pack.is_none() {
-        scopes_from_search(&mut profiles, palette, progress)?;
-        return Ok(profiles);
-    }
-
-    for p in &mut profiles {
-        progress.note(&format!("reading profile {}", p.reference));
-        let doc = match palette.profile_document(&p.uid) {
-            Ok(doc) => doc,
-            Err(e) => {
-                p.error = Some(e.to_json());
-                continue;
-            }
-        };
-        p.scope = ProfileScope::of_document(&doc);
-        // the template that a record of the version reads
-        let template = doc.pointer(&format!("/spec/{}", recorded_template(&doc)));
-        let packs = recorded_packs(&doc)
-            .iter()
-            .map(|pk| ListedPack {
-                layer: text(pk, "/layer"),
-                name: text(pk, "/name"),
-                tag: text(pk, "/tag"),
-                version: text(pk, "/version"),
-            })
-            .collect();
-        p.profile_type = template.and_then(|t| opt_set(t, "/type", PROFILE_TEMPLATE));
-        let consumers = ConsumerCounts::of(&doc);
-        p.consumers = Some(consumers.count());
-        p.consumers_by_kind = Some(consumers);
-        p.packs = Some(packs);
-        p.published = opt_flag(&doc, "/status/isPublished");
-    }
-    if let Some(needle) = &options.pack {
-        let needle = needle.to_lowercase();
-        // A profile that could not be read cannot be ruled out, so it stays with its error.
-        profiles.retain(|p| match &p.packs {
-            Some(packs) => packs
-                .iter()
-                .any(|pk| pk.name.to_lowercase().contains(&needle)),
-            None => p.error.is_some(),
-        });
-    }
-    Ok(profiles)
-}
-
-/// Give each version its scope from the profile search.
-///
-/// The listing names each version with no scope. So strata asks the search for the versions of
-/// each other scope that the listing holds. In a project, these are the tenant and the system. At
-/// tenant scope, it is the system. Each other version is of the scope of the listing. An empty
-/// listing needs no search.
-///
-/// A Palette with no profile search answers HTTP 404 or 405. The scopes then stay unknown,
-/// because the listing is still the answer. Each other error returns.
-fn scopes_from_search<A: PaletteApi>(
-    profiles: &mut [ListedProfile],
-    palette: &Palette<A>,
-    progress: &Progress,
-) -> Result<()> {
-    if profiles.is_empty() {
-        return Ok(());
-    }
-    let own = ProfileScope::of_listing(palette.project_uid().unwrap_or(""));
-    let mut scopes: BTreeMap<String, ProfileScope> = BTreeMap::new();
-    for &scope in own.others_listed() {
-        progress.note(&format!("searching the {scope} profiles"));
-        let Some(uids) = served(palette.profile_uids_in_scope(scope))? else {
-            return Ok(());
-        };
-        scopes.extend(uids.into_iter().map(|uid| (uid, scope)));
-    }
-    for p in profiles {
-        p.scope = Some(scopes.get(&p.uid).copied().unwrap_or(own));
-    }
-    Ok(())
 }
 
 /// The project listing of each scope that a command reads, each read one time.

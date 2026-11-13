@@ -1,3 +1,3 @@
 $ strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0
 strata: looking up project dev
-strata: pack 'csi-aws-ebs' at version '1.65.0' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.65.0
+strata: pack 'csi-aws-ebs' at version '1.65.0' is in several registries: Palette Registry, Public Repo; name one, as in pack:<registry>/csi-aws-ebs@1.65.0. `strata list --pack csi-aws-ebs` names the registry of the pack in each profile version

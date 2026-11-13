@@ -7,7 +7,7 @@ use super::ids::{
     DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::{Edit, profile_exists_message};
+use crate::tenant::{Edit, TENANT, profile_exists_message};
 use serde_json::json;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROFILE_EXISTS_CODE;
@@ -31,6 +31,10 @@ pub(super) fn run(r: &mut Runner) {
 fn list(r: &mut Runner) {
     r.chapter("list", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    // Palette lists the registries in each scope, and a pack row names its registry from them
+    for scope in [DEV, PROD, TENANT] {
+        r.tenant(|t| t.registries(scope));
+    }
     r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -198,6 +202,7 @@ fn scope(r: &mut Runner) {
     // a profile of the tenant with the name and the version of a profile of the project
     r.chapter("scope", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.tenant(|t| t.registries(DEV));
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
     r.tenant_profile(A111_TENANT, "1.1.1", "aws-stack@1.1.1", &[]);

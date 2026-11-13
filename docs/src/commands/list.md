@@ -215,6 +215,29 @@ cannot tell if it carries the pack.
 [Find the profiles that carry a pack](../use-cases/find-a-pack.md) searches
 every project.
 
+## The registry of each pack
+
+Each pack row ends with the registry that the profile version takes the pack
+from. Two registries can have the same pack version, and a profile pins one of
+them. Here `aws-stack@1.1.18` takes `csi-aws-ebs` 1.65.0 from `Palette
+Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`:
+
+```text
+{{#include ../output/pack-which-registry.txt}}
+```
+
+The pack ref of a profile names its registry by the uid alone. So strata reads
+the names from the registry listing of Palette, with one more request for the
+command. A registry that the key cannot see shows its uid. A `pack:` ref takes
+the uid too: see [Refs](../reference/refs.md). A pack with no registry, such as
+a manifest pack, ends at its version. The JSON gives `registryUid` and
+`registry` on each pack. With `--format markdown`, the pack ends with `in`
+and the registry.
+
+When the registry listing answers HTTP 404 or 405, strata reads it as no
+listing, and each pack row shows the uid. Each other error, such as HTTP 403,
+stops `list` with exit `2` and that error.
+
 ## A version that nobody published
 
 A version that nobody published has its packs in its draft. `--packs` and
@@ -265,7 +288,8 @@ consumers. It also searches the edge hosts:
 {{#include ../output/list-consumers-same.txt}}
 ```
 
-`list --packs` costs one request for each version. It reads no edge host, and
+`list --packs` costs one request for each version, and one request for the
+registry listing. It reads no edge host, and
 it does no second reading. So an edge host that the version is bound to, and a
 cluster that the list of Palette omits, are not in the count.
 `strata consumers` finds them: see [Edge hosts](./consumers.md#edge-hosts) and

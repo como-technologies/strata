@@ -26,6 +26,7 @@ mod observer_deploy;
 mod observer_up;
 mod presets;
 mod projects;
+mod registry_names;
 mod renumber;
 mod report;
 mod report_deploy;

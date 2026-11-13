@@ -69,6 +69,25 @@ Exit `2`. Registries hold copies of the same pack, so a ref that names none is
 an error that lists them. `pack:<registry>/<name>@<version>` picks one, by the
 registry's name or its uid.
 
+To compare the pack of a profile, name the registry that the profile takes it
+from. The error names the command that shows it:
+
+```text
+{{#include ../output/pack-which-registry.txt}}
+```
+
+Each pack row ends with its registry. `aws-stack@1.1.18` takes `csi-aws-ebs`
+from `Palette Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`. A
+record of the version names the registry too, beside its uid:
+
+```text
+{{#include ../output/pack-record-registry.txt}}
+```
+
+So the ref of the pack of `aws-stack@1.1.18` is
+`pack:Palette Registry/csi-aws-ebs@1.65.0`. See
+[The registry of each pack](../commands/list.md#the-registry-of-each-pack).
+
 Comparing the two copies says whether they are the same build:
 
 ```text

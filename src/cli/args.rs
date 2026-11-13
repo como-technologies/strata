@@ -501,7 +501,8 @@ pub(crate) struct ListArgs {
     pub(crate) kinds: Vec<ListKind>,
     #[command(flatten)]
     pub(crate) project: ProjectArgs,
-    /// Also read each version for its packs, its consumers, and whether it is published
+    /// Also read each version for its packs and their registries, its consumers, and whether it is
+    /// published
     #[arg(long)]
     pub(crate) packs: bool,
     /// Keep the versions with a pack whose name holds TEXT; sets --packs

@@ -12,6 +12,7 @@ use super::cluster::{
 use super::pack::Pack;
 use super::variable::{Variable, hash_of};
 use super::{Consumers, SNAPSHOT_SCHEMA, Snapshot, Source, SubjectKind, Template, Tool, macros_of};
+use crate::api::registry::registry_name;
 use crate::api::{CLUSTER_TEMPLATE, PROFILE_TEMPLATE, RawCluster, RawProfile};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
@@ -237,6 +238,25 @@ impl Snapshot {
     pub fn with_project(mut self, project_uid: Option<&str>) -> Snapshot {
         self.source.project_uid = project_uid.unwrap_or("").to_string();
         self
+    }
+
+    /// True when a pack names a registry, and the record does not name that registry yet.
+    pub(crate) fn has_unnamed_registry(&self) -> bool {
+        self.packs
+            .iter()
+            .any(|p| !p.registry_uid.is_empty() && p.registry_name.is_empty())
+    }
+
+    /// Give each pack with no registry name the name of its registry in `registries`, the items
+    /// of `GET /v1/registries/metadata`. A registry that the key cannot see gets no name.
+    pub(crate) fn name_registries(&mut self, registries: &[Value]) {
+        for p in &mut self.packs {
+            if p.registry_name.is_empty()
+                && let Some(name) = registry_name(registries, &p.registry_uid)
+            {
+                p.registry_name = name;
+            }
+        }
     }
 
     /// Build a snapshot of what a cluster runs from its raw API responses. Each applied profile is
