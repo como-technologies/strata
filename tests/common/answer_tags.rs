@@ -61,3 +61,45 @@ pub fn outside_code_blocks(markdown: &str) -> String {
     }
     outside
 }
+
+/// The text of `markdown` outside its code spans, as the markdown of GitHub reads them.
+///
+/// A run of backticks opens a span, and the next run of the same length closes it. A run that no
+/// run closes is text. `code_span.rs` reads a pair of single backticks, as the book writes a span.
+/// So it cannot read the longer fence of a value with a backtick.
+pub fn outside_code_spans(markdown: &str) -> String {
+    let mut outside = String::new();
+    let mut rest = markdown;
+    while let Some(start) = rest.find('`') {
+        outside.push_str(&rest[..start]);
+        let run = backtick_run(&rest[start..]);
+        let after = &rest[start + run..];
+        match closing_run(after, run) {
+            Some(end) => rest = &after[end + run..],
+            None => {
+                outside.push_str(&rest[start..start + run]);
+                rest = after;
+            }
+        }
+    }
+    outside.push_str(rest);
+    outside
+}
+
+/// The number of backticks at the start of `text`.
+fn backtick_run(text: &str) -> usize {
+    text.len() - text.trim_start_matches('`').len()
+}
+
+/// The position in `text` of its first run of exactly `n` backticks.
+fn closing_run(text: &str, n: usize) -> Option<usize> {
+    let mut at = 0;
+    while let Some(i) = text[at..].find('`') {
+        let run = backtick_run(&text[at + i..]);
+        if run == n {
+            return Some(at + i);
+        }
+        at += i + run;
+    }
+    None
+}

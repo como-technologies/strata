@@ -45,11 +45,22 @@ quietly() {
 
 # The jq functions that write a text into the markdown of an issue, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`: it also escapes each `|`, and writes a line break as a space. `fence` is
-# the fence of `text::code_block`, so that no line of the text ends the block.
+# `text::markdown_cell`: it also escapes each `|`, and writes a line break as a space. `span` is
+# `text::code_span`: its fence is longer than each run of backticks in the text. `code` is
+# `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of `text::code_block`, so
+# that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
-  def cell: html | split("|") | join("\\|") | split("\n") | join(" ");
-  def fence: ([scan("`+") | length] | max // 0) as $n | [range([$n + 1, 3] | max)] | map("`") | join("");'
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def cell: html | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
 
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
@@ -194,9 +205,13 @@ if ! jq -es '.[0].schema == "strata-behind/1"' "$work/report.json" > /dev/null 2
 fi
 [ -z "$save" ] || cp "$work/report.json" "$save"
 
+# marker_of PACK REGISTRY -> the first line of the issue of the pack. The pack name comes from the
+# answer of Palette, so each `&`, `<`, and `>` is an entity, and a `-->` cannot end the comment.
+marker_of() { printf '<!-- strata-behind: %s %s -->\n' "$(md html "$1")" "$(md html "$2")"; }
+
 # issue_for PACK REGISTRY -> the lowest open issue number whose body starts with their marker
 issue_for() {
-  jq -r --arg m "<!-- strata-behind: $1 $2 -->" \
+  jq -r --arg m "$(marker_of "$1" "$2")" \
     '[.[] | select(((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
@@ -219,7 +234,9 @@ while IFS= read -r group <&3; do
   uid=$(jq -r .registryUid <<<"$group")
   registry=$(jq -r 'if .registry == "" then .registryUid else .registry end' <<<"$group")
   # the name of the registry comes from the answer of Palette
-  registry_md=$(jq -rn --arg r "$registry" "$markdown_jq"' $r | cell')
+  registry_md=$(md cell "$registry")
+  # a code span: a backtick in the name cannot end the span
+  name_md=$(md span "$name")
   what="$name in $registry"
   if jq -e '.pins | any(.error)' <<<"$group" > /dev/null && ! jq -e '.pins | any(.behind)' <<<"$group" > /dev/null; then
     errors=$((errors + 1))
@@ -234,7 +251,7 @@ while IFS= read -r group <&3; do
     fi
     number=$(issue_for "$name" "$uid")
     [ -n "$number" ] || continue
-    host close_issue "$number" "Each pin of \`$name\` in $registry_md is at the newest version it can move to (checked $now)."
+    host close_issue "$number" "Each pin of $name_md in $registry_md is at the newest version it can move to (checked $now)."
     actions+=("closed #$number for $what")
     continue
   fi
@@ -245,13 +262,13 @@ while IFS= read -r group <&3; do
   title="strata behind: $name $pinned behind $newest in $registry"
   body="$work/body.md"
   {
-    echo "<!-- strata-behind: $name $uid -->"
+    marker_of "$name" "$uid"
     # The pins hold texts of the answers. So the JSON writes each `<`, `>`, and `&` as an escape of
     # JSON. Then a text cannot end the comment, and the next run reads the same JSON.
     echo "<!-- strata-behind-state: $(jq -r --arg at "$(jq -r .generatedAt "$work/report.json")" \
       '{generatedAt: $at, pins: [.pins[] | del(.arrived)]} | tojson
         | split("<") | join("\\u003c") | split(">") | join("\\u003e") | split("&") | join("\\u0026")' <<<"$group") -->"
-    echo "\`strata behind\` finds \`$name\` behind in $registry_md, checked $now."
+    echo "\`strata behind\` finds $name_md behind in $registry_md, checked $now."
     echo
     echo "| pinned | newer | bump | arrived | pinned by |"
     echo "|---|---|---|---|---|"
@@ -270,13 +287,13 @@ while IFS= read -r group <&3; do
           | "\(.pack) \(.from) -> \(.to) skips a minor version: Palette refuses the update with \(.code); move to \(.nextStep // "a version of \(.nextMinor)") first");
       def bump_cell:
         (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines]) | map(cell) | join("<br>");
-      .pins[] | "| `\(.version)`\(if .floating then " (floating tag `\(.tag)`)" else "" end) | \(
+      .pins[] | "| \(.version | code)\(if .floating then " (floating tag \(.tag | code))" else "" end) | \(
         if .behind then [.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
           | if length > 0 then " (\(join(", ")))" else "" end)] | join(", ") | cell
         elif .error then "not checked: \(.error.message)" | cell else "current" end) | \(
         if .bump then (.bump | bump_cell) else "-" end) | \(
         if .arrived == null then "-" elif (.arrived | length) == 0 then "none" else (.arrived | join(", ") | cell) end) | \(
-        [.pinnedBy[] | "`\(.path)` (\(.subject | cell))"] | join("<br>")) |"' <<<"$group"
+        [.pinnedBy[] | "\(.path | code) (\(.subject | cell))"] | join("<br>")) |"' <<<"$group"
     echo
     if jq -e '.pins | any(.arrived != null)' <<<"$group" > /dev/null; then
       echo "**arrived** names the versions that arrived since the last update of this issue."

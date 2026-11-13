@@ -25,6 +25,12 @@ record as the heading of `compare` does. So does the comment of its close. The
 script reads these words from `records[].subject` of the summary. So the issue
 of a cluster that runs four profiles names `4 profiles on cluster <name>`.
 
+The marker writes each `&`, `<`, and `>` of the path as an entity. So a `-->`
+in a path cannot end the comment. Each body and each comment shows the names
+and the versions of the record as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. The
+path is in a code span, with a fence longer than each run of backticks in it.
+
 ## Try it first
 
 `--dry-run` prints each issue body and the action, and calls no host:
