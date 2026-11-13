@@ -12,7 +12,7 @@ error kinds do not. See [Versions and compatibility](../reference/compatibility.
 | `1` | Different, drifted, unverified, behind, or in use. |
 | `2` | Strata could not answer. Treat it as a failed job, never as "no change". |
 
-`strata preflight` follows the same rule: `0` when each counted check passed,
+`strata preflight` follows the same rule: `0` when no counted check failed,
 `1` when one failed or the readiness is under `--ready`, `2` when it could not
 answer. See [Preflight in a pipeline](./preflight.md).
 

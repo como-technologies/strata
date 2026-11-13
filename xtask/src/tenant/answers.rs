@@ -4,7 +4,9 @@ use serde_json::{Value, json};
 use strata::api::codes::Denial;
 
 use super::Tenant;
-use super::routes::{CLUSTERS, PROFILES, cluster_route, profile_route, repave_route};
+use super::routes::{
+    CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
+};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -180,10 +182,24 @@ impl Tenant {
         self.deny(project, path, Denial::Object, &message);
     }
 
-    /// Make Palette refuse `GET path` in `project` with `denial`, as it refuses a key whose roles do
+    /// Make Palette refuse the validate route of the create of `cloud` in `project`, as it does
+    /// for a key whose role does not give `cluster.create`. The route needs it, also for a body
+    /// that creates nothing. Palette answers HTTP 403 with the code `AccessDenied`, and the
+    /// message names the permission and its scopes.
+    pub fn deny_create(&self, project: &str, cloud: &str) {
+        let message = access_denied_message("cluster.create", "project or tenant or system");
+        self.deny(
+            project,
+            &cluster_validate_route(cloud),
+            Denial::Route,
+            &message,
+        );
+    }
+
+    /// Make Palette refuse `path` in `project` with `denial`, as it refuses a key whose roles do
     /// not give the access. The answer has the status of the denial, its code, and `message`.
     ///
-    /// After the call, the route gives no document.
+    /// After the call, the route gives no document, so each request gets the refusal.
     pub fn deny(&self, project: &str, path: &str, denial: Denial, message: &str) {
         let file = self.doc(project, path);
         if file.is_file() {

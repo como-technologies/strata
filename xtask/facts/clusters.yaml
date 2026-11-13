@@ -1211,6 +1211,19 @@ facts:
     code:
       - src/snapshot/cluster.rs
 
+  - id: cluster-profile-order-append
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].uid
+    stand_in: []
+    live: []
+    unchecked: The code of Palette shows it. No script adds a profile, or a new version of the infrastructure profile, to a cluster and reads the order.
+    pages:
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    rules:
+      - position-zero
+
   - id: profile-pack-order
     kind: behavior
     reads:

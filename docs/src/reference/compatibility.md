@@ -384,6 +384,16 @@ record of 0.33.0 and before has no `registryName`, and strata reads it as before
 record again to name the registries: see
 [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
 
+One value changes after 0.33.0 with no new id. In `strata-preflight/1`, `sections[].failed`
+counts the counted failures alone, as `summary.failed` does. Before, it counted each failure but
+a note. A new id breaks each reader of the document, and the sum of `failed`, `probeFailed`, and
+`warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
+action.
+
+After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
+`sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
+reader that ignores unknown fields reads them.
+
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
@@ -1104,6 +1114,55 @@ field, a value, an input, or an option is in the sections above.
   prints or keeps the error. Palette quotes a key that it does not know three
   times. See
   [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
+- **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
+  [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
+  - Only a counted check can fail a run: a preflight check of severity `fail`, or a probe with
+    `--strict`.
+  - For such a run, the last line was `OK: each counted check passed`. It is
+    `NOT COUNTED: no check counted on aws` now.
+  - A run in which no check ran gave `OK: no check ran`. It gives
+    `NOT COUNTED: no check ran on aws` now.
+  - A watch of a deleted cluster with no counted check gave
+    `OK: the cluster is gone; no counted check failed`. It gives
+    `NOT COUNTED: the cluster is gone; no check counted on aws` now.
+  - The exit code does not change: it is `0`. The markdown report starts with
+    `**NOT COUNTED: ...**`, and the HTML page shows the verdict in the color of a warning.
+  - `legend.exit` of `strata-preflight/1` has a new text for `0`. `summary.counted` gives the
+    number of counted checks that ran.
+  - A script that reads a line that starts with `OK:` must also read `NOT COUNTED:`, or read
+    `summary.exitCode`.
+- **The scorecard counts a warning and a failed probe apart.** Before, its `fail` held each
+  failure but a note, and the summary did not.
+  - `sections[].failed` counts the counted failures alone, as `summary.failed` does.
+    `sections[].probeFailed` and `sections[].warned` are new. A script that reads the old count
+    adds the three.
+  - The table of the terminal has the new columns `probe fail` and `warn`. The tables of the
+    markdown and the HTML have `probes failed` and `warnings`.
+  - The tile `failed` of the HTML page counted the failed probes too. It counts the counted
+    failures, and the tile `probes failed` is new. The summary of the markdown names the
+    warnings.
+- **The readiness names the tiers that ran.** The number depends on `--tier`, so each form of the
+  report writes the tiers beside it.
+  - The summary line was `readiness 59%: 19 of 32 checks passed`. It is
+    `readiness 59% (tiers static, palette, cloud): 19 of 32 checks passed` now.
+  - The markdown was `readiness **20%** (4 of 20 checks passed).` It is
+    `readiness **20%** (tiers static, offline): 4 of 20 checks passed.` now.
+  - The verdict under `--ready` is `NOT READY: readiness 50% (tiers static) is under 80%`. The
+    tile of the HTML page is `readiness (tiers static)`.
+- **A request to Palette that failed shows once, with the checks that it stopped.** See
+  [The key of the live tier](../commands/preflight/tiers.md#the-key-of-the-live-tier).
+  - The row of each check that a request stopped shows
+    `stopped by a request that failed: <request>`. It shows no message, no `ran:` line, and no
+    reproduce line.
+  - The new block `Requests that failed` shows the error, `stopped <count> checks: <ids>`, and
+    the reproduce lines that the checks share. The markdown has the section
+    `### Requests that failed`, and the HTML page has it before the results.
+  - `checks[].messages` of the JSON keep the error of each check, and `checks[].failedRequest`
+    names the request.
+- **A request that Palette refused with HTTP 401 or 403 goes one time.** The next check that
+  sends it gets the same error. Before, each check asked again.
+- **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
+  messages. They name the fault, each effect, and the way forward. Before, it gave one message.
 
 ### For a user of the CI drop-ins
 
@@ -1130,6 +1189,17 @@ field, a value, an input, or an option is in the sections above.
 - `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
   accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
   one of them.
+
+### For a user of the library of strata-preflight
+
+- `report::CheckResult` has the new field `failed_request: Option<probe::Call>`. A literal must
+  set it. `report::assemble` sets it from `probe::Ran::failed_request`.
+- `report::SectionScore` has the new fields `probe_failed: u32` and `warned: u32`. A literal must
+  set them. `failed` counts the counted failures alone.
+- `report::Summary` has the new field `counted: u32`. A literal must set it.
+  `Summary::not_counted` is true when the verdict is `NOT COUNTED`.
+- `probe::LiveBackend` keeps a 401 and a 403 for the run, and gives the same error to each check
+  that sends the request.
 
 ## Release 0.33.0: changes that need action
 

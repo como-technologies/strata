@@ -35,6 +35,17 @@ and `FAIL` are preflight checks: the runs prove them. A failed probe does not
 change the exit code; a failed preflight check makes it `1`. See
 [Two levels: probe and preflight check](../../internals/preflight.md#two-levels-probe-and-preflight-check).
 
+Only a counted check can fail the run: a preflight check of severity `fail`, or
+a probe with `--strict`. When no counted check ran, the last line starts with
+`NOT COUNTED`, and not with `OK`. It names the engine, and the exit is `0`.
+Here each rule that ran is a probe. The last line of the scorecard says how many
+rules of the engine are preflight checks. `--strict` counts each probe.
+
+The scorecard counts each result in one column, as the summary line does.
+`fail` is a counted failure, `probe fail` is a probe that failed, and `warn` is
+a warning. A warning is no failure. The readiness names the tiers that ran,
+because another `--tier` gives another number for one entity.
+
 ## The live tier: the answers of Palette
 
 With a key, strata records each profile of the entity, reads the cloud account
@@ -50,6 +61,30 @@ create through the provider or the API goes to the create route, so the same
 fault shows after a full apply. See
 [The validate routes](../../internals/palette/validate-routes.md).
 
+### The key of the live tier
+
+The live tier reads Palette, and the validate route of the create needs
+`cluster.create`. That permission is broader than a check: a viewer role does
+not give it. So a read-only key cannot run the rules of that route. [The role that
+a key needs](../../internals/palette/clusters.md#the-role-that-a-key-needs)
+gives the permission of each request of the tier, and the roles that hold it.
+
+Here the role of the key does not give `cluster.create`. Palette refuses the
+route with HTTP 403, and three rules send it:
+
+```text
+{{#include ../../output/preflight-denied.txt}}
+```
+
+Strata sends the request one time, because the refusal stays for the run. The
+report shows the error once, under `Requests that failed`, with the rules that
+it stopped. The error names the permission that the role does not give. An
+earlier answer of the run proved the key, so the error does not name the key.
+
+Each of these rules gives `ERROR`, and the exit is `2`. To run them,
+give the key a role with `cluster.create`, such as Cluster Admin. Or give
+`--tier static` to the job of a read-only key.
+
 Each `reproduce:` line that reads Palette starts with the same `curl`. The key
 goes to `curl` in a config that `printf` writes into `<( )`, so no argument of a
 process holds it. A key with a line break stops the line before `curl`. Run the
@@ -59,9 +94,13 @@ line in bash or zsh. See
 A run sends each request one time. The backend keeps the answer of each request,
 by its method, its path, and its body. A 4xx is an answer, and the backend keeps
 it. A 401, a 403, and a 429 are errors of the key or of the rate, so they are not
-answers. A 5xx is an answer only for a check that names its code in
-[`refusal_codes`](../../reference/preflight-rules.md#a-refusal-at-a-5xx). An error such as a 503 is
-not an answer, and the next rule asks again.
+answers.
+
+A run changes no role of the key, so the backend keeps a 401 and a 403
+as errors: the next rule gets the same error with no request. A 5xx is an
+answer only for a check that names its code in
+[`refusal_codes`](../../reference/preflight-rules.md#a-refusal-at-a-5xx). An
+error such as a 503 is not an answer, and the next rule asks again.
 
 So `palette-validate`, `worker-cpu-floor`, `pack-dependency`, and
 `ecr-oci-images` send the validate route one time. The six rules that read an

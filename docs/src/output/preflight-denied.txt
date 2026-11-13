@@ -1,0 +1,32 @@
+$ strata preflight cluster.json --cloud aws --tier palette --no-exec --quiet --rule palette-validate --rule worker-cpu-floor --rule pack-dependency
+strata-preflight: aws cluster payments (cluster.json), Palette release not given, tiers palette
+
+Quotas and limits
+  ERROR         worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 11/11 (76%), clean 13/13 (79%)
+                stopped by a request that failed: POST /v1/spectroclusters/aws/validate
+
+Images and registries
+  ERROR         pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs, clean 13/13 (79%)
+                stopped by a request that failed: POST /v1/spectroclusters/aws/validate
+
+The Palette platform
+  ERROR         palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 11/11 (76%), clean 13/13 (79%)
+                stopped by a request that failed: POST /v1/spectroclusters/aws/validate
+
+Requests that failed
+  ERROR         POST /v1/spectroclusters/aws/validate
+                POST /v1/spectroclusters/aws/validate failed with HTTP 403: {"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system"}; the role of the key does not give the permission 'cluster.create'
+                stopped 3 checks: worker-cpu-floor, pack-dependency, palette-validate
+                reproduce: jq '.validateBody' $OUT/world.json > $OUT/request.json
+                reproduce: code=$({ [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o $OUT/body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @$OUT/request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
+
+Section scorecard
+  section                      rows seen check preflight runs weakest  ran pass fail probe fail warn not run not checked ready
+  Quotas and limits               1    1     1         0    1     76%    0    0    0          0    0       0           0     -
+  Images and registries           1    1     1         0    1     79%    0    0    0          0    0       0           0     -
+  The Palette platform            1    1     1         0    1     76%    0    0    0          0    0       0           0     -
+runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 3 checks.
+
+3 rules apply; 0 ran: 0 passed, 0 failed, no probes failed, no warnings, no notes; 0 did not run, 0 not checked, 0 do not apply, 3 errors; readiness - (tiers palette): 0 of 0 checks passed
+No file written; --out DIR writes report.html, report.md, and report.json, and --world adds world.json and entity.json, which the reproduce lines read there ($OUT).
+ERROR: 3 checks could not answer: worker-cpu-floor, pack-dependency, palette-validate

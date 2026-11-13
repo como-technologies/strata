@@ -94,10 +94,17 @@ pub enum Reader {
 /// is the answer of Palette to the request.
 pub fn is_answer(status: u16, reader: Reader) -> bool {
     let key_or_rate = match reader {
-        Reader::Check => matches!(status, 401 | 403 | 429),
+        Reader::Check => refuses_the_key(status) || status == 429,
         Reader::World => matches!(status, 401 | 429),
     };
     (400..500).contains(&status) && !key_or_rate
+}
+
+/// True when the HTTP error `status` refuses the key and not the request: a 401 or a 403. No check
+/// reads it, whatever codes the check names. A run changes no role of the key, so the refusal stays
+/// for the run.
+fn refuses_the_key(status: u16) -> bool {
+    matches!(status, 401 | 403)
 }
 
 /// True when a 5xx is the answer of a check: the `code` of its body is one that the check names in
@@ -192,7 +199,9 @@ impl Kept {
 ///
 /// The backend keeps the answer of each request, by its method, its path, and its body, for the
 /// run. So a rule that asks what another rule asked, or what the world read, costs no request.
-/// An error that no check can read is not kept: the next request tries again.
+/// A denial of the key, HTTP 401 or 403, is kept too. The next check that sends the request gets
+/// the same error, with no request. Another error, such as a 503, is not kept: the next request
+/// tries again.
 ///
 /// The backend is a [`PaletteApi`] too. The world of a run reads through it, and shares its
 /// answers with the checks.
@@ -200,6 +209,9 @@ pub struct LiveBackend<'a, A: PaletteApi> {
     palette: Option<&'a A>,
     no_exec: bool,
     kept: RefCell<BTreeMap<String, Kept>>,
+    /// The denials of the key, by the key of `kept`. Each holds the status and the body of a request
+    /// that Palette refused with HTTP 401 or 403. See [`refuses_the_key`].
+    refused: RefCell<BTreeMap<String, (u16, String)>>,
 }
 
 impl<'a, A: PaletteApi> LiveBackend<'a, A> {
@@ -210,6 +222,7 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
             palette,
             no_exec,
             kept: RefCell::new(BTreeMap::new()),
+            refused: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -235,6 +248,9 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
             kept.read_by(method, path, refusal_codes)?;
             return Ok(read(kept));
         }
+        if let Some((status, text)) = self.refused.borrow().get(&key) {
+            return Err(http_error(method, path, *status, text).into());
+        }
         let answer = match method {
             Method::Get => api.get_json(path),
             Method::Post => api.post_json(path, body.unwrap_or(&Value::Null)),
@@ -254,6 +270,11 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
                 // result. A route also refuses with a 5xx and a code. The validate routes are
                 // known, and a check names the code of any other route in `refusal_codes`.
                 if !reads_error(method, &path, status, parsed.as_ref(), refusal_codes) {
+                    if refuses_the_key(status) {
+                        self.refused
+                            .borrow_mut()
+                            .insert(key, (status, text.clone()));
+                    }
                     return Err(strata::Error::Api {
                         method,
                         path,

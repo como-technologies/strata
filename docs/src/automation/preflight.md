@@ -8,9 +8,10 @@ Three jobs, one for each tier. Each one runs where its inputs are.
 | live | before each build | `strata preflight cluster.json --cloud eks --strict --out preflight` | `PALETTE_API_KEY`; the tools of the cloud for the cloud tier |
 | watch | during the build | `strata preflight --watch cluster:$UID --limit 3600` | `PALETTE_API_KEY`; the uid, from the create |
 
-Exit `0` lets the next step run. Exit `1` stops it: a counted check failed, or
-the readiness is under `--ready`. Exit `2` is a failed job, never "no fault":
-strata could not answer.
+Exit `0` lets the next step run: no counted check failed. The last line says
+`NOT COUNTED` when no counted check ran, and `--strict` counts each probe. Exit
+`1` stops it: a counted check failed, or the readiness is under `--ready`. Exit
+`2` is a failed job, never "no fault": strata could not answer.
 
 ## The static tier on each pull request
 
@@ -149,9 +150,14 @@ the variable of the key is empty:
 {{#include ../output/preflight-job-offline.txt}}
 ```
 
-An offline job exits `0` when each static check passes. The checks that did not
+An offline job exits `0` when no counted static check fails. The checks that did not
 run count against the readiness. To stop such a job, give the input `ready`,
 such as `80`. See [Exit codes, and `--strict`](../commands/preflight.md#exit-codes-and---strict).
+
+The role of the key decides which rules of the palette tier can run. The
+validate route of the create needs `cluster.create`, and no viewer role gives
+it. With a read-only key, the rules of that route give `ERROR`, and the job
+exits `2`. See [The key of the live tier](../commands/preflight/tiers.md#the-key-of-the-live-tier).
 
 The script `palette-key.sh` looks for the key. `preflight.sh` and
 `merge-gate.sh` call it, and each release carries it beside them. A job can call
