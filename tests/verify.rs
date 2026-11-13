@@ -11,7 +11,7 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE,
+    CreateRule, Denial, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE,
     PROFILE_EXISTS_CODE, PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
@@ -26,18 +26,18 @@ use strata::term::progress::Progress;
 
 use common::CommandExt;
 use common::{
-    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, CLUSTERS_DENIED,
-    EDGE_HOST_SEARCH, FILTERS_DENIED, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
-    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
-    UID_ADDONS, UID_B, WITH_IMPACT, app_profile_route, behind_of, candidate_snapshot,
-    cluster_manifests_route, cluster_namespaces_route, cluster_rbacs_route, cluster_ref,
-    cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
-    edge_host_route, fetch_examples, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
-    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
-    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
-    write_record, write_yaml,
+    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
+    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
+    REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
+    app_profile_route, behind_of, candidate_snapshot, cluster_manifests_route,
+    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
+    cluster_resolved_values_route, cluster_route, cluster_variables_route, clusters_denied,
+    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
+    group_route, listing, manifest_route, manifests_route, no_manifests, no_template, no_variables,
+    pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
+    read_json, resolved_values_route, serve_fixture, serve_pack_listing, serve_profile,
+    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template,
+    variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -554,11 +554,17 @@ fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
     // the answers of Palette to a key with no role in the project that gives the read, to a role
     // without the permission on one object, and to a user with no role at all
     for body in [
-        CLUSTERS_DENIED,
-        r#"{"code":"OperationForbidden","message":"Operation 'cluster.list' is forbidden"}"#,
-        r#"{"code":"NoRolesAssociated","message":"No roles associated to user 'barney'"}"#,
+        clusters_denied(),
+        error_body(
+            OPERATION_FORBIDDEN_CODE,
+            "Operation 'cluster.list' is forbidden",
+        ),
+        error_body(
+            Denial::NoRole.as_str(),
+            "No roles associated to user 'barney'",
+        ),
     ] {
-        let api = MemoryApi::new().failing_n_times(CLUSTER_LISTING, 99, 500, body);
+        let api = MemoryApi::new().failing_n_times(CLUSTER_LISTING, 99, 500, &body);
         let (retry, slept) = retrying(&api, 3);
         let err = Palette::new(retry).cluster_listing().unwrap_err();
         assert!(err.denial().is_some(), "{err}");
@@ -5477,7 +5483,7 @@ fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_den
             PROFILE_LISTING,
             serde_json::json!({"items": [listed_profile("lab-profile", "1.9.0", "u2")]}),
         )
-        .failing_n_times(CLUSTER_LISTING, 99, 500, CLUSTERS_DENIED)
+        .failing_n_times(CLUSTER_LISTING, 99, 500, clusters_denied())
         .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     let (retry, slept) = retrying(&api, 3);
     let connect = |_: Option<&str>| Ok(Palette::new(&retry));
@@ -5506,8 +5512,9 @@ fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_den
     assert!(text.contains("\n  lab-profile@1.9.0"), "{text}");
     assert!(
         text.ends_with(&format!(
-            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {CLUSTERS_DENIED}; \
-             no role of the key in the project gives the access of the request)\n"
+            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+             no role of the key in the project gives the access of the request)\n",
+            clusters_denied()
         )),
         "{text}"
     );
@@ -5568,7 +5575,7 @@ fn list_names_each_kind_that_it_could_not_read_and_fails_as_one_read_when_it_rea
 fn list_filters_names_the_permission_that_the_role_of_the_key_does_not_give() {
     let api = MemoryApi::new()
         .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
-        .failing(TAG_FILTER_LISTING, 403, FILTERS_DENIED);
+        .failing(TAG_FILTER_LISTING, 403, filters_denied());
     let options = ListOptions {
         kinds: vec![ListKind::Filters],
         ..ListOptions::default()
@@ -8431,9 +8438,9 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied","message":"no permission"}"#;
+    let denied = error_body(Denial::Route.as_str(), "no permission");
     let fault = r#"{"code":"InternalError"}"#;
-    for (status, body) in [(403, denied), (500, fault)] {
+    for (status, body) in [(403, denied.as_str()), (500, fault)] {
         // Palette ends a body with a newline: the reason has none
         let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
             profile_audits("t0"),
@@ -8478,11 +8485,11 @@ fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
         profile_audits("t0"),
         403,
-        denied,
+        denied.as_str(),
     );
     let s = common::verify_summary_with(&recorded, &api, &who_options());
     assert_eq!(s.summary.status, ops::RecordStatus::Drifted);

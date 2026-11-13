@@ -9,7 +9,7 @@ use std::process::{Command, Output};
 use common::*;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
-    OPERATION_FORBIDDEN_CODE, PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
+    Denial, OPERATION_FORBIDDEN_CODE, PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::model::pack_type::PackType;
 
@@ -1443,7 +1443,7 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     std::fs::write(routes.join("v1_x_found"), r#"{"items":[]}"#).unwrap();
     std::fs::write(
         routes.join("v1_x_refused"),
-        r#"{"code":"ResourceAccessDenied","message":"access denied"}"#,
+        error_body(Denial::Project.as_str(), "access denied"),
     )
     .unwrap();
     std::fs::write(routes.join("v1_x_refused.status"), "500").unwrap();
@@ -1457,7 +1457,10 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(
         text(&o.stdout),
-        "HTTP 500\n{\"code\":\"ResourceAccessDenied\",\"message\":\"access denied\"}"
+        format!(
+            "HTTP 500\n{}",
+            error_body(Denial::Project.as_str(), "access denied")
+        )
     );
     assert_eq!(text(&o.stderr), "");
 
@@ -3734,7 +3737,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
         rbacs,
         "limited-k",
         500,
-        r#"{"code":"ResourceAccessDenied","message":"Project 'p-1' access denied"}"#,
+        &error_body(Denial::Project.as_str(), "Project 'p-1' access denied"),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
 
@@ -3756,7 +3759,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
-        "ResourceAccessDenied\n",
+        format!("{}\n", Denial::Project.as_str()),
         "the check records the error code of the body"
     );
     assert!(
@@ -3803,7 +3806,10 @@ fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_
         rbacs,
         "limited-k",
         403,
-        r#"{"code":"AccessDenied","message":"cluster.get operation is not permitted"}"#,
+        &error_body(
+            Denial::Route.as_str(),
+            "cluster.get operation is not permitted",
+        ),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
     let (o, steps) = stage.run("tiers.sh", &["6"]);
@@ -3869,8 +3875,9 @@ fn narrow_list(stage: &Stage, stdout: &str, stderr: &str, code: i32) {
 fn narrow_listing() -> String {
     format!(
         "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
-         clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {CLUSTERS_DENIED}; \
-         no role of the key in the project gives the access of the request)\n"
+         clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+         no role of the key in the project gives the access of the request)\n",
+        clusters_denied()
     )
 }
 
@@ -3952,7 +3959,7 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
 #[test]
 fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access_denied() {
     // the answer that the stand-in gave before #665
-    let (o, steps) = narrow_stage(403, "AccessDenied").run("tiers.sh", &["8"]);
+    let (o, steps) = narrow_stage(403, Denial::Route.as_str()).run("tiers.sh", &["8"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     for (name, _) in narrow_routes() {
         passed(&steps, &[&format!("narrow-{name}")]);
@@ -3964,9 +3971,11 @@ fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access
 fn tiers_sh_stage_8_fails_the_checks_of_list_when_strata_retries_and_prints_no_profile() {
     // the strata of before #620: it sends the read again, and one refused kind loses each kind
     let stage = narrow_stage(500, OPERATION_FORBIDDEN_CODE);
-    let error = "strata: GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: \
-                 {\"code\":\"ResourceAccessDenied\"}; retry 1 of 3 in 1s\n";
-    narrow_list(&stage, "", error, 2);
+    let error = format!(
+        "strata: GET {CLUSTER_LISTING} failed with HTTP 500: {{\"code\":\"{}\"}}; retry 1 of 3 in 1s\n",
+        Denial::Project.as_str()
+    );
+    narrow_list(&stage, "", &error, 2);
     let (o, steps) = stage.run("tiers.sh", &["8"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     passed(&steps, &["narrow-list"]);
@@ -13154,10 +13163,16 @@ fn observer_role_stage() -> Stage {
 #[test]
 fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answers_the_role() {
     let stage = observer_role_stage();
-    let denied = "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system\"}";
+    let denied = format!(
+        "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
+        error_body(
+            Denial::Route.as_str(),
+            "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+        )
+    );
     std::fs::write(
         stage.path("strata/preflight-role.json"),
-        observer_role_preflight("error", Some(denied)),
+        observer_role_preflight("error", Some(&denied)),
     )
     .unwrap();
     let (o, steps) = stage.run("observer-role.sh", &["3"]);
@@ -13202,7 +13217,7 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         "/v1/audits",
         "role-k",
         403,
-        r#"{"code":"AccessDenied","message":"no audit.list"}"#,
+        &error_body(Denial::Route.as_str(), "no audit.list"),
     );
     let (o, steps) = stage.run("observer-role.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
@@ -13217,7 +13232,10 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         );
     }
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
-    assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
+    assert_eq!(
+        said("role-audits").trim(),
+        format!("HTTP 403 {}", Denial::Route.as_str())
+    );
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
     let line = step_line(&steps, "role-audits");
     assert!(
@@ -13317,7 +13335,11 @@ fn observer_role_sh_sends_the_validate_request_with_the_body_of_the_record_with_
 #[test]
 fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_judges_none_of_it()
 {
-    for (status, code) in [(403, "AccessDenied"), (500, "InternalError"), (422, "")] {
+    for (status, code) in [
+        (403, Denial::Route.as_str()),
+        (500, "InternalError"),
+        (422, ""),
+    ] {
         let stage = observer_role_stage();
         let body = if code.is_empty() {
             "{}".to_string()

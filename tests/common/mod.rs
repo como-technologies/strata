@@ -1147,6 +1147,28 @@ pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::r
     }
 }
 
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`: HTTP 500, not 403, with the code of [`Denial::Project`].
+///
+/// [`Denial::Project`]: strata::api::codes::Denial::Project
+pub fn clusters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Project.as_str(),
+        CLUSTERS_DENIED_MESSAGE,
+    )
+}
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
+///
+/// [`Denial::Route`]: strata::api::codes::Denial::Route
+pub fn filters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Route.as_str(),
+        FILTERS_DENIED_MESSAGE,
+    )
+}
+
 /// The listing that `options` asks for, from the in-memory Palette `api`, read at `t1` with no
 /// progress output.
 pub fn listing(

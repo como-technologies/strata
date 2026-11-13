@@ -3,6 +3,7 @@
 //! Palette quotes in a refusal.
 
 use serde_json::json;
+use strata::api::codes::Denial;
 use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -497,9 +498,14 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
 }
 
 /// What the validate route of the create answers to a key with no `cluster.create`: HTTP 403 with
-/// the code `AccessDenied`. The code of Palette shows it, and a field test met it. Palette can put
-/// the scopes in another order in each answer.
-const NO_CLUSTER_CREATE: &str = r#"{"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system"}"#;
+/// the code of [`Denial::Route`]. The code of Palette shows it, and a field test met it. Palette can
+/// put the scopes in another order in each answer.
+fn no_cluster_create() -> String {
+    routes::error_body(
+        Denial::Route.as_str(),
+        "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+    )
+}
 
 /// The rules of the cluster `c1` that send the validate route of the create.
 const VALIDATE_RULES: [&str; 3] = ["palette-validate", "worker-cpu-floor", "pack-dependency"];
@@ -511,7 +517,7 @@ fn one_denial_of_the_validate_route_is_one_request_and_each_form_shows_it_once_w
     let api = api().failing(
         "POST /v1/spectroclusters/aws/validate",
         403,
-        NO_CLUSTER_CREATE,
+        no_cluster_create(),
     );
     let report = run_report(&api, &VALIDATE_RULES);
     let posted = api
@@ -542,7 +548,7 @@ fn one_denial_of_the_validate_route_is_one_request_and_each_form_shows_it_once_w
         .filter(|(form, _)| *form != "report.json")
     {
         assert_eq!(
-            out.matches("AccessDenied").count(),
+            out.matches(Denial::Route.as_str()).count(),
             1,
             "{form}: the denial shows once\n{out}"
         );

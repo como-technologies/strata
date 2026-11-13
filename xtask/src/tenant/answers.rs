@@ -401,14 +401,14 @@ mod tests {
                 "tenant",
                 TAG_FILTER_LISTING,
                 403,
-                "AccessDenied",
+                Denial::Route.as_str(),
                 filters.as_str(),
             ),
             (
                 "p1",
                 CLUSTER_LISTING,
                 500,
-                "ResourceAccessDenied",
+                Denial::Project.as_str(),
                 project.as_str(),
             ),
         ] {

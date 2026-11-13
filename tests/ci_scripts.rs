@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::api::codes::{Denial, UPGRADE_NOT_SUPPORTED_CODE};
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
@@ -4347,13 +4347,13 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let dir = tempfile::tempdir().unwrap();
     make_fixtures(dir.path());
     let recorded = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(strata::api::MemoryApi::new(), dir.path(), "b", UID_A).failing(
         format!(
             "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
         ),
         403,
-        denied,
+        denied.as_str(),
     );
     let options = strata::ops::VerifyOptions {
         who: true,
