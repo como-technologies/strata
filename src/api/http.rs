@@ -91,6 +91,7 @@ impl HttpApi {
                 retry_after,
             });
         }
+        super::prove_key();
         Ok((status, body))
     }
 

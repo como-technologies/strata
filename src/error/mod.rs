@@ -4,19 +4,21 @@
 use std::path::PathBuf;
 
 use crate::api::Method;
-use crate::api::codes::{CreateRule, PROJECT_SCOPE_CODE};
+use crate::api::codes::{CreateRule, Denial};
 use crate::closed_set::ClosedSet;
-use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
+use crate::config::{MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
 use crate::model::pack_state::PackState;
 use crate::snapshot::SNAPSHOT_SCHEMA;
 use crate::text::{and_list, cut, plural};
 
 mod class;
+mod hint;
 mod json;
 
 pub(crate) use json::{ErrorDocument, MESSAGE_AT};
 
 pub use class::FailureClass;
+use hint::status_hint;
 
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
@@ -35,7 +37,9 @@ pub enum Error {
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from. The body alone names nothing that the reader can set.
     /// A 403 with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the
-    /// route is of the tenant scope and that the request named a project.
+    /// route is of the tenant scope and that the request named a project. A [`Denial`] names what
+    /// Palette denied, such as the permission, and a 403 names the key only when no answer of the
+    /// run proved it.
     #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, path, body))]
     Api {
         /// The request method.
@@ -526,35 +530,6 @@ pub enum Error {
     Serialize(#[from] serde_json::Error),
 }
 
-/// The hint of a 401 or a 403: the key is almost always the cause, so the message names where a
-/// key comes from. A 403 with the code [`PROJECT_SCOPE_CODE`] is the exception. The key is right,
-/// and the message says that the route is of the tenant scope and that the request named a
-/// project. A 429 of the download of a profile version at `path` names the limit of Palette.
-/// Empty for each other status.
-fn status_hint(status: u16, path: &str, body: &str) -> String {
-    let names_project = status == 403
-        && crate::model::validation::PaletteRefusal::from_error_body(body)
-            .is_some_and(|refusal| refusal.code == PROJECT_SCOPE_CODE);
-    if names_project {
-        "; the route is of the tenant scope, and the request named a project: ask it with no project"
-            .to_string()
-    } else if crate::api::is_download_limit(status, path) {
-        format!(
-            "; Palette takes one download of a profile version in {} seconds: run the command again later",
-            crate::api::DOWNLOAD_INTERVAL_SECONDS
-        )
-    } else if status == 401 || status == 403 {
-        format!(
-            "; check {}, {}, or ~/{}: the key can be wrong, expired, or for another tenant",
-            KEY_VARS[0],
-            KEY_VARS[1],
-            crate::config::ENV_FILE
-        )
-    } else {
-        String::new()
-    }
-}
-
 /// The most characters of a body that the message of [`Error::Api`] shows. The field keeps the
 /// whole body.
 const BODY_IN_MESSAGE: usize = 300;
@@ -709,6 +684,24 @@ impl Error {
                 ..
             }
         )
+    }
+
+    /// True for a request that Palette refused, or that did not complete. A command that reads
+    /// many parts keeps the other parts after such an error, and names the part that it lost.
+    pub(crate) fn is_failed_read(&self) -> bool {
+        matches!(self, Error::Api { .. } | Error::Transport { .. })
+    }
+
+    /// The denial that the answer of Palette states: the key has no access to the request. `None`
+    /// for each other error.
+    pub fn denial(&self) -> Option<Denial> {
+        match self {
+            Error::Api { body, .. } => {
+                crate::model::validation::PaletteRefusal::from_error_body(body)
+                    .and_then(|refusal| Denial::from_text(&refusal.code))
+            }
+            _ => None,
+        }
     }
 
     /// The reason that a record or a verdict keeps for a read that failed.

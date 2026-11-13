@@ -415,6 +415,9 @@ impl Renderer for TerminalRenderer {
         if let Some(filters) = &l.filters {
             list_filters(&mut out, p, filters);
         }
+        for line in super::list::unread_lines(l) {
+            out.push_str(&format!("\n{}\n", p.red(&line)));
+        }
         Ok(out)
     }
 }
@@ -658,6 +661,7 @@ mod tests {
             resolved: None,
             query_filter: None,
             filters: None,
+            errors: std::collections::BTreeMap::new(),
         };
         let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
             .into_iter()

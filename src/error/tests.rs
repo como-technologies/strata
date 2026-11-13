@@ -14,7 +14,8 @@ mod table;
 mod variants;
 
 use super::*;
-use crate::api::codes::OPERATION_FORBIDDEN_CODE;
+use crate::api::codes::{OPERATION_FORBIDDEN_CODE, PROJECT_SCOPE_CODE};
+use crate::config::KEY_VARS;
 use table::first_cells;
 use variants::one_of_each;
 
@@ -731,6 +732,7 @@ fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_n
 fn a_401_or_another_403_still_names_the_key() {
     let tenant_scope = format!(r#"{{"code":"{PROJECT_SCOPE_CODE}"}}"#);
     for (status, body) in [
+        // a denial names the key too while no answer of the run proved it
         (403, r#"{"code":"ResourceAccessDenied"}"#),
         (403, "forbidden"),
         (401, r#"{"code":"MissingAuthHeader"}"#),
@@ -745,6 +747,96 @@ fn a_401_or_another_403_still_names_the_key() {
         );
         assert!(!text.contains("tenant scope"), "{status} {body}: {text}");
     }
+}
+
+/// The body of the refusal of the saved tag filters to a role without `filter.list`, as Palette
+/// gives it with HTTP 403.
+const FILTERS_DENIED: &str = r#"{"code":"AccessDenied","message":"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"}"#;
+
+#[test]
+fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
+    let permission = "the role of the key does not give the permission 'filter.list'";
+    // the first request of the run: nothing proved the key yet
+    let first = api_message(403, FILTERS_DENIED);
+    assert!(first.contains(permission), "{first}");
+    assert!(first.contains("the key can be wrong"), "{first}");
+    // an answer with a 2xx status, such as the lookup of the project, proves the key
+    crate::api::prove_key();
+    let after = api_message(403, FILTERS_DENIED);
+    assert!(after.ends_with(&format!("; {permission}")), "{after}");
+    for key in KEY_VARS {
+        assert!(!after.contains(key), "{after}");
+    }
+    // a 401 is the key itself, and a 403 that is no denial names no permission
+    for (status, body) in [(401, r#"{"code":"ExpiredApiKey"}"#), (403, "forbidden")] {
+        let text = api_message(status, body);
+        assert!(text.contains("the key can be wrong"), "{status}: {text}");
+        assert!(!text.contains("does not give"), "{status}: {text}");
+    }
+}
+
+#[test]
+fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
+    for (code, message, sentence) in [
+        (
+            OPERATION_FORBIDDEN_CODE,
+            "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission",
+            "the role of the key does not give the permission 'cluster.get'",
+        ),
+        (
+            "ResourceAccessDenied",
+            "Project 'dev' access denied",
+            "no role of the key in the project gives the access of the request",
+        ),
+        (
+            "NoRolesAssociated",
+            "No roles associated to user 'barney'",
+            "the user of the key has no role",
+        ),
+    ] {
+        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        let error = Error::Api {
+            method: Method::Get,
+            path: "/v1/dashboard/spectroclusters/meta".into(),
+            status: 500,
+            body: body.clone(),
+            retry_after: None,
+        };
+        let text = error.to_string();
+        assert!(text.ends_with(&format!("; {sentence}")), "{code}: {text}");
+        assert!(!text.contains("the key can be wrong"), "{code}: {text}");
+        // a retry gets the same answer, so strata does not send the request again
+        assert_eq!(error.class(), FailureClass::Terminal, "{code}");
+        assert_eq!(error.denial().map(Denial::as_str), Some(code));
+    }
+}
+
+#[test]
+fn the_denial_of_an_error_is_the_code_of_the_body_of_an_answer_of_palette() {
+    let api = |body: &str| Error::Api {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        status: 403,
+        body: body.into(),
+        retry_after: None,
+    };
+    for denial in Denial::ALL {
+        let body = format!(r#"{{"code":"{}","message":"m"}}"#, denial.as_str());
+        assert_eq!(api(&body).denial(), Some(*denial));
+    }
+    for body in [
+        r#"{"code":"InternalError"}"#,
+        "forbidden",
+        r#"{"message":"m"}"#,
+    ] {
+        assert_eq!(api(body).denial(), None, "{body}");
+    }
+    let transport = Error::Transport {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        message: "connection reset".into(),
+    };
+    assert_eq!(transport.denial(), None);
 }
 
 #[test]

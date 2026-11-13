@@ -28,6 +28,9 @@ pub const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 /// The project listing, `GET /v1/dashboard/projects/metadata`.
 pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 
+/// The listing of the saved tag filters of the tenant, `GET /v1/filters/metadata?filterType=tag`.
+pub const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 

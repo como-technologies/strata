@@ -20,6 +20,7 @@ mod raw;
 pub(crate) mod registry;
 mod retry;
 
+use std::cell::Cell;
 use std::fmt;
 
 use schemars::JsonSchema;
@@ -135,6 +136,23 @@ impl<A: PaletteApi + ?Sized> PaletteApi for &A {
     fn project_uid(&self) -> Option<&str> {
         (**self).project_uid()
     }
+}
+
+thread_local! {
+    /// True after an answer with a 2xx status on this thread. A command of strata runs on one
+    /// thread, so the flag holds for the run.
+    static KEY_PROVED: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Note an answer with a 2xx status: Palette took the key of this thread.
+pub(crate) fn prove_key() {
+    KEY_PROVED.set(true);
+}
+
+/// True when an answer on this thread had a 2xx status. Then the key is right, and a 403 that is a
+/// [`codes::Denial`] is a refusal of the role of the key.
+pub(crate) fn key_proved() -> bool {
+    KEY_PROVED.get()
 }
 
 #[cfg(test)]
