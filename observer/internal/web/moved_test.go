@@ -45,7 +45,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 
 // The page of each pack of the version shows the facts of the published version and of the copy of this cluster, and no fact of a
 // newer version. Strata does not look for a newer version of a version that the cluster does not run, so no side of the pack says
-// "Current" or "No newer version".
+// "Current" or "No newer version". The nav of each screen holds "Newer versions", so the test looks for the label of the fact.
 func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVersion(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	for _, name := range []string{"traefik", "aws-application-loadbalancer", "vendor-product"} {
@@ -53,7 +53,7 @@ func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVers
 		mustHold(t, "the page of "+name, pageOf(t, screens, hash, ""), `<b class="ok">Same</b><span>Published now</span>`, `<b class="">Not here</b><span>This cluster&#39;s copy</span>`)
 		for _, s := range screens {
 			if s.Hash == hash {
-				mustNotHold(t, fmt.Sprintf("the page of %s %q", name, s.Variant), s.HTML, "Current", "No newer version", "Newer version")
+				mustNotHold(t, fmt.Sprintf("the page of %s %q", name, s.Variant), s.HTML, "Current", "No newer version", "<span>Newer version</span>")
 			}
 		}
 	}
