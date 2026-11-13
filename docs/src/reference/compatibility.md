@@ -970,6 +970,11 @@ After 0.32.2, each command that reads Palette takes `--project <uid>` and `--pro
 with three refs or more, it gives the error `usage` and exit `2`, before any request. See
 [Environments in the projects of one tenant](../use-cases/projects.md).
 
+After 0.33.0, `list` takes the singular of each kind: `profile`, `cluster`, `project`, and
+`filter`. Each one sends the requests and prints the output of its plural, so it only adds.
+Before, strata refused it with a usage error of the command line and exit `2`, before any
+request. See [What to expect](../commands/list.md#what-to-expect).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a

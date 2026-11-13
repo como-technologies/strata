@@ -34,9 +34,10 @@ use common::{
     cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
-    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
-    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
+    profile_document, profile_route, project_listing, read_json, resolved_values_route,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
+    write_yaml,
 };
 
 #[test]
@@ -2534,10 +2535,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     assert!(text.contains("project p1"), "{text}");
 
     // with one, it names the project and keeps the uid
-    let named = api.with(
-        PROJECT_LISTING,
-        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}}]}),
-    );
+    let named = api.with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
     let r = ops::consumers(
         &Ref::Uid(UID_B.into()),
         |_| Ok(Palette::new(named.clone())),
@@ -3693,14 +3691,6 @@ fn listed_cluster(name: &str, uid: &str, state: &str) -> Value {
     })
 }
 
-fn projects(names: &[(&str, &str)]) -> Value {
-    let items: Vec<Value> = names
-        .iter()
-        .map(|(name, uid)| serde_json::json!({"metadata": {"name": name, "uid": uid}}))
-        .collect();
-    serde_json::json!({ "items": items })
-}
-
 #[test]
 fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
     let api = MemoryApi::new()
@@ -3720,7 +3710,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
                 listed_cluster("workload-a", "c1", "Running"),
             ]),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |scope: Option<&str>| {
         scopes.borrow_mut().push(scope.map(str::to_string));
@@ -3814,7 +3804,7 @@ fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
         .in_project("p1")
         .with(PROFILE_LISTING, listing)
         .with(CLUSTER_LISTING, serde_json::json!([]))
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     let connect = |_: Option<&str>| Ok(Palette::new(api.clone()));
     let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
     let refs: Vec<&str> = l
@@ -4145,7 +4135,7 @@ fn a_tenant_and_a_project_version() -> MemoryApi {
                 listed_profile("aws-stack", "1.1.1", "u-project"),
             ]}),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]))
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
         .with_post(
             PROFILE_SEARCH,
             &profile_search_body("tenant"),
@@ -4305,7 +4295,7 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
                 listed_profile("aws-stack", "1.1.1", "u-project"),
             ]}),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     // Palette answers 404 or 405 for a route that it does not have
     let not_allowed = api.clone().failing(post(PROFILE_SEARCH), 405, "{}");
     let l = listing(
@@ -4659,8 +4649,11 @@ fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() 
             PROFILE_LISTING,
             serde_json::json!({"items": [listed_profile("edge", "1.0.0", "u1")]}),
         )
-        .with(PROJECT_LISTING, projects(&[("prod", "p2")]));
-    let tenant = MemoryApi::new().with(PROJECT_LISTING, projects(&[("prod", "p2"), ("dev", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("prod", "p2")]));
+    let tenant = MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("prod", "p2"), ("dev", "p1")]),
+    );
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |scope: Option<&str>| {
         scopes.borrow_mut().push(scope.map(str::to_string));
@@ -4718,7 +4711,10 @@ fn list_reads_the_project_listing_one_time_for_the_clusters_and_the_projects() {
             CLUSTER_LISTING,
             serde_json::json!([listed_cluster("workload-a", "c1", "Running"), other]),
         )
-        .with(PROJECT_LISTING, projects(&[("dev", "p1"), ("prod", "p2")]));
+        .with(
+            PROJECT_LISTING,
+            project_listing(&[("dev", "p1"), ("prod", "p2")]),
+        );
     let options = ListOptions {
         kinds: vec![ListKind::Clusters, ListKind::Projects],
         ..ListOptions::default()
@@ -4812,10 +4808,7 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
     // and the listing is one request that `list projects` already makes.
     let named = api.clone().with(
         PROJECT_LISTING,
-        serde_json::json!({"items": [
-            {"metadata": {"name": "dev", "uid": "p1"}},
-            {"metadata": {"name": "prod", "uid": "p2"}},
-        ]}),
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
     );
     let l = listing(&named, &options).unwrap();
     let text = common::terminal().render_list(&l).unwrap();
@@ -4837,7 +4830,7 @@ fn two_clusters_with_search(properties: &[&str]) -> MemoryApi {
             ]),
         )
         .with(CLUSTER_SEARCH_SCHEMA, search_schema(properties))
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]))
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
 }
 
 /// The cluster listing that `query` selects, from `api`.
@@ -5962,9 +5955,10 @@ fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are
 
 #[test]
 fn a_project_name_resolves_to_its_uid_and_an_unknown_name_lists_the_projects() {
-    let tenant = Palette::new(
-        MemoryApi::new().with(PROJECT_LISTING, projects(&[("prod", "p2"), ("lab", "p1")])),
-    );
+    let tenant = Palette::new(MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("prod", "p2"), ("lab", "p1")]),
+    ));
     assert_eq!(tenant.project_uid_named("prod").unwrap(), "p2");
 
     let err = tenant.project_uid_named("staging").unwrap_err();
@@ -15863,8 +15857,7 @@ fn serve_fleet(api: MemoryApi, found: Vec<Value>, all: Vec<Value>) -> MemoryApi 
     )
     .with(
         PROJECT_LISTING,
-        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}},
-            {"metadata": {"name": "prod", "uid": "p2"}}]}),
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
     )
 }
 
