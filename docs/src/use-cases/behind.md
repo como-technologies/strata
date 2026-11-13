@@ -18,7 +18,8 @@ plans the next release.
 week, before the registry published `csi-aws-ebs` 1.65.0, and
 `just playground behind-2` serves it today. `just playground behind-3` adds a
 profile that Palette refuses to move. `just playground behind-pre-release` serves a
-registry with a pre-release of `csi-aws-ebs`.
+registry with a pre-release of `csi-aws-ebs`. `just playground behind-profiles-1`
+serves the cluster `payments` with its four profiles.
 
 </div>
 
@@ -36,12 +37,21 @@ The run keeps its JSON in `behind.json`.
 {{#include ../output/behind.txt}}
 ```
 
-Four pins of `aws-stack@1.0.0` are behind, and each line under one says what the
-bump does. The Kubernetes bump and the OS bump are `repave`: plan them. The line
+The first line counts the 9 pins: 4 are behind and 5 are current. Four pins of
+`aws-stack@1.0.0` are behind, and each line under one says what the bump does. The
+Kubernetes bump and the OS bump are `repave`: plan them. The line
 `palette accepts` says that Palette takes the move on the clusters that run the
 profile. The pins of `aws-stack@1.1.1` are current. The OS pins are floating
 tags. Each pins the version that its tag names now, so the tag adds no version
 to move to. `LTS__20.4.x` never reaches 22.04 or 24.04.
+
+The newest Kubernetes version is of another minor version, and it drops `arm64`.
+The line `next patch` names 1.35.6, the newest patch of the minor version of the
+pin, and the command that compares the two:
+
+```text
+{{#include ../output/behind-next-patch.txt}}
+```
 
 The line `aws-stack@1.1.1 carries` under each pin of 1.0.0 says that a newer
 version of the profile already pins the newer pack. So move the clusters to
@@ -114,6 +124,25 @@ not a pre-release. The pins of `aws-stack@1.1.1` are current:
 {{#include ../output/behind-pre-release-lines.txt}}
 ```
 
+## 5. A cluster with many profiles
+
+A field test ran `behind` on a cluster with 12 profiles: 29 pins, 10 of them
+behind. The report gave each of the 19 current pins a row too. The line
+`pinned by` gave the title of the record, with all the profiles and their versions.
+So the line did not say which profile held the pack.
+
+`--behind-only` omits the rows that are current, and the first line still counts
+them. The line `pinned by` names the profile that holds the pack. Here the cluster
+`payments` runs `aws-stack@1.0.0` and three add-on profiles:
+
+```text
+{{#include ../output/behind-only-cluster.txt}}
+```
+
+The pins that are behind are pins of `aws-stack@1.0.0`, so the move of that
+profile is the step to plan. The add-on profiles are current, so they have no row.
+See [A cluster with many profiles](../commands/behind.md#a-cluster-with-many-profiles).
+
 ## What to do
 
 - Run `behind` on a schedule over the release records, and keep its report:
@@ -121,6 +150,10 @@ not a pre-release. The pins of `aws-stack@1.1.1` are current:
   issue open for each pack that is behind.
 - Read the bump before you move a pin: `repave` needs a window, and `in-place`
   does not.
+- When the newest version is too far, run the command of the line `next patch`.
+  It says what the move to the newest patch of the minor version of the pin does.
+- On many records, or on a cluster with many profiles, add `--behind-only`. Each
+  line `pinned by` names the profile to move.
 - To report one pack, give its key to `--pin`, such as `--pin k8s/kubernetes`.
   [One pack](../commands/behind.md#one-pack) shows the report.
 - When Palette refuses a move, pick a closer version in `newer`. `behind` asks
