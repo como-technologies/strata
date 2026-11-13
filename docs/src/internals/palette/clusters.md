@@ -320,7 +320,7 @@ A request without its permission gets one of these answers:
 
 | Code | HTTP status | When |
 | --- | --- | --- |
-| `AccessDenied` | 403 | The route as a whole is refused: the audit log and the lists of registries. |
+| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, and the validate route of a create. |
 | `OperationForbidden` | 500 | One object is refused: a profile, a cluster, or a registry. |
 | `NoRolesAssociated` | 500 | The user has no role at all. |
 | `ResourceAccessDenied` | 500 | The user has no role in the project of the request. |
