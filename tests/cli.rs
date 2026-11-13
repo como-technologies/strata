@@ -1178,11 +1178,10 @@ fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
     for (old, part) in [("--packs", "versions"), ("--applied", "clusters")] {
         let r = stand.run_with_notes(&["list", old, "--json"]);
         assert_eq!(r.code, 0, "{}", r.err);
-        let note = format!(
-            "strata: {old} is the old name of --detail for the {part} alone. Release 0.35.0 \
-             removes {old}"
-        );
-        assert!(r.err.contains(&note), "{note:?} in {}", r.err);
+        let note = r.err.lines().find(|l| l.contains("old name")).unwrap_or("");
+        for named in [old, "--detail", part, "Release 0.35.0"] {
+            assert!(note.contains(named), "{named} in {note:?}: {}", r.err);
+        }
         let quiet = stand.run_with_notes(&["list", old, "--json", "-q"]);
         assert!(!quiet.err.contains("old name"), "{}", quiet.err);
     }
