@@ -1,5 +1,5 @@
 $ strata behind 'releases/*/dev.json' --since behind.json --no-impact
-9 pins from 2 records: 4 behind, 2 floating; 1 version arrived since 2026-09-17T09:30:00Z; 2 profile versions: 1 behind
+9 pins (2 with a floating tag) from 2 records: 4 behind, 5 current; 1 version arrived since 2026-09-17T09:30:00Z; 2 profile versions: 1 behind, 1 current
 ...
 ~ [csi  ] csi-aws-ebs     1.63.1  Public Repo  behind: 1.65.0, 1.64.0
 ...

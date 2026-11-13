@@ -147,6 +147,7 @@ pub(super) fn held_keys(snap: &Snapshot) -> impl Iterator<Item = ProfileKey> + '
 pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, path: &Path) {
     let source = &snap.source;
     for key in held_keys(snap) {
+        let owner = source.title_of_profile(&name_version(&key.name, &key.version));
         let entry = held.entry(key.clone()).or_insert_with(|| Held {
             profile: ProfilePin {
                 name: key.name,
@@ -162,7 +163,7 @@ pub(super) fn collect(held: &mut BTreeMap<ProfileKey, Held>, snap: &Snapshot, pa
             },
             project: source.project_uid.clone(),
         });
-        PinnedBy::add(&mut entry.profile.pinned_by, path, &source.title());
+        PinnedBy::add(&mut entry.profile.pinned_by, path, &source.title(), owner);
     }
 }
 

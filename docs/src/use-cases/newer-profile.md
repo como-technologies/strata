@@ -69,8 +69,11 @@ See [The move to the newest profile version](../commands/behind.md#the-move-to-t
 {{#include ../output/behind-profile-cluster-lines.txt}}
 ```
 
-The record of `payments` holds each profile that the cluster runs. So the same
-line names the version that the cluster can move to.
+The record of `payments` holds each profile that the cluster runs: the release
+and three add-on profiles. So the same line names the version that the cluster can
+move to. The add-on profiles are current. On a cluster with many profiles,
+`--behind-only` omits them: see
+[Only the rows that are behind](../commands/behind.md#only-the-rows-that-are-behind).
 
 ## 4. How far the change of a pack went
 

@@ -234,6 +234,26 @@ impl ClusterSource {
         self.tiers.get(&Open::Known(tier))
     }
 
+    /// The profiles of the record that hold a pack of the name `pack`, in the order of
+    /// `profiles`. Empty when the record carries no tier `running`, or the tier does not name the
+    /// pack.
+    ///
+    /// Palette gives the profile of each pack that the cluster reconciled, and the tier keeps it.
+    pub(crate) fn profiles_holding(&self, pack: &str) -> Vec<&AppliedProfile> {
+        let Some(tier) = self.tier(Tier::Running) else {
+            return Vec::new();
+        };
+        let running = arr(&tier.fields, "");
+        self.profiles
+            .iter()
+            .filter(|p| {
+                running
+                    .iter()
+                    .any(|r| str_at(r, "/name") == pack && str_at(r, "/profileUid") == p.uid)
+            })
+            .collect()
+    }
+
     /// Why strata could not read the notifications, when `updates_pending` is absent for that
     /// reason.
     pub fn updates_pending_error(&self) -> Option<&str> {

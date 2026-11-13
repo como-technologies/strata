@@ -325,7 +325,7 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
     let error = r.pins[0].error.as_ref().unwrap();
     assert_eq!(error["kind"], "pack-not-found");
     assert_eq!(error["unsynced"], json!(["charts-auth"]));
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(text.contains("not checked"), "{text}");
     assert!(
         text.contains(&format!(

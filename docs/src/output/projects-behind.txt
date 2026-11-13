@@ -1,5 +1,5 @@
 $ strata behind 'releases/*/*.json' --no-impact
-5 pins from 2 records: 0 behind, 1 floating; 2 profile versions: 2 behind
+5 pins (1 with a floating tag) from 2 records: 0 behind, 5 current; 2 profile versions: 2 behind
   [addon] cert-manager    1.21.1  Public Repo  current
       pinned by releases/1.1.0/dev.json (aws-stack@1.1.0)
       pinned by releases/1.1.0/prod.json (aws-stack@1.1.0)

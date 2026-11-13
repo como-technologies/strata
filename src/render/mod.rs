@@ -30,6 +30,7 @@ use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::{cut, plural};
 
+pub use behind::RowState;
 pub use json::JsonRenderer;
 pub use list::{invalid_pack_warnings, secret_like_notes, set_counts_line};
 pub use markdown::MarkdownRenderer;
@@ -106,11 +107,13 @@ pub trait Renderer {
     fn render_packs(&self, l: &PackListing) -> Result<String>;
 
     /// The pack versions and the profile versions that records hold, against their newer versions.
+    /// `behind_only` omits each pin and each profile version that is current, where the
+    /// format shows rows. The JSON document holds each one.
     ///
     /// # Errors
     ///
     /// The errors of [`Renderer::render`].
-    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String>;
+    fn render_behind(&self, r: &crate::ops::BehindReport, behind_only: bool) -> Result<String>;
 
     /// The records that `snapshot` wrote for a set of clusters, and the files it removed.
     ///
