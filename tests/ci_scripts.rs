@@ -4353,10 +4353,9 @@ fn with_tags(value: &str) -> String {
     format!("{value}`{}", common::ANSWER_TAGS)
 }
 
-/// Make sure that GitHub shows each tag of an answer in the body or the comment `markdown` of an
-/// issue of a report script as text. The marker and the state at the start of a body are each one
-/// whole comment of HTML on one line, with no tag in it. A code span or a code block shows a tag
-/// as text.
+/// Make sure that GitHub shows each tag of an answer as text in `markdown`, a body or a comment of
+/// a report script. The marker and the state at the start of a body are each one whole comment of
+/// HTML, with no tag. A code span or a code block shows a tag as text.
 fn assert_issue_shows_tags_as_text(markdown: &str) {
     let mut rest = markdown;
     while let Some(comment) = rest.strip_prefix("<!-- ") {

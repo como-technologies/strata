@@ -1267,8 +1267,8 @@ field, a value, an input, or an option is in the sections above.
     issue too.
   - The output of strata in an issue of `verify-report.sh` has a fence that no line of the output
     ends.
-  - A name, a version, a floating tag, or a path in a code span has a fence longer than each
-    run of backticks in it, as the markdown form writes it.
+  - Each code span of a name, a version, a tag, or a path has a fence longer than each run of
+    backticks in it.
   - The marker on the first line of an issue writes each `&`, `<`, and `>` of the path or of the
     pack name as an entity. A marker with none of these characters does not change, so the next
     run finds an older issue.

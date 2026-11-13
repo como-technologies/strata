@@ -1,6 +1,6 @@
 //! The markdown form of a report: a pull request comment.
 
-use strata::text::{code_block, markdown_cell, plural};
+use strata::text::{code_block, code_span, markdown_cell, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, FAILED_REQUESTS, FailedRequest, Report, SectionScore, pct};
@@ -15,9 +15,9 @@ pub fn markdown(r: &Report) -> String {
     let warnings = count_of(s.warned as usize, "warning");
     let checks = plural(s.applies() as usize, "check", "checks");
     out.push_str(&format!(
-        "## strata-preflight: {} cluster `{}`\n\n",
+        "## strata-preflight: {} cluster {}\n\n",
         r.subject.cloud,
-        r.subject.name_or_dash()
+        code_span(r.subject.name_or_dash())
     ));
     out.push_str(&format!(
         "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed, {warnings}; {} did not run, {} not checked; readiness {}: {} of {} {checks} passed.\n\n",
@@ -81,14 +81,17 @@ fn failed_request_section(failed: &[FailedRequest<'_>]) -> String {
     let mut out = format!("\n### {FAILED_REQUESTS}\n\n");
     for f in failed {
         out.push_str(&format!(
-            "`{}` {}.\n\n```text\n{}\n```\n\n",
-            f.request,
-            f.stopped_text(),
-            f.messages.join("\n")
+            "{} {}.\n\n",
+            code_span(&f.request),
+            markdown_cell(&f.stopped_text())
         ));
+        // the messages quote the body of the answer
+        out.push_str(&code_block("text", &f.messages.join("\n")));
+        out.push('\n');
         let reproduce = f.reproduce();
         if !reproduce.is_empty() {
-            out.push_str(&format!("```bash\n{}\n```\n\n", reproduce.join("\n")));
+            out.push_str(&code_block("bash", &reproduce.join("\n")));
+            out.push('\n');
         }
     }
     out

@@ -1308,6 +1308,29 @@ fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
     }
 }
 
+/// The criterion of #832: the markdown of a request that failed keeps its error in one block. The
+/// error quotes the body of the answer, with a line of three backticks and tags of HTML.
+#[test]
+fn the_markdown_of_a_request_that_failed_keeps_the_body_of_the_answer_in_its_block() {
+    let message = format!("HTTP 403:\n```\n{ANSWER_TAGS}");
+    let failed = Outcome {
+        verdict: Verdict::Error,
+        messages: vec![message.clone()],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get("/v1/edgehosts/h2", None)),
+    };
+    let md = markdown(&report_of_edge_host_in_use(
+        None,
+        "/v1/edgehosts/h2",
+        failed,
+    ));
+    let block = format!(
+        "`GET /v1/edgehosts/h2` stopped 1 check: edge-host-in-use.\n\n````text\n{message}\n````\n"
+    );
+    assert!(md.contains(&block), "{block:?} in\n{md}");
+    assert_only_strata_tags(&outside_code_blocks(&md));
+}
+
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,
 /// the checks, and the verb of the rules.
 #[test]
