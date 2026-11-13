@@ -5,30 +5,34 @@ use crate::closed_set::ClosedSet;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
 use crate::render::behind::{
     arrived_line, behind_heading, bump_line, carrier_lines, created_since, listed_since,
-    palette_lines, pin_status, profile_bump_line, profile_status,
+    next_patch_line, palette_lines, pin_status, profile_bump_line, profile_status, record_title,
+    shown_pins, shown_profiles,
 };
 use crate::render::entry_error;
 use crate::text::{dash, markdown_cell};
 
-/// The report of `behind` as markdown. A table that has no row is not there.
-pub(super) fn markdown_behind(r: &BehindReport) -> String {
+/// The report of `behind` as markdown. A table that has no row is not there. With `behind_only`,
+/// no table has a row that is current.
+pub(super) fn markdown_behind(r: &BehindReport, behind_only: bool) -> String {
     let mut o = format!("### behind: {}\n\n", markdown_cell(&behind_heading(r)));
-    if !r.pins.is_empty() {
+    let pins = shown_pins(r, behind_only);
+    let profiles = shown_profiles(r, behind_only);
+    if !pins.is_empty() {
         o.push_str(
             "| pack | pinned | registry | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
         );
-        for pin in &r.pins {
+        for pin in &pins {
             o.push_str(&pin_row(pin));
         }
     }
-    if !r.profiles.is_empty() {
-        if !r.pins.is_empty() {
+    if !profiles.is_empty() {
+        if !pins.is_empty() {
             o.push('\n');
         }
         o.push_str(
             "| profile | version | scope | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
         );
-        for p in &r.profiles {
+        for p in &profiles {
             o.push_str(&profile_row(p));
         }
     }
@@ -38,7 +42,8 @@ pub(super) fn markdown_behind(r: &BehindReport) -> String {
 /// The row of one pin.
 fn pin_row(pin: &Pin) -> String {
     let mut status = pin_status(pin);
-    for line in [listed_since(pin), arrived_line(pin)].into_iter().flatten() {
+    let lines = [listed_since(pin), next_patch_line(pin), arrived_line(pin)];
+    for line in lines.into_iter().flatten() {
         status.push_str(&format!("; {line}"));
     }
     if let Some(msg) = entry_error(pin.error.as_ref()) {
@@ -89,8 +94,8 @@ fn profile_row(p: &ProfilePin) -> String {
     )
 }
 
-/// The cell of the records that pin a pack or hold a profile version: `` `path` (subject) ``, one
-/// for each record.
+/// The cell of the records that pin a pack or hold a profile version: `` `path` (title) ``, one
+/// for each record. The title is that of [`record_title`].
 fn pinned_by(by: &[PinnedBy]) -> String {
     let cells: Vec<String> = by
         .iter()
@@ -98,7 +103,7 @@ fn pinned_by(by: &[PinnedBy]) -> String {
             format!(
                 "`{}` ({})",
                 markdown_cell(&b.path),
-                markdown_cell(&b.subject)
+                markdown_cell(record_title(b))
             )
         })
         .collect();

@@ -84,7 +84,7 @@ pub(crate) fn run(dir: &Path, since: Option<BehindReport>) -> BehindReport {
 #[track_caller]
 fn writes_and_loads_again(dir: &Path, report: &BehindReport) {
     let json = renderer(Format::Json, Paint::off(), false)
-        .render_behind(report)
+        .render_behind(report, false)
         .expect("a report is written as JSON");
     write(dir, AGAIN_FILE, json.as_bytes());
     let again = answer(BehindReport::load(&dir.join(AGAIN_FILE)))
@@ -149,8 +149,10 @@ pub(crate) fn since(bytes: &[u8]) -> bool {
     let report = run(&dir, Some(previous.clone()));
     check_arrived(&previous, &report);
     for &format in Format::ALL {
-        let shown = renderer(format, Paint::off(), false).render_behind(&report);
-        assert!(shown.is_ok(), "{format:?} cannot show the run: {shown:?}");
+        for behind_only in [false, true] {
+            let shown = renderer(format, Paint::off(), false).render_behind(&report, behind_only);
+            assert!(shown.is_ok(), "{format:?} cannot show the run: {shown:?}");
+        }
     }
     true
 }

@@ -1,9 +1,10 @@
 $ strata behind 'releases/*/dev.json' --pin k8s/kubernetes
-2 pins from 2 records: 1 behind
+2 pins from 2 records: 1 behind, 1 current
 ~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.36.2 (drops arm64), 1.35.6
       1.36.2 listed since 2026-07-30T22:45:47.109Z
       bump to 1.36.2: repave IDENTITY UPSTREAM AUTHORED IMAGES
       palette accepts
+      next patch 1.35.6: strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
   [k8s  ] kubernetes  1.36.2  Public Repo  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)

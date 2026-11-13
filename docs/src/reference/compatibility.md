@@ -298,6 +298,12 @@ After 0.33.0, `diff::Impact` implements `Default`: the level `none` with no text
 only difference is a pack uid that Palette mints has it: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `render::RowState` is new: the state of a pin or of a profile version in the report
+of `behind`. `text::shell_words` is public: a command as a person types it in a shell.
+`shell_words` of `strata-preflight` calls it, and its rule of the quotes does not change.
+`render::Renderer::render_behind` and `ops::PinnedBy` change: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -393,6 +399,11 @@ action.
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
+
+After 0.33.0, an entry of `pinnedBy[]` of `strata-behind/1` can have the new field `owner`. A
+record of more than one profile, such as a cluster, gives it. It is the title of the record with
+only the profile that holds the entry. The id stays, and `subject` keeps the title of the record.
+`--since` reads a report of 0.33.0 and before.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -985,6 +996,11 @@ After 0.33.0, `list` takes the singular of each kind: `profile`, `cluster`, `pro
 Before, strata refused it with a usage error of the command line and exit `2`, before any
 request. See [What to expect](../commands/list.md#what-to-expect).
 
+After 0.33.0, `behind --behind-only` is new, and it only adds. The terminal report and the
+markdown omit each pin and each profile version that is current. The first line, the exit, and
+the JSON do not change. See
+[Only the rows that are behind](../commands/behind.md#only-the-rows-that-are-behind).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -1163,6 +1179,28 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+- **The first line of `behind` counts each pin one time.** The counts after the colon add up to
+  the pins. They are `behind`, `current`, and `not checked`, and a count in parentheses gives the
+  pins with a floating tag. An example is
+  `4 pins (1 with a floating tag) from 1 record: 3 behind, 1 current`. Before, the line was
+  `4 pins from 1 record: 3 behind, 1 floating`. The floating pin was one of the 3, and the line
+  did not count the current pin: see
+  [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+  - A pin whose comparison failed counts as `not checked` alone. Before, the line also counted it
+    as behind.
+  - The profile versions count `current` and `gone` too, as in
+    `2 profile versions: 1 behind, 1 current`.
+  - The heading of the markdown changes in the same way. A script that reads the line must read
+    the new form. `summary` of the JSON does not change.
+- **The line `pinned by` of a cluster with many profiles names the profile of the pack.** An
+  example is `aws-stack@1.0.0 on cluster payments`. Before, the line gave the title of the record,
+  with each profile. The line of a profile version names that version. The cell of the markdown
+  changes in the same way. `subject` of the JSON keeps the title of the record, and `owner` is
+  new. See [A cluster with many profiles](../commands/behind.md#a-cluster-with-many-profiles).
+- **A pin that is behind a newer minor version can have the line `next patch`.** It names the
+  newest patch of its minor version. It also gives the command `strata compare` of the two pack
+  versions. The markdown adds the line to the cell of the status. A script that reads the lines
+  under a pin must skip it. The JSON does not change.
 
 ### For a user of the CI drop-ins
 
@@ -1189,6 +1227,9 @@ field, a value, an input, or an option is in the sections above.
 - `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
   accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
   one of them.
+- `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
+  the report of 0.33.0. The JSON renderer does not read it.
+- `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
 
 ### For a user of the library of strata-preflight
 

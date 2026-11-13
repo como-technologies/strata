@@ -814,6 +814,10 @@ const PASSES: [Passes; 4] = [
                 flags: &["--pre-release"],
                 why: "an issue opens for a final version, and a pipeline would open one for each build",
             },
+            Left {
+                flags: &["--behind-only"],
+                why: "the script reads the JSON, and the JSON keeps each pin",
+            },
         ],
     },
     Passes {
@@ -4760,7 +4764,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
         // the cell is the bump line of `behind --format markdown` without its "bump to", and then
         // the same lines under it
         let behind: strata::ops::BehindReport = serde_json::from_value(report).unwrap();
-        let md = common::markdown().render_behind(&behind).unwrap();
+        let md = common::markdown().render_behind(&behind, false).unwrap();
         let row = md
             .lines()
             .find(|l| l.starts_with("| `csi-aws-ebs`"))

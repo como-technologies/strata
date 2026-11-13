@@ -61,7 +61,8 @@ impl Renderer for JsonRenderer {
         self.document(l)
     }
 
-    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
+    fn render_behind(&self, r: &crate::ops::BehindReport, _behind_only: bool) -> Result<String> {
+        // the document holds each pin and each profile version: `--since` reads them all
         self.document(r)
     }
 
