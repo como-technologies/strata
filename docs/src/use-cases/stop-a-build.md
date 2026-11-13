@@ -45,11 +45,14 @@ with no key:
 ```
 
 Each rule is one line. The static tier reads the entity and the records alone,
-so it runs on every pull request in milliseconds.
+so it runs on every pull request in milliseconds. Each rule that ran here is a
+probe, so no check of the run can fail it, and the last line says
+`NOT COUNTED`. The readiness names the tiers that ran.
 
 With a key, strata calls the validate route of the cloud type and the other
 routes that a create does not call, and the tool of the cloud when it is on the
-machine:
+machine. The validate route needs `cluster.create`, and no viewer role gives
+it: see [The key of the live tier](../commands/preflight/tiers.md#the-key-of-the-live-tier).
 
 ```text
 {{#include ../output/preflight-live.txt}}

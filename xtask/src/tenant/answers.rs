@@ -3,7 +3,9 @@
 use serde_json::{Value, json};
 
 use super::Tenant;
-use super::routes::{CLUSTERS, PROFILES, cluster_route, profile_route, repave_route};
+use super::routes::{
+    CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
+};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -151,15 +153,34 @@ impl Tenant {
     /// whose role does not give the permission that the route needs. The body is in the form of
     /// the bodies of Palette, with the code `AccessDenied`.
     pub fn forbid(&self, project: &str, path: &str) {
+        self.deny(
+            project,
+            path,
+            "cluster.get operation is not permitted, required permissions cluster.get",
+        );
+    }
+
+    /// Make Palette refuse the validate route of the create of `cloud` in `project`, as it does
+    /// for a key whose role does not give `cluster.create`. The route needs it, also for a body
+    /// that creates nothing. Palette answers HTTP 403 with the code `AccessDenied`, and the
+    /// message names the permission and its scopes.
+    pub fn deny_create(&self, project: &str, cloud: &str) {
+        self.deny(
+            project,
+            &cluster_validate_route(cloud),
+            "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+        );
+    }
+
+    /// Make Palette refuse `path` in `project` with HTTP 403, the code `AccessDenied`, and
+    /// `message`. The answer of the route goes, so each request gets the refusal.
+    fn deny(&self, project: &str, path: &str, message: &str) {
         let file = self.doc(project, path);
         if file.is_file() {
             std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         }
         let refused = crate::palette::forbidden(&file);
-        let body = json!({
-            "code": "AccessDenied",
-            "message": "cluster.get operation is not permitted, required permissions cluster.get",
-        });
+        let body = json!({"code": "AccessDenied", "message": message});
         std::fs::write(&refused, body.to_string() + "\n")
             .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
     }

@@ -37,7 +37,7 @@ the options that it takes:
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Each counted check passed. A failed probe is not counted. |
+| `0` | No counted check failed. A failed probe is not counted. The last line is `OK` when each counted check passed, and `NOT COUNTED` when no counted check ran. |
 | `1` | A counted check failed, or the readiness is under `--ready`. |
 | `2` | Strata could not answer: no key for a live tier, Palette did not answer, or a program failed. |
 
@@ -51,12 +51,14 @@ the options that it takes:
 checks that apply to the entity. A check that did not run counts against it: a
 tier that was not asked for (`--tier`, `--offline`), a Palette check with no
 key, or a command under `--no-exec`. So the static tier alone reads as a low
-readiness, and the report says how many checks did not run and why. Exit `1`
-when the readiness is under the percentage. A row with no check in
-strata-preflight (`NOT CHECKED`) is outside the count; the report prints that
-count beside it. The last lines of the report say where `--out` wrote the
-reports and the world, or that no file was written. They also say how to
-write the world when the run did not.
+readiness, and the report says how many checks did not run and why. The report
+names the tiers beside the readiness. Exit `1` when the readiness is under the
+percentage.
+
+A row with no check in strata-preflight (`NOT CHECKED`) is outside the count;
+the report prints that count beside it. The last lines of the report say where
+`--out` wrote the reports and the world, or that no file was written. They also
+say how to write the world when the run did not.
 
 ## Options
 

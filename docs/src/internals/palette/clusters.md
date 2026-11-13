@@ -299,6 +299,16 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
+The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
+sends more requests. The validate route of a create needs a permission that a viewer role
+does not give. The code of Palette shows this table; no live run shows it yet.
+
+| Requests | Permission | Built-in roles that hold it | The answer without it |
+| --- | --- | --- | --- |
+| [The validate route of a create](./validate-routes.md#the-permission-of-the-route), `POST /v1/spectroclusters/{cloudType}/validate` | `cluster.create` | Project Admin, Cluster Admin, Tenant Admin, Tenant Project Admin. No viewer role and no editor role holds it. | HTTP 403, `AccessDenied` |
+| A cloud account, and a list of the account with `cloudAccountUid`, such as the instance types | `cloudaccount.get` | Project Viewer and Cluster Viewer. Cluster Profile Viewer does not hold it. | HTTP 500, `OperationForbidden` |
+| An edge host, `GET /v1/edgehosts/{uid}` | `edgehost.get` | Project Viewer and Cluster Viewer. Cluster Profile Viewer does not hold it. | HTTP 500, `OperationForbidden` |
+
 A request without its permission gets one of these answers:
 
 | Code | HTTP status | When |

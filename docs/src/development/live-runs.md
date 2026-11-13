@@ -1420,7 +1420,7 @@ needs the example at its baseline with cluster A.
 | `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. |
 | `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
-| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
+| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier. On aws, no rule of the static tier is a preflight check, so the verdict is `**NOT COUNTED: no check counted on aws**` (#619). |
 | `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. |
 | `preflight-job-key`, `preflight-job-key-says` | 0 | #618: with the key of the lab where strata finds it, `preflight.sh` reads Palette. The log has no line that says that the run is offline, and the report says `tiers static, palette`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
@@ -1696,7 +1696,11 @@ It also sends the request of the click "Ask Palette" of the observer:
 `POST /v1/clusterprofiles/{uid}/validate/packs` for the add-on version. That route
 changes nothing.
 
-The script then runs `verify --who`, a record of cluster A, and `behind` with both keys. It needs the example at its baseline with cluster A,
+The script then runs `verify --who`, a record of cluster A, and `behind` with both keys.
+Stage 3 runs the rules of the validate route of the create on cluster A with both keys:
+`palette-validate`, `worker-cpu-floor`, and `pack-dependency`. That route needs `cluster.create`:
+see [The permission of the route](../internals/palette/validate-routes.md#the-permission-of-the-route).
+It needs the example at its baseline with cluster A,
 `OBSERVER_ROLE_KEY`, and `OBSERVER_ROLE`, the name of the role. With no key, it says
 `could not check` and exits `2`.
 
@@ -1718,6 +1722,8 @@ needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 | `validate-body` | 0 | #647: the body of the validate request, made from the record of the add-on version |
 | `control-validate-packs` | 0 | #647: the key of the example sends the validate request, and Palette answers 2xx |
 | `role-validate-packs` | ? | #647: the status and the error code of the same request with the key of the role under test. The click of the observer sends this request. The check records the answer and does not judge it. With Project Viewer, the request answered HTTP 200 |
+| `preflight-control-validate` | 0 | #619: with the key of the example, the rules of the validate route of the create give no `error` on cluster A. No result yet: the check is new, and no live window ran it |
+| `preflight-role-validate` | ? | #619: the verdict and the first message of the same rules with the key of the role under test. With Project Viewer, each rule must give `error`, with HTTP 403, the code `AccessDenied`, and a message that names `cluster.create`. No result yet: the check is new, and no live window ran it |
 
 ## observer-chart.sh
 

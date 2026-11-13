@@ -20,9 +20,10 @@
 //! [`REFUSALS`], Palette refuses the request. The answer is that status with that file as the
 //! body.
 //!
-//! The validate route of a create, `POST /v1/spectroclusters/{cloudType}/validate`, reads the body
-//! first. When a profile of the body is of another cloud type, the answer is HTTP 500 with the
-//! code `ClusterProfilesNotSupported`, as Palette gives it. See `profile_cloud_refusal`.
+//! The validate route of a create, `POST /v1/spectroclusters/{cloudType}/validate`, checks the
+//! permission of the key first: a file of a 403 refusal gives its answer. It then reads the body.
+//! When a profile of the body is of another cloud type, the answer is HTTP 500 with the code
+//! `ClusterProfilesNotSupported`, as Palette gives it. See `profile_cloud_refusal`.
 //!
 //! A route of the tenant, such as the saved tag filters under `/v1/filters`, refuses each request
 //! that names a project. The answer is HTTP 403 with the code `ProjectUidIsNotEmpty`, whatever
@@ -208,6 +209,11 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
 /// comma, which no run shows.
 fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
     let cloud = validated_cloud(request.target.trim_start_matches('/'))?;
+    // Palette checks `cluster.create` before it reads the body: a key that it refuses gets the 403
+    let route = file_for(root, request.project.as_deref(), &request.target);
+    if route.as_deref().and_then(refusal_of) == Some(403) {
+        return None;
+    }
     let entity: serde_json::Value = serde_json::from_slice(&request.body).ok()?;
     let names: Vec<String> = entity["spec"]["profiles"]
         .as_array()
@@ -681,6 +687,12 @@ mod tests {
             refusal("/v1/spectroclusters/aws/validate/packs", &["u-gcp"]),
             None
         );
+        // Palette checks `cluster.create` before it reads the body. So a key that it refuses gets
+        // the 403 of the route, and not the refusal of the profile
+        let validate = dir.join("p1/v1/spectroclusters/aws/validate.json");
+        fs::create_dir_all(validate.parent().unwrap()).unwrap();
+        fs::write(forbidden(&validate), "{}").unwrap();
+        assert_eq!(refusal(route, &["u-aws", "u-gcp"]), None);
     }
 
     /// A file of a refusal gives its status, and the first status of [`REFUSALS`] wins.
