@@ -1172,8 +1172,12 @@ facts:
       fields:
         - spec.clusterProfileTemplates[].uid
     stand_in: []
-    live: []
-    unchecked: The code of Palette shows it. No script adds a profile, or a new version of the infrastructure profile, to a cluster and reads the order.
+    live:
+      - order.sh:added-last
+      - order.sh:upgraded-last
+      - order.sh:summary-first
+      - order.sh:summary-addon
+      - order.sh:control-kept
     pages:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     rules:

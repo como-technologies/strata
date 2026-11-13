@@ -22,7 +22,7 @@ show.
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, the repave answer for a cluster in the template (#276), and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
-| `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
+| `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. Stage 4: the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control (#844). It puts the baseline back. |
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. Stage 3 reads with a key that cannot read the audit log (#664), and needs `STRATA_LIVE_NO_AUDIT_KEY`. |
 | `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `scope.sh` | A profile of the tenant with the name and the version of the release profile: what the listing, the search, and the document of Palette say, and what `list` and `snapshot` do with the ref that two scopes answer (#113). It needs the profiles, and no cluster. |
@@ -145,7 +145,7 @@ its end.
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
-| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
+| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `draft.sh` | The draft test (#155): a draft of the add-on version, `<uid>@draft`, and the publish. |
 | `pending.sh` | The pending update test (#70, #78): when Palette says that an update waits for cluster A, what a record, the listing, and `compare` say, and what `cluster:<uid>@pending` holds; `consumers --list-only`. |
@@ -195,8 +195,8 @@ Its stage 9 moves the console address of `VMO_CLUSTER` to a mark, and back.
 `registry-move-nodes.sh` checks the baseline, and puts the release version back, unless a repave waits for approval.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
-gone, and `order.sh` leaves two versions edited: run `just live-down` after
-each.
+gone, and stages 1 to 3 of `order.sh` leave two versions edited: run
+`just live-down` after each.
 
 | Script | Changes | Holds |
 | --- | --- | --- |
@@ -220,7 +220,7 @@ each.
 | `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B. Stage 5: a role binding of cluster A, through the API, and back. Stage 6: nothing; it only reads. Stage 7: both overrides of the worker pool of cluster A, through the API, and back | the profiles, cluster A, the baseline |
 | `template.sh` | a template over the release and add-on versions; a cluster in the template, then removed; version 1.0.1, in place and put back; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
-| `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
+| `order.sh` | the pack order of two published versions, and the profile order of cluster A. Stage 4: cluster B, the release version 1.0.2, and an add-on profile, then the profiles of cluster A; it removes each | the packs, the values, the manifests; stages 1 to 3 leave the versions edited, and stage 4 puts the baseline back |
 | `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
 | `draft.sh` | the manifest of the add-on version, in a draft and then published; it puts the edit back | the profiles, the clusters |
 | `pending.sh` | a manifest of the add-on version, a value and a kubeadm command of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
@@ -582,6 +582,7 @@ just live-tiers-narrow                                                         #
 just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
+just live-order-append                                                         # #844, needs just live-up; builds and removes cluster B, and puts the baseline back
 just live-pack-states                                                          # #68, needs no cluster
 just live-knurl                                                                # #66, read-only; the instance checks need just live-up
 just live-who                                                                  # #69, stage 2 needs just live-up

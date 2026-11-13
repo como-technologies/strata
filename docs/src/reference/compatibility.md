@@ -1141,6 +1141,8 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+  The message of the way forward also says that a new version of the infrastructure profile goes
+  to the end of the stored order.
 
 ### For a user of the CI drop-ins
 

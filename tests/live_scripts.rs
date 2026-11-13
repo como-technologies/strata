@@ -5363,6 +5363,256 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     );
 }
 
+/// How the stand-in of a cluster stores the order of its profiles after a `PUT` or a `PATCH` of
+/// `/v1/spectroclusters/{uid}/profiles`.
+#[derive(Clone, Copy)]
+enum StoredOrder {
+    /// As the code of Palette does: the profiles that the cluster has keep their order, and each
+    /// new uid goes to the end. A `PUT` drops each profile that its body does not name, and a
+    /// `PATCH` drops the profile that `replaceWithProfile` names.
+    AsPalette,
+    /// The order of the body: a `PUT` stores the order of its body. A `PATCH` puts the new uid in
+    /// the place of the profile that it replaces.
+    AsTheBody,
+}
+
+/// The stand-in of the cluster `uid`, named `name`, with the profiles `first` in that order. It
+/// answers the document, the summary, and each `PUT` and `PATCH` of the profiles, with `order`. A
+/// uid that starts with `r-` is a profile of the type `cluster`, and each other uid an add-on.
+fn ordered_cluster(stage: &Stage, uid: &str, name: &str, first: &[&str], order: StoredOrder) {
+    let routes = stage.path("routes");
+    std::fs::write(
+        routes.join(format!("{uid}.uids")),
+        serde_json::json!(first).to_string(),
+    )
+    .unwrap();
+    let templates =
+        r#"map({uid: ., name: ., type: (if startswith("r-") then "cluster" else "add-on" end)})"#;
+    let route = |path: &str| routes.join(format!("{}.sh", Stage::route_key(path)));
+    executable(
+        &route(&cluster_route(uid)),
+        &format!(
+            r#"#!/usr/bin/env bash
+jq -c '{{metadata: {{uid: "{uid}", name: "{name}"}}, spec: {{clusterProfileTemplates: {templates}}},
+  status: {{state: "Running"}}}}' "$FAKE_ROUTES/{uid}.uids"
+"#
+        ),
+    );
+    executable(
+        &route(&cluster_summary_route(uid)),
+        &format!(
+            r#"#!/usr/bin/env bash
+jq -c '{templates} as $t
+  | {{spec: ({{clusterProfileTemplates: $t}} + if $t == [] then {{}} else {{clusterProfileTemplate: $t[0]}} end)}}' \
+  "$FAKE_ROUTES/{uid}.uids"
+"#
+        ),
+    );
+    let stored = match order {
+        StoredOrder::AsPalette => {
+            r#"($old | map(select(. as $u | ($gone | index($u)) == null))
+         | if $method == "PUT" then map(select(. as $u | ($in | index($u)) != null)) else . end)
+       + ($in - $old)"#
+        }
+        StoredOrder::AsTheBody => {
+            r#"if $method == "PUT" then $in
+       else ($old | map(. as $u | ([$body.profiles[] | select(.replaceWithProfile == $u) | .uid][0] // $u)))
+         + [$body.profiles[] | select((.replaceWithProfile // "") == "") | .uid | select(. as $n | ($old | index($n)) == null)]
+       end"#
+        }
+    };
+    let profiles = format!("{}/profiles", cluster_route(uid));
+    let key = Stage::route_key(&profiles);
+    // the stand-in of curl logs the method of the request before it runs the route
+    executable(
+        &route(&profiles),
+        &format!(
+            r#"#!/usr/bin/env bash
+method=$(tail -n 1 "$FAKE_LOG" | cut -d' ' -f1)
+state="$FAKE_ROUTES/{uid}.uids"
+jq -c --arg method "$method" --slurpfile old "$state" '
+  . as $body | $old[0] as $old | [.profiles[].uid] as $in | [.profiles[] | .replaceWithProfile // empty] as $gone
+  | {stored}' "$FAKE_ROUTES/sent/${{method}}_{key}" > "$state.next" && mv "$state.next" "$state"
+echo '{{}}'
+"#
+        ),
+    );
+}
+
+/// A stage of `order.sh` 4: cluster A and cluster B run the release version `r-1` and the add-on
+/// version `ad-1`. The apply gives cluster B `c-b` and the release version 1.0.2 `r-2`, and the
+/// profile of the add is `x-1`.
+fn order_append_stage(order: StoredOrder) -> Stage {
+    let mut outputs = baseline_outputs();
+    outputs["cluster_b_uid"] = serde_json::json!("c-b");
+    outputs["registries_profile_uid"] = serde_json::json!("rg-1");
+    outputs["os_pack_name"] = serde_json::json!("ubuntu-aws");
+    outputs["tagged_profile_uids"] = serde_json::json!({"1.0.2": "r-2"});
+    let stage = Stage::new(outputs);
+    ordered_cluster(&stage, "c-a", "fred", &["r-1", "ad-1"], order);
+    ordered_cluster(
+        &stage,
+        "c-b",
+        "barney",
+        &["r-1", "ad-1"],
+        StoredOrder::AsPalette,
+    );
+    for uid in ["r-1", "r-2", "ad-1", "x-1"] {
+        let (kind, pack) = if uid.starts_with("r-") {
+            ("cluster", "ubuntu-aws")
+        } else {
+            ("add-on", "strata-live-order")
+        };
+        stage.route(
+            &profile_route(uid),
+            &format!(
+                r#"{{"metadata":{{"uid":"{uid}","name":"{uid}"}},"spec":{{"published":{{"type":"{kind}",
+                    "packs":[{{"name":"{pack}","tag":"24.04","type":"spectro","values":""}}]}}}}}}"#
+            ),
+        );
+        stage.route(&manifests_route(uid), "{}");
+    }
+    stage.route(&cluster_manifests_route("c-a"), "{}");
+    stage.route("/v1/clusterprofiles", r#"{"uid":"x-1"}"#);
+    stage.route("/v1/clusterprofiles/x-1/publish", "{}");
+    stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
+    stage
+}
+
+/// #844: stage 4 of `order.sh` adds a profile to cluster A with a `PUT` that gives it first. Then
+/// it sends the `PATCH` of an upgrade of the release version. Against a Palette that keeps the
+/// stored order, each judged check passes, and the stage puts cluster A back.
+#[test]
+fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_cluster_after_each_step()
+ {
+    let stage = order_append_stage(StoredOrder::AsPalette);
+    let (o, steps) = stage.run("order.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "append-release",
+            "append-profile",
+            "append-add",
+            "added-last",
+            "append-upgrade",
+            "upgraded-last",
+            "summary-first",
+            "summary-addon",
+            "control-kept",
+            "append-back",
+            "append-detach",
+            "append-delete",
+            "append-baseline",
+        ],
+    );
+    for step in ["before", "added", "upgraded"] {
+        for read in ["order-a", "summary-a", "order-b", "summary-b"] {
+            passed(&steps, &[format!("{read}-{step}").as_str()]);
+        }
+    }
+    // the add gives the new profile first in the body, and Palette puts it last
+    let puts = stage.sent("PUT", "/v1/spectroclusters/c-a/profiles");
+    let uids = |body: &serde_json::Value| -> Vec<String> {
+        body["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["uid"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(uids(&puts[0]), ["x-1", "r-1", "ad-1"]);
+    assert_eq!(uids(&puts[1]), ["ad-1", "r-1"], "the detach of the profile");
+    // the upgrade and its undo name one profile, and the profile that it replaces
+    let patches = stage.sent("PATCH", "/v1/spectroclusters/c-a/profiles");
+    let replaces: Vec<(Vec<String>, &str)> = patches
+        .iter()
+        .map(|p| {
+            (
+                uids(p),
+                p["profiles"][0]["replaceWithProfile"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        replaces,
+        [
+            (vec!["r-2".to_string()], "r-1"),
+            (vec!["r-1".to_string()], "r-2")
+        ]
+    );
+    let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
+    assert_eq!(
+        said("summary-a-upgraded"),
+        "{\"spec\":{\"clusterProfileTemplates\":[\
+         {\"uid\":\"ad-1\",\"name\":\"ad-1\",\"type\":\"add-on\"},\
+         {\"uid\":\"x-1\",\"name\":\"x-1\",\"type\":\"add-on\"},\
+         {\"uid\":\"r-2\",\"name\":\"r-2\",\"type\":\"cluster\"}],\
+         \"clusterProfileTemplate\":{\"uid\":\"ad-1\",\"name\":\"ad-1\",\"type\":\"add-on\"}}}\n"
+    );
+    // the apply makes cluster B and 1.0.2 with the content of 1.0.0, and the last one removes both
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        applies
+            .iter()
+            .any(|l| l
+                .contains(r#"-var second_cluster=true -var tag_only_versions={"1.0.2"="24.04"}"#)),
+        "{applies:?}"
+    );
+    let last = applies.last().unwrap();
+    assert!(
+        !last.contains("second_cluster") && !last.contains("tag_only_versions"),
+        "{applies:?}"
+    );
+    let stored = std::fs::read_to_string(stage.path("routes/c-a.uids")).unwrap();
+    assert_eq!(stored.trim(), r#"["ad-1","r-1"]"#, "cluster A is back");
+}
+
+/// #844: against a Palette that stores the order of the body, the two checks of the stored order
+/// fail. The checks of the summary and of the control read no order of a body, so they pass.
+#[test]
+fn order_sh_stage_4_fails_the_checks_of_the_stored_order_when_palette_keeps_the_order_of_the_body()
+{
+    let stage = order_append_stage(StoredOrder::AsTheBody);
+    let (o, steps) = stage.run("order.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}\n{}", text(&o.stderr));
+    failed(&steps, &["added-last", "upgraded-last"]);
+    passed(
+        &steps,
+        &["summary-first", "control-kept", "append-baseline"],
+    );
+}
+
+/// With no argument, `order.sh` runs stages 1 to 3, and stage 4 builds no cluster B. It refuses a
+/// stage other than 1 and 4.
+#[test]
+fn order_sh_runs_stage_4_only_when_its_number_is_given_and_refuses_another_stage() {
+    let stage = order_append_stage(StoredOrder::AsPalette);
+    let (_, steps) = stage.run("order.sh", &[]);
+    for heading in ["== stage 1: ", "== stage 2: ", "== stage 3: "] {
+        assert!(steps.contains(heading), "{heading}:\n{steps}");
+    }
+    assert!(!steps.contains("== stage 4"), "{steps}");
+    assert!(
+        !stage.tofu_calls().contains("second_cluster"),
+        "{}",
+        stage.tofu_calls()
+    );
+    let (o, _) = stage.run("order.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("examples/live/order.sh [4]"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
 /// The text of a file of the OpenTofu configuration of the live example.
 fn terraform_file(name: &str) -> String {
     std::fs::read_to_string(live_script("terraform").join(name)).unwrap()

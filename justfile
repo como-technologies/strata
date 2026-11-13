@@ -495,6 +495,11 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
+# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and puts the baseline back.
+[group('live checks')]
+live-order-append: build
+    examples/live/order.sh 4
+
 # The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up; the stage of the key with no audit permission needs STRATA_LIVE_NO_AUDIT_KEY (#664). Undoes each edit.
 [group('live checks')]
 live-who: build
