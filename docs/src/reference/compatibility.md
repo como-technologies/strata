@@ -1195,6 +1195,18 @@ field, a value, an input, or an option is in the sections above.
   newest patch of its minor version. It also gives the command `strata compare` of the two pack
   versions. The markdown adds the line to the cell of the status. A script that reads the lines
   under a pin must skip it. The JSON does not change.
+- **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
+  commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
+  `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
+  `@latest@draft`. An app profile gets its ref, such as `@latest is appprofile:shop@1.0.0`. When
+  `@latest` skips a pre-release above that version, the note names the highest one:
+  `; it skips 1.0.1-mr2.770685, a pre-release by SemVer`. A script that reads the whole
+  standard error must accept the note, or pass `-q`. See
+  [Record the newest version](../commands/snapshot/profile-version.md#record-the-newest-version).
+- **The note of `pack:<name>@latest` names the skipped pre-release.** Its note
+  `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
+  matches the whole note must match the new text. Standard output and the exit code of both
+  changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
 
 ### For a user of the CI drop-ins
 
