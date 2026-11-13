@@ -12,8 +12,8 @@ use super::{connect, now_utc, project_arg};
 
 pub(crate) fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    // the old names read one kind deeper each, as before, so a script that uses them gets the
-    // same answer until the release that removes them
+    // each old name reads one kind deeper, as before, so a script that uses it gets the same
+    // answer until its removal
     for (old, given, part) in [
         ("--packs", a.packs, "versions"),
         ("--applied", a.applied, "clusters"),

@@ -8,9 +8,9 @@ use serde_json::Value;
 use super::{
     AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH,
     CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE, PACKS, PROFILE_LISTING,
-    PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, SEARCH_ENVIRONMENT,
-    SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value,
-    route, search_all, sorted_names, uids_named, with_limit, with_nested,
+    PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, SEARCH_ENVIRONMENT, SEARCH_STRING,
+    SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value, route,
+    search_all, sorted_names, uids_named, with_limit, with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::closed_set::ClosedSet;

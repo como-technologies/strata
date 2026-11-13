@@ -171,6 +171,7 @@ pack, compare the profile versions: [Review a change before you publish it](./re
 - Record the pack, and verify the record on a schedule. `verify` reads the
   registry again, and answers `DRIFT` with exit `1`.
 - Name the registry with `--registry` when two registries hold the pack name.
+  `strata list registries` names each registry that the key can see.
 
 ## Palette behavior
 

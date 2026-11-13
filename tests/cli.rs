@@ -1153,7 +1153,11 @@ fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
         assert!(detail.1.contains(&path), "--detail reads {path}");
     }
     assert!(detail.0["profiles"][0]["packs"].is_array(), "{}", detail.0);
-    assert!(detail.0["clusters"][0]["profiles"].is_array(), "{}", detail.0);
+    assert!(
+        detail.0["clusters"][0]["profiles"].is_array(),
+        "{}",
+        detail.0
+    );
     assert_eq!(
         list(&["profiles", "--detail"]),
         list(&["profiles", "--packs"])

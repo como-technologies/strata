@@ -4601,6 +4601,39 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
     failed(&steps, &["packs-paged-count"]);
 }
 
+/// A run of packs.sh whose `strata list registries --json` prints `registries`. Gives steps.log.
+fn packs_registries(registries: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.strata("list registries --json", 0, registries);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    steps
+}
+
+#[test]
+fn packs_sh_checks_that_list_registries_names_the_public_repo_one_time_with_its_uid_and_kind() {
+    let steps = packs_registries(
+        r#"{"registries":[{"name":"Palette Registry","uid":"r2","kind":"oci"},
+            {"name":"Public Repo","uid":"r1","kind":"pack"}]}"#,
+    );
+    passed(&steps, &["list-registries"]);
+    for wrong in [
+        // the registry of the script is not in the list
+        r#"{"registries":[{"name":"Palette Registry","uid":"r2","kind":"oci"}]}"#,
+        // two registries have its name
+        r#"{"registries":[{"name":"Public Repo","uid":"r1","kind":"pack"},
+            {"name":"Public Repo","uid":"r3","kind":"pack"}]}"#,
+        // the listing names no kind
+        r#"{"registries":[{"name":"Public Repo","uid":"r1"}]}"#,
+        // no uid
+        r#"{"registries":[{"name":"Public Repo","uid":"","kind":"pack"}]}"#,
+    ] {
+        failed(&packs_registries(wrong), &["list-registries"]);
+    }
+}
+
 /// A run of packs.sh whose `strata packs <name> --registry ... --json` prints `kubernetes` for
 /// kubernetes and `cert_manager` for cert-manager. Gives steps.log.
 fn packs_newest(kubernetes: &str, cert_manager: &str) -> String {

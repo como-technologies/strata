@@ -356,8 +356,7 @@ fn list_registries_names_each_registry_that_the_key_can_see_with_its_uid_and_kin
 /// The pack rows and the registries read one registry listing. The list of the registries is the
 /// answer, so a Palette with no listing is its error, where the pack rows show the uid alone.
 #[test]
-fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of_the_registries()
-{
+fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of_the_registries() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_two_copies(dir.path(), Some(two_registries()));
     let both = ListOptions {
@@ -379,7 +378,10 @@ fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of
     };
     let l = listing(&api, &packs).unwrap();
     let pack = &l.profiles.as_ref().unwrap()[0].packs.as_ref().unwrap()[3];
-    assert_eq!((pack.registry.as_str(), pack.registry_uid.as_str()), ("", PROD_REGISTRY));
+    assert_eq!(
+        (pack.registry.as_str(), pack.registry_uid.as_str()),
+        ("", PROD_REGISTRY)
+    );
     let err = listing(&api, &both).unwrap_err();
     assert!(
         matches!(err, strata::Error::Api { status: 404, .. }),

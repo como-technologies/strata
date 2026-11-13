@@ -403,12 +403,7 @@ fn cluster_release(r: &mut Runner) {
         true,
         "strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
     );
-    r.step(
-        "cluster-applied",
-        0,
-        false,
-        "strata list clusters --detail",
-    );
+    r.step("cluster-applied", 0, false, "strata list clusters --detail");
     cluster_release_many_profiles(r);
     r.step(
         "cluster-moved",

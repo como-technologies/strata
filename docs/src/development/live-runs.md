@@ -200,6 +200,7 @@ registries the tenant can see, including one pack that two registries hold.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `list-packs` | 0 | #55: the profiles list the pack versions they pin |
+| `list-registries` | 0 | #635: `list registries` names `Public Repo` one time, with its uid and the kind `pack`, `helm`, or `oci`. No result yet: no live window ran the check |
 | `compare-versions`, `compare-json` | 1 | #55: two versions of one pack differ, and the document names the pack on both sides |
 | `compare-images`, `compare-images-says` | 0 | #77: the diff flags `IMAGES` and `CHARTS` beside `AUTHORED`, and names each image that moved. The move is from `csi-aws-ebs` 1.63.1 to 1.65.0. Eight images are retagged, and the chart `aws-ebs-csi-driver` is at 2.65.0 |
 | `compare-same` | 0 | #55: a pack version against itself is identical |

@@ -28,8 +28,8 @@ mod profiles;
 mod registries;
 
 use profiles::list_profiles;
-use registries::list_registries;
 pub use registries::ListedRegistry;
+use registries::list_registries;
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -65,8 +65,7 @@ pub enum ListKind {
     Packs,
 }
 
-/// The refusal of `list packs`. It names the two commands that answer the questions about packs
-/// that strata keeps.
+/// The refusal of `list packs`. It names the two commands that answer a question about packs.
 const NO_PACK_LIST: &str = "`list` does not list packs, because a list of the packs of a \
                             registry is a catalog. `strata list --detail` gives the packs of \
                             each profile version. `strata packs <name>` gives the versions of \
@@ -423,7 +422,7 @@ where
     // each project listing of the command is read one time, whoever needs it
     let mut listings = ProjectListings::default();
     // the registry listing too: the pack rows and the registries read the same one
-    let mut registry_listings = Registries::new(&home);
+    let mut registries = Registries::new(&home);
     // a query of labels searches every project the key can read, so the listing is at tenant
     // scope, and each cluster names its project
     let project_uid = if options.query.is_empty() {
@@ -434,12 +433,7 @@ where
 
     let profiles = if options.wants(ListKind::Profiles) {
         progress.note("listing profiles");
-        Some(list_profiles(
-            &home,
-            options,
-            &mut registry_listings,
-            progress,
-        )?)
+        Some(list_profiles(&home, options, &mut registries, progress)?)
     } else {
         None
     };
@@ -462,9 +456,9 @@ where
     } else {
         None
     };
-    let registries = if options.wants(ListKind::Registries) {
+    let listed_registries = if options.wants(ListKind::Registries) {
         progress.note("listing registries");
-        Some(list_registries(&mut registry_listings)?)
+        Some(list_registries(&mut registries)?)
     } else {
         None
     };
@@ -486,7 +480,7 @@ where
         resolved,
         query_filter,
         filters,
-        registries,
+        registries: listed_registries,
     })
 }
 

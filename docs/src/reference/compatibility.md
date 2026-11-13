@@ -675,12 +675,12 @@ strata reads each value of them:
 - the `status` of a sync
 
 Strata only writes its other documents, such as `strata-packs/1` and
-`strata-diff/1`, and does not read them. So their closed sets stay closed. Three
-fields are exceptions, and take any text. These are the `state` of a version and
-of a registry in `strata-packs/1`, and in `strata-list/1` the `type` of a
-profile and the `kind` of a registry. A program can read such a document with the
-types of the library, such as `ops::PackBuild`. Then a value of a later release
-gives an error, except in those three fields.
+`strata-diff/1`, and does not read them. So their closed sets stay closed, except
+in three fields that take any text. The first is the `state` of a version and of
+a registry in `strata-packs/1`. The other two are the `type` of a profile and the
+`kind` of a registry in `strata-list/1`. A program can read such a document with
+the types of the library, such as `ops::PackBuild`. Then a value of a later
+release gives an error, except in those three fields.
 
 ### The note for a value that Palette gives
 

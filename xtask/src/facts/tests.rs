@@ -1227,7 +1227,7 @@ fn a_call_of_opt_set_that_the_table_of_reads_lacks_is_a_fault() {
 #[test]
 fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a_get_fact() {
     let sources = Sources::read(&crate::repository(), None).0;
-    assert_eq!(sources.set_reads.len(), 4);
+    assert_eq!(sources.set_reads.len(), 5);
     for read in &sources.set_reads {
         let fact = sources
             .facts

@@ -8,7 +8,9 @@ use crate::model::pack_type::PackType;
 
 /// A kind of registry, as the routes of Palette name it. The registry listing,
 /// `GET /v1/registries/metadata`, names the kind of each registry with the same word.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum RegistryKind {
     /// A pack registry. It holds the packs of the type `spectro`.
