@@ -2,6 +2,7 @@
 
 use serde_json::Value;
 
+use super::mask::mask_secret;
 use super::{Method, PaletteApi};
 use crate::config::Config;
 use crate::error::{Error, Result};
@@ -53,8 +54,10 @@ impl HttpApi {
     }
 
     /// The status and the body of an answer with a 2xx status. Else the error that the answer
-    /// stands for: a status out of 2xx, or a body that strata cannot read.
+    /// stands for: a status out of 2xx, or a body that strata cannot read. The body of the error
+    /// holds no copy of the key of the request: Palette quotes a key that it does not know.
     fn body(
+        &self,
         method: Method,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
@@ -87,7 +90,8 @@ impl HttpApi {
                 method,
                 path: path.to_string(),
                 status,
-                body: String::from_utf8_lossy(&body).replace(['\n', '\r'], " "),
+                body: mask_secret(&String::from_utf8_lossy(&body), &self.config.api_key)
+                    .replace(['\n', '\r'], " "),
                 retry_after,
             });
         }
@@ -98,11 +102,12 @@ impl HttpApi {
     /// The JSON of a response, or the error it stands for: the errors of [`HttpApi::body`], or a
     /// body that is not JSON.
     fn read(
+        &self,
         method: Method,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value> {
-        let (status, body) = Self::body(method, path, answer)?;
+        let (status, body) = self.body(method, path, answer)?;
         // a 204 No Content, which the validate routes of the clouds answer, is an answer with no
         // body: null, and not a body that is not JSON. A 200 with no body stays the error it
         // was: a proxy or an outage page, not an answer of Palette
@@ -120,7 +125,7 @@ impl HttpApi {
 impl PaletteApi for HttpApi {
     fn get_json(&self, path: &str) -> Result<Value> {
         let url = format!("{}{}", self.config.base_url, path);
-        Self::read(
+        self.read(
             Method::Get,
             path,
             self.headers(self.agent.get(url.as_str()), JSON_TYPE).call(),
@@ -132,13 +137,13 @@ impl PaletteApi for HttpApi {
         let req = self
             .headers(self.agent.post(url.as_str()), JSON_TYPE)
             .header("Content-Type", JSON_TYPE);
-        Self::read(Method::Post, path, req.send(body.to_string()))
+        self.read(Method::Post, path, req.send(body.to_string()))
     }
 
     fn get_file(&self, path: &str) -> Result<Vec<u8>> {
         let url = format!("{}{}", self.config.base_url, path);
         let answer = self.headers(self.agent.get(url.as_str()), FILE_TYPE).call();
-        Self::body(Method::Get, path, answer).map(|(_, body)| body)
+        self.body(Method::Get, path, answer).map(|(_, body)| body)
     }
 
     fn project_uid(&self) -> Option<&str> {
@@ -254,6 +259,35 @@ mod tests {
         }
     }
 
+    #[test]
+    fn the_error_of_an_answer_that_quotes_the_key_holds_no_copy_of_the_key() {
+        // Palette quotes a key that it does not know three times, and a long key comes back whole
+        let key = format!("strata-{}", "x".repeat(400));
+        let body = format!(
+            r#"{{"code":"ResourceNotFound","message":"API Key '{key}' is not found","details":"{key} {key}"}}"#
+        );
+        let url = serve_once("401 Unauthorized", &body);
+        let api = HttpApi::new(Config::new(url, key.as_str()));
+        let err = api.get_json("/v1/dashboard/projects/metadata").unwrap_err();
+        match &err {
+            Error::Api { status, body, .. } => {
+                assert_eq!(*status, 401);
+                assert_eq!(
+                    body.matches(super::super::mask::MASKED).count(),
+                    3,
+                    "{body}"
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+        for printed in [err.to_string(), err.to_json().to_string(), err.reason()] {
+            assert!(!printed.contains(&key), "{printed}");
+            assert!(
+                !printed.contains("xxxxxxxx"),
+                "no part of the key: {printed}"
+            );
+        }
+    }
     #[test]
     fn retry_after_header_parses_whole_seconds_only() {
         assert_eq!(retry_after_seconds(Some("2")), Some(2));

@@ -1194,6 +1194,8 @@ API, and removes it. It needs the example at its baseline with cluster A.
   Cluster Profile Viewer. It runs only as `tiers.sh 8`. With no key set, it
   says `could not check` and exits `2`. The stage also runs `strata list` with
   that key (#620).
+- Stage 9 only reads. It makes a key of 400 characters that no tenant has, so
+  it needs no other key. It runs only as `tiers.sh 9`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1234,6 +1236,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `narrow-list-profiles` | 0 | #620: the listing holds the release profile, because the role gives `clusterProfile.list`. No result yet: no live window ran stage 8. |
 | `narrow-list-says` | 0 | #620: the listing has the line `clusters: not read (...)` with the answer of Palette to the cluster listing: HTTP 500 with the code `ResourceAccessDenied`. The code of Palette shows this answer for a role in the project without `cluster.list`, and the stand-in gives it. No result yet: no live window ran stage 8. |
 | `narrow-list-once` | 1 | #620: standard error of `narrow-list` holds no line `retry`, so strata asked for the clusters one time. No result yet: no live window ran stage 8. |
+| `unknown-key-read` | 0 | #620: the project listing with a key that Palette does not know. `api.sh get-status` prints the status and the body of the answer, and exits `0`. No result yet: no live window ran stage 9. |
+| `unknown-key-says` | 0 | #620: the answer is HTTP 401 with the code `ResourceNotFound`, and its body holds the key 3 times. A read by hand on the host showed this answer, with the key in `message`, in `details`, and in the identifier in `details`. No result yet: no live window ran stage 9. |
+| `unknown-key-list` | 2 | #620: `strata list projects` with that key, as text and with `--json`, exits `2` with the error. No result yet: no live window ran stage 9. |
+| `unknown-key-masked` | 1 | #620: the standard output and the standard error of `unknown-key-list` hold no copy of the key. No result yet: no live window ran stage 9. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says

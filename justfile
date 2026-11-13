@@ -664,6 +664,11 @@ live-tiers-pool: build
 live-tiers-narrow: build
     examples/live/tiers.sh 8
 
+# The unknown key test (#620): what Palette answers to a key that it does not know, and that the error of strata holds no copy of it. Needs live-up; reads only, with a key that no tenant has.
+[group('live checks')]
+live-tiers-unknown-key: build
+    examples/live/tiers.sh 9
+
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]
 live-inventory:

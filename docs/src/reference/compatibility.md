@@ -1094,6 +1094,11 @@ field, a value, an input, or an option is in the sections above.
 - **Strata sends no 5xx with `ResourceAccessDenied` or `NoRolesAssociated`
   again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
   waited between the requests. Each request got the same denial.
+- **The error of an answer holds no copy of the API key.** Strata masks each
+  whole copy of the key in the body with `********`. It does so before it
+  prints or keeps the error. Palette quotes a key that it does not know three
+  times. See
+  [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 
 ### For a user of the CI drop-ins
 
