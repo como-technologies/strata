@@ -1,7 +1,7 @@
 use super::exec::run_command;
 use super::*;
 use crate::error::Result;
-use crate::routes::{edge_host_route, profile_route};
+use crate::routes::{access_denied_message, edge_host_route, error_body, profile_route};
 use crate::rule::{ExecCheck, Level, PaletteCheck, PaletteRead, Severity, Status};
 use serde_json::json;
 use std::time::Duration;
@@ -300,11 +300,10 @@ fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
 #[test]
 fn a_denial_of_the_create_names_the_permission_and_not_the_key_after_an_answer_of_the_run() {
     let route = "/v1/spectroclusters/aws/validate";
-    let denied = json!({
-        "code": Denial::Route.as_str(),
-        "message": "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project",
-    })
-    .to_string();
+    let denied = error_body(
+        Denial::Route.as_str(),
+        &access_denied_message("cluster.create", "project"),
+    );
     let api = strata::api::MemoryApi::new()
         .with(profile_route("p1"), json!({"metadata": {"uid": "p1"}}))
         .failing(format!("POST {route}"), 403, denied.as_str());
@@ -396,11 +395,10 @@ fn the_backend_asks_again_after_an_error_that_time_can_remove() {
 /// a second request can give a second message for one denial.
 #[test]
 fn the_backend_keeps_a_denial_of_the_key_and_gives_each_check_the_same_error() {
-    let denied = json!({
-        "code": Denial::Route.as_str(),
-        "message": "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant",
-    })
-    .to_string();
+    let denied = error_body(
+        Denial::Route.as_str(),
+        &access_denied_message("cluster.create", "project or tenant"),
+    );
     for (status, body) in [(403u16, denied.as_str()), (401, "{}")] {
         let api = strata::api::MemoryApi::new().failing("POST /v1/x", status, body);
         let b = LiveBackend::new(Some(&api), false);

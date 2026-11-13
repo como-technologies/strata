@@ -3,7 +3,8 @@
 //! The crate names each route in a const of its own that is not public. So this file names the
 //! route again, in one place. `tests/common/mod.rs` re-exports it for the tests. The libraries
 //! of `benches/` and `fuzz/`, the tests of `strata-preflight`, and the unit tests of
-//! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists.
+//! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists. The
+//! stand-in of `xtask/` builds the body and the message of a denial with it, as the tests do.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
@@ -36,13 +37,28 @@ pub fn error_body(code: &str, message: &str) -> String {
     json!({"code": code, "message": message}).to_string()
 }
 
-/// The message of the answer of Palette to the cluster listing for a key whose roles in the
-/// project `lab` do not give `cluster.list`. The code is `ResourceAccessDenied`, with HTTP 500.
-pub const CLUSTERS_DENIED_MESSAGE: &str = "Project 'lab' access denied";
+/// The message of the refusal of a route as a whole, with HTTP 403 and the code `AccessDenied`. The
+/// role does not give `permission` in `scope`, such as `filter.list` in `tenant`. Palette names the
+/// permission two times: as the operation, and as the permission that the route needs.
+pub fn access_denied_message(permission: &str, scope: &str) -> String {
+    format!(
+        "{permission} operation is not permitted, required permissions '{permission}' in the scope(s) {scope}"
+    )
+}
 
-/// The message of the answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that
-/// gives `filter.list`. The code is `AccessDenied`, with HTTP 403.
-pub const FILTERS_DENIED_MESSAGE: &str = "filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant";
+/// The message of the refusal of one object, with HTTP 500 and the code `OperationForbidden`. The
+/// role does not give `permission`, such as `cluster.get`. The message names the permission two
+/// times.
+pub fn operation_forbidden_message(permission: &str) -> String {
+    format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
+}
+
+/// The message of the refusal of a request in the project `name`, with HTTP 500 and the code
+/// `ResourceAccessDenied`. No role of the user in the project gives the access. Palette names the
+/// project by its name.
+pub fn project_denied_message(name: &str) -> String {
+    format!("Project '{name}' access denied")
+}
 
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";

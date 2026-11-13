@@ -754,8 +754,10 @@ fn a_401_or_another_403_still_names_the_key() {
 #[test]
 fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
     let permission = "the role of the key does not give the permission 'filter.list'";
-    let filters_denied =
-        palette::error_body(Denial::Route.as_str(), palette::FILTERS_DENIED_MESSAGE);
+    let filters_denied = palette::error_body(
+        Denial::Route.as_str(),
+        &palette::access_denied_message("filter.list", "tenant"),
+    );
     // the first request of the run: nothing proved the key yet
     let first = api_message(403, &filters_denied);
     assert!(first.contains(permission), "{first}");
@@ -779,9 +781,12 @@ fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer
 fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
     let object = palette::error_body(
         OPERATION_FORBIDDEN_CODE,
-        "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission",
+        &palette::operation_forbidden_message("cluster.get"),
     );
-    let project = palette::error_body(Denial::Project.as_str(), palette::CLUSTERS_DENIED_MESSAGE);
+    let project = palette::error_body(
+        Denial::Project.as_str(),
+        &palette::project_denied_message("lab"),
+    );
     let no_role = palette::error_body(
         Denial::NoRole.as_str(),
         "No roles associated to user 'barney'",

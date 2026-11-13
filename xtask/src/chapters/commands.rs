@@ -7,10 +7,8 @@ use super::ids::{
     DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::{
-    CLUSTER_LISTING, Edit, TAG_FILTER_LISTING, TENANT, access_denied_message,
-    profile_exists_message, project_denied_message,
-};
+use crate::common_palette::{access_denied_message, project_denied_message};
+use crate::tenant::{CLUSTER_LISTING, Edit, TAG_FILTER_LISTING, TENANT, profile_exists_message};
 use serde_json::json;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{Denial, PROFILE_EXISTS_CODE};

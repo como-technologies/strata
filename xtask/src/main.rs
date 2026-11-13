@@ -25,6 +25,12 @@ mod checks;
 #[path = "../../tests/common/code_span.rs"]
 #[allow(dead_code)]
 mod code_span;
+// The routes and the answers of Palette that the tests of strata serve. The stand-in builds the body
+// and the message of a denial with them, so the tests and the book read one message. The stand-in
+// uses no other item of it.
+#[path = "../../tests/common/palette.rs"]
+#[allow(dead_code)]
+mod common_palette;
 mod contract;
 mod facts;
 mod files;

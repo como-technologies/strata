@@ -13167,7 +13167,7 @@ fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answer
         "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
         error_body(
             Denial::Route.as_str(),
-            "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+            &access_denied_message("cluster.create", "project or tenant or system"),
         )
     );
     std::fs::write(

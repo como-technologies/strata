@@ -7,6 +7,7 @@ use super::Tenant;
 use super::routes::{
     CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
 };
+use crate::common_palette::{access_denied_message, error_body, operation_forbidden_message};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -23,27 +24,6 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
 /// validate route, and a PUT of a profile give it.
 pub fn profile_exists_message(name: &str, version: &str) -> String {
     format!("Cluster Profile with name '{name}' and version '{version}' already exists")
-}
-
-/// The message of the refusal of one object with [`Denial::Object`], to a role that
-/// does not give `permission`, such as `cluster.get`. The message names the permission two times.
-fn operation_forbidden_message(permission: &str) -> String {
-    format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
-}
-
-/// The message of the refusal of a route as a whole with [`Denial::Route`], to a role that does
-/// not give `permission` in `scope`, such as `filter.list` in `tenant`. Palette names the
-/// permission two times: as the operation, and as the permission that the route needs.
-pub fn access_denied_message(permission: &str, scope: &str) -> String {
-    format!(
-        "{permission} operation is not permitted, required permissions '{permission}' in the scope(s) {scope}"
-    )
-}
-
-/// The message of the refusal of a request in the project `name` with [`Denial::Project`]: no
-/// role of the user in the project gives the access. Palette names the project by its name.
-pub fn project_denied_message(name: &str) -> String {
-    format!("Project '{name}' access denied")
 }
 
 /// The entries of `packs.results` for a move that a pack does not allow on the clusters of the
@@ -206,8 +186,7 @@ impl Tenant {
             std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         }
         let refused = crate::palette::refused(&file, denial.http_status());
-        let body = json!({"code": denial.as_str(), "message": message});
-        std::fs::write(&refused, body.to_string() + "\n")
+        std::fs::write(&refused, error_body(denial.as_str(), message) + "\n")
             .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
     }
 
@@ -362,6 +341,7 @@ impl Tenant {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common_palette::project_denied_message;
     use crate::palette::refused;
     use crate::tenant::routes::{CLUSTER_LISTING, TAG_FILTER_LISTING, rbacs_route};
     use strata::api::codes::OPERATION_FORBIDDEN_CODE;
@@ -382,10 +362,7 @@ mod tests {
         let body: Value =
             serde_json::from_slice(&std::fs::read(refused(&answer, 500)).unwrap()).unwrap();
         assert_eq!(body["code"], OPERATION_FORBIDDEN_CODE);
-        assert_eq!(
-            body["message"],
-            "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission"
-        );
+        assert_eq!(body["message"], operation_forbidden_message("cluster.get"));
     }
 
     #[test]
@@ -419,11 +396,6 @@ mod tests {
                 (Some(code), Some(message))
             );
         }
-        assert_eq!(
-            filters,
-            "filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"
-        );
-        assert_eq!(project, "Project 'dev' access denied");
     }
 
     #[test]

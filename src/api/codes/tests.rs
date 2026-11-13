@@ -308,8 +308,8 @@ fn the_refusals_that_set_another_type_belong_to_their_routes() {
 #[test]
 fn a_denial_names_the_permission_of_its_message_and_a_denial_of_the_project_names_none() {
     // the messages of the answers of Palette that the tests of the crate serve
-    let route = palette::FILTERS_DENIED_MESSAGE;
-    let object = "Operation 'clusterProfile.get' is forbidden";
+    let route = &palette::access_denied_message("filter.list", "tenant");
+    let object = &palette::operation_forbidden_message("clusterProfile.get");
     assert_eq!(Denial::Route.permission(route), Some("filter.list"));
     assert_eq!(
         Denial::Object.permission(object),
@@ -328,7 +328,7 @@ fn a_denial_names_the_permission_of_its_message_and_a_denial_of_the_project_name
         "the role of the key does not give the permission of the request"
     );
     // the quotes of a denial of the project hold the project, and no permission
-    let project = palette::CLUSTERS_DENIED_MESSAGE;
+    let project = &palette::project_denied_message("lab");
     assert_eq!(Denial::Project.permission(project), None);
     assert_eq!(
         Denial::Project.sentence(project),

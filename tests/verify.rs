@@ -34,10 +34,10 @@ use common::{
     cluster_resolved_values_route, cluster_route, cluster_variables_route, clusters_denied,
     edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
     group_route, listing, manifest_route, manifests_route, no_manifests, no_template, no_variables,
-    pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
-    read_json, resolved_values_route, serve_fixture, serve_pack_listing, serve_profile,
-    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template,
-    variables_route, write_record, write_yaml,
+    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
+    profile_route, project_listing, read_json, resolved_values_route, serve_fixture,
+    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
+    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -557,7 +557,7 @@ fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
         clusters_denied(),
         error_body(
             OPERATION_FORBIDDEN_CODE,
-            "Operation 'cluster.list' is forbidden",
+            &operation_forbidden_message("cluster.list"),
         ),
         error_body(
             Denial::NoRole.as_str(),

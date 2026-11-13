@@ -503,7 +503,7 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
 fn no_cluster_create() -> String {
     routes::error_body(
         Denial::Route.as_str(),
-        "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+        &routes::access_denied_message("cluster.create", "project or tenant or system"),
     )
 }
 

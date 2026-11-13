@@ -1154,7 +1154,7 @@ pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::r
 pub fn clusters_denied() -> String {
     error_body(
         strata::api::codes::Denial::Project.as_str(),
-        CLUSTERS_DENIED_MESSAGE,
+        &project_denied_message("lab"),
     )
 }
 
@@ -1165,7 +1165,7 @@ pub fn clusters_denied() -> String {
 pub fn filters_denied() -> String {
     error_body(
         strata::api::codes::Denial::Route.as_str(),
-        FILTERS_DENIED_MESSAGE,
+        &access_denied_message("filter.list", "tenant"),
     )
 }
 
