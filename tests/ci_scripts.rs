@@ -3660,13 +3660,19 @@ impl Report {
     }
 
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
-    /// per record.
+    /// per record. Each record is of a profile version, so its subject is `name@version`.
     fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
         let records: Vec<serde_json::Value> = records
             .iter()
             .map(|(path, status, name, version)| {
+                let subject = if name.is_empty() {
+                    String::new()
+                } else {
+                    format!("{name}@{version}")
+                };
                 let mut r = serde_json::json!({"path": path, "status": status, "name": name,
-                    "version": version, "uid": UID_A, "recordedAt": "2026-09-16T01:56:23Z"});
+                    "version": version, "subject": subject, "uid": UID_A,
+                    "recordedAt": "2026-09-16T01:56:23Z"});
                 if *status == "error" {
                     r["error"] = serde_json::json!({"kind": "api", "message": "GET /v1/clusterprofiles/64f0 failed with HTTP 404"});
                 }
@@ -3923,6 +3929,72 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
     let o = d.run(&["releases/a.json", "--repo", "o/r"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(d.log("gh.log").len(), 1);
+}
+
+/// The title of an issue and the comment of its close name a record of four profiles by their
+/// count (#851). These are the words of the heading of `compare`. The script reads `subject` of
+/// the summary that strata writes, and not the joined names and versions.
+#[test]
+fn verify_report_names_a_record_of_four_profiles_by_their_count_in_the_title_and_the_close() {
+    let raw = tempfile::tempdir().unwrap();
+    make_fixtures(raw.path());
+    let api = serve_four_profiles(raw.path());
+    let record = snapshot_of_ref(&api, &cluster_ref(CLUSTER_UID, None, false), "t0").unwrap();
+    let heading = "4 profiles on cluster lab-cluster";
+    assert_eq!(record.source.title(), heading);
+    let d = Report::verify();
+    // the summary that strata writes for the record, and the path of the record in it
+    let summary = |s: strata::ops::VerifySummary| -> String {
+        d.put("summary.json", &serde_json::to_string(&s).unwrap());
+        d.put("summary.exit", &s.exit_code().to_string());
+        s.records[0].path.clone()
+    };
+
+    // the cluster runs two of the four profiles now, so the record drifts
+    let moved = serve_cluster(strata::api::MemoryApi::new(), raw.path(), "cluster-merged");
+    let path = summary(verify_summary(&record, &moved));
+    d.record(
+        "record",
+        1,
+        &format!("## {heading}\n\n**Result:** CHANGED\n"),
+        "",
+    );
+    d.put("issues.json", "[]");
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls.iter().any(|c| c.starts_with(&format!(
+            "issue create --repo o/r --title strata verify: {heading} drifted ({path})"
+        ))),
+        "{calls:#?}"
+    );
+
+    // the cluster runs the four profiles again, so the record verifies and its issue closes
+    let path = summary(verify_summary(&record, &api));
+    d.put(
+        "issues.json",
+        &serde_json::json!([{"number": 7, "title": "t",
+            "body": format!("<!-- strata-verify: {path} -->\nold")}])
+        .to_string(),
+    );
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r --comment"),
+        "{calls:#?}"
+    );
+    let comment = d.handed("comment", 2);
+    assert!(
+        comment.contains(&format!(
+            "`{path}` verifies again: {heading} is unchanged since t0"
+        )),
+        "{comment}"
+    );
+    for out in [calls.join("\n"), comment] {
+        assert!(!out.contains("lab-profile+lab-addons"), "{out}");
+    }
 }
 
 #[test]

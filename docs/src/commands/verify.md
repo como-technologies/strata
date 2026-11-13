@@ -170,6 +170,15 @@ cannot read or check is an `ERROR` line, and strata checks the other records.
 `--summary` prints the summary also for one file, so a script always reads one
 document shape.
 
+A row names the record in the words of the heading of `compare`. So the row of
+a cluster record names the cluster, and a record of two or more profiles gives
+their count. The JSON gives these words in `subject`, and keeps the joined
+`name` and `version` of the record:
+
+```text
+{{#include ../output/cluster-all-profiles-summary.txt}}
+```
+
 ## The verdicts
 
 | Verdict | Cause | Exit |

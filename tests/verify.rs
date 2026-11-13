@@ -34,9 +34,10 @@ use common::{
     cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
-    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
-    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
+    profile_document, profile_route, read_json, resolved_values_route, serve_cluster,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
+    write_yaml,
 };
 
 #[test]
@@ -1677,39 +1678,6 @@ fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_le
 
 // ---- clusters --------------------------------------------------------------------------------
 
-/// An API that serves the cluster fixture `dir` under `CLUSTER_UID`.
-fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
-    let d = raw_root.join(dir);
-    // the profile documents of the profiles the cluster runs, as they are published: verify of a
-    // cluster record reads them for their current version
-    let mut api = api;
-    for template in read_json(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"]
-        .as_array()
-        .unwrap()
-    {
-        let uid = template["uid"].as_str().unwrap();
-        for fixture in ["a", "b", "addons"] {
-            let profile = read_json(&raw_root.join(fixture).join("profile.json"));
-            if profile["metadata"]["uid"] == uid {
-                api = api.with(profile_route(uid), profile);
-                break;
-            }
-        }
-    }
-    api.with(
-        cluster_route(CLUSTER_UID),
-        read_json(&d.join("cluster.json")),
-    )
-    .with(
-        cluster_manifests_route(CLUSTER_UID),
-        read_json(&d.join("manifests.json")),
-    )
-    .with(
-        cluster_variables_route(CLUSTER_UID),
-        read_json(&d.join("variables.json")),
-    )
-}
-
 /// The record of the cluster under `CLUSTER_UID`, or of its profile `profile` when the test names
 /// one.
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
@@ -1878,6 +1846,94 @@ fn the_heading_of_a_record_of_two_profiles_gives_the_count_of_the_profiles() {
             "{verdict}"
         );
     }
+}
+
+/// A row of `verify --summary` names a record of four profiles in the words of the heading of
+/// `compare`, on the terminal and in markdown, also when strata cannot check it (#851). The
+/// document gives the words in `subject`, and keeps the joined `name` and `version` for a script.
+#[test]
+fn a_row_of_the_summary_names_a_record_of_four_profiles_in_the_words_of_the_heading_of_compare() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = common::serve_four_profiles(dir.path());
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let (name, version) = (
+        "lab-profile+lab-addons+lab-logging+lab-quota",
+        "1.3.0+2.0.0+2.0.0+2.0.0",
+    );
+    assert_eq!(
+        (
+            recorded.source.name.as_str(),
+            recorded.source.version.as_str()
+        ),
+        (name, version)
+    );
+    let heading = recorded.source.title();
+    assert_eq!(heading, "4 profiles on cluster lab-cluster");
+
+    let checked = common::verify_summary(&recorded, &api);
+    let failed = common::verify_summary(
+        &recorded,
+        &api.clone()
+            .failing(cluster_route(CLUSTER_UID), 500, "internal error"),
+    );
+    let refused = format!(
+        "GET {} failed with HTTP 500: internal error",
+        cluster_route(CLUSTER_UID)
+    );
+    for (s, status, word, detail) in [
+        (
+            &checked,
+            RecordStatus::Unchanged,
+            "OK",
+            "is unchanged since t0",
+        ),
+        (&failed, RecordStatus::Error, "ERROR", refused.as_str()),
+    ] {
+        let row = &s.records[0];
+        assert_eq!(row.status, status);
+        let lines = common::terminal().render_verify_summary(s).unwrap();
+        let table = common::markdown().render_verify_summary(s).unwrap();
+        assert!(
+            lines.contains(&format!("{word:<5}  {}  {heading}  {detail}", row.path)),
+            "{lines}"
+        );
+        assert!(
+            table.contains(&format!(
+                "| {word} | `{}` | `{heading}` | {detail}",
+                row.path
+            )),
+            "{table}"
+        );
+        for out in [&lines, &table] {
+            assert!(!out.contains(name) && !out.contains(version), "{out}");
+        }
+
+        // the document gives the words, and keeps the joined name and version
+        let json = serde_json::to_value(s).unwrap();
+        let row = &json["records"][0];
+        assert_eq!(
+            (
+                row["subject"].as_str(),
+                row["name"].as_str(),
+                row["version"].as_str()
+            ),
+            (Some(heading.as_str()), Some(name), Some(version))
+        );
+    }
+
+    // a record of a profile version keeps its words
+    let version_record = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let s = common::verify_summary(
+        &version_record,
+        &serve_fixture(MemoryApi::new(), dir.path(), "b", UID_B),
+    );
+    assert_eq!(s.records[0].subject, "lab-profile@1.3.0");
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
+    assert!(
+        lines.contains("  lab-profile@1.3.0  is unchanged since t0"),
+        "{lines}"
+    );
 }
 
 #[test]
