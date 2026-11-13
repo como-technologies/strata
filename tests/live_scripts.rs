@@ -9,9 +9,11 @@ use std::process::{Command, Output};
 use common::*;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
-    OPERATION_FORBIDDEN_CODE, PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
+    INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
+    PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::model::pack_type::PackType;
+use strata::model::update::MinorSkip;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -7072,13 +7074,17 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
 }
 
 /// The report of `strata behind --json` for a record that pins kubernetes 1.35.3. The newest
-/// version is `newest`. The answer of Palette for the bump is `validation`.
+/// version is `newest`. The answer of Palette for the bump is `validation`. The bump holds
+/// `updateChecks.skippedMinor` when the move skips a minor version, as strata gives it.
 fn kubernetes_bump_report(newest: &str, validation: &serde_json::Value) -> String {
+    let mut bump = serde_json::json!({"to": newest, "paletteValidation": validation});
+    if let Some(skip) = MinorSkip::of("k8s", "kubernetes", "1.35.3", newest) {
+        bump["updateChecks"] = serde_json::json!({"skippedMinor": skip});
+    }
     serde_json::json!({"pins": [
         {"name": "cni", "version": "1.0.0", "behind": false},
         {"name": "kubernetes", "version": "1.35.3", "behind": true,
-         "newer": [{"version": newest}],
-         "bump": {"to": newest, "paletteValidation": validation}}]})
+         "newer": [{"version": newest}], "bump": bump}]})
     .to_string()
 }
 
@@ -7147,7 +7153,8 @@ fn bump_stage_with(
         "behind bump-profile.json",
         1,
         &format!(
-            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n"
+            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n      {}\n",
+            MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0").unwrap().line()
         ),
     );
     arrange(&stage);
@@ -7175,6 +7182,7 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
             "bump-refused",
             "bump-clusters",
             "bump-text-says",
+            "bump-text-skip",
             "bump-no-impact-says",
             "bump-cluster-record",
             "bump-cluster-same",
@@ -7344,6 +7352,218 @@ fn validate_packs_sh_stage_6_needs_a_profile_and_runs_only_when_its_number_is_gi
     stage.env("PROFILE", "strata-live-release@1.0.0");
     let (_, steps) = stage.run("validate-packs.sh", &["5"]);
     assert!(!steps.contains("bump-"), "{steps}");
+}
+
+/// One move of stage 7 of validate-packs.sh. It has the variable of the version, the version, and
+/// its uid. It also has the uid of the version of its profile that `fred` runs, and the id of the
+/// checks.
+struct Move<'a> {
+    variable: &'a str,
+    reference: &'a str,
+    uid: &'a str,
+    from: &'a str,
+    id: &'a str,
+}
+
+/// The move to a version of the release profile with Kubernetes two minor versions above fred.
+const SKIP_MOVE: Move = Move {
+    variable: "SKIP",
+    reference: "strata-live-release@1.1.0",
+    uid: "p-skip",
+    from: "p-infra",
+    id: "skip",
+};
+
+/// The move to a version of the add-on profile with a required variable with no default value.
+const VARIABLES_MOVE: Move = Move {
+    variable: "VARIABLES",
+    reference: "strata-live-addons@1.1.0",
+    uid: "p-vars",
+    from: "p-addon",
+    id: "variables",
+};
+
+/// A stage 7 run of validate-packs.sh on the cluster `fred`, for the move `m`. `compare --validate
+/// --json` gives `compared`, and Palette answers the update with the HTTP `status` and `answer`.
+/// Gives the stage and steps.log.
+fn move_stage(
+    m: &Move,
+    compared: &serde_json::Value,
+    status: u16,
+    answer: &str,
+) -> (Stage, String) {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("CLUSTER", "fred");
+    stage.env(m.variable, m.reference);
+    stage.strata(
+        "snapshot cluster:fred -o move-cluster.json",
+        0,
+        &serde_json::json!({"source": {"cluster": {"uid": FRED_UID, "profiles": [
+            {"name": "strata-live-release", "version": "1.0.0", "uid": "p-infra"},
+            {"name": "strata-live-addons", "version": "1.0.0", "uid": "p-addon"}]}}})
+        .to_string(),
+    );
+    stage.strata(
+        &format!("snapshot {} -o {}.json", m.reference, m.id),
+        0,
+        &serde_json::json!({"source": {"uid": m.uid}}).to_string(),
+    );
+    stage.strata(
+        &format!("compare cluster:fred {} --validate --json", m.reference),
+        1,
+        &compared.to_string(),
+    );
+    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}/profiles/packs/manifests"),
+        r#"{"profiles":[]}"#,
+    );
+    for uid in ["p-infra", "p-addon", m.uid] {
+        let published = serde_json::json!({"metadata": {"uid": uid}, "spec": {"published": {
+            "packs": [{"name": format!("pack-{uid}"), "tag": "1.0.0", "type": "spectro",
+                       "values": "a: 1"}]}}});
+        stage.route(
+            &format!("/v1/clusterprofiles/{uid}"),
+            &published.to_string(),
+        );
+        stage.route(
+            &format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+            r#"{"spec":{"packs":[]}}"#,
+        );
+    }
+    let update = cluster_profiles_route(FRED_UID);
+    stage.route(&update, answer);
+    std::fs::write(
+        stage
+            .path("routes")
+            .join(format!("{}.status", Stage::route_key(&update))),
+        status.to_string(),
+    )
+    .unwrap();
+    let (o, steps) = stage.run("validate-packs.sh", &["7"]);
+    assert!(steps.contains("== a move "), "{steps}{}", text(&o.stderr));
+    (stage, steps)
+}
+
+/// The comparison of the move to [`SKIP_MOVE`]: the route accepts, and strata says that the move
+/// from Kubernetes 1.35.8 to 1.37.0 skips a minor version.
+fn skip_compared() -> serde_json::Value {
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.35.8", "1.37.0").unwrap();
+    serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
+        "updateChecks": {"skippedMinor": skip}})
+}
+
+/// The refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0.
+fn skip_refused() -> String {
+    serde_json::json!({"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
+        "message": "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported"})
+    .to_string()
+}
+
+#[test]
+fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_sends_the_update() {
+    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 400, &skip_refused());
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "move-cluster-record",
+            "skip-record",
+            "skip-asked",
+            "skip-says",
+            "skip-update",
+            "skip-refused",
+        ],
+    );
+    assert!(!steps.contains("variables-"), "{steps}");
+    replaced_with(&stage, &SKIP_MOVE);
+}
+
+/// The update of stage 7 names the version of the move `m`, and the version of its profile that
+/// fred runs. The Spectro Cloud provider sends a new version in this form. The entry gives no
+/// variable.
+fn replaced_with(stage: &Stage, m: &Move) {
+    let sent = stage.sent("PATCH", &cluster_profiles_route(FRED_UID));
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let entries = sent[0]["profiles"].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "{sent:?}");
+    assert_eq!(entries[0]["uid"], m.uid);
+    assert_eq!(entries[0]["replaceWithProfile"], m.from);
+    assert_eq!(entries[0]["variables"], serde_json::json!([]));
+}
+
+#[test]
+fn validate_packs_sh_stage_7_fails_when_palette_accepts_the_update_or_strata_finds_no_skip() {
+    // Palette takes the update: the cluster moves, and the check fails
+    let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 200, "{}");
+    passed(&steps, &["skip-says", "skip-update"]);
+    failed(&steps, &["skip-refused"]);
+
+    // strata says nothing about the move, and Palette refuses it
+    let compared =
+        serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true}});
+    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 400, &skip_refused());
+    failed(&steps, &["skip-says", "skip-refused"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_7_sends_the_update_of_a_move_that_adds_a_required_variable() {
+    let compared = serde_json::json!({
+        "paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
+        "updateChecks": {"requiredVariables": {"code": INVALID_VARIABLE_CODE, "names": ["owner"]}}});
+    let refused = serde_json::json!({"code": INVALID_VARIABLE_CODE,
+        "message": "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'"})
+    .to_string();
+    let (stage, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &refused);
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "variables-record",
+            "variables-asked",
+            "variables-accepts",
+            "variables-says",
+            "variables-update",
+            "variables-refused",
+        ],
+    );
+    assert!(!steps.contains("skip-"), "{steps}");
+    replaced_with(&stage, &VARIABLES_MOVE);
+
+    // the refusal names another variable: the check fails
+    let other = refused.replace("'owner'", "'region'");
+    let (_, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &other);
+    failed(&steps, &["variables-refused"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_7_needs_a_cluster_and_a_version_and_runs_only_when_its_number_is_given()
+{
+    for env in [
+        &[][..],
+        &[("CLUSTER", "fred")][..],
+        &[("SKIP", "a@1.0.0")][..],
+    ] {
+        let mut stage = Stage::new(serde_json::json!({}));
+        for (k, v) in env {
+            stage.env(k, v);
+        }
+        let (o, steps) = stage.run("validate-packs.sh", &["7"]);
+        assert!(
+            steps.contains("stage 7 skipped: give CLUSTER"),
+            "{env:?}: {steps}{}",
+            text(&o.stderr)
+        );
+        assert!(!steps.contains("move-"), "{steps}");
+    }
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("CLUSTER", "fred");
+    stage.env("SKIP", "a@1.0.0");
+    let (_, steps) = stage.run("validate-packs.sh", &["5"]);
+    assert!(
+        !steps.contains("move-") && !steps.contains("skip-"),
+        "{steps}"
+    );
 }
 
 // ---- validate-route.sh -----------------------------------------------------------------------------

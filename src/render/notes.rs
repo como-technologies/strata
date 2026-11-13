@@ -73,6 +73,7 @@ pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
     if !validation.is_empty() {
         notes.push(DiffNote::Palette(validation));
     }
+    notes.extend(d.update_checks.lines().into_iter().map(DiffNote::Warn));
     notes.extend(same_content_note(d).map(DiffNote::Good));
     notes.extend(variables_unavailable_note(d).map(DiffNote::Warn));
     notes.extend(cross_kind_note(d).map(DiffNote::Warn));

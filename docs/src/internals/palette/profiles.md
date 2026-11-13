@@ -652,6 +652,23 @@ behind. It compares the version of the pack with the order of the pins. See
 When a route of Palette names the profile versions that pin a pack, strata reads
 that answer.
 
+### The checks of an update
+
+Palette checks two rules only at the update of a cluster, and no validate route
+checks them: see [What the update checks](./validate-routes.md#what-the-update-checks).
+A team learns of a fault only at the update. So `behind` and `compare --validate`
+check each rule for a move, and print a line under the answer of Palette:
+
+| Rule | Code |
+| --- | --- |
+| One update moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | `K8sUpgradeNotSupported` |
+| Each required variable has a value or a default value. Strata names each required variable with no default value that the move adds. | `InvalidVariable` |
+
+Palette is the owner of each rule. When a validate route checks a rule, strata
+removes its check and reads the answer of the route. See
+[A move that skips a minor version](../../commands/behind.md#a-move-that-skips-a-minor-version)
+and [What the route does not check](../../commands/compare/validate.md#what-the-route-does-not-check).
+
 ### An event when a published version changes
 
 The rules above are rules of the create. The alerts of the observer cover a gap of

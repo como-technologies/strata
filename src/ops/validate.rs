@@ -6,12 +6,13 @@
 
 use serde_json::{Value, json};
 
-use super::repave::{Question, cluster_and_target, validate_body};
+use super::repave::{Question, cluster_and_target, cluster_record_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
 use crate::api::registry::{Registries, registry_entry};
 use crate::api::{CLUSTER_TEMPLATE, Palette, PaletteApi, RawCluster};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, value_at};
+use crate::model::update::UpdateChecks;
 use crate::model::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 use crate::snapshot::{AppliedProfile, Pack, Snapshot, SubjectKind};
 
@@ -322,6 +323,21 @@ pub fn palette_validation<A: PaletteApi>(
         return Ok(PaletteValidation::refused(&cluster.uid, errors));
     }
     cluster_packs_answer(palette, &cluster.uid, &validate_body(&running, target))
+}
+
+/// What strata checks about the move from the cluster side to the profile side, beside the answer
+/// of [`palette_validation`].
+///
+/// These are the rules that Palette checks only at the update: see [`UpdateChecks::between`].
+/// The checks send no request.
+///
+/// # Errors
+///
+/// [`Error::Usage`] for a pair that is not a cluster and a profile version, as
+/// [`palette_validation`] gives it.
+pub fn update_checks(a: &Snapshot, b: &Snapshot) -> Result<UpdateChecks> {
+    let (cluster, target) = cluster_record_and_target(a, b, Question::Validate)?;
+    Ok(UpdateChecks::between(cluster, target))
 }
 
 /// The error of `snapshot --validate` when Palette refuses the record.

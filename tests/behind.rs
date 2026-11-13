@@ -5,13 +5,15 @@
 //! it names the newer profile version that carries a newer version of the pack (#709). On a cluster
 //! with many profiles, each row names the profile that holds its pack, the counts of the heading
 //! add up, `--behind-only` omits the rows that are current, and a pin names the newest patch of
-//! its own minor version (#622).
+//! its own minor version (#622). The move of a profile version names the required variables that
+//! it adds, and a move of Kubernetes that skips a minor version (#623).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
+use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::scope::ProfileScope;
@@ -460,10 +462,21 @@ fn serve_packs(
     versions: &[(&str, &str)],
     packs: &[PackFixture],
 ) -> MemoryApi {
+    serve_packs_with(api, (uid, version), versions, packs, no_variables())
+}
+
+/// [`serve_packs`], where the answer of the variables of the version is `variables`.
+fn serve_packs_with(
+    api: MemoryApi,
+    (uid, version): (&str, &str),
+    versions: &[(&str, &str)],
+    packs: &[PackFixture],
+    variables: Value,
+) -> MemoryApi {
     let mut doc = version_document(uid, "barney-addons", version, versions);
     doc["spec"]["published"]["packs"] = packs.iter().map(|p| p.pack_ref(&[])).collect();
     let manifests = packs.iter().map(|p| p.pack_manifests(Vec::new())).collect();
-    serve_profile(api, uid, doc, manifests_answer(manifests), no_variables())
+    serve_profile(api, uid, doc, manifests_answer(manifests), variables)
 }
 
 /// [`serve_versions`] of [`BARNEY`], where 1.3.1 holds [`packs_held`] and 1.4.0 holds
@@ -580,6 +593,97 @@ fn a_profile_version_with_no_newer_version_and_a_run_with_no_impact_show_no_move
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("bump to"), "{text}");
     assert_eq!((manifests(HELD), manifests(NEWEST)), before);
+}
+
+/// The pack of the `k8s` layer of `barney-addons` at `version`, from no registry, so that the
+/// record has no pin of it.
+fn kubernetes_at(version: &str) -> PackFixture<'_> {
+    PackFixture::new("kubernetes", "k8s", version, "k8s", "", "", "k: 1\n")
+}
+
+#[test]
+fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_adds_and_a_skip() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    // 1.3.1 runs Kubernetes 1.34.9 and has the variable region. 1.4.0 moves Kubernetes to 1.36.2,
+    // and adds three variables: owner needs a value, tier has a default value, and note is not
+    // required
+    let held = [packs_held()[0], kubernetes_at("1.34.9")];
+    let newest = [packs_newest()[0], kubernetes_at("1.36.2")];
+    let region = common::variable("region", "Region", "", false);
+    let api = serve_packs_with(
+        api,
+        (HELD, "1.3.1"),
+        BARNEY,
+        &held,
+        json!({"variables": [region]}),
+    );
+    let mut note = common::variable("note", "Note", "", false);
+    note["required"] = json!(false);
+    let variables = json!({"variables": [
+        region,
+        common::variable("owner", "Owner", "", false),
+        common::variable("tier", "Tier", "gold", false),
+        note,
+    ]});
+    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &newest, variables);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    assert_eq!(
+        bump.update_checks
+            .required_variables
+            .as_ref()
+            .unwrap()
+            .names,
+        ["owner"]
+    );
+    let skip = bump.update_checks.skipped_minor.as_ref().unwrap();
+    assert_eq!(
+        (
+            skip.from.as_str(),
+            skip.to.as_str(),
+            skip.next_step.as_deref()
+        ),
+        ("1.34.9", "1.36.2", None),
+        "strata reads no registry for the move of a profile version"
+    );
+    assert!(
+        api.posted().is_empty(),
+        "strata asks Palette nothing about the move of a profile"
+    );
+
+    // the two lines come under the bump line, the variables first
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let variables_line = format!(
+        "the move adds the required variable owner with no default value: give it a value at the \
+         update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
+    );
+    let skip_line = format!(
+        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
+         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to a version of 1.35 first"
+    );
+    assert!(
+        text.contains(&format!(
+            "{} IDENTITY UPSTREAM\n      {variables_line}\n      {skip_line}\n",
+            bump.impact
+        )),
+        "{text}"
+    );
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        markdown.contains(&format!("<br>{variables_line}<br>{skip_line} |")),
+        "{markdown}"
+    );
+    let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        doc["profiles"][0]["bump"]["updateChecks"]["requiredVariables"]["names"],
+        json!(["owner"])
+    );
+    assert_eq!(
+        doc["profiles"][0]["bump"]["updateChecks"]["skippedMinor"]["nextMinor"],
+        "1.35"
+    );
 }
 
 #[test]
