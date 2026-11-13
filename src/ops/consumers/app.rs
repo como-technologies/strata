@@ -44,7 +44,7 @@ where
 {
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(scope)?;
-    let uid = home.app_profile_uid(id, version)?;
+    let uid = home.app_profile_uid(id, version, progress)?;
     progress.note(&format!("listing the app deployments of app profile {uid}"));
     let doc = home.app_profile_document(&uid)?;
 

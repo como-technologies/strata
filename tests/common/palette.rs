@@ -28,6 +28,9 @@ pub const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
 /// The project listing, `GET /v1/dashboard/projects/metadata`.
 pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 
+/// The app profile listing, `GET /v1/dashboard/appProfiles/metadata`.
+pub const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
@@ -123,6 +126,11 @@ pub fn group_route(uid: &str) -> String {
 /// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
 pub fn app_profile_route(uid: &str) -> String {
     format!("/v1/appProfiles/{uid}")
+}
+
+/// The tiers of the app profile `uid`, `GET /v1/appProfiles/{uid}/tiers`.
+pub fn app_tiers_route(uid: &str) -> String {
+    format!("{}/tiers", app_profile_route(uid))
 }
 
 /// The document of the edge host `uid`, `GET /v1/edgehosts/{uid}`.

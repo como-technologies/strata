@@ -662,6 +662,13 @@ fn palette_latest(r: &mut Runner) {
         false,
         "strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'",
     );
+    // the note of the record names the pre-release that `@latest` skips (#625)
+    r.step(
+        "packs-pre-release-record",
+        0,
+        true,
+        "strata snapshot 'pack:Public Repo/cert-manager@latest' -o cert-manager.json",
+    );
 }
 
 /// The chapter `behind-pre-release`: a pipeline publishes a pre-release of the next version.

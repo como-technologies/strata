@@ -1,12 +1,15 @@
 //! The lines of `list` and `packs`, and of a set of records.
 
+use std::path::Path;
+
+use super::changes::variable_path;
 use super::notes::marks_invalid;
 use super::verify::record_label;
 use super::{count_of, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
-use crate::snapshot::Snapshot;
+use crate::snapshot::{SecretLikeVariable, Snapshot};
 use crate::text::{and_list, dash, name_or_uid};
 
 /// The profile type of a listed profile as a cell of a report: `cluster` or `add-on`, and `-`
@@ -242,6 +245,26 @@ pub fn invalid_pack_warnings(snap: &Snapshot) -> Vec<String> {
             format!(
                 "{}. The record keeps the flag, outside the root",
                 marks_invalid(p, "")
+            )
+        })
+        .collect()
+}
+
+/// One note for each variable of `variables`, which a record holds in clear and whose name reads
+/// as a secret: see [`Snapshot::secret_like_variables`].
+///
+/// The note names the variable as `<profile>.<name>`, and never gives its value. `record` is the
+/// file of a record of a set. It is `None` for the one record of the command, which the note
+/// calls "this record". A name is only a guess, so the note says so and blocks nothing.
+pub fn secret_like_notes(variables: &[SecretLikeVariable], record: Option<&Path>) -> Vec<String> {
+    let place = record.map_or_else(|| "this record".to_string(), |p| p.display().to_string());
+    variables
+        .iter()
+        .map(|v| {
+            format!(
+                "note: variable {} has a value in clear in {place} \
+                 (its name reads as a secret, which is a guess)",
+                variable_path(&v.profile, &v.name)
             )
         })
         .collect()
