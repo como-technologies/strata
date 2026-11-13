@@ -131,12 +131,13 @@ impl Stand {
         Run::of(self.command(args).env("STRATA_QUIET", "1"))
     }
 
-    /// [`Stand::run`], with the notes of strata on standard error.
-    pub fn run_with_notes(&self, args: &[&str]) -> Run {
+    /// [`Stand::run`] with the progress notes that a person sees.
+    pub fn run_loud(&self, args: &[&str]) -> Run {
         Run::of(self.command(args).env_remove("STRATA_QUIET"))
     }
 
-    /// The command of [`Stand::run`]. The requests of an earlier run are gone.
+    /// The command of strata with `args` against the stand-in, in the folder of the home. The
+    /// requests of an earlier run are gone.
     fn command(&self, args: &[&str]) -> Command {
         self.requests.lock().unwrap().clear();
         let mut command = strata_command();

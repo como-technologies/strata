@@ -168,7 +168,8 @@ Exit `0`. A difference here shows that the pre-release holds other content than
 the content that the review saw.
 
 A pre-release is below its version. So `<name>@latest` takes the highest final
-version, and not a pre-release above it:
+version, and not a pre-release above it. Its note names the highest pre-release
+that it skips:
 
 ```text
 {{#include ../output/pipeline-latest.txt}}

@@ -89,7 +89,13 @@ fn the_merge(r: &mut Runner) {
         false,
         "strata same-release aws-stack@1.1.2-mr12.345 aws-stack@1.1.2-g0123456789ab",
     );
-    r.quiet("strata snapshot aws-stack@latest -o latest.json");
+    // the note names the version that `@latest` takes, and the pre-release above it (#625)
+    r.step(
+        "pipeline-latest",
+        0,
+        true,
+        "strata snapshot aws-stack@latest -o latest.json",
+    );
     r.step(
         "pipeline-latest",
         0,

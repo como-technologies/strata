@@ -7,6 +7,7 @@ use crate::api::{MemoryApi, RawCluster, ReadErrors};
 use crate::closed_set::ClosedSet;
 use crate::model::registry_kind::RegistryKind;
 use crate::model::scope::ProfileScope;
+use crate::reference::LATEST;
 
 fn listing() -> Value {
     json!({"items": [
@@ -762,4 +763,45 @@ fn each_template_of_a_route_that_gives_a_closed_set_starts_from_its_collection()
         OCI_SUMMARY_TEMPLATE,
         route(REGISTRIES, &[RegistryKind::Oci.as_str(), "summary"])
     );
+}
+
+/// Issue #625. `@latest` of a profile and of an app profile gives the uid of the version that it
+/// takes, and the highest pre-release above it, which it skips. An exact version skips nothing.
+#[test]
+fn latest_of_a_profile_and_of_an_app_profile_names_the_pre_release_that_it_skips() {
+    let listed = |(name, uid, version): &(&str, &str, &str)| json!({"metadata": {"name": name, "uid": uid}, "spec": {"version": version}});
+    let items: Vec<Value> = [
+        ("barney", "u1", "1.0.0"),
+        ("barney", "u2", "1.0.1-mr2.770685"),
+        ("barney", "u3", "1.0.1-mr1.770600"),
+        ("hotfix", "u4", "2.2.8"),
+        ("hotfix", "u5", "2.2.8-hotfix"),
+    ]
+    .iter()
+    .map(listed)
+    .collect();
+    let api = MemoryApi::new()
+        .with(PROFILE_LISTING, json!({"items": items}))
+        .with(APP_PROFILE_LISTING, json!({"appProfiles": items}));
+    let p = Palette::new(api);
+    let pick = |found: profiles::PickedUid| {
+        let skipped = found.picked.skipped;
+        (found.uid, found.picked.version, skipped)
+    };
+    let want = |uid: &str, version: &str, skipped: Option<&str>| {
+        (
+            uid.to_string(),
+            version.to_string(),
+            skipped.map(str::to_string),
+        )
+    };
+    let barney = want("u1", "1.0.0", Some("1.0.1-mr2.770685"));
+    // `2.2.8-hotfix` is below `2.2.8` by SemVer, so `@latest` skips nothing above `2.2.8`
+    let hotfix = want("u4", "2.2.8", None);
+    assert_eq!(pick(p.latest("barney").unwrap()), barney);
+    assert_eq!(pick(p.app_profile_at("barney", LATEST).unwrap()), barney);
+    assert_eq!(pick(p.latest("hotfix").unwrap()), hotfix);
+    assert_eq!(pick(p.app_profile_at("hotfix", LATEST).unwrap()), hotfix);
+    let exact = p.app_profile_at("barney", "1.0.0").unwrap();
+    assert_eq!(pick(exact), want("u1", "1.0.0", None));
 }

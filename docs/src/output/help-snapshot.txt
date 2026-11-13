@@ -39,3 +39,5 @@ Options:
           No progress messages, no note of an unknown value, and no warning of the send
   -h, --help
           Print help
+
+A cluster record holds the value of each variable that nobody marked sensitive, in clear. A note names each such variable whose name reads as a secret, and never gives its value. The note changes no exit.

@@ -32,7 +32,7 @@ use crate::text::{cut, plural};
 
 pub use behind::RowState;
 pub use json::JsonRenderer;
-pub use list::{invalid_pack_warnings, set_counts_line};
+pub use list::{invalid_pack_warnings, secret_like_notes, set_counts_line};
 pub use markdown::MarkdownRenderer;
 pub use terminal::TerminalRenderer;
 

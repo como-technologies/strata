@@ -20,7 +20,8 @@ use crate::model::cloud::CLOUD_ALL;
 use crate::model::layer::Layer;
 use crate::model::profile_type::ProfileType;
 use crate::model::scope::{ProfileScope, ScopedUid};
-use crate::reference::{LATEST, name_version, one_named, version};
+use crate::reference::picked::Picked;
+use crate::reference::{LATEST, Ref, name_version, one_named, version};
 use crate::snapshot::{Template, manifest_of};
 use crate::term::progress::Progress;
 
@@ -83,18 +84,45 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The uid of a profile that a ref names: `id` is a uid when there is no `version`, and else
-    /// a name that [`Palette::resolve`] finds at `version`.
-    pub(crate) fn profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+    /// a name that [`Palette::resolve`] finds at `version`. For [`LATEST`], `progress` notes the
+    /// version that the pick takes: see [`Picked::note`].
+    pub(crate) fn profile_uid(
+        &self,
+        id: &str,
+        version: Option<&str>,
+        progress: &Progress,
+    ) -> Result<String> {
         match version {
+            Some(LATEST) => {
+                let latest = self.latest(id)?;
+                let reference = name_version(id, &latest.picked.version);
+                progress.note(&latest.picked.note(&reference));
+                Ok(latest.uid)
+            }
             Some(version) => self.resolve(id, version),
             None => Ok(id.to_string()),
         }
     }
 
     /// The uid of an app profile that a ref names. `id` is a uid when there is no `version`, and
-    /// else a name that [`Palette::resolve_app_profile`] finds at `version`.
-    pub(crate) fn app_profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+    /// else a name that [`Palette::resolve_app_profile`] finds at `version`. For [`LATEST`],
+    /// `progress` notes the version that the pick takes, as [`Palette::profile_uid`] does.
+    pub(crate) fn app_profile_uid(
+        &self,
+        id: &str,
+        version: Option<&str>,
+        progress: &Progress,
+    ) -> Result<String> {
         match version {
+            Some(LATEST) => {
+                let latest = self.app_profile_at(id, LATEST)?;
+                let reference = Ref::AppProfile {
+                    id: id.to_string(),
+                    version: Some(latest.picked.version.clone()),
+                };
+                progress.note(&latest.picked.note(&reference.to_string()));
+                Ok(latest.uid)
+            }
             Some(version) => self.resolve_app_profile(id, version),
             None => Ok(id.to_string()),
         }
@@ -110,9 +138,16 @@ impl<A: PaletteApi> Palette<A> {
     /// when two or more versions of the name are the highest. A profile of the tenant and a
     /// profile of the project can have one name and one version.
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
+        self.latest(name).map(|latest| latest.uid)
+    }
+
+    /// The version of `name` that [`Palette::resolve_latest`] finds, with its uid, and the
+    /// highest pre-release above it that the pick skips.
+    pub(super) fn latest(&self, name: &str) -> Result<PickedUid> {
         let listing = self.profile_listing()?;
         let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
-        let Some((highest, _)) = version::pick(versions.iter(), |(v, _)| v.as_str(), LATEST) else {
+        let texts: Vec<&str> = versions.iter().map(|(v, _)| v.as_str()).collect();
+        let Some(picked) = Picked::of(&texts, LATEST) else {
             return Err(Error::ProfileNotFound {
                 name: name.to_string(),
                 version: LATEST.to_string(),
@@ -121,10 +156,13 @@ impl<A: PaletteApi> Palette<A> {
         };
         let uids = versions
             .iter()
-            .filter(|(v, _)| version::compare(v, highest).is_eq())
+            .filter(|(v, _)| version::compare(v, &picked.version).is_eq())
             .map(|(_, uid)| uid.clone())
             .collect();
-        self.one_of(name, highest, uids)
+        Ok(PickedUid {
+            uid: self.one_of(name, &picked.version, uids)?,
+            picked,
+        })
     }
 
     /// The uid of each version of each profile of `scope` in the current scope, from the profile
@@ -170,6 +208,13 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::AppProfileNotFound`] when no app profile has the name and the version.
     /// [`Error::AppProfileNameAmbiguous`] when two or more have them. Each error of the request.
     pub fn resolve_app_profile(&self, name: &str, version: &str) -> Result<String> {
+        self.app_profile_at(name, version).map(|found| found.uid)
+    }
+
+    /// The version of the app profile `name` that [`Palette::resolve_app_profile`] finds at
+    /// `version`, with its uid. For [`LATEST`], also the highest pre-release above it that the
+    /// pick skips.
+    pub(super) fn app_profile_at(&self, name: &str, version: &str) -> Result<PickedUid> {
         let listing = self.api.get_json(APP_PROFILE_LISTING)?;
         let all: Vec<(String, String, String)> = arr(&listing, "/appProfiles")
             .iter()
@@ -191,22 +236,27 @@ impl<A: PaletteApi> Palette<A> {
                 available,
             }
         };
-        let named = all.iter().filter(|(n, _, _)| n == name);
-        let Some((_, picked, _)) = version::pick(named, |(_, v, _)| v.as_str(), version) else {
+        let named: Vec<&str> = all
+            .iter()
+            .filter(|(n, _, _)| n == name)
+            .map(|(_, v, _)| v.as_str())
+            .collect();
+        let Some(picked) = Picked::of(&named, version) else {
             return Err(not_found());
         };
         let uids = all
             .iter()
-            .filter(|(n, v, _)| n == name && v == picked)
+            .filter(|(n, v, _)| n == name && *v == picked.version)
             .map(|(_, _, uid)| uid.clone())
             .collect();
-        one_named(uids, String::as_str, not_found, |uids| {
+        let uid = one_named(uids, String::as_str, not_found, |uids| {
             Error::AppProfileNameAmbiguous {
                 name: name.to_string(),
-                version: picked.clone(),
+                version: picked.version.clone(),
                 uids,
             }
-        })
+        })?;
+        Ok(PickedUid { uid, picked })
     }
 
     /// Reads an app profile in the shape of a profile, so that a record of it has packs and a root.
@@ -576,6 +626,15 @@ impl<A: PaletteApi> Palette<A> {
         self.api
             .post_json(&route(PROFILES, &["import", "validate"]), body)
     }
+}
+
+/// The uid of the version of a profile or of an app profile that a ref takes, and the pick of
+/// that version.
+pub(super) struct PickedUid {
+    /// The uid of the version.
+    pub(super) uid: String,
+    /// The version, and the highest pre-release above it that [`LATEST`] skips.
+    pub(super) picked: Picked,
 }
 
 /// The segments of the route of the download of a profile version, after its uid.

@@ -37,6 +37,14 @@ A ref names the thing that a command reads.
   is above `1.29.10`. A pre-release is below its version. A name that has only
   pre-releases gives its highest one. The snapshot records the version that it
   found in `source.version`, and keeps `aws-stack@latest` in `source.ref`.
+  - `@latest` names the version that it takes in a note on standard error. A
+    profile and an app profile get `@latest is` with the ref of that version,
+    such as `appprofile:shop@1.0.0`, and a pack gets `recording pack`. When
+    `@latest` skips a pre-release above that version, the note names the
+    highest one. It says `a pre-release by SemVer` for a version that parses,
+    such as `1.0.1-rc.1`. It says `a pre-release` for each other form, such as
+    `1.2.develop`, because the order below, and not SemVer, makes it one. See
+    [Record the newest version](../commands/snapshot/profile-version.md#record-the-newest-version).
   - A text that does not parse reads as its first three numbers, as Palette
     reads it: see [The order of versions](../internals/palette/profiles.md#the-order-of-versions).
     The numbers decide first.

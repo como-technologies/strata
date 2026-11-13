@@ -108,7 +108,7 @@ impl OpLine {
     pub(crate) fn cluster_value(c: &ClusterValueChange) -> Self {
         Self {
             op: c.op,
-            path: format!("{}.{}", c.profile, c.name),
+            path: variable_path(&c.profile, &c.name),
             old: cluster_value(&c.old, c.sensitive),
             new: cluster_value(&c.new, c.sensitive),
         }
@@ -291,6 +291,12 @@ pub(crate) fn values_changed(n: usize) -> String {
         "{n} variable {} changed",
         crate::text::plural(n, "value", "values")
     )
+}
+
+/// `<profile>.<name>`: a variable of a cluster, as the reports and the notes name it. A cluster
+/// can run more than one profile, so the name of the variable alone does not identify it.
+pub(crate) fn variable_path(profile: &str, name: &str) -> String {
+    format!("{profile}.{name}")
 }
 
 /// A cluster value as the reports print it: quoted, or `(sensitive)`.
