@@ -1,5 +1,6 @@
 use super::*;
 use strata::api::Method;
+use strata::api::codes::OPERATION_FORBIDDEN_CODE;
 
 const GOOD: &str = r#"
 section: compute
@@ -194,9 +195,10 @@ fn a_check_of_palette_cannot_name_a_code_that_the_library_does_not_list_as_a_ref
     };
     // each code that the library lists is right: a refusal of another route, and a check of a
     // validate route
-    let listed =
-        "AwsKeyPairNotFound, FeatureNotSupported, OperationForbidden, ClusterProfilesNotSupported";
-    assert!(Catalog::parse_section(&palette(listed), Path::new("x.yaml")).is_ok());
+    let listed = format!(
+        "AwsKeyPairNotFound, FeatureNotSupported, {OPERATION_FORBIDDEN_CODE}, ClusterProfilesNotSupported"
+    );
+    assert!(Catalog::parse_section(&palette(&listed), Path::new("x.yaml")).is_ok());
     // the library sends a 5xx with another code again, so the check reads it only after the retries
     let err = Catalog::parse_section(
         &palette("AwsKeyPairNotFound, InternalError"),

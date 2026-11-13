@@ -3770,7 +3770,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
     assert_eq!(
         calls
             .lines()
-            .filter(|l| l.ends_with("config/rbacs"))
+            .filter(|l| l.ends_with(rbacs.as_str()))
             .count(),
         2,
         "one read with each key: {calls}"
@@ -3828,7 +3828,10 @@ fn tiers_sh_stage_6_says_could_not_check_and_exits_2_without_the_second_key() {
     );
     assert!(!steps.contains("limited-"), "no check ran: {steps}");
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
-    assert!(!calls.contains("config/rbacs"), "no request: {calls}");
+    assert!(
+        !calls.contains(&cluster_rbacs_route("c-a")),
+        "no request: {calls}"
+    );
 }
 
 /// The routes of cluster A that tiers.sh stage 8 reads with the third key, by the name of their
