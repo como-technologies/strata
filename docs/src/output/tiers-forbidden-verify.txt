@@ -1,7 +1,7 @@
 $ strata verify runs/payments.json
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
 root       088136c929bd -> 088136c929bd   IDENTICAL
-note       strata could not read policy.rbacs of cluster payments (HTTP 403: {"code":"AccessDenied","message":"cluster.get operation is not permitted, required permissions cluster.get"}), so it does not compare it
+note       strata could not read policy.rbacs of cluster payments (HTTP 500: {"code":"OperationForbidden","message":"Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission"}), so it does not compare it
 note       cluster payments runs kubernetes 1.36.1, and its profile declares 1.36.2
 
   variables unchanged

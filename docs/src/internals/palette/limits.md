@@ -65,14 +65,20 @@ These are open:
   alone, because strata prints one refusal when two routes give the same one.
   See
   [The validate routes](validate-routes.md#post-v1clusterprofilesimportvalidate).
-- An HTTP 403 on `config/rbacs`, `config/namespaces`, or `repave/status`. The
-  stand-in gives the body `AccessDenied`, and no run shows that body yet. A key
-  of an active user with no role in the project gets HTTP 500 and not 403: see
-  [Cluster tiers](clusters.md#cluster-tiers). Stage 6 of
-  [tiers.sh](../../development/live-runs.md#tierssh) reads `config/rbacs` with
-  such a key. Palette answers HTTP 500 with the code `ResourceAccessDenied` and
-  the message `Project '<project uid>' access denied`. `strata snapshot` of the
-  cluster writes no record and exits `2`. See
+- The answer of `config/rbacs`, `config/namespaces`, and `repave/status` to a
+  key whose role in the project does not give `cluster.get`. The code of
+  Palette shows HTTP 500 with the code `OperationForbidden`, and the stand-in
+  gives that answer. Stage 8 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes with
+  such a key, and has no result yet.
+
+  A run shows the answer to a key of an active user with no role in the
+  project. Stage 6 of [tiers.sh](../../development/live-runs.md#tierssh) reads
+  `config/rbacs` with such a key. Palette answers HTTP 500, and not 403, with
+  the code `ResourceAccessDenied` and the message
+  `Project '<project uid>' access denied`. See
+  [Cluster tiers](clusters.md#cluster-tiers). `strata snapshot` of the cluster
+  writes no record and exits `2`: see
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.

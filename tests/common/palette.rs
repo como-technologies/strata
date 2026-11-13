@@ -140,6 +140,21 @@ pub fn cluster_variables_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}/variables")
 }
 
+/// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`.
+pub fn cluster_rbacs_route(uid: &str) -> String {
+    format!("{}/config/rbacs", cluster_route(uid))
+}
+
+/// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
+pub fn cluster_namespaces_route(uid: &str) -> String {
+    format!("{}/config/namespaces", cluster_route(uid))
+}
+
+/// The last repave of the cluster `uid`, `GET /v1/spectroclusters/{uid}/repave/status`.
+pub fn cluster_repave_route(uid: &str) -> String {
+    format!("{}/repave/status", cluster_route(uid))
+}
+
 /// The pack listing of the pack `name`, as strata asks for its first page.
 pub fn pack_listing_route(name: &str) -> String {
     format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")

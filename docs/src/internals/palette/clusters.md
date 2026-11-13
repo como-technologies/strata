@@ -52,6 +52,13 @@ itself. A cluster on AWS gives these fields:
   code `ResourceNotFound`. For the key of an active user with no role in the
   project, the bindings route answers HTTP 500, and not 403. The body holds the
   code `ResourceAccessDenied`, and a message that names the project.
+- Three routes need `cluster.get`: the bindings route, the namespaces route,
+  and `GET /v1/spectroclusters/{uid}/repave/status`. For a key whose role in the
+  project does not give it, each answers HTTP 500, and not 403. The body holds
+  the code `OperationForbidden`, and a message that names `cluster.get`. The
+  code of Palette shows it; no live run shows it yet. Stage 8 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes
+  with such a key.
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.

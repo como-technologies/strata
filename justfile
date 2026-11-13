@@ -659,6 +659,11 @@ live-tiers-limited: build
 live-tiers-pool: build
     examples/live/tiers.sh 7
 
+# The narrow key test (#665): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
+[group('live checks')]
+live-tiers-narrow: build
+    examples/live/tiers.sh 8
+
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]
 live-inventory:

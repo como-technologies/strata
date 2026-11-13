@@ -11,8 +11,8 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
-    PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
+    CreateRule, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE,
+    PROFILE_EXISTS_CODE, PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
@@ -29,14 +29,14 @@ use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
     REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, app_profile_route,
-    behind_of, candidate_snapshot, cluster_manifests_route, cluster_ref,
-    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
-    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
-    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, read_json, resolved_values_route,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
-    write_yaml,
+    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
+    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
+    cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
+    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
+    no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
+    profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
+    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
+    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -2007,12 +2007,12 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
 
 /// The route of the role bindings of the fixture cluster.
 fn rbacs_route() -> String {
-    format!("{}/config/rbacs", cluster_route(CLUSTER_UID))
+    cluster_rbacs_route(CLUSTER_UID)
 }
 
 /// The route of the namespaces of the fixture cluster.
 fn namespaces_route() -> String {
-    format!("{}/config/namespaces", cluster_route(CLUSTER_UID))
+    cluster_namespaces_route(CLUSTER_UID)
 }
 
 /// Cluster b with the five settings of the policy tier, and one role binding to `subjects` and
@@ -8742,7 +8742,7 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
 
 /// The repave status of the cluster fixture.
 fn repave_route() -> String {
-    format!("{}/repave/status", cluster_route(CLUSTER_UID))
+    cluster_repave_route(CLUSTER_UID)
 }
 
 /// The route that asks Palette if a change of the cluster fixture repaves it.
@@ -9223,6 +9223,67 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
     let saved = dir.path().join("raw-clean");
     clean.save_dir(&saved, "t0").unwrap();
     assert!(!saved.join("errors.json").exists());
+}
+
+#[test]
+fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_records_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut cluster = read_json(&dir.path().join("cluster-merged").join("cluster.json"));
+    cluster["status"]["repave"] = serde_json::json!({"state": "Pending"});
+    cluster["spec"]["clusterConfig"] = serde_json::json!({"timezone": "Etc/UTC"});
+    let routes = [repave_route(), rbacs_route(), namespaces_route()];
+    // each route answers `body` with HTTP 500. `calls` is the count of the requests of each route
+    let fetch = |body: &str| {
+        let api = routes.iter().fold(
+            serve_repave(dir.path(), "cluster-merged", "Pending")
+                .with(cluster_route(CLUSTER_UID), cluster.clone()),
+            |api, route| api.failing(route.as_str(), 500, body),
+        );
+        let (retry, slept) = retrying(&api, 3);
+        let raw = Palette::new(retry)
+            .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
+            .unwrap();
+        let calls: Vec<u32> = routes.iter().map(|route| api.calls(route)).collect();
+        (raw, calls, slept.borrow().len())
+    };
+    // the answer that the code of Palette shows for each of the three routes
+    let refusal = format!(
+        r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden"}}"#
+    );
+    let classes = routes.clone().map(|path| {
+        Error::Api {
+            method: Method::Get,
+            path,
+            status: 500,
+            body: refusal.clone(),
+            retry_after: None,
+        }
+        .class()
+    });
+    assert_eq!(classes, [FailureClass::Terminal; 3]);
+    let (raw, calls, slept) = fetch(&refusal);
+    assert_eq!(calls, [1, 1, 1], "a refusal gets no second request");
+    assert_eq!(slept, 0, "strata does not wait to ask again");
+    let reason = format!("HTTP 500: {refusal}");
+    let c = Snapshot::from_cluster(&raw, None, "live", "t0")
+        .unwrap()
+        .source
+        .cluster
+        .unwrap();
+    assert_eq!(c.pending_repave_error(), Some(reason.as_str()));
+    assert_eq!(
+        c.tier(Tier::Policy).unwrap().errors,
+        std::collections::BTreeMap::from([
+            ("namespaces".to_string(), reason.clone()),
+            ("rbacs".to_string(), reason),
+        ])
+    );
+
+    // a 500 with no code of a refusal is a fault of the server, and strata asks again
+    let (_, calls, slept) = fetch(r#"{"code":"InternalError"}"#);
+    assert_eq!(calls, [4, 4, 4], "one request and three retries");
+    assert_eq!(slept, 9);
 }
 
 // ---- a pack with no upstream digest ------------------------------------------------------------

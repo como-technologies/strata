@@ -250,16 +250,13 @@ fn with_query(target: &str, path: &str) -> bool {
 
 /// The statuses of a refusal that a file beside the file of the answer gives:
 ///
-/// - 403: the key cannot read the resource.
+/// - 403: Palette refuses the route as a whole to the key, as the audit log to a role without
+///   `audit.list`.
 /// - 409: the resource exists.
 /// - 422: the API schema refuses the body.
-/// - 500: Palette gives the refusal the type of a server fault.
+/// - 500: Palette gives the refusal the type of a server fault. An example is the refusal of one
+///   object to a role without the permission, with the code `OperationForbidden`.
 pub(crate) const REFUSALS: [u16; 4] = [403, 409, 422, 500];
-
-/// The file whose presence makes the server refuse the request for `path` with HTTP 403.
-pub fn forbidden(path: &Path) -> PathBuf {
-    refused(path, 403)
-}
 
 /// The file whose presence makes the server refuse the request for `path` with `status`.
 pub fn refused(path: &Path, status: u16) -> PathBuf {
@@ -441,7 +438,7 @@ pub fn route_of(relative: &str) -> Option<String> {
 }
 
 /// True when the file `relative` holds the refusal of a request and not a document. Its name ends
-/// with the status of a refusal, as in `v1/spectroclusters/c1/config/rbacs.403.json`.
+/// with the status of a refusal, as in `v1/spectroclusters/c1/config/rbacs.500.json`.
 pub fn is_refusal(relative: &str) -> bool {
     relative
         .strip_suffix(".json")
@@ -507,7 +504,7 @@ mod tests {
             ("p1/v1/clusterprofiles/abc.json", "v1/clusterprofiles/abc"),
             ("tenant/v1/packs@filters=a=b&limit=1.json", "v1/packs"),
             (
-                "p1/v1/spectroclusters/c1/config/rbacs.403.json",
+                "p1/v1/spectroclusters/c1/config/rbacs.500.json",
                 "v1/spectroclusters/c1/config/rbacs",
             ),
             (
@@ -698,7 +695,7 @@ mod tests {
         assert_eq!(refusal_of(&answer), Some(409));
     }
 
-    /// The file that makes the server answer HTTP 403 is beside the file of the answer.
+    /// The file that makes the server refuse a request is beside the file of the answer.
     #[test]
     fn the_file_of_a_refusal_is_beside_the_file_of_the_answer() {
         let got = file_for(
@@ -707,8 +704,8 @@ mod tests {
             "/v1/spectroclusters/c1/config/rbacs",
         );
         assert_eq!(
-            forbidden(&got.unwrap()),
-            Path::new("/r/p1/v1/spectroclusters/c1/config/rbacs.403.json")
+            refused(&got.unwrap(), 500),
+            Path::new("/r/p1/v1/spectroclusters/c1/config/rbacs.500.json")
         );
     }
 

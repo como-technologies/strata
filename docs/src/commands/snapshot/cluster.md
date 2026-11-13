@@ -83,7 +83,13 @@ When Palette answers another HTTP error for the bindings or the namespaces,
 strata still writes the record, and the exit is 0. The tier does not hold the
 field, so its hash does not cover it. `errors` of the tier holds the error.
 Strata asks again after an HTTP 5xx, so it records an HTTP 500 only after the last retry.
-Here the API key cannot read the role bindings of the cluster `payments`:
+A 5xx with the code of a refusal gets no retry: see
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+
+Here Palette refuses the role bindings of the cluster `payments` with HTTP 500
+and the code `OperationForbidden`. This is its answer to a key whose role does
+not give `cluster.get`: see
+[Cluster tiers](../../internals/palette/clusters.md#cluster-tiers).
 
 ```text
 {{#include ../../output/tiers-forbidden-record.txt}}

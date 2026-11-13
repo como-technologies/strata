@@ -14,6 +14,7 @@ mod table;
 mod variants;
 
 use super::*;
+use crate::api::codes::OPERATION_FORBIDDEN_CODE;
 use table::first_cells;
 use variants::one_of_each;
 
@@ -322,7 +323,11 @@ fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
     };
     // a refusal by design stays while the inputs stay
     assert_eq!(
-        api(500, r#"{"code":"OperationForbidden","message":"m"}"#).class(),
+        api(
+            500,
+            &format!(r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"m"}}"#)
+        )
+        .class(),
         FailureClass::Terminal
     );
     // another 5xx can go away
