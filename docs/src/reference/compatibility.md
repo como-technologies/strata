@@ -395,6 +395,11 @@ record of 0.33.0 and before has no `registryName`, and strata reads it as before
 record again to name the registries: see
 [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
 
+After 0.33.0, each row of `strata-verify-summary/1` has the new field `subject`.
+It names the record in the words of the heading of `compare`, such as
+`4 profiles on cluster payments`. The row keeps `name` and `version`, and the id
+stays. See [Check many records](../commands/verify.md#check-many-records).
+
 One value changes after 0.33.0 with no new id. In `strata-preflight/1`, `sections[].failed`
 counts the counted failures alone, as `summary.failed` does. Before, it counted each failure but
 a note. A new id breaks each reader of the document, and the sum of `failed`, `probeFailed`, and
@@ -1122,6 +1127,14 @@ field, a value, an input, or an option is in the sections above.
   So does `pinnedBy[].subject` of `strata-behind/1`. The record keeps the joined
   `source.name` and `source.version`. See
   [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+- **A row of `verify --summary` names the record as the heading of `compare`
+  does.** Before, it gave `name@version` alone. A record of a cluster now reads
+  `aws-stack@1.1.1 on cluster payments`, and a record of an edge host names the
+  host. A record of two or more profiles reads `4 profiles on cluster payments`,
+  where the row joined the names and the versions. The markdown table gives the
+  same words. A script that reads the text of a row must match the new words, or
+  read `subject` of `--json`. See
+  [Check many records](../commands/verify.md#check-many-records).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
@@ -1216,6 +1229,13 @@ field, a value, an input, or an option is in the sections above.
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
   `in-place` adds no label for such a pair.
+- **`verify-report.sh` names a record as the heading of `compare` does.** It
+  reads `subject`. The title of the issue of a drift reads
+  `strata verify: 4 profiles on cluster payments drifted`. The comment of its
+  close uses the same words. Before, they gave `name@version`, and joined the
+  names and the versions of many profiles. The next run gives the new title to
+  the open issue of a record that still drifts. See
+  [Drift issues](../automation/drift-issues.md).
 
 ### For a user of the library of strata
 
@@ -1227,6 +1247,8 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
+  pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.

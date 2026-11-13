@@ -504,6 +504,20 @@ fn cluster_release_many_profiles(r: &mut Runner) {
         "cluster-all-profiles",
         r"^([$] |strata: wrote|[0-9]+ profiles on|root |OK:)",
     );
+    // the row of the summary gives the words of the heading, and the document keeps the joined
+    // name and version beside them (#851)
+    r.step(
+        "cluster-all-profiles-summary",
+        0,
+        false,
+        "strata verify runs/payments-all.json --summary",
+    );
+    r.step(
+        "cluster-all-profiles-summary",
+        0,
+        false,
+        "strata verify runs/payments-all.json --summary --json | jq '.records[0] | {subject, name, version}'",
+    );
 }
 
 /// The chapter `cluster-values`: the variables that two clusters of one release hold.

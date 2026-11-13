@@ -20,6 +20,11 @@ body: `<!-- strata-verify: <path> -->`. It reads only the open issues with the
 label `strata-drift`. It does not touch the issues of records that you did not
 give.
 
+The title of the issue of a record that drifted or is unverified names the
+record as the heading of `compare` does. So does the comment of its close. The
+script reads these words from `records[].subject` of the summary. So the issue
+of a cluster that runs four profiles names `4 profiles on cluster <name>`.
+
 ## Try it first
 
 `--dry-run` prints each issue body and the action, and calls no host:
