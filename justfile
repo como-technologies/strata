@@ -495,7 +495,7 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
-# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and puts the baseline back.
+# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and returns the example to its baseline.
 [group('live checks')]
 live-order-append: build
     examples/live/order.sh 4

@@ -5481,7 +5481,7 @@ fn order_append_stage(order: StoredOrder) -> Stage {
 
 /// #844: stage 4 of `order.sh` adds a profile to cluster A with a `PUT` that gives it first. Then
 /// it sends the `PATCH` of an upgrade of the release version. Against a Palette that keeps the
-/// stored order, each judged check passes, and the stage puts cluster A back.
+/// stored order, each judged check passes. The stage returns cluster A to its baseline profiles.
 #[test]
 fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_cluster_after_each_step()
  {
@@ -5571,7 +5571,11 @@ fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_clus
         "{applies:?}"
     );
     let stored = std::fs::read_to_string(stage.path("routes/c-a.uids")).unwrap();
-    assert_eq!(stored.trim(), r#"["ad-1","r-1"]"#, "cluster A is back");
+    assert_eq!(
+        stored.trim(),
+        r#"["ad-1","r-1"]"#,
+        "cluster A has its baseline profiles again, with the release profile last"
+    );
 }
 
 /// #844: against a Palette that stores the order of the body, the two checks of the stored order

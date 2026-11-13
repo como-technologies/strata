@@ -459,10 +459,11 @@ first. Then it sends the `PATCH` of an upgrade of cluster A to 1.0.2, in the
 form of the provider: one entry with `replaceWithProfile`.
 
 After each step, stage 4 reads `spec.clusterProfileTemplates` of each cluster,
-and `spec.clusterProfileTemplate` of the summary of each cluster. Then it puts
-cluster A back, deletes the profile, and removes cluster B and 1.0.2. When it
-stops early, run `just live-down`. The checks state what each read must show,
-from [The order of the profiles of a
+and `spec.clusterProfileTemplate` of the summary of each cluster. Then it
+returns cluster A to its baseline profiles, deletes the added profile, and
+removes cluster B and 1.0.2. The release profile of cluster A then stays last
+in the stored order. When it stops early, run `just live-down`. The checks
+state what each read must show, from [The order of the profiles of a
 cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 
 | Check | Expected exit | What it shows |

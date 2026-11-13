@@ -22,9 +22,10 @@
 #      of each cluster, and spec.clusterProfileTemplate of the summary of each cluster.
 #
 # Stage 4 runs only when you give its number. It builds cluster B from the same definition, and
-# changes nothing on it. At its end, it puts cluster A back, deletes the profile, and removes
-# cluster B and 1.0.2. When it stops early, run just live-down. It is billable: it keeps cluster
-# B until its end.
+# changes nothing on it. At its end, it returns cluster A to its baseline profiles, deletes the
+# added profile, and removes cluster B and 1.0.2. The release profile of cluster A then stays last
+# in the stored order. When it stops early, run just live-down. It is billable: it keeps cluster B
+# until its end.
 #
 # Needs tofu, jq, and curl with the Palette API key in PALETTE_API_KEY or ~/.palette.env. Results
 # go under runs/<UTC time>/order/, or OUT. Exit 0 only when no check fails.
