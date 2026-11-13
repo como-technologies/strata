@@ -131,9 +131,23 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         )
     }
 
+    /// The entries of [`Registries::metadata`], or `None` when Palette has no such listing: it
+    /// answers HTTP 404 or 405.
+    ///
+    /// A record and a pack row of `list` read the name of the registry of each pack here. The
+    /// pack ref of a profile gives the uid of its registry, and no name.
+    ///
+    /// # Errors
+    ///
+    /// Each other error of the request, also a 401, a 403, or a 429. A record holds the names, so
+    /// a key that cannot read the listing must not change the record with no error.
+    pub(crate) fn listed(&mut self) -> Result<Option<&[Value]>> {
+        served(self.metadata())
+    }
+
     /// The name of the registry `uid`, or `None` when the key cannot see the registry.
     pub(crate) fn name_of(&mut self, uid: &str) -> Result<Option<String>> {
-        Ok(registry_entry(self.metadata()?, "/uid", uid).and_then(|it| opt_text(it, "/name")))
+        Ok(registry_name(self.metadata()?, uid))
     }
 
     /// The provider type of the OCI registry `uid`, `pack`, `helm`, or `zarf`, from
@@ -288,6 +302,12 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 /// summary.
 pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> Option<&'e Value> {
     entries.iter().find(|it| str_at(it, ptr) == uid)
+}
+
+/// The name of the registry `uid` in `entries`, the items of `GET /v1/registries/metadata`.
+/// `None` when no entry has the uid, or when the entry has no name.
+pub(crate) fn registry_name(entries: &[Value], uid: &str) -> Option<String> {
+    registry_entry(entries, "/uid", uid).and_then(|it| opt_text(it, "/name"))
 }
 
 /// The provider type of the OCI registry in `reg`, an entry of the OCI summary listing, or `None`

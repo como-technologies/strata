@@ -15,7 +15,8 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Six sections list the changes that need action:
+Seven sections list the changes that need action:
+[Release 0.34.0](#release-0340-changes-that-need-action),
 [Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
@@ -371,6 +372,13 @@ After 0.32.2, `strata-behind/1` has the new field `profiles[]`, the profile vers
 records. `summary` has the new counts `profiles`, `profilesBehind`, and `profileErrors`. The
 id stays, and `--since` reads a report of 0.32.2 and before. The exit changes:
 see [Release 0.33.0](#release-0330-changes-that-need-action).
+
+After 0.33.0, each pack of `strata-snapshot/1` has the new field `registryName`, the name of
+the registry of `registryUid`. Each pack of `strata-list/1` has the new fields `registryUid`
+and `registry`, and the ids stay. `registryName` is outside the root, so no root changes. A
+record of 0.33.0 and before has no `registryName`, and strata reads it as before. Take the
+record again to name the registries: see
+[The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1023,6 +1031,42 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.34.0: changes that need action
+
+Release 0.34.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A pack row of `list --packs` and `list --pack` ends with its registry.** The name of the
+  registry follows the version. When the key cannot see the registry, the row gives its uid. A
+  script that reads the text of a row must read one more column, or read `--json`. With
+  `--format markdown`, the pack ends with `in` and the registry. See
+  [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
+- **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
+  is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
+  and `same-release` send it for each side that Palette answers. A key needs the permission
+  `packRegistry.list` for it, which each built-in role with `clusterProfile.get` holds. A key
+  without it gets HTTP 403, and the command exits `2` with the error `api`. Before, these
+  commands did not read the listing. See
+  [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
+- **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
+  with one more sentence. The kind and the fields stay. A script that matches the whole message
+  must match the new text.
+
+### For a user of the library of strata
+
+- `snapshot::Pack` has the new field `registry_name`. `ops::ListedPack` has the new fields
+  `registry_uid` and `registry`. A struct literal must set them, and a pattern with no `..`
+  must name them.
+- `ops::snapshot_for`, `ops::snapshot_from_candidate`, and each other function that reads a
+  record from Palette read the registry listing, as the command line does. Their errors include
+  the error of that request. `ops::list` reads it with `packs` or `pack`.
+- `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
+  writes that file.
 
 ## Release 0.33.0: changes that need action
 

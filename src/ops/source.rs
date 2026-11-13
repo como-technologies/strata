@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use crate::api::registry::Registries;
-use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
+use crate::api::{Palette, PaletteApi, RawCluster, RawProfile, save_registries, saved_registries};
 use crate::candidate::LoadedCandidate;
 use crate::error::{Error, Result};
 use crate::reference::Ref;
@@ -313,20 +313,59 @@ fn candidate_snapshot<A: PaletteApi>(
     snap.source.template = crate::snapshot::Template::Candidate.into();
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;
+    name_registries(registries, &mut snap, None)?;
     Ok(snap.with_project(palette.project_uid()))
+}
+
+/// Give each pack of `snap` the name of its registry, from the registry listing of `registries`.
+///
+/// Strata asks only when a pack names a registry that the record does not name. With `raw_dir`,
+/// it also saves the listing there, so that `--from-raw` gives the same names. A Palette with no
+/// such listing gives no names.
+///
+/// # Errors
+///
+/// The errors of [`Registries::listed`], and the error of the save.
+pub(super) fn name_registries<A: PaletteApi>(
+    registries: &mut Registries<'_, A>,
+    snap: &mut Snapshot,
+    raw_dir: Option<&Path>,
+) -> Result<()> {
+    if !snap.has_unnamed_registry() {
+        return Ok(());
+    }
+    let Some(listed) = registries.listed()? else {
+        return Ok(());
+    };
+    if let Some(dir) = raw_dir {
+        save_registries(dir, listed)?;
+    }
+    snap.name_registries(listed);
+    Ok(())
 }
 
 /// Build a snapshot from raw API responses saved on disk, in the project they were fetched in.
 ///
 /// A directory with `cluster.json` is a cluster's; a `reference` of the form
 /// `cluster:<uid>/<profile>` then selects the profile. `fetched_at` is the time of this read, in
-/// RFC 3339. The record states the time in `scope.json` when the directory has one.
+/// RFC 3339. The record states the time in `scope.json` when the directory has one. Each pack
+/// gets the name of its registry from `registries.json` when the directory has one.
 ///
 /// # Errors
 ///
 /// The errors of [`RawProfile::load_dir`] or [`RawCluster::load_dir`], and the errors of
-/// [`Snapshot::from_raw`] or [`Snapshot::from_cluster`].
+/// [`Snapshot::from_raw`] or [`Snapshot::from_cluster`]. A `registries.json` that strata cannot
+/// read gives the error of that read.
 pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+    let mut snap = saved_snapshot(dir, reference, fetched_at)?;
+    if let Some(registries) = saved_registries(dir)? {
+        snap.name_registries(&registries);
+    }
+    Ok(snap)
+}
+
+/// The record of the answers that `--raw-dir` saved in `dir`: see [`snapshot_from_dir`].
+fn saved_snapshot(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
     if dir.join(RawCluster::MARKER).is_file() {
         let profile = match Ref::parse_with(reference, |_| false) {
             Ref::Cluster { profile, .. } => profile,

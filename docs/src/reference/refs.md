@@ -119,7 +119,9 @@ A ref names the thing that a command reads.
 - **`<registry>`.** The name or the uid of a registry. Without one, strata uses
   the registry that has the pack version. When several do, the error
   `pack-in-several-registries` lists them. Two registries can hold two builds
-  under one version, so the ref must name one.
+  under one version, so the ref must name one. `strata list --pack <name>`
+  names the registry that each profile version takes the pack from, and a
+  record names it in `packs[].registryName`.
 - **`<cluster>`.** A uid, or the name of one cluster in the scope. A name that
   two clusters have is the error `cluster-name-ambiguous`, which lists their
   uids. A name that no cluster has is `cluster-not-found`, which lists the

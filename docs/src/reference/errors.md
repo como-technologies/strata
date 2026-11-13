@@ -39,7 +39,7 @@ the kind.
 | `pack-unavailable` | Spectro Cloud retired the version: its `system_state` in the listing is `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. A version with the mark `disabled` is not this error: Palette serves it, and `--validate` asks Palette. | `name`, `version`, `registry`, `state` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `registry-name-ambiguous` | Two or more visible registries have this name: a registry of the system and a registry of the tenant. Give the uid in place of the name. | `name`, `uids` |
-| `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. | `name`, `version`, `registries` |
+| `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. The message names `strata list --pack <name>`, which gives the registry of the pack in each profile version. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |
 | `cluster-not-found` | No cluster in the scope has this name. | `cluster`, `available` |
 | `cluster-name-ambiguous` | Two or more clusters in the scope have this name. | `name`, `uids` |

@@ -119,6 +119,29 @@ A version that nobody published has only its draft. `<name>@<version>` and
 `source.template` `draft` too. `list --packs` marks the version `draft`: see
 [strata list](../list.md).
 
+## The registry of each pack
+
+A record names the registry of each pack in `registryName`, beside
+`registryUid`. Two registries can have the same pack version, and the record
+says which one the version takes:
+
+```text
+{{#include ../../output/pack-record-registry.txt}}
+```
+
+The pack ref of a profile names its registry by the uid alone. So `snapshot`
+reads the names from the registry listing of Palette, with one more request. It
+reads the listing only when a pack names a registry. A registry that the key
+cannot see gets no `registryName`. The name is outside the root, so a new name
+of a registry does not change the root.
+
+When the registry listing answers HTTP 404 or 405, the record holds no names.
+Each other error, such as HTTP 403, stops the record, and strata gives the
+error. The record of each other subject names its registries in the same way.
+`--raw-dir` saves the listing: see [A record with no network](no-network.md).
+`strata list --pack <name>` names the registry of a pack in each version: see
+[The registry of each pack](../list.md#the-registry-of-each-pack).
+
 ## Record a pack version
 
 `pack:<name>@<version>` records one pack version from a registry, with the

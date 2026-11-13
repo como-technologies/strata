@@ -1,10 +1,10 @@
 //! The chapters of the fleet, the registries, and the retire of a version.
 
 use super::DEV_ENV;
-use super::edits::RETAIN;
+use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
-    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, AWS_STANDARD,
-    DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
+    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118,
+    AWS_STANDARD, DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
 use crate::book::Runner;
 use crate::tenant::{Edit, UpgradeRefusal};
@@ -503,6 +503,9 @@ fn packs(r: &mut Runner) {
     r.chapter("packs", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.tenant(|t| t.registries(DEV));
+    // two versions pin csi-aws-ebs 1.65.0, each from one of the two registries that have it
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.profile(DEV, A1118, "1.1.18", "aws-stack@1.1.1", OCI_CSI);
     r.step(
         "pack-compare",
         1,
@@ -525,6 +528,19 @@ fn packs(r: &mut Runner) {
         2,
         true,
         "strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0",
+    );
+    r.step(
+        "pack-which-registry",
+        0,
+        false,
+        "strata list --pack csi-aws-ebs",
+    );
+    r.quiet("strata snapshot aws-stack@1.1.18 -o aws-stack-1.1.18.json");
+    r.step(
+        "pack-record-registry",
+        0,
+        false,
+        r#"jq '.packs[] | select(.name == "csi-aws-ebs") | {key, version, registryUid, registryName}' aws-stack-1.1.18.json"#,
     );
     r.step("pack-registries", 1, false, "strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'");
     r.step(

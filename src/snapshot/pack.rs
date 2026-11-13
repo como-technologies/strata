@@ -72,6 +72,11 @@ pub struct Pack {
     pub pack_uid: String,
     /// Uid of the registry.
     pub registry_uid: String,
+    /// The name of the registry, from the registry listing of Palette: the pack ref gives the uid
+    /// alone. Empty when the key cannot see the registry, and in a record written before this
+    /// field. Outside the root: the uid is in it, and a new name of the registry changes no content.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub registry_name: String,
     /// The digest Palette stamps on the pack ref of the profile template
     pub ref_digest: String,
     /// The digest of the pack in its registry, from the packs/manifests endpoint
@@ -353,6 +358,8 @@ impl Pack {
             version,
             pack_uid,
             registry_uid,
+            // no document of a profile gives the name: the command that writes the record sets it
+            registry_name: String::new(),
             ref_digest,
             registry_digest,
             registry_provider_type,
