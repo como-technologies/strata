@@ -341,8 +341,8 @@ impl Renderer for TerminalRenderer {
         Ok(out)
     }
 
-    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        Ok(behind::terminal_behind(r, &self.paint))
+    fn render_behind(&self, r: &crate::ops::BehindReport, behind_only: bool) -> Result<String> {
+        Ok(behind::terminal_behind(r, behind_only, &self.paint))
     }
 
     fn render_packs(&self, l: &PackListing) -> Result<String> {

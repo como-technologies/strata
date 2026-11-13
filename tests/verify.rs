@@ -34,10 +34,10 @@ use common::{
     cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, read_json, resolved_values_route, serve_cluster,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
-    write_yaml,
+    profile_document, profile_route, project_listing, read_json, resolved_values_route,
+    serve_cluster, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
+    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
+    write_record, write_yaml,
 };
 
 #[test]
@@ -2590,10 +2590,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     assert!(text.contains("project p1"), "{text}");
 
     // with one, it names the project and keeps the uid
-    let named = api.with(
-        PROJECT_LISTING,
-        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}}]}),
-    );
+    let named = api.with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
     let r = ops::consumers(
         &Ref::Uid(UID_B.into()),
         |_| Ok(Palette::new(named.clone())),
@@ -3749,14 +3746,6 @@ fn listed_cluster(name: &str, uid: &str, state: &str) -> Value {
     })
 }
 
-fn projects(names: &[(&str, &str)]) -> Value {
-    let items: Vec<Value> = names
-        .iter()
-        .map(|(name, uid)| serde_json::json!({"metadata": {"name": name, "uid": uid}}))
-        .collect();
-    serde_json::json!({ "items": items })
-}
-
 #[test]
 fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
     let api = MemoryApi::new()
@@ -3776,7 +3765,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
                 listed_cluster("workload-a", "c1", "Running"),
             ]),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |scope: Option<&str>| {
         scopes.borrow_mut().push(scope.map(str::to_string));
@@ -3870,7 +3859,7 @@ fn list_orders_a_version_that_does_not_parse_by_its_three_numbers() {
         .in_project("p1")
         .with(PROFILE_LISTING, listing)
         .with(CLUSTER_LISTING, serde_json::json!([]))
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     let connect = |_: Option<&str>| Ok(Palette::new(api.clone()));
     let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
     let refs: Vec<&str> = l
@@ -4201,7 +4190,7 @@ fn a_tenant_and_a_project_version() -> MemoryApi {
                 listed_profile("aws-stack", "1.1.1", "u-project"),
             ]}),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]))
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
         .with_post(
             PROFILE_SEARCH,
             &profile_search_body("tenant"),
@@ -4361,7 +4350,7 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
                 listed_profile("aws-stack", "1.1.1", "u-project"),
             ]}),
         )
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
     // Palette answers 404 or 405 for a route that it does not have
     let not_allowed = api.clone().failing(post(PROFILE_SEARCH), 405, "{}");
     let l = listing(
@@ -4715,8 +4704,11 @@ fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() 
             PROFILE_LISTING,
             serde_json::json!({"items": [listed_profile("edge", "1.0.0", "u1")]}),
         )
-        .with(PROJECT_LISTING, projects(&[("prod", "p2")]));
-    let tenant = MemoryApi::new().with(PROJECT_LISTING, projects(&[("prod", "p2"), ("dev", "p1")]));
+        .with(PROJECT_LISTING, project_listing(&[("prod", "p2")]));
+    let tenant = MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("prod", "p2"), ("dev", "p1")]),
+    );
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |scope: Option<&str>| {
         scopes.borrow_mut().push(scope.map(str::to_string));
@@ -4774,7 +4766,10 @@ fn list_reads_the_project_listing_one_time_for_the_clusters_and_the_projects() {
             CLUSTER_LISTING,
             serde_json::json!([listed_cluster("workload-a", "c1", "Running"), other]),
         )
-        .with(PROJECT_LISTING, projects(&[("dev", "p1"), ("prod", "p2")]));
+        .with(
+            PROJECT_LISTING,
+            project_listing(&[("dev", "p1"), ("prod", "p2")]),
+        );
     let options = ListOptions {
         kinds: vec![ListKind::Clusters, ListKind::Projects],
         ..ListOptions::default()
@@ -4868,10 +4863,7 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
     // and the listing is one request that `list projects` already makes.
     let named = api.clone().with(
         PROJECT_LISTING,
-        serde_json::json!({"items": [
-            {"metadata": {"name": "dev", "uid": "p1"}},
-            {"metadata": {"name": "prod", "uid": "p2"}},
-        ]}),
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
     );
     let l = listing(&named, &options).unwrap();
     let text = common::terminal().render_list(&l).unwrap();
@@ -4893,7 +4885,7 @@ fn two_clusters_with_search(properties: &[&str]) -> MemoryApi {
             ]),
         )
         .with(CLUSTER_SEARCH_SCHEMA, search_schema(properties))
-        .with(PROJECT_LISTING, projects(&[("lab", "p1")]))
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
 }
 
 /// The cluster listing that `query` selects, from `api`.
@@ -6018,9 +6010,10 @@ fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are
 
 #[test]
 fn a_project_name_resolves_to_its_uid_and_an_unknown_name_lists_the_projects() {
-    let tenant = Palette::new(
-        MemoryApi::new().with(PROJECT_LISTING, projects(&[("prod", "p2"), ("lab", "p1")])),
-    );
+    let tenant = Palette::new(MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("prod", "p2"), ("lab", "p1")]),
+    ));
     assert_eq!(tenant.project_uid_named("prod").unwrap(), "p2");
 
     let err = tenant.project_uid_named("staging").unwrap_err();
@@ -14043,7 +14036,7 @@ fn behind_current_on(api: &MemoryApi) -> (ops::BehindReport, String) {
     let path = dir.path().join("current.json");
     common::write_snapshot(&path, &current, false);
     let r = behind_of(api, &[path], &ops::BehindOptions::default());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     (r, text)
 }
 
@@ -14077,7 +14070,7 @@ fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_
         )),
         "{text}"
     );
-    let md = common::markdown().render_behind(&r).unwrap();
+    let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         md.contains(&format!(
             "| `csi-aws-ebs` | `1.65.0` | Public Repo | {note} |"
@@ -14172,7 +14165,7 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
         "{:?}",
         r.pins[0]
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("sync"), "{text}");
 }
 
@@ -14378,7 +14371,7 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
     assert_eq!(json["pins"][0]["newer"][1]["paletteLatest"], true);
     assert!(json["pins"][0]["newer"][0].get("paletteLatest").is_none());
     assert_eq!(pin.bump.as_ref().map(|b| b.to.as_str()), Some("1.65.0.1"));
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.lines()
             .any(|l| l.starts_with("      bump to 1.65.0.1: ")
@@ -14661,12 +14654,12 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
         serde_json::json!(["arm64"])
     );
     assert!(json["pins"][0]["newer"][1].get("drops").is_none());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
         "{text}"
     );
-    let md = common::markdown().render_behind(&r).unwrap();
+    let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         md.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
         "{md}"
@@ -14820,9 +14813,9 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(current.version, "1.65.0");
     assert!(!current.behind && current.bump.is_none());
 
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
-        text.starts_with("2 pins from 3 records: 1 behind\n"),
+        text.starts_with("2 pins from 3 records: 1 behind, 1 current\n"),
         "{text}"
     );
     assert!(
@@ -14832,7 +14825,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
             && text.contains("current"),
         "{text}"
     );
-    let md = common::markdown().render_behind(&r).unwrap();
+    let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         md.contains("| `csi-aws-ebs` | `1.63.1` | Public Repo | behind: 1.65.0"),
         "{md}"
@@ -14969,7 +14962,7 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     assert!(!answer.accepts());
     assert_eq!(answer.errors()[0].code, UPGRADE_NOT_SUPPORTED_CODE);
     assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
     assert!(text.contains(&refusal), "{text}");
     // the answer of Palette is under the bump line
@@ -14978,7 +14971,7 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
         text.find(&refusal).unwrap(),
     );
     assert!(bump_at < refusal_at, "{text}");
-    let md = common::markdown().render_behind(&r).unwrap();
+    let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         md.contains(&format!(
             "<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments"
@@ -15020,7 +15013,7 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
     let r = behind_of(&api, &[csi], &WITH_IMPACT);
     let answer = r.pins[0].bump.as_ref().unwrap().palette_validation.as_ref();
     assert!(answer.unwrap().accepts());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(text.contains("      palette accepts\n"), "{text}");
     assert!(!text.contains("palette refuses"), "{text}");
     assert_eq!(
@@ -15059,7 +15052,7 @@ fn behind_with_no_impact_makes_no_validate_request() {
     // the two records hold one version of the profile. Strata reads its document one time, for the
     // versions of the profile, and not for the bump
     assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("palette "), "{text}");
 }
 
@@ -15193,7 +15186,7 @@ fn behind_asks_the_route_of_the_profile_version_that_a_cluster_runs_about_the_bu
         posted[0].1,
         serde_json::json!({"cloudType": "", "type": "add-on", "packs": [moved]})
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(&format!(
             "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n"
@@ -15384,7 +15377,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
     );
     assert!(r.pins[0].behind && r.pins[0].error.is_none());
     assert_eq!(r.exit_code(), 1);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(text.contains("      palette gave no answer: "), "{text}");
     assert!(!text.contains("palette accepts"), "{text}");
 
@@ -15446,7 +15439,7 @@ fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_
     let csi = dir.path().join("csi.json");
     common::write_snapshot(&csi, &record, false);
     let r = behind_of(&api, std::slice::from_ref(&csi), &WITH_IMPACT);
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(&format!(
             "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} csi-aws-ebs: {message}\n"
@@ -15494,7 +15487,7 @@ fn behind_does_not_ask_about_a_record_that_no_cluster_runs() {
     assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
     let json = serde_json::to_value(&r).unwrap();
     assert!(json["pins"][0]["bump"].get("paletteValidation").is_none());
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("palette "), "{text}");
 }
 
@@ -15538,7 +15531,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
         bump.palette_validation_error.as_deref(),
         Some("1 record of project prod was not asked")
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("      palette gave no answer: 1 record of project prod was not asked\n"),
         "{text}"
@@ -15617,7 +15610,7 @@ fn behind_keeps_the_refusal_of_palette_and_says_that_it_did_not_ask_a_record_of_
         bump.palette_validation_error.as_deref(),
         Some("1 record of project prod was not asked")
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
     let missing = "      palette gave no answer: 1 record of project prod was not asked\n";
     assert!(text.contains(&format!("{refusal}{missing}")), "{text}");
@@ -15675,12 +15668,12 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
     let r: ops::BehindReport = serde_json::from_value(doc).unwrap();
     let listed = "1.65.0 listed since 2026-09-21T08:00:00.000Z";
     let arrived = "arrived: 1.65.0";
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(&format!("      {listed}\n")) && text.contains(&format!("      {arrived}\n")),
         "{text}"
     );
-    let md = common::markdown().render_behind(&r).unwrap();
+    let md = common::markdown().render_behind(&r, false).unwrap();
     let row = md.lines().find(|l| l.contains("csi-aws-ebs")).unwrap();
     assert!(
         row.contains(&format!("; {listed}")) && row.contains(&format!("; {arrived}")),
@@ -15806,7 +15799,7 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
             .collect::<Vec<_>>(),
         ["1.67.0"]
     );
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains("1.66.0") && text.contains("; the pinned version is disabled"),
         "{text}"
@@ -15868,7 +15861,7 @@ fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_r
     assert!(gone.error.is_some());
     assert_eq!((r.summary.floating, r.summary.errors), (3, 1));
     // the terminal names the version that the tag names now beside each one
-    let text = common::terminal().render_behind(&r).unwrap();
+    let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
             "1.63.1  Public Repo  behind: 1.65.0, 1.64.0 (deprecated) (floating tag 1.x, now 1.65.0)"
@@ -15919,8 +15912,7 @@ fn serve_fleet(api: MemoryApi, found: Vec<Value>, all: Vec<Value>) -> MemoryApi 
     )
     .with(
         PROJECT_LISTING,
-        serde_json::json!({"items": [{"metadata": {"name": "dev", "uid": "p1"}},
-            {"metadata": {"name": "prod", "uid": "p2"}}]}),
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
     )
 }
 

@@ -1,5 +1,5 @@
 $ strata behind releases/1.0.0/dev.json --no-impact --pre-release
-5 pins from 1 record: 4 behind, 1 floating; 1 profile version: 1 behind
+5 pins (1 with a floating tag) from 1 record: 4 behind, 1 current; 1 profile version: 1 behind
   [addon] cert-manager    1.21.1  Public Repo  current
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
 ~ [cni  ] cni-cilium-oss  1.19.6  Public Repo  behind: 1.20.1, 1.20.0
@@ -12,6 +12,7 @@ $ strata behind releases/1.0.0/dev.json --no-impact --pre-release
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
 ~ [k8s  ] kubernetes      1.35.3  Public Repo  behind: 1.36.2, 1.35.6
       1.36.2 listed since 2026-07-30T22:45:47.109Z
+      next patch 1.35.6: strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'
       aws-stack@1.2.0-rc.1 carries kubernetes@1.36.2
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
 ~ [os   ] ubuntu-aws      20.04   Public Repo  behind: 24.04, 22.04 (floating tag LTS__20.4.x, now 20.04)

@@ -495,3 +495,79 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
         );
     }
 }
+
+/// What the validate route of the create answers to a key with no `cluster.create`: HTTP 403 with
+/// the code `AccessDenied`. The code of Palette shows it, and a field test met it. Palette can put
+/// the scopes in another order in each answer.
+const NO_CLUSTER_CREATE: &str = r#"{"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system"}"#;
+
+/// The rules of the cluster `c1` that send the validate route of the create.
+const VALIDATE_RULES: [&str; 3] = ["palette-validate", "worker-cpu-floor", "pack-dependency"];
+
+/// F-025: one denial of the validate route stops each rule that sends the route. Palette gets one
+/// request, and each form of the report shows the error once, with the rules that it stopped.
+#[test]
+fn one_denial_of_the_validate_route_is_one_request_and_each_form_shows_it_once_with_the_rules() {
+    let api = api().failing(
+        "POST /v1/spectroclusters/aws/validate",
+        403,
+        NO_CLUSTER_CREATE,
+    );
+    let report = run_report(&api, &VALIDATE_RULES);
+    let posted = api
+        .posted()
+        .into_iter()
+        .filter(|(path, _)| path == "/v1/spectroclusters/aws/validate")
+        .count();
+    assert_eq!(posted, 1, "three rules, one request, one denial");
+    assert_eq!(report.checks.len(), 3, "{:?}", report.checks);
+    for check in &report.checks {
+        assert_eq!(check.verdict, Verdict::Error, "{}", check.id);
+        assert_eq!(
+            check.failed_request.as_ref().map(|call| call.ran()),
+            Some("POST /v1/spectroclusters/aws/validate".to_string()),
+            "{}: the JSON names the request that stopped the check",
+            check.id
+        );
+        assert!(
+            check.messages[0].contains("cluster.create"),
+            "{}: the JSON keeps the error of each check",
+            check.id
+        );
+    }
+    let text = report::render(&report, Format::Terminal, false, &Paint::off());
+    for (form, out) in [("terminal", text.clone())]
+        .into_iter()
+        .chain(reports(report.clone()))
+        .filter(|(form, _)| *form != "report.json")
+    {
+        assert_eq!(
+            out.matches("AccessDenied").count(),
+            1,
+            "{form}: the denial shows once\n{out}"
+        );
+        assert!(out.contains("Requests that failed"), "{form}\n{out}");
+        assert!(out.contains("stopped 3 checks: "), "{form}\n{out}");
+        assert_eq!(
+            out.matches("stopped by a request that failed: POST /v1/spectroclusters/aws/validate")
+                .count(),
+            3,
+            "{form}: each rule points to the request\n{out}"
+        );
+    }
+    let stopped = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("stopped 3 checks: "))
+        .unwrap();
+    for id in VALIDATE_RULES {
+        assert!(stopped.contains(id), "{stopped}");
+    }
+    assert!(
+        report
+            .summary
+            .verdict
+            .starts_with("ERROR: 3 checks could not answer: "),
+        "{}",
+        report.summary.verdict
+    );
+}

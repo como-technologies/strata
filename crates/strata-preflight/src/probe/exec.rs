@@ -164,21 +164,10 @@ pub(super) fn missing_tools<'a>(needs: &'a [String], backend: &dyn Backend) -> V
         .collect()
 }
 
-/// The command as a person types it: an argument with a space or a quote is quoted.
+/// The command as a person types it: an argument with a space or a quote is quoted, by the rule
+/// of [`strata::text::shell_words`].
 pub fn shell_words(argv: &[String]) -> String {
-    argv.iter()
-        .map(|a| {
-            if a.is_empty()
-                || a.chars()
-                    .any(|c| c.is_whitespace() || "\"'$`\\|&;<>()*?[]{}".contains(c))
-            {
-                format!("'{}'", a.replace('\'', "'\\''"))
-            } else {
-                a.clone()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
+    strata::text::shell_words(argv)
 }
 
 /// True when `name` is an executable on the PATH.

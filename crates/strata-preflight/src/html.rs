@@ -8,7 +8,9 @@ use strata::closed_set::ClosedSet;
 
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
-use crate::report::{CheckResult, DEFAULT_GATE, Report, SectionScore, Summary, pct, percent};
+use crate::report::{
+    CheckResult, DEFAULT_GATE, FAILED_REQUESTS, Report, SectionScore, pct, percent,
+};
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -29,6 +31,7 @@ h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 17px; margin: 28px 0 8p
 .verdict { display: inline-block; padding: 6px 12px; border-radius: 6px; font-weight: 600; margin: 8px 0 16px; }
 .verdict.ok { background: color-mix(in srgb, var(--pass) 15%, transparent); color: var(--pass); }
 .verdict.bad { background: color-mix(in srgb, var(--fail) 15%, transparent); color: var(--fail); }
+.verdict.none { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0 0 8px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 .tile b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; } .tile span { color: var(--muted); font-size: 13px; }
@@ -50,8 +53,9 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 /// The page.
 pub fn page(r: &Report) -> String {
     let mut h = head(r);
-    h.push_str(&tiles(&r.summary));
+    h.push_str(&tiles(r));
     h.push_str(&scorecard_section(r));
+    h.push_str(&failed_request_section(r));
     h.push_str("<h2>Results</h2>");
     for sc in &r.sections {
         h.push_str(&section_results(r, sc));
@@ -92,32 +96,79 @@ fn head(r: &Report) -> String {
         esc(&r.tool.name),
         esc(&r.tool.version)
     ));
+    let class = if s.exit_code != 0 {
+        "bad"
+    } else if s.not_counted() {
+        "none"
+    } else {
+        "ok"
+    };
     h.push_str(&format!(
-        "<div class=\"verdict {}\">{}</div>",
-        if s.exit_code == 0 { "ok" } else { "bad" },
+        "<div class=\"verdict {class}\">{}</div>",
         esc(&s.verdict)
     ));
     h
 }
 
-/// The tiles of the totals.
-fn tiles(s: &Summary) -> String {
+/// The tiles of the totals. The counts of the failures are those of the summary and of the
+/// scorecard, and the tile of the readiness names the tiers that it counts.
+fn tiles(r: &Report) -> String {
+    let s = &r.summary;
     let mut h = String::from("<div class=\"tiles\">");
     for (n, what) in [
-        (pct(s.readiness), "readiness"),
-        (s.passed.to_string(), "passed"),
-        ((s.failed + s.probe_failed).to_string(), "failed"),
-        (s.not_run.to_string(), "did not run"),
-        (s.warned.to_string(), "warnings"),
-        (s.not_checked.to_string(), "not checked"),
-        (s.errors.to_string(), "errors"),
-        (s.rules.to_string(), "rules apply"),
+        (
+            pct(s.readiness),
+            format!("readiness (tiers {})", r.options.tiers_text()),
+        ),
+        (s.passed.to_string(), "passed".to_string()),
+        (s.failed.to_string(), "failed".to_string()),
+        (s.probe_failed.to_string(), "probes failed".to_string()),
+        (s.warned.to_string(), "warnings".to_string()),
+        (s.not_run.to_string(), "did not run".to_string()),
+        (s.not_checked.to_string(), "not checked".to_string()),
+        (s.errors.to_string(), "errors".to_string()),
+        (s.rules.to_string(), "rules apply".to_string()),
     ] {
         h.push_str(&format!(
-            "<div class=\"tile\"><b>{n}</b><span>{what}</span></div>"
+            "<div class=\"tile\"><b>{n}</b><span>{}</span></div>",
+            esc(&what)
         ));
     }
     h.push_str("</div>");
+    h
+}
+
+/// Each request that failed, once: the request, the error, the checks that it stopped, and the
+/// lines to run by hand. Empty when no request failed.
+fn failed_request_section(r: &Report) -> String {
+    let failed = r.failed_requests();
+    if failed.is_empty() {
+        return String::new();
+    }
+    let mut h = format!("<h2>{FAILED_REQUESTS}</h2><table><tbody>");
+    for f in &failed {
+        h.push_str(&format!(
+            "<tr class=\"error\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td><code>{}</code>",
+            Verdict::Error.name(),
+            esc(&f.request)
+        ));
+        for m in f.messages {
+            h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
+        }
+        h.push_str(&format!(
+            "<div class=\"fix\">{}</div>",
+            esc(&f.stopped_text())
+        ));
+        let reproduce = f.reproduce();
+        if !reproduce.is_empty() {
+            h.push_str(&format!(
+                "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
+                esc(&reproduce.join("\n"))
+            ));
+        }
+        h.push_str("</td></tr>");
+    }
+    h.push_str("</tbody></table>");
     h
 }
 
@@ -125,7 +176,7 @@ fn tiles(s: &Summary) -> String {
 fn scorecard_section(r: &Report) -> String {
     let s = &r.summary;
     let mut h = String::from(
-        "<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>",
+        "<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">probes failed</th><th class=\"num\">warnings</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>",
     );
     let gate = r.options.ready.unwrap_or(DEFAULT_GATE);
     for sc in &r.sections {
@@ -134,12 +185,12 @@ fn scorecard_section(r: &Report) -> String {
             None => (0.0, "none"),
         };
         h.push_str(&format!(
-            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
+            "<tr><td>{}</td><td><div class=\"bar\" title=\"{}\"><i class=\"{class}\" style=\"width:{width:.0}%\"></i><em style=\"left:{:.0}%\"></em></div> <span class=\"conf\">{}</span></td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"num hide-sm\">{}</td><td class=\"hide-sm\">{}</td></tr>",
             esc(&sc.title),
             pct(sc.readiness),
             gate * 100.0,
             pct(sc.readiness),
-            sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight, sc.with_runs,
+            sc.ran, sc.passed, sc.failed, sc.probe_failed, sc.warned, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight, sc.with_runs,
             bound_text(sc.weakest_bound)
         ));
     }
@@ -201,7 +252,10 @@ fn result_row(c: &CheckResult) -> String {
             .map(|a| format!(" · {}", esc(a)))
             .unwrap_or_default()
     ));
-    if c.verdict != Verdict::Passed {
+    // a check that a request stopped points to the request: the page shows the error once
+    if let Some(stopped) = c.stopped_text() {
+        h.push_str(&format!("<div class=\"msg\">{}</div>", esc(&stopped)));
+    } else if c.verdict != Verdict::Passed {
         for m in &c.messages {
             h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
         }
@@ -262,6 +316,7 @@ mod tests {
             evidence: vec![],
             confidence: None,
             counts_as_failure: false,
+            failed_request: None,
         };
         Report {
             schema: REPORT_SCHEMA.into(),
@@ -297,7 +352,9 @@ mod tests {
                 weakest_bound: None,
                 ran: 1,
                 passed: 0,
-                failed: 1,
+                failed: 0,
+                probe_failed: 1,
+                warned: 0,
                 not_run: 0,
                 not_checked: 0,
                 readiness: Some(0.0),
@@ -305,6 +362,7 @@ mod tests {
             summary: Summary {
                 rules: 1,
                 ran: 1,
+                counted: 0,
                 passed: 0,
                 failed: 0,
                 probe_failed: 1,
@@ -345,7 +403,7 @@ mod tests {
         report.sections[0].readiness = None;
         let html = page(&report);
         assert!(
-            html.contains("<b>-</b><span>readiness</span>"),
+            html.contains("<b>-</b><span>readiness (tiers static)</span>"),
             "the tile of no readiness"
         );
         assert!(!html.contains('–'), "one mark for no percent");

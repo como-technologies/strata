@@ -192,7 +192,7 @@ fn loop_preflight(r: &mut Runner) {
         "loop-preflight-static",
         0,
         false,
-        "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet | grep -E '^(OK|FAIL)'",
+        "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet | grep -E '^(OK|NOT COUNTED|FAIL)'",
     );
     // the pull request gets the same report as a comment of its own
     r.step(

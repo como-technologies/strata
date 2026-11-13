@@ -399,8 +399,8 @@ impl Renderer for MarkdownRenderer {
         Ok(markdown_report(r))
     }
 
-    fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        Ok(behind::markdown_behind(r))
+    fn render_behind(&self, r: &crate::ops::BehindReport, behind_only: bool) -> Result<String> {
+        Ok(behind::markdown_behind(r, behind_only))
     }
 
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {

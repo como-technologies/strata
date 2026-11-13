@@ -21,11 +21,29 @@ from one registry. A pin that is behind names the newer versions, newest first.
 the change flags of `compare pack:<name>@<pinned> pack:<name>@<newest>`. See
 [Change flags and impact](../reference/impact.md).
 
+The first line counts each pin one time, by its state: `behind`, `current`, or
+`not checked`. So the counts add up to the pins. A pin whose comparison failed is
+`not checked`, also when it is behind. The count in parentheses is the pins with a
+floating tag, and each of them is also behind or current. The profile versions
+have counts of their own, in the same form, and they can also be `gone`.
+
 When Palette calls a
 different newer version the latest, the line ends with
 `; Palette calls <version> the latest`: see
 [Which version is the newest](./packs.md#which-version-is-the-newest). The lines
-under a pin name each record that pins it.
+`pinned by` under a pin name each record that pins it. For a cluster with many
+profiles, the line names the profile that holds the pack: see
+[A cluster with many profiles](#a-cluster-with-many-profiles).
+
+The line `next patch` names the newest patch of the minor version of the pin. It
+comes when the newest version is of another minor version, as `1.36.2` is for the
+pin `1.35.3`. A team can take the patch before the move. The line gives the
+command that says what the move to the patch does, and strata sends no request for
+it. Run the command:
+
+```text
+{{#include ../output/behind-next-patch.txt}}
+```
 
 - **A newer version** is one that a person can move to. A version that Spectro
   Cloud disabled or deleted is not, and a version for none of the clouds of the
@@ -72,6 +90,48 @@ versions. See [The move to the newest profile version](#the-move-to-the-newest-p
 `--pre-release` names a pre-release as a newer version of a pin or of a profile
 version that is not a pre-release. `--pin` reports one pack: see [One pack](#one-pack).
 
+`--behind-only` shows only the rows that are behind, or that strata could not
+check: see [Only the rows that are behind](#only-the-rows-that-are-behind).
+
+## Only the rows that are behind
+
+On many records, most rows are current. `--behind-only` omits each pin and each
+profile version that is current. The first line still counts each one:
+
+```text
+{{#include ../output/behind-only.txt}}
+```
+
+The exit does not change. A row that strata could not check stays, because the
+exit is `2` for it. A profile version that is `gone` stays too. `--json` keeps
+each pin and each profile version, because `--since` reads all the pins of the
+previous run. To keep the pins that are behind in a script, select them with
+`.pins[] | select(.behind)`.
+
+## A cluster with many profiles
+
+A record of a cluster holds each profile that the cluster runs. When it holds two
+or more, its title gives their count, such as `4 profiles on cluster payments`. So
+the title does not say which profile holds a pack. The line `pinned by` of a pin
+names the profile of the cluster that holds the pack. The line of a profile
+version names that version. Here the cluster `payments` runs `aws-stack@1.0.0` and
+three add-on profiles, and `--behind-only` omits the rows that are current:
+
+```text
+{{#include ../output/behind-only-cluster.txt}}
+```
+
+The record names the profile of each pack that the cluster reconciled, in the
+tier `running`: see
+[More of the cluster than its release](./snapshot/cluster.md#more-of-the-cluster-than-its-release). When the record holds
+no tier `running`, or the tier does not name the pack, the line gives the title of
+the record. A record of a cluster group holds no such tier. `--json` keeps the title
+of the record in `subject`, and gives the title with the profile in `owner`:
+
+```text
+{{#include ../output/behind-owner-json.txt}}
+```
+
 ## Newer versions of a profile
 
 A pipeline publishes the versions of a profile, and the definition of a cluster
@@ -116,7 +176,7 @@ Palette created the newest version. Palette gives no time of the publish.
 ```
 
 The record of a cluster holds each profile that the cluster runs. The cluster
-`payments` runs `aws-stack@1.0.0`:
+`payments` runs `aws-stack@1.0.0` and three add-on profiles:
 
 ```text
 {{#include ../output/behind-profile-cluster-lines.txt}}

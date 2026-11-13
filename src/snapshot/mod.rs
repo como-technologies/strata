@@ -21,7 +21,7 @@ pub use crate::model::repave::PendingRepave;
 pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
 use crate::render::count_of;
-use crate::text::name_or_uid;
+use crate::text::{and_list, name_or_uid};
 use crate::timestamp::Rfc3339;
 
 mod build;
@@ -315,28 +315,34 @@ impl Source {
                 Naming::Verdict => format!("published version {profile}"),
             };
         };
-        match c.kind.known() {
-            _ if self.name.is_empty() && !c.kind.is_cluster() => {
-                format!("{} {}", c.kind.noun(), c.name)
-            }
-            // a kind that a later release wrote: the name of the kind in the documents
-            None => format!("{profile} on {} {}", c.kind.noun(), c.name),
-            Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
-            Some(SubjectKind::ClusterGroup) => {
-                format!("{profile} pinned by cluster group {}", c.name)
-            }
-            Some(SubjectKind::Cluster) if self.name.is_empty() && c.pending => {
-                format!("cluster {} pending", c.name)
-            }
-            Some(SubjectKind::Cluster) if self.name.is_empty() => format!("cluster {}", c.name),
-            Some(SubjectKind::Cluster) if c.pending => {
-                format!("{profile} pending for cluster {}", c.name)
-            }
-            Some(SubjectKind::Cluster) => match naming {
-                Naming::Side => format!("{profile} on cluster {}", c.name),
-                Naming::Verdict => format!("cluster {} running {profile}", c.name),
-            },
+        let covered = (!self.name.is_empty()).then_some(profile.as_str());
+        cluster_named(c, covered, naming)
+    }
+
+    /// The title of the record with `profile` in the place of the profiles that it covers, such as
+    /// `monitoring@1.4.0 on cluster payments`. None for a record that covers one profile or none.
+    ///
+    /// The title of a record of two or more profiles gives their count. So it does not say which
+    /// of them holds a pack.
+    pub(crate) fn title_of_profile(&self, profile: &str) -> Option<String> {
+        let c = self.cluster.as_ref().filter(|c| c.profiles.len() > 1)?;
+        Some(cluster_named(c, Some(profile), Naming::Side))
+    }
+
+    /// The title of the record with only the profiles that hold the pack `name`: see
+    /// [`Source::title_of_profile`] and [`ClusterSource::profiles_holding`]. None when the record
+    /// does not say which profile holds the pack.
+    pub(crate) fn title_of_pack(&self, name: &str) -> Option<String> {
+        let holding: Vec<String> = self
+            .cluster
+            .iter()
+            .flat_map(|c| c.profiles_holding(name))
+            .map(|p| name_version(&p.name, &p.version))
+            .collect();
+        if holding.is_empty() {
+            return None;
         }
+        self.title_of_profile(&and_list(&holding))
     }
 
     /// `name@version` of the profile of the record, or the count of the profiles for a record of
@@ -367,6 +373,32 @@ impl Source {
             (None, Some(c)) => &c.uid,
             (None, None) => &self.uid,
         }
+    }
+}
+
+/// The object of a record of the cluster `c` in the words of `naming`: see [`Source::named`].
+/// `profile` is the part of the title that names the profiles, as `name@version`. It is `None`
+/// when the record covers no profile.
+fn cluster_named(c: &ClusterSource, profile: Option<&str>, naming: Naming) -> String {
+    let Some(profile) = profile else {
+        return match c.kind.known() {
+            Some(SubjectKind::Cluster) if c.pending => format!("cluster {} pending", c.name),
+            Some(SubjectKind::Cluster) => format!("cluster {}", c.name),
+            _ => format!("{} {}", c.kind.noun(), c.name),
+        };
+    };
+    match c.kind.known() {
+        // a kind that a later release wrote: the name of the kind in the documents
+        None => format!("{profile} on {} {}", c.kind.noun(), c.name),
+        Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
+        Some(SubjectKind::ClusterGroup) => format!("{profile} pinned by cluster group {}", c.name),
+        Some(SubjectKind::Cluster) if c.pending => {
+            format!("{profile} pending for cluster {}", c.name)
+        }
+        Some(SubjectKind::Cluster) => match naming {
+            Naming::Side => format!("{profile} on cluster {}", c.name),
+            Naming::Verdict => format!("cluster {} running {profile}", c.name),
+        },
     }
 }
 

@@ -153,7 +153,8 @@ accuracy of a section is the lowest bound of its rules.
 | preflight | the rows promoted to preflight checks |
 | runs | the rows with a run in the ledger on this engine |
 | weakest bound | the lowest 95% lower bound among the rows with runs, or `no runs` when none has one |
-| ran, passed, failed, not run, not checked | the checks of this run |
+| ran, passed, not run, not checked | the checks of this run |
+| fail, probe fail, warn | the checks of this run that failed, in one class each: a counted failure, a probe that failed and does not count, and a warning. A warning is no failure. The summary line gives the same three counts |
 | readiness | `passed / (ran + not run)`, or none when no check applies |
 
 No number measures what the catalog does not hold. A low count of `seen` shows
@@ -173,6 +174,11 @@ a job: `--ready 80` is exit `1` under 80%. It says how ready an estate is to
 start a first build, and where the work is first. It does not say that a build
 will pass: a row that is `NOT CHECKED` (no check in strata-preflight) is
 outside the count, and the report prints that count beside the readiness.
+
+The readiness counts the checks of the tiers that ran. The static tier alone
+and the three tiers give two numbers for one entity, so each form of the report
+names the tiers beside the number: `readiness 20% (tiers static)`. Compare two
+numbers of one set of tiers only.
 
 ## The facts of the clouds
 

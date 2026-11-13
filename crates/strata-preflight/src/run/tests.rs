@@ -673,7 +673,8 @@ rules:
     .unwrap();
     // the limit is zero. A watch that does not end at the first reading ends at the limit.
     // The rule that passed is an error then, and the exit code is 2. A cluster that is gone gives
-    // the verdict a message of its own, also with the state `Deleted`.
+    // the verdict a message of its own, also with the state `Deleted`. With `--strict`, the probe
+    // counts, so the verdict is not `NOT COUNTED`.
     let gone = "OK: the cluster is gone; no counted check failed";
     for (is_deleted, verdict, state, exit_code, words) in [
         (true, Verdict::Passed, "Deleting", 0, gone),
@@ -698,7 +699,10 @@ rules:
             world: &w,
             palette: &Palette::new(&api),
             ledger: &Ledger::default(),
-            selection: &Selection::default(),
+            selection: &Selection {
+                strict: true,
+                ..Selection::default()
+            },
             options: &WatchOptions {
                 limit: Duration::ZERO,
                 ..WatchOptions::default()
@@ -754,24 +758,34 @@ rules:
     );
     let mut w = world(3);
     w.cluster_uid = Some("c1".into());
-    let (report, _) = watch(WatchInputs {
-        catalog: &c,
-        world: &w,
-        palette: &Palette::new(&api),
-        ledger: &Ledger::default(),
-        selection: &Selection::default(),
-        options: &WatchOptions::default(),
-        now: "t",
-        progress: &Progress::silent(),
-        verbose: false,
-        paint: Paint::off(),
-        sleep: &|_| {},
-        out_dir: None,
-        out_world: false,
-    })
-    .unwrap();
-    assert_eq!(report.summary.exit_code, 0);
-    assert_eq!(report.summary.verdict, "OK: each counted check passed");
+    // the one rule is a probe: it counts only with --strict, and a run with no counted check is
+    // not OK
+    for (strict, words) in [
+        (true, "OK: each counted check passed"),
+        (false, "NOT COUNTED: no check counted on gke"),
+    ] {
+        let (report, _) = watch(WatchInputs {
+            catalog: &c,
+            world: &w,
+            palette: &Palette::new(&api),
+            ledger: &Ledger::default(),
+            selection: &Selection {
+                strict,
+                ..Selection::default()
+            },
+            options: &WatchOptions::default(),
+            now: "t",
+            progress: &Progress::silent(),
+            verbose: false,
+            paint: Paint::off(),
+            sleep: &|_| {},
+            out_dir: None,
+            out_world: false,
+        })
+        .unwrap();
+        assert_eq!(report.summary.exit_code, 0);
+        assert_eq!(report.summary.verdict, words);
+    }
 }
 
 #[test]

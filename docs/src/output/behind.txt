@@ -1,5 +1,5 @@
 $ strata behind 'releases/*/dev.json'
-9 pins from 2 records: 4 behind, 2 floating; 2 profile versions: 1 behind
+9 pins (2 with a floating tag) from 2 records: 4 behind, 5 current; 2 profile versions: 1 behind, 1 current
   [addon] cert-manager    1.21.1  Public Repo  current
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)
@@ -23,6 +23,7 @@ $ strata behind 'releases/*/dev.json'
       1.36.2 listed since 2026-07-30T22:45:47.109Z
       bump to 1.36.2: repave IDENTITY UPSTREAM AUTHORED IMAGES
       palette accepts
+      next patch 1.35.6: strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'
       aws-stack@1.1.1 carries kubernetes@1.36.2
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
   [k8s  ] kubernetes      1.36.2  Public Repo  current

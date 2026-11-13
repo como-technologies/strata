@@ -52,6 +52,33 @@ facts:
       - palette-validate
       - worker-cpu-floor
 
+  # The validate route of a create checks the role of the key first: it needs cluster.create
+  - id: validate-create-permission
+    kind: behavior
+    reads:
+      codes:
+        - AccessDenied
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/spectroclusters/{cloudType}/validate
+    live:
+      - observer-role.sh:preflight-control-validate
+      - observer-role.sh:preflight-role-validate
+    pages:
+      - internals/palette/validate-routes.md#the-permission-of-the-route
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - commands/preflight/tiers.md#the-key-of-the-live-tier
+    code:
+      - crates/strata-preflight/src/probe/backend.rs
+      - crates/strata-preflight/src/report/mod.rs
+    rules:
+      - ecr-oci-images
+      - pack-dependency
+      - palette-validate
+      - worker-cpu-floor
+
   - id: validate-create-gke-pool-size
     kind: behavior
     reads:

@@ -4,7 +4,7 @@
 //! [`crate::html`] gives the HTML form. A script reads the exit status and the JSON; the text
 //! forms can change in any release.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use clap::ValueEnum;
 use schemars::JsonSchema;
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::legend;
+use strata::render::count_of;
 use strata::term::color::Paint;
 use strata::text::dash;
 
@@ -133,6 +134,13 @@ impl Options {
         format!("{}{strict}{offline}", tiers.join(", "))
     }
 
+    /// The readiness as each form of the report writes it, with the tiers beside it: `20% (tiers
+    /// static)`. `readiness` is the number as text. The readiness counts the checks of the tiers
+    /// that ran, so another `--tier` gives another number for one entity.
+    pub(crate) fn readiness_text(&self, readiness: &str) -> String {
+        format!("{readiness} (tiers {})", self.tiers_text())
+    }
+
     /// The directory that holds `world.json` and `entity.json`: `outDir` when `--world` wrote
     /// them there, else none.
     pub(crate) fn world_dir(&self) -> Option<&str> {
@@ -191,6 +199,11 @@ pub struct CheckResult {
     /// True when this result makes the exit code `1`: a failed preflight check of severity
     /// `fail`, or a failed probe with `--strict`.
     pub counts_as_failure: bool,
+    /// The request to Palette that failed, for a check that gave `error` at a request. The
+    /// request has no `answer`, and the messages give the error. A report from before 0.34.0 has
+    /// no such field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failed_request: Option<Call>,
 }
 
 impl CheckResult {
@@ -212,11 +225,22 @@ impl CheckResult {
 
     /// The lines to run by hand are those of a check that failed, is not checked, or gave an
     /// error. A form of the report shows them. A check that passed or did not run shows none.
+    /// A request that failed shows the lines of the checks that it stopped: see
+    /// [`FailedRequest::reproduce`].
     pub(crate) fn shown_reproduce(&self) -> &[String] {
         match self.verdict {
+            Verdict::Error if self.failed_request.is_some() => &[],
             Verdict::Failed | Verdict::NotChecked | Verdict::Error => &self.reproduce,
             _ => &[],
         }
+    }
+
+    /// The line that a form shows in place of the error of a check that a request stopped. The
+    /// form shows the error once, in [`Report::failed_requests`].
+    pub(crate) fn stopped_text(&self) -> Option<String> {
+        self.failed_request
+            .as_ref()
+            .map(|call| format!("stopped by a request that failed: {}", call.ran()))
     }
 
     /// The fix that a form of the report shows: the fix of a check that failed, when it has text. A
@@ -273,12 +297,21 @@ pub struct SectionScore {
     /// none when no row has a run.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub weakest_bound: Option<f64>,
-    /// The checks that ran: passed or failed.
+    /// The checks that ran: passed or failed, at any level and severity but `note`.
     pub ran: u32,
     /// The checks that passed.
     pub passed: u32,
-    /// The checks that failed, at any level and severity but `note`.
+    /// The checks that failed and count: exit `1`. The counts of the sections add to `failed` of
+    /// the summary, and so does each count below.
     pub failed: u32,
+    /// The probes that failed and do not count. A report from before 0.34.0 counts them in
+    /// `failed`.
+    #[serde(default)]
+    pub probe_failed: u32,
+    /// The checks of severity `warn` that failed. A report from before 0.34.0 counts them in
+    /// `failed`.
+    #[serde(default)]
+    pub warned: u32,
     /// The checks that apply here and did not run: a tier not asked for, no key, or `--no-exec`.
     pub not_run: u32,
     /// The rows strata-preflight could not check here.
@@ -297,6 +330,10 @@ pub struct Summary {
     pub rules: u32,
     /// The checks that ran.
     pub ran: u32,
+    /// The checks that ran and count: a failure of one of them is exit `1`. When it is `0`, the
+    /// verdict is `NOT COUNTED`. A report from before 0.34.0 has no such field.
+    #[serde(default)]
+    pub counted: u32,
     /// Passed.
     pub passed: u32,
     /// Failed, and counted: exit `1`.
@@ -333,6 +370,12 @@ impl Summary {
     pub fn applies(&self) -> u32 {
         scorecard::applies(self.ran, self.not_run)
     }
+
+    /// True when the verdict is `NOT COUNTED`: no counted check failed, and none ran. The exit
+    /// code is `0`, and the forms of the report do not show it as a pass.
+    pub fn not_counted(&self) -> bool {
+        self.exit_code == 0 && self.counted == 0
+    }
 }
 
 /// What the words of the document mean, for a reader of the JSON.
@@ -355,7 +398,10 @@ impl Legend {
             levels: legend::<Level>(),
             tiers: legend::<Tier>(),
             exit: [
-                ("0", "each counted check passed"),
+                (
+                    "0",
+                    "no counted check failed: OK when each counted check passed, NOT COUNTED when no counted check ran",
+                ),
                 (
                     "1",
                     "a counted check failed, or the readiness is under --ready",
@@ -416,6 +462,73 @@ impl Report {
         let listed: Vec<&CheckResult> = rows.iter().copied().filter(|c| c.is_listed()).collect();
         (!listed.is_empty() || section.not_run > 0).then_some(SectionRows { rows, listed })
     }
+
+    /// Each request to Palette that failed, with the checks that it stopped. One denial of the key
+    /// stops each check that sends the same request, so a form shows the error once.
+    ///
+    /// Two checks share an entry when they sent the same request and got the same messages. The
+    /// entries are in the order of their requests.
+    pub(crate) fn failed_requests(&self) -> Vec<FailedRequest<'_>> {
+        let mut by: BTreeMap<(String, &[String]), Vec<&CheckResult>> = BTreeMap::new();
+        for c in &self.checks {
+            if let Some(call) = &c.failed_request {
+                by.entry((call.ran(), c.messages.as_slice()))
+                    .or_default()
+                    .push(c);
+            }
+        }
+        by.into_iter()
+            .map(|((request, messages), checks)| FailedRequest {
+                request,
+                messages,
+                checks,
+            })
+            .collect()
+    }
+}
+
+/// The heading of the part of each form that shows the requests that failed: see
+/// [`Report::failed_requests`].
+pub(crate) const FAILED_REQUESTS: &str = "Requests that failed";
+
+/// One request to Palette that failed, and the checks that it stopped.
+pub(crate) struct FailedRequest<'a> {
+    /// The request: `POST /v1/spectroclusters/aws/validate`.
+    pub(crate) request: String,
+    /// The messages of the error, with the HTTP status and the start of the body.
+    pub(crate) messages: &'a [String],
+    /// The checks that the request stopped, in the order of the report.
+    pub(crate) checks: Vec<&'a CheckResult>,
+}
+
+impl FailedRequest<'_> {
+    /// `stopped 4 checks: palette-validate, worker-cpu-floor, ...`.
+    pub(crate) fn stopped_text(&self) -> String {
+        let ids: Vec<&str> = self.checks.iter().map(|c| c.id.as_str()).collect();
+        format!(
+            "stopped {}: {}",
+            count_of(ids.len(), "check"),
+            ids.join(", ")
+        )
+    }
+
+    /// The lines to run by hand that each check of the request has: the lines that send the
+    /// request. The line that reads the answer is of one rule, so it is not here.
+    pub(crate) fn reproduce(&self) -> Vec<&str> {
+        let Some((first, rest)) = self.checks.split_first() else {
+            return Vec::new();
+        };
+        let others: Vec<BTreeSet<&str>> = rest
+            .iter()
+            .map(|c| c.reproduce.iter().map(String::as_str).collect())
+            .collect();
+        first
+            .reproduce
+            .iter()
+            .map(String::as_str)
+            .filter(|line| others.iter().all(|lines| lines.contains(line)))
+            .collect()
+    }
 }
 
 /// The results of one section of a report.
@@ -460,9 +573,12 @@ pub struct Assembly<'a> {
 /// It counts when the rule has severity `fail` and has the preflight level, or when `--strict` is
 /// on. It is exit `1`, and it ends a watch. A warning or a note never counts.
 pub fn counts_as_failure(rule: &Rule, verdict: Verdict, strict: bool) -> bool {
-    verdict == Verdict::Failed
-        && rule.severity == Severity::Fail
-        && (rule.level == Level::Preflight || strict)
+    verdict == Verdict::Failed && is_counted(rule.level, rule.severity, strict)
+}
+
+/// True when a failure of a check at `level` with `severity` counts: see [`counts_as_failure`].
+pub(crate) fn is_counted(level: Level, severity: Severity, strict: bool) -> bool {
+    severity == Severity::Fail && (level == Level::Preflight || strict)
 }
 
 /// Build the report from the outcomes.
@@ -511,10 +627,11 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             evidence: rule.evidence.clone(),
             confidence: a.confidence.get(&rule.id).cloned(),
             counts_as_failure,
+            failed_request: outcome.ran.failed_request().cloned(),
         });
     }
     let sections = scorecard(a.catalog, &checks);
-    let summary = summarize(&checks, &sections, &a.options, a.cluster_gone);
+    let summary = summarize(&checks, &a.subject.cloud, &a.options, a.cluster_gone);
     Report {
         schema: REPORT_SCHEMA.to_string(),
         tool: Tool::current(),

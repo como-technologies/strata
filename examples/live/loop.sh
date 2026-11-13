@@ -185,7 +185,7 @@ if stage 4 "before a build"; then
   check preflight-comment 0 '#158: pr-comment.sh --preflight posts the markdown report of the static tier as the comment of the pull request' -- \
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier static --offline --quiet --format markdown > preflight-report.md && \"$ci/pr-comment.sh\" --preflight preflight-report.md --dry-run > preflight-comment.md"
   check preflight-comment-says 0 '#158: the comment starts with the marker of its own and holds the verdict' -- \
-    bash -c "head -n 1 preflight-comment.md | grep -qx '<!-- strata-preflight -->' && grep -q '^\*\*OK: ' preflight-comment.md"
+    bash -c "head -n 1 preflight-comment.md | grep -qx '<!-- strata-preflight -->' && grep -Eq '^\*\*(OK|NOT COUNTED): ' preflight-comment.md"
   # the job of a pipeline runs preflight.sh, as the drop-ins do. Offline, the log and the report of
   # the job say so. With the key of the lab where strata finds it, the job reads Palette.
   check preflight-job 0 '#618: preflight.sh --offline runs the static tier of the body as the job of a pull request' -- \

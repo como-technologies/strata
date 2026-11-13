@@ -80,14 +80,9 @@ fn the_json_document_is_the_same_with_and_without_the_note() {
     let home = tempfile::tempdir().unwrap();
     let noisy = list(&api, home.path(), &["--json"]);
     let quiet = list(&api, home.path(), &["--json", "--quiet"]);
-    // the time of the document is the one field that two runs do not share
-    let read = |run: &Run| -> Value {
-        let mut doc: Value = serde_json::from_str(&run.out).unwrap();
-        doc.as_object_mut().unwrap().remove("generatedAt");
-        doc
-    };
-    assert_eq!(read(&noisy), read(&quiet));
-    assert_eq!(read(&noisy)["profiles"][0]["type"], LATER_TYPE);
+    let document = noisy.document_without_time();
+    assert_eq!(document, quiet.document_without_time());
+    assert_eq!(document["profiles"][0]["type"], LATER_TYPE);
     assert!(!noisy.out.contains("Palette gave"));
 }
 
