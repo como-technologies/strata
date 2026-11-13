@@ -43,11 +43,6 @@ use crate::text::{code_block, code_cell, code_span, dash, html_text, markdown_ce
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
 
-/// The text in a code span: `` `--full` ``.
-pub(super) fn code(text: &str) -> String {
-    format!("`{text}`")
-}
-
 fn leaf(l: &Leaf) -> String {
     op_line(&OpLine::leaf(&l.path, l))
 }
@@ -82,17 +77,21 @@ fn heading_table(d: &Diff) -> String {
     ));
     o.push_str("| | A | B |\n|---|---|---|\n");
     o.push_str(&format!(
-        "| uid | `{}` | `{}` |\n",
-        dash(d.a.shown_uid()),
-        dash(d.b.shown_uid())
+        "| uid | {} | {} |\n",
+        code_cell(dash(d.a.shown_uid())),
+        code_cell(dash(d.b.shown_uid()))
     ));
     if let Some((a, b)) = side_projects(&d.a.project_uid, &d.b.project_uid) {
-        o.push_str(&format!("| project | {a} | {b} |\n"));
+        o.push_str(&format!(
+            "| project | {} | {} |\n",
+            markdown_cell(a),
+            markdown_cell(b)
+        ));
     }
     o.push_str(&format!(
-        "| root | `{}` | `{}` |\n",
-        short(&d.root_a),
-        short(&d.root_b)
+        "| root | {} | {} |\n",
+        code_cell(short(&d.root_a)),
+        code_cell(short(&d.root_b))
     ));
     if let Some((a, b)) = consumer_counts(d) {
         o.push_str(&format!(
@@ -130,7 +129,7 @@ fn result_section(d: &Diff) -> String {
         variables
     ));
     if let Some(sentence) = consumers_sentence(d) {
-        o.push_str(&format!("**Consumers:** {sentence}\n\n"));
+        o.push_str(&format!("**Consumers:** {}\n\n", markdown_cell(&sentence)));
     }
     for note in diff_notes(d) {
         o.push_str(&match note {
@@ -144,9 +143,9 @@ fn result_section(d: &Diff) -> String {
     }
     if let Some(v) = &d.verify {
         o.push_str(&format!(
-            "**Verify:** `{}` for uid `{}`, recorded {}, checked {}\n\n",
+            "**Verify:** `{}` for uid {}, recorded {}, checked {}\n\n",
             record_word(RecordStatus::from(v.status)),
-            v.uid,
+            code_span(&v.uid),
             v.recorded_at,
             v.checked_at
         ));
@@ -160,8 +159,9 @@ fn pack_table(d: &Diff) -> String {
         String::from("| | layer | pack | version | change | impact |\n|---|---|---|---|---|---|\n");
     for pd in &d.packs {
         let mark = status_mark(pd.status);
+        // a tag rename holds the tags of the answer
         let change = match pd.status {
-            Status::Changed => plain_flags(pd).replace("->", "→"),
+            Status::Changed => markdown_cell(&plain_flags(pd).replace("->", "→")),
             status => status_word(status).to_string(),
         };
         let change = match invalid_mark(pd) {
@@ -170,7 +170,7 @@ fn pack_table(d: &Diff) -> String {
         };
         o.push_str(&format!(
             "| `{mark}` | {} | {} | {} | {} | {} |\n",
-            pd.layer,
+            markdown_cell(&pd.layer),
             code_cell(&pd.name),
             markdown_cell(&version_display(pd).replace("->", "→")),
             change,
@@ -211,7 +211,7 @@ fn tiers_section(d: &Diff) -> String {
             let lines: String = tier_op_lines(d).iter().map(op_line).collect();
             format!(
                 "**Cluster tiers:** {}\n\n<details><summary>cluster tiers that differ</summary>\n\n{}</details>\n\n",
-                words.join(", "),
+                markdown_cell(&words.join(", ")),
                 code_block("diff", &lines)
             )
         }
@@ -238,7 +238,7 @@ fn cluster_values_section(d: &Diff) -> String {
 /// The fold with the detail of a changed pack. It is empty when the pack has no detail to show.
 fn pack_detail(pd: &PackDiff) -> String {
     let mut body = String::new();
-    if let Some(line) = upstream_line(pd, &Paint::off(), code) {
+    if let Some(line) = upstream_line(pd, &Paint::off(), code_span) {
         body.push_str(&format!("{line}\n\n"));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
@@ -246,7 +246,7 @@ fn pack_detail(pd: &PackDiff) -> String {
         body.push_str(&code_block("diff", &lines));
     }
     if pd.values.changed && !pd.values.parseable {
-        body.push_str(&values_unparsed_sentence(code));
+        body.push_str(&values_unparsed_sentence(code_span));
         body.push('\n');
     }
     let artifacts = artifact_lines(pd);
@@ -255,7 +255,7 @@ fn pack_detail(pd: &PackDiff) -> String {
         body.push_str(&code_block("diff", &lines));
     }
     for m in &pd.manifests {
-        body.push_str(&format!("- {}\n", manifest_change(m, code)));
+        body.push_str(&format!("- {}\n", manifest_change(m, code_span)));
     }
     if body.is_empty() {
         return body;
@@ -268,7 +268,7 @@ fn pack_detail(pd: &PackDiff) -> String {
     format!(
         "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
         html_text(&pd.name),
-        what,
+        html_text(&what),
         body
     )
 }
@@ -298,7 +298,7 @@ impl Renderer for MarkdownRenderer {
 
     fn verdict(&self, d: &Diff) -> Option<String> {
         let v = d.verify.as_ref()?;
-        let parts = verdict_parts(v, d.same, &d.a, code);
+        let parts = verdict_parts(v, d.same, &d.a, code_span);
         let mut line = format!(
             "\n**{}**: {}",
             parts.word(),
@@ -373,7 +373,7 @@ impl Renderer for MarkdownRenderer {
         }
         for rec in &r.records {
             let root = match &rec.root {
-                Some(root) => format!("`{}`", short(root)),
+                Some(root) => code_cell(short(root)),
                 None => format!("error: {}", markdown_cell(super::list::set_error(rec))),
             };
             o.push_str(&format!(
@@ -408,7 +408,10 @@ impl Renderer for MarkdownRenderer {
         );
         let second = format!(
             "{}.",
-            capitalized(&markdown_cell(&second_reading_line(&r.clusters_read, code)))
+            capitalized(&markdown_cell(&second_reading_line(
+                &r.clusters_read,
+                code_span
+            )))
         );
         let edge = format!("{}.", capitalized(&markdown_cell(&edge_hosts_line(r))));
         if r.consumers.is_empty() {
@@ -472,7 +475,7 @@ impl Renderer for MarkdownRenderer {
     fn render_packs(&self, l: &PackListing) -> Result<String> {
         let mut out = String::new();
         if let Some(sentence) = no_version_sentence(l) {
-            return Ok(format!("{}.\n", capitalized(&sentence)));
+            return Ok(format!("{}.\n", capitalized(&markdown_cell(&sentence))));
         }
         for r in &l.registries {
             out.push_str(&format!(
@@ -485,7 +488,9 @@ impl Renderer for MarkdownRenderer {
                 out.push_str(&format!(
                     "| {}{} | {} | {} | {} | {} |\n",
                     code_cell(&v.version),
-                    version_note(v).map(|n| format!(" {n}")).unwrap_or_default(),
+                    version_note(v)
+                        .map(|n| format!(" {}", markdown_cell(&n)))
+                        .unwrap_or_default(),
                     if v.tags.is_empty() {
                         "-".to_string()
                     } else {
