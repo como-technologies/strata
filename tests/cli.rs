@@ -9,8 +9,9 @@ use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, isolate_palette,
-    read_json, schema, schema_values, snapshot_from_raw, strata_command, write_record,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B,
+    against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
+    schema_values, snapshot_from_raw, strata_command, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -1065,6 +1066,52 @@ fn list_needs_credentials_and_takes_only_known_kinds() {
         "{}",
         r.err
     );
+}
+
+/// A field test typed `strata list project`, and strata refused it before it read Palette. Each
+/// kind also takes its singular, which sends the requests and prints the output of the plural.
+#[test]
+fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
+    let routes = std::collections::BTreeMap::from([
+        (
+            PROJECT_LISTING.to_string(),
+            project_listing(&[("dev", "p-dev"), ("prod", "p-prod")]),
+        ),
+        (
+            PROFILE_LISTING.to_string(),
+            serde_json::json!({"items": [listed("aws-stack", UID_A)]}),
+        ),
+        (
+            CLUSTER_LISTING.to_string(),
+            serde_json::json!({"items": []}),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    // the exit code, the document with no time stamp, the error, and each request
+    let list = |kind: &str| {
+        let r = stand.run(&["list", kind, "--json"]);
+        (r.code, r.document_without_time(), r.err, stand.requests())
+    };
+    for (singular, plural) in [
+        ("profile", "profiles"),
+        ("cluster", "clusters"),
+        ("project", "projects"),
+        ("filter", "filters"),
+    ] {
+        let one = list(singular);
+        let all = list(plural);
+        assert!(!all.3.is_empty(), "list {plural} reads Palette");
+        assert_eq!(one, all, "list {singular} does what list {plural} does");
+    }
+    let (code, document, err, _) = list("project");
+    assert_eq!(code, 0, "{err}");
+    let names: Vec<&str> = document["projects"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|p| p["name"].as_str())
+        .collect();
+    assert_eq!(names, ["dev", "prod"], "{document}");
 }
 
 #[test]

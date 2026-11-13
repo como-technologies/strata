@@ -35,17 +35,24 @@ pub const TENANT_SCOPE: &str = "";
 
 /// A kind of thing `list` reads. On the command line, each is its name in lower case.
 ///
+/// The command line also takes the singular of each name, such as `project`. A person who types
+/// `strata list project` means the projects, so strata does not refuse it.
+///
 /// [`Listing::errors`] names a kind that strata could not read by one of these values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ListKind {
     /// Profile versions, each a `<name>@<version>` ref.
+    #[value(alias = "profile")]
     Profiles,
     /// Clusters, each a `cluster:<uid>` ref.
+    #[value(alias = "cluster")]
     Clusters,
     /// Projects, each a uid for `PALETTE_PROJECT_UID` or `--project`.
+    #[value(alias = "project")]
     Projects,
     /// The saved tag filters of the tenant, each a `filter:<name>` ref.
+    #[value(alias = "filter")]
     Filters,
 }
 

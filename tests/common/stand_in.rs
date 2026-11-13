@@ -15,7 +15,7 @@ use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
 use strata::closed_set::unknown::sighting::Sighting;
 
 use super::{
-    PROFILE_LISTING, UID_A, UID_B, isolate_palette, profile_document, profile_route,
+    PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, profile_document, profile_route,
     strata_command, template,
 };
 
@@ -26,6 +26,16 @@ pub const LATER_TYPE: &str = "later-type";
 /// it.
 pub fn listed(name: &str, uid: &str) -> Value {
     json!({"metadata": {"name": name, "uid": uid}, "spec": {"cloudType": "aws", "version": "1.0.0"}})
+}
+
+/// The listing of the projects, with the name and the uid of each pair, as
+/// `GET /v1/dashboard/projects/metadata` gives it.
+pub fn project_listing(projects: &[(&str, &str)]) -> Value {
+    let items: Vec<Value> = projects
+        .iter()
+        .map(|(name, uid)| json!({"metadata": {"name": name, "uid": uid}}))
+        .collect();
+    json!({ "items": items })
 }
 
 /// The packs of the template: one pack, so that the template is the published one.
@@ -91,6 +101,56 @@ pub fn serve_recorded(routes: BTreeMap<String, Value>) -> (String, Arc<Mutex<Vec
         }
     });
     (format!("http://{address}"), requests)
+}
+
+/// The stand-in of [`serve_recorded`] for some routes, and a home for the runs of strata against
+/// it.
+pub struct Stand {
+    api: String,
+    requests: Arc<Mutex<Vec<Request>>>,
+    /// The home of each run, and its working folder.
+    pub home: tempfile::TempDir,
+    /// The `PALETTE_PROJECT_UID` of each run.
+    project: String,
+}
+
+impl Stand {
+    /// Serve `routes`. Each run has `project` in `PALETTE_PROJECT_UID`.
+    pub fn new(routes: BTreeMap<String, Value>, project: &str) -> Stand {
+        let (api, requests) = serve_recorded(routes);
+        Stand {
+            api,
+            requests,
+            home: tempfile::tempdir().unwrap(),
+            project: project.to_string(),
+        }
+    }
+
+    /// Run strata with `args` in the folder of the home. The requests of an earlier run are gone.
+    pub fn run(&self, args: &[&str]) -> Run {
+        self.requests.lock().unwrap().clear();
+        let mut command = strata_command();
+        isolate_palette(&mut command, self.home.path())
+            .current_dir(self.home.path())
+            .env("PALETTE_API", &self.api)
+            .env("PALETTE_PROJECT_UID", &self.project)
+            .env("STRATA_QUIET", "1")
+            .args(args);
+        Run::of(&mut command)
+    }
+
+    /// Each request of the last run, in the order of arrival.
+    pub fn requests(&self) -> Vec<Request> {
+        self.requests.lock().unwrap().clone()
+    }
+
+    /// The path and the project of each request of the last run.
+    pub fn asked(&self) -> Vec<(String, Option<String>)> {
+        self.requests()
+            .into_iter()
+            .map(|r| (r.path, r.project))
+            .collect()
+    }
 }
 
 /// The command `strata list profiles --packs` with the arguments `more` against `api`. The run
@@ -166,7 +226,7 @@ pub fn write_log(home: &Path, lines: &[String]) -> PathBuf {
 }
 
 /// One request that a stand-in took.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
     pub method: String,
     pub path: String,
