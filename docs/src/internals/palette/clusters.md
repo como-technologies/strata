@@ -334,12 +334,19 @@ name.
 
 A `PUT` of a cluster's profiles in the other order, with the uids it has,
 changes nothing: the document keeps the stored order. The audit log gets an
-update of the cluster. So the order strata gives a cluster record
-drops nothing that can change: the stored order is set when the cluster is
-made, and stays.
+update of the cluster.
 
-That order is no install order either. No run establishes the install order of
-the packs of two add-on profiles: see
+An added profile goes to the end of the list. A new uid of the infrastructure
+profile, such as a new version of it, moves that profile to the end too. So an
+add-on profile can reach position 0, and the rule `position-zero` of
+`strata preflight` warns about it. The code of Palette shows it; no live run
+shows it yet.
+
+The order that strata gives a cluster record does not depend on the stored
+order. So a change of the stored order changes no root of a record.
+
+The stored order is no install order either. No run establishes the install
+order of the packs of two add-on profiles: see
 [What no run covers](limits.md#what-no-run-covers).
 
 The order of the packs inside a profile is no install order either. Each add-on

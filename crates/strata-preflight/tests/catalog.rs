@@ -3325,7 +3325,7 @@ fn position_zero_says_when_each_effect_applies_and_what_a_person_can_do() {
             fips,
             dashboard,
             "no add-on profile holds a CNI or a CSI pack, so the repave check of CNI and CSI is right",
-            "the cluster keeps this order, because a PUT of the profiles in another order changes nothing",
+            "a PUT of the profiles in another order keeps the stored order of the cluster",
             "read the infrastructure profile by its type in spec.clusterProfileTemplates, and the FIPS mode in status.fips.mode",
         ]
     );

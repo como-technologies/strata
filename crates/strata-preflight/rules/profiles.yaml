@@ -71,7 +71,7 @@ rules:
                 else "no add-on profile holds a CNI or a CSI pack, so the repave check of CNI and CSI is right" end),
               (if $cluster == null
                 then "put the infrastructure profile at position 0 of spec.profiles of the create"
-                else ("the cluster keeps this order, because a PUT of the profiles in another order changes nothing",
+                else ("a PUT of the profiles in another order keeps the stored order of the cluster",
                       "read the infrastructure profile by its type in spec.clusterProfileTemplates, and the FIPS mode in status.fips.mode") end) ]
     fix:
       owner: palette
