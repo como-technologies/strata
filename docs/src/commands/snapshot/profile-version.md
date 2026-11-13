@@ -47,6 +47,21 @@ version, so `1.0.1` is above `1.0.1-g0123456789ab`. A name that has only
 pre-releases gives its highest one. See
 [The order of versions](../../reference/compatibility.md#the-order-of-versions).
 
+The note `@latest is` names the version that the ref takes. When `@latest`
+skips a pre-release above that version, the note names the highest one. So a
+pipeline that publishes a build on each merge gets one line. In
+[the sample pipeline](../../internals/sample-pipeline.md#the-pre-release-of-a-merge),
+`aws-stack` has pre-releases above `1.1.1`:
+
+```text
+{{#include ../../output/pipeline-latest.txt}}
+```
+
+`-q` removes the note, as it removes each progress note. An app profile gets the
+same note with its ref, such as `@latest is appprofile:shop@1.0.0`. `2.2.8-hotfix`
+is a pre-release by SemVer, below `2.2.8`, also when a team means a later build.
+Give a later build a higher number, such as `2.2.9`.
+
 A develop build such as `1.1.8.develop` does not parse as a semantic version.
 Palette reads it as `1.1.8`. Strata puts it below `1.1.8`, and `@latest` skips
 it as a pre-release. A develop build such as `1.2.develop` holds no three
@@ -59,12 +74,15 @@ numbers, so Palette reads no version in it. Strata reads it as a pre-release of
 ```
 
 `strata list` gives `1.2.develop` last, because it is the highest. The record
-takes `1.1.10`:
+takes `1.1.10`, and the note names `1.2.develop`:
 
 ```text
 {{#include ../../output/latest-develop.txt}}
 {{#include ../../output/latest-develop-version.txt}}
 ```
+
+`1.2.develop` does not parse, so the note does not say `by SemVer`. See
+[the rule of `@latest`](../../reference/refs.md#rules).
 
 <div class="playground-demo">
 
@@ -149,6 +167,10 @@ values that the registry ships. `verify` on that record reads the registry
 again, so it says whether a published pack version still serves the content it
 served. See [What changed between two pack versions](../../use-cases/pack-versions.md).
 
+The note `recording pack` names the version that the record takes. For
+`pack:<name>@latest`, it also names the highest pre-release that the ref skips:
+see [Which version is the newest](../packs.md#which-version-is-the-newest).
+
 ## Where to keep a record
 
 A record is a file. Strata reads a record and writes a record. Strata does not
@@ -171,6 +193,8 @@ A record does not hold the value of a sensitive profile variable. Each other
 secret stays: a secret in a value that the schema does not mark, or in a
 manifest. So a record of a profile whose pack values or manifests hold such a
 secret carries that secret. Keep that record in the object store, and not in the repository.
+A cluster record also holds the value of each variable that nobody marked
+sensitive: see [What a cluster record holds](cluster.md#what-a-cluster-record-holds).
 
 The book uses two layouts. The use cases keep one record for each version, at
 `releases/<version>/<project>.json`, and one for each cluster, at

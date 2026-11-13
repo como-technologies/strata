@@ -79,6 +79,11 @@ Strata never records the value of a sensitive variable, or a hash of it. The
 record lists the variable with `sensitive: true`. So strata can show that a
 sensitive variable was added or removed, but never that its value changed.
 
+A variable that nobody marked sensitive is in the record in clear. When its
+name reads as a secret, `snapshot` names it in a note. The fix is in Palette:
+mark the variable sensitive. See
+[What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
 This covers profile variables. A pack's values and manifests go into the record
 in full: see
 [Where to keep a record](../commands/snapshot/profile-version.md#where-to-keep-a-record).

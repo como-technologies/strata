@@ -12,6 +12,7 @@ use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{str_at, text};
 use crate::model::profile_type::ProfileType;
+use crate::reference::picked::Picked;
 use crate::reference::{LATEST, name_version};
 use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
@@ -127,11 +128,12 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
         ));
     };
     progress.note(&format!(
-        "recording pack {} from registry {}",
-        name_version(name, &resolved),
-        named(&registry_uid)
+        "recording pack {} from registry {}{}",
+        name_version(name, &resolved.version),
+        named(&registry_uid),
+        resolved.skip_words()
     ));
-    let loaded = one_layer_candidate(name, &resolved, &registry_uid, reference);
+    let loaded = one_layer_candidate(name, &resolved.version, &registry_uid, reference);
     let mut snap =
         resolve_with(&loaded, registries, progress)?.into_snapshot(reference, fetched_at)?;
     snap.source.kind = ProfileType::Pack.as_str().to_string();
@@ -142,7 +144,7 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     snap.name_registries(registries.metadata()?);
     snap.source.pack = Some(PackSource {
         name: name.to_string(),
-        version: resolved,
+        version: resolved.version,
         registry_uid,
         registry_name,
         pack_uid: snap
@@ -167,7 +169,8 @@ fn pack_not_found(name: &str, version: &str, registry: String, unsynced: Vec<Str
 }
 
 /// The version of the pack `name` that `version` names in the registry `uid`, from the listing
-/// `entries` of the pack. `version` can be [`LATEST`]. None when the registry has no such version.
+/// `entries` of the pack. `version` can be [`LATEST`], and then the pick also names the highest
+/// pre-release that it skips. None when the registry has no such version.
 ///
 /// Strata finds an exact version in each entry of the listing. Palette refuses a profile that pins
 /// a version that it does not serve, and `snapshot --validate` asks it. Strata picks [`LATEST`]
@@ -183,7 +186,7 @@ fn picked_in<A: PaletteApi>(
     name: &str,
     uid: &str,
     version: &str,
-) -> Result<Option<String>> {
+) -> Result<Option<Picked>> {
     let mine: Vec<&Value> = entries
         .iter()
         .filter(|e| str_at(e, "/spec/registryUid") == uid)
@@ -194,11 +197,12 @@ fn picked_in<A: PaletteApi>(
         mine
     };
     let versions: Vec<String> = offered.iter().map(|e| text(e, "/spec/version")).collect();
-    Ok(crate::reference::version::pick(versions.iter(), |v| v.as_str(), version).cloned())
+    let versions: Vec<&str> = versions.iter().map(String::as_str).collect();
+    Ok(Picked::of(&versions, version))
 }
 
-/// The uid of the one visible registry that has the pack `name` at `version`, and the version that
-/// it has: see [`picked_in`]. `version` can be [`LATEST`].
+/// The uid of the one visible registry that has the pack `name` at `version`, and the pick of the
+/// version that it has: see [`picked_in`]. `version` can be [`LATEST`].
 ///
 /// # Errors
 ///
@@ -210,7 +214,7 @@ fn holding_registry<A: PaletteApi>(
     entries: &[Value],
     name: &str,
     version: &str,
-) -> Result<(String, String)> {
+) -> Result<(String, Picked)> {
     let palette = registries.palette();
     // the registries that have it, in the order Palette lists them
     let mut holders = Vec::new();

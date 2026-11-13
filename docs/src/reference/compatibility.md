@@ -304,6 +304,11 @@ of `behind`. `text::shell_words` is public: a command as a person types it in a 
 `render::Renderer::render_behind` and `ops::PinnedBy` change: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_variables`, and
+`render::secret_like_notes` are new. They name each variable that a cluster record holds in
+clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -404,6 +409,12 @@ After 0.33.0, an entry of `pinnedBy[]` of `strata-behind/1` can have the new fie
 record of more than one profile, such as a cluster, gives it. It is the title of the record with
 only the profile that holds the entry. The id stays, and `subject` keeps the title of the record.
 `--since` reads a report of 0.33.0 and before.
+
+After 0.33.0, each entry of `records[]` of `strata-set/1` has the new field
+`secretLikeVariables`. An entry has it only when its record holds a variable in
+clear whose name reads as a secret. The id stays, and a reader that ignores
+unknown fields reads it. The exit does not change: see
+[What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1001,6 +1012,11 @@ markdown omit each pin and each profile version that is current. The first line,
 the JSON do not change. See
 [Only the rows that are behind](../commands/behind.md#only-the-rows-that-are-behind).
 
+After 0.33.0, `snapshot` of a cluster or of a set can write a new note on standard error. It
+names each variable in clear whose name reads as a secret, and never gives its value. `-q`
+hides it, and the exit and the root do not change. `snapshot --help` says it after the options.
+See [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -1201,6 +1217,18 @@ field, a value, an input, or an option is in the sections above.
   newest patch of its minor version. It also gives the command `strata compare` of the two pack
   versions. The markdown adds the line to the cell of the status. A script that reads the lines
   under a pin must skip it. The JSON does not change.
+- **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
+  commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
+  `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
+  `@latest@draft`. An app profile gets its ref, such as `@latest is appprofile:shop@1.0.0`. When
+  `@latest` skips a pre-release above that version, the note names the highest one:
+  `; it skips 1.0.1-mr2.770685, a pre-release by SemVer`. A script that reads the whole
+  standard error must accept the note, or pass `-q`. See
+  [Record the newest version](../commands/snapshot/profile-version.md#record-the-newest-version).
+- **The note of `pack:<name>@latest` names the skipped pre-release.** Its note
+  `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
+  matches the whole note must match the new text. Standard output and the exit code of both
+  changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
 
 ### For a user of the CI drop-ins
 
@@ -1230,6 +1258,8 @@ field, a value, an input, or an option is in the sections above.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
+- `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
+  a pattern with no `..` must name it.
 
 ### For a user of the library of strata-preflight
 

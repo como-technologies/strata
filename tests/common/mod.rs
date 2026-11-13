@@ -261,6 +261,22 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
     }
 }
 
+/// Give the variable `name` of the raw cluster fixture in `dir` the value `value` in clear, with
+/// `isSensitive: false`. Palette serves a variable in this form when nobody marked it sensitive.
+pub fn clear_cluster_variable(dir: &Path, name: &str, value: &str) {
+    let path = dir.join("variables.json");
+    let mut doc = read_json(&path);
+    for profile in doc.as_array_mut().unwrap() {
+        for v in profile["variables"].as_array_mut().unwrap() {
+            if v["name"] == name {
+                v["isSensitive"] = json!(false);
+                v["value"] = json!(value);
+            }
+        }
+    }
+    fs::write(&path, serde_json::to_string_pretty(&doc).unwrap()).unwrap();
+}
+
 /// Copy the three raw files from `from` to `to`, and apply each text replacement to each file.
 pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
     fs::create_dir_all(to).unwrap();

@@ -76,6 +76,13 @@ the version that Palette marks. They are two versions:
 {{#include ../output/packs-pre-release-json.txt}}
 ```
 
+`pack:<name>@latest` records `1.21.1`. Its note names the pre-release that it
+skips:
+
+```text
+{{#include ../output/packs-pre-release-record.txt}}
+```
+
 `strata behind` names the version of Palette on its bump line: see
 [The pins that are behind](./behind.md#the-pins-that-are-behind). See
 [The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest).

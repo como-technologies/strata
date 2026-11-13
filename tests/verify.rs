@@ -26,18 +26,19 @@ use strata::term::progress::Progress;
 
 use common::CommandExt;
 use common::{
-    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
-    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
-    REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
-    app_profile_route, behind_of, candidate_snapshot, cluster_manifests_route,
-    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
-    cluster_resolved_values_route, cluster_route, cluster_variables_route, clusters_denied,
-    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
-    group_route, listing, manifest_route, manifests_route, no_manifests, no_template, no_variables,
-    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
-    profile_route, project_listing, read_json, resolved_values_route, serve_fixture,
-    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
-    snapshot_of_ref, strata_command, template, variables_route, write_record, write_yaml,
+    APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
+    EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING,
+    PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B,
+    WITH_IMPACT, app_profile_route, app_tiers_route, behind_of, candidate_snapshot,
+    cluster_manifests_route, cluster_namespaces_route, cluster_rbacs_route, cluster_ref,
+    cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
+    clusters_denied, edge_host_route, error_body, fetch_examples, filters_denied,
+    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
+    no_manifests, no_template, no_variables, operation_forbidden_message, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
+    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
+    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
+    write_record, write_yaml,
 };
 
 #[test]
@@ -13571,7 +13572,7 @@ fn verify_and_a_snapshot_of_a_group_with_a_password_that_strata_cannot_mask_give
 /// property `replicas` at `replicas`.
 fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
     api.with(
-        "/v1/dashboard/appProfiles/metadata",
+        APP_PROFILE_LISTING,
         serde_json::json!({"appProfiles": [
             {"metadata": {"name": "shop", "uid": "ap1"}, "spec": {"version": "1.0.0"}},
             {"metadata": {"name": "shop", "uid": "ap0"}, "spec": {"version": "0.9.0"}},
@@ -13586,7 +13587,7 @@ fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
             "status": {"inUseApps": [{"kind": "appdeployment", "uid": "d1", "name": "shop-dev"}]}}),
     )
     .with(
-        "/v1/appProfiles/ap1/tiers",
+        app_tiers_route("ap1"),
         serde_json::json!({"spec": {"appTiers": [
             {"metadata": {"name": "web", "uid": "t1"},
              "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
@@ -13690,7 +13691,7 @@ fn app_tiers(web_order: Option<i64>) -> Value {
 
 /// A record of `appprofile:ap1` from an API that gives `tiers` for its tiers.
 fn app_record(tiers: Value) -> Snapshot {
-    let api = serve_app_profile(MemoryApi::new(), "2").with("/v1/appProfiles/ap1/tiers", tiers);
+    let api = serve_app_profile(MemoryApi::new(), "2").with(app_tiers_route("ap1"), tiers);
     common::snapshot_of(&api, "appprofile:ap1").unwrap()
 }
 
@@ -16418,6 +16419,10 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
     );
     assert_eq!(lab["root"], old.root.as_str());
     assert!(lab.get("error").is_none(), "{lab}");
+    assert!(
+        lab.get("secretLikeVariables").is_none(),
+        "grafana_password is sensitive, so the record holds no value of it: {lab}"
+    );
     let gone = &doc["records"][0];
     assert_eq!(gone["cluster"]["name"], "gone");
     assert!(gone.get("root").is_none(), "{gone}");
@@ -16466,6 +16471,55 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
         "{md}"
     );
     assert!(md.contains("| gone | `c-gone` |"), "{md}");
+}
+
+#[test]
+fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps_the_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path();
+    common::make_fixtures(dir);
+    let not_a_secret = "example-only-not-a-secret";
+    common::clear_cluster_variable(&dir.join("cluster-a"), "grafana_password", not_a_secret);
+    let lab = fleet_row(
+        CLUSTER_UID,
+        "lab-cluster",
+        "",
+        serde_json::json!({"env": "prod"}),
+    );
+    let api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
+        vec![lab],
+        vec![],
+    );
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &dir.join("fleet"),
+        false,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.exit_code(), 0, "a name is only a guess");
+    let doc = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        doc["records"][0]["secretLikeVariables"],
+        serde_json::json!([{"profile": "lab-profile", "name": "grafana_password"}]),
+        "{doc}"
+    );
+    assert!(!doc.to_string().contains(not_a_secret), "{doc}");
+    let r = &report.records[0];
+    assert_eq!(
+        render::secret_like_notes(&r.secret_like_variables, Some(&r.path)),
+        [format!(
+            "note: variable lab-profile.grafana_password has a value in clear in {} (its name \
+             reads as a secret, which is a guess)",
+            r.path.display()
+        )]
+    );
 }
 
 // ---- what happened to the object of a record --------------------------------------------------

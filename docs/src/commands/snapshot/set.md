@@ -34,6 +34,17 @@ each removed file:
 {{#include ../../output/fleet-set-json.txt}}
 ```
 
+An entry also has `secretLikeVariables` when its record holds a variable in
+clear whose name reads as a secret: see
+[What a cluster record holds](cluster.md#what-a-cluster-record-holds). It names
+the profile and the variable, and holds no value. The note on standard error
+names the file of the record:
+
+```text
+{{#include ../../output/secret-set.txt}}
+{{#include ../../output/secret-set-json.txt}}
+```
+
 `--format markdown` writes a table for a pull request comment, and `--compact`
 writes the JSON on one line. The exit code is the same in each format. An
 error of the query itself, such as a filter that does not exist, writes no
