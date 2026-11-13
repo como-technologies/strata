@@ -181,6 +181,12 @@ profile, or pack version.
     Palette gives it in `v1PackType`. Strata writes the layer `app` for each
     tier of an app profile. The `type` of such a tier is the type that Palette
     gives it in `v1AppTierType`.
+  - `registryName`, the name of the registry of `registryUid`. The pack ref
+    gives the uid alone, so strata reads the name from the registry listing
+    of Palette. It is absent when the key cannot see the registry, for a pack
+    with no registry, and in a record of strata 0.33 and before. It is outside
+    the root: a new name of a registry changes no content. See
+    [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
   - `refDigest`, the digest on the pack reference, and `registryDigest`, the
     digest of the pack in the manifests document.
   - `registryProviderType`, only for a pack from an OCI registry: `pack`,
@@ -607,7 +613,13 @@ of the secret does not show, because the two sides hold the mask: see
     - `scope` is absent when Palette has no profile search, or when strata
       could not read the document of the version with `--packs`.
     - With `--packs`, also `type`, `consumers`, `published`, and `packs[]` with
-      `layer`, `name`, `tag`, and `version`, or `error`.
+      `layer`, `name`, `tag`, `version`, `registryUid`, and `registry`, or
+      `error`.
+    - `registryUid` is the uid of the registry that the version takes the pack
+      from, and `registry` is its name, from the registry listing. Each is
+      absent when it is empty: a pack with no registry has neither, and a
+      registry that the key cannot see has no `registry`. A document of strata
+      0.33 and before has neither.
     - `consumers` is the number of consumers that the profile document names:
       its clusters, and the cluster templates that link the version.
       `consumersByKind` gives the count of each kind, `clusters` and

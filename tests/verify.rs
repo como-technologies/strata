@@ -3856,6 +3856,12 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
             listed_profile("hidden", "1.0.0", "u-denied"),
         ]}),
     )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+        ]}),
+    )
     .failing(profile_route("u-denied"), 403, "forbidden");
     let options = ListOptions {
         pack: Some("CERT-man".into()),
@@ -3896,6 +3902,11 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
         (cm.layer.as_str(), cm.version.as_str(), cm.tag.as_str()),
         ("addon", "1.14.0", "1.14.0")
     );
+    assert_eq!(
+        (cm.registry_uid.as_str(), cm.registry.as_str()),
+        (common::PUBLIC_REGISTRY, "Public Repo"),
+        "the row names the registry that the profile takes the pack from"
+    );
 
     let text = common::terminal().render_list(&l).unwrap();
     assert!(text.starts_with("tenant scope\n"), "{text}");
@@ -3910,12 +3921,15 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
         "{text}"
     );
     assert!(
-        text.contains("    addon  cert-manager         1.14.0\n"),
+        text.contains("    addon  cert-manager         1.14.0  Public Repo\n"),
         "{text}"
     );
     assert!(text.contains("forbidden"), "the error is shown: {text}");
     let md = common::markdown().render_list(&l).unwrap();
-    assert!(md.contains("addon/cert-manager 1.14.0"), "{md}");
+    assert!(
+        md.contains("addon/cert-manager 1.14.0 in Public Repo"),
+        "{md}"
+    );
 }
 
 /// The profile document of `lab-profile@<version>` with one CNI pack at `cni`. A version that
@@ -7460,13 +7474,28 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
     }
     assert_eq!(err.kind(), "pack-in-several-registries");
     assert_eq!(err.exit_code(), 2);
+    assert!(
+        err.to_string().ends_with(
+            "name one, as in pack:<registry>/csi-aws-ebs@1.65.0. `strata list --pack csi-aws-ebs` \
+             names the registry of the pack in each profile version"
+        ),
+        "the refusal points to the command that names the registry of a profile: {err}"
+    );
 
     // by registry name, and by registry uid
+    let before = api.calls(REGISTRY_LISTING);
     let by_name = snapshot_of(&api, "pack:Mirror/csi-aws-ebs@1.65.0").unwrap();
     assert_eq!(by_name.packs[0].hash.upstream_raw, "sha256:ccc");
     assert_eq!(by_name.source.reference, "pack:Mirror/csi-aws-ebs@1.65.0");
+    assert_eq!(by_name.packs[0].registry_name, "Mirror");
+    assert_eq!(
+        api.calls(REGISTRY_LISTING),
+        before + 1,
+        "the name of the registry comes from the listing that the ref read"
+    );
     let by_uid = snapshot_of(&api, "pack:reg-public/csi-aws-ebs@1.65.0").unwrap();
     assert_eq!(by_uid.packs[0].hash.upstream_raw, "sha256:bbb");
+    assert_eq!(by_uid.packs[0].registry_name, "Public Repo");
 
     // the same release in two registries differs by IDENTITY and UPSTREAM alone
     let d = ops::compare(&by_uid, &by_name, "t1");

@@ -215,6 +215,12 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
     }
 }
 
+/// The registry that a profile takes a listed pack from: its name, or its uid when the key cannot
+/// see the registry. `None` for a pack with no registry.
+pub(crate) fn pack_registry(pk: &crate::ops::ListedPack) -> Option<&str> {
+    Some(name_or_uid(&pk.registry, &pk.registry_uid)).filter(|r| !r.is_empty())
+}
+
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.
 pub fn set_counts_line(r: &SetReport) -> String {
     let c = &r.summary;

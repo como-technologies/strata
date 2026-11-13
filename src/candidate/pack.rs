@@ -138,6 +138,8 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     snap.source.template = Template::Registry.into();
     // a pack version is not a profile version, so no cluster uses it and nothing asked
     snap.source.consumers = None;
+    // the listing is in memory: the names of the registries came from it
+    snap.name_registries(registries.metadata()?);
     snap.source.pack = Some(PackSource {
         name: name.to_string(),
         version: resolved,

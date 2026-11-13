@@ -444,11 +444,15 @@ pub fn make_fixtures(root: &Path) {
     );
     // a3 and a4 are text transforms of a: the API shapes stay, only the identifiers move.
     // Manifest digests are not hashed, so rewriting every digest changes UPSTREAM alone.
+    let (public, prod) = (
+        format!("\"{PUBLIC_REGISTRY}\""),
+        format!("\"{PROD_REGISTRY}\""),
+    );
     rewrite(
         &root.join("a"),
         &root.join("a3"),
         &[
-            ("\"reg-public\"", "\"reg-prod\""),
+            (public.as_str(), prod.as_str()),
             ("\"pk-", "\"pkp-"),
             ("sha256:", "sha256:prod-"),
         ],

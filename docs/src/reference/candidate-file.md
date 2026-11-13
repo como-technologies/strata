@@ -140,6 +140,10 @@ needs this listing in three cases:
 - The listing of the packs does not have the version of a layer.
 - An error names a registry.
 
+The record of the candidate reads the same listing for the name of the registry
+of each pack: see
+[The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
+
 The listing gives each registry name its uid. The `registry` field
 takes a name or a uid of that listing. Then, for each layer that is not a
 `manifest` layer:

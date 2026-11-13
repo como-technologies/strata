@@ -241,6 +241,10 @@ pub fn cluster_template(document: &Value) -> Value {
 /// The registry of a pack when a fixture names none.
 pub const PUBLIC_REGISTRY: &str = "reg-public";
 
+/// The registry that the fixture `a3` takes each pack of `a` from: the same pack versions in a
+/// second registry.
+pub const PROD_REGISTRY: &str = "reg-prod";
+
 /// A pack as a fixture states it: the fields that its pack ref, its pack manifests, and its entry
 /// in the pack listing share.
 ///
