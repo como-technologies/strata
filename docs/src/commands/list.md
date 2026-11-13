@@ -351,8 +351,9 @@ and no row has the mark:
 ## What to expect
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters
-projects`. With no kind, strata lists profiles and clusters. Palette lists each
-kind differently by scope:
+projects`. With no kind, strata lists profiles and clusters. Each kind also
+takes its singular, so `strata list project` lists the projects. Palette lists
+each kind differently by scope:
 
 | Scope | Profiles | Clusters | Projects |
 | --- | --- | --- | --- |
