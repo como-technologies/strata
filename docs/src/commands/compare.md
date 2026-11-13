@@ -17,7 +17,7 @@ takes:
 | Page | What it holds |
 | --- | --- |
 | [Two versions](compare/versions.md) | What changed between two profile versions, and the impact: how to read the report, `--full`, the images and the charts of a pack, a version that replaces nodes, and a version that only changes its numbers. |
-| [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, a profile version against a cluster that runs many profiles, and a cluster group against a member. |
+| [Two clusters](compare/clusters.md) | The tiers of two clusters, a cluster against the update that waits for it, a profile version against a cluster that runs many profiles, the heading of a side with many profiles, and a cluster group against a member. |
 | [Ask Palette if the change repaves](compare/repave.md) | `--repave`: the answer of Palette for one cluster, beside the level of the table. |
 | [Ask Palette if it accepts the packs](compare/validate.md) | `--validate`: Palette checks the packs of the change on one cluster. |
 | [A pull request comment and a script](compare/scripts.md) | `--format markdown` for a pull request, and `--json` for a job. |
@@ -51,7 +51,7 @@ A `note` line follows `root` in these cases:
 | Note | Cause | Page |
 | --- | --- | --- |
 | `the roots differ only by the tag name a pack is pinned under` | One pack build under two tag names. The result is `SAME CONTENT`. | [One pack build under two tag names](../use-cases/tag-name.md) |
-| `the roots differ only by the packUid Palette mints for each profile's manifest pack` | One manifest in two profiles. The result is `SAME CONTENT`. | [One manifest in two profiles](../use-cases/manifest-pack.md) |
+| `the roots differ only by the packUid that Palette mints` | One manifest in two profiles. The result is `SAME CONTENT`. The pack line shows `IDENTITY` and no impact. | [One manifest in two profiles](../use-cases/manifest-pack.md) |
 | `both sides are <name>@<version> (uid <uid>): the version was edited in place` | One uid and one version, with two roots. | [A published version is edited in place](../use-cases/edited-in-place.md) |
 | `<ref>@draft is the draft of <name>@<version> (uid <uid>): its publish makes this change` | One side is the draft of the version on the other side, and the roots differ. | [Review a draft before its publish](../use-cases/draft.md) |
 | `the content uses macro <m>: the root covers its name and not its value, so an edit of a macro does not show` | The values or the manifests of either side name a user macro. | [Macros](snapshot/cluster.md#macros) |
@@ -79,11 +79,15 @@ The markdown report writes the same line as a quotation.
 
 ## What to expect
 
-| Exit | Meaning |
-| --- | --- |
-| `0` | The roots are equal, and no macro value or `imageId` differs. |
-| `1` | The roots differ, or a macro value or an `imageId` differs. `SAME CONTENT` also exits `1`. |
-| `2` | Strata could not answer. |
+The help of `compare` gives the exit codes:
+
+```text
+{{#include ../output/help-compare-exit.txt}}
+```
+
+The root covers the release. Two clusters on one release can have other values,
+tiers, and labels, so a difference there does not change the exit code: see
+[Two clusters](compare/clusters.md#compare-two-clusters-by-more-than-the-release).
 
 ## Options
 

@@ -80,6 +80,21 @@ clusters stay whole. To compare each profile of a cluster, compare two records
 of the cluster. See
 [A cluster does not run its release](../../use-cases/cluster-release.md).
 
+## A side with many profiles
+
+The heading names a side with two or more profiles by their count. The record
+joins their names and their versions with `+`, and a reader cannot pair them.
+Here strata records each profile of `payments`, compares the record with the
+cluster now, and verifies the record:
+
+```text
+{{#include ../../output/cluster-all-profiles-lines.txt}}
+```
+
+The verdict of `verify` gives the count too. `strata list clusters --applied`
+names each profile and its version. `--json` gives them in
+`a.cluster.profiles` and `b.cluster.profiles`.
+
 ## Compare a cluster group with a member
 
 When one side is a cluster group and the other is a `cluster:` ref that selects

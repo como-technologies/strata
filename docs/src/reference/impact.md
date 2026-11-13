@@ -98,7 +98,7 @@ the level, and says when the two disagree. See
 | `cluster-wide` | CNI or CSI layer with `IDENTITY` or `AUTHORED` | Each node gets the change. Palette does not replace the nodes for it: its repave check reads no CNI or CSI layer. |
 | `in-place` | any other layer with `IDENTITY` or `AUTHORED` | Palette upgrades or configures the pack in place. |
 | `sync` | only `UPSTREAM`, on any layer, or `UPSTREAM` with `IDENTITY` at the same version on the OS, Kubernetes, or kernel layer | Palette applies the change at the next profile sync. |
-| `none` | no change, only a tag renamed for the same build, `IDENTITY` alone at the same version on the OS, Kubernetes, or kernel layer, or a renumber that keeps the numbers of the version | No node changes. |
+| `none` | no change, only a tag renamed for the same build, only a pack uid that Palette mints, `IDENTITY` alone at the same version on the OS, Kubernetes, or kernel layer, or a renumber that keeps the numbers of the version | No node changes. |
 
 **A new version repaves, and another pack reference does not.** On the OS,
 Kubernetes, and kernel layers, `IDENTITY` gives `repave` only for a new
@@ -108,6 +108,12 @@ changes, the pack takes the level of its other flags. The impact text then says
 a running cluster to another registry at one version. Palette said no repave,
 and the cluster kept its nodes. See
 [A pack that moves between registries](../internals/palette/packs.md#a-pack-that-moves-between-registries).
+
+**A pack uid that Palette mints gives no impact.** Palette mints the pack uid of
+a manifest pack for each profile. The two sides then differ only by that uid,
+and `packs[].mintedUidOnly` is `true`. The pack shows `IDENTITY` and gets
+`none` with no text, so the terminal report prints no `impact:` line under it.
+See [One manifest in two profiles](../use-cases/manifest-pack.md).
 
 A pack key is `<layer>/<name>`. So a release that exchanges one pack for a pack
 of another name gives one `ADDED` line and one `REMOVED` line, and no `IDENTITY`
@@ -161,7 +167,8 @@ archives is the check of the publish.
 
 ## Where to see it
 
-- The terminal report: `impact:` below each changed pack.
+- The terminal report: `impact:` below each changed pack, except a pack with
+  `none` and no text.
 - The markdown comment: the `impact` column.
 - The JSON document: `packs[].impact.level` and `summary.maxImpact`.
 - [Pull request comments](../automation/pr-comments.md): the label threshold.

@@ -174,7 +174,7 @@ pub struct PackDiff {
     /// from no registry, and Palette mints its uid for each profile it creates, so two profiles
     /// with the same manifests have different uids. A pack from a registry that Palette does not
     /// sync gets its uid at the create, so the record of a candidate has none. The content is the
-    /// same.
+    /// same, so the impact is `none` with no text.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub minted_uid_only: bool,
     /// True when `IDENTITY` moved only because the tag name differs. The same name, layer, type,
@@ -646,8 +646,12 @@ fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
             &y.registry_uid,
         );
     let renumbered = renumber::renumber_only(x, y);
+    let minted_uid_only = identity && !upstream && !authored && minted_uid_pair(x, y);
+    // a uid that Palette mints changes nothing on a cluster, so the pack has no impact
     let mut imp = if renumbered {
         renumber_impact()
+    } else if minted_uid_only {
+        Impact::default()
     } else {
         impact(
             Layer::parse(&x.layer),
@@ -675,7 +679,7 @@ fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
         upstream,
         authored,
         params_changed: canonical_json(&x.params) != canonical_json(&y.params),
-        minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
+        minted_uid_only,
         tag_renamed,
         renumbered,
         version_move: VersionMove::of(&x.version, &y.version),
