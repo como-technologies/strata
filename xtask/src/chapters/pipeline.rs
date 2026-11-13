@@ -305,4 +305,11 @@ fn renumber_chart(r: &mut Runner) {
         false,
         "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --json | jq -c '.pairs[0].archivesNotReadable[]'",
     );
+    // the markdown shows each tag of the answer of the host as text (#832)
+    r.step(
+        "renumber-not-readable-markdown",
+        1,
+        false,
+        "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --format markdown",
+    );
 }

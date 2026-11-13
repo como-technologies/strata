@@ -2,7 +2,8 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, a text in a cell of a markdown table, and a text in a code span.
+//! - A mark for an empty text, a text of HTML, a text in a cell of a markdown table, and a text in
+//!   a code span.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
@@ -124,11 +125,30 @@ pub fn dash(s: &str) -> &str {
     if s.is_empty() { "-" } else { s }
 }
 
-/// `s` as the text of one cell of a markdown table.
+/// `s` as text of HTML: each `&`, `<`, and `>` is an entity. So a reader of HTML shows each tag
+/// and each entity of `s` as text.
+///
+/// The HTML report of `strata-preflight` and [`markdown_cell`] write a text here. The markdown of
+/// GitHub reads HTML in a text too.
+pub fn html_text(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// `s` as the text of one cell of a markdown table, or of one line of markdown.
 ///
 /// A `|` ends a cell, and a line break ends the row. So the text escapes each `|`, and writes a
-/// line break as a space.
+/// line break as a space. It is also [`html_text`]. So a text that strata quotes from an answer,
+/// such as a message of Palette, shows each tag of HTML as text. A code span shows an entity as it
+/// is, so [`code_cell`] writes a value in a code span.
 pub fn markdown_cell(s: &str) -> String {
+    table_text(&html_text(s))
+}
+
+/// `s` with each `|` escaped and each line break as a space, so that it cannot end a cell or a
+/// row of a markdown table.
+fn table_text(s: &str) -> String {
     s.replace('|', "\\|").replace('\n', " ")
 }
 
@@ -149,10 +169,12 @@ pub fn code_span(text: &str) -> String {
     format!("{fence}{pad}{text}{pad}{fence}")
 }
 
-/// `text` as a code span in one cell of a markdown table: [`code_span`], and then
-/// [`markdown_cell`] on the span. So a value cannot end a cell or a row of the table.
+/// `text` as a code span in one cell of a markdown table: [`code_span`], with each `|` escaped and
+/// each line break as a space. So a value cannot end a cell or a row of the table.
+///
+/// A code span shows an entity as it is, so the span gets no [`html_text`]. It shows a tag as text.
 pub fn code_cell(text: &str) -> String {
-    markdown_cell(&code_span(text))
+    table_text(&code_span(text))
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
@@ -264,6 +286,34 @@ mod tests {
         assert_eq!(markdown_cell("a|b"), "a\\|b");
         assert_eq!(markdown_cell("first\nsecond"), "first second");
         assert_eq!(markdown_cell("plain"), "plain");
+    }
+
+    /// A link and a tag of an answer, as a chart host or a message of Palette can hold them.
+    const TAGS: &str = "<a href=\"https://example.com\">x</a> <Error><Code>AccessDenied</Code>";
+
+    #[test]
+    fn a_text_of_html_shows_each_tag_and_each_entity_as_text() {
+        assert_eq!(
+            html_text(TAGS),
+            "&lt;a href=\"https://example.com\"&gt;x&lt;/a&gt; \
+             &lt;Error&gt;&lt;Code&gt;AccessDenied&lt;/Code&gt;"
+        );
+        // an entity of the answer shows as it is, and not as the character that it names
+        assert_eq!(html_text("a &lt; b & c"), "a &amp;lt; b &amp; c");
+        assert_eq!(html_text("plain"), "plain");
+    }
+
+    #[test]
+    fn a_cell_of_a_markdown_table_holds_no_tag_of_html_from_a_quoted_text() {
+        let cell = markdown_cell(&format!("{TAGS}\n| next"));
+        assert!(!cell.contains('<'), "{cell}");
+        assert_eq!(cell, format!("{} \\| next", html_text(TAGS)));
+    }
+
+    #[test]
+    fn a_code_span_in_a_table_cell_shows_a_tag_as_text_with_no_entity() {
+        assert_eq!(code_cell("<Code>"), "`<Code>`");
+        assert_eq!(code_cell("a & b|c"), "`a & b\\|c`");
     }
 
     #[test]

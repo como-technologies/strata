@@ -108,6 +108,14 @@ The comment has:
 `verify` adds a `Verify` line and the verdict. The `Verify` line states the
 status in the word of the verdict: `OK`, `UNVERIFIED`, or `DRIFT`.
 
+The markdown writes each `&`, `<`, and `>` of a text as an entity, and GitHub
+shows the same characters. A text from an answer, such as a message of Palette,
+can hold a tag of HTML. A job summary or a pull request comment shows that tag
+as text, also the tag of a link. A value in a code span, such as a uid,
+shows as it is. [same-release](../commands/same-release.md#the-archives-of-the-two-builds)
+shows the answer of the host of a chart in a reason. `strata-preflight` writes
+its markdown in the same way.
+
 ## The JSON document
 
 The JSON is never colored and never cut. `--compact` writes it on one line.

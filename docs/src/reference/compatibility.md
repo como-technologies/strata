@@ -15,7 +15,8 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Six sections list the changes that need action:
+Seven sections list the changes that need action:
+[Release 0.34.0](#release-0340-changes-that-need-action),
 [Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
@@ -1023,6 +1024,34 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.34.0: changes that need action
+
+Release 0.34.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
+  `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
+  request comment shows a tag in a message of Palette as text. The reason of
+  `archivesNotReadable` also shows the answer of the host of a chart as text. Before, GitHub read
+  such a tag as HTML, and kept a link in it.
+  - A script that reads the markdown as text reads `-&gt;` in place of `->`.
+  - A value in a code span, such as a pack name or a uid, shows as before. A backtick in such a
+    value does not end the span now.
+  - `strata-preflight` writes its markdown in the same way. Its terminal form, its HTML form,
+    and the JSON documents of both tools do not change.
+
+### For a user of the library of strata
+
+- `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
+- `text::markdown_cell` also writes each `&`, `<`, and `>` as an entity. A caller that puts the
+  cell in a code span calls `text::code_cell` in its place, because a code span shows an entity as
+  it is.
+- `text::code_cell` writes no entity. It escapes a `|` and a line break, as before.
 
 ## Release 0.33.0: changes that need action
 

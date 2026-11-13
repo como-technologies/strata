@@ -274,7 +274,12 @@ fn same_release_reads_each_side_in_its_own_project_and_names_each_project() {
         ]
         .concat(),
     );
-    assert!(r.out.contains("<br>project p-dev -> p-prod |"), "{}", r.out);
+    // the markdown writes each `>` as an entity, and GitHub shows `->`
+    assert!(
+        r.out.contains("<br>project p-dev -&gt; p-prod |"),
+        "{}",
+        r.out
+    );
 }
 
 #[test]

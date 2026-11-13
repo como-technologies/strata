@@ -166,6 +166,13 @@ when the file is text. Else it gives the error of the read.
 {{#include ../output/renumber-not-readable-json.txt}}
 ```
 
+The markdown form shows each tag of the answer as text in a job summary or a
+pull request comment: see [The markdown comment](../reference/formats.md#the-markdown-comment).
+
+```text
+{{#include ../output/renumber-not-readable-markdown.txt}}
+```
+
 Strata reads the other packs of the download as before. A pack whose version
 stays has no compare, so such a file does not change its pair. Get the chart
 from another registry, or check its archive in your pipeline.

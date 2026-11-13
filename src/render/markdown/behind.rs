@@ -8,7 +8,7 @@ use crate::render::behind::{
     palette_lines, pin_status, profile_bump_line, profile_status,
 };
 use crate::render::entry_error;
-use crate::text::{dash, markdown_cell};
+use crate::text::{code_cell, dash, markdown_cell};
 
 /// The report of `behind` as markdown. A table that has no row is not there.
 pub(super) fn markdown_behind(r: &BehindReport) -> String {
@@ -53,9 +53,9 @@ fn pin_row(pin: &Pin) -> String {
         .map(|l| markdown_cell(&l))
         .collect();
     format!(
-        "| `{}` | `{}` | {} | {} | {} | {} |\n",
-        markdown_cell(&pin.name),
-        markdown_cell(&pin.version),
+        "| {} | {} | {} | {} | {} | {} |\n",
+        code_cell(&pin.name),
+        code_cell(&pin.version),
         markdown_cell(dash(&pin.registry)),
         markdown_cell(&status),
         if bump.is_empty() {
@@ -79,9 +79,9 @@ fn profile_row(p: &ProfilePin) -> String {
     let scope = p.scope.map(|s| s.as_str()).unwrap_or_default();
     let bump = profile_bump_line(p).unwrap_or_default();
     format!(
-        "| `{}` | `{}` | {} | {} | {} | {} |\n",
-        markdown_cell(&p.name),
-        markdown_cell(&p.version),
+        "| {} | {} | {} | {} | {} | {} |\n",
+        code_cell(&p.name),
+        code_cell(&p.version),
         markdown_cell(dash(scope)),
         markdown_cell(&status),
         markdown_cell(dash(&bump)),
@@ -94,13 +94,7 @@ fn profile_row(p: &ProfilePin) -> String {
 fn pinned_by(by: &[PinnedBy]) -> String {
     let cells: Vec<String> = by
         .iter()
-        .map(|b| {
-            format!(
-                "`{}` ({})",
-                markdown_cell(&b.path),
-                markdown_cell(&b.subject)
-            )
-        })
+        .map(|b| format!("{} ({})", code_cell(&b.path), markdown_cell(&b.subject)))
         .collect();
     cells.join("<br>")
 }
