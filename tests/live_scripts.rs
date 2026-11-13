@@ -3866,18 +3866,21 @@ fn narrow_list(stage: &Stage, stdout: &str, stderr: &str, code: i32) {
 
 /// The listing of the project with the third key: the release profile, and the clusters as not
 /// read. The answer of the clusters is the one that the code of Palette shows.
-const NARROW_LISTING: &str = "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
-clusters: not read (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: \
-{\"code\":\"ResourceAccessDenied\",\"message\":\"Project 'dev' access denied\"}; \
-no role of the key in the project gives the access of the request)\n";
+fn narrow_listing() -> String {
+    format!(
+        "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
+         clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {CLUSTERS_DENIED}; \
+         no role of the key in the project gives the access of the request)\n"
+    )
+}
 
 /// A stage of tiers.sh stage 8. Each route of [`narrow_routes`] answers the third key with
 /// `status` and the code `code`, with a message that names `cluster.get`. `strata list` with the
-/// third key prints [`NARROW_LISTING`] and exits 2.
+/// third key prints [`narrow_listing`] and exits 2.
 fn narrow_stage(status: u16, code: &str) -> Stage {
     let mut stage = baseline_stage();
     stage.wrap_strata(FAKE_STRATA_NARROW);
-    narrow_list(&stage, NARROW_LISTING, "", 2);
+    narrow_list(&stage, &narrow_listing(), "", 2);
     stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
     let refusal =
         format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);

@@ -31,6 +31,15 @@ pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 /// The listing of the saved tag filters of the tenant, `GET /v1/filters/metadata?filterType=tag`.
 pub const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`: HTTP 500, not 403, with the code `ResourceAccessDenied`.
+pub const CLUSTERS_DENIED: &str =
+    r#"{"code":"ResourceAccessDenied","message":"Project 'lab' access denied"}"#;
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code `AccessDenied`.
+pub const FILTERS_DENIED: &str = r#"{"code":"AccessDenied","message":"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"}"#;
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 

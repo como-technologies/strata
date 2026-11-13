@@ -12,6 +12,11 @@ mod table;
 // the lists keep one rule.
 #[path = "../../tests/common/variants.rs"]
 mod variants;
+// The answers of Palette to a key whose roles do not give a read, as the tests of the crate serve
+// them.
+#[allow(dead_code)]
+#[path = "../../tests/common/palette.rs"]
+mod palette;
 
 use super::*;
 use crate::api::codes::{OPERATION_FORBIDDEN_CODE, PROJECT_SCOPE_CODE};
@@ -749,20 +754,16 @@ fn a_401_or_another_403_still_names_the_key() {
     }
 }
 
-/// The body of the refusal of the saved tag filters to a role without `filter.list`, as Palette
-/// gives it with HTTP 403.
-const FILTERS_DENIED: &str = r#"{"code":"AccessDenied","message":"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"}"#;
-
 #[test]
 fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
     let permission = "the role of the key does not give the permission 'filter.list'";
     // the first request of the run: nothing proved the key yet
-    let first = api_message(403, FILTERS_DENIED);
+    let first = api_message(403, palette::FILTERS_DENIED);
     assert!(first.contains(permission), "{first}");
     assert!(first.contains("the key can be wrong"), "{first}");
     // an answer with a 2xx status, such as the lookup of the project, proves the key
     crate::api::prove_key();
-    let after = api_message(403, FILTERS_DENIED);
+    let after = api_message(403, palette::FILTERS_DENIED);
     assert!(after.ends_with(&format!("; {permission}")), "{after}");
     for key in KEY_VARS {
         assert!(!after.contains(key), "{after}");
@@ -777,41 +778,38 @@ fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer
 
 #[test]
 fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
-    for (code, message, sentence) in [
+    let object = format!(
+        r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission"}}"#
+    );
+    let no_role =
+        r#"{"code":"NoRolesAssociated","message":"No roles associated to user 'barney'"}"#;
+    for (body, denial, sentence) in [
         (
-            OPERATION_FORBIDDEN_CODE,
-            "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission",
+            object.as_str(),
+            Denial::Object,
             "the role of the key does not give the permission 'cluster.get'",
         ),
         (
-            "ResourceAccessDenied",
-            "Project 'dev' access denied",
+            palette::CLUSTERS_DENIED,
+            Denial::Project,
             "no role of the key in the project gives the access of the request",
         ),
-        (
-            "NoRolesAssociated",
-            "No roles associated to user 'barney'",
-            "the user of the key has no role",
-        ),
+        (no_role, Denial::NoRole, "the user of the key has no role"),
     ] {
         // Palette ends a body with a newline, and the message holds no blank before the hint
-        let body = serde_json::json!({"code": code, "message": message}).to_string() + "\n";
         let error = Error::Api {
             method: Method::Get,
-            path: "/v1/dashboard/spectroclusters/meta".into(),
+            path: "/v1/x".into(),
             status: 500,
-            body: body.clone(),
+            body: format!("{body}\n"),
             retry_after: None,
         };
         let text = error.to_string();
-        assert!(
-            text.ends_with(&format!("\"}}; {sentence}")),
-            "{code}: {text}"
-        );
-        assert!(!text.contains("the key can be wrong"), "{code}: {text}");
+        assert!(text.ends_with(&format!("}}; {sentence}")), "{text}");
+        assert!(!text.contains("the key can be wrong"), "{text}");
         // a retry gets the same answer, so strata does not send the request again
-        assert_eq!(error.class(), FailureClass::Terminal, "{code}");
-        assert_eq!(error.denial().map(Denial::as_str), Some(code));
+        assert_eq!(error.class(), FailureClass::Terminal, "{text}");
+        assert_eq!(error.denial(), Some(denial));
     }
 }
 

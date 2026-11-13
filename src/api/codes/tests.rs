@@ -1,5 +1,11 @@
 //! The tests of the codes of Palette: the tables, the routes, the classes, and the denials.
 
+// The answers of Palette to a key whose roles do not give a read, as the tests of the crate serve
+// them.
+#[allow(dead_code)]
+#[path = "../../../tests/common/palette.rs"]
+mod palette;
+
 use super::*;
 use crate::error::{Error, FailureClass};
 use serde_json::json;
@@ -306,22 +312,21 @@ fn the_refusals_that_set_another_type_belong_to_their_routes() {
 
 #[test]
 fn a_denial_names_the_permission_of_its_message_and_a_denial_of_the_project_names_none() {
-    let route = "filter.list operation is not permitted, required permissions 'filter.list' in the \
-                 scope(s) tenant";
-    let object = "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' \
-                  permission";
-    assert_eq!(Denial::Route.permission(route), Some("filter.list"));
-    assert_eq!(Denial::Object.permission(object), Some("cluster.get"));
+    // the message of an answer of Palette that the tests of the crate serve
+    let message = |body: &str| PaletteRefusal::from_error_body(body).unwrap().message;
+    let route = message(palette::FILTERS_DENIED);
+    let object = "Operation 'clusterProfile.get' is forbidden";
+    assert_eq!(Denial::Route.permission(&route), Some("filter.list"));
     assert_eq!(
-        Denial::Route.sentence(route),
+        Denial::Object.permission(object),
+        Some("clusterProfile.get")
+    );
+    assert_eq!(
+        Denial::Route.sentence(&route),
         "the role of the key does not give the permission 'filter.list'"
     );
     // a message with no quotes, or with empty quotes, names no permission
-    for message in [
-        "access denied",
-        "the permission '' is missing",
-        "one ' only",
-    ] {
+    for message in ["forbidden", "the permission '' is missing", "one ' only"] {
         assert_eq!(Denial::Route.permission(message), None, "{message}");
     }
     assert_eq!(
@@ -329,14 +334,11 @@ fn a_denial_names_the_permission_of_its_message_and_a_denial_of_the_project_name
         "the role of the key does not give the permission of the request"
     );
     // the quotes of a denial of the project hold the project, and no permission
-    let project = "Project 'dev' access denied";
-    assert_eq!(Denial::Project.permission(project), None);
+    let project = message(palette::CLUSTERS_DENIED);
+    assert_eq!(Denial::Project.permission(&project), None);
     assert_eq!(
-        Denial::Project.sentence(project),
+        Denial::Project.sentence(&project),
         "no role of the key in the project gives the access of the request"
     );
-    assert_eq!(
-        Denial::NoRole.permission("No roles associated to user 'barney'"),
-        None
-    );
+    assert_eq!(Denial::NoRole.permission("No roles of 'barney'"), None);
 }

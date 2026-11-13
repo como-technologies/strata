@@ -26,14 +26,14 @@ use strata::term::progress::Progress;
 
 use common::CommandExt;
 use common::{
-    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
-    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
-    REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
-    app_profile_route, behind_of, candidate_snapshot, cluster_manifests_route,
-    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
-    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
-    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
-    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
+    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, CLUSTERS_DENIED,
+    EDGE_HOST_SEARCH, FILTERS_DENIED, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
+    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
+    UID_ADDONS, UID_B, WITH_IMPACT, app_profile_route, behind_of, candidate_snapshot,
+    cluster_manifests_route, cluster_namespaces_route, cluster_rbacs_route, cluster_ref,
+    cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
+    edge_host_route, fetch_examples, group_resolved_values_route, group_route, listing,
+    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
     pack_listing_route, post, profile_document, profile_route, read_json, resolved_values_route,
     serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
     snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
@@ -5477,11 +5477,6 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
     );
 }
 
-/// The answer of Palette to the cluster listing for a key whose roles in the project do not give
-/// `cluster.list`, such as Cluster Profile Viewer: HTTP 500, not 403.
-const CLUSTERS_DENIED: &str =
-    r#"{"code":"ResourceAccessDenied","message":"Project 'lab' access denied","ref":"x"}"#;
-
 #[test]
 fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_denied() {
     let api = MemoryApi::new()
@@ -5579,10 +5574,9 @@ fn list_names_each_kind_that_it_could_not_read_and_fails_as_one_read_when_it_rea
 
 #[test]
 fn list_filters_names_the_permission_that_the_role_of_the_key_does_not_give() {
-    let denied = r#"{"code":"AccessDenied","message":"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant"}"#;
     let api = MemoryApi::new()
         .with(PROJECT_LISTING, projects(&[("lab", "p1")]))
-        .failing(TAG_FILTER_LISTING, 403, denied);
+        .failing(TAG_FILTER_LISTING, 403, FILTERS_DENIED);
     let options = ListOptions {
         kinds: vec![ListKind::Filters],
         ..ListOptions::default()

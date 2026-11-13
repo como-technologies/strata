@@ -22,7 +22,7 @@ pub(crate) fn unread_lines(l: &Listing) -> Vec<String> {
         .iter()
         .filter_map(|kind| {
             let error = l.errors.get(&Open::Known(*kind))?;
-            let message = entry_error(Some(error)).unwrap_or("see the error");
+            let message = error_text(Some(error));
             Some(format!("{}: not read ({message})", kind.as_str()))
         })
         .collect()
@@ -262,7 +262,7 @@ pub fn invalid_pack_warnings(snap: &Snapshot) -> Vec<String> {
 
 /// Why strata could not record a cluster of a set: the message of its error.
 pub(crate) fn set_error(r: &SetRecord) -> &str {
-    entry_error(r.error.as_ref()).unwrap_or("see the error")
+    error_text(r.error.as_ref())
 }
 
 /// The mark of a listed version that nobody published: `draft`, or nothing.
@@ -298,4 +298,9 @@ pub(crate) fn profile_marks(
 /// `<name>@<version>` of a profile a cluster applies, as `list` and the reports print it.
 pub(crate) fn applied_ref(a: &crate::snapshot::AppliedProfile) -> String {
     record_label(&a.name, &a.version)
+}
+
+/// The message of the error document `error`, or `see the error` when it holds none.
+fn error_text(error: Option<&serde_json::Value>) -> &str {
+    entry_error(error).unwrap_or("see the error")
 }
