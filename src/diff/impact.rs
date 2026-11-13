@@ -14,9 +14,9 @@ use crate::model::layer::Layer;
 )]
 #[serde(rename_all = "kebab-case")]
 pub enum ImpactLevel {
-    /// No change, a renamed tag of the same build, an OS, Kubernetes, or kernel pack that moved to
-    /// another pack reference at the same version, or a pack whose version alone changed and kept
-    /// its numbers.
+    /// No change, a renamed tag of the same build, a pack uid that Palette mints, an OS,
+    /// Kubernetes, or kernel pack that moved to another pack reference at the same version, or a
+    /// pack whose version alone changed and kept its numbers.
     #[default]
     None,
     /// Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack
@@ -45,7 +45,7 @@ impl Described for ImpactLevel {
     fn describe(self) -> &'static str {
         match self {
             Self::None => {
-                "No change, only the tag name of a pack changed for the same build, an OS, Kubernetes, or kernel pack moved to another pack reference at the same version, or only the version of a pack changed and it kept its numbers: renumber only."
+                "No change, only the tag name of a pack changed for the same build, only a pack uid that Palette mints changed, an OS, Kubernetes, or kernel pack moved to another pack reference at the same version, or only the version of a pack changed and it kept its numbers: renumber only."
             }
             Self::Sync => {
                 "Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version and its digest changed. Applied on the next profile sync."
@@ -63,7 +63,9 @@ impl Described for ImpactLevel {
 }
 
 /// What a change does to running clusters; a hint from the layer and the flags.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+///
+/// The default is the level `none` with no text. A report prints no impact line for it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct Impact {
     /// Severity level.
     pub level: ImpactLevel,
@@ -236,10 +238,8 @@ fn rule_impact(layer: Layer, flags: Flags) -> Impact {
             level: r.level,
             text: r.text.to_string(),
         })
-        .unwrap_or(Impact {
-            level: ImpactLevel::None,
-            text: String::new(),
-        })
+        // no rule matches a pack with no change
+        .unwrap_or_default()
 }
 
 /// The impact of a pack that only one side has.

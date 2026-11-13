@@ -203,8 +203,8 @@ pub struct Pin {
 pub struct PinnedBy {
     /// The path of the record.
     pub path: String,
-    /// What the record holds, as its title: `aws-stack@1.1.1`, or `aws-stack@1.1.1 on cluster
-    /// payments`.
+    /// What the record holds, as its title: `aws-stack@1.1.1`, `aws-stack@1.1.1 on cluster
+    /// payments`, or `4 profiles on cluster payments`.
     pub subject: String,
 }
 

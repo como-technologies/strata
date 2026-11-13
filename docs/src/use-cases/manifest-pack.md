@@ -41,8 +41,9 @@ with no key and no cost.
 ```
 
 The root line says `SAME CONTENT`, and the note names the cause. The pack line
-still shows `IDENTITY` and an impact, because the pack uid differs. `compare`
-exits `1`, because the roots differ.
+still shows `IDENTITY`, because the pack uid differs. It has no impact line,
+because the content is the same and no cluster changes. `compare` exits `1`,
+because the roots differ.
 
 ## 3. The records are one release
 

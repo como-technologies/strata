@@ -39,6 +39,15 @@ impl Cli {
     }
 }
 
+/// The exit codes of `strata compare`, after its options. Two clusters on one release can have
+/// other values, tiers, and labels, so a difference there does not fail a compare.
+const COMPARE_EXIT_CODES: &str = "\
+Exit codes:
+  0  The roots are equal, and no macro value or imageId differs
+  1  The roots differ, or a macro value or an imageId differs. SAME CONTENT also exits 1
+  2  Strata could not answer
+The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers of --repave and --validate do not change the exit code.";
+
 #[derive(Subcommand)]
 // In alphabetical order, which is the order `strata --help` lists them in.
 pub(crate) enum Cmd {
@@ -48,6 +57,7 @@ pub(crate) enum Cmd {
     Candidate(CandidateArgs),
     /// Compare two profile versions, records, clusters, edge hosts, cluster groups, app profiles,
     /// or pack versions
+    #[command(after_help = COMPARE_EXIT_CODES)]
     Compare(CompareArgs),
     /// List the clusters, edge hosts, cluster templates, and app deployments that use a profile
     /// version

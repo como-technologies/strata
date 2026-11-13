@@ -1,0 +1,7 @@
+$ strata compare --help
+...
+Exit codes:
+  0  The roots are equal, and no macro value or imageId differs
+  1  The roots differ, or a macro value or an imageId differs. SAME CONTENT also exits 1
+  2  Strata could not answer
+The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers of --repave and --validate do not change the exit code.

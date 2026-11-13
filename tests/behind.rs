@@ -276,9 +276,10 @@ fn behind_on_a_record_of_a_cluster_names_the_newer_versions_of_each_profile_that
             ("barney-base", "2.0.0", vec!["2.1.0"]),
         ]
     );
+    // the record covers two profiles, so its title gives their count (#624)
     for p in &r.profiles {
         let subjects: Vec<&str> = p.pinned_by.iter().map(|b| b.subject.as_str()).collect();
-        assert_eq!(subjects, ["barney-addons@1.3.1 on cluster payments"]);
+        assert_eq!(subjects, ["2 profiles on cluster payments"]);
     }
 
     // the record of the version and the record of the cluster hold one version: one entry, with

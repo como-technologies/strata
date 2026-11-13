@@ -20,6 +20,7 @@ use crate::model::profile_type::ProfileType;
 pub use crate::model::repave::PendingRepave;
 pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
+use crate::render::count_of;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
 
@@ -283,7 +284,8 @@ impl Source {
     }
 
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
-    /// <name>` for the update that waits for it.
+    /// <name>` for the update that waits for it. A snapshot of two or more profiles gives their
+    /// count in place of `name@version`, such as `3 profiles on cluster <name>`.
     pub fn title(&self) -> String {
         self.named(Naming::Side)
     }
@@ -297,7 +299,7 @@ impl Source {
     /// that runs a
     /// profile has other words in a verdict.
     pub(crate) fn named(&self, naming: Naming) -> String {
-        let profile = name_version(&self.name, &self.version);
+        let profile = self.profile_words();
         if let Some(p) = &self.pack {
             return match naming {
                 Naming::Side => format!("pack {profile}"),
@@ -334,6 +336,18 @@ impl Source {
                 Naming::Side => format!("{profile} on cluster {}", c.name),
                 Naming::Verdict => format!("cluster {} running {profile}", c.name),
             },
+        }
+    }
+
+    /// `name@version` of the profile of the record, or the count of the profiles for a record of
+    /// two or more, such as `3 profiles`.
+    ///
+    /// Such a record joins the names and the versions with `+`, and a reader cannot pair each
+    /// name with its version. `cluster.profiles` names each profile with its version.
+    fn profile_words(&self) -> String {
+        match self.cluster.as_ref().map(|c| c.profiles.len()) {
+            Some(n) if n > 1 => count_of(n, "profile"),
+            _ => name_version(&self.name, &self.version),
         }
     }
 

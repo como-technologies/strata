@@ -2144,6 +2144,33 @@ fn the_help_of_repave_says_what_palette_saves_at_the_request() {
     );
 }
 
+/// Two clusters on one release can print `CHANGED` for their values and exit 0. So the help
+/// states each exit code, and what does not change it (#624).
+#[test]
+fn the_help_of_compare_states_the_exit_codes_and_what_does_not_change_them() {
+    let help = run(&["compare", "--help"]);
+    assert_eq!(help.code, 0, "{}", help.err);
+    let exits = help
+        .out
+        .split_once("\nExit codes:\n")
+        .map(|(_, tail)| tail)
+        .unwrap_or_else(|| panic!("no exit codes: {}", help.out));
+    let codes: Vec<&str> = exits
+        .lines()
+        .map_while(|l| l.strip_prefix("  "))
+        .filter_map(|l| l.split_once("  ").map(|(code, _)| code))
+        .collect();
+    assert_eq!(codes, ["0", "1", "2"], "{exits}");
+    assert!(exits.contains("SAME CONTENT also exits 1"), "{exits}");
+    assert!(
+        exits.contains(
+            "The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers \
+             of --repave and --validate do not change the exit code."
+        ),
+        "{exits}"
+    );
+}
+
 #[test]
 fn snapshot_of_a_set_with_no_dir_says_what_records_each_cluster_before_any_request() {
     let home = tempfile::tempdir().unwrap();
