@@ -478,6 +478,30 @@ fn cluster_release_many_profiles(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.1 --repave --validate",
     );
+    // a record of each profile: the heading gives the count of the profiles (#624)
+    r.step(
+        "cluster-all-profiles",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments-all.json",
+    );
+    r.step(
+        "cluster-all-profiles",
+        0,
+        false,
+        "strata compare runs/payments-all.json cluster:payments",
+    );
+    r.step(
+        "cluster-all-profiles",
+        0,
+        false,
+        "strata verify runs/payments-all.json",
+    );
+    r.excerpt(
+        "cluster-all-profiles-lines",
+        "cluster-all-profiles",
+        r"^([$] |strata: wrote|[0-9]+ profiles on|root |OK:)",
+    );
 }
 
 /// The chapter `cluster-values`: the variables that two clusters of one release hold.

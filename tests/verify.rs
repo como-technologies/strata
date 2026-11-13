@@ -1300,6 +1300,51 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
     assert!(!ops::compare(&a, &a3, "t1").same_content);
 }
 
+/// A uid that Palette mints changes nothing on a cluster. So `compare` prints `IDENTITY` and no
+/// impact for the pack, and exits 1 for the roots (#624).
+#[test]
+fn a_pack_whose_only_difference_is_a_uid_that_palette_mints_has_no_impact() {
+    use strata::diff::ImpactLevel;
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let one = with_manifest_pack(dir.path(), "m1", "pk-minted-1", None);
+    let two = with_manifest_pack(dir.path(), "m2", "pk-minted-2", None);
+    let edited = with_manifest_pack(dir.path(), "m3", "pk-minted-3", Some("groups: []\n"));
+
+    let d = ops::compare(&one, &two, "t1");
+    assert!(d.same_content && !d.nothing_differs());
+    let prom = d
+        .packs
+        .iter()
+        .find(|p| p.name == "prometheus-operator")
+        .unwrap();
+    assert!(prom.identity && prom.minted_uid_only, "{prom:?}");
+    assert_eq!(
+        (prom.impact.level, prom.impact.text.as_str()),
+        (ImpactLevel::None, "")
+    );
+    assert_eq!(d.summary.max_impact, ImpactLevel::None);
+    let text = common::terminal().render(&d, &one, &two, false).unwrap();
+    assert!(
+        text.lines()
+            .any(|l| l.contains("prometheus-operator") && l.ends_with("IDENTITY")),
+        "{text}"
+    );
+    assert!(!text.contains("impact:"), "{text}");
+    let md = common::markdown().render(&d, &one, &two, false).unwrap();
+    assert!(!md.contains("in-place"), "{md}");
+
+    // a changed manifest still has the impact of its layer
+    let d = ops::compare(&one, &edited, "t1");
+    let prom = d
+        .packs
+        .iter()
+        .find(|p| p.name == "prometheus-operator")
+        .unwrap();
+    assert!(!prom.minted_uid_only);
+    assert_eq!(prom.impact.level, ImpactLevel::InPlace);
+}
+
 /// Fixture A with its `ubuntu-aws` pack changed by `edit` in the profile, saved as the raw
 /// directory `dir`; the pack's uid in the manifests listing follows the profile's `packUid`.
 fn with_os_pack(raw_root: &Path, dir: &str, edit: impl Fn(&mut Value)) -> Snapshot {
@@ -1786,6 +1831,53 @@ fn a_profile_on_the_cluster_is_selected_by_name_and_the_rest_are_merged() {
         err.to_string().contains("applied: lab-profile, lab-addons"),
         "{err}"
     );
+}
+
+/// The record of a cluster that runs two profiles joins their names and their versions, and a
+/// reader cannot pair each name with its version. So the heading and the verdict give the count
+/// of the profiles (#624).
+#[test]
+fn the_heading_of_a_record_of_two_profiles_gives_the_count_of_the_profiles() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
+    let merged = snapshot_cluster(&api, None).unwrap();
+    let selected = snapshot_cluster(&api, Some("lab-profile")).unwrap();
+    assert_eq!(merged.source.name, "lab-profile+lab-addons");
+    assert_eq!(merged.source.title(), "2 profiles on cluster lab-cluster");
+    assert_eq!(
+        selected.source.title(),
+        "lab-profile@1.3.0 on cluster lab-cluster"
+    );
+
+    let (terminal, markdown) = (common::terminal(), common::markdown());
+    let d = ops::compare(&selected, &merged, "t1");
+    let text = terminal.render(&d, &selected, &merged, false).unwrap();
+    let heading = text.lines().next().unwrap();
+    assert!(
+        heading.starts_with("lab-profile@1.3.0 on cluster lab-cluster (uid ")
+            && heading.contains("  ->  2 profiles on cluster lab-cluster (uid "),
+        "{heading}"
+    );
+    let md = markdown.render(&d, &selected, &merged, false).unwrap();
+    assert!(
+        md.contains(
+            "### lab-profile@1.3.0 on cluster lab-cluster → 2 profiles on cluster lab-cluster\n"
+        ),
+        "{md}"
+    );
+    for out in [&text, &md] {
+        assert!(!out.contains("lab-profile+lab-addons"), "{out}");
+    }
+
+    let v = ops::verify(&merged, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    for r in [&terminal, &markdown] {
+        let verdict = r.verdict(&v.diff).unwrap();
+        assert!(
+            verdict.contains("cluster lab-cluster running 2 profiles"),
+            "{verdict}"
+        );
+    }
 }
 
 #[test]

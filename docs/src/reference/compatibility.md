@@ -15,7 +15,8 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Six sections list the changes that need action:
+Seven sections list the changes that need action:
+[Release 0.34.0](#release-0340-changes-that-need-action),
 [Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
@@ -292,6 +293,10 @@ After 0.32.2, `ops::SideProjects` is new. It gives the project of each side of `
 `same-release`. `SideProjects::check` refuses a flag of one side for a count of refs other than
 two. `ops::snapshot_pair` gives its `connect` the side that it reads: see
 [Release 0.33.0](#release-0330-changes-that-need-action).
+
+After 0.33.0, `diff::Impact` implements `Default`: the level `none` with no text. A pack whose
+only difference is a pack uid that Palette mints has it: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
 
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
@@ -1023,6 +1028,40 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.34.0: changes that need action
+
+Release 0.34.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A pack whose only difference is a pack uid that Palette mints has no impact.**
+  `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
+  `impact` is `none` with no text, and `compare` prints no `impact:` line under
+  it. Before, it had the level of its layer, such as `in-place addon upgrade` on
+  the add-on layer. So `summary.maxImpact` of two copies of one profile with a
+  manifest pack is `none`. The exit code stays `1`. See
+  [One manifest in two profiles](../use-cases/manifest-pack.md).
+- **A report names a record of two or more profiles by their count.** The heading
+  of `compare` reads `4 profiles on cluster payments`. Before, it joined the
+  names and the versions, such as
+  `aws-stack+observability@1.1.0+1.0.0 on cluster payments`. The markdown
+  heading, the verdict of `verify`, and the progress notes use the same words.
+  So does `pinnedBy[].subject` of `strata-behind/1`. The record keeps the joined
+  `source.name` and `source.version`. See
+  [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+- **`compare --help` gives the exit codes, and what does not change them.** The
+  codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+
+### For a user of the CI drop-ins
+
+- **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
+  mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
+  profile with a manifest pack have the maximum impact `none`. So a threshold of
+  `in-place` adds no label for such a pair.
 
 ## Release 0.33.0: changes that need action
 

@@ -243,8 +243,10 @@ profile, or pack version.
 
 A cluster record that covers two or more profiles joins their names and versions
 with `+`, for example `aws-stack+platform-addons@1.1.0+1.0.0`, and its `source.uid`
-is empty. A record of one profile keeps the name, version, and uid of that
-profile.
+is empty. A report names such a record by the count of its profiles: see
+[A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+`source.cluster.profiles` names each profile with its version. A record of one
+profile keeps the name, version, and uid of that profile.
 
 ## strata-diff/1
 

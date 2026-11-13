@@ -5,4 +5,3 @@ root       b49f91f9df85 -> 24c6d1b1de2e   SAME CONTENT
 note       the roots differ only by the packUid that Palette mints: the same content
 ...
 ~ [addon] namespace-policy           1.0.0              IDENTITY
-      impact: in-place addon upgrade

@@ -1,0 +1,36 @@
+$ strata snapshot cluster:payments -o runs/payments-all.json
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: wrote runs/payments-all.json (root b18fc230c0b9)
+$ strata compare runs/payments-all.json cluster:payments
+4 profiles on cluster payments (uid 64f1000000000000000000e1)  ->  4 profiles on cluster payments (uid 64f1000000000000000000e1)
+root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
+
+  variables unchanged
+  cluster tiers unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+  [addon] log-shipper                1.0.0              unchanged
+  [addon] namespace-policy           1.0.0              unchanged
+  [addon] payments-quota             1.0.0              unchanged
+$ strata verify runs/payments-all.json
+4 profiles on cluster payments (uid 64f1000000000000000000e1)  ->  4 profiles on cluster payments (uid 64f1000000000000000000e1)
+root       b18fc230c0b9 -> b18fc230c0b9   IDENTICAL
+
+  variables unchanged
+  cluster tiers unchanged
+
+  [os   ] ubuntu-aws                 24.04              unchanged
+  [k8s  ] kubernetes                 1.36.2             unchanged
+  [cni  ] cni-cilium-oss             1.20.1             unchanged
+  [csi  ] csi-aws-ebs                1.65.0             unchanged
+  [addon] cert-manager               1.21.1             unchanged
+  [addon] log-shipper                1.0.0              unchanged
+  [addon] namespace-policy           1.0.0              unchanged
+  [addon] payments-quota             1.0.0              unchanged
+OK: cluster payments running 4 profiles is unchanged since 2026-09-17T09:30:00Z

@@ -8,4 +8,3 @@ consumers  0 -> 0 clusters
   variables unchanged
 
 ~ [addon] namespace-policy           1.0.0              IDENTITY
-      impact: in-place addon upgrade
