@@ -16276,6 +16276,10 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
     );
     assert_eq!(lab["root"], old.root.as_str());
     assert!(lab.get("error").is_none(), "{lab}");
+    assert!(
+        lab.get("secretLikeVariables").is_none(),
+        "grafana_password is sensitive, so the record holds no value of it: {lab}"
+    );
     let gone = &doc["records"][0];
     assert_eq!(gone["cluster"]["name"], "gone");
     assert!(gone.get("root").is_none(), "{gone}");
@@ -16324,6 +16328,55 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
         "{md}"
     );
     assert!(md.contains("| gone | `c-gone` |"), "{md}");
+}
+
+#[test]
+fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps_the_exit() {
+    let dir = tempfile::tempdir().unwrap();
+    let dir = dir.path();
+    common::make_fixtures(dir);
+    let not_a_secret = "example-only-not-a-secret";
+    common::clear_cluster_variable(&dir.join("cluster-a"), "grafana_password", not_a_secret);
+    let lab = fleet_row(
+        CLUSTER_UID,
+        "lab-cluster",
+        "",
+        serde_json::json!({"env": "prod"}),
+    );
+    let api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
+        vec![lab],
+        vec![],
+    );
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &dir.join("fleet"),
+        false,
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.exit_code(), 0, "a name is only a guess");
+    let doc = serde_json::to_value(&report).unwrap();
+    assert_eq!(
+        doc["records"][0]["secretLikeVariables"],
+        serde_json::json!([{"profile": "lab-profile", "name": "grafana_password"}]),
+        "{doc}"
+    );
+    assert!(!doc.to_string().contains(not_a_secret), "{doc}");
+    let r = &report.records[0];
+    assert_eq!(
+        render::secret_like_notes(&r.secret_like_variables, Some(&r.path)),
+        [format!(
+            "note: variable lab-profile.grafana_password has a value in clear in {} (its name \
+             reads as a secret, which is a guess)",
+            r.path.display()
+        )]
+    );
 }
 
 // ---- what happened to the object of a record --------------------------------------------------

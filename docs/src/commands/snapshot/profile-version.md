@@ -171,6 +171,8 @@ A record does not hold the value of a sensitive profile variable. Each other
 secret stays: a secret in a value that the schema does not mark, or in a
 manifest. So a record of a profile whose pack values or manifests hold such a
 secret carries that secret. Keep that record in the object store, and not in the repository.
+A cluster record also holds the value of each variable that nobody marked
+sensitive: see [What a cluster record holds](cluster.md#what-a-cluster-record-holds).
 
 The book uses two layouts. The use cases keep one record for each version, at
 `releases/<version>/<project>.json`, and one for each cluster, at

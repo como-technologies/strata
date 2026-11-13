@@ -268,3 +268,43 @@ fn an_older_field_that_is_text_or_null_moves_into_errors_when_the_record_is_take
             .is_none()
     );
 }
+
+#[test]
+fn a_variable_reads_as_a_secret_when_its_name_matches_with_no_case_and_its_value_is_in_clear() {
+    let reads = |name: &str, value: Option<&str>| {
+        ClusterVariable {
+            name: name.to_string(),
+            value: value.map(str::to_string),
+            sensitive: value.is_none(),
+            ..ClusterVariable::default()
+        }
+        .reads_as_secret()
+    };
+    let x = Some("x");
+    let cases = [
+        (("client_secret", x), true),
+        (("DB_PASSWORD", x), true),
+        (("smtpPasswd", x), true),
+        (("gitToken", x), true),
+        (("apikey", x), true),
+        (("API_KEY", x), true),
+        (("api-key", x), true),
+        (("private.key", x), true),
+        (("privateKey", x), true),
+        // the one character between the words can take more than one byte
+        (("api·key", x), true),
+        // two characters between the words are more than the pattern takes
+        (("api__key", x), false),
+        (("apis_monkey", x), false),
+        (("owner", x), false),
+        (("keycloak_api", x), false),
+        // a value that is empty, a template, or absent for a sensitive variable is no value in
+        // clear
+        (("client_secret", Some("")), false),
+        (("client_secret", Some("{{.spectro.macro.secret}}")), false),
+        (("client_secret", None), false),
+    ];
+    for ((name, value), want) in cases {
+        assert_eq!(reads(name, value), want, "{name} {value:?}");
+    }
+}

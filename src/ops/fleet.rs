@@ -14,7 +14,7 @@ use crate::closed_set::ClosedSet;
 use crate::error::{Error, ErrorDocument, Result};
 use crate::model::conjunction::Conjunction;
 use crate::reference::{Ref, one_named};
-use crate::snapshot::{Snapshot, Tool};
+use crate::snapshot::{SecretLikeVariable, Snapshot, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
@@ -395,6 +395,10 @@ pub struct SetRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
+    /// Each variable that the record holds in clear and whose name reads as a secret: see
+    /// [`Snapshot::secret_like_variables`]. A name is only a guess, so it changes no exit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secret_like_variables: Vec<SecretLikeVariable>,
 }
 
 /// The counts of a set: the clusters of the query, the records written, the clusters that strata
@@ -547,6 +551,7 @@ where
     });
     match snap {
         Ok(snap) => SetRecord {
+            secret_like_variables: snap.secret_like_variables(),
             cluster,
             path,
             root: Some(snap.root),
@@ -557,6 +562,7 @@ where
             path,
             root: None,
             error: Some(e.to_json()),
+            secret_like_variables: Vec::new(),
         },
     }
 }

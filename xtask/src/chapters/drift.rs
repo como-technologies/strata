@@ -1,10 +1,11 @@
 //! The chapters of the drift of a version, and of the clusters that run one.
 
 use super::edits::RETAIN;
-use super::ids::{A110, A111, A112, A120, DEV, LEDGER, PAYMENTS, SEARCH};
+use super::ids::{A110, A111, A112, A120, A1119, DEV, LEDGER, PAYMENTS, SEARCH};
 use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, variables_route};
+use serde_json::json;
 
 /// Run the chapters of the drift of a version, and of the clusters that run one.
 pub(super) fn run(r: &mut Runner) {
@@ -13,6 +14,7 @@ pub(super) fn run(r: &mut Runner) {
     overwritten(r);
     cluster_release(r);
     cluster_values(r);
+    cluster_secret(r);
 }
 
 /// The chapter `edited-in-place`: a person edits a published version through the API.
@@ -566,5 +568,57 @@ fn cluster_values(r: &mut Runner) {
         0,
         false,
         r#"strata verify 'runs/*.json' --format json | jq '.records[] | {path, clusterVariables}'"#,
+    );
+}
+
+/// The chapter `cluster-secret`: a cluster gives a value to `client_secret`, a variable that
+/// nobody marked sensitive (#626). Palette serves the value, so the record holds it in clear.
+fn cluster_secret(r: &mut Runner) {
+    r.chapter("cluster-secret", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.profile(DEV, A1119, "1.1.19", "aws-stack@1.1.1", &[]);
+    let variable = |name: &str, display: &str| {
+        json!({"name": name, "displayName": display, "defaultValue": "", "format": "string",
+            "inputType": "text", "required": true, "hidden": false, "immutable": false,
+            "isSensitive": false, "options": []})
+    };
+    let variables = [
+        variable("client_secret", "Client secret"),
+        variable("platform_owner", "Platform owner"),
+    ];
+    r.answer(
+        DEV,
+        &variables_route(A1119),
+        &json!({"variables": variables}),
+    );
+    let values = [
+        ("client_secret", "example-only-not-a-secret"),
+        ("platform_owner", "team-payments"),
+    ];
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A1119], &values));
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/metadata/labels", json!({"env": "prod"})));
+    r.step(
+        "secret-record",
+        0,
+        true,
+        "strata snapshot cluster:payments -o runs/payments.json",
+    );
+    r.step(
+        "secret-values",
+        0,
+        false,
+        "jq -c '.source.cluster.variables[] | {name, value}' runs/payments.json",
+    );
+    r.step(
+        "secret-set",
+        0,
+        true,
+        "strata snapshot tag:env=prod --dir fleet",
+    );
+    r.step(
+        "secret-set-json",
+        0,
+        false,
+        "strata snapshot tag:env=prod --dir fleet --json --quiet | jq -c '.records[] | {path, secretLikeVariables}'",
     );
 }

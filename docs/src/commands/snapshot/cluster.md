@@ -21,8 +21,55 @@ profile that the cluster runs, in the order that strata gives them: see
 cluster, so `verify` finds a renamed cluster.
 
 `source.cluster.variables` holds the value that the cluster gives each
-variable. The values are not part of the root. Strata writes no value for a
-sensitive variable. See [Clusters give variables different values](../../use-cases/cluster-values.md).
+variable: see [What a cluster record holds](#what-a-cluster-record-holds). The
+values are not part of the root. See [Clusters give variables different values](../../use-cases/cluster-values.md).
+
+## What a cluster record holds
+
+A cluster record holds what the cluster runs, and what Palette gives of the
+cluster beside it:
+
+- each profile that the record covers, with each pack of the copy, as a record
+  of a profile version holds it. The root covers these.
+- `source.cluster.variables`: the value that the cluster gives each variable of
+  these profiles. The root does not cover the values.
+- the labels, the tiers, the updates and the repave that wait, and, with
+  `--macros`, the digest of each macro value. The root covers none of these.
+
+Palette gives the value of each variable that nobody marked sensitive, and
+strata writes it as it is. Strata writes no value of a sensitive variable, and
+no hash of it. So a credential in a variable that nobody marked sensitive is in
+the record in clear:
+
+```text
+{{#include ../../output/secret-values.txt}}
+```
+
+When the name of such a variable reads as a secret, `snapshot` writes a note on
+standard error. The note names the variable as `<profile>.<variable>`, and
+never gives its value:
+
+```text
+{{#include ../../output/secret-record.txt}}
+```
+
+A name reads as a secret when it holds `secret`, `password`, `passwd`, or
+`token`, in upper case or lower case. A name that holds `api` or `private`, and
+then `key`, reads as a secret too. The two words can have one character between
+them, as in `api_key`. A value counts when it is not empty and holds no
+template, `{{`.
+
+The name is only a guess, so the note changes no exit and no root. Strata
+examines the names of the variables, and not the text of a value. So a secret
+in a variable with another name gets no note. Strata does not examine the
+values of a pack: there, the same words name many settings that are no secret.
+`-q` hides the note. A set of clusters names the variables in its report: see
+[The report as JSON](set.md#the-report-as-json).
+
+> **Mark a variable that holds a secret as sensitive in Palette.** Palette then
+> gives no value of it, and the record holds none. If the variable stays as it
+> is, keep the record in the object store, and not in the repository: see
+> [Where to keep a record](profile-version.md#where-to-keep-a-record).
 
 ## More of the cluster than its release
 

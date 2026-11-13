@@ -830,6 +830,10 @@ The report of `snapshot tag:<key>=<value> --dir DIR` or
   - `path`: the file of its record.
   - `root`: the root of the record that strata wrote. `error`, in place of
     `root`: why strata could not record the cluster. See [Errors](./errors.md).
+  - `secretLikeVariables`, only when the record has one: each variable that the
+    record holds in clear and whose name reads as a secret. An item gives the
+    `profile` and the `name`, and no value. See
+    [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 - `removed[]`: with `--prune`, each record file that strata removed.
 
 ## strata-report/1
