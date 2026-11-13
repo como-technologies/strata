@@ -207,9 +207,9 @@ unless you name the kinds:
 {{#include ../output/list-cluster.txt}}
 ```
 
-`--cluster` reads each cluster that it keeps as `--detail` does, and `--pack`
-reads each version so. A person who names one cluster asks what that cluster
-runs.
+`--cluster` reads each cluster that it keeps, as `--detail` does. `--pack`
+reads each version in the same way. A person who names one cluster asks what
+that cluster runs.
 
 At tenant scope the text can match a cluster in more than one project, and each
 one is an answer:

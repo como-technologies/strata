@@ -1,5 +1,5 @@
 //! The consumer list of a profile document: the clusters that use the version, and the cluster
-//! templates that link it. `list --packs` counts them, and `consumers` reads each one.
+//! templates that link it. `list --detail` counts them, and `consumers` reads each one.
 
 use std::collections::BTreeSet;
 
@@ -12,7 +12,7 @@ use crate::model::cluster_template::ClusterTemplateRef;
 
 /// The consumers that a profile document names, by kind.
 ///
-/// Palette refuses the delete of the version while one of them uses it. `list --packs` gives
+/// Palette refuses the delete of the version while one of them uses it. `list --detail` gives
 /// [`ConsumerCounts::count`] as `consumers`, and the kinds as `consumersByKind`.
 /// `consumers --list-only` lists each one, and the edge hosts that it searches: the profile
 /// document names no edge host.
@@ -34,7 +34,7 @@ impl ConsumerCounts {
         }
     }
 
-    /// The consumers of each kind together: what a row of `list --packs` shows.
+    /// The consumers of each kind together: what a row of `list --detail` shows.
     pub fn count(&self) -> usize {
         self.clusters + self.templates
     }

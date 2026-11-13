@@ -120,7 +120,7 @@ impl ListOptions {
         Ok(())
     }
 
-    /// True when the clusters are read for the profiles they apply: `--applied`, or `--cluster`,
+    /// True when the clusters are read for the profiles they apply: `applied`, or `--cluster`,
     /// which names one cluster to answer what it runs.
     fn reads_clusters(&self) -> bool {
         self.applied || self.cluster.is_some()

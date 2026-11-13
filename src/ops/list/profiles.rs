@@ -1,4 +1,4 @@
-//! The profile versions of a listing: the scope of each one, and with `--packs`, its packs and
+//! The profile versions of a listing: the scope of each one, and with `--detail`, its packs and
 //! the registry of each pack.
 
 use std::collections::BTreeMap;
