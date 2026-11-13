@@ -8,7 +8,7 @@ send it. A run of another command can send the report by itself, when you choose
 [What strata can report](../reference/report.md).
 
 The examples use a tenant where the profile `aws-stack@1.1.12` has a type that this release does
-not know. Two runs of `strata list profiles --packs` noted the type.
+not know. Two runs of `strata list profiles --detail` noted the type.
 
 ## The report
 

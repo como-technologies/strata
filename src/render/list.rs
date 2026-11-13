@@ -5,7 +5,7 @@ use std::path::Path;
 use super::changes::variable_path;
 use super::notes::marks_invalid;
 use super::verify::record_label;
-use super::{count_of, entry_error, joined_note};
+use super::{count_of, count_of_noun, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
@@ -199,6 +199,17 @@ pub(crate) fn list_count(n: usize, singular: &str, pack: Option<&str>) -> String
     }
 }
 
+/// `2 registries`, `1 registry`, or `no registries`: the heading of the registries of a listing.
+pub(crate) fn registry_count(n: usize) -> String {
+    count_of_noun(n, "registry", "registries")
+}
+
+/// The kind of a listed registry as a cell of a report: `pack`, `helm`, or `oci`, and `-` when
+/// the listing names no kind.
+pub(crate) fn registry_kind_cell(r: &crate::ops::ListedRegistry) -> &str {
+    dash(r.kind.as_ref().map_or("", Open::as_str))
+}
+
 /// `2 clusters`, or, with the `--cluster` filter, `2 clusters matching 'payments'`.
 pub(crate) fn cluster_count(n: usize, text: Option<&str>) -> String {
     let count = count_of(n, "cluster");
@@ -280,7 +291,7 @@ fn draft_mark(p: &crate::ops::ListedProfile) -> Option<&'static str> {
     p.is_draft().then_some("draft")
 }
 
-/// The note of a cluster of `list --applied` that has no profile, when the listing says why.
+/// The note of a cluster of `list --detail` that has no profile, when the listing says why.
 ///
 /// A person imported the cluster, and Palette applies no add-on profile to an imported cluster
 /// in read-only mode. `None` for a cluster with a profile, one that strata did not read, or one

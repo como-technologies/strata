@@ -401,7 +401,7 @@ What strata does with this:
 - A record of a version reads the published template. When the version has a
   draft, strata reads each manifest by its uid, and takes its published
   content. When the version was never published, the record reads the draft.
-- `list --packs` reads the draft of a version that nobody published, and marks
+- `list --detail` reads the draft of a version that nobody published, and marks
   its row `draft`. See [strata list](../../commands/list.md#a-version-that-nobody-published).
 - `<ref>@draft` records the draft: the values of the draft, and the draft
   content of each manifest that the draft changed. A version with no draft is
@@ -697,7 +697,7 @@ The profile document names no edge host.
 
 So [`strata consumers`](../../commands/consumers.md) counts the clusters and the
 templates of the profile document, and searches the edge hosts.
-[`strata list --packs`](../../commands/list.md#the-consumers-of-a-version)
+[`strata list --detail`](../../commands/list.md#the-consumers-of-a-version)
 counts the same clusters and templates. A live run shows it: a version that a
 template links, and that no cluster runs, counts one template and no cluster.
 See [template.sh](../../development/live-runs.md#templatesh).

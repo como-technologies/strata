@@ -1,4 +1,4 @@
-$ strata list profiles --packs --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'
+$ strata list profiles --detail --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'
 {"ref":"aws-stack@1.0.0","consumers":1,"consumersByKind":{"clusters":0,"templates":1}}
 {"ref":"aws-stack@1.1.0","consumers":1,"consumersByKind":{"clusters":1,"templates":0}}
 {"ref":"aws-stack@1.1.1","consumers":1,"consumersByKind":{"clusters":1,"templates":0}}

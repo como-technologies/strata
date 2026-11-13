@@ -88,7 +88,7 @@ fn edited_in_place_cluster(r: &mut Runner) {
         "edited-list-behind",
         0,
         false,
-        "strata list clusters --applied",
+        "strata list clusters --detail",
     );
     r.step(
         "edited-verify-who-json",
@@ -405,12 +405,7 @@ fn cluster_release(r: &mut Runner) {
         true,
         "strata snapshot aws-stack@1.1.0 -o releases/1.1.0/dev.json",
     );
-    r.step(
-        "cluster-applied",
-        0,
-        false,
-        "strata list clusters --applied",
-    );
+    r.step("cluster-applied", 0, false, "strata list clusters --detail");
     cluster_release_many_profiles(r);
     r.step(
         "cluster-moved",

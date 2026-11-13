@@ -1,7 +1,8 @@
 # strata list
 
-List the profile versions, clusters, and projects in the scope. The first
-column of each line is a ref that the other commands accept.
+List the profile versions, clusters, projects, saved tag filters, and
+registries in the scope. The first column of each line is a ref or a name that
+the other commands accept.
 
 The examples use the projects `dev` and `prod`, with `PALETTE_PROJECT=dev`.
 
@@ -12,8 +13,27 @@ The examples use the projects `dev` and `prod`, with `PALETTE_PROJECT=dev`.
 ```
 
 Profiles sort by name, then by version, in the order of Semantic Versioning, so
-`1.9.0` comes before `1.10.0`, and `1.0.1-rc.1` before `1.0.1`. Clusters and
-projects sort by name.
+`1.9.0` comes before `1.10.0`, and `1.0.1-rc.1` before `1.0.1`. Clusters,
+projects, and registries sort by name.
+
+## Read each row deeper
+
+The kinds say what to list, and `--detail` reads each row deeper. It reads each
+profile version for its packs and their registries, its consumers, and whether
+it is published. It also reads each cluster for the profiles that it applies:
+
+```text
+{{#include ../output/list-detail.txt}}
+```
+
+`--detail` sends one request for each version, two for each cluster, and one
+for the registry listing. Name a kind to read that kind alone:
+`strata list profiles --detail`. The sections below show each part.
+
+`--packs` and `--applied` are the old names of the two parts. `--packs` reads
+the versions alone, and `--applied` reads the clusters alone, as before. Each
+one writes a note that names `--detail`. Release 0.35.0 removes them: see
+[Release 0.34.0](../reference/compatibility.md#release-0340-changes-that-need-action).
 
 ## List the projects
 
@@ -23,6 +43,45 @@ projects sort by name.
 
 Strata always reads the projects at tenant scope, so the list holds each
 project that the key can see.
+
+## List the registries
+
+`strata list registries` names each registry that the key can see, with its uid
+and its kind: `pack`, `helm`, or `oci`:
+
+```text
+{{#include ../output/list-registries.txt}}
+```
+
+`--registry` of [`strata packs`](./packs.md) takes the name or the uid. So
+does a `pack:<registry>/<name>@<version>` ref: see [Refs](../reference/refs.md).
+A registry of the system and a registry of the tenant can have one name. Then
+a ref takes the uid: see
+[`registry-name-ambiguous`](../reference/errors.md).
+
+The JSON gives `name`, `uid`, and `kind` for each registry. A kind of a later
+Palette release keeps its text:
+
+```text
+{{#include ../output/list-registries-json.txt}}
+```
+
+Strata reads the registry listing of Palette in the scope of the listing, as
+the pack rows do. When the listing answers an error, also HTTP 404, `list`
+exits `2` with that error.
+
+## The packs of a registry
+
+`strata list packs` is an error. It exits `2` before any request:
+
+```text
+{{#include ../output/list-packs-refused.txt}}
+```
+
+A list of each pack of a registry is a catalog, and strata is no catalog: see
+[The rules of the scope](../boundary.md#the-rules-of-the-scope).
+`strata list --detail` gives the packs that each profile version pins, and
+[`strata packs <name>`](./packs.md) gives the versions of one pack.
 
 ## List another project
 
@@ -111,8 +170,8 @@ consumer list of Palette and from the same search: see
 ## Find the profiles a cluster runs
 
 `strata consumers <name>@<version>` names the clusters that use a profile
-version. `--applied` answers the opposite question, for each cluster in the
-scope:
+version. `strata list clusters --detail` answers the opposite question, for
+each cluster in the scope:
 
 ```text
 {{#include ../output/list-applied.txt}}
@@ -131,7 +190,7 @@ cluster has not taken: Palette says an update waits for it. See
 With `--format markdown`, the `behind` column says `yes` and names the
 profiles, `no`, or `-` when Palette did not say.
 
-`--applied` reads each cluster and its notifications, two requests for each.
+`--detail` reads each cluster and its notifications, two requests for each.
 Read the uid when you
 need the identity. A published version can be updated after its publish, and
 then one `<name>@<version>` means two contents at two times. A legacy version
@@ -148,8 +207,9 @@ unless you name the kinds:
 {{#include ../output/list-cluster.txt}}
 ```
 
-`--cluster` sets `--applied`, as `--pack` sets `--packs`: a person who names one
-cluster asks what that cluster runs.
+`--cluster` reads each cluster that it keeps, as `--detail` does. `--pack`
+reads each version in the same way. A person who names one cluster asks what
+that cluster runs.
 
 At tenant scope the text can match a cluster in more than one project, and each
 one is an answer:
@@ -166,7 +226,7 @@ one name can also run one version and different content. See
 
 Palette builds a cluster from a cluster profile. A person can also import a
 cluster that runs elsewhere. An imported cluster runs add-on profiles alone,
-and in read-only mode it runs none. With `--applied`, the row of an imported
+and in read-only mode it runs none. With `--detail`, the row of an imported
 cluster with no profile says why:
 
 ```text
@@ -201,14 +261,9 @@ tool marks a match. A pipe, a file and `--no-color` get the plain name.
 `--pack` reads each profile version, one request for each. It also lists only
 profiles, unless you name the kinds.
 
-`--packs` reads the same packs with no filter, so every profile version shows
-what it carries:
-
-```text
-{{#include ../output/list-packs.txt}}
-```
-
-A pack under another tag name shows the tag: `24.04 (tag LTS__24.x)`. A version
+`--detail` reads the same packs with no filter, so every profile version shows
+what it carries: see [Read each row deeper](#read-each-row-deeper). A pack
+under another tag name shows the tag: `24.04 (tag LTS__24.x)`. A version
 that strata cannot read stays in the list with its error, because strata
 cannot tell if it carries the pack.
 
@@ -240,7 +295,7 @@ stops `list` with exit `2` and that error.
 
 ## A version that nobody published
 
-A version that nobody published has its packs in its draft. `--packs` and
+A version that nobody published has its packs in its draft. `--detail` and
 `--pack` read the packs of the draft, and the row of the version ends with
 `draft`:
 
@@ -264,7 +319,7 @@ published version with a draft that waits: see
 
 ## The consumers of a version
 
-With `--packs`, the row of a version ends with the number of its consumers.
+With `--detail`, the row of a version ends with the number of its consumers.
 Strata counts what the profile document names: the clusters of its consumer
 list, and the cluster templates that link the version. Palette refuses the
 delete of the version while one of them uses it. Here the template
@@ -288,8 +343,8 @@ consumers. It also searches the edge hosts:
 {{#include ../output/list-consumers-same.txt}}
 ```
 
-`list --packs` costs one request for each version, and one request for the
-registry listing. It reads no edge host, and
+`list profiles --detail` costs one request for each version, and one request
+for the registry listing. It reads no edge host, and
 it does no second reading. So an edge host that the version is bound to, and a
 cluster that the list of Palette omits, are not in the count.
 `strata consumers` finds them: see [Edge hosts](./consumers.md#edge-hosts) and
@@ -315,7 +370,7 @@ for each version: `project`, `tenant`, or `system`:
 
 Strata reads the scope from the profile search of Palette. It sends one request
 for the tenant versions and one for the system versions, with 50 profile names
-on a page. With `--packs` or `--pack`, it reads the scope in the document of each
+on a page. With `--detail` or `--pack`, it reads the scope in the document of each
 version, and sends no search. When Palette has no profile search, the JSON has
 no `scope`, and no row has the mark. See
 [The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
@@ -334,7 +389,7 @@ Give the uid in place of the name:
 {{#include ../output/scope-by-uid.txt}}
 ```
 
-With `--packs`, the mark ends the row after the consumers. A tenant version
+With `--detail`, the mark ends the row after the consumers. A tenant version
 that nobody published shows both marks: `tenant, draft`.
 
 ```text
@@ -352,8 +407,10 @@ and no row has the mark:
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters
 projects`. With no kind, strata lists profiles and clusters. Each kind also
-takes its singular, so `strata list project` lists the projects. Palette lists
-each kind differently by scope:
+takes its singular, so `strata list project` lists the projects.
+`strata list packs` is an error: see
+[The packs of a registry](#the-packs-of-a-registry). Palette lists each kind
+differently by scope:
 
 | Scope | Profiles | Clusters | Projects |
 | --- | --- | --- | --- |
@@ -364,9 +421,10 @@ each kind differently by scope:
 `strata list filters` reads the saved tag filters, which belong to the tenant.
 Each listed cluster carries its labels in the JSON. A list of clusters holds the
 virtual clusters of the scope, from the search of Palette. That is one request
-for the schema of the search, and one for the search.
+for the schema of the search, and one for the search. `strata list registries`
+reads the registry listing in the scope of the listing.
 
-Exit `0`, or `2` when strata cannot read a listing. `--json` writes
+Exit `0`, or `2` when strata cannot read a listing or refuses a kind. `--json` writes
 [`strata-list/1`](../reference/documents.md#strata-list1).
 
 ## Options

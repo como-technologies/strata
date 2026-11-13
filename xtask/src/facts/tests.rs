@@ -1227,7 +1227,7 @@ fn a_call_of_opt_set_that_the_table_of_reads_lacks_is_a_fault() {
 #[test]
 fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a_get_fact() {
     let sources = Sources::read(&crate::repository(), None).0;
-    assert_eq!(sources.set_reads.len(), 4);
+    assert_eq!(sources.set_reads.len(), 5);
     for read in &sources.set_reads {
         let fact = sources
             .facts
@@ -1257,7 +1257,8 @@ fn the_lists_of_the_closed_sets_of_strata_in_the_facts_name_their_type() {
         );
         fact.reads.sets.get(field).map(String::as_str)
     };
-    // the five lists that the issue names, and the sixth that the code of strata notes
+    // the five lists that the issue names, the sixth that the code of strata notes, and the kind
+    // of a registry, which `list registries` shows
     assert_eq!(
         named("cluster-document", "status.state"),
         Some("ClusterState")
@@ -1274,6 +1275,10 @@ fn the_lists_of_the_closed_sets_of_strata_in_the_facts_name_their_type() {
     assert_eq!(
         named("profile-document", "spec.published.type"),
         Some("ProfileType")
+    );
+    assert_eq!(
+        named("registry-metadata", "items[].kind"),
+        Some("RegistryKind")
     );
 }
 

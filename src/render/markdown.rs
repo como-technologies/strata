@@ -13,8 +13,8 @@ use super::consumers::{
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
-    pack_version, profile_marks, project_label, registry_heading, side_projects, version_note,
-    virtual_group, virtual_line,
+    pack_version, profile_marks, project_label, registry_count, registry_heading,
+    registry_kind_cell, side_projects, version_note, virtual_group, virtual_line,
 };
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
@@ -35,8 +35,8 @@ use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
 use crate::model::profile_type::ProfileType;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
-    PackListing, RecordStatus, SavedFilter, VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject,
+    ListedRegistry, Listing, PackListing, RecordStatus, SavedFilter, VerifySummary,
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -524,6 +524,9 @@ impl Renderer for MarkdownRenderer {
         if let Some(filters) = &l.filters {
             list_filters(&mut o, filters);
         }
+        if let Some(registries) = &l.registries {
+            list_registries(&mut o, registries);
+        }
         Ok(o)
     }
 }
@@ -746,6 +749,23 @@ fn list_filters(o: &mut String, filters: &[SavedFilter]) {
             markdown_cell(&f.reference()),
             markdown_cell(&f.uid),
             markdown_cell(&f.expression())
+        ));
+    }
+    o.push('\n');
+}
+
+/// The table of the registries of a listing, with its count.
+fn list_registries(o: &mut String, registries: &[ListedRegistry]) {
+    o.push_str(&format!("**{}**\n\n", registry_count(registries.len())));
+    if !registries.is_empty() {
+        o.push_str("| name | uid | kind |\n|---|---|---|\n");
+    }
+    for r in registries {
+        o.push_str(&format!(
+            "| {} | `{}` | {} |\n",
+            markdown_cell(dash(&r.name)),
+            markdown_cell(&r.uid),
+            markdown_cell(registry_kind_cell(r))
         ));
     }
     o.push('\n');

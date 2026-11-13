@@ -4,12 +4,10 @@
 use serde_json::Value;
 
 use super::PaletteApi;
-use crate::closed_set::impl_texts;
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, set_at, str_at, take_items, text};
 use crate::model::cloud::CLOUD_NESTED;
 use crate::model::conjunction::Conjunction;
-use crate::model::pack_type::PackType;
 use crate::snapshot::{SubjectKind, Template, manifest_of};
 use crate::term::progress::Progress;
 use crate::text::query_value;
@@ -82,8 +80,9 @@ const TAG_FILTERS: &str = "/v1/filters/tag";
 const CLOUD_CONFIGS: &str = "/v1/cloudconfigs";
 /// The registries: the summary listing of a kind is under it.
 const REGISTRIES: &str = "/v1/registries";
-/// The registries that the key can see.
-const REGISTRY_METADATA: &str = "/v1/registries/metadata";
+/// The registries that the key can see. No segment of it varies, so it is also its own template
+/// for the log of the unknown values.
+pub(crate) const REGISTRY_METADATA: &str = "/v1/registries/metadata";
 /// The dashboard summary of a cluster: `/v1/dashboard/spectroclusters/{uid}`.
 const CLUSTER_SUMMARIES: &str = "/v1/dashboard/spectroclusters";
 /// The events of a cluster: `/v1/events/components/spectrocluster/{uid}`.
@@ -101,7 +100,8 @@ const AUDITS: &str = "/v1/audits";
 
 // The templates of the routes that give a value of a closed set, with `{uid}` for the segment that
 // varies. The log of the unknown values names the route of a read by its template, and never by
-// the uid of a real request. The pack listing is PACKS.
+// the uid of a real request. The pack listing is PACKS, and the registry listing is
+// REGISTRY_METADATA.
 
 /// The template of the route of a profile version: `GET /v1/clusterprofiles/{uid}`.
 pub(crate) const PROFILE_TEMPLATE: &str = "/v1/clusterprofiles/{uid}";
@@ -271,48 +271,6 @@ fn with_nested(filter: &Value) -> Value {
         )],
     ));
     search_filter(groups)
-}
-
-/// A kind of registry, as the routes of Palette name it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum RegistryKind {
-    /// A pack registry. It holds the packs of the type `spectro`.
-    Pack,
-    /// A Helm registry.
-    Helm,
-    /// An OCI registry.
-    Oci,
-}
-
-// The segment of the kind in a route: `pack`, `helm`, or `oci`. The metadata listing names the
-// kind with the same word.
-impl_texts!(pub(crate) RegistryKind {
-    Pack => "pack",
-    Helm => "helm",
-    Oci => "oci",
-});
-
-impl RegistryKind {
-    /// The kind of the registry that holds a pack of the type `pack_type`: a pack registry holds
-    /// the type `spectro`. None for a manifest pack, which no registry holds.
-    pub(crate) fn of_pack_type(pack_type: PackType) -> Option<Self> {
-        match pack_type {
-            PackType::Spectro => Some(Self::Pack),
-            PackType::Helm => Some(Self::Helm),
-            PackType::Oci => Some(Self::Oci),
-            PackType::Manifest => None,
-        }
-    }
-
-    /// The type of a pack of a registry of the kind: `spectro` for a pack registry, else the
-    /// word of the kind.
-    pub(crate) fn pack_type(self) -> PackType {
-        match self {
-            Self::Pack => PackType::Spectro,
-            Self::Helm => PackType::Helm,
-            Self::Oci => PackType::Oci,
-        }
-    }
 }
 
 /// The clusters that a search found, and whether the virtual clusters are among them.

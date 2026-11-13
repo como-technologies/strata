@@ -1,4 +1,4 @@
-$ strata list profiles --packs --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'
+$ strata list profiles --detail --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'
 aws-stack@1.0.0 published=true
 aws-stack@1.1.0 published=true
 aws-stack@1.1.1 published=true

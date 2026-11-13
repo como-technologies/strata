@@ -4,6 +4,8 @@ use serde_json::json;
 
 use super::*;
 use crate::api::{MemoryApi, RawCluster, ReadErrors};
+use crate::closed_set::ClosedSet;
+use crate::model::registry_kind::RegistryKind;
 use crate::model::scope::ProfileScope;
 use crate::reference::LATEST;
 
@@ -105,20 +107,6 @@ fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
         p.registry_summary(RegistryKind::Oci).unwrap()["items"],
         json!([3])
     );
-    assert_eq!(
-        RegistryKind::of_pack_type(PackType::Spectro),
-        Some(RegistryKind::Pack)
-    );
-    assert_eq!(
-        RegistryKind::of_pack_type(PackType::Helm),
-        Some(RegistryKind::Helm)
-    );
-    assert_eq!(RegistryKind::of_pack_type(PackType::Manifest), None);
-    for &kind in RegistryKind::ALL {
-        assert_eq!(RegistryKind::from_text(kind.as_str()), Some(kind));
-        assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
-    }
-    assert_eq!(RegistryKind::from_text("spectro"), None);
 }
 
 #[test]

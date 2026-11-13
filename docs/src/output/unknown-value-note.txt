@@ -1,4 +1,4 @@
-$ strata list profiles --packs > /dev/null
+$ strata list profiles --detail > /dev/null
 strata: looking up project dev
 strata: listing profiles
 strata: reading profile aws-stack@1.1.12

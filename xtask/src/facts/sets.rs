@@ -18,6 +18,7 @@ use strata::model::oci_provider::OciProvider;
 use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::profile_type::ProfileType;
+use strata::model::registry_kind::RegistryKind;
 use strata::model::scope::ProfileScope;
 
 use super::sources::Sources;
@@ -70,6 +71,7 @@ pub fn closed_sets() -> Vec<Set> {
         Set::of::<OciProvider>(),
         Set::of::<ProfileScope>(),
         Set::of::<ProfileType>(),
+        Set::of::<RegistryKind>(),
     ]
 }
 
@@ -101,6 +103,7 @@ pub fn reads() -> Vec<SetRead> {
     vec![
         SetRead::of::<PackState>("pack-listing", "items[].spec.annotations.system_state"),
         SetRead::of::<OciProvider>("oci-registry-summary", "items[].spec.providerType"),
+        SetRead::of::<RegistryKind>("registry-metadata", "items[].kind"),
         SetRead::of::<ProfileType>("profile-document", "spec.published.type"),
         SetRead::of::<OciProvider>(
             "profile-document",

@@ -14,7 +14,7 @@ use std::collections::btree_map::Entry;
 
 use serde_json::Value;
 
-use super::{OCI_SUMMARY_TEMPLATE, PACKS, Palette, PaletteApi, RegistryKind};
+use super::{OCI_SUMMARY_TEMPLATE, PACKS, Palette, PaletteApi, REGISTRY_METADATA};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served};
@@ -22,6 +22,7 @@ use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_state::PackState;
 use crate::model::pack_type::PackType;
+use crate::model::registry_kind::RegistryKind;
 use crate::reference::one_named;
 use crate::term::progress::Progress;
 
@@ -175,7 +176,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         let Some(meta) = registry_entry(self.metadata()?, "/uid", uid) else {
             return Ok(None);
         };
-        let kind = RegistryKind::from_text(str_at(meta, "/kind"));
+        let kind = registry_kind(meta).as_ref().and_then(Open::known);
         let private = flag(meta, "/isPrivate");
         match kind {
             Some(RegistryKind::Helm) => Ok(private.then_some(Unsynced {
@@ -308,6 +309,12 @@ pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> 
 /// `None` when no entry has the uid, or when the entry has no name.
 pub(crate) fn registry_name(entries: &[Value], uid: &str) -> Option<String> {
     registry_entry(entries, "/uid", uid).and_then(|it| opt_text(it, "/name"))
+}
+
+/// The kind of the registry in `entry`, an item of `GET /v1/registries/metadata`, or `None` when
+/// the entry names no kind. A kind of a later Palette release is [`Open::Unknown`], with a note.
+pub(crate) fn registry_kind(entry: &Value) -> Option<Open<RegistryKind>> {
+    opt_set(entry, "/kind", REGISTRY_METADATA)
 }
 
 /// The provider type of the OCI registry in `reg`, an entry of the OCI summary listing, or `None`

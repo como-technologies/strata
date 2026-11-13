@@ -9,7 +9,7 @@ use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, Stand, UID_A, UID_B,
     against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
     schema_values, snapshot_from_raw, strata_command, write_record,
 };
@@ -1131,13 +1131,134 @@ fn list_needs_credentials_and_takes_only_known_kinds() {
     let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
     assert_eq!(e["error"]["kind"], "missing-credential");
 
-    let r = run(&["list", "packs"]);
+    let r = run(&["list", "projectz"]);
     assert_eq!(r.code, 2, "{}", r.err);
     assert!(
-        r.err.contains("invalid value 'packs'") && r.err.contains("profiles, clusters, projects"),
+        r.err.contains("invalid value 'projectz'")
+            && r.err
+                .contains("profiles, clusters, projects, filters, registries]"),
         "{}",
         r.err
     );
+}
+
+/// A list of the packs of a registry is a catalog, which rule 3 of the scope keeps out of strata.
+/// So `list packs` stays an error, and the error names the two commands that answer about packs.
+/// The refs show it, so strata refuses it before it needs a key.
+#[test]
+fn list_refuses_packs_before_any_request_and_names_detail_and_the_packs_command() {
+    let stand = Stand::new(std::collections::BTreeMap::new(), "p-dev");
+    let home = tempfile::tempdir().unwrap();
+    for kind in ["packs", "pack"] {
+        let r = stand.run(&["list", "profiles", kind, "--json"]);
+        assert_eq!(r.code, 2, "{}", r.err);
+        assert!(stand.requests().is_empty(), "list {kind} sends no request");
+        let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+        assert_eq!(e["error"]["kind"], "usage", "{}", r.err);
+        let message = e["error"]["message"].as_str().unwrap();
+        for named in ["`strata list --detail`", "`strata packs <name>`"] {
+            assert!(message.contains(named), "{named} in {message}");
+        }
+
+        let r = run_in(
+            &["list", kind],
+            &[("HOME", home.path().to_str().unwrap())],
+            &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
+        );
+        assert_eq!(r.code, 2, "{}", r.err);
+        assert!(
+            r.err.contains("does not list packs") && !r.err.contains("PALETTE_API_KEY"),
+            "the refusal comes before the key: {}",
+            r.err
+        );
+    }
+    let help = run(&["list", "--help"]);
+    assert!(
+        !help.out.contains("packs]") && !help.out.contains("--packs"),
+        "the help shows neither the refused kind nor the old flag: {}",
+        help.out
+    );
+}
+
+/// `--detail` reads each row deeper: each profile version for its packs, and each cluster for
+/// the profiles it applies. `--packs` and `--applied` stay for one release, as the old names of
+/// its two parts. Each one reads what it read before, and a note names `--detail`.
+#[test]
+fn detail_does_what_packs_and_applied_do_and_the_old_names_stay_with_a_note() {
+    let profile = common::profile_document(
+        UID_A,
+        "aws-stack",
+        "1.0.0",
+        common::template("aws", "cluster", common::packs()),
+        None,
+    );
+    let routes = std::collections::BTreeMap::from([
+        (
+            PROFILE_LISTING.to_string(),
+            serde_json::json!({"items": [listed("aws-stack", UID_A)]}),
+        ),
+        (common::profile_route(UID_A), profile),
+        (
+            CLUSTER_LISTING.to_string(),
+            serde_json::json!({"items": [{"metadata": {"name": "payments", "uid": "c1"},
+                "spec": {"cloudType": "aws"}, "status": {"state": "Running"}}]}),
+        ),
+        (
+            common::cluster_route("c1"),
+            serde_json::json!({"metadata": {"name": "payments", "uid": "c1"},
+                "spec": {"clusterProfileTemplates": [{"name": "aws-stack",
+                    "profileVersion": "1.0.0", "uid": UID_A, "type": "cluster"}]}}),
+        ),
+    ]);
+    let stand = Stand::new(routes, "p-dev");
+    // the exit code, the document with no time stamp, and the path of each request
+    let list = |args: &[&str]| {
+        let r = stand.run(&[&["list", "--json"], args].concat());
+        assert_eq!(r.code, 0, "{args:?}: {}", r.err);
+        let mut asked: Vec<String> = stand.asked().into_iter().map(|(path, _)| path).collect();
+        asked.sort();
+        (r.document_without_time(), asked)
+    };
+    let detail = list(&["--detail"]);
+    assert_eq!(detail, list(&["--packs", "--applied"]));
+    for path in [common::profile_route(UID_A), common::cluster_route("c1")] {
+        assert!(detail.1.contains(&path), "--detail reads {path}");
+    }
+    assert!(detail.0["profiles"][0]["packs"].is_array(), "{}", detail.0);
+    assert!(
+        detail.0["clusters"][0]["profiles"].is_array(),
+        "{}",
+        detail.0
+    );
+    assert_eq!(
+        list(&["profiles", "--detail"]),
+        list(&["profiles", "--packs"])
+    );
+    assert_eq!(
+        list(&["clusters", "--detail"]),
+        list(&["clusters", "--applied"])
+    );
+
+    // an old name reads one kind deeper, as before
+    let (packs, _) = list(&["--packs"]);
+    assert!(packs["profiles"][0]["packs"].is_array(), "{packs}");
+    assert!(packs["clusters"][0].get("profiles").is_none(), "{packs}");
+    let (applied, _) = list(&["--applied"]);
+    assert!(applied["profiles"][0].get("packs").is_none(), "{applied}");
+    assert!(applied["clusters"][0]["profiles"].is_array(), "{applied}");
+
+    for (old, part) in [("--packs", "versions"), ("--applied", "clusters")] {
+        let r = stand.run_loud(&["list", old, "--json"]);
+        assert_eq!(r.code, 0, "{}", r.err);
+        let note = r.err.lines().find(|l| l.contains("old name")).unwrap_or("");
+        for named in [old, "--detail", part, "Release 0.35.0"] {
+            assert!(note.contains(named), "{named} in {note:?}: {}", r.err);
+        }
+        let quiet = stand.run_loud(&["list", old, "--json", "-q"]);
+        assert!(!quiet.err.contains("old name"), "{}", quiet.err);
+    }
+    let r = stand.run_loud(&["list", "--detail", "--json"]);
+    assert!(!r.err.contains("old name"), "{}", r.err);
 }
 
 /// A field test typed `strata list project`, and strata refused it before it read Palette. Each
@@ -1157,6 +1278,10 @@ fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
             CLUSTER_LISTING.to_string(),
             serde_json::json!({"items": []}),
         ),
+        (
+            REGISTRY_LISTING.to_string(),
+            serde_json::json!({"items": [{"name": "Public Repo", "uid": "r1", "kind": "pack"}]}),
+        ),
     ]);
     let stand = Stand::new(routes, "p-dev");
     // the exit code, the document with no time stamp, the error, and each request
@@ -1169,6 +1294,7 @@ fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
         ("cluster", "clusters"),
         ("project", "projects"),
         ("filter", "filters"),
+        ("registry", "registries"),
     ] {
         let one = list(singular);
         let all = list(plural);

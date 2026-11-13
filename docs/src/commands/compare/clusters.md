@@ -91,7 +91,7 @@ cluster now, and verifies the record:
 {{#include ../../output/cluster-all-profiles-lines.txt}}
 ```
 
-The verdict of `verify` gives the count too. `strata list clusters --applied`
+The verdict of `verify` gives the count too. `strata list clusters --detail`
 names each profile and its version. `--json` gives them in
 `a.cluster.profiles` and `b.cluster.profiles`.
 

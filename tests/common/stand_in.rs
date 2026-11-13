@@ -163,7 +163,7 @@ impl Stand {
     }
 }
 
-/// The command `strata list profiles --packs` with the arguments `more` against `api`. The run
+/// The command `strata list profiles --detail` with the arguments `more` against `api`. The run
 /// has a home of its own, `home`, and no state folder from the environment of the test.
 pub fn list_command(api: &str, home: &Path, more: &[&str]) -> Command {
     let mut command = strata_command();
@@ -172,7 +172,7 @@ pub fn list_command(api: &str, home: &Path, more: &[&str]) -> Command {
         .env_remove("STRATA_QUIET")
         .env_remove("XDG_STATE_HOME")
         .env("PALETTE_API", api)
-        .args(["list", "profiles", "--packs"])
+        .args(["list", "profiles", "--detail"])
         .args(more);
     command
 }

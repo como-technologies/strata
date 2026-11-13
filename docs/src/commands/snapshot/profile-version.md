@@ -134,7 +134,7 @@ the draft changed. A version with no draft exits `2` with `no-draft`:
 
 A version that nobody published has only its draft. `<name>@<version>` and
 `<uid>` record that draft with no `@draft`, and the record says
-`source.template` `draft` too. `list --packs` marks the version `draft`: see
+`source.template` `draft` too. `list --detail` marks the version `draft`: see
 [strata list](../list.md).
 
 ## The registry of each pack

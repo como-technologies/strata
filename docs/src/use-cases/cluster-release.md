@@ -43,7 +43,7 @@ Record the release first. Every step below compares a cluster against this file:
 {{#include ../output/cluster-applied.txt}}
 ```
 
-`strata list clusters --applied` reads each cluster for the profiles it
+`strata list clusters --detail` reads each cluster for the profiles it
 applies. Start here, because the list gives you the two things the next steps
 need.
 

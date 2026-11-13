@@ -1,4 +1,4 @@
-$ strata list clusters --applied
+$ strata list clusters --detail
 project dev (uid 64f20000000000000000a0d1)
 
 3 clusters

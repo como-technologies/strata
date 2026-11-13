@@ -14,6 +14,8 @@ facts:
         - items[].isPrivate
       values:
         "items[].kind": [pack, helm, oci]
+      sets:
+        "items[].kind": RegistryKind
     stand_in:
       - v1/registries/metadata
     live:
@@ -22,6 +24,7 @@ facts:
     pages:
       - reference/palette-api.md#other-reads
       - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
+      - commands/list.md#list-the-registries
     code:
       - src/api/palette/listings.rs
       - src/api/registry.rs

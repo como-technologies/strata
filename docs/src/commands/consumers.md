@@ -148,7 +148,7 @@ reading failed, because strata did none. So a gate before a delete runs without
 `--list-only`.
 The edge hosts are read with it too: the consumer list names clusters alone.
 The cluster templates are in it too: the profile document names them.
-`strata list --packs` counts the same clusters and templates for each version
+`strata list --detail` counts the same clusters and templates for each version
 of the scope: see
 [The consumers of a version](./list.md#the-consumers-of-a-version).
 
