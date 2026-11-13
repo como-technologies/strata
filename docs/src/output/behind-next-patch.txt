@@ -1,0 +1,21 @@
+$ strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'
+pack kubernetes@1.35.3 (uid 69f778872d19e4c57df8f630)  ->  pack kubernetes@1.35.6 (uid 6a6bd41b16c3cbf99cd5fc21)
+root       f466249ad0ae -> 2d36f3ce66ec   CHANGED
+images     6 images, no charts changed in 1 pack
+
+~ [k8s  ] kubernetes                 1.35.3 -> 1.35.6   IDENTITY UPSTREAM AUTHORED IMAGES
+      upstream digest: sha256:ff3df77ebc9c -> sha256:85e06d1a6a1c (packRef.digest)
+      + image registry.k8s.io/pause:3.10.1
+      + image registry.k8s.io/pause:3.10.2
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-apiserver: v1.35.3 -> v1.35.6
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-controller-manager: v1.35.3 -> v1.35.6
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-proxy: v1.35.3 -> v1.35.6
+      ~ image us-docker.pkg.dev/palette-images/k8s/kube-scheduler: v1.35.3 -> v1.35.6
+      values: 4 changed, 2 added, 0 removed
+        + pack.content.images[10].image: "registry.k8s.io/pause:3.10.2"
+        ~ pack.content.images[2].image: "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-apiserver:v1.35.6"
+        ~ pack.content.images[3].image: "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-controller-manager:v1.35.6"
+        ~ pack.content.images[4].image: "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-proxy:v1.35.6"
+        ~ pack.content.images[5].image: "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.3" -> "us-docker.pkg.dev/palette-images/k8s/kube-scheduler:v1.35.6"
+        + pack.content.images[9].image: "registry.k8s.io/pause:3.10.1"
+      impact: node repave (Kubernetes version change)

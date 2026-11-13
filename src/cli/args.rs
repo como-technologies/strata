@@ -456,6 +456,10 @@ pub(crate) struct BehindArgs {
     /// Name a pre-release as a newer version of a pin or a profile version that is not a pre-release
     #[arg(long)]
     pub(crate) pre_release: bool,
+    /// Show only the pins and the profile versions that are behind, or that strata could not
+    /// check. The JSON keeps each one
+    #[arg(long)]
+    pub(crate) behind_only: bool,
     #[command(flatten)]
     pub(crate) project: ProjectArgs,
     #[command(flatten)]
