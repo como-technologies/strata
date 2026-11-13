@@ -3,12 +3,61 @@
 
 use std::collections::BTreeMap;
 
-use super::{CheckResult, Options, SectionScore, Summary, percent};
+use super::{CheckResult, Options, SectionScore, Summary, is_counted, percent};
 use crate::confidence::{Confidence, NO_RUNS, runs_to_reach};
 use crate::probe::Verdict;
 use crate::rule::{Catalog, DEFAULT_BAR, Level, Severity, Status};
 use strata::render::count_of;
 use strata::text::plural;
+
+/// What the results add to the counts of the scorecard and of the summary. One function counts
+/// both, so the counts of the sections add to the counts of the summary.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(super) struct Tally {
+    pub(super) passed: u32,
+    /// The failures that count: exit `1`.
+    pub(super) failed: u32,
+    /// The probes that failed and do not count.
+    pub(super) probe_failed: u32,
+    /// The failures of severity `warn`. A warning is not a failure, and it never counts.
+    pub(super) warned: u32,
+    /// The failures of severity `note`.
+    pub(super) noted: u32,
+    pub(super) not_run: u32,
+}
+
+impl Tally {
+    /// The counts of `checks`. A note is outside the checks that ran and outside the readiness,
+    /// whether it ran or not: a failed note is a note, and another note adds nothing.
+    pub(super) fn of<'a>(checks: impl IntoIterator<Item = &'a CheckResult>) -> Tally {
+        let mut t = Tally::default();
+        for c in checks {
+            let count = match (c.verdict, c.severity) {
+                (Verdict::Failed, Severity::Note) => &mut t.noted,
+                (_, Severity::Note) => continue,
+                (Verdict::Passed, _) => &mut t.passed,
+                (Verdict::Failed, _) if c.counts_as_failure => &mut t.failed,
+                (Verdict::Failed, Severity::Warn) => &mut t.warned,
+                (Verdict::Failed, _) => &mut t.probe_failed,
+                (Verdict::NotRun, _) => &mut t.not_run,
+                _ => continue,
+            };
+            *count += 1;
+        }
+        t
+    }
+
+    /// The checks that ran: each one that passed or failed, at each level and severity but
+    /// `note`.
+    pub(super) fn ran(&self) -> u32 {
+        self.passed + self.failed + self.probe_failed + self.warned
+    }
+
+    /// The readiness of the counts: see [`readiness_of`].
+    fn readiness(&self) -> Option<f64> {
+        readiness_of(self.passed, self.ran(), self.not_run)
+    }
+}
 
 /// The scorecard: one line for each section that has a row for this engine.
 pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore> {
@@ -21,19 +70,7 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
         if rows.is_empty() {
             continue;
         }
-        let ran: Vec<&&CheckResult> = rows
-            .iter()
-            .filter(|c| {
-                matches!(c.verdict, Verdict::Passed | Verdict::Failed)
-                    && c.severity != Severity::Note
-            })
-            .collect();
-        let passed = ran.iter().filter(|c| c.verdict == Verdict::Passed).count() as u32;
-        let failed = ran.len() as u32 - passed;
-        let not_run = rows
-            .iter()
-            .filter(|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note)
-            .count() as u32;
+        let tally = Tally::of(rows.iter().copied());
         let with_runs = rows
             .iter()
             .filter(|c| c.confidence.as_ref().is_some_and(Confidence::has_runs))
@@ -56,15 +93,17 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             preflight: rows.iter().filter(|c| c.level == Level::Preflight).count() as u32,
             with_runs,
             weakest_bound: weakest,
-            ran: ran.len() as u32,
-            passed,
-            failed,
-            not_run,
+            ran: tally.ran(),
+            passed: tally.passed,
+            failed: tally.failed,
+            probe_failed: tally.probe_failed,
+            warned: tally.warned,
+            not_run: tally.not_run,
             not_checked: rows
                 .iter()
                 .filter(|c| c.verdict == Verdict::NotChecked)
                 .count() as u32,
-            readiness: readiness_of(passed, ran.len() as u32, not_run),
+            readiness: tally.readiness(),
         });
     }
     out
@@ -127,89 +166,81 @@ pub(crate) fn written_text(options: &Options) -> String {
     }
 }
 
+/// The counts of the run, and its exit code and verdict. `cloud` is the engine: the verdict of a
+/// run with no counted check names it.
 pub(super) fn summarize(
     checks: &[CheckResult],
-    sections: &[SectionScore],
+    cloud: &str,
     options: &Options,
     cluster_gone: bool,
 ) -> Summary {
     let count = |f: &dyn Fn(&CheckResult) -> bool| checks.iter().filter(|c| f(c)).count() as u32;
-    let ran = sections.iter().map(|s| s.ran).sum();
-    let passed = sections.iter().map(|s| s.passed).sum();
-    let failed = count(&|c| c.counts_as_failure);
-    let probe_failed = count(&|c| {
-        c.verdict == Verdict::Failed
-            && c.level == Level::Probe
-            && c.severity == Severity::Fail
-            && !c.counts_as_failure
-    });
-    let warned = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Warn);
-    let noted = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Note);
-    let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
-    // a note is outside the readiness whether it ran or not, as `ran` omits it
-    let not_run = count(&|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note);
-    let not_run_reasons = not_run_reasons(checks.iter());
-    let skipped = count(&|c| c.verdict == Verdict::Skipped);
-    let errors = count(&|c| c.verdict == Verdict::Error);
-    let counted = Summary {
+    let tally = Tally::of(checks);
+    let summary = Summary {
         rules: checks.len() as u32,
-        ran,
-        passed,
-        failed,
-        probe_failed,
-        warned,
-        noted,
-        not_run,
-        not_run_reasons,
-        not_checked,
-        skipped,
-        errors,
-        readiness: readiness_of(passed, ran, not_run),
+        ran: tally.ran(),
+        counted: count(&|c| {
+            matches!(c.verdict, Verdict::Passed | Verdict::Failed)
+                && is_counted(c.level, c.severity, options.strict)
+        }),
+        passed: tally.passed,
+        failed: tally.failed,
+        probe_failed: tally.probe_failed,
+        warned: tally.warned,
+        noted: tally.noted,
+        not_run: tally.not_run,
+        not_run_reasons: not_run_reasons(checks.iter()),
+        not_checked: count(&|c| c.verdict == Verdict::NotChecked),
+        skipped: count(&|c| c.verdict == Verdict::Skipped),
+        errors: count(&|c| c.verdict == Verdict::Error),
+        readiness: tally.readiness(),
         exit_code: 0,
         verdict: String::new(),
     };
-    let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready, cluster_gone);
+    let (exit_code, verdict) = exit_and_verdict(checks, &summary, cloud, options, cluster_gone);
     Summary {
         exit_code,
         verdict,
-        ..counted
+        ..summary
     }
 }
 
-/// The exit code and the verdict line of a run, from its counts. `ready` is the readiness that the
-/// run needs. `cluster_gone` is true when a watch ended because Palette deleted the cluster: an
-/// `OK` verdict then says so.
+/// The exit code and the verdict line of a run, from its counts. `cloud` is the engine, and
+/// `options` give the readiness that the run needs. `cluster_gone` is true when a watch ended
+/// because Palette deleted the cluster: a verdict with no failure then says so.
 fn exit_and_verdict(
     checks: &[CheckResult],
     summary: &Summary,
-    ready: Option<f64>,
+    cloud: &str,
+    options: &Options,
     cluster_gone: bool,
 ) -> (u8, String) {
     let Summary {
-        ran,
         failed,
-        probe_failed,
         errors,
         readiness,
         ..
     } = *summary;
-    let under_ready = match (ready, readiness) {
+    let under_ready = match (options.ready, readiness) {
         (Some(want), Some(have)) => have < want,
         (Some(_), None) => true,
         _ => false,
     };
-    if failed > 0 {
-        let ids: Vec<&str> = checks
+    let ids = |f: &dyn Fn(&CheckResult) -> bool| {
+        checks
             .iter()
-            .filter(|c| c.counts_as_failure)
+            .filter(|c| f(c))
             .map(|c| c.id.as_str())
-            .collect();
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if failed > 0 {
         (
             1,
             format!(
                 "FAIL: {} failed: {}",
                 count_of(failed as usize, "check"),
-                ids.join(", ")
+                ids(&|c| c.counts_as_failure)
             ),
         )
     } else if under_ready {
@@ -217,46 +248,49 @@ fn exit_and_verdict(
             1,
             format!(
                 "NOT READY: readiness {} is under {}",
-                readiness.map_or_else(|| "none".to_string(), percent),
-                percent(ready.unwrap_or(0.0))
+                options.readiness_text(&readiness.map_or_else(|| "none".to_string(), percent)),
+                percent(options.ready.unwrap_or(0.0))
             ),
         )
     } else if errors > 0 {
-        let ids: Vec<&str> = checks
-            .iter()
-            .filter(|c| c.verdict == Verdict::Error)
-            .map(|c| c.id.as_str())
-            .collect();
         (
             2,
             format!(
                 "ERROR: {} could not answer: {}",
                 count_of(errors as usize, "check"),
-                ids.join(", ")
+                ids(&|c| c.verdict == Verdict::Error)
             ),
         )
-    } else if ran == 0 {
-        let gone = if cluster_gone {
-            "the cluster is gone; "
-        } else {
-            ""
-        };
-        (0, format!("OK: {gone}no check ran"))
     } else {
-        let probes = if probe_failed > 0 {
-            format!(
-                "; {} failed, not counted",
-                count_of(probe_failed as usize, "probe")
-            )
-        } else {
-            String::new()
-        };
-        let passed = if cluster_gone {
-            "the cluster is gone; no counted check failed"
-        } else {
-            "each counted check passed"
-        };
-        (0, format!("OK: {passed}{probes}"))
+        (0, no_failure_verdict(summary, cloud, cluster_gone))
+    }
+}
+
+/// The verdict of a run in which no counted check failed and no check gave an error, with the
+/// failed probes. A run with no counted check is `NOT COUNTED`, and not `OK`: no check of the run
+/// can fail it. `cloud` is the engine, which the words name.
+fn no_failure_verdict(summary: &Summary, cloud: &str, cluster_gone: bool) -> String {
+    let gone = if cluster_gone {
+        "the cluster is gone; "
+    } else {
+        ""
+    };
+    let probes = if summary.probe_failed > 0 {
+        format!(
+            "; {} failed, not counted",
+            count_of(summary.probe_failed as usize, "probe")
+        )
+    } else {
+        String::new()
+    };
+    if summary.ran == 0 {
+        format!("NOT COUNTED: {gone}no check ran on {cloud}")
+    } else if summary.counted == 0 {
+        format!("NOT COUNTED: {gone}no check counted on {cloud}{probes}")
+    } else if cluster_gone {
+        format!("OK: {gone}no counted check failed{probes}")
+    } else {
+        format!("OK: each counted check passed{probes}")
     }
 }
 

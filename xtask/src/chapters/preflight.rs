@@ -200,6 +200,25 @@ pub(super) fn run(r: &mut Runner) {
     preflight_second_command(r);
     preflight_clouds(r);
     preflight_gone(r);
+    preflight_denied(r);
+}
+
+/// The chapter `preflight-denied`: a key whose role does not give `cluster.create`. The validate
+/// route of the create needs it, so Palette refuses the route with HTTP 403, and each rule that
+/// sends the route gives `ERROR`.
+fn preflight_denied(r: &mut Runner) {
+    r.chapter("preflight-denied", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.write_file("cluster.json", &preflight_entity("payments", A111));
+    preflight_routes(r, DEV);
+    r.tenant(|t| t.deny_create(DEV, "aws"));
+    r.step(
+        "preflight-denied",
+        2,
+        false,
+        "strata preflight cluster.json --cloud aws --tier palette --no-exec --quiet --rule palette-validate --rule worker-cpu-floor --rule pack-dependency",
+    );
 }
 
 /// A script named `aws` for a rule that runs two commands. The nodes role holds 21 policies, and
@@ -325,7 +344,7 @@ fn preflight_report(r: &mut Runner) {
         "preflight-json-summary",
         0,
         false,
-        "strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'",
+        "strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, probeFailed, warned, notChecked, readiness}]}'",
     );
     r.step(
         "preflight-out",

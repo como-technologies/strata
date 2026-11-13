@@ -207,6 +207,18 @@ impl Ran {
         }
     }
 
+    /// The request to Palette that failed: a request with no answer. A check with `each` stops at
+    /// it, so it is the last request. None when each request has an answer, or the check sent
+    /// none. A command with a read of Palette has its read here when the read failed.
+    pub fn failed_request(&self) -> Option<&Call> {
+        match self {
+            Ran::Request(call) => Some(call),
+            Ran::Requests(calls) => calls.last(),
+            Ran::Nothing | Ran::Exec { .. } => None,
+        }
+        .filter(|call| call.answer.is_none())
+    }
+
     /// The requests of a check with `each`, one for each item, in the order of the list. For a
     /// command with a read of Palette, the one request of the read.
     pub fn requests(&self) -> &[Call] {

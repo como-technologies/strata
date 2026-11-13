@@ -4,7 +4,9 @@ use serde_json::{Value, json};
 use strata::api::codes::OPERATION_FORBIDDEN_CODE;
 
 use super::Tenant;
-use super::routes::{CLUSTERS, PROFILES, cluster_route, profile_route, repave_route};
+use super::routes::{
+    CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
+};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -161,15 +163,38 @@ impl Tenant {
     /// [`OPERATION_FORBIDDEN_CODE`], and a message that names the permission. No live run shows it
     /// yet.
     pub fn forbid(&self, project: &str, path: &str) {
+        self.deny(
+            project,
+            path,
+            500,
+            OPERATION_FORBIDDEN_CODE,
+            &operation_forbidden_message("cluster.get"),
+        );
+    }
+
+    /// Make Palette refuse the validate route of the create of `cloud` in `project`, as it does
+    /// for a key whose role does not give `cluster.create`. The route needs it, also for a body
+    /// that creates nothing. Palette answers HTTP 403 with the code `AccessDenied`, and the
+    /// message names the permission and its scopes.
+    pub fn deny_create(&self, project: &str, cloud: &str) {
+        self.deny(
+            project,
+            &cluster_validate_route(cloud),
+            403,
+            "AccessDenied",
+            "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+        );
+    }
+
+    /// Make Palette refuse `path` in `project` with HTTP `status`, `code`, and `message`. The
+    /// answer of the route goes, so each request gets the refusal.
+    fn deny(&self, project: &str, path: &str, status: u16, code: &str, message: &str) {
         let file = self.doc(project, path);
         if file.is_file() {
             std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         }
-        let refused = crate::palette::refused(&file, 500);
-        let body = json!({
-            "code": OPERATION_FORBIDDEN_CODE,
-            "message": operation_forbidden_message("cluster.get"),
-        });
+        let refused = crate::palette::refused(&file, status);
+        let body = json!({"code": code, "message": message});
         std::fs::write(&refused, body.to_string() + "\n")
             .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
     }
