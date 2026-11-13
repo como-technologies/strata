@@ -29,8 +29,37 @@ fn tags_for(tagged: &[&str]) -> MemoryApi {
     MemoryApi::new().with(TAGS, json!({"layer": "addon", "tags": tags}))
 }
 
-fn picked(api: &MemoryApi, entries: &[Value], version: &str) -> Option<String> {
+/// The pick of `version` of `entries` in `reg-public`.
+fn pick(api: &MemoryApi, entries: &[Value], version: &str) -> Option<Picked> {
     picked_in(&Palette::new(api), entries, "nginx", "reg-public", version).unwrap()
+}
+
+/// The version that [`pick`] takes.
+fn picked(api: &MemoryApi, entries: &[Value], version: &str) -> Option<String> {
+    pick(api, entries, version).map(|p| p.version)
+}
+
+/// Issue #625. `pack:<name>@latest` names the highest pre-release that it skips, of the versions
+/// that the registry serves. An exact version skips nothing.
+#[test]
+fn latest_names_the_highest_pre_release_that_it_skips_of_the_versions_that_the_registry_serves() {
+    // the registry gives no tag to 1.31.0-rc.1, so it does not serve that version
+    let api = tags_for(&["1.29.0", "1.30.0-rc.1"]);
+    let entries = [
+        entry("reg-public", "1.29.0", ""),
+        entry("reg-public", "1.30.0-rc.1", ""),
+        entry("reg-public", "1.31.0-rc.1", ""),
+    ];
+    let latest = pick(&api, &entries, LATEST).unwrap();
+    assert_eq!(
+        (latest.version.as_str(), latest.skipped.as_deref()),
+        ("1.29.0", Some("1.30.0-rc.1"))
+    );
+    assert_eq!(
+        latest.skip_words(),
+        "; it skips 1.30.0-rc.1, a pre-release by SemVer"
+    );
+    assert_eq!(pick(&api, &entries, "1.29.0").unwrap().skipped, None);
 }
 
 #[test]

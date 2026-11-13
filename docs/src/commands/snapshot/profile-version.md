@@ -57,9 +57,10 @@ pipeline that publishes a build on each merge gets one line. In
 {{#include ../../output/pipeline-latest.txt}}
 ```
 
-`-q` removes the note, as it removes each progress note. `2.2.8-hotfix` is a
-pre-release by SemVer, below `2.2.8`, also when a team means a later build. Give
-a later build a higher number, such as `2.2.9`.
+`-q` removes the note, as it removes each progress note. An app profile gets the
+same note with its ref, such as `@latest is appprofile:shop@1.0.0`. `2.2.8-hotfix`
+is a pre-release by SemVer, below `2.2.8`, also when a team means a later build.
+Give a later build a higher number, such as `2.2.9`.
 
 A develop build such as `1.1.8.develop` does not parse as a semantic version.
 Palette reads it as `1.1.8`. Strata puts it below `1.1.8`, and `@latest` skips
@@ -165,6 +166,10 @@ error. The record of each other subject names its registries in the same way.
 values that the registry ships. `verify` on that record reads the registry
 again, so it says whether a published pack version still serves the content it
 served. See [What changed between two pack versions](../../use-cases/pack-versions.md).
+
+The note `recording pack` names the version that the record takes. For
+`pack:<name>@latest`, it also names the highest pre-release that the ref skips:
+see [Which version is the newest](../packs.md#which-version-is-the-newest).
 
 ## Where to keep a record
 

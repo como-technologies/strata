@@ -5,6 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::api::{MemoryApi, RawCluster, ReadErrors};
 use crate::model::scope::ProfileScope;
+use crate::reference::LATEST;
 
 fn listing() -> Value {
     json!({"items": [
@@ -776,47 +777,43 @@ fn each_template_of_a_route_that_gives_a_closed_set_starts_from_its_collection()
     );
 }
 
-/// Issue #625. The note of `@latest` names the version that it takes, and the highest pre-release
-/// above it, which it skips. A pre-release that parses is one by Semantic Versioning. Another
-/// form, such as `1.2.develop`, is one by the order of strata, so the note omits `by SemVer`.
+/// Issue #625. `@latest` of a profile and of an app profile gives the uid of the version that it
+/// takes, and the highest pre-release above it, which it skips. An exact version skips nothing.
 #[test]
-fn the_note_of_latest_names_the_version_and_the_highest_pre_release_that_it_skips() {
-    fn listed(name: &str, uid: &str, version: &str) -> Value {
-        json!({"metadata": {"name": name, "uid": uid}, "spec": {"version": version}})
-    }
-    let listing = json!({"items": [
-        listed("barney", "u1", "1.0.0"),
-        listed("barney", "u2", "1.0.1-mr2.770685"),
-        listed("barney", "u3", "1.0.1-mr1.770600"),
-        listed("barney", "u4", "0.9.0-rc.1"),
-        listed("hotfix", "u5", "2.2.8"),
-        listed("hotfix", "u6", "2.2.8-hotfix"),
-        listed("develop", "u7", "1.1.10"),
-        listed("develop", "u8", "1.2.develop"),
-        listed("rc", "u9", "1.0.0-rc.1"),
-        listed("rc", "u10", "1.0.0-rc.2"),
-    ]});
-    let p = Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
-    for (name, uid, note) in [
+fn latest_of_a_profile_and_of_an_app_profile_names_the_pre_release_that_it_skips() {
+    let listed = |(name, uid, version): &(&str, &str, &str)| json!({"metadata": {"name": name, "uid": uid}, "spec": {"version": version}});
+    let items: Vec<Value> = [
+        ("barney", "u1", "1.0.0"),
+        ("barney", "u2", "1.0.1-mr2.770685"),
+        ("barney", "u3", "1.0.1-mr1.770600"),
+        ("hotfix", "u4", "2.2.8"),
+        ("hotfix", "u5", "2.2.8-hotfix"),
+    ]
+    .iter()
+    .map(listed)
+    .collect();
+    let api = MemoryApi::new()
+        .with(PROFILE_LISTING, json!({"items": items}))
+        .with(APP_PROFILE_LISTING, json!({"appProfiles": items}));
+    let p = Palette::new(api);
+    let pick = |found: profiles::PickedUid| {
+        let skipped = found.picked.skipped;
+        (found.uid, found.picked.version, skipped)
+    };
+    let want = |uid: &str, version: &str, skipped: Option<&str>| {
         (
-            "barney",
-            "u1",
-            "@latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer",
-        ),
-        // `2.2.8-hotfix` is below `2.2.8` by SemVer, so `@latest` skips nothing above `2.2.8`
-        ("hotfix", "u5", "@latest is hotfix@2.2.8"),
-        (
-            "develop",
-            "u7",
-            "@latest is develop@1.1.10; it skips 1.2.develop, a pre-release",
-        ),
-        // a name with only pre-releases gives its highest one, and skips none
-        ("rc", "u10", "@latest is rc@1.0.0-rc.2"),
-    ] {
-        let latest = p.latest(name).unwrap();
-        assert_eq!(
-            (latest.uid.as_str(), latest.note(name)),
-            (uid, note.to_string())
-        );
-    }
+            uid.to_string(),
+            version.to_string(),
+            skipped.map(str::to_string),
+        )
+    };
+    let barney = want("u1", "1.0.0", Some("1.0.1-mr2.770685"));
+    // `2.2.8-hotfix` is below `2.2.8` by SemVer, so `@latest` skips nothing above `2.2.8`
+    let hotfix = want("u4", "2.2.8", None);
+    assert_eq!(pick(p.latest("barney").unwrap()), barney);
+    assert_eq!(pick(p.app_profile_at("barney", LATEST).unwrap()), barney);
+    assert_eq!(pick(p.latest("hotfix").unwrap()), hotfix);
+    assert_eq!(pick(p.app_profile_at("hotfix", LATEST).unwrap()), hotfix);
+    let exact = p.app_profile_at("barney", "1.0.0").unwrap();
+    assert_eq!(pick(exact), want("u1", "1.0.0", None));
 }

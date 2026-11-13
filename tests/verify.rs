@@ -26,18 +26,18 @@ use strata::term::progress::Progress;
 
 use common::CommandExt;
 use common::{
-    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
-    OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, PackFixture,
-    REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT, app_profile_route,
-    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
-    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
-    cluster_route, cluster_variables_route, edge_host_route, fetch_examples,
-    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
-    no_manifests, no_template, no_variables, pack_entity_route, pack_listing_route, post,
-    profile_document, profile_route, project_listing, read_json, resolved_values_route,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route, write_record,
-    write_yaml,
+    APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
+    EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING,
+    PackFixture, REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
+    app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
+    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
+    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
+    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
+    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
+    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
+    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
+    write_record, write_yaml,
 };
 
 #[test]
@@ -13429,7 +13429,7 @@ fn verify_and_a_snapshot_of_a_group_with_a_password_that_strata_cannot_mask_give
 /// property `replicas` at `replicas`.
 fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
     api.with(
-        "/v1/dashboard/appProfiles/metadata",
+        APP_PROFILE_LISTING,
         serde_json::json!({"appProfiles": [
             {"metadata": {"name": "shop", "uid": "ap1"}, "spec": {"version": "1.0.0"}},
             {"metadata": {"name": "shop", "uid": "ap0"}, "spec": {"version": "0.9.0"}},
@@ -13444,7 +13444,7 @@ fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
             "status": {"inUseApps": [{"kind": "appdeployment", "uid": "d1", "name": "shop-dev"}]}}),
     )
     .with(
-        "/v1/appProfiles/ap1/tiers",
+        app_tiers_route("ap1"),
         serde_json::json!({"spec": {"appTiers": [
             {"metadata": {"name": "web", "uid": "t1"},
              "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
@@ -13548,7 +13548,7 @@ fn app_tiers(web_order: Option<i64>) -> Value {
 
 /// A record of `appprofile:ap1` from an API that gives `tiers` for its tiers.
 fn app_record(tiers: Value) -> Snapshot {
-    let api = serve_app_profile(MemoryApi::new(), "2").with("/v1/appProfiles/ap1/tiers", tiers);
+    let api = serve_app_profile(MemoryApi::new(), "2").with(app_tiers_route("ap1"), tiers);
     common::snapshot_of(&api, "appprofile:ap1").unwrap()
 }
 

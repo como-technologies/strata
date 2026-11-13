@@ -4117,7 +4117,7 @@ fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_insta
         "#!/usr/bin/env bash\nn=$(( $(cat \"$FAKE_ROUTES/n\" 2> /dev/null || echo 0) + 1 ))\necho $n > \"$FAKE_ROUTES/n\"\necho \"{\\\"uid\\\":\\\"ap-$n\\\"}\"\n",
     );
     stage.route(
-        "/v1/appProfiles/ap-1/tiers",
+        &app_tiers_route("ap-1"),
         r#"{"spec":{"appTiers":[
             {"metadata":{"name":"tier1","uid":"t-1"},"spec":{"type":"manifest","version":"1.0.0","installOrder":2}},
             {"metadata":{"name":"tier2","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0","installOrder":5}}]}}"#,

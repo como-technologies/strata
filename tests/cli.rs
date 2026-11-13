@@ -2351,6 +2351,49 @@ fn barney_tenant() -> String {
     common::serve_routes(routes)
 }
 
+/// The stand-in of a tenant with two versions of the app profile `shop`: `1.0.0` at `ap1`, and the
+/// pre-release `1.0.1-rc.1` above it at `ap2`. Each version has one helm tier.
+fn shop_tenant() -> String {
+    let versions = [("ap1", "1.0.0"), ("ap2", "1.0.1-rc.1")];
+    let mut routes = std::collections::BTreeMap::new();
+    let listed: Vec<serde_json::Value> = versions
+        .iter()
+        .map(|(uid, version)| {
+            serde_json::json!({"metadata": {"name": "shop", "uid": uid}, "spec": {"version": version}})
+        })
+        .collect();
+    routes.insert(
+        common::APP_PROFILE_LISTING.to_string(),
+        serde_json::json!({"appProfiles": listed}),
+    );
+    for (uid, version) in versions {
+        routes.insert(
+            common::app_profile_route(uid),
+            serde_json::json!({"metadata": {"name": "shop", "uid": uid},
+                "spec": {"version": version, "template": {"appTiers": [
+                    {"name": "web", "uid": "t1", "type": "helm", "version": "2.1.0"}]}}}),
+        );
+        routes.insert(
+            common::app_tiers_route(uid),
+            serde_json::json!({"spec": {"appTiers": [{"metadata": {"name": "web", "uid": "t1"},
+                "spec": {"type": "helm", "version": "2.1.0", "registryUid": "r1",
+                    "sourceAppTierUid": "s1", "values": "replicaCount: 2\n"}}]}}),
+        );
+    }
+    common::serve_routes(routes)
+}
+
+/// A run of strata with `args` against the stand-in at `api`, with the home `home`. The run writes
+/// its progress notes.
+fn against(api: &str, home: &Path, args: &[&str]) -> Run {
+    let mut command = strata_command();
+    isolate_palette(&mut command, home)
+        .env("PALETTE_API", api)
+        .env_remove("STRATA_QUIET")
+        .args(args);
+    Run::of(&mut command)
+}
+
 /// Issue #625. A ref `<name>@latest` names the version that it takes, and the highest pre-release
 /// above that version, which it skips. The draft of the version and `consumers` print the same
 /// note. A quiet run writes no note, as for each other progress note.
@@ -2360,14 +2403,7 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
     let home = tempfile::tempdir().unwrap();
     let out = home.path().join("latest.json");
     let out = out.to_str().unwrap();
-    let strata = |args: &[&str]| {
-        let mut command = strata_command();
-        isolate_palette(&mut command, home.path())
-            .env("PALETTE_API", &api)
-            .env_remove("STRATA_QUIET")
-            .args(args);
-        Run::of(&mut command)
-    };
+    let strata = |args: &[&str]| against(&api, home.path(), args);
     let note =
         "strata: @latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer\n";
     for reference in ["barney@latest", "barney@latest@draft"] {
@@ -2394,6 +2430,35 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
     );
     // an exact version names its version already, so it writes no note
     let r = strata(&["snapshot", "barney@1.0.0", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("@latest"), "{}", r.err);
+}
+
+/// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the
+/// version as its ref. So does `consumers`.
+#[test]
+fn an_app_profile_at_latest_names_its_ref_and_the_pre_release_it_skips() {
+    let api = shop_tenant();
+    let home = tempfile::tempdir().unwrap();
+    let out = home.path().join("shop.json");
+    let out = out.to_str().unwrap();
+    let strata = |args: &[&str]| against(&api, home.path(), args);
+    let note = "strata: @latest is appprofile:shop@1.0.0; it skips 1.0.1-rc.1, a pre-release by \
+                SemVer\n";
+    let r = strata(&["snapshot", "appprofile:shop@latest", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    assert!(
+        r.err.contains("strata: fetching app profile ap1\n"),
+        "{}",
+        r.err
+    );
+    assert_eq!(read_json(Path::new(out))["source"]["version"], "1.0.0");
+    let r = strata(&["consumers", "appprofile:shop@latest"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    // an exact version names its version already, so it writes no note
+    let r = strata(&["snapshot", "appprofile:shop@1.0.0", "-o", out]);
     assert_eq!(r.code, 0, "{}", r.err);
     assert!(!r.err.contains("@latest"), "{}", r.err);
 }

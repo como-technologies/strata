@@ -1,0 +1,5 @@
+$ strata snapshot 'pack:Public Repo/cert-manager@latest' -o cert-manager.json
+strata: looking up project dev
+strata: recording pack cert-manager@1.21.1 from registry Public Repo; it skips 1.22.0-rc.1, a pre-release by SemVer
+strata: resolving cert-manager@1.21.1 against the registry
+strata: wrote cert-manager.json (root c227dd0f9313)

@@ -421,7 +421,7 @@ pub fn app_profile_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let uid = palette.app_profile_uid(id, version)?;
+    let uid = palette.app_profile_uid(id, version, progress)?;
     Snapshot::from_app_profile(
         &palette.fetch_app_profile(&uid, progress)?,
         reference,
