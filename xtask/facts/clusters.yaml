@@ -124,7 +124,7 @@ facts:
     stand_in:
       - v1/spectroclusters/{uid}/config/namespaces
     live: []
-    unchecked: No script reads the namespaces of a cluster. A read by hand shows the empty list of a deleted cluster.
+    unchecked: No script reads the namespaces of a cluster with a key that can read them. A read by hand shows the empty list of a deleted cluster.
     pages:
       - reference/palette-api.md#a-cluster
       - internals/palette/clusters.md#cluster-tiers

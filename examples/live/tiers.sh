@@ -26,16 +26,22 @@
 #      config; a new record keeps them in the shape tier; compare of a record from before names
 #      them, with exit 0. Then the pool as before. `tiers.sh 7` runs it alone, and no other
 #      FROM_STAGE runs it
+#   8  a third key, from STRATA_LIVE_NARROW_KEY. Its user has a role in the project that does not
+#      give cluster.get, such as Cluster Profile Viewer. It cannot read the role bindings, the
+#      namespaces, or the repave of cluster A. The stage records the status and the code of each
+#      answer. The code of Palette shows HTTP 500 with the code OperationForbidden (#665). It
+#      writes nothing. `tiers.sh 8` runs it alone, and no other FROM_STAGE runs it. With no
+#      variable set, it says "could not check" and exits 2
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5, 6, and
-# 7 add no machine. Results go under
+# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 8
+# add no machine. Results go under
 # runs/<UTC time>/tiers/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=tiers
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2|3|4|5|6|7) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7|8) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/tiers}
@@ -52,7 +58,8 @@ load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid)
 release=$(out profile_name)
 [ -n "$C" ] || die "no cluster A; run just live-up"
-# the role bindings of cluster A: stage 5 reads and puts them, and stage 6 reads them with a second key
+# the role bindings of cluster A: stage 5 reads and puts them, and stages 6 and 8 read them with
+# another key
 rbacs_route=/v1/spectroclusters/$C/config/rbacs
 export PALETTE_PROJECT_UID=$(out project_uid)
 
@@ -176,12 +183,12 @@ if stage 5 "the subjects of a role binding of cluster A"; then
     bash -c "diff <(jq -S '[.items[]?.spec.bindings]' rbac-before.out) <(jq -S '[.items[]?.spec.bindings]' rbac-after-read.out)"
 fi
 
-# limited_read: read the role bindings of cluster A with the second key. api.sh get-status prints
-# the status and the body of the refusal; the key never leaves the environment of that one call.
-limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get-status "$rbacs_route"; }
-# refusal_code: the error code in the body of the refusal that limited-read.out holds after its
-# status line
-refusal_code() { sed 1d limited-read.out | jq -r '.code // empty'; }
+# read_with VAR PATH: GET PATH with the key in the variable VAR, such as STRATA_LIVE_LIMITED_KEY.
+# api.sh get-status prints the status and the body of the answer. The key never leaves the
+# environment of that one call, and no argument holds it.
+read_with() { PALETTE_API_KEY=${!1} "$live/api.sh" get-status "$2"; }
+# refusal_code FILE: the error code in the body of the refusal that FILE holds after its status line
+refusal_code() { sed 1d "$1" | jq -r '.code // empty'; }
 # limited_record: a record of cluster A that strata reads with the second key
 limited_record() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$strata" snapshot "cluster:$C" -o limited-record.json; }
 
@@ -190,9 +197,10 @@ if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of clust
   [ -n "${STRATA_LIVE_LIMITED_KEY:-}" ] \
     || die "could not check: set STRATA_LIVE_LIMITED_KEY to a key that cannot read config/rbacs of cluster A"
   check limited-control 0 "#276: the key of the example reads the role bindings of cluster A" -- rbacs
-  check limited-read 0 "#276: the second key does not read them: api.sh get-status prints the refusal of Palette" -- limited_read
+  check limited-read 0 "#276: the second key does not read them: api.sh get-status prints the refusal of Palette" -- \
+    read_with STRATA_LIVE_LIMITED_KEY "$rbacs_route"
   check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- grep -qx 'HTTP 500' limited-read.out
-  check limited-code ? "#276: the error code of the body that Palette answers" -- refusal_code
+  check limited-code ? "#276: the error code of the body that Palette answers" -- refusal_code limited-read.out
   check limited-code-says 0 "#276: the code is ResourceAccessDenied" -- grep -qx ResourceAccessDenied limited-code.out
   check limited-message 0 "#276: the message names the project: Project '<uid>' access denied" -- \
     grep -q "Project '$PALETTE_PROJECT_UID' access denied" limited-read.out
@@ -265,6 +273,37 @@ if [ "$from" = 7 ] && stage 7 "an override on a machine pool of cluster A"; then
     "$strata" compare pool-before.json "cluster:$C"
   check pool-restored-says 0 "and it names no change of the shape tier" -- \
     bash -c "! grep -q 'shape CHANGED' pool-restored.out"
+fi
+
+# narrow_routes: the routes of cluster A that stage 8 reads with the third key, as NAME PATH. Each
+# one needs the permission cluster.get.
+narrow_routes() {
+  cat << EOF
+rbacs $rbacs_route
+namespaces /v1/spectroclusters/$C/config/namespaces
+repave /v1/spectroclusters/$C/repave/status
+EOF
+}
+# forbidden_says FILE: the answer that FILE holds is HTTP 500 with the code OperationForbidden, and
+# its message names the permission 'cluster.get'
+forbidden_says() {
+  [ "$(head -n 1 "$1")" = "HTTP 500" ] || return 1
+  sed 1d "$1" | jq -e --arg p "'cluster.get'" \
+    '.code == "OperationForbidden" and (.message // "" | contains($p))' > /dev/null
+}
+
+# stage 8 runs only when its number is given: it needs a third key
+if [ "$from" = 8 ] && stage 8 "a key whose role does not give cluster.get"; then
+  [ -n "${STRATA_LIVE_NARROW_KEY:-}" ] \
+    || die "could not check: set STRATA_LIVE_NARROW_KEY to a key with a role in the project that does not give cluster.get"
+  check narrow-control 0 "#665: the key of the example reads the role bindings of cluster A" -- rbacs
+  while read -r name path; do
+    check "narrow-$name" 0 "#665: GET $path with the third key: api.sh get-status prints the answer of Palette" -- \
+      read_with STRATA_LIVE_NARROW_KEY "$path"
+    check "narrow-$name-code" ? "#665: the error code of that answer" -- refusal_code "narrow-$name.out"
+    check "narrow-$name-says" 0 "#665: the answer is HTTP 500 with the code OperationForbidden, and the message names 'cluster.get'" -- \
+      forbidden_says "narrow-$name.out"
+  done < <(narrow_routes)
 fi
 
 echo

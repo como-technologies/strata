@@ -8,7 +8,9 @@ use std::process::{Command, Output};
 
 use common::*;
 use strata::api::PROJECT_UID_HEADER;
-use strata::api::codes::{PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE};
+use strata::api::codes::{
+    OPERATION_FORBIDDEN_CODE, PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
+};
 use strata::model::pack_type::PackType;
 
 // ---- examples/live helpers -------------------------------------------------------------------
@@ -3612,7 +3614,7 @@ fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_
 #[test]
 fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bindings_back() {
     let mut stage = baseline_stage();
-    let rbacs = "/v1/spectroclusters/c-a/config/rbacs";
+    let rbacs = &cluster_rbacs_route("c-a");
     stage.route(
         rbacs,
         r#"{"items":[{"metadata":{"name":"ops"},"spec":{"bindings":[{"type":"RoleBinding","namespace":"ops",
@@ -3669,6 +3671,10 @@ fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bi
         !steps.contains("== stage 6"),
         "stage 6 needs a second key, so it runs only when asked: {steps}"
     );
+    assert!(
+        !steps.contains("== stage 8"),
+        "stage 8 needs a third key, so it runs only when asked: {steps}"
+    );
 
     let ops = serde_json::json!({"spec": {"bindings": [{"type": "RoleBinding", "namespace": "ops",
         "role": {"kind": "Role", "name": "edit"}, "subjects": [{"type": "Group", "name": "ops"}]}]}});
@@ -3721,7 +3727,7 @@ exit 0
 fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_refusal() {
     let mut stage = baseline_stage();
     stage.command("fake-strata", FAKE_STRATA_LIMITED);
-    let rbacs = "/v1/spectroclusters/c-a/config/rbacs";
+    let rbacs = &cluster_rbacs_route("c-a");
     stage.route(rbacs, r#"{"items":[]}"#);
     // an active user with no role in the project: Palette answers HTTP 500, and not 403
     stage.route_as(
@@ -3791,7 +3797,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
 #[test]
 fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_500() {
     let mut stage = baseline_stage();
-    let rbacs = "/v1/spectroclusters/c-a/config/rbacs";
+    let rbacs = &cluster_rbacs_route("c-a");
     stage.route(rbacs, r#"{"items":[]}"#);
     stage.route_as(
         rbacs,
@@ -3823,6 +3829,107 @@ fn tiers_sh_stage_6_says_could_not_check_and_exits_2_without_the_second_key() {
     assert!(!steps.contains("limited-"), "no check ran: {steps}");
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
     assert!(!calls.contains("config/rbacs"), "no request: {calls}");
+}
+
+/// The routes of cluster A that tiers.sh stage 8 reads with the third key, by the name of their
+/// checks. Each one needs the permission `cluster.get`.
+fn narrow_routes() -> [(&'static str, String); 3] {
+    [
+        ("rbacs", cluster_rbacs_route("c-a")),
+        ("namespaces", cluster_namespaces_route("c-a")),
+        ("repave", cluster_repave_route("c-a")),
+    ]
+}
+
+/// A stage of tiers.sh stage 8. Each route of [`narrow_routes`] answers the third key with
+/// `status` and the code `code`, with a message that names `cluster.get`.
+fn narrow_stage(status: u16, code: &str) -> Stage {
+    let mut stage = baseline_stage();
+    stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
+    let refusal =
+        format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);
+    for (_, route) in narrow_routes() {
+        stage.route_as(&route, "narrow-k", status, &refusal);
+    }
+    stage.env("STRATA_LIVE_NARROW_KEY", "narrow-k");
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_records_each_refusal() {
+    // the answer that the code of Palette shows for a role without cluster.get
+    let stage = narrow_stage(500, OPERATION_FORBIDDEN_CODE);
+    let (o, steps) = stage.run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(&steps, &["narrow-control"]);
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    for (name, route) in narrow_routes() {
+        passed(
+            &steps,
+            &[&format!("narrow-{name}"), &format!("narrow-{name}-says")],
+        );
+        let code = format!("narrow-{name}-code");
+        assert!(has_verdict(&steps, "SEEN", &code), "{code}: {steps}");
+        assert_eq!(
+            std::fs::read_to_string(stage.path(&format!("out/{code}.out"))).unwrap(),
+            format!("{OPERATION_FORBIDDEN_CODE}\n"),
+            "the check records the error code of the body"
+        );
+        let answer =
+            std::fs::read_to_string(stage.path(&format!("out/narrow-{name}.out"))).unwrap();
+        assert_eq!(answer.lines().next(), Some("HTTP 500"), "{answer}");
+        let reads = calls
+            .lines()
+            .filter(|l| l.ends_with(route.as_str()))
+            .count();
+        // the control reads the role bindings with the key of the example
+        let want = if name == "rbacs" { 2 } else { 1 };
+        assert_eq!(reads, want, "{route}: {calls}");
+    }
+    assert!(
+        !calls.contains("PUT") && !calls.contains("POST") && !calls.contains("PATCH"),
+        "the stage writes nothing: {calls}"
+    );
+    assert!(!steps.contains("== stage 6"), "stage 8 runs alone: {steps}");
+    assert!(!steps.contains("== stage 7"), "stage 8 runs alone: {steps}");
+    let printed = format!("{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        !printed.contains("narrow-k"),
+        "the key is not printed: {printed}"
+    );
+    for (name, content) in files_under(&stage.path("out")) {
+        assert!(!content.contains("narrow-k"), "{name} holds the key");
+    }
+}
+
+#[test]
+fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access_denied() {
+    // the answer that the stand-in gave before #665
+    let (o, steps) = narrow_stage(403, "AccessDenied").run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    for (name, _) in narrow_routes() {
+        passed(&steps, &[&format!("narrow-{name}")]);
+        failed(&steps, &[&format!("narrow-{name}-says")]);
+    }
+}
+
+#[test]
+fn tiers_sh_stage_8_says_could_not_check_and_exits_2_without_the_third_key() {
+    let stage = baseline_stage();
+    let (o, steps) = stage.run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("could not check")
+            && text(&o.stderr).contains("STRATA_LIVE_NARROW_KEY"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("narrow-"), "no check ran: {steps}");
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
+    for (_, route) in narrow_routes() {
+        assert!(!calls.contains(&route), "no request: {calls}");
+    }
 }
 
 /// A `strata` for tiers.sh stage 7. strata-preflight writes the create body of cluster A into the

@@ -1,6 +1,7 @@
 //! The answers of the routes that check a change, and of the routes that report a repave.
 
 use serde_json::{Value, json};
+use strata::api::codes::OPERATION_FORBIDDEN_CODE;
 
 use super::Tenant;
 use super::routes::{CLUSTERS, PROFILES, cluster_route, profile_route, repave_route};
@@ -20,6 +21,12 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
 /// validate route, and a PUT of a profile give it.
 pub fn profile_exists_message(name: &str, version: &str) -> String {
     format!("Cluster Profile with name '{name}' and version '{version}' already exists")
+}
+
+/// The message of the refusal of one object with [`OPERATION_FORBIDDEN_CODE`], to a role that
+/// does not give `permission`, such as `cluster.get`. The message names the permission two times.
+fn operation_forbidden_message(permission: &str) -> String {
+    format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
 }
 
 /// The entries of `packs.results` for a move that a pack does not allow on the clusters of the
@@ -147,18 +154,21 @@ impl Tenant {
         );
     }
 
-    /// Make Palette refuse `GET path` in `project` with HTTP 403. Palette does this for a user
-    /// whose role does not give the permission that the route needs. The body is in the form of
-    /// the bodies of Palette, with the code `AccessDenied`.
+    /// Make Palette refuse `GET path` in `project` to a key whose role does not give `cluster.get`.
+    ///
+    /// `path` is the route of the role bindings, the namespaces, or the repave of a cluster. The
+    /// code of Palette shows the answer to such a key: HTTP 500 with
+    /// [`OPERATION_FORBIDDEN_CODE`], and a message that names the permission. No live run shows it
+    /// yet.
     pub fn forbid(&self, project: &str, path: &str) {
         let file = self.doc(project, path);
         if file.is_file() {
             std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         }
-        let refused = crate::palette::forbidden(&file);
+        let refused = crate::palette::refused(&file, 500);
         let body = json!({
-            "code": "AccessDenied",
-            "message": "cluster.get operation is not permitted, required permissions cluster.get",
+            "code": OPERATION_FORBIDDEN_CODE,
+            "message": operation_forbidden_message("cluster.get"),
         });
         std::fs::write(&refused, body.to_string() + "\n")
             .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
@@ -315,6 +325,30 @@ impl Tenant {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::palette::refused;
+    use crate::tenant::routes::rbacs_route;
+
+    #[test]
+    fn a_read_without_cluster_get_gets_http_500_with_the_code_operation_forbidden() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), std::path::Path::new("/nowhere"));
+        let route = rbacs_route("c1");
+        tenant.put("p1", &route, &json!({"items": []}));
+        tenant.forbid("p1", &route);
+        let answer = tenant.doc("p1", &route);
+        assert!(
+            !answer.exists(),
+            "the refusal takes the place of the answer"
+        );
+        assert!(!refused(&answer, 403).exists(), "Palette answers no 403");
+        let body: Value =
+            serde_json::from_slice(&std::fs::read(refused(&answer, 500)).unwrap()).unwrap();
+        assert_eq!(body["code"], OPERATION_FORBIDDEN_CODE);
+        assert_eq!(
+            body["message"],
+            "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission"
+        );
+    }
 
     #[test]
     fn the_upgrade_refusal_has_the_message_of_a_live_run_for_one_cluster() {

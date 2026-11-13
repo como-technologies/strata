@@ -28,13 +28,20 @@ use crate::model::validation::PaletteRefusal;
 pub(crate) const REFUSAL_CODES: [&str; 8] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
-    "OperationForbidden",
+    OPERATION_FORBIDDEN_CODE,
     "ClusterProfileUpdateValidationFailure",
     "ClusterProfileInvalidPackState",
     "InvalidLimit",
     "AwsKeyPairNotFound",
     "FeatureNotSupported",
 ];
+
+/// The code of the refusal of one object to a key whose role does not give the permission.
+///
+/// Palette answers it with HTTP 500, and the message names the permission. A read of the role
+/// bindings, the namespaces, or the repave of a cluster gets it when the role does not give
+/// `cluster.get`. The code of Palette shows it; no live run shows it yet for these three routes.
+pub const OPERATION_FORBIDDEN_CODE: &str = "OperationForbidden";
 
 /// The code of the refusal of a profile name and version that the project already holds.
 ///

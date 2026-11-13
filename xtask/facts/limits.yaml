@@ -125,19 +125,27 @@ facts:
   - id: limit-forbidden-config-routes
     kind: behavior
     reads:
+      codes: [OperationForbidden]
       fields:
         - code
         - message
-    unchecked: No run shows an HTTP 403 body on the routes config/rbacs, config/namespaces, and repave/status. The stand-in of the book models the body with the code AccessDenied.
+    stand_in:
+      - v1/spectroclusters/{uid}/config/rbacs
+      - v1/spectroclusters/{uid}/config/namespaces
+      - v1/spectroclusters/{uid}/repave/status
+    unchecked: The code of Palette shows HTTP 500 with the code OperationForbidden on the routes config/rbacs, config/namespaces, and repave/status, for a key whose role does not give cluster.get. The checks narrow-rbacs-says, narrow-namespaces-says, and narrow-repave-says of tiers.sh stage 8 have no result yet.
     pages:
       - internals/palette/limits.md#what-no-run-covers
       - internals/palette/clusters.md#cluster-tiers
       - commands/snapshot/cluster.md#the-policy-tier
+      - development/live-runs.md#tierssh
     code:
       - src/api/palette/mod.rs
       - src/api/palette/clusters.rs
       - src/snapshot/policy.rs
       - src/snapshot/cluster.rs
+      - src/api/codes.rs
+      - src/error/class.rs
 
   - id: limit-repave-variable-move
     kind: behavior

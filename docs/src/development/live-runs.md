@@ -1189,6 +1189,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 7 sets both overrides on the worker pool of cluster A through the API,
   and then restores the pool. Each override is a YAML comment, so no machine
   changes. It needs no cluster B. It runs only as `tiers.sh 7`.
+- Stage 8 only reads. It needs a third key in `STRATA_LIVE_NARROW_KEY`. Its
+  user has a role in the project that does not give `cluster.get`, such as
+  Cluster Profile Viewer. It runs only as `tiers.sh 8`. With no key set, it
+  says `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1221,6 +1225,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `pool-verify`, `pool-verify-says` | 0 | #515: `verify` of the record from before exits `0` and names `shape CHANGED`. |
 | `pool-undo`, `pool-after-read`, `pool-undone` | 0 | #515: the PUT of the worker pool as before the stage. The cloud config then holds neither override. |
 | `pool-restored`, `pool-restored-says` | 0 | #515: `compare` of the record from before with cluster A exits `0` and names no change of the `shape` tier. |
+| `narrow-control` | 0 | #665: the key of the example reads the role bindings of cluster A. No result yet: no live window ran stage 8. |
+| `narrow-rbacs`, `narrow-namespaces`, `narrow-repave` | 0 | #665: the third key reads `config/rbacs`, `config/namespaces`, and `repave/status` of cluster A. `api.sh get-status` prints the status and the body of each answer, and exits `0`. No result yet: no live window ran stage 8. |
+| `narrow-rbacs-code`, `narrow-namespaces-code`, `narrow-repave-code` | ? | #665: the error code of each answer. No result yet: no live window ran stage 8. |
+| `narrow-rbacs-says`, `narrow-namespaces-says`, `narrow-repave-says` | 0 | #665: each answer is HTTP 500 with the code `OperationForbidden`, and its message names `'cluster.get'`. The code of Palette shows this answer, and the stand-in gives it. No result yet: no live window ran stage 8. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1231,8 +1239,9 @@ of the timezone and the labels changed the `spcHash` of B.
 No run makes a cluster run another pack version than its profile declares; the
 book shows it on the stand-in.
 
-Stage 5 reads the role bindings of cluster A, and no script reads the
-namespaces of a cluster. Read-only requests to the tenant show the other facts
+Stage 5 reads the role bindings of cluster A. No script reads the namespaces
+of a cluster with a key that can read them: stage 8 reads them only with a key
+that cannot. Read-only requests to the tenant show the other facts
 in [Cluster tiers](../internals/palette/clusters.md#cluster-tiers). A deleted
 cluster of the live example gives `{"items": []}` for each route. A uid that is
 not a cluster of the project gives HTTP 404 `ResourceNotFound`. The edit of the
