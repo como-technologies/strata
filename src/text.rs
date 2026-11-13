@@ -3,6 +3,7 @@
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
 //! - A mark for an empty text, a text in a cell of a markdown table, and a text in a code span.
+//! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
@@ -153,6 +154,28 @@ pub fn code_span(text: &str) -> String {
 /// [`markdown_cell`] on the span. So a value cannot end a cell or a row of the table.
 pub fn code_cell(text: &str) -> String {
     markdown_cell(&code_span(text))
+}
+
+/// The command `argv` as a person types it in a shell. An argument that is empty, or that holds a
+/// space, a quote, or another character that the shell reads, goes in single quotes.
+///
+/// Strata and `strata-preflight` print each command that a person can copy here, so a copy runs
+/// with the arguments that the tool names.
+pub fn shell_words<S: AsRef<str>>(argv: &[S]) -> String {
+    argv.iter()
+        .map(|a| {
+            let a = a.as_ref();
+            if a.is_empty()
+                || a.chars()
+                    .any(|c| c.is_whitespace() || "\"'$`\\|&;<>()*?[]{}".contains(c))
+            {
+                format!("'{}'", a.replace('\'', "'\\''"))
+            } else {
+                a.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
@@ -307,5 +330,14 @@ mod tests {
             ]),
             "a, b, c, and d"
         );
+    }
+
+    #[test]
+    fn a_shell_word_is_quoted_only_when_the_shell_reads_a_character_of_it() {
+        assert_eq!(
+            shell_words(&["strata", "compare", "pack:k@1.0", "pack:Public Repo/k@1.1"]),
+            "strata compare pack:k@1.0 'pack:Public Repo/k@1.1'"
+        );
+        assert_eq!(shell_words(&["", "a$b", "it's"]), "'' 'a$b' 'it'\\''s'");
     }
 }
