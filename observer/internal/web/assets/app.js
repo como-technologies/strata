@@ -502,6 +502,18 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
+// notRunHere says that the cluster does not run the profile version x. No filter and no count of the profiles holds such a record.
+const notRunHere = x => !!x && x.status === STATUS.NOT_ON_CLUSTER;
+// NEWER_STATE is what strata knows of a newer version of a pack. Strata does not look for a newer version of a pack of a profile version
+// that the cluster does not run, so such a pack is NOT_RUN, and never CURRENT. Each screen reads the state from newerStateOf. The state
+// is no word of the API, so its values are numbers.
+const NEWER_STATE = {NEWER: 0, NOT_CHECKED: 1, NOT_READ: 2, CURRENT: 3, NOT_RUN: 4};
+function newerStateOf(x, p) {
+  if (notRunHere(x)) return NEWER_STATE.NOT_RUN;
+  if (p.newer) return NEWER_STATE.NEWER;
+  if (p.status === STATUS.NOT_CHECKED) return NEWER_STATE.NOT_CHECKED;
+  return versionsRead() ? NEWER_STATE.CURRENT : NEWER_STATE.NOT_READ;
+}
 // movePackOf finds a pack in the move of a profile to its newest version. It is undefined when the move does not change the pack, and
 // when strata did not compare the record with that version.
 const movePackOf = (x, key) => x.newerVersion && x.newerVersion.move ? x.newerVersion.move.packs.find(q => q.key === key) : undefined;

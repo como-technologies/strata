@@ -399,8 +399,7 @@ function awayFold(rows, head) {
 function profilesCard() {
   // A profile with a newer version of itself or of a pack shows under "Newer", also when its status is a drift.
   const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? !!x.newerVersion || x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
-  const away = x => x.status === STATUS.NOT_ON_CLUSTER;
-  const list = D.profiles.filter(x => !away(x)).sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
+  const list = D.profiles.filter(x => !notRunHere(x)).sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
   const cnt = {};
   FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });
   const q = S.q.toLowerCase();
@@ -414,7 +413,7 @@ function profilesCard() {
   const clear = h` <button type="button" class="lnk" data-clear="filter">Clear the filter</button>`;
   const empty = h`<tr><td colspan="5">${list.length ? inline(TONE.OFF, what, clear) : inline(TONE.OFF, "No profile yet.")}</td></tr>`;
   const head = h`<thead><tr>${sortTh("pt", "status", "Status")}${sortTh("pt", "profile", "Profile")}${sortTh("pt", "type", "Type", "narrow-hide")}${sortTh("pt", "packs", "Packs", "narrow-hide")}<th>Message</th></tr></thead>`;
-  const fold = S.filter === "all" ? awayFold(sortBy("pt", D.profiles.filter(x => away(x) && named(x)), PROFILE_KEYS).map(row), head) : "";
+  const fold = S.filter === "all" ? awayFold(sortBy("pt", D.profiles.filter(x => notRunHere(x) && named(x)), PROFILE_KEYS).map(row), head) : "";
   return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${neverChecked() ? "Not read yet" : `${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs`}</span></h2>
     <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${num(cnt[k])}</button>`)}</div>
     <input class="search" id="q" type="search" placeholder="Filter by name" aria-label="Filter by name" value="${S.q}"></div></div>

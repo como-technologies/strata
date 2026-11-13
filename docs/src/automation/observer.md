@@ -227,7 +227,8 @@ status `not-on-this-cluster`, the word of its `clusterCopy`.
 - **The page.** A fold under the table of the profiles lists the record, with the
   filter "All" only. The fold says "1 record of a profile version that this cluster
   does not run". On the page of the version, no pack says "newer" or "current", and
-  no card "Move to" shows. The row has the badge "Not on this cluster", and the
+  no card "Move to" shows. The page of each of its packs shows no fact of a newer
+  version, such as "Current". The row has the badge "Not on this cluster", and the
   message "This cluster does not run this version."
 
 ### Exit codes

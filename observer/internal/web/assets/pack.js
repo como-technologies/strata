@@ -337,14 +337,26 @@ const publishedUnread = x => !(x.published && (x.published.status === VERIFY.UNC
 // quietTone is the tone of a place that says "no change": calm only when the check allows it.
 const quietTone = () => calmOk() ? TONE.CALM : TONE.OFF;
 
-// sideFacts gives the three facts of a pack: the published version, the copy of this cluster, and the newer version.
-function sideFacts(x, p, row, changed) {
+// sideFacts gives the facts of a pack: the published version, the copy of this cluster, and the newer version. A pack that strata does
+// not look for has no fact of a newer version.
+function sideFacts(x, p, changed) {
   const copy = x.clusterCopy && x.clusterCopy.status;
   const readCopy = COPY_READ.includes(copy);
   const published = publishedUnread(x) ? ["Not read", "Published now"] : changed[SIDE.PUBLISHED] ? ["Changed", "Published now"] : ["Same", "Published now", "ok"];
   const cluster = readCopy ? (changed[SIDE.CLUSTER] ? ["Changed", "This cluster's copy"] : ["Same", "This cluster's copy", "ok"]) : copy === COPY.NOT_ON_CLUSTER ? ["Not here", "This cluster's copy"] : ["Not read", "This cluster's copy"];
-  const newer = row ? [row.newest, "Newer version"] : p.status === STATUS.NOT_CHECKED ? ["Not checked", "Newer version"] : D.cluster.versions.readAt ? ["Current", "No newer version", "ok"] : ["Not read", "Newer version"];
-  return [published, cluster, newer];
+  const newer = newerFact(x, p);
+  return newer ? [published, cluster, newer] : [published, cluster];
+}
+
+// newerFact gives the fact of the newer version of the pack p of the profile x, or null for a pack that strata does not look for.
+function newerFact(x, p) {
+  switch (newerStateOf(x, p)) {
+    case NEWER_STATE.NEWER: return [p.newer, "Newer version"];
+    case NEWER_STATE.NOT_CHECKED: return ["Not checked", "Newer version"];
+    case NEWER_STATE.NOT_READ: return ["Not read", "Newer version"];
+    case NEWER_STATE.CURRENT: return ["Current", "No newer version", "ok"];
+    default: return null;
+  }
 }
 
 // undisturbed is the splash of a side with no change.
@@ -386,7 +398,7 @@ function comparePack(subject, x, p, row) {
     inner = splash(TONE.WARN, "This side was not read", "Strata could not read the published version, so it cannot say whether it changed.", "", SIZE.CARD);
   } else if (d === null || (d.state === "ok" && d.data.status === "unchanged")) {
     state = badge("g", "Identical");
-    inner = undisturbed(side, sideFacts(x, p, row, changed));
+    inner = undisturbed(side, sideFacts(x, p, changed));
   } else {
     ({flags, inner} = comparePanel(tabId, d, packHash(subject, p), command));
     // A newer version is no drift: its side keeps the neutral badge of a newer version, as each other level does.
@@ -464,5 +476,5 @@ function viewPack(subject, layer, name) {
   const extra = p.status === STATUS.DRIFT && p.newer ? statusBadge(STATUS.NEWER) : "";
   return {nav: "profiles", crumbs: cr, body: h`${alertBars()}<section class="card"><div class="phead"><div class="body"><div class="title"><h1 class="m h1m">${ref(p.name, p.version)}</h1>${statusBadge(p.status)}${extra}</div>
     <div class="meta"><div><span>Layer</span>${p.layer}</div><div><span>Registry</span>${orNone(p.registry)}</div><div><span>Kind</span>${orNone(p.kind)}</div><div><span>Upstream</span><span class="m bright">${p.upstream ? digest(p.upstream) : "none"}</span></div><div><span title="${IMAGES_LISTED}">Images listed</span>${imagesListed(p.images)}</div><div><span>Profile</span><a class="m" href="${profileHash(subject)}">${subjectRef(subject)}</a></div></div></div>
-    <div class="pside">${packStack(subject, x.packs, true, p.key)}</div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
+    <div class="pside">${packStack(subject, x, true, p.key)}</div></div></section>${row ? moveCard(subject, p, row) : ""}${comparePack(subject, x, p, row)}${checkCard(terminalRows(subject, x, p, row))}`};
 }

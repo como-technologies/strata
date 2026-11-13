@@ -52,7 +52,7 @@ function newerGroups(rows) {
 }
 
 function newerTiles(rows) {
-  const n = D.cluster.counts, others = packsWithoutMove();
+  const n = D.cluster.counts, current = currentPacks();
   const repave = rows.filter(r => REPAVES.includes(r.impact)).length, fresh = rows.filter(r => r.new).length;
   const steps = rows.reduce((sum, r) => sum + stepsOf(r).length, 0);
   const T = (cls, label, value, sub) => h`<div class="tile ${cls}"><div class="l">${label}</div><div class="v">${value}</div><div class="s">${sub}</div></div>`;
@@ -60,7 +60,7 @@ function newerTiles(rows) {
     ${T("b", "Packs with a newer version", rows.length, `in ${n.newerProfiles} of ${n.profiles} ${plural(n.profiles, "profile", "profiles")}`)}
     ${T(repave ? "a" : "g", "Moves that repave", repave, repave ? "The move replaces the nodes" : "No move replaces the nodes")}
     ${T("b", "New this week", fresh, "Listed in the last 7 days")}
-    ${T("y", "Versions newer than the pins", steps, `${others.current} other ${plural(others.current, "pack is", "packs are")} current`)}
+    ${T("y", "Versions newer than the pins", steps, `${current} other ${plural(current, "pack is", "packs are")} current`)}
   </section>`;
 }
 
@@ -111,16 +111,8 @@ function newerCard() {
   return h`${newerTiles(rows)}<section class="card"><div class="chead"><h2>Newer versions ${sub}</h2><div class="tb">${seg}${filterBox("newer", "Filter by pack or profile")}</div></div>${note}${view === "table" ? newerTable(groups) : newerTimeline(groups)}</section>`;
 }
 
-// packsWithoutMove counts the packs that have no newer version: the ones that are current, and the ones that were not checked. A
-// profile version that the cluster does not run adds none, because strata does not look for a newer version of it.
-function packsWithoutMove() {
-  let current = 0, unchecked = 0;
-  D.profiles.filter(x => x.status !== STATUS.NOT_ON_CLUSTER).forEach(x => x.packs.forEach(p => {
-    if (p.newer) return;
-    if (p.status === STATUS.NOT_CHECKED) unchecked++; else current++;
-  }));
-  return {current, unchecked};
-}
+// currentPacks counts the packs that are current. A pack of a profile version that the cluster does not run is not one of them.
+const currentPacks = () => D.profiles.reduce((n, x) => n + x.packs.filter(p => newerStateOf(x, p) === NEWER_STATE.CURRENT).length, 0);
 
 function viewNotChecked() {
   return withChecks("notchecked", crumbs("Not checked"), () => {
@@ -192,7 +184,7 @@ function viewProfile(subject) {
     return h`<tr><td>${badgeOf(EVENT_BADGE, q.type)}</td><td class="m narrow-hide">${q.reason}</td><td class="mut nw">${ago(q.time)}</td><td class="mut narrow-hide">${eventFrom(q)}</td><td>${q.message}</td></tr>`;
   })}</tbody></table></div></section>` : "";
   const advice = fs.some(f => f.kind === KIND.PUBLISHED && !f.alsoOnCluster) ? h`<div class="note r small"><b>What to do.</b> Do not repair the edited version in place: that is a second edit. Publish a new version with the change through review, and move the clusters to it. A new cluster gets this edit at once. The finding clears when the version goes back to its record.${D.cluster.cluster.updatesPending ? " An update waits for this cluster. Do not accept it until the content is what the team approved." : ""}</div>` : "";
-  const packs = x.packs.length ? packStack(subject, x.packs, false, "") : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
+  const packs = x.packs.length ? packStack(subject, x, false, "") : h`<div class="body">${inline(TONE.OFF, x.status === STATUS.NO_RECORD ? "No record holds this profile, so the packs are not listed." : "This profile holds no pack.")}</div>`;
   return {nav: "profiles", crumbs: crumbs(h`<a href="#profiles">Profiles</a>`, subjectRef(subject)), body: h`${alertBars()}
     <section class="card"><div class="body"><div class="title"><h1 class="m h1m">${subjectRef(subject)}</h1>${statusBadge(x.status)}</div>
     <div class="meta"><div><span>Type</span>${x.type}</div><div><span>Scope</span>${x.scope || "-"}</div><div><span>Packs</span>${x.packs.length}</div><div><span>Record</span>${record}</div></div></div></section>
@@ -238,14 +230,16 @@ function eventFrom(q) {
    A profile shows its packs as a stack of layers, as Palette builds a cluster: the add-ons on top, the OS at the bottom. The color on
    the left of a slab is the status of the pack. The page of a pack shows the same stack, small, with its own slab lit, so a person
    sees one picture of a pack on both pages and steps from one pack to the next. */
-// newerWords tells what strata found about a newer version of a pack. A pack of a profile version that the cluster does not run gets no
-// word, because strata does not look for a newer version of it.
-function newerWords(p, away) {
-  if (away) return "";
-  if (p.newer) return h`newer: <span class="m">${ref(p.name, p.newer)}</span>`;
-  if (p.status === STATUS.NOT_CHECKED) return "not checked";
-  if (!D.cluster.versions.readAt) return "versions not read yet";
-  return "current";
+// newerWords tells what strata found about a newer version of the pack p of the profile x. A pack that strata does not look for gets no
+// word.
+function newerWords(x, p) {
+  switch (newerStateOf(x, p)) {
+    case NEWER_STATE.NEWER: return h`newer: <span class="m">${ref(p.name, p.newer)}</span>`;
+    case NEWER_STATE.NOT_CHECKED: return "not checked";
+    case NEWER_STATE.NOT_READ: return "versions not read yet";
+    case NEWER_STATE.CURRENT: return "current";
+    default: return "";
+  }
 }
 const imagesWords = n => n ? `${n} ${plural(n, "image", "images")} listed` : h`<span title="${IMAGES_LISTED}">no image list</span>`;
 
@@ -260,16 +254,15 @@ function carriedWords(c, newest) {
   return c.pack === newest ? h`carried by <span class="m">${by}</span>` : h`<span class="m">${c.pack}</span> carried by <span class="m">${by}</span>`;
 }
 
-function packSlab(subject, p, compact, here, away) {
-  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0], carried = carriedWords(p.carried, p.newer), version = newerWords(p, away);
+function packSlab(subject, x, p, compact, here) {
+  const href = packHash(subject, p), tone = (BADGE[p.status] || ["y"])[0], carried = carriedWords(p.carried, p.newer), version = newerWords(x, p);
   const sub = compact ? "" : h`<span class="sub">${version ? h`${version} · ` : ""}${carried ? h`${carried} · ` : ""}${imagesWords(p.images)}</span>`;
   return h`<li class="pslab t-${tone}${here ? " here" : ""}"><a href="${href}"${here ? h` aria-current="page"` : ""}><span class="layer">${p.layer}</span><span class="who"><span class="m ref">${ref(p.name, p.version)}</span>${sub}</span>${statusBadge(p.status)}</a></li>`;
 }
 
-// packStack lists the packs from the top layer to the bottom one. here is the key of the lit slab, or "".
-function packStack(subject, packs, compact, here) {
-  const away = (profileOf(subject) || {}).status === STATUS.NOT_ON_CLUSTER;
-  return h`<ul class="pstack${compact ? " compact" : ""}" aria-label="The packs of ${subject}, from the top layer to the bottom">${[...packs].reverse().map(p => packSlab(subject, p, compact, p.key === here, away))}</ul>`;
+// packStack lists the packs of the profile x from the top layer to the bottom one. here is the key of the lit slab, or "".
+function packStack(subject, x, compact, here) {
+  return h`<ul class="pstack${compact ? " compact" : ""}" aria-label="The packs of ${subject}, from the top layer to the bottom">${[...x.packs].reverse().map(p => packSlab(subject, x, p, compact, p.key === here))}</ul>`;
 }
 
 // viewMissing is the view of a page that the data does not hold. A page with nothing read shows the splash of its state.
