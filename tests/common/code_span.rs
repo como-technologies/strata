@@ -5,8 +5,8 @@
 //! this file with `#[path]`. So each test and the check read a code span in one way, and a change
 //! of the rule changes this file only.
 
-/// The parts of `text` between its code spans. A part with an odd index is a code span, and a part
-/// with an even index is outside the code spans.
+/// The parts of `text`, split at the fences of its code spans. A part with an odd index is a code
+/// span, and a part with an even index is outside the code spans.
 ///
 /// A run of backticks opens a span, and the next run of the same length closes it. A run that no
 /// run closes is text. So a span that holds a backtick has a longer fence, as `text::code_span`

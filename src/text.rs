@@ -244,8 +244,8 @@ pub fn query_value(text: &str) -> String {
 #[path = "../tests/common/answer_tags.rs"]
 mod answer_tags;
 
-// The reads of a code block and of a code span, in the files that the tests of strata use. A unit
-// test here reads each fence that this module writes, with one read of each file.
+// The reads of a code block and of a code span, in the files of the tests of strata. A unit test
+// here uses one read of each file, so the other reads are dead code here.
 #[cfg(test)]
 #[allow(dead_code)]
 #[path = "../tests/common/code_block.rs"]

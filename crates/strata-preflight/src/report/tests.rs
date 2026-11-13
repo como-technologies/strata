@@ -13,8 +13,8 @@ use strata::api::Method;
 #[allow(dead_code)]
 #[path = "../../../../tests/common/answer_tags.rs"]
 mod answer_tags;
-// The reads of the code blocks and of the code spans of markdown, in the files that the tests of
-// strata use. So a test here reads a fence as they do. It uses one read of each file.
+// The reads of the code blocks and of the code spans of markdown, in the files of the tests of
+// strata. A test here uses one read of each file, so the other reads are dead code here.
 #[allow(dead_code)]
 #[path = "../../../../tests/common/code_block.rs"]
 mod code_block;
