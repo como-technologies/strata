@@ -488,7 +488,8 @@ them:
   as the filter of Profiles does.
 - The table of the profiles lists the profiles that the cluster runs. A fold under it
   lists each record of a version that the cluster does not run, with the filter "All"
-  only. No filter counts such a record.
+  only. No filter counts such a record. The slabs of its packs name no newer version,
+  and the tile "Versions newer than the pins" does not count them as current.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the
   words of strata for the impact under them. The panel "Ask Palette" sits beside them in
   its own box, with what it asks, the button, and the answer.
