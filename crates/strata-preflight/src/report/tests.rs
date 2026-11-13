@@ -2,7 +2,7 @@ use super::*;
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
-use answer_tags::{ANSWER_TAGS, assert_only_strata_tags, outside_code_blocks};
+use answer_tags::{ANSWER_TAGS, assert_only_strata_tags, outside_code_blocks, outside_code_spans};
 use std::time::Duration;
 use strata::api::Method;
 
@@ -1329,6 +1329,31 @@ fn the_markdown_of_a_request_that_failed_keeps_the_body_of_the_answer_in_its_blo
     );
     assert!(md.contains(&block), "{block:?} in\n{md}");
     assert_only_strata_tags(&outside_code_blocks(&md));
+}
+
+/// The criterion of #832: the heading of the markdown shows the cloud type, the name of the
+/// cluster, and the source as text. A watch adds the state of the cluster to the source. A backtick
+/// in a value cannot end its code span.
+#[test]
+fn the_heading_of_the_markdown_shows_the_cloud_the_name_and_the_source_as_text() {
+    let mut report = report_of_edge_host_in_use(
+        None,
+        "/v1/edgehosts/h2",
+        Outcome::not_run(Verdict::NotRun, "no reading"),
+    );
+    let value = format!("`{ANSWER_TAGS}");
+    report.subject.cloud = ANSWER_TAGS.into();
+    report.subject.name = format!("fred{value}");
+    report.subject.source = format!("cluster:c1 (Running{value} after 3s, 2 readings)");
+    let md = markdown(&report);
+    let heading = format!(
+        "## strata-preflight: {} cluster ``fred{value}``\n",
+        strata::text::html_text(ANSWER_TAGS)
+    );
+    assert!(md.contains(&heading), "{heading:?} in\n{md}");
+    let source = format!("source ``cluster:c1 (Running{value} after 3s, 2 readings)``,");
+    assert!(md.contains(&source), "{source:?} in\n{md}");
+    assert_only_strata_tags(&outside_code_spans(&outside_code_blocks(&md)));
 }
 
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,

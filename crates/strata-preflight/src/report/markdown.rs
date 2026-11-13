@@ -14,15 +14,17 @@ pub fn markdown(r: &Report) -> String {
     let probes = count_of(s.probe_failed as usize, "probe");
     let warnings = count_of(s.warned as usize, "warning");
     let checks = plural(s.applies() as usize, "check", "checks");
+    // the cloud type and the name come from the entity, and a watch adds the state of the cluster
+    // to the source
     out.push_str(&format!(
         "## strata-preflight: {} cluster {}\n\n",
-        r.subject.cloud,
+        markdown_cell(&r.subject.cloud),
         code_span(r.subject.name_or_dash())
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed, {warnings}; {} did not run, {} not checked; readiness {}: {} of {} {checks} passed.\n\n",
+        "**{}** — source {}, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed, {warnings}; {} did not run, {} not checked; readiness {}: {} of {} {checks} passed.\n\n",
         s.verdict,
-        r.subject.source,
+        code_span(&r.subject.source),
         r.subject.release_text(),
         r.options.tiers_text(),
         s.ran, s.passed, s.failed, s.not_run, s.not_checked, r.options.readiness_text(&format!("**{}**", pct(s.readiness))), s.passed, s.applies()
