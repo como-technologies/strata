@@ -15,7 +15,8 @@ The package is `strata-palette`, and Rust code names the crate `strata`. A
 dependency names the tag and the package: see
 [The library](../automation/library.md#add-the-dependency).
 
-Six sections list the changes that need action:
+Seven sections list the changes that need action:
+[Release 0.34.0](#release-0340-changes-that-need-action),
 [Release 0.33.0](#release-0330-changes-that-need-action),
 [Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
@@ -1023,6 +1024,24 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.34.0: changes that need action
+
+Release 0.34.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
+  it had a status such as `ok` or `newer`. Now the record and its packs have no newer version.
+  `counts.profiles` of `/v1/cluster` does not count it. No row of `/v1/newer`, no event, and
+  no alert names it. The page lists it in a fold under the table of the profiles. See
+  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  - A program that reads `status` of `/v1/profiles` must know the new value.
+  - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
+    `counts.profiles`.
 
 ## Release 0.33.0: changes that need action
 

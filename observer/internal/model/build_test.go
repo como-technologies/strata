@@ -123,6 +123,8 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 		pack    Status
 	}{
 		{"drift beats newer", drift, pins(newer), StatusDrift, StatusDrift},
+		{"drift beats not on this cluster", notOnCluster(drift), pins(newer), StatusDrift, StatusDrift},
+		{"not on this cluster beats newer and not checked", notOnCluster(unverified), pins(newer), StatusNotOnThisCluster, StatusNotChecked},
 		{"newer beats not checked", unverified, pins(newer), StatusNewer, StatusNewer},
 		{"not checked", unverified, nil, StatusNotChecked, StatusNotChecked},
 		{"ok", ok, nil, StatusOK, StatusOK},
@@ -567,5 +569,54 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	carriers := []Carried{*want["barney-addons@1.3.1"], *want["barney-addons@1.3.0"], *want["other@1.0.0"]}
 	if !slices.Equal(rows[0].Carriers, carriers) {
 		t.Errorf("the newer row carries %+v, want %+v", rows[0].Carriers, carriers)
+	}
+}
+
+// Issue #834. The cluster ran fred-crossplane@1.3.1, and then moved to 2.0.0. The record of 1.3.1 stays,
+// so the versions cycle still names a newer version of its packs and of the profile. The row of 1.3.1
+// has the status not-on-this-cluster and no newer version. No count of the page and no newer row
+// holds it. A pin that the two versions share stays for 2.0.0. The answers of the cycle stay as they are.
+func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t *testing.T) {
+	ubuntu := pk("os", "ubuntu", "22.04")
+	old := notOnCluster(rec("fred-crossplane", "1.3.1", docs.VerifyUnchanged, pk("addon", "crossplane", "1.17.0"), ubuntu))
+	moved := rec("fred-crossplane", "2.0.0", docs.VerifyUnchanged, pk("addon", "crossplane", "2.0.2"), ubuntu)
+	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", "fred-crossplane@1.3.1")
+	crossplane.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1", Carrier: &docs.Carrier{Version: "2.0.0", PackVersion: "2.0.2"}}}
+	shared := pin("ubuntu", "os", "22.04", "24.04", "fred-crossplane@1.3.1", "fred-crossplane@2.0.0")
+	shared.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1"}, {Profile: "fred-crossplane", Version: "2.0.0"}}
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{crossplane, shared},
+		Profiles: []docs.ProfilePin{profilePin("fred-crossplane", "1.3.1", "2.0.0", at(-2*time.Hour)), profilePin("fred-crossplane", "2.0.0", "", "")}}
+	s := build(ptr(content(t, old, moved)), v)
+	oldRow, newRow := s.Profiles[0], s.Profiles[1]
+	if oldRow.Version != "1.3.1" || oldRow.Status != StatusNotOnThisCluster || oldRow.NewerVersion != nil || oldRow.ClusterCopy.Status != CopyNotOnThisCluster {
+		t.Errorf("1.3.1: status %q, newer version %+v, copy %+v", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
+	}
+	for _, p := range oldRow.Packs {
+		if p.Newer != "" || p.Carried != nil || p.Status != StatusOK {
+			t.Errorf("1.3.1: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+		}
+	}
+	if newRow.Status != StatusNewer || newRow.Packs[1].Newer != "24.04" || newRow.Packs[1].Carried == nil {
+		t.Errorf("2.0.0: status %q, packs %+v", newRow.Status, newRow.Packs)
+	}
+	want := Counts{Newer: 1, NewerProfiles: 1, Packs: 2, PacksInFull: 2, Profiles: 1}
+	if s.Counts != want {
+		t.Errorf("counts %+v, want %+v", s.Counts, want)
+	}
+	carriers := []Carried{{Profile: "fred-crossplane@2.0.0"}}
+	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{"fred-crossplane@2.0.0"}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
+		t.Errorf("newer rows %+v", s.Newer)
+	}
+	for _, e := range s.Events {
+		if strings.Contains(e.Object, "fred-crossplane@1.3.1") {
+			t.Errorf("an event names 1.3.1: %+v", e)
+		}
+	}
+	if len(v.Pins) != 2 || len(v.Pins[1].PinnedBy) != 2 || len(v.Pins[1].Carriers) != 2 || len(v.Profiles) != 2 {
+		t.Errorf("the answers of the cycle changed: %+v", v)
+	}
+	// before the first good content cycle, the observer does not know what the cluster runs
+	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{"fred-crossplane@1.3.1", "fred-crossplane@2.0.0"}) {
+		t.Errorf("newer rows with no content cycle %+v", rows)
 	}
 }

@@ -105,7 +105,7 @@ address names the screen:
 | `#images` | The images that the pods run, with the status of each. |
 | `#newer` | The newer versions, by profile. |
 | `#notchecked` | The causes of "Not checked", and what a check does not cover. |
-| `#profiles` | The table of the profiles. |
+| `#profiles` | The table of the profiles, and a fold with the records of the versions that the cluster does not run. |
 | `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
 | `#p-<name@version>` | One profile: its two sides, its events, its packs as a stack of layers, and its move to the newest version of the profile. |
@@ -486,6 +486,9 @@ them:
   registry listed after it, and the newest, with the day of each.
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
+- The table of the profiles lists the profiles that the cluster runs. A fold under it
+  lists each record of a version that the cluster does not run, with the filter "All"
+  only. No filter counts such a record.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the
   words of strata for the impact under them. The panel "Ask Palette" sits beside them in
   its own box, with what it asks, the button, and the answer.
@@ -533,9 +536,10 @@ the page are those of the data.
 
 - The set `ok` holds made-up data. It has 12 profiles, 29 packs, 1 finding, and 10
   newer versions in 6 profiles. It also has 2 causes of "Not checked", 26 of 29 packs
-  in full, and 8 images that pods run. One text is real: the two texts of
-  `kubeadmconfig.files[2].content` in the pack `kubernetes`, from a run of
-  `strata compare`. The file has 21 lines, and three lines differ.
+  in full, and 8 images that pods run. It holds a 13th record, of
+  `wilma-gateway@3.0.4`, a version that the cluster no longer runs. One text is real:
+  the two texts of `kubeadmconfig.files[2].content` in the pack `kubernetes`, from a
+  run of `strata compare`. The file has 21 lines, and three lines differ.
 - The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
   `cluster.json` only.
 - The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file

@@ -207,6 +207,28 @@ shows the edit of `aws-stack@1.0.0`:
 {{#include ../output/observer-ledger.txt}}
 ```
 
+### A version that the cluster no longer runs
+
+A cluster moves to the next version of a profile, and the record of the old version
+stays. The seed keeps its first-seen record, and a pipeline can publish a record for
+each version. The observer still checks that record against Palette. The cluster
+`payments` does not run `aws-stack@1.1.0`, so the summary above gives its record the
+status `not-on-this-cluster`, the word of its `clusterCopy`.
+
+- **A status of its own.** A record of a version that the cluster does not run is
+  `not-on-this-cluster`. A finding wins: on `ledger`, the edit of `aws-stack@1.0.0`
+  stays a drift.
+- **No newer version.** The record and its packs have no newer version, because the
+  cluster does not run the version. No row of the newer versions, no event, and no alert
+  names the record.
+- **The counts.** `counts.profiles` does not count the record, so `payments` has 2
+  profiles for 3 records. The filters of the table of the profiles, the tile
+  "Profiles", and the tile "Newer versions" do not count it.
+- **The page.** A fold under the table of the profiles lists the record, with the
+  filter "All" only. The fold says "1 record of a profile version that this cluster
+  does not run". The page of the version has no card "Move to". The row has the badge
+  "Not on this cluster", and the message "This cluster does not run this version."
+
 ### Exit codes
 
 | Exit | Meaning |

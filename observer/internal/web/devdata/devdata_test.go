@@ -175,10 +175,13 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 			t.Errorf("%s: page %q, want %q", state, s.Cluster.Page, pages[state])
 		}
 		n := s.Cluster.Counts
-		var drift, packs int
+		var drift, packs, here int
 		for _, p := range s.Profiles.Profiles {
 			if p.Status == model.StatusDrift {
 				drift++
+			}
+			if p.Status != model.StatusNotOnThisCluster {
+				here++
 			}
 			if p.ClusterCopy == nil || p.ClusterCopy.Status != model.CopyNotOnThisCluster {
 				packs += len(p.Packs)
@@ -191,7 +194,7 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 			}
 		}
 		for what, got := range map[string][2]int{
-			"findings": {n.Findings, len(s.Findings.Findings)}, "profiles": {n.Profiles, len(s.Profiles.Profiles)}, "drift": {n.Drift, drift},
+			"findings": {n.Findings, len(s.Findings.Findings)}, "profiles": {n.Profiles, here}, "drift": {n.Drift, drift},
 			"newer": {n.Newer, len(s.Newer.Newer)}, "newerProfiles": {n.NewerProfiles, len(profiles)},
 			"notChecked": {n.NotChecked, len(s.NotChecked.NotChecked)}, "packs": {n.Packs, packs},
 		} {

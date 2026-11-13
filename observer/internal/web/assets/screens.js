@@ -173,7 +173,7 @@ function verdict(x) {
     case COPY.DIFFERS:
       copyCard = h`<div class="vcard">${head}<div class="m mt6">root ${root(pub && pub.rootRecorded)}${ARROW}<span class="now">${root(cp.rootB)}</span></div></div>`; break;
     case COPY.NOT_ON_CLUSTER:
-      copyCard = h`<div class="vcard">${head}<div class="small mut mt6">This cluster does not run this version.</div></div>`; break;
+      copyCard = h`<div class="vcard">${head}<div class="small mut mt6">${NOT_ON_CLUSTER_WORDS}</div></div>`; break;
     default:
       copyCard = h`<div class="vcard">${head}<div class="small mut mt6">Strata could not read this copy.</div></div>`;
   }

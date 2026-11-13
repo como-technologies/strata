@@ -239,6 +239,11 @@ scripts/ci/observer-records.sh --revision "$GIT_SHA" releases/*/dev.json \
 A replace removes each record that the step does not write, also a first-seen record
 of the seed.
 
+The glob also writes the records of the older versions. After you move the cluster, the
+page lists each of them in a fold under the table of the profiles, as "Not on this
+cluster", and names no newer version for it. See [A version that the cluster no longer
+runs](./automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+
 The script stops when two records are for one version. So the glob must not match
 the records of `prod`, which hold the same versions. It stops for a record of a
 cluster too, such as `fleet/prod/payments.json`. This layout keeps the records of `dev`
