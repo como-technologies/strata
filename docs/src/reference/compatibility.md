@@ -1173,6 +1173,8 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+  The message of the way forward also says that a new version of the infrastructure profile goes
+  to the end of the stored order.
 - **The first line of `behind` counts each pin one time.** The counts after the colon add up to
   the pins. They are `behind`, `current`, and `not checked`, and a count in parentheses gives the
   pins with a floating tag. An example is

@@ -138,6 +138,11 @@ pub fn edge_host_route(uid: &str) -> String {
     format!("/v1/edgehosts/{uid}")
 }
 
+/// The profiles of the cluster `uid`, which a `PUT` or a `PATCH` changes.
+pub fn cluster_profiles_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}/profiles")
+}
+
 /// The pack manifests of each profile of the cluster `uid`.
 pub fn cluster_manifests_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}/profiles/packs/manifests")
