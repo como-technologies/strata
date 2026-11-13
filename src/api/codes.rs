@@ -74,6 +74,15 @@ impl_texts!(pub Denial {
 });
 
 impl Denial {
+    /// The HTTP status that Palette gives the denial: 403 for [`Denial::Route`]. Palette gives each
+    /// other denial the response type of a server fault, HTTP 500.
+    pub fn http_status(self) -> u16 {
+        match self {
+            Denial::Route => 403,
+            Denial::Object | Denial::Project | Denial::NoRole => 500,
+        }
+    }
+
     /// The permission that `message`, the message of Palette, names: its first text in single
     /// quotes. `None` for a denial that names no permission, and for a message with no quotes.
     pub fn permission(self, message: &str) -> Option<&str> {

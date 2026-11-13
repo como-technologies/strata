@@ -3844,10 +3844,40 @@ fn narrow_routes() -> [(&'static str, String); 3] {
     ]
 }
 
+/// A `strata` for tiers.sh stage 8. `strata list` with the third key and its progress notes prints
+/// `list.out`, writes `list.err` to standard error, and exits with `list.code`. With another key, or
+/// with no notes, it prints nothing. Any other call goes to the answers of the stage.
+const FAKE_STRATA_NARROW: &str = r#"#!/usr/bin/env bash
+if [ "$*" = list ]; then
+  { [ "${PALETTE_API_KEY:-}" = narrow-k ] && [ -z "${STRATA_QUIET+set}" ]; } || exit 0
+  cat "$FAKE_STRATA/list.out"
+  cat "$FAKE_STRATA/list.err" >&2
+  exit "$(cat "$FAKE_STRATA/list.code")"
+fi
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+/// What `strata list` of tiers.sh stage 8 prints and exits with: `stdout`, `stderr`, and `code`.
+fn narrow_list(stage: &Stage, stdout: &str, stderr: &str, code: i32) {
+    std::fs::write(stage.path("strata/list.out"), stdout).unwrap();
+    std::fs::write(stage.path("strata/list.err"), stderr).unwrap();
+    std::fs::write(stage.path("strata/list.code"), code.to_string()).unwrap();
+}
+
+/// The listing of the project with the third key: the release profile, and the clusters as not
+/// read. The answer of the clusters is the one that the code of Palette shows.
+const NARROW_LISTING: &str = "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
+clusters: not read (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: \
+{\"code\":\"ResourceAccessDenied\",\"message\":\"Project 'dev' access denied\"}; \
+no role of the key in the project gives the access of the request)\n";
+
 /// A stage of tiers.sh stage 8. Each route of [`narrow_routes`] answers the third key with
-/// `status` and the code `code`, with a message that names `cluster.get`.
+/// `status` and the code `code`, with a message that names `cluster.get`. `strata list` with the
+/// third key prints [`NARROW_LISTING`] and exits 2.
 fn narrow_stage(status: u16, code: &str) -> Stage {
     let mut stage = baseline_stage();
+    stage.wrap_strata(FAKE_STRATA_NARROW);
+    narrow_list(&stage, NARROW_LISTING, "", 2);
     stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
     let refusal =
         format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);
@@ -3858,6 +3888,14 @@ fn narrow_stage(status: u16, code: &str) -> Stage {
     stage
 }
 
+/// The checks of `strata list` of tiers.sh stage 8.
+const NARROW_LIST_CHECKS: [&str; 4] = [
+    "narrow-list",
+    "narrow-list-profiles",
+    "narrow-list-says",
+    "narrow-list-once",
+];
+
 #[test]
 fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_records_each_refusal() {
     // the answer that the code of Palette shows for a role without cluster.get
@@ -3866,6 +3904,8 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(&steps, &["narrow-control"]);
+    // strata lists the profiles that the role reads, and names the clusters, with no retry
+    passed(&steps, &NARROW_LIST_CHECKS);
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     for (name, route) in narrow_routes() {
         passed(
@@ -3915,6 +3955,26 @@ fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access
         passed(&steps, &[&format!("narrow-{name}")]);
         failed(&steps, &[&format!("narrow-{name}-says")]);
     }
+}
+
+#[test]
+fn tiers_sh_stage_8_fails_the_checks_of_list_when_strata_retries_and_prints_no_profile() {
+    // the strata of before #620: it sends the read again, and one refused kind loses each kind
+    let stage = narrow_stage(500, OPERATION_FORBIDDEN_CODE);
+    let error = "strata: GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: \
+                 {\"code\":\"ResourceAccessDenied\"}; retry 1 of 3 in 1s\n";
+    narrow_list(&stage, "", error, 2);
+    let (o, steps) = stage.run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["narrow-list"]);
+    failed(
+        &steps,
+        &[
+            "narrow-list-profiles",
+            "narrow-list-says",
+            "narrow-list-once",
+        ],
+    );
 }
 
 #[test]

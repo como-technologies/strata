@@ -659,7 +659,7 @@ live-tiers-limited: build
 live-tiers-pool: build
     examples/live/tiers.sh 7
 
-# The narrow key test (#665): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
+# The narrow key test (#665, #620): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get, and what strata list prints with that key. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
 [group('live checks')]
 live-tiers-narrow: build
     examples/live/tiers.sh 8

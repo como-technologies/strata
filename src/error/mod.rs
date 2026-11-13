@@ -40,7 +40,7 @@ pub enum Error {
     /// route is of the tenant scope and that the request named a project. A [`Denial`] names what
     /// Palette denied, such as the permission, and a 403 names the key only when no answer of the
     /// run proved it.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, path, body))]
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body.trim(), BODY_IN_MESSAGE), status_hint(*status, path, body))]
     Api {
         /// The request method.
         method: Method,

@@ -655,6 +655,11 @@ of the secret does not show, because the two sides hold the mask: see
   - A saved tag filter: `name`, `uid`, `conjunction` (`and` or `or`), and
     `conditions[]`. Each condition has `key`, `values[]`, and `negation` when
     true. `values[]` is empty when the key alone must be there.
+- `errors`: each kind that strata could not read, by its name: `profiles`,
+  `clusters`, `projects`, or `filters`. The value is the error, with the fields
+  of an [error](./errors.md). The kind is then absent, and the exit is `2`. The
+  field is absent when strata read each kind. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 
 ## strata-packs/1
 

@@ -1192,7 +1192,8 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 8 only reads. It needs a third key in `STRATA_LIVE_NARROW_KEY`. Its
   user has a role in the project that does not give `cluster.get`, such as
   Cluster Profile Viewer. It runs only as `tiers.sh 8`. With no key set, it
-  says `could not check` and exits `2`.
+  says `could not check` and exits `2`. The stage also runs `strata list` with
+  that key (#620).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1229,6 +1230,10 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `narrow-rbacs`, `narrow-namespaces`, `narrow-repave` | 0 | #665: the third key reads `config/rbacs`, `config/namespaces`, and `repave/status` of cluster A. `api.sh get-status` prints the status and the body of each answer, and exits `0`. No result yet: no live window ran stage 8. |
 | `narrow-rbacs-code`, `narrow-namespaces-code`, `narrow-repave-code` | ? | #665: the error code of each answer. No result yet: no live window ran stage 8. |
 | `narrow-rbacs-says`, `narrow-namespaces-says`, `narrow-repave-says` | 0 | #665: each answer is HTTP 500 with the code `OperationForbidden`, and its message names `'cluster.get'`. The code of Palette shows this answer, and the stand-in gives it. No result yet: no live window ran stage 8. |
+| `narrow-list` | 2 | #620: `strata list` with the third key, in the project. It prints what it read, and exits `2` because it could not read the clusters. The run keeps its progress notes. No result yet: no live window ran stage 8. |
+| `narrow-list-profiles` | 0 | #620: the listing holds the release profile, because the role gives `clusterProfile.list`. No result yet: no live window ran stage 8. |
+| `narrow-list-says` | 0 | #620: the listing has the line `clusters: not read (...)` with the answer of Palette to the cluster listing: HTTP 500 with the code `ResourceAccessDenied`. The code of Palette shows this answer for a role in the project without `cluster.list`, and the stand-in gives it. No result yet: no live window ran stage 8. |
+| `narrow-list-once` | 1 | #620: standard error of `narrow-list` holds no line `retry`, so strata asked for the clusters one time. No result yet: no live window ran stage 8. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says

@@ -30,8 +30,10 @@
 #      give cluster.get, such as Cluster Profile Viewer. It cannot read the role bindings, the
 #      namespaces, or the repave of cluster A. The stage records the status and the code of each
 #      answer. The code of Palette shows HTTP 500 with the code OperationForbidden (#665). It
-#      writes nothing. `tiers.sh 8` runs it alone, and no other FROM_STAGE runs it. With no
-#      variable set, it says "could not check" and exits 2
+#      writes nothing. Then `strata list` with that key: the code of Palette shows HTTP 500 with the
+#      code ResourceAccessDenied for the clusters, so the listing names them as not read, keeps the
+#      profiles, and exits 2, with no retry (#620). `tiers.sh 8` runs it alone, and no other
+#      FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 8
@@ -292,6 +294,10 @@ forbidden_says() {
     '.code == "OperationForbidden" and (.message // "" | contains($p))' > /dev/null
 }
 
+# narrow_list: strata list with the third key. The run keeps its progress notes, so that standard
+# error shows each retry
+narrow_list() { env -u STRATA_QUIET PALETTE_API_KEY="$STRATA_LIVE_NARROW_KEY" "$strata" list; }
+
 # stage 8 runs only when its number is given: it needs a third key
 if [ "$from" = 8 ] && stage 8 "a key whose role does not give cluster.get"; then
   [ -n "${STRATA_LIVE_NARROW_KEY:-}" ] \
@@ -304,6 +310,13 @@ if [ "$from" = 8 ] && stage 8 "a key whose role does not give cluster.get"; then
     check "narrow-$name-says" 0 "#665: the answer is HTTP 500 with the code OperationForbidden, and the message names 'cluster.get'" -- \
       forbidden_says "narrow-$name.out"
   done < <(narrow_routes)
+  check narrow-list 2 "#620: strata list with the third key prints what it read, and exits 2 for the clusters" -- narrow_list
+  check narrow-list-profiles 0 "#620: the listing keeps the release profile, which the role reads" -- \
+    grep -q "^  $release@" narrow-list.out
+  check narrow-list-says 0 "#620: the listing names the clusters as not read: HTTP 500 and ResourceAccessDenied" -- \
+    grep -q '^clusters: not read (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: .*ResourceAccessDenied' narrow-list.out
+  check narrow-list-once 1 "#620: strata asks for the clusters one time: standard error holds no retry" -- \
+    grep -q retry narrow-list.err
 fi
 
 echo

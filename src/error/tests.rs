@@ -794,7 +794,8 @@ fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
             "the user of the key has no role",
         ),
     ] {
-        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        // Palette ends a body with a newline, and the message holds no blank before the hint
+        let body = serde_json::json!({"code": code, "message": message}).to_string() + "\n";
         let error = Error::Api {
             method: Method::Get,
             path: "/v1/dashboard/spectroclusters/meta".into(),
@@ -803,7 +804,10 @@ fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
             retry_after: None,
         };
         let text = error.to_string();
-        assert!(text.ends_with(&format!("; {sentence}")), "{code}: {text}");
+        assert!(
+            text.ends_with(&format!("\"}}; {sentence}")),
+            "{code}: {text}"
+        );
         assert!(!text.contains("the key can be wrong"), "{code}: {text}");
         // a retry gets the same answer, so strata does not send the request again
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");

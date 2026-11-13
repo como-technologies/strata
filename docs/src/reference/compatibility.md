@@ -1077,6 +1077,23 @@ field, a value, an input, or an option is in the sections above.
   [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+- **`list` keeps each kind that it read.** When strata cannot read one kind, such
+  as the clusters, `list` prints the other kinds. The line
+  `<kind>: not read (<error>)` follows them, and the exit is `2`. `--json` gives
+  the error of the kind under `errors` of `strata-list/1`. Before, `list` printed
+  nothing and gave the error alone. When strata reads no kind, the command fails
+  with the error of the first kind, as before. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
+- **The message of `api` names what Palette denied.** A denial, such as
+  `AccessDenied`, adds the permission or the project to the end of the message. A
+  `403` that is a denial names the key only when no earlier answer of the run
+  proved the key. The message has no blank between the body and its end, and the
+  kind and the fields stay. A script that matches the whole message must match
+  the new text. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **Strata sends no 5xx with `ResourceAccessDenied` or `NoRolesAssociated`
+  again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
+  waited between the requests. Each request got the same denial.
 
 ### For a user of the CI drop-ins
 
@@ -1095,6 +1112,14 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::Listing` has the new field `errors`. A struct literal must set it, and a
+  pattern with no `..` must name it. `ops::list` gives a listing with the error
+  of a kind that it could not read, in place of the error, when it read another
+  kind. `ops::ListKind` is a closed set of `closed_set::ClosedSet` with serde,
+  and `Listing::exit_code` is new.
+- `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
+  accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
+  one of them.
 
 ## Release 0.33.0: changes that need action
 

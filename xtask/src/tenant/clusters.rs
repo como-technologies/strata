@@ -10,8 +10,9 @@ use super::edit::with_reclaim_policy;
 use super::macros::Pinner;
 use super::profiles::template_of;
 use super::routes::{
-    PROFILES, cloud_config_route, cloud_config_uid, cluster_route, cluster_variables_route,
-    group_route, manifests_route, namespaces_route, profile_route, rbacs_route, variables_route,
+    PROFILES, TAG_FILTER_LISTING, cloud_config_route, cloud_config_uid, cluster_route,
+    cluster_variables_route, group_route, manifests_route, namespaces_route, profile_route,
+    rbacs_route, variables_route,
 };
 use super::{TENANT, Tenant};
 
@@ -92,7 +93,7 @@ impl Tenant {
     /// A saved tag filter of the tenant, `name`, that selects the clusters with the label
     /// `key=value`.
     pub fn tag_filter(&self, name: &str, uid: &str, key: &str, value: &str) {
-        let path = "v1/filters/metadata@filterType=tag";
+        let path = TAG_FILTER_LISTING;
         let mut items: Vec<Value> = std::fs::read_to_string(self.doc(TENANT, path))
             .ok()
             .and_then(|t| serde_json::from_str::<Value>(&t).ok())

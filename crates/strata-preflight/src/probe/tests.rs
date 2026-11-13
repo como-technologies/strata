@@ -297,6 +297,28 @@ fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
 }
 
 #[test]
+fn a_denial_of_the_create_names_the_permission_and_not_the_key_after_an_answer_of_the_run() {
+    let route = "/v1/spectroclusters/aws/validate";
+    let denied = r#"{"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project"}"#;
+    let api = strata::api::MemoryApi::new()
+        .with(profile_route("p1"), json!({"metadata": {"uid": "p1"}}))
+        .failing(format!("POST {route}"), 403, denied);
+    let b = LiveBackend::new(Some(&api), false);
+    // the read of the profile answers first, so the key is right
+    b.palette(Method::Get, &profile_route("p1"), None, &[])
+        .unwrap();
+    let err = b
+        .palette(Method::Post, route, Some(&json!({})), &[])
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("; the role of the key does not give the permission 'cluster.create'"),
+        "{err}"
+    );
+    assert!(!err.contains("PALETTE_API_KEY"), "{err}");
+}
+
+#[test]
 fn a_check_reads_a_403_as_the_key_and_the_world_reads_it_as_an_object_that_is_not_there() {
     for (status, check, world) in [
         (400u16, true, true),

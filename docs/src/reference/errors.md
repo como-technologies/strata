@@ -15,7 +15,7 @@ the kind.
 | Kind | Cause | Fields |
 | --- | --- | --- |
 | `missing-credential` | No API key. | `variable`, `alternate` |
-| `api` | Palette answered with an error status. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. | `method`, `path`, `status` |
+| `api` | Palette answered with an error status. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. A denial names what Palette denied, such as a permission: see [Refusals that strata does not send again](#refusals-that-strata-does-not-send-again). | `method`, `path`, `status` |
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
@@ -139,12 +139,30 @@ sent.
 | `DeletionResourceInUseError` | The delete of an object that another object uses. |
 | `ResOperationForbidden` | An operation on this object, for this key. |
 | `OperationForbidden` | An operation, for this key. |
+| `ResourceAccessDenied` | A request in a project where no role of the key gives the access. |
+| `NoRolesAssociated` | A request of a user with no role. |
 | `ClusterProfileCreationValidationFailure` | A new profile that is not valid. |
 | `ClusterProfileUpdateValidationFailure` | A change to a profile that is not valid. |
 | `ClusterProfileInvalidPackState` | A profile that pins a pack version that is disabled or deleted. |
 | `InvalidLimit` | A listing with a `limit` above the maximum. |
 | `AwsKeyPairNotFound` | A key pair that the region does not hold, on the property route of AWS. |
 | `FeatureNotSupported` | A feature that the cloud account does not support, such as a Pod Identity account on the property route of AWS. |
+
+`OperationForbidden`, `ResourceAccessDenied`, and `NoRolesAssociated` are
+denials: the key is right, and its roles do not give the access. `AccessDenied`
+is the fourth denial. Palette gives it with HTTP `403` for a route as a whole,
+so strata does not send it again either. The message of a denial ends with what
+Palette denied:
+
+| Code | The end of the message |
+| --- | --- |
+| `AccessDenied`, `OperationForbidden` | `the role of the key does not give the permission '<name>'`, with the permission that the message of Palette names |
+| `ResourceAccessDenied` | `no role of the key in the project gives the access of the request` |
+| `NoRolesAssociated` | `the user of the key has no role` |
+
+A `403` that is a denial names the key too, unless an earlier answer of the
+same run proved the key. A lookup of `PALETTE_PROJECT` is such an answer. See
+[A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 
 `POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with
 HTTP `500` and one of these codes. Strata does not send it again.
