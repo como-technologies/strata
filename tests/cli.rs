@@ -2323,9 +2323,9 @@ fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_erro
     assert!(!r.err.contains("invalid"), "{}", r.err);
 }
 
-/// The stand-in of a tenant with two versions of `barney`: `1.0.0`, and the pre-release
-/// `1.0.1-mr2.770685` above it. Each version has a draft, so `@draft` reads one too.
-fn barney_tenant() -> String {
+/// The documents of a tenant with two versions of `barney`, by route: `1.0.0`, and the
+/// pre-release `1.0.1-mr2.770685` above it. Each version has a draft, so `@draft` reads one too.
+fn barney_tenant() -> std::collections::BTreeMap<String, serde_json::Value> {
     let versions = [(UID_A, "1.0.0"), (UID_B, "1.0.1-mr2.770685")];
     let mut routes = std::collections::BTreeMap::new();
     let listed: Vec<serde_json::Value> = versions
@@ -2348,12 +2348,13 @@ fn barney_tenant() -> String {
         );
         routes.insert(common::manifests_route(uid), common::no_manifests());
     }
-    common::serve_routes(routes)
+    routes
 }
 
-/// The stand-in of a tenant with two versions of the app profile `shop`: `1.0.0` at `ap1`, and the
-/// pre-release `1.0.1-rc.1` above it at `ap2`. Each version has one helm tier.
-fn shop_tenant() -> String {
+/// The documents of a tenant with two versions of the app profile `shop`, by route. They are
+/// `1.0.0` at `ap1`, and the pre-release `1.0.1-rc.1` above it at `ap2`. Each version has one
+/// helm tier.
+fn shop_tenant() -> std::collections::BTreeMap<String, serde_json::Value> {
     let versions = [("ap1", "1.0.0"), ("ap2", "1.0.1-rc.1")];
     let mut routes = std::collections::BTreeMap::new();
     let listed: Vec<serde_json::Value> = versions
@@ -2380,18 +2381,7 @@ fn shop_tenant() -> String {
                     "sourceAppTierUid": "s1", "values": "replicaCount: 2\n"}}]}}),
         );
     }
-    common::serve_routes(routes)
-}
-
-/// A run of strata with `args` against the stand-in at `api`, with the home `home`. The run writes
-/// its progress notes.
-fn against(api: &str, home: &Path, args: &[&str]) -> Run {
-    let mut command = strata_command();
-    isolate_palette(&mut command, home)
-        .env("PALETTE_API", api)
-        .env_remove("STRATA_QUIET")
-        .args(args);
-    Run::of(&mut command)
+    routes
 }
 
 /// Issue #625. A ref `<name>@latest` names the version that it takes, and the highest pre-release
@@ -2399,11 +2389,9 @@ fn against(api: &str, home: &Path, args: &[&str]) -> Run {
 /// note. A quiet run writes no note, as for each other progress note.
 #[test]
 fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
-    let api = barney_tenant();
-    let home = tempfile::tempdir().unwrap();
-    let out = home.path().join("latest.json");
-    let out = out.to_str().unwrap();
-    let strata = |args: &[&str]| against(&api, home.path(), args);
+    let stand = Stand::new(barney_tenant(), "p-dev");
+    let strata = |args: &[&str]| stand.run_loud(args);
+    let out = "latest.json";
     let note =
         "strata: @latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer\n";
     for reference in ["barney@latest", "barney@latest@draft"] {
@@ -2416,7 +2404,8 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
             "{reference}: {}",
             r.err
         );
-        assert_eq!(read_json(Path::new(out))["source"]["version"], "1.0.0");
+        let record = read_json(&stand.home.path().join(out));
+        assert_eq!(record["source"]["version"], "1.0.0");
         let r = strata(&["snapshot", reference, "-o", out, "-q"]);
         assert_eq!((r.code, r.err.as_str()), (0, ""), "{reference}");
     }
@@ -2438,11 +2427,9 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
 /// version as its ref. So does `consumers`.
 #[test]
 fn an_app_profile_at_latest_names_its_ref_and_the_pre_release_it_skips() {
-    let api = shop_tenant();
-    let home = tempfile::tempdir().unwrap();
-    let out = home.path().join("shop.json");
-    let out = out.to_str().unwrap();
-    let strata = |args: &[&str]| against(&api, home.path(), args);
+    let stand = Stand::new(shop_tenant(), "p-dev");
+    let strata = |args: &[&str]| stand.run_loud(args);
+    let out = "shop.json";
     let note = "strata: @latest is appprofile:shop@1.0.0; it skips 1.0.1-rc.1, a pre-release by \
                 SemVer\n";
     let r = strata(&["snapshot", "appprofile:shop@latest", "-o", out]);
@@ -2453,7 +2440,8 @@ fn an_app_profile_at_latest_names_its_ref_and_the_pre_release_it_skips() {
         "{}",
         r.err
     );
-    assert_eq!(read_json(Path::new(out))["source"]["version"], "1.0.0");
+    let record = read_json(&stand.home.path().join(out));
+    assert_eq!(record["source"]["version"], "1.0.0");
     let r = strata(&["consumers", "appprofile:shop@latest"]);
     assert_eq!(r.code, 0, "{}", r.err);
     assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);

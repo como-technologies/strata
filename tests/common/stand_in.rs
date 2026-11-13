@@ -128,15 +128,25 @@ impl Stand {
 
     /// Run strata with `args` in the folder of the home. The requests of an earlier run are gone.
     pub fn run(&self, args: &[&str]) -> Run {
+        Run::of(self.command(args).env("STRATA_QUIET", "1"))
+    }
+
+    /// [`Stand::run`] with the progress notes that a person sees.
+    pub fn run_loud(&self, args: &[&str]) -> Run {
+        Run::of(self.command(args).env_remove("STRATA_QUIET"))
+    }
+
+    /// The command of strata with `args` against the stand-in, in the folder of the home. The
+    /// requests of an earlier run are gone.
+    fn command(&self, args: &[&str]) -> Command {
         self.requests.lock().unwrap().clear();
         let mut command = strata_command();
         isolate_palette(&mut command, self.home.path())
             .current_dir(self.home.path())
             .env("PALETTE_API", &self.api)
             .env("PALETTE_PROJECT_UID", &self.project)
-            .env("STRATA_QUIET", "1")
             .args(args);
-        Run::of(&mut command)
+        command
     }
 
     /// Each request of the last run, in the order of arrival.
