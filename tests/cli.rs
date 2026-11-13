@@ -9,9 +9,9 @@ use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
-    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port,
-    isolate_palette, listed, read_json, schema, schema_values, serve_recorded, snapshot_from_raw,
-    strata_command, write_record,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, Run, Stand, UID_A, UID_B,
+    against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
+    schema_values, snapshot_from_raw, strata_command, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -1072,12 +1072,10 @@ fn list_needs_credentials_and_takes_only_known_kinds() {
 /// kind also takes its singular, which sends the requests and prints the output of the plural.
 #[test]
 fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
-    let project =
-        |name: &str, uid: &str| serde_json::json!({"metadata": {"name": name, "uid": uid}});
     let routes = std::collections::BTreeMap::from([
         (
             PROJECT_LISTING.to_string(),
-            serde_json::json!({"items": [project("dev", "p-dev"), project("prod", "p-prod")]}),
+            project_listing(&[("dev", "p-dev"), ("prod", "p-prod")]),
         ),
         (
             PROFILE_LISTING.to_string(),
@@ -1088,30 +1086,11 @@ fn list_takes_the_singular_of_each_kind_and_does_what_the_plural_does() {
             serde_json::json!({"items": []}),
         ),
     ]);
-    let (api, requests) = serve_recorded(routes);
-    let home = tempfile::tempdir().unwrap();
+    let stand = Stand::new(routes, "p-dev");
     // the exit code, the document with no time stamp, the error, and each request
     let list = |kind: &str| {
-        requests.lock().unwrap().clear();
-        let mut c = strata_command();
-        isolate_palette(&mut c, home.path())
-            .env("PALETTE_API", &api)
-            .env("PALETTE_PROJECT_UID", "p-dev")
-            .env("STRATA_QUIET", "1")
-            .args(["list", kind, "--json"]);
-        let r = Run::of(&mut c);
-        let mut document: serde_json::Value =
-            serde_json::from_str(&r.out).unwrap_or(serde_json::Value::Null);
-        if let Some(fields) = document.as_object_mut() {
-            fields.remove("generatedAt");
-        }
-        let asked: Vec<(String, String, Option<String>)> = requests
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|q| (q.method.clone(), q.path.clone(), q.project.clone()))
-            .collect();
-        (r.code, document, r.err, asked)
+        let r = stand.run(&["list", kind, "--json"]);
+        (r.code, r.document_without_time(), r.err, stand.requests())
     };
     for (singular, plural) in [
         ("profile", "profiles"),

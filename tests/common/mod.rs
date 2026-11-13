@@ -1445,6 +1445,16 @@ impl Run {
             err: text(&o.stderr),
         }
     }
+
+    /// The JSON document of the output with no `generatedAt`, the one field that two runs do not
+    /// share. An output that is not JSON gives `null`.
+    pub fn document_without_time(&self) -> Value {
+        let mut document: Value = serde_json::from_str(&self.out).unwrap_or(Value::Null);
+        if let Some(fields) = document.as_object_mut() {
+            fields.remove("generatedAt");
+        }
+        document
+    }
 }
 
 /// Run `command` on `args` against an address that refuses connections, with a home of its own,
