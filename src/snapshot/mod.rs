@@ -20,6 +20,7 @@ use crate::model::profile_type::ProfileType;
 pub use crate::model::repave::PendingRepave;
 pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
+use crate::render::count_of;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
 
@@ -345,7 +346,7 @@ impl Source {
     /// name with its version. `cluster.profiles` names each profile with its version.
     fn profile_words(&self) -> String {
         match self.cluster.as_ref().map(|c| c.profiles.len()) {
-            Some(n) if n > 1 => format!("{n} profiles"),
+            Some(n) if n > 1 => count_of(n, "profile"),
             _ => name_version(&self.name, &self.version),
         }
     }
