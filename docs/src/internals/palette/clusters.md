@@ -379,7 +379,7 @@ clusters` reads. **It names no profile.** Each entry holds:
 
 So the profiles that a cluster applies need the cluster document itself,
 `GET /v1/spectroclusters/{uid}`, and its `spec.clusterProfileTemplates`. That is
-one request for each cluster, which is why `strata list clusters --applied` asks
+one request for each cluster, which is why `strata list clusters --detail` asks
 for them and a plain `strata list` does not.
 
 The listing names no health either, and neither does the cluster document. The
@@ -402,7 +402,7 @@ permission mode it applies add-on profiles, and in no mode a cluster profile
 ([Imported clusters](https://docs.spectrocloud.com/clusters/imported-clusters/)).
 
 The listing gives no import mode: the console shows it. So the row of
-`strata list clusters --applied` says only that the cluster is imported, when it
+`strata list clusters --detail` says only that the cluster is imported, when it
 has no profile. No run imports a cluster: see
 [What no run covers](limits.md).
 

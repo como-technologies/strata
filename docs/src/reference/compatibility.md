@@ -394,6 +394,10 @@ After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
 
+After 0.33.0, `strata-list/1` has the new field `registries[]`, with `strata list
+registries`. Each entry has `name`, `uid`, and `kind`. The id stays, and a reader that ignores
+unknown fields reads it. See [List the registries](../commands/list.md#list-the-registries).
+
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
@@ -671,12 +675,12 @@ strata reads each value of them:
 - the `status` of a sync
 
 Strata only writes its other documents, such as `strata-packs/1` and
-`strata-diff/1`, and does not read them. So their closed sets stay closed. Two
+`strata-diff/1`, and does not read them. So their closed sets stay closed. Three
 fields are exceptions, and take any text. These are the `state` of a version and
-of a registry in `strata-packs/1`, and the `type` of a profile in
-`strata-list/1`. A program can read such a document with the types of the
-library, such as `ops::PackBuild`. Then a value of a later release gives an
-error, except in those two fields.
+of a registry in `strata-packs/1`, and in `strata-list/1` the `type` of a
+profile and the `kind` of a registry. A program can read such a document with the
+types of the library, such as `ops::PackBuild`. Then a value of a later release
+gives an error, except in those three fields.
 
 ### The note for a value that Palette gives
 
@@ -694,6 +698,7 @@ gives to the definition of the set. These reads can give such a value:
 - the `state` of a pack version in the pack listing
 - the `providerType` of an OCI registry, and the provider type in a pack ref
 - the `type` of a profile version
+- the `kind` of a registry in the registry listing
 
 `--quiet` and `STRATA_QUIET` hide the note:
 
@@ -985,6 +990,10 @@ After 0.33.0, `list` takes the singular of each kind: `profile`, `cluster`, `pro
 Before, strata refused it with a usage error of the command line and exit `2`, before any
 request. See [What to expect](../commands/list.md#what-to-expect).
 
+After 0.33.0, `list` takes the kind `registries`, and its singular `registry`. It lists each
+registry that the key can see, with one request, so it only adds. `list --detail` is new too:
+see [Release 0.34.0](#release-0340-changes-that-need-action) for the two flags that it replaces.
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
@@ -1141,6 +1150,18 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+- **`list --detail` replaces `--packs` and `--applied`.** `--detail` reads each profile
+  version for its packs and each cluster for the profiles that it applies. `--packs` still
+  reads the versions alone, and `--applied` the clusters alone. Each one also writes a note on
+  standard error that names `--detail`, and the help no longer shows them. Release 0.35.0
+  removes them. Use `--detail`, and name a kind to read that kind alone, such as
+  `strata list profiles --detail`. See
+  [Read each row deeper](../commands/list.md#read-each-row-deeper).
+- **`strata list packs` gives the error `usage` with a message of its own.** Before, the
+  command line refused the value with `invalid value 'packs'`. The exit code stays `2`, and
+  strata still sends no request. The message names `strata list --detail` and
+  `strata packs <name>`, and `--json` writes the error document. A script that matches the old
+  text must match the new one. See [The packs of a registry](../commands/list.md#the-packs-of-a-registry).
 
 ### For a user of the CI drop-ins
 
@@ -1159,6 +1180,11 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::ListKind` has the new variants `Registries` and `Packs`. A `match` with no wildcard arm
+  must name them. `ops::list` refuses `Packs` with `Error::Usage`, before it connects.
+- `ops::Listing` has the new field `registries`, of the new type `ops::ListedRegistry`. A
+  struct literal must set it, and a pattern with no `..` must name it. The kind of a registry is
+  the new closed set `model::registry_kind::RegistryKind`.
 
 ### For a user of the library of strata-preflight
 

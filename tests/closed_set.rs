@@ -21,6 +21,7 @@ use strata::model::oci_provider::OciProvider;
 use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::profile_type::ProfileType;
+use strata::model::registry_kind::RegistryKind;
 use strata::model::scope::ProfileScope;
 use strata::ops::{PairStatus, Policy, RecordStatus};
 use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier, UpstreamSource};
@@ -31,7 +32,7 @@ use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier,
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id. If it does, a record
 /// of an earlier release reads the value as unknown.
-fn sets() -> [Set; 23] {
+fn sets() -> [Set; 24] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
@@ -67,6 +68,7 @@ fn sets() -> [Set; 23] {
         set::<PackType>(&["spectro", "helm", "oci", "manifest"]),
         set::<ProfileType>(&["cluster", "infra", "add-on", "system", "app", "pack"]),
         set::<ProfileScope>(&["project", "tenant", "system"]),
+        set::<RegistryKind>(&["pack", "helm", "oci"]),
         set::<Conjunction>(&["and", "or"]),
         set::<Cloud>(&[
             "all",

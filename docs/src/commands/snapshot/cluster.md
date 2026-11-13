@@ -209,7 +209,7 @@ record carries that statement in `source.cluster`:
 
 These fields are not part of the root: they are Palette's statement about the
 copy, and the copy is the same with or without them. `compare` and `list
-clusters --applied` say when a cluster is behind. What Palette says for each
+clusters --detail` say when a cluster is behind. What Palette says for each
 kind of change is in
 [Cluster copies](../../internals/palette/clusters.md#cluster-copies).
 

@@ -1,0 +1,6 @@
+$ strata list registries
+project dev (uid 64f20000000000000000a0d1)
+
+2 registries
+  Palette Registry  64ec000000000000000000a1  oci
+  Public Repo       5eecc89d0b150045ae661cef  pack

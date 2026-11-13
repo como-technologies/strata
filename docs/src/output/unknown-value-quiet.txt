@@ -1,1 +1,1 @@
-$ strata list profiles --packs --quiet > /dev/null
+$ strata list profiles --detail --quiet > /dev/null

@@ -36,7 +36,7 @@ pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
-    PROFILE_TEMPLATE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
+    PROFILE_TEMPLATE, REGISTRY_METADATA, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
     is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };

@@ -7,7 +7,8 @@
 
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
-use strata::ops::{self, ListOptions, SnapshotOptions};
+use strata::closed_set::Open;
+use strata::ops::{self, ListKind, ListOptions, SnapshotOptions};
 use strata::reference::Ref;
 use strata::snapshot::Snapshot;
 use strata::term::progress::Progress;
@@ -264,4 +265,153 @@ fn a_raw_directory_keeps_the_registries_and_from_raw_gives_the_same_names() {
     let older = ops::snapshot_from_dir(raw.path(), UID_A3, "t1").unwrap();
     assert!(names(&older).iter().all(|(_, n)| n.is_empty()));
     assert_eq!(older.root, fetched.root);
+}
+
+/// "What registries do we even have to search?" `list registries` names each registry that the
+/// key can see, by name, with its uid and its kind. `--registry` of `packs` and a `pack:` ref take
+/// the name or the uid.
+#[test]
+fn list_registries_names_each_registry_that_the_key_can_see_with_its_uid_and_kind() {
+    let api = MemoryApi::new().with(
+        REGISTRY_LISTING,
+        json!({"items": [
+            {"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"},
+            {"name": "Bitnami", "uid": "reg-helm", "kind": "helm"},
+            {"name": "Palette Registry", "uid": "reg-oci", "kind": "oci"},
+            // a kind of a later Palette release keeps its text
+            {"name": "Zarf Repo", "uid": "reg-later", "kind": "later-kind"},
+            {"name": "Prod Repo", "uid": PROD_REGISTRY},
+        ]}),
+    );
+    let options = ListOptions {
+        kinds: vec![ListKind::Registries],
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &options).unwrap();
+    assert_eq!(api.calls(REGISTRY_LISTING), 1);
+    assert!(l.profiles.is_none() && l.clusters.is_none() && l.projects.is_none());
+    let rows: Vec<(&str, &str, &str)> = l
+        .registries
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r.name.as_str(),
+                r.uid.as_str(),
+                r.kind.as_ref().map_or("", Open::as_str),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("Bitnami", "reg-helm", "helm"),
+            ("Palette Registry", "reg-oci", "oci"),
+            ("Prod Repo", PROD_REGISTRY, ""),
+            ("Public Repo", PUBLIC_REGISTRY, "pack"),
+            ("Zarf Repo", "reg-later", "later-kind"),
+        ],
+        "by name"
+    );
+
+    let text = common::terminal().render_list(&l).unwrap();
+    for line in [
+        "\n5 registries\n",
+        "\n  Bitnami           reg-helm    helm\n",
+        "\n  Prod Repo         reg-prod    -\n",
+        "\n  Zarf Repo         reg-later   later-kind\n",
+    ] {
+        assert!(text.contains(line), "{line:?} in {text}");
+    }
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(md.contains("**5 registries**"), "{md}");
+    assert!(md.contains("| Bitnami | `reg-helm` | helm |"), "{md}");
+    let json: Value = serde_json::to_value(&l).unwrap();
+    assert_eq!(
+        json["registries"][0],
+        json!({"name": "Bitnami", "uid": "reg-helm", "kind": "helm"})
+    );
+    assert!(json["registries"][2].get("kind").is_none(), "{json}");
+
+    let one = ListOptions {
+        kinds: vec![ListKind::Registries],
+        ..ListOptions::default()
+    };
+    let single = MemoryApi::new().with(
+        REGISTRY_LISTING,
+        json!({"items": [{"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"}]}),
+    );
+    let text = common::terminal()
+        .render_list(&listing(&single, &one).unwrap())
+        .unwrap();
+    assert!(text.contains("\n1 registry\n"), "{text}");
+    let empty = MemoryApi::new().with(REGISTRY_LISTING, json!({"items": []}));
+    let text = common::terminal()
+        .render_list(&listing(&empty, &one).unwrap())
+        .unwrap();
+    assert!(text.contains("\nno registries\n"), "{text}");
+}
+
+/// The pack rows and the registries read one registry listing. The list of the registries is the
+/// answer, so a Palette with no listing is its error, where the pack rows show the uid alone.
+#[test]
+fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of_the_registries()
+{
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_two_copies(dir.path(), Some(two_registries()));
+    let both = ListOptions {
+        kinds: vec![ListKind::Profiles, ListKind::Registries],
+        packs: true,
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &both).unwrap();
+    assert_eq!(api.calls(REGISTRY_LISTING), 1, "one read for both");
+    assert_eq!(l.registries.as_ref().unwrap().len(), 2);
+    let pack = &l.profiles.as_ref().unwrap()[0].packs.as_ref().unwrap()[3];
+    assert_eq!(pack.registry, "Prod Repo");
+
+    let api = serve_two_copies(dir.path(), None).failing(REGISTRY_LISTING, 404, "not found");
+    let packs = ListOptions {
+        kinds: vec![ListKind::Profiles],
+        packs: true,
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &packs).unwrap();
+    let pack = &l.profiles.as_ref().unwrap()[0].packs.as_ref().unwrap()[3];
+    assert_eq!((pack.registry.as_str(), pack.registry_uid.as_str()), ("", PROD_REGISTRY));
+    let err = listing(&api, &both).unwrap_err();
+    assert!(
+        matches!(err, strata::Error::Api { status: 404, .. }),
+        "{err}"
+    );
+}
+
+/// `ops::list` refuses `ListKind::Packs` with `Usage`, before it connects, as the command line
+/// does.
+#[test]
+fn list_refuses_the_kind_packs_with_usage_before_it_connects() {
+    let options = ListOptions {
+        kinds: vec![ListKind::Profiles, ListKind::Packs],
+        ..ListOptions::default()
+    };
+    let mut connects = 0;
+    let err = ops::list(
+        &options,
+        |_| -> strata::Result<Palette<MemoryApi>> {
+            connects += 1;
+            Ok(Palette::new(MemoryApi::new()))
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert_eq!(connects, 0);
+    let strata::Error::Usage { message } = err else {
+        panic!("{err}")
+    };
+    assert!(
+        message.contains("`strata list --detail`") && message.contains("`strata packs <name>`"),
+        "{message}"
+    );
 }

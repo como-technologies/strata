@@ -8,9 +8,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi, named_entries};
 use crate::closed_set::Open;
-use crate::error::{ErrorDocument, Result};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::model::cloud::Cloud;
 use crate::model::profile_type::ProfileType;
 use crate::model::scope::ProfileScope;
@@ -24,8 +25,11 @@ use crate::json::{first_nonempty, items, str_at, text, text_map};
 use super::{ConsumerCounts, client_for};
 
 mod profiles;
+mod registries;
 
 use profiles::list_profiles;
+use registries::list_registries;
+pub use registries::ListedRegistry;
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -51,7 +55,22 @@ pub enum ListKind {
     /// The saved tag filters of the tenant, each a `filter:<name>` ref.
     #[value(alias = "filter")]
     Filters,
+    /// The registries that the key can see, each a name for `--registry` of `packs` and for a
+    /// `pack:` ref.
+    #[value(alias = "registry")]
+    Registries,
+    /// No kind that `list` reads: `list` refuses it with `Usage`. A list of the packs of a
+    /// registry is a catalog, and strata is no catalog. The help does not show it.
+    #[value(alias = "pack", hide = true)]
+    Packs,
 }
+
+/// The refusal of `list packs`. It names the two commands that answer the questions about packs
+/// that strata keeps.
+const NO_PACK_LIST: &str = "`list` does not list packs, because a list of the packs of a \
+                            registry is a catalog. `strata list --detail` gives the packs of \
+                            each profile version. `strata packs <name>` gives the versions of \
+                            one pack";
 
 /// What `list` reads, and in which scope.
 #[derive(Debug, Clone, Default)]
@@ -61,12 +80,13 @@ pub struct ListOptions {
     /// The project to list profiles and clusters in, in place of the configured scope.
     pub project: Option<String>,
     /// Read each profile document for its type, its consumers, and its packs: one request per
-    /// profile version.
+    /// profile version. `--detail` sets it, and `applied` too.
     pub packs: bool,
     /// Keep only the profiles with a pack whose name contains this text, ignoring case. Implies
     /// `packs`.
     pub pack: Option<String>,
     /// Read each cluster document for the profiles the cluster applies: one request per cluster.
+    /// `--detail` sets it, and `packs` too.
     pub applied: bool,
     /// Keep only the clusters whose name or uid contains this text, ignoring case. Implies
     /// `applied`.
@@ -85,8 +105,20 @@ impl ListOptions {
         match kind {
             ListKind::Profiles => self.cluster.is_none() && self.query.is_empty(),
             ListKind::Clusters => self.pack.is_none(),
-            ListKind::Projects | ListKind::Filters => false,
+            ListKind::Projects | ListKind::Filters | ListKind::Registries | ListKind::Packs => {
+                false
+            }
         }
+    }
+
+    /// `Usage` for a kind that `list` refuses, before the first request.
+    fn check(&self) -> Result<()> {
+        if self.kinds.contains(&ListKind::Packs) {
+            return Err(Error::Usage {
+                message: NO_PACK_LIST.to_string(),
+            });
+        }
+        Ok(())
     }
 
     /// True when the clusters are read for the profiles they apply: `--applied`, or `--cluster`,
@@ -347,6 +379,9 @@ pub struct Listing {
     /// The saved tag filters of the tenant, by name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filters: Option<Vec<super::SavedFilter>>,
+    /// The registries that the key can see in the scope of the listing, by name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registries: Option<Vec<ListedRegistry>>,
 }
 
 impl Listing {
@@ -357,11 +392,11 @@ impl Listing {
     }
 }
 
-/// List what a ref can name: profile versions and clusters in one scope, and the projects the
-/// key can see.
+/// List what a ref can name: profile versions, clusters, and registries in one scope, and the
+/// projects the key can see.
 ///
-/// Profiles and clusters are read through `connect(options.project)`, where `None` is the
-/// configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
+/// Profiles, clusters, and registries are read through `connect(options.project)`, where `None`
+/// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
 /// project Palette lists only that project. The cluster listing omits each virtual cluster,
 /// so the clusters also come from [`Palette::virtual_cluster_search`], when the search takes
 /// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
@@ -370,8 +405,9 @@ impl Listing {
 ///
 /// # Errors
 ///
-/// The error of `connect`, and the error of a listing that strata cannot read. The errors of
-/// [`select`](super::select) for a query of tags.
+/// [`Error::Usage`] for [`ListKind::Packs`], before `connect`. The error of `connect`, and the
+/// error of a listing that strata cannot read. The errors of [`select`](super::select) for a
+/// query of tags.
 pub fn list<A, F>(
     options: &ListOptions,
     mut connect: F,
@@ -382,9 +418,12 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
+    options.check()?;
     let home = connect(options.project.as_deref())?;
     // each project listing of the command is read one time, whoever needs it
     let mut listings = ProjectListings::default();
+    // the registry listing too: the pack rows and the registries read the same one
+    let mut registry_listings = Registries::new(&home);
     // a query of labels searches every project the key can read, so the listing is at tenant
     // scope, and each cluster names its project
     let project_uid = if options.query.is_empty() {
@@ -395,7 +434,12 @@ where
 
     let profiles = if options.wants(ListKind::Profiles) {
         progress.note("listing profiles");
-        Some(list_profiles(&home, options, progress)?)
+        Some(list_profiles(
+            &home,
+            options,
+            &mut registry_listings,
+            progress,
+        )?)
     } else {
         None
     };
@@ -418,6 +462,12 @@ where
     } else {
         None
     };
+    let registries = if options.wants(ListKind::Registries) {
+        progress.note("listing registries");
+        Some(list_registries(&mut registry_listings)?)
+    } else {
+        None
+    };
     let project_name = scope_name(&project_uid, projects.as_deref(), &home, &mut listings);
 
     Ok(Listing {
@@ -436,6 +486,7 @@ where
         resolved,
         query_filter,
         filters,
+        registries,
     })
 }
 

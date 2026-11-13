@@ -62,7 +62,7 @@ pub(crate) enum Cmd {
     /// List the clusters, edge hosts, cluster templates, and app deployments that use a profile
     /// version
     Consumers(ConsumersArgs),
-    /// List the profile versions, clusters, projects, and saved tag filters in the scope
+    /// List the profile versions, clusters, projects, saved tag filters, and registries in the scope
     List(ListArgs),
     /// List the versions a registry offers for a pack
     Packs(PacksArgs),
@@ -512,14 +512,17 @@ pub(crate) struct ListArgs {
     #[command(flatten)]
     pub(crate) project: ProjectArgs,
     /// Also read each version for its packs and their registries, its consumers, and whether it is
-    /// published
+    /// published; read each cluster for the profiles it applies
     #[arg(long)]
+    pub(crate) detail: bool,
+    /// The old name of --detail for the versions alone. It stays until release 0.35.0
+    #[arg(long, hide = true)]
     pub(crate) packs: bool,
-    /// Keep the versions with a pack whose name holds TEXT; sets --packs
+    /// Keep the versions with a pack whose name holds TEXT; reads each version as --detail does
     #[arg(long, value_name = "TEXT")]
     pub(crate) pack: Option<String>,
-    /// Also read each cluster for the profiles it applies
-    #[arg(long)]
+    /// The old name of --detail for the clusters alone. It stays until release 0.35.0
+    #[arg(long, hide = true)]
     pub(crate) applied: bool,
     /// Keep the clusters with this label, KEY=VALUE or KEY; give it again for each label.
     /// Palette searches every project the key can read
@@ -528,7 +531,7 @@ pub(crate) struct ListArgs {
     /// Keep the clusters that a saved tag filter selects, by name or uid
     #[arg(long, value_name = "NAME")]
     pub(crate) filter: Option<String>,
-    /// Keep the clusters whose name or uid holds TEXT; sets --applied
+    /// Keep the clusters whose name or uid holds TEXT; reads each cluster as --detail does
     #[arg(long, value_name = "TEXT")]
     pub(crate) cluster: Option<String>,
     #[command(flatten)]

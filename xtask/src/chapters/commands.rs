@@ -27,7 +27,7 @@ pub(super) fn run(r: &mut Runner) {
     verify_objects(r);
 }
 
-/// The chapter `list`: the listings of profiles, clusters, packs, and consumers.
+/// The chapter `list`: the listings of profiles, clusters, packs, consumers, and registries.
 fn list(r: &mut Runner) {
     r.chapter("list", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
@@ -43,10 +43,20 @@ fn list(r: &mut Runner) {
     r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A111], &[]));
     r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A111_PROD], &[]));
     r.step("list", 0, false, "strata list");
+    r.step("list-detail", 0, false, "strata list --detail");
     r.step("list-projects", 0, false, "strata list projects");
+    r.step("list-registries", 0, false, "strata list registries");
+    r.step(
+        "list-registries-json",
+        0,
+        false,
+        "strata list registries --json | jq -c '.registries[]'",
+    );
+    // a list of the packs of a registry is a catalog, so strata refuses it
+    r.step("list-packs-refused", 2, true, "strata list packs");
     r.step("list-prod", 0, false, "strata list --project-name prod");
     r.step("list-tenant", 0, false, "strata list clusters --project ''");
-    r.step("list-applied", 0, false, "strata list clusters --applied");
+    r.step("list-applied", 0, false, "strata list clusters --detail");
     r.step("list-cluster", 0, false, "strata list --cluster payments");
     r.step(
         "list-cluster-tenant",
@@ -67,7 +77,6 @@ fn list(r: &mut Runner) {
         false,
         "strata list --pack cilium --project ''",
     );
-    r.step("list-packs", 0, false, "strata list --packs");
     r.step(
         "list-pack-consumers",
         1,
@@ -97,13 +106,13 @@ fn unknown_value(r: &mut Runner) {
         "unknown-value-note",
         0,
         true,
-        "strata list profiles --packs > /dev/null",
+        "strata list profiles --detail > /dev/null",
     );
     r.step(
         "unknown-value-quiet",
         0,
         true,
-        "strata list profiles --packs --quiet > /dev/null",
+        "strata list profiles --detail --quiet > /dev/null",
     );
     // the two runs above wrote two lines to the log of the home of the runner
     r.step("unknown-value-report", 0, false, "strata report");
@@ -138,7 +147,7 @@ fn unknown_value(r: &mut Runner) {
         "unknown-value-send",
         0,
         true,
-        "STRATA_REPORT=1 strata list profiles --packs > /dev/null",
+        "STRATA_REPORT=1 strata list profiles --detail > /dev/null",
     );
     // the send marked the line that it sent, so the report holds nothing new
     r.step("unknown-value-send-marked", 0, false, "strata report");
@@ -154,19 +163,19 @@ fn unknown_value(r: &mut Runner) {
 fn list_edge_cases(r: &mut Runner) {
     // a version that nobody published: its packs are the packs of its draft
     r.unpublished(DEV, A130, "1.3.0", "aws-stack@1.1.1", &[]);
-    r.step("list-draft", 0, false, "strata list profiles --packs");
+    r.step("list-draft", 0, false, "strata list profiles --detail");
     r.step(
         "list-draft-json",
         0,
         false,
-        r#"strata list profiles --packs --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'"#,
+        r#"strata list profiles --detail --json | jq -r '.profiles[] | "\(.ref) published=\(.published)"'"#,
     );
     // an imported cluster in read-only mode: Palette lists it with an import type and the cloud
     // generic, and applies no add-on profile to it
     r.tenant(|t| t.cluster(DEV, LEGACY, "legacy", &[], &[]));
     r.tenant(|t| t.cluster_field(DEV, LEGACY, "/spec/clusterType", json!("AlloyMonitor")));
     r.tenant(|t| t.cluster_field(DEV, LEGACY, "/spec/cloudType", json!("generic")));
-    r.step("list-imported", 0, false, "strata list clusters --applied");
+    r.step("list-imported", 0, false, "strata list clusters --detail");
     r.step(
         "list-imported-json",
         0,
@@ -179,14 +188,14 @@ fn list_edge_cases(r: &mut Runner) {
         "list-consumers-full",
         0,
         false,
-        "strata list profiles --packs",
+        "strata list profiles --detail",
     );
     r.excerpt("list-consumers", "list-consumers-full", r"^  aws-stack@");
     r.step(
         "list-consumers-json",
         0,
         false,
-        r#"strata list profiles --packs --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'"#,
+        r#"strata list profiles --detail --json | jq -c '.profiles[] | {ref, consumers, consumersByKind}'"#,
     );
     r.step(
         "list-consumers-same",
@@ -225,7 +234,7 @@ fn scope(r: &mut Runner) {
         true,
         &format!("strata snapshot {A111_TENANT} -o tenant-aws-stack.json"),
     );
-    r.step("scope-packs", 0, false, "strata list profiles --packs");
+    r.step("scope-packs", 0, false, "strata list profiles --detail");
     r.step(
         "scope-tenant",
         0,

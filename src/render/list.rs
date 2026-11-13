@@ -2,7 +2,7 @@
 
 use super::notes::marks_invalid;
 use super::verify::record_label;
-use super::{count_of, entry_error, joined_note};
+use super::{count_of, count_of_noun, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
@@ -194,6 +194,17 @@ pub(crate) fn list_count(n: usize, singular: &str, pack: Option<&str>) -> String
         Some(text) => format!("{count} with a pack matching '{text}'"),
         None => count,
     }
+}
+
+/// `2 registries`, `1 registry`, or `no registries`: the heading of the registries of a listing.
+pub(crate) fn registry_count(n: usize) -> String {
+    count_of_noun(n, "registry", "registries")
+}
+
+/// The kind of a listed registry as a cell of a report: `pack`, `helm`, or `oci`, and `-` when
+/// the listing names no kind.
+pub(crate) fn registry_kind_cell(r: &crate::ops::ListedRegistry) -> &str {
+    dash(r.kind.as_ref().map_or("", Open::as_str))
 }
 
 /// `2 clusters`, or, with the `--cluster` filter, `2 clusters matching 'payments'`.

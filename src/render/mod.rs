@@ -137,10 +137,15 @@ fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
 ///
 /// Each count and its noun in a report comes from here, so zero reads in one way.
 pub fn count_of(n: usize, singular: &str) -> String {
-    let ending = plural(n, "", "s");
+    count_of_noun(n, singular, &format!("{singular}s"))
+}
+
+/// `2 registries`, `1 registry`, or `no registries`: [`count_of`] for a noun whose plural is
+/// `many`, and not the singular `one` with an `s`.
+pub(crate) fn count_of_noun(n: usize, one: &str, many: &str) -> String {
     match n {
-        0 => format!("no {singular}{ending}"),
-        n => format!("{n} {singular}{ending}"),
+        0 => format!("no {many}"),
+        n => format!("{n} {}", plural(n, one, many)),
     }
 }
 

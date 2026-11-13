@@ -86,7 +86,7 @@ fn edited_in_place_cluster(r: &mut Runner) {
         "edited-list-behind",
         0,
         false,
-        "strata list clusters --applied",
+        "strata list clusters --detail",
     );
     r.step(
         "edited-verify-who-json",
@@ -407,7 +407,7 @@ fn cluster_release(r: &mut Runner) {
         "cluster-applied",
         0,
         false,
-        "strata list clusters --applied",
+        "strata list clusters --detail",
     );
     cluster_release_many_profiles(r);
     r.step(

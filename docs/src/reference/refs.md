@@ -10,7 +10,7 @@ A ref names the thing that a command reads.
 | `<name>@<version>@draft` | the draft of the profile version: what its publish gives | `aws-stack@1.1.1@draft` |
 | `<uid>@draft` | the draft of the profile version with this uid | `64e0000000000000000000c3@draft` |
 | `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
-| `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
+| `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid, as `strata list registries` names them | `pack:Public Repo/csi-aws-ebs@1.65.0` |
 | `pack:<name>@latest` | the highest version of the pack that the registry serves and that is not a pre-release | `pack:kubernetes@latest` |
 | `cluster:<cluster>` | each profile that the cluster runs; beside a profile version in `compare`, the profile that the version replaces | `cluster:payments` |
 | `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |

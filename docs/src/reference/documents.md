@@ -605,14 +605,15 @@ of the secret does not show, because the two sides hold the mask: see
   Palette for the virtual clusters, so `clusters[]` holds them. `false` when
   Palette has no search, or its search takes no `environment`: the list then
   holds no virtual cluster.
-- `profiles[]`, `clusters[]`, `projects[]`, and `filters[]`: only the kinds that were listed.
-  A kind that was listed and holds nothing is `[]`. Profiles come by name and
-  then by version, clusters by name, and projects by name.
+- `profiles[]`, `clusters[]`, `projects[]`, `filters[]`, and `registries[]`: only the
+  kinds that were listed. A kind that was listed and holds nothing is `[]`.
+  Profiles come by name and then by version. Clusters, projects, and registries
+  come by name.
   - A profile: `ref`, `name`, `version`, `uid`, `cloudType`, and `scope`.
     `scope` is `project`, `tenant`, or `system`.
     - `scope` is absent when Palette has no profile search, or when strata
-      could not read the document of the version with `--packs`.
-    - With `--packs`, also `type`, `consumers`, `published`, and `packs[]` with
+      could not read the document of the version with `--detail`.
+    - With `--detail`, also `type`, `consumers`, `published`, and `packs[]` with
       `layer`, `name`, `tag`, `version`, `registryUid`, and `registry`, or
       `error`.
     - `registryUid` is the uid of the registry that the version takes the pack
@@ -645,16 +646,20 @@ of the secret does not show, because the two sides hold the mask: see
       each with `uid` and `name`, as the search names them. `name` is absent
       when Palette gives none, and `hostCluster` is absent for a group of the
       system.
-    - With `--applied`, the entry also has `profiles[]`, or `error`. Each entry
+    - With `--detail`, the entry also has `profiles[]`, or `error`. Each entry
       of `profiles[]` has the `uid`, `name`, `version`, and `type` of a profile
       that the cluster applies.
-    - With `--applied`, the entry also has `updatesPending` and
+    - With `--detail`, the entry also has `updatesPending` and
       `pendingUpdates[]`, as a cluster record gives them. `updatesPending` is
       absent when strata could not read the notifications.
   - A project: `name` and `uid`.
   - A saved tag filter: `name`, `uid`, `conjunction` (`and` or `or`), and
     `conditions[]`. Each condition has `key`, `values[]`, and `negation` when
     true. `values[]` is empty when the key alone must be there.
+  - A registry: `name`, `uid`, and `kind`. `kind` is `pack`, `helm`, or `oci`,
+    or the text of a kind of a later Palette release. It is absent when the
+    registry listing names no kind. A document of strata 0.33 and before has no
+    `registries[]`.
 
 ## strata-packs/1
 
