@@ -12,14 +12,10 @@ mod table;
 // the lists keep one rule.
 #[path = "../../tests/common/variants.rs"]
 mod variants;
-// The answers of Palette to a key whose roles do not give a read, as the tests of the crate serve
-// them.
-#[allow(dead_code)]
-#[path = "../../tests/common/palette.rs"]
-mod palette;
 
 use super::*;
 use crate::api::codes::{OPERATION_FORBIDDEN_CODE, PROJECT_SCOPE_CODE};
+use crate::api::routes as palette;
 use crate::config::KEY_VARS;
 use table::first_cells;
 use variants::one_of_each;

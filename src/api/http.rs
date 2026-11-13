@@ -152,11 +152,12 @@ fn retry_after_seconds(header: Option<&str>) -> Option<u64> {
 }
 
 // The routes and the answers of Palette that the tests of strata serve, in the file that they use.
-// A unit test here uses the refusal of a download, so the other items are dead code here.
+// The crate loads the file here alone, and the other unit tests read it as `api::routes`.
+// Each unit test uses a few items, so the other items are dead code.
 #[cfg(test)]
 #[allow(dead_code)]
 #[path = "../../tests/common/palette.rs"]
-mod routes;
+pub(crate) mod routes;
 
 #[cfg(test)]
 mod tests {

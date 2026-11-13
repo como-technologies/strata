@@ -1,12 +1,7 @@
 //! The tests of the codes of Palette: the tables, the routes, the classes, and the denials.
 
-// The answers of Palette to a key whose roles do not give a read, as the tests of the crate serve
-// them.
-#[allow(dead_code)]
-#[path = "../../../tests/common/palette.rs"]
-mod palette;
-
 use super::*;
+use crate::api::routes as palette;
 use crate::error::{Error, FailureClass};
 use serde_json::json;
 
