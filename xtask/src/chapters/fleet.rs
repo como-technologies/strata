@@ -523,25 +523,7 @@ fn packs(r: &mut Runner) {
         false,
         "strata compare 'pack:Public Repo/ubuntu-aws@20.04' 'pack:Public Repo/ubuntu-aws@24.04'",
     );
-    r.step(
-        "pack-ambiguous",
-        2,
-        true,
-        "strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0",
-    );
-    r.step(
-        "pack-which-registry",
-        0,
-        false,
-        "strata list --pack csi-aws-ebs",
-    );
-    r.quiet("strata snapshot aws-stack@1.1.18 -o aws-stack-1.1.18.json");
-    r.step(
-        "pack-record-registry",
-        0,
-        false,
-        r#"jq '.packs[] | select(.name == "csi-aws-ebs") | {key, version, registryUid, registryName}' aws-stack-1.1.18.json"#,
-    );
+    two_registries(r);
     r.step("pack-registries", 1, false, "strata compare 'pack:Public Repo/csi-aws-ebs@1.65.0' 'pack:Palette Registry/csi-aws-ebs@1.65.0'");
     r.step(
         "pack-record",
@@ -583,6 +565,30 @@ fn packs(r: &mut Runner) {
         "strata packs kubernetes --registry 'Public Repo' --cloud aws --latest",
     );
     r.step("packs-json", 0, false, r#"strata packs csi-aws-ebs --registry 'Public Repo' --latest --json | jq '.registries[0].versions[0]'"#);
+}
+
+/// The steps of the chapter `packs` for a pack version in two registries: the refusal of a ref
+/// that names no registry, and the list and the record that name the registry of each pin.
+fn two_registries(r: &mut Runner) {
+    r.step(
+        "pack-ambiguous",
+        2,
+        true,
+        "strata compare pack:csi-aws-ebs@1.65.0 pack:csi-aws-ebs@1.65.0",
+    );
+    r.step(
+        "pack-which-registry",
+        0,
+        false,
+        "strata list --pack csi-aws-ebs",
+    );
+    r.quiet("strata snapshot aws-stack@1.1.18 -o aws-stack-1.1.18.json");
+    r.step(
+        "pack-record-registry",
+        0,
+        false,
+        r#"jq '.packs[] | select(.name == "csi-aws-ebs") | {key, version, registryUid, registryName}' aws-stack-1.1.18.json"#,
+    );
 }
 
 /// The chapter `palette-latest`: a rebuild of the newest version of a pack.
