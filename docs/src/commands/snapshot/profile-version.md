@@ -47,6 +47,20 @@ version, so `1.0.1` is above `1.0.1-g0123456789ab`. A name that has only
 pre-releases gives its highest one. See
 [The order of versions](../../reference/compatibility.md#the-order-of-versions).
 
+The note `@latest is` names the version that the ref takes. When `@latest`
+skips a pre-release above that version, the note names the highest one. So a
+pipeline that publishes a build on each merge gets one line. In
+[the sample pipeline](../../internals/sample-pipeline.md#the-pre-release-of-a-merge),
+`aws-stack` has pre-releases above `1.1.1`:
+
+```text
+{{#include ../../output/pipeline-latest.txt}}
+```
+
+`-q` removes the note, as it removes each progress note. `2.2.8-hotfix` is a
+pre-release by SemVer, below `2.2.8`, also when a team means a later build. Give
+a later build a higher number, such as `2.2.9`.
+
 A develop build such as `1.1.8.develop` does not parse as a semantic version.
 Palette reads it as `1.1.8`. Strata puts it below `1.1.8`, and `@latest` skips
 it as a pre-release. A develop build such as `1.2.develop` holds no three
@@ -59,12 +73,15 @@ numbers, so Palette reads no version in it. Strata reads it as a pre-release of
 ```
 
 `strata list` gives `1.2.develop` last, because it is the highest. The record
-takes `1.1.10`:
+takes `1.1.10`, and the note names `1.2.develop`:
 
 ```text
 {{#include ../../output/latest-develop.txt}}
 {{#include ../../output/latest-develop-version.txt}}
 ```
+
+`1.2.develop` does not parse, so the note does not say `by SemVer`. See
+[the rule of `@latest`](../../reference/refs.md#rules).
 
 <div class="playground-demo">
 

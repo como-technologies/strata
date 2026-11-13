@@ -2322,3 +2322,78 @@ fn snapshot_of_a_version_whose_pack_palette_marks_invalid_warns_on_standard_erro
     assert_eq!(r.code, 0, "{}", r.err);
     assert!(!r.err.contains("invalid"), "{}", r.err);
 }
+
+/// The stand-in of a tenant with two versions of `barney`: `1.0.0`, and the pre-release
+/// `1.0.1-mr2.770685` above it. Each version has a draft, so `@draft` reads one too.
+fn barney_tenant() -> String {
+    let versions = [(UID_A, "1.0.0"), (UID_B, "1.0.1-mr2.770685")];
+    let mut routes = std::collections::BTreeMap::new();
+    let listed: Vec<serde_json::Value> = versions
+        .iter()
+        .map(|(uid, version)| {
+            serde_json::json!({"metadata": {"name": "barney", "uid": uid},
+                "spec": {"cloudType": "aws", "version": version}})
+        })
+        .collect();
+    routes.insert(
+        PROFILE_LISTING.to_string(),
+        serde_json::json!({"items": listed}),
+    );
+    for (uid, version) in versions {
+        let published = common::template("aws", "add-on", common::packs());
+        let draft = Some(published.clone());
+        routes.insert(
+            common::profile_route(uid),
+            common::profile_document(uid, "barney", version, published, draft),
+        );
+        routes.insert(common::manifests_route(uid), common::no_manifests());
+    }
+    common::serve_routes(routes)
+}
+
+/// Issue #625. A ref `<name>@latest` names the version that it takes, and the highest pre-release
+/// above that version, which it skips. The draft of the version and `consumers` print the same
+/// note. A quiet run writes no note, as for each other progress note.
+#[test]
+fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
+    let api = barney_tenant();
+    let home = tempfile::tempdir().unwrap();
+    let out = home.path().join("latest.json");
+    let out = out.to_str().unwrap();
+    let strata = |args: &[&str]| {
+        let mut command = strata_command();
+        isolate_palette(&mut command, home.path())
+            .env("PALETTE_API", &api)
+            .env_remove("STRATA_QUIET")
+            .args(args);
+        Run::of(&mut command)
+    };
+    let note =
+        "strata: @latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer\n";
+    for reference in ["barney@latest", "barney@latest@draft"] {
+        let r = strata(&["snapshot", reference, "-o", out]);
+        assert_eq!(r.code, 0, "{reference}: {}", r.err);
+        assert_eq!(r.err.matches(note).count(), 1, "{reference}: {}", r.err);
+        assert!(
+            r.err
+                .contains(&format!("strata: fetching profile {UID_A}\n")),
+            "{reference}: {}",
+            r.err
+        );
+        assert_eq!(read_json(Path::new(out))["source"]["version"], "1.0.0");
+        let r = strata(&["snapshot", reference, "-o", out, "-q"]);
+        assert_eq!((r.code, r.err.as_str()), (0, ""), "{reference}");
+    }
+    let r = strata(&["consumers", "barney@latest", "--list-only"]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert_eq!(r.err.matches(note).count(), 1, "{}", r.err);
+    assert!(
+        r.err.contains(&format!("consumers of profile {UID_A}")),
+        "{}",
+        r.err
+    );
+    // an exact version names its version already, so it writes no note
+    let r = strata(&["snapshot", "barney@1.0.0", "-o", out]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(!r.err.contains("@latest"), "{}", r.err);
+}

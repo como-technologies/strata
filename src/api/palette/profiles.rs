@@ -83,9 +83,20 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The uid of a profile that a ref names: `id` is a uid when there is no `version`, and else
-    /// a name that [`Palette::resolve`] finds at `version`.
-    pub(crate) fn profile_uid(&self, id: &str, version: Option<&str>) -> Result<String> {
+    /// a name that [`Palette::resolve`] finds at `version`. For [`LATEST`], `progress` notes the
+    /// version that the pick takes: see [`Latest::note`].
+    pub(crate) fn profile_uid(
+        &self,
+        id: &str,
+        version: Option<&str>,
+        progress: &Progress,
+    ) -> Result<String> {
         match version {
+            Some(LATEST) => {
+                let latest = self.latest(id)?;
+                progress.note(&latest.note(id));
+                Ok(latest.uid)
+            }
             Some(version) => self.resolve(id, version),
             None => Ok(id.to_string()),
         }
@@ -110,6 +121,12 @@ impl<A: PaletteApi> Palette<A> {
     /// when two or more versions of the name are the highest. A profile of the tenant and a
     /// profile of the project can have one name and one version.
     pub fn resolve_latest(&self, name: &str) -> Result<String> {
+        self.latest(name).map(|latest| latest.uid)
+    }
+
+    /// The version of `name` that [`Palette::resolve_latest`] finds, with its uid, and the
+    /// highest pre-release above it that the pick skips.
+    pub(super) fn latest(&self, name: &str) -> Result<Latest> {
         let listing = self.profile_listing()?;
         let versions: Vec<(String, String)> = listed_versions(&listing, name).collect();
         let Some((highest, _)) = version::pick(versions.iter(), |(v, _)| v.as_str(), LATEST) else {
@@ -124,7 +141,12 @@ impl<A: PaletteApi> Palette<A> {
             .filter(|(v, _)| version::compare(v, highest).is_eq())
             .map(|(_, uid)| uid.clone())
             .collect();
-        self.one_of(name, highest, uids)
+        let skipped = version::skipped_above(versions.iter().map(|(v, _)| v.as_str()), highest);
+        Ok(Latest {
+            uid: self.one_of(name, highest, uids)?,
+            version: highest.clone(),
+            skipped: skipped.map(str::to_string),
+        })
     }
 
     /// The uid of each version of each profile of `scope` in the current scope, from the profile
@@ -575,6 +597,37 @@ impl<A: PaletteApi> Palette<A> {
     pub fn validate_profile_import(&self, body: &Value) -> Result<Value> {
         self.api
             .post_json(&route(PROFILES, &["import", "validate"]), body)
+    }
+}
+
+/// The version of a profile name that [`LATEST`] takes, and the highest pre-release above it
+/// that the pick skips: see [`version::pick`].
+pub(super) struct Latest {
+    /// The uid of the version.
+    pub(super) uid: String,
+    /// The version.
+    pub(super) version: String,
+    /// The highest pre-release above `version`. None when the pick skips none.
+    pub(super) skipped: Option<String>,
+}
+
+impl Latest {
+    /// The progress note of the pick of `name`, such as `@latest is barney@1.0.0`.
+    ///
+    /// A skipped pre-release adds `; it skips 1.0.1-rc.1, a pre-release by SemVer`. A skipped
+    /// version that does not parse, such as `1.2.develop`, is a pre-release by the order of
+    /// [`version::compare`], and not by Semantic Versioning. So the note omits `by SemVer` for it.
+    pub(super) fn note(&self, name: &str) -> String {
+        let picked = format!("@latest is {}", name_version(name, &self.version));
+        let Some(skipped) = &self.skipped else {
+            return picked;
+        };
+        let rule = if version::parses(skipped) {
+            " by SemVer"
+        } else {
+            ""
+        };
+        format!("{picked}; it skips {skipped}, a pre-release{rule}")
     }
 }
 

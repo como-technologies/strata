@@ -421,7 +421,7 @@ where
 
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
-    let uid = uid_of_ref(reference, uid_hint, &home)?;
+    let uid = uid_of_ref(reference, uid_hint, &home, progress)?;
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home.profile_document(&uid)?;
 
@@ -473,11 +473,14 @@ fn uid_of_ref<A: PaletteApi>(
     reference: &Ref,
     hint: Option<String>,
     home: &Palette<A>,
+    progress: &Progress,
 ) -> Result<String> {
     match (hint, reference) {
         (Some(uid), _) => Ok(uid),
-        (None, Ref::NameVersion { name, version }) => home.resolve(name, version),
-        (None, Ref::Draft { id, version }) => home.profile_uid(id, version.as_deref()),
+        (None, Ref::NameVersion { name, version }) => {
+            home.profile_uid(name, Some(version), progress)
+        }
+        (None, Ref::Draft { id, version }) => home.profile_uid(id, version.as_deref(), progress),
         (None, _) => unreachable!("every other ref carries a uid"),
     }
 }

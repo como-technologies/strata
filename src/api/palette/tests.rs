@@ -775,3 +775,48 @@ fn each_template_of_a_route_that_gives_a_closed_set_starts_from_its_collection()
         route(REGISTRIES, &[RegistryKind::Oci.as_str(), "summary"])
     );
 }
+
+/// Issue #625. The note of `@latest` names the version that it takes, and the highest pre-release
+/// above it, which it skips. A pre-release that parses is one by Semantic Versioning. Another
+/// form, such as `1.2.develop`, is one by the order of strata, so the note omits `by SemVer`.
+#[test]
+fn the_note_of_latest_names_the_version_and_the_highest_pre_release_that_it_skips() {
+    fn listed(name: &str, uid: &str, version: &str) -> Value {
+        json!({"metadata": {"name": name, "uid": uid}, "spec": {"version": version}})
+    }
+    let listing = json!({"items": [
+        listed("barney", "u1", "1.0.0"),
+        listed("barney", "u2", "1.0.1-mr2.770685"),
+        listed("barney", "u3", "1.0.1-mr1.770600"),
+        listed("barney", "u4", "0.9.0-rc.1"),
+        listed("hotfix", "u5", "2.2.8"),
+        listed("hotfix", "u6", "2.2.8-hotfix"),
+        listed("develop", "u7", "1.1.10"),
+        listed("develop", "u8", "1.2.develop"),
+        listed("rc", "u9", "1.0.0-rc.1"),
+        listed("rc", "u10", "1.0.0-rc.2"),
+    ]});
+    let p = Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+    for (name, uid, note) in [
+        (
+            "barney",
+            "u1",
+            "@latest is barney@1.0.0; it skips 1.0.1-mr2.770685, a pre-release by SemVer",
+        ),
+        // `2.2.8-hotfix` is below `2.2.8` by SemVer, so `@latest` skips nothing above `2.2.8`
+        ("hotfix", "u5", "@latest is hotfix@2.2.8"),
+        (
+            "develop",
+            "u7",
+            "@latest is develop@1.1.10; it skips 1.2.develop, a pre-release",
+        ),
+        // a name with only pre-releases gives its highest one, and skips none
+        ("rc", "u10", "@latest is rc@1.0.0-rc.2"),
+    ] {
+        let latest = p.latest(name).unwrap();
+        assert_eq!(
+            (latest.uid.as_str(), latest.note(name)),
+            (uid, note.to_string())
+        );
+    }
+}

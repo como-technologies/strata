@@ -213,7 +213,7 @@ where
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(names_a_set(reference)),
         Ref::NameVersion { name, version } => live(&|palette| {
-            let uid = palette.resolve(name, version)?;
+            let uid = palette.profile_uid(name, Some(version), progress)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
         }),
         Ref::Uid(uid) => {
@@ -650,7 +650,7 @@ pub fn draft_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let uid = palette.profile_uid(id, version)?;
+    let uid = palette.profile_uid(id, version, progress)?;
     let raw = palette.fetch_profile(&uid, progress)?;
     Snapshot::from_raw_draft(&raw, reference, fetched_at)
 }
