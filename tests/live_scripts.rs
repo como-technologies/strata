@@ -8633,23 +8633,23 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     stage.strata(
         "preflight build.json --cloud aws --tier static --offline --quiet",
         0,
-        "OK: each counted check passed\n",
+        "NOT COUNTED: no check counted on aws\n",
     );
     stage.strata(
         "preflight build.json --cloud aws --tier static --offline --quiet --format markdown",
         0,
-        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`\n",
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**NOT COUNTED: no check counted on aws** — source `build.json`\n",
     );
     // the job of a pull request runs preflight.sh: offline, and then with the key of the lab
     stage.strata(
         "preflight build.json --cloud aws --tier static --quiet --offline --out preflight-job --format markdown",
         0,
-        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`, Palette release not given, tiers static, offline. 4 ran\n",
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**NOT COUNTED: no check counted on aws** — source `build.json`, Palette release not given, tiers static, offline. 4 ran\n",
     );
     stage.strata(
         "preflight build.json --cloud aws --tier static,palette --quiet --out preflight-job-key --format markdown",
         0,
-        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`, Palette release not given, tiers static, palette. 6 ran\n",
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**NOT COUNTED: no check counted on aws** — source `build.json`, Palette release not given, tiers static, palette. 6 ran\n",
     );
     stage.strata(
         "preflight build.json --cloud aws --tier static,palette --no-exec --strict --quiet",
@@ -12904,11 +12904,33 @@ fn the_page_of_live_runs_names_each_check_of_observer_chart_sh() {
 
 /// A `strata` that logs each call with the name of the key it read. The name is `role` for the
 /// second key, and `lab` for the key of the example. A real key never appears in the log.
+///
+/// `strata preflight` prints `$FAKE_STRATA/preflight-<name>.json`, the report for that key, and
+/// exits 2 when a check of it gave an error, as strata-preflight does.
 const FAKE_STRATA_ROLE: &str = r#"#!/usr/bin/env bash
 who=lab; [ "${PALETTE_API_KEY:-}" = role-k ] && who=role
 echo "$who $*" >> "$FAKE_STRATA/keys"
+if [ "$1" = preflight ]; then
+  cat "$FAKE_STRATA/preflight-$who.json"
+  ! grep -q '"verdict":"error"' "$FAKE_STRATA/preflight-$who.json" || exit 2
+  exit 0
+fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
+
+/// The rules of the validate route of the create that `observer-role.sh` runs on cluster A.
+const OBSERVER_ROLE_PREFLIGHT_RULES: [&str; 3] =
+    ["palette-validate", "worker-cpu-floor", "pack-dependency"];
+
+/// The report of strata-preflight for the rules of the validate route, each with `verdict` and
+/// `messages`.
+fn observer_role_preflight(verdict: &str, message: Option<&str>) -> String {
+    let checks: Vec<serde_json::Value> = OBSERVER_ROLE_PREFLIGHT_RULES
+        .iter()
+        .map(|id| serde_json::json!({"id": id, "verdict": verdict, "messages": message.map_or(vec![], |m| vec![m])}))
+        .collect();
+    serde_json::json!({"schema": "strata-preflight/1", "checks": checks}).to_string()
+}
 
 /// The requests of the cycles that `observer-role.sh` sends, with the paths of the baseline stage.
 const OBSERVER_ROLE_ROUTES: [(&str, &str); 16] = [
@@ -12988,7 +13010,61 @@ fn observer_role_stage() -> Stage {
     );
     stage.env("OBSERVER_ROLE", "Project Viewer");
     stage.env("OBSERVER_ROLE_KEY", "role-k");
+    // the rules of the validate route of the create pass with both keys
+    for who in ["lab", "role"] {
+        std::fs::write(
+            stage.path(&format!("strata/preflight-{who}.json")),
+            observer_role_preflight("passed", None),
+        )
+        .unwrap();
+    }
     stage
+}
+
+/// #619: stage 3 runs the palette tier of preflight on cluster A with both keys. With the key of the
+/// example, no check gives an error. With the key of the role, the check records each verdict and
+/// message. A role with no `cluster.create` gets the 403 of the validate route of the create.
+#[test]
+fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answers_the_role() {
+    let stage = observer_role_stage();
+    let denied = "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system\"}";
+    std::fs::write(
+        stage.path("strata/preflight-role.json"),
+        observer_role_preflight("error", Some(denied)),
+    )
+    .unwrap();
+    let (o, steps) = stage.run("observer-role.sh", &["3"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    passed(&steps, &["preflight-control-validate"]);
+    assert!(
+        has_verdict(&steps, "SEEN", "preflight-role-validate"),
+        "{steps}"
+    );
+    let said = std::fs::read_to_string(stage.path("out/preflight-role-validate.out")).unwrap();
+    for id in OBSERVER_ROLE_PREFLIGHT_RULES {
+        assert!(
+            said.lines().any(|l| l == format!("{id} error: {denied}")),
+            "{id} in:\n{said}"
+        );
+    }
+    let line = step_line(&steps, "preflight-role-validate");
+    assert!(
+        line.ends_with("got 1"),
+        "an error is recorded as 1:\n{steps}"
+    );
+    // each run reads cluster A with its own key, and no file of the run holds the key
+    let keys = std::fs::read_to_string(stage.path("strata/keys")).unwrap();
+    let rules: String = OBSERVER_ROLE_PREFLIGHT_RULES
+        .iter()
+        .map(|id| format!(" --rule {id}"))
+        .collect();
+    for who in ["lab", "role"] {
+        let call = format!("{who} preflight cluster:c-a --tier palette{rules} --json --quiet");
+        assert!(keys.lines().any(|l| l == call), "{call} in:\n{keys}");
+    }
+    for (name, body) in files_under(&stage.path("out")) {
+        assert!(!body.contains("role-k"), "{name} holds the key");
+    }
 }
 
 #[test]

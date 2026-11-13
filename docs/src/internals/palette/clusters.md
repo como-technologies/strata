@@ -306,11 +306,21 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
+The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
+sends more requests. The validate route of a create needs a permission that a viewer role
+does not give. The code of Palette shows this table; no live run shows it yet.
+
+| Requests | Permission | Built-in roles that hold it | The answer without it |
+| --- | --- | --- | --- |
+| [The validate route of a create](./validate-routes.md#the-permission-of-the-route), `POST /v1/spectroclusters/{cloudType}/validate` | `cluster.create` | Project Admin, Cluster Admin, Tenant Admin, Tenant Project Admin. No viewer role and no editor role holds it. | HTTP 403, `AccessDenied` |
+| A cloud account, and a list of the account with `cloudAccountUid`, such as the instance types | `cloudaccount.get` | Project Viewer and Cluster Viewer. Cluster Profile Viewer does not hold it. | HTTP 500, `OperationForbidden` |
+| An edge host, `GET /v1/edgehosts/{uid}` | `edgehost.get` | Project Viewer and Cluster Viewer. Cluster Profile Viewer does not hold it. | HTTP 500, `OperationForbidden` |
+
 A request without its permission gets one of these answers:
 
 | Code | HTTP status | When |
 | --- | --- | --- |
-| `AccessDenied` | 403 | The route as a whole is refused: the audit log and the lists of registries. |
+| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, and the validate route of a create. |
 | `OperationForbidden` | 500 | One object is refused: a profile, a cluster, or a registry. |
 | `NoRolesAssociated` | 500 | The user has no role at all. |
 | `ResourceAccessDenied` | 500 | The user has no role in the project of the request. |
@@ -331,12 +341,19 @@ name.
 
 A `PUT` of a cluster's profiles in the other order, with the uids it has,
 changes nothing: the document keeps the stored order. The audit log gets an
-update of the cluster. So the order strata gives a cluster record
-drops nothing that can change: the stored order is set when the cluster is
-made, and stays.
+update of the cluster.
 
-That order is no install order either. No run establishes the install order of
-the packs of two add-on profiles: see
+An added profile goes to the end of the list. A new uid of the infrastructure
+profile, such as a new version of it, moves that profile to the end too. So an
+add-on profile can reach position 0, and the rule `position-zero` of
+`strata preflight` warns about it. The code of Palette shows it; no live run
+shows it yet.
+
+The order that strata gives a cluster record does not depend on the stored
+order. So a change of the stored order changes no root of a record.
+
+The stored order is no install order either. No run establishes the install
+order of the packs of two add-on profiles: see
 [What no run covers](limits.md#what-no-run-covers).
 
 The order of the packs inside a profile is no install order either. Each add-on

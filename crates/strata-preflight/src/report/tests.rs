@@ -35,6 +35,7 @@ fn check(
         evidence: vec![],
         confidence: None,
         counts_as_failure: counts,
+        failed_request: None,
     }
 }
 
@@ -47,38 +48,6 @@ fn options() -> Options {
         out_dir: None,
         out_world: false,
     }
-}
-
-/// One section that holds every check, for the tests of the summary.
-fn sections(checks: &[CheckResult]) -> Vec<SectionScore> {
-    vec![SectionScore {
-        section: "compute".into(),
-        title: "Compute".into(),
-        rows: checks.len() as u32,
-        seen: 0,
-        with_check: 0,
-        preflight: 0,
-        with_runs: 0,
-        weakest_bound: None,
-        ran: checks
-            .iter()
-            .filter(|c| matches!(c.verdict, Verdict::Passed | Verdict::Failed))
-            .count() as u32,
-        passed: checks
-            .iter()
-            .filter(|c| c.verdict == Verdict::Passed)
-            .count() as u32,
-        failed: checks
-            .iter()
-            .filter(|c| c.verdict == Verdict::Failed)
-            .count() as u32,
-        not_run: checks
-            .iter()
-            .filter(|c| c.verdict == Verdict::NotRun)
-            .count() as u32,
-        not_checked: 0,
-        readiness: None,
-    }]
 }
 
 #[test]
@@ -122,7 +91,7 @@ fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_
             false,
         ),
     ];
-    let s = summarize(&checks, &sections(&checks), &options(), false);
+    let s = summarize(&checks, "aws", &options(), false);
     assert_eq!((s.ran, s.not_run, s.skipped, s.not_checked), (1, 1, 1, 1));
     assert_eq!(
         s.readiness,
@@ -140,10 +109,7 @@ fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_
         Severity::Fail,
         false,
     )];
-    assert_eq!(
-        summarize(&none, &sections(&none), &options(), false).readiness,
-        None
-    );
+    assert_eq!(summarize(&none, "aws", &options(), false).readiness, None);
 }
 
 #[test]
@@ -154,7 +120,7 @@ fn a_note_that_did_not_run_is_outside_the_readiness_as_a_note_that_ran_is() {
         check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
         note,
     ];
-    let s = summarize(&checks, &sections(&checks), &options(), false);
+    let s = summarize(&checks, "aws", &options(), false);
     assert_eq!((s.ran, s.not_run), (1, 0));
     assert_eq!(s.readiness, Some(1.0), "the note does not count against it");
     assert!(s.not_run_reasons.is_empty());
@@ -636,7 +602,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         ),
         check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
     ];
-    let s = summarize(&probe_fail, &sections(&probe_fail), &options(), false);
+    let s = summarize(&probe_fail, "aws", &options(), false);
     assert_eq!((s.exit_code, s.probe_failed, s.failed), (0, 1, 0));
     assert!(s.verdict.starts_with("OK"), "{}", s.verdict);
 
@@ -647,7 +613,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         Severity::Fail,
         true,
     )];
-    let s = summarize(&counted, &sections(&counted), &options(), false);
+    let s = summarize(&counted, "aws", &options(), false);
     assert_eq!(s.exit_code, 1);
     assert!(s.verdict.contains("b"), "{}", s.verdict);
 
@@ -658,10 +624,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         Severity::Fail,
         false,
     )];
-    assert_eq!(
-        summarize(&error, &sections(&error), &options(), false).exit_code,
-        2
-    );
+    assert_eq!(summarize(&error, "aws", &options(), false).exit_code, 2);
 
     let mut ready = options();
     ready.ready = Some(0.9);
@@ -669,7 +632,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
         check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
     ];
-    let s = summarize(&half, &sections(&half), &ready, false);
+    let s = summarize(&half, "aws", &ready, false);
     assert_eq!(s.exit_code, 1);
     assert!(
         s.verdict.starts_with("NOT READY: readiness 50%"),
@@ -695,7 +658,7 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
     };
     for (n, words) in [(1, "1 check failed: f0"), (2, "2 checks failed: f0, f1")] {
         let checks = failed(n);
-        let s = summarize(&checks, &sections(&checks), &options(), false);
+        let s = summarize(&checks, "aws", &options(), false);
         assert_eq!(s.verdict, format!("FAIL: {words}"));
     }
     let errors = |n: usize| -> Vec<CheckResult> {
@@ -716,7 +679,7 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
         (2, "2 checks could not answer: e0, e1"),
     ] {
         let checks = errors(n);
-        let s = summarize(&checks, &sections(&checks), &options(), false);
+        let s = summarize(&checks, "aws", &options(), false);
         assert_eq!(s.verdict, format!("ERROR: {words}"));
     }
     let probes = |n: usize| -> Summary {
@@ -731,28 +694,28 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
                 )
             })
             .collect();
-        summarize(&checks, &sections(&checks), &options(), false)
+        summarize(&checks, "aws", &options(), false)
     };
     assert_eq!(
         probes(1).verdict,
-        "OK: each counted check passed; 1 probe failed, not counted"
+        "NOT COUNTED: no check counted on aws; 1 probe failed, not counted"
     );
     assert_eq!(
         probes(2).verdict,
-        "OK: each counted check passed; 2 probes failed, not counted"
+        "NOT COUNTED: no check counted on aws; 2 probes failed, not counted"
     );
 }
 
 #[test]
 fn the_verdict_of_a_run_that_passed_says_that_the_cluster_is_gone_when_a_watch_ended_so() {
     let verdict = |checks: &[CheckResult], gone: bool| {
-        let s = summarize(checks, &sections(checks), &options(), gone);
+        let s = summarize(checks, "aws", &options(), gone);
         (s.exit_code, s.verdict)
     };
     let passed = vec![check(
         "a",
         Verdict::Passed,
-        Level::Probe,
+        Level::Preflight,
         Severity::Fail,
         false,
     )];
@@ -785,10 +748,30 @@ fn the_verdict_of_a_run_that_passed_says_that_the_cluster_is_gone_when_a_watch_e
                 .to_string()
         )
     );
-    assert_eq!(verdict(&[], false), (0, "OK: no check ran".to_string()));
+    assert_eq!(
+        verdict(&[], false),
+        (0, "NOT COUNTED: no check ran on aws".to_string())
+    );
     assert_eq!(
         verdict(&[], true),
-        (0, "OK: the cluster is gone; no check ran".to_string())
+        (
+            0,
+            "NOT COUNTED: the cluster is gone; no check ran on aws".to_string()
+        )
+    );
+    let probe_passed = vec![check(
+        "a",
+        Verdict::Passed,
+        Level::Probe,
+        Severity::Fail,
+        false,
+    )];
+    assert_eq!(
+        verdict(&probe_passed, true),
+        (
+            0,
+            "NOT COUNTED: the cluster is gone; no check counted on aws".to_string()
+        )
     );
     // a failure, an error, and a readiness under the bar keep their words
     let counted = vec![check(
@@ -811,6 +794,230 @@ fn the_verdict_of_a_run_that_passed_says_that_the_cluster_is_gone_when_a_watch_e
     assert_eq!(verdict(&error, true).0, 2);
 }
 
+/// F-028: only a counted check can fail a run. A run in which none ran says so, and not `OK`.
+#[test]
+fn a_run_with_no_counted_check_is_not_ok_and_says_that_no_check_counted_on_the_engine() {
+    let run = |checks: &[CheckResult], strict: bool| {
+        let options = Options {
+            strict,
+            ..options()
+        };
+        summarize(checks, "aws", &options, false)
+    };
+    let probe = check("p", Verdict::Passed, Level::Probe, Severity::Fail, false);
+    let warn = check(
+        "w",
+        Verdict::Passed,
+        Level::Preflight,
+        Severity::Warn,
+        false,
+    );
+    let preflight = check(
+        "c",
+        Verdict::Passed,
+        Level::Preflight,
+        Severity::Fail,
+        false,
+    );
+    // a probe and a warning never count without --strict, so no check counted
+    let s = run(&[probe.clone(), warn.clone()], false);
+    assert_eq!(
+        (s.exit_code, s.counted, s.verdict.as_str()),
+        (0, 0, "NOT COUNTED: no check counted on aws")
+    );
+    assert!(s.not_counted());
+    // with --strict, the probe counts; a warning counts in no case
+    let s = run(&[probe.clone(), warn.clone()], true);
+    assert_eq!(
+        (s.counted, s.verdict.as_str()),
+        (1, "OK: each counted check passed")
+    );
+    assert!(!s.not_counted());
+    assert_eq!(run(&[warn], true).counted, 0);
+    // a preflight check of severity fail counts with no flag
+    let s = run(&[probe, preflight], false);
+    assert_eq!(
+        (s.counted, s.verdict.as_str()),
+        (1, "OK: each counted check passed")
+    );
+    // a check that did not run is no counted check
+    let mut not_run = check(
+        "n",
+        Verdict::NotRun,
+        Level::Preflight,
+        Severity::Fail,
+        false,
+    );
+    not_run.messages = vec!["tier palette was not asked for".into()];
+    assert_eq!(run(&[not_run], false).counted, 0);
+}
+
+/// F-029: a warning is no failure. The scorecard and the summary count each result in one class, so
+/// the counts of the sections add to the counts of the summary.
+#[test]
+fn the_summary_and_the_scorecard_give_one_count_of_failures_and_a_warning_is_no_failure() {
+    let section = r#"
+section: profiles
+title: Profiles and packs
+rules:
+  - id: a-probe
+    title: t
+    engines: [all]
+    tier: static
+    status: seen
+    what: w
+    check: {kind: static, expr: "false"}
+  - id: a-warning
+    title: t
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    what: w
+    check: {kind: static, expr: "false"}
+  - id: a-pass
+    title: t
+    engines: [all]
+    tier: static
+    status: seen
+    what: w
+    check: {kind: static, expr: "true"}
+"#;
+    let mut catalog = Catalog::default();
+    catalog
+        .push(
+            Catalog::parse_section(section, std::path::Path::new("p.yaml")).unwrap(),
+            std::path::Path::new("p.yaml"),
+        )
+        .unwrap();
+    let rules: Vec<&Rule> = catalog.rules().collect();
+    let outcome = |verdict: Verdict| Outcome {
+        verdict,
+        messages: vec!["why".into()],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Nothing,
+    };
+    let world = serde_json::json!({"cloud": "aws"});
+    let report = assemble(
+        Assembly {
+            catalog: &catalog,
+            outcomes: vec![
+                (rules[0], outcome(Verdict::Failed)),
+                (rules[1], outcome(Verdict::Failed)),
+                (rules[2], outcome(Verdict::Passed)),
+            ],
+            confidence: BTreeMap::new(),
+            world: &world,
+            subject: Subject {
+                cloud: "aws".into(),
+                release: None,
+                source: "c.json".into(),
+                name: "fred".into(),
+                cluster_uid: None,
+            },
+            options: options(),
+            cluster_gone: false,
+            generated_at: "t".into(),
+        },
+        &Jq::new(),
+    );
+    let s = &report.summary;
+    let sc = &report.sections[0];
+    assert_eq!(
+        (s.failed, s.probe_failed, s.warned, s.passed, s.ran),
+        (0, 1, 1, 1, 3)
+    );
+    assert_eq!(
+        (sc.failed, sc.probe_failed, sc.warned, sc.passed, sc.ran),
+        (s.failed, s.probe_failed, s.warned, s.passed, s.ran),
+        "the scorecard counts as the summary does"
+    );
+    // each form shows the same counts, and the scorecard has a column for each
+    let text = terminal(&report, &Paint::off());
+    assert!(text.contains("fail probe fail warn"), "{text}");
+    let row = text
+        .lines()
+        .find(|l| l.starts_with("  Profiles and packs"))
+        .unwrap();
+    let cells: Vec<&str> = row.split_whitespace().skip(3).collect();
+    // rows seen check preflight runs weakest(no runs) ran pass fail probe-fail warn not-run ...
+    assert_eq!(
+        &cells[..12],
+        &[
+            "3", "3", "3", "0", "0", "no", "runs", "3", "1", "0", "1", "1"
+        ],
+        "{row}"
+    );
+    assert!(
+        text.contains("3 ran: 1 passed, 0 failed, 1 probe failed, 1 warning"),
+        "{text}"
+    );
+    let md = markdown(&report);
+    assert!(md.contains("| failed | probes failed | warnings |"), "{md}");
+    assert!(
+        md.contains("3 ran: 1 passed, 0 failed, 1 probe failed, 1 warning;"),
+        "{md}"
+    );
+    let html = crate::html::page(&report);
+    for tile in [
+        "<b>0</b><span>failed</span>",
+        "<b>1</b><span>probes failed</span>",
+        "<b>1</b><span>warnings</span>",
+    ] {
+        assert!(html.contains(tile), "{tile}");
+    }
+}
+
+/// F-026: the readiness counts the checks of the tiers that ran, so each form names the tiers
+/// beside the number.
+#[test]
+fn the_readiness_states_the_tiers_beside_the_number_in_each_form() {
+    let mut report = assemble(
+        Assembly {
+            catalog: &Catalog::default(),
+            outcomes: vec![],
+            confidence: BTreeMap::new(),
+            world: &serde_json::json!({}),
+            subject: Subject {
+                cloud: "aws".into(),
+                release: None,
+                source: "c.json".into(),
+                name: "fred".into(),
+                cluster_uid: None,
+            },
+            options: Options {
+                tiers: vec![Tier::Static, Tier::Palette],
+                ready: Some(0.8),
+                ..options()
+            },
+            cluster_gone: false,
+            generated_at: "t".into(),
+        },
+        &Jq::new(),
+    );
+    report.summary.readiness = Some(0.38);
+    let text = terminal(&report, &Paint::off());
+    assert!(
+        text.contains("readiness 38% (tiers static, palette): 0 of 0 checks passed"),
+        "{text}"
+    );
+    assert!(
+        markdown(&report)
+            .contains("readiness **38%** (tiers static, palette): 0 of 0 checks passed"),
+        "the markdown"
+    );
+    assert!(
+        crate::html::page(&report)
+            .contains("<b>38%</b><span>readiness (tiers static, palette)</span>"),
+        "the page"
+    );
+    // the verdict of a readiness under the gate names the tiers too
+    assert_eq!(
+        report.summary.verdict,
+        "NOT READY: readiness none (tiers static, palette) is under 80%"
+    );
+}
+
 #[test]
 fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run() {
     let checks = vec![
@@ -819,8 +1026,7 @@ fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run
         check("c", Verdict::NotRun, Level::Probe, Severity::Fail, false),
         check("d", Verdict::Skipped, Level::Probe, Severity::Fail, false),
     ];
-    let sections = sections(&checks);
-    let s = summarize(&checks, &sections, &options(), false);
+    let s = summarize(&checks, "aws", &options(), false);
     assert_eq!((s.ran, s.not_run, s.applies()), (2, 1, 3));
     assert_eq!(s.readiness, Some(1.0 / 3.0));
 }
@@ -908,7 +1114,7 @@ rules:
         "{text}"
     );
     assert!(
-        text.contains("no errors; readiness 0%: 0 of 1 check passed"),
+        text.contains("no errors; readiness 0% (tiers static): 0 of 1 check passed"),
         "{text}"
     );
     let md = markdown(&report);
@@ -917,8 +1123,11 @@ rules:
         "{md}"
     );
     assert!(md.contains("Reproduce by hand"), "{md}");
-    assert!(md.contains("1 probe failed; "), "{md}");
-    assert!(md.contains("(0 of 1 check passed)"), "{md}");
+    assert!(md.contains("1 probe failed, no warnings; "), "{md}");
+    assert!(
+        md.contains("readiness **0%** (tiers static): 0 of 1 check passed"),
+        "{md}"
+    );
     let json: Value =
         serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
     assert_eq!(json["schema"], REPORT_SCHEMA);
@@ -1082,7 +1291,7 @@ fn the_summary_of_a_run_of_one_rule_agrees_each_noun_with_its_count() {
     );
     assert!(text.contains("1 of 1 check passed"), "{text}");
     let markdown = render(&report, Format::Markdown, false, &Paint::off());
-    assert!(markdown.contains("(1 of 1 check passed)"), "{markdown}");
+    assert!(markdown.contains(": 1 of 1 check passed."), "{markdown}");
 
     let mut none = report;
     none.summary.rules = 0;

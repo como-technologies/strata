@@ -888,12 +888,22 @@ what it answered.
     of older releases, and of runs with no release, that the counts omit. It is
     `0` when the run names no `--release`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
+  - `failedRequest`, for a check that gave `error` at a request: the request to
+    Palette that failed, with `method` and `path`. The messages give the error.
+    The text forms show the error of one request once, with the checks that it
+    stopped. Added in 0.34.0.
 - `sections[]`: the scorecard, one line for each section with a row for the
   engine. A line has `rows`, `seen`, `withCheck`, `preflight`, `withRuns`,
-  `weakestBound`, `ran`, `passed`, `failed`, `notRun`, `notChecked`, and
-  `readiness`.
+  `weakestBound`, `ran`, `passed`, `failed`, `probeFailed`, `warned`, `notRun`,
+  `notChecked`, and `readiness`. `failed` is the counted failures,
+  `probeFailed` the probes that failed and do not count, and `warned` the
+  warnings, as in `summary`. The counts of the sections add to the counts of
+  `summary`. Before 0.34.0, `failed` counted all three.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
-  `readiness`, `exitCode`, and one line, `verdict`.
+  `readiness`, `exitCode`, and one line, `verdict`. `counted` is the number of
+  counted checks that ran: a preflight check of severity `fail`, or a probe of
+  severity `fail` with `--strict`. When it is `0`, the verdict starts with
+  `NOT COUNTED`, and not with `OK`. Added in 0.34.0.
 - `options`: `tiers`, `strict`, `offline`, `ready`, `outDir` when `--out` was given, and
   `outWorld`, true when `--world` wrote `world.json` and `entity.json` into `outDir`.
 - `legend`: what each verdict, level, tier, and exit code means.

@@ -354,13 +354,39 @@ fn the_backend_tells_two_posts_with_two_bodies_apart_and_sends_each_body_one_tim
 }
 
 #[test]
-fn the_backend_does_not_keep_an_error_that_no_check_can_read() {
-    for status in [500u16, 503, 401] {
+fn the_backend_asks_again_after_an_error_that_time_can_remove() {
+    for status in [500u16, 503, 429] {
         let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
         let b = LiveBackend::new(Some(&api), false);
         assert!(b.palette(Method::Get, "/v1/x", None, &[]).is_err());
         assert!(b.palette(Method::Get, "/v1/x", None, &[]).is_err());
         assert_eq!(api.calls("/v1/x"), 2, "HTTP {status} is asked again");
+    }
+}
+
+/// F-025: a denial of the key stays for the run. Each check that sends the request gets the same
+/// error, and Palette gets one request. The message of a 403 can differ between two requests, so
+/// a second request can give a second message for one denial.
+#[test]
+fn the_backend_keeps_a_denial_of_the_key_and_gives_each_check_the_same_error() {
+    let denied = r#"{"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant"}"#;
+    for (status, body) in [(403u16, denied), (401, "{}")] {
+        let api = strata::api::MemoryApi::new().failing("POST /v1/x", status, body);
+        let b = LiveBackend::new(Some(&api), false);
+        let errors: Vec<String> = (0..4)
+            .map(|_| {
+                b.palette(Method::Post, "/v1/x", Some(&json!({"a": 1})), &[])
+                    .unwrap_err()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(api.posted().len(), 1, "HTTP {status} is asked once");
+        assert!(errors.iter().all(|e| e == &errors[0]), "{errors:?}");
+        assert!(
+            errors[0].contains(&format!("HTTP {status}")),
+            "{}",
+            errors[0]
+        );
     }
 }
 

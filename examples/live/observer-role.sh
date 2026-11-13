@@ -10,6 +10,8 @@
 #      validate/packs for the add-on version (#647). A request with the key of the example must answer
 #      2xx. With the second key, the check records the answer and does not judge it
 #   2  the commands of the cycles: verify, snapshot of the cluster, and behind, with both keys
+#   3  the palette tier of preflight on cluster A, with both keys (#619). The validate route of the
+#      create needs cluster.create, also for a body that creates nothing
 #
 # The role of the second key is the question, so a person makes the user once. Making a user in the
 # tenant is for a maintainer. The steps:
@@ -23,14 +25,14 @@
 # time, and no file of the run holds it. With no key, the script says "could not check" and exits 2.
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# and jq. The script changes nothing. Its one POST goes to a validate route, which only checks.
+# and jq. The script changes nothing. Its POSTs go to validate routes, which only check.
 # Results go under runs/<UTC time>/observer-role/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0
 # only when no check fails.
 set -uo pipefail
 script=observer-role
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 [ -n "${OBSERVER_ROLE_KEY:-}" ] \
   || die "could not check: set OBSERVER_ROLE_KEY to the key of a user with the role under test, and OBSERVER_ROLE to its name"
@@ -119,6 +121,24 @@ if stage 2 "the commands of the cycles"; then
   check command-role-cluster ? "#645: the same record with the key of the role $OBSERVER_ROLE" -- with_role "$strata" snapshot "cluster:$C" -o cluster-role.json
   check command-control-behind ? '#645: behind with the key of the example (0 or 1)' -- "$strata" behind addon.json --no-impact --json --compact
   check command-role-behind ? "#645: the same behind with the key of the role $OBSERVER_ROLE" -- with_role "$strata" behind addon.json --no-impact --json --compact
+fi
+
+# preflight_validate KEY FILE: run the rules of the validate route of the create on cluster A, with KEY,
+# and write the report to FILE. An empty KEY is the key of the example. Print the verdict and the
+# first message of each check. It succeeds when no check gave an error.
+preflight_validate() {
+  ( [ -z "$1" ] || export PALETTE_API_KEY=$1
+    "$strata" preflight "cluster:$C" --tier palette --rule palette-validate --rule worker-cpu-floor \
+      --rule pack-dependency --json --quiet > "$2" )
+  jq -r '.checks[] | "\(.id) \(.verdict): \((.messages // [])[0] // "")"' "$2" || return 2
+  jq -e '[.checks[] | select(.verdict == "error")] | length == 0' "$2" > /dev/null
+}
+
+if stage 3 "the palette tier of preflight"; then
+  check preflight-control-validate 0 '#619: with the key of the example, the rules of the validate route of the create give no error' -- \
+    preflight_validate "" preflight-control.json
+  check preflight-role-validate ? "#619: the same rules with the key of the role $OBSERVER_ROLE: the route needs cluster.create" -- \
+    preflight_validate "$OBSERVER_ROLE_KEY" preflight-role.json
 fi
 
 echo
