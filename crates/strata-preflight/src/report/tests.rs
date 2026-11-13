@@ -2,7 +2,9 @@ use super::*;
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
-use answer_tags::{ANSWER_TAGS, assert_only_strata_tags, outside_code_blocks, outside_code_spans};
+use answer_tags::{ANSWER_TAGS, assert_only_strata_tags};
+use code_block::outside_code_blocks;
+use code_span::without_code;
 use std::time::Duration;
 use strata::api::Method;
 
@@ -11,6 +13,14 @@ use strata::api::Method;
 #[allow(dead_code)]
 #[path = "../../../../tests/common/answer_tags.rs"]
 mod answer_tags;
+// The reads of the code blocks and of the code spans of markdown, in the files that the tests of
+// strata use. So a test here reads a fence as they do. It uses one read of each file.
+#[allow(dead_code)]
+#[path = "../../../../tests/common/code_block.rs"]
+mod code_block;
+#[allow(dead_code)]
+#[path = "../../../../tests/common/code_span.rs"]
+mod code_span;
 
 fn check(
     id: &str,
@@ -1353,7 +1363,7 @@ fn the_heading_of_the_markdown_shows_the_cloud_the_name_and_the_source_as_text()
     assert!(md.contains(&heading), "{heading:?} in\n{md}");
     let source = format!("source ``cluster:c1 (Running{value} after 3s, 2 readings)``,");
     assert!(md.contains(&source), "{source:?} in\n{md}");
-    assert_only_strata_tags(&outside_code_spans(&outside_code_blocks(&md)));
+    assert_only_strata_tags(&without_code(&outside_code_blocks(&md)));
 }
 
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,

@@ -40,6 +40,7 @@ use strata::model::pack_type::PackType;
 mod answer;
 mod answer_tags;
 pub mod closed_set;
+mod code_block;
 mod code_span;
 mod download;
 mod git;
@@ -53,6 +54,7 @@ mod walk;
 pub use answer::*;
 pub use answer_tags::*;
 pub use closed_set::schema_values;
+pub use code_block::*;
 pub use code_span::*;
 pub use download::*;
 pub use git::isolate_git;
@@ -858,31 +860,6 @@ pub fn page_section(path: &str, heading: &str) -> String {
         .find(&format!("\n{level} "))
         .unwrap_or_else(|| panic!("no section follows {heading:?} in {path}"));
     page[from..from + 1 + to].to_string()
-}
-
-/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
-/// opening fence, so the block of a list item reads as it does in a terminal.
-pub fn code_blocks(text: &str, lang: &str) -> Vec<String> {
-    let opening = format!("```{lang}");
-    let mut blocks = Vec::new();
-    let mut open: Option<(usize, Vec<&str>)> = None;
-    for line in text.lines() {
-        let body = line.trim_start();
-        let indent = line.len() - body.len();
-        match open.take() {
-            None => {
-                if body == opening {
-                    open = Some((indent, Vec::new()));
-                }
-            }
-            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
-            Some((strip, mut lines)) => {
-                lines.push(line.get(strip..).unwrap_or(""));
-                open = Some((strip, lines));
-            }
-        }
-    }
-    blocks
 }
 
 /// The first block of `lang` in `text` that holds `needle`.

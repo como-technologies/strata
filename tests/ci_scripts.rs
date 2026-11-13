@@ -4366,9 +4366,7 @@ fn assert_issue_shows_tags_as_text(markdown: &str) {
         );
         rest = next;
     }
-    common::assert_only_strata_tags(&common::outside_code_spans(&common::outside_code_blocks(
-        rest,
-    )));
+    common::assert_only_strata_tags(&common::without_code(&common::outside_code_blocks(rest)));
 }
 
 /// The criterion of #832: each body and each comment of verify-report.sh shows each text of a

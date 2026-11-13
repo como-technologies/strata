@@ -244,6 +244,17 @@ pub fn query_value(text: &str) -> String {
 #[path = "../tests/common/answer_tags.rs"]
 mod answer_tags;
 
+// The reads of a code block and of a code span, in the files that the tests of strata use. A unit
+// test here reads each fence that this module writes, with one read of each file.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../tests/common/code_block.rs"]
+mod block_read;
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../tests/common/code_span.rs"]
+mod span_read;
+
 #[cfg(test)]
 mod tests {
     use super::answer_tags::ANSWER_TAGS;
@@ -397,6 +408,24 @@ mod tests {
             "```bash\nstrata diff\n```\n"
         );
         assert_eq!(code_block("diff", ""), "```diff\n```\n");
+    }
+
+    /// The tests of an output read each code span and each code block with the reads of
+    /// `tests/common/`. Each read gives the text that this module wrote. So a test cannot see
+    /// a part of a span or of a block as text outside it.
+    #[test]
+    fn the_reads_of_the_tests_give_the_text_that_each_code_span_and_each_code_block_holds() {
+        for text in [
+            "later", "late`r", "late``r", "`later", "later`", "`", "a ``` b",
+        ] {
+            assert_eq!(span_read::code_spans(&code_span(text)), [text]);
+        }
+        for text in ["+ a\n- b", " ```\n <Code>", "`````", "   ```"] {
+            assert_eq!(
+                block_read::code_blocks(&code_block("diff", text), "diff"),
+                [text]
+            );
+        }
     }
 
     #[test]
