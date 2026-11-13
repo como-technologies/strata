@@ -216,6 +216,68 @@ fn cluster_record(fx: &Fx) -> (PathBuf, serde_json::Value) {
 }
 
 #[test]
+fn snapshot_of_a_cluster_notes_a_clear_value_of_a_secret_like_name_by_name_and_keeps_exit_and_root()
+{
+    let fx = fixtures();
+    let dir = fx.raw.join("cluster-a");
+    let out = fx.raw.join("cluster.json");
+    let record = |clear: &[&str]| {
+        let args = [
+            "snapshot",
+            "--from-raw",
+            dir.to_str().unwrap(),
+            "-o",
+            out.to_str().unwrap(),
+        ];
+        let r = run_in(&args, &[], clear);
+        assert_eq!(
+            r.code, 0,
+            "a name is only a guess, so it blocks nothing: {}",
+            r.err
+        );
+        (r.err, read_json(&out))
+    };
+    // the fixture marks grafana_password sensitive, so the record holds no value of it
+    let (err, _) = record(&["STRATA_QUIET"]);
+    assert!(!err.contains("note:"), "{err}");
+
+    let not_a_secret = "example-only-not-a-secret";
+    common::clear_cluster_variable(&dir, "grafana_password", not_a_secret);
+    let (err, clear) = record(&["STRATA_QUIET"]);
+    assert!(
+        err.contains(
+            "strata: note: variable lab-profile.grafana_password has a value in clear in this \
+             record (its name reads as a secret, which is a guess)"
+        ),
+        "{err}"
+    );
+    assert!(
+        !err.contains(not_a_secret),
+        "the note never gives the value: {err}"
+    );
+    assert!(
+        !err.contains("cluster_env"),
+        "cluster_env reads as no secret: {err}"
+    );
+    assert!(
+        clear.to_string().contains(not_a_secret),
+        "the record holds the value"
+    );
+    let (err, _) = record(&[]);
+    assert!(!err.contains("note:"), "STRATA_QUIET hides the note: {err}");
+
+    for value in ["", "{{.spectro.macro.grafana}}"] {
+        common::clear_cluster_variable(&dir, "grafana_password", value);
+        let (err, other) = record(&["STRATA_QUIET"]);
+        assert!(
+            !err.contains("note:"),
+            "{value:?} is no value in clear: {err}"
+        );
+        assert_eq!(other["root"], clear["root"], "the note changes no root");
+    }
+}
+
+#[test]
 fn a_field_inside_the_cluster_of_a_record_gives_its_own_path_in_snapshot_schema() {
     let fx = fixtures();
     let (_, record) = cluster_record(&fx);

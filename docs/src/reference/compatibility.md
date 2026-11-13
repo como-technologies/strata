@@ -298,6 +298,11 @@ After 0.33.0, `diff::Impact` implements `Default`: the level `none` with no text
 only difference is a pack uid that Palette mints has it: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_variables`, and
+`render::secret_like_notes` are new. They name each variable that a cluster record holds in
+clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -393,6 +398,12 @@ action.
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
+
+After 0.33.0, each entry of `records[]` of `strata-set/1` has the new field
+`secretLikeVariables`. An entry has it only when its record holds a variable in
+clear whose name reads as a secret. The id stays, and a reader that ignores
+unknown fields reads it. The exit does not change: see
+[What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -1159,6 +1170,8 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
+  a pattern with no `..` must name it.
 
 ### For a user of the library of strata-preflight
 

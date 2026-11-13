@@ -35,7 +35,7 @@ mod variable;
 
 pub use cluster::{
     AppliedProfile, ClusterRead, ClusterSource, ClusterTier, ClusterVariable, GroupMember,
-    PendingUpdate, Tier, cluster_tiers, macro_digests,
+    PendingUpdate, SecretLikeVariable, Tier, cluster_tiers, macro_digests,
 };
 pub use pack::{Manifest, Pack, PackChart, PackHash, PresetOption, UpstreamSource, pack_content};
 pub use variable::{Variable, VariableOption};
@@ -487,6 +487,23 @@ impl Snapshot {
     /// The packs of the record by their key.
     pub(crate) fn packs_by_key(&self) -> BTreeMap<&str, &Pack> {
         self.packs.iter().map(|p| (p.key.as_str(), p)).collect()
+    }
+
+    /// Each variable that the record holds in clear and whose name reads as a secret, in the
+    /// order of `source.cluster.variables`.
+    ///
+    /// The name holds `secret`, `password`, `passwd`, `token`, `api.?key`, or `private.?key`,
+    /// with no case. The value is not empty and holds no template, `{{`. A name is only a guess.
+    /// A profile record holds no value of a cluster, so it gives none.
+    pub fn secret_like_variables(&self) -> Vec<SecretLikeVariable> {
+        let variables = self.source.cluster.iter().flat_map(|c| &c.variables);
+        variables
+            .filter(|v| v.reads_as_secret())
+            .map(|v| SecretLikeVariable {
+                profile: v.profile.clone(),
+                name: v.name.clone(),
+            })
+            .collect()
     }
 
     /// The key of each pack whose upstream is unknown, in pack order: see
