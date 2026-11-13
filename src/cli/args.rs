@@ -48,6 +48,11 @@ Exit codes:
   2  Strata could not answer
 The cluster values, the cluster tiers, the labels, an INVALID pack, and the answers of --repave and --validate do not change the exit code.";
 
+/// The values that a cluster record holds in clear, after the options of `strata snapshot`.
+/// Palette gives the value of each variable that nobody marked sensitive.
+const SNAPSHOT_CLEAR_VALUES: &str = "\
+A cluster record holds the value of each variable that nobody marked sensitive, in clear. A note names each such variable whose name reads as a secret, and never gives its value. The note changes no exit.";
+
 #[derive(Subcommand)]
 // In alphabetical order, which is the order `strata --help` lists them in.
 pub(crate) enum Cmd {
@@ -80,6 +85,7 @@ pub(crate) enum Cmd {
     },
     /// Record a profile version, a cluster, an edge host, a cluster group, an app profile, or a
     /// pack version in a snapshot file, or each cluster of a tag: or filter: set in a directory
+    #[command(after_help = SNAPSHOT_CLEAR_VALUES)]
     Snapshot(SnapshotArgs),
     /// Make sure that each record agrees with Palette now
     Verify(VerifyArgs),

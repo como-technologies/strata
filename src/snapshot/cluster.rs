@@ -593,6 +593,7 @@ fn name_reads_as_secret(name: &str) -> bool {
 /// A variable of a cluster record whose name reads as a secret, and whose value the record holds
 /// in clear. It names the variable, and holds no value.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct SecretLikeVariable {
     /// The name of the profile that declares the variable.
     pub profile: String,

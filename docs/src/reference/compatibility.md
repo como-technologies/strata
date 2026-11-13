@@ -996,6 +996,11 @@ After 0.33.0, `list` takes the singular of each kind: `profile`, `cluster`, `pro
 Before, strata refused it with a usage error of the command line and exit `2`, before any
 request. See [What to expect](../commands/list.md#what-to-expect).
 
+After 0.33.0, `snapshot` of a cluster or of a set can write a new note on standard error. It
+names each variable in clear whose name reads as a secret, and never gives its value. `-q` hides it, and the exit and the root do not change.
+`snapshot --help` says it after the options. See
+[What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a

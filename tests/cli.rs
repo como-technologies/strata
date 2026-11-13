@@ -275,6 +275,16 @@ fn snapshot_of_a_cluster_notes_a_clear_value_of_a_secret_like_name_by_name_and_k
         );
         assert_eq!(other["root"], clear["root"], "the note changes no root");
     }
+
+    let help = run(&["snapshot", "--help"]);
+    assert!(
+        help.out.contains(
+            "A cluster record holds the value of each variable that nobody marked sensitive, in \
+             clear. A note names each such variable whose name reads as a secret"
+        ),
+        "{}",
+        help.out
+    );
 }
 
 #[test]
