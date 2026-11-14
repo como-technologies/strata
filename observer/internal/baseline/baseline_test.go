@@ -13,7 +13,7 @@ import (
 const marker = "SENTINEL-MUST-NOT-LEAVE"
 
 // aws is the record of aws-stack@1.1.0 that the tests of Load read.
-var aws = testkit.AWSStack(`,"packs":[]`)
+var aws = testkit.AWSStack(testkit.NoPacks)
 
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
@@ -145,7 +145,7 @@ func TestADirectoryThatDoesNotExistIsAnError(t *testing.T) {
 
 func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 	dir := t.TempDir()
-	body := testkit.AWSStack(`,"packs":[],"variables":[{"name":"x","value":"` + marker + `"}]`)
+	body := testkit.RigRecord(t, "aws-stack", "1.1.0", []map[string]any{}, marker)
 	testkit.WriteGzip(t, dir, testkit.RecordFile, body)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 1 {

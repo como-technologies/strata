@@ -614,7 +614,7 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
 	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), tabAttrs(k8sMove, "manifests"))
 	where = "the manifests of kubernetes"
-	mustHold(t, where, none, "No manifest changed here.", tabLink(k8sMove, "values", "Values"))
+	mustHold(t, where, none, "No manifest"+changedHere, tabLink(k8sMove, "values", "Values"))
 	mustNotHold(t, where, none, tooLargeTitle)
 	// The set ok has the text for the same packs.
 	for _, s := range render(t, devdata.StateOK, false) {

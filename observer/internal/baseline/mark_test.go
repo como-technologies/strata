@@ -27,9 +27,9 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
 	second := Mark(dir)
 	if second == first {
-		t.Error("a new meta.json kept the mark")
+		t.Error("a new " + testkit.MetaFile + " kept the mark")
 	}
-	testkit.WriteGzip(t, dir, awsFile, `{"schema":"`+docs.SnapshotSchema+`","packs":[]}`)
+	testkit.WriteGzip(t, dir, awsFile, `{"schema":"`+docs.SnapshotSchema+`"`+testkit.NoPacks+`}`)
 	if Mark(dir) == second {
 		t.Error("a changed record kept the mark")
 	}

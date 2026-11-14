@@ -87,7 +87,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 	}
 	first := store.data[Name(0)]
 	if got := string(first[MetaKey]); got != testkit.FirstSeenMeta(testkit.ClusterUID) {
-		t.Errorf("meta.json is %s", got)
+		t.Errorf(MetaKey+" is %s", got)
 	}
 	for _, p := range profiles {
 		key := p[0] + "_" + p[1] + ".json.gz"

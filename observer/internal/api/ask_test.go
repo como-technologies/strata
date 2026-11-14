@@ -175,9 +175,9 @@ func TestARunThatFailsGivesNoAnswerWithTheStatusOfTheRun(t *testing.T) {
 func TestAPostNeedsTheHeaderOfARequestFromThePageItself(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
-	for _, site := range []string{"", "cross-site", "same-site", "none", "Same-Origin ", "same-origin; x"} {
+	for _, site := range []string{"", "cross-site", "same-site", "none", "Same-Origin ", testkit.SameOrigin + "; x"} {
 		if rec := testkit.Serve(h, http.MethodPost, pathAsk, testkit.LoopbackHost, site); rec.Code != http.StatusForbidden {
-			t.Errorf("Sec-Fetch-Site %q gave %d", site, rec.Code)
+			t.Errorf(testkit.FetchSite+" %q gave %d", site, rec.Code)
 		} else if strings.Contains(rec.Body.String(), site) && site != "" {
 			t.Errorf("the refusal echoes the header: %s", rec.Body.String())
 		}
