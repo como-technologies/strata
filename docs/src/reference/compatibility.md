@@ -1156,8 +1156,7 @@ field, a value, an input, or an option is in the sections above.
   waited between the requests. Each request got the same denial.
 - **The error of an answer holds no copy of the API key.** Strata masks each
   whole copy of the key in the body with `********`. It does so before it
-  prints or keeps the error. Palette quotes a key that it does not know three
-  times. See
+  prints or keeps the error. See
   [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
   [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).

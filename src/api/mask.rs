@@ -26,9 +26,8 @@ pub(crate) const MASKED: &str = "********";
 /// of an answer.
 ///
 /// A copy is whole when no letter or digit touches it on either side. So a short key such as `k`
-/// masks `'k'`, and not the `k` of `Pack`. Palette quotes a key that it does not know three times
-/// in its answer, and a long key comes back whole, so each copy gets the mask. An empty `secret`
-/// changes nothing.
+/// masks `'k'`, and not the `k` of `Pack`. Each whole copy gets the mask, also when `text` holds
+/// more than one. An empty `secret` changes nothing.
 pub(crate) fn mask_secret(text: &str, secret: &str) -> String {
     let Some(first) = secret.chars().next() else {
         return text.to_string();

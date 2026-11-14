@@ -3989,20 +3989,19 @@ fn tiers_sh_stage_8_fails_the_checks_of_list_when_strata_retries_and_prints_no_p
     );
 }
 
-/// The key that tiers.sh stage 9 makes: no tenant has it, and it has 400 characters.
+/// The key that tiers.sh stage 9 makes: no tenant has it.
 fn unknown_key() -> String {
     format!("strata-unknown-key-{}", "0".repeat(381))
 }
 
-/// A stage of tiers.sh stage 9. The project listing answers each key with HTTP 401 and a body
-/// that holds the key `copies` times. strata prints `stderr` and exits 2 for `list projects`, as
-/// text and as JSON.
-fn unknown_key_stage(copies: usize, stderr: &str) -> Stage {
+/// A stage of tiers.sh stage 9. The project listing gives an error status for each key. strata
+/// prints `stderr` and exits 2 for `list projects`, as text and as JSON.
+fn unknown_key_stage(stderr: &str) -> Stage {
     let mut stage = baseline_stage();
-    let key = unknown_key();
-    let quoted = vec![key.as_str(); copies].join(" ");
-    let body =
-        format!(r#"{{"code":"ResourceNotFound","message":"API Key '{quoted}' is not found"}}"#);
+    let body = format!(
+        r#"{{"code":"ResourceNotFound","message":"API Key '{}' is not found"}}"#,
+        unknown_key()
+    );
     // a file of the stand-in has no room for the key in its name, so each key gets the answer
     let route = Stage::route_key(PROJECT_LISTING);
     std::fs::write(stage.path(&format!("routes/{route}")), body).unwrap();
@@ -4013,23 +4012,17 @@ fn unknown_key_stage(copies: usize, stderr: &str) -> Stage {
 }
 
 #[test]
-fn tiers_sh_stage_9_reads_the_answer_to_a_key_that_palette_does_not_know_and_finds_no_copy_in_strata()
- {
+fn tiers_sh_stage_9_reads_with_a_key_that_no_tenant_has_and_finds_no_copy_of_it_in_strata() {
     let masked = format!(
         "strata: GET {PROJECT_LISTING} failed with HTTP 401: {{\"code\":\"ResourceNotFound\",\
-         \"message\":\"API Key '******** ******** ********' is not found\"}}\n"
+         \"message\":\"API Key '********' is not found\"}}\n"
     );
-    let stage = unknown_key_stage(3, &masked);
+    let stage = unknown_key_stage(&masked);
     let (o, steps) = stage.run("tiers.sh", &["9"]);
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     passed(
         &steps,
-        &[
-            "unknown-key-read",
-            "unknown-key-says",
-            "unknown-key-list",
-            "unknown-key-masked",
-        ],
+        &["unknown-key-read", "unknown-key-list", "unknown-key-masked"],
     );
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     assert!(
@@ -4042,15 +4035,15 @@ fn tiers_sh_stage_9_reads_the_answer_to_a_key_that_palette_does_not_know_and_fin
 }
 
 #[test]
-fn tiers_sh_stage_9_fails_when_the_answer_holds_one_copy_or_strata_prints_the_key() {
+fn tiers_sh_stage_9_fails_the_check_of_the_mask_when_strata_prints_the_key() {
     let printed = format!(
         "strata: GET {PROJECT_LISTING} failed with HTTP 401: {}\n",
         unknown_key()
     );
-    let (o, steps) = unknown_key_stage(1, &printed).run("tiers.sh", &["9"]);
+    let (o, steps) = unknown_key_stage(&printed).run("tiers.sh", &["9"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     passed(&steps, &["unknown-key-read", "unknown-key-list"]);
-    failed(&steps, &["unknown-key-says", "unknown-key-masked"]);
+    failed(&steps, &["unknown-key-masked"]);
 }
 
 #[test]

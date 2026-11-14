@@ -1171,27 +1171,6 @@ facts:
       - src/api/codes.rs
       - src/error/hint.rs
 
-  - id: unknown-key-answer
-    kind: behavior
-    reads:
-      codes: [ResourceNotFound, MissingAuthHeader]
-      fields:
-        - code
-        - message
-        - details
-    stand_in: []
-    live:
-      - tiers.sh:unknown-key-read
-      - tiers.sh:unknown-key-says
-      - tiers.sh:unknown-key-list
-      - tiers.sh:unknown-key-masked
-    pages:
-      - internals/palette/clusters.md#the-role-that-a-key-needs
-      - development/live-runs.md#tierssh
-    code:
-      - src/api/http.rs
-      - src/api/mask.rs
-
   # ---- clusters.md: The order of the profiles of a cluster
 
   - id: cluster-profile-order

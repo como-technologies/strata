@@ -306,13 +306,6 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
-A key that Palette does not know gets HTTP 401 with the code `ResourceNotFound`,
-and the message `API Key '<key>' is not found`. The body holds the key three
-times: in `message`, in `details`, and in the identifier in `details`. A key of
-400 characters comes back whole. A request with no key gets the code
-`MissingAuthHeader`, and its body holds no key. Stage 9 of
-[tiers.sh](../../development/live-runs.md#tierssh) reads with such a key.
-
 Strata writes `********` over each whole copy of the key of the run in the body
 of an error, before it prints or keeps the error. So the terminal, `--json`, a
 record, and the log of a job hold no copy of the key.

@@ -55,7 +55,7 @@ impl HttpApi {
 
     /// The status and the body of an answer with a 2xx status. Else the error that the answer
     /// stands for: a status out of 2xx, or a body that strata cannot read. The body of the error
-    /// holds no copy of the key of the request: Palette quotes a key that it does not know.
+    /// holds no copy of the key of the request.
     fn body(
         &self,
         method: Method,
@@ -261,7 +261,7 @@ mod tests {
 
     #[test]
     fn the_error_of_an_answer_that_quotes_the_key_holds_no_copy_of_the_key() {
-        // Palette quotes a key that it does not know three times, and a long key comes back whole
+        // a body with three whole copies of a long key
         let key = format!("strata-{}", "x".repeat(400));
         let body = format!(
             r#"{{"code":"ResourceNotFound","message":"API Key '{key}' is not found","details":"{key} {key}"}}"#

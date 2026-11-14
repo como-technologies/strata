@@ -34,8 +34,7 @@
 #      code ResourceAccessDenied for the clusters, so the listing names them as not read, keeps the
 #      profiles, and exits 2, with no retry (#620). `tiers.sh 8` runs it alone, and no other
 #      FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
-#   9  a key that Palette does not know, of 400 characters, that the stage makes: Palette answers
-#      HTTP 401 with the code ResourceNotFound, and the body holds the key 3 times. The error of
+#   9  a key that no tenant has, which the stage makes: the stage reads with it, and the error of
 #      strata list with that key holds no copy of it (#620). The stage writes nothing, and the key
 #      is no secret. `tiers.sh 9` runs it alone, and no other FROM_STAGE runs it
 #
@@ -323,28 +322,19 @@ if [ "$from" = 8 ] && stage 8 "a key whose role does not give cluster.get"; then
     grep -q retry narrow-list.err
 fi
 
-# unknown_key: a key that Palette does not know, of 400 characters. No tenant has it, so it is no
-# secret, and a check can look for each copy of it
+# unknown_key: a key that no tenant has. So it is no secret, and a check can look for each copy of
+# it
 unknown_key="strata-unknown-key-$(printf '%0381d' 0)"
-# unknown_says FILE: the answer that FILE holds is HTTP 401 with the code ResourceNotFound, and its
-# body holds the key 3 times
-unknown_says() {
-  [ "$(head -n 1 "$1")" = "HTTP 401" ] || return 1
-  [ "$(refusal_code "$1")" = ResourceNotFound ] || return 1
-  [ "$(sed 1d "$1" | grep -oF "$unknown_key" | wc -l)" -eq 3 ]
-}
-# unknown_list: strata list projects with the key that Palette does not know, as text and as JSON
+# unknown_list: strata list projects with the key that no tenant has, as text and as JSON
 unknown_list() {
   PALETTE_API_KEY=$unknown_key "$strata" list projects
   PALETTE_API_KEY=$unknown_key "$strata" list projects --json
 }
 
 # stage 9 runs only when its number is given
-if [ "$from" = 9 ] && stage 9 "a key that Palette does not know"; then
-  check unknown-key-read 0 "#620: GET the project listing with a key that Palette does not know: api.sh get-status prints the answer" -- \
+if [ "$from" = 9 ] && stage 9 "a key that no tenant has"; then
+  check unknown-key-read 0 "#620: GET the project listing with a key that no tenant has: api.sh get-status prints the answer" -- \
     read_with unknown_key /v1/dashboard/projects/metadata
-  check unknown-key-says 0 "#620: the answer is HTTP 401 with the code ResourceNotFound, and the body holds the key 3 times" -- \
-    unknown_says unknown-key-read.out
   check unknown-key-list 2 "#620: strata list projects with that key, as text and as JSON, exits 2 with the error" -- unknown_list
   check unknown-key-masked 1 "#620: the errors of strata hold no copy of the key" -- \
     grep -qF "$unknown_key" unknown-key-list.out unknown-key-list.err

@@ -669,7 +669,7 @@ live-tiers-pool: build
 live-tiers-narrow: build
     examples/live/tiers.sh 8
 
-# The unknown key test (#620): what Palette answers to a key that it does not know, and that the error of strata holds no copy of it. Needs live-up; reads only, with a key that no tenant has.
+# The unknown key test (#620): the error of strata with a key that no tenant has holds no copy of it. Needs live-up; reads only.
 [group('live checks')]
 live-tiers-unknown-key: build
     examples/live/tiers.sh 9
