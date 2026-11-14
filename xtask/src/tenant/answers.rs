@@ -1,13 +1,17 @@
 //! The answers of the routes that check a change, and of the routes that report a repave.
 
 use serde_json::{Value, json};
+use strata::api::AuditKind;
 use strata::api::codes::Denial;
 
 use super::Tenant;
 use super::routes::{
-    CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
+    CLUSTERS, PROFILES, audit_log_file, cluster_route, cluster_validate_route, profile_route,
+    repave_route,
 };
-use crate::common_palette::{access_denied_message, error_body, operation_forbidden_message};
+use crate::common_palette::{
+    EACH_SCOPE, access_denied_message, error_body, operation_forbidden_message,
+};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -167,10 +171,23 @@ impl Tenant {
     /// that creates nothing. Palette answers HTTP 403 with the code `AccessDenied`, and the
     /// message names the permission and its scopes.
     pub fn deny_create(&self, project: &str, cloud: &str) {
-        let message = access_denied_message("cluster.create", "project or tenant or system");
+        let message = access_denied_message("cluster.create", EACH_SCOPE);
         self.deny(
             project,
             &cluster_validate_route(cloud),
+            Denial::Route,
+            &message,
+        );
+    }
+
+    /// Make Palette refuse the audit log of the profile `uid` in `project`, as it does for a key
+    /// whose role does not give `audit.list`. Palette answers HTTP 403 with the code
+    /// `AccessDenied`, and the message names the permission and its scopes.
+    pub fn deny_audit_log(&self, project: &str, uid: &str) {
+        let message = access_denied_message("audit.list", EACH_SCOPE);
+        self.deny(
+            project,
+            &audit_log_file(AuditKind::ClusterProfile.as_str(), uid),
             Denial::Route,
             &message,
         );

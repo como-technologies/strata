@@ -5,6 +5,7 @@ use super::verify::edited_in_place_note;
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
+use crate::error::reason_words;
 use crate::model::repave::PaletteRepaveReason;
 use crate::reference::name_version;
 use crate::snapshot::{PendingUpdate, Source, Tier};
@@ -428,7 +429,10 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
                     note.push_str(&format!(": {}", reasons.join("; ")));
                 }
             } else if let Some(e) = c.pending_repave_error() {
-                note.push_str(&format!(" (strata could not read its reasons: {e})"));
+                note.push_str(&format!(
+                    " (strata could not read its reasons: {})",
+                    reason_words(e)
+                ));
             }
             note.push_str(". Palette refuses an update of its profiles until a person approves it");
             note
@@ -449,9 +453,10 @@ fn unread_notes(d: &Diff) -> Vec<String> {
             c.tiers.iter().flat_map(move |(tier, t)| {
                 t.errors.iter().map(move |(field, e)| {
                     format!(
-                        "strata could not read {} of cluster {} ({e}), so it does not compare it",
+                        "strata could not read {} of cluster {} ({}), so it does not compare it",
                         tier_path(tier, field),
-                        c.name
+                        c.name,
+                        reason_words(e)
                     )
                 })
             })

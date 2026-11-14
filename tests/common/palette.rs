@@ -50,6 +50,10 @@ pub fn access_denied_message(permission: &str, scope: &str) -> String {
     )
 }
 
+/// The `scope` of [`access_denied_message`] for a permission that a role can give in each scope,
+/// such as `cluster.create` and `audit.list`.
+pub const EACH_SCOPE: &str = "project or tenant or system";
+
 /// The message of the refusal of one object, with HTTP 500 and the code `OperationForbidden`. The
 /// role does not give `permission`, such as `cluster.get`. The message names the permission two
 /// times.
