@@ -3766,20 +3766,33 @@ fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
     failed(&steps, &["rbac-add"]);
 }
 
-/// A `strata` for tiers.sh stage 6. It writes a record that says which key it read with: the
-/// record names the key and does not hold it.
-const FAKE_STRATA_LIMITED: &str = r#"#!/usr/bin/env bash
-if [ "$*" = "snapshot cluster:c-a -o limited-record.json" ]; then
-  with=first; [ "${PALETTE_API_KEY:-}" = limited-k ] && with=second
-  echo "{\"readWith\":\"$with\",\"source\":{\"cluster\":{\"tiers\":{\"policy\":{\"errors\":{\"rbacs\":\"HTTP 500\"}}}}}}" > limited-record.json
-fi
-exit 0
-"#;
+/// A `strata` for the stages of tiers.sh that read cluster A with another key, given to
+/// [`Stage::wrap_strata`]. `snapshot cluster:c-a -o FILE` writes `record`, a JSON object, to FILE.
+///
+/// The record gets the field `readWith`: `second` for the key `key`, and `first` for another key.
+/// So the record names the key and does not hold it. Any other call goes to the answers of the
+/// stage.
+fn fake_strata_keyed(key: &str, record: &str) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+case "$*" in
+  "snapshot cluster:c-a -o "*)
+    with=first; [ "${{PALETTE_API_KEY:-}}" = {key} ] && with=second
+    jq -c --arg with "$with" '{{readWith: $with}} + .' <<< '{record}' > "${{@: -1}}"
+    exit 0 ;;
+esac
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#
+    )
+}
 
 #[test]
 fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_refusal() {
     let mut stage = baseline_stage();
-    stage.command("fake-strata", FAKE_STRATA_LIMITED);
+    stage.wrap_strata(&fake_strata_keyed(
+        "limited-k",
+        r#"{"source":{"cluster":{"tiers":{"policy":{"errors":{"rbacs":"HTTP 500"}}}}}}"#,
+    ));
     let rbacs = &cluster_rbacs_route("c-a");
     stage.route(rbacs, r#"{"items":[]}"#);
     // an active user with no role in the project: Palette answers HTTP 500, and not 403
@@ -4111,6 +4124,139 @@ fn tiers_sh_stage_8_says_could_not_check_and_exits_2_without_the_third_key() {
     for (_, route) in narrow_routes() {
         assert!(!calls.contains(&route), "no request: {calls}");
     }
+}
+
+/// A stage of tiers.sh stage 10. The role bindings of cluster A answer `first` to the key of the
+/// example, and `second` to the second key. compare of the two records names the policy tier as
+/// changed.
+fn second_key_stage(first: &serde_json::Value, second: &serde_json::Value) -> Stage {
+    let mut stage = baseline_stage();
+    stage.wrap_strata(&fake_strata_keyed("second-k", "{}"));
+    let rbacs = &cluster_rbacs_route("c-a");
+    stage.route(rbacs, &first.to_string());
+    stage.route_as(rbacs, "second-k", 200, &second.to_string());
+    stage.strata(
+        "compare first-key.json second-key.json --json",
+        0,
+        r#"{"clusterTiers":[{"tier":"policy","same":false}]}"#,
+    );
+    stage.env("STRATA_LIVE_SECOND_KEY", "second-k");
+    stage
+}
+
+/// The checks of tiers.sh stage 10 that judge the answers of Palette to the two keys.
+const SECOND_KEY_CHECKS: [&str; 4] = [
+    "second-system",
+    "second-own-subject",
+    "second-system-differs",
+    "second-others-same",
+];
+
+#[test]
+fn tiers_sh_stage_10_reads_a_role_binding_of_the_system_with_the_keys_of_two_users() {
+    // the answer that the code of Palette shows: each user reads only its own subject
+    let fred = rbacs_answer(system_rbacs(), "fred@example.com");
+    let wilma = rbacs_answer(system_rbacs(), "wilma@example.com");
+    let stage = second_key_stage(&fred, &wilma);
+    let (o, steps) = stage.run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "second-first",
+            "second-read",
+            "second-status",
+            "second-record-first",
+            "second-record-second",
+        ],
+    );
+    passed(&steps, &SECOND_KEY_CHECKS);
+    for seen in [
+        "second-system-first",
+        "second-system-second",
+        "second-compare",
+        "second-policy",
+    ] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
+    }
+    let out = |name: &str| std::fs::read_to_string(stage.path(&format!("out/{name}"))).unwrap();
+    assert_eq!(
+        out("second-system-first.out"),
+        "[{\"role\":\"cluster-admin\",\"subjects\":[\"fred@example.com\"]}]\n"
+    );
+    assert_eq!(
+        out("second-system-second.out"),
+        "[{\"role\":\"view\",\"subjects\":[\"wilma@example.com\"]}]\n"
+    );
+    assert_eq!(out("second-policy.out"), "changed\n");
+    assert!(out("first-key.json").contains(r#""readWith":"first""#));
+    assert!(
+        out("second-key.json").contains(r#""readWith":"second""#),
+        "strata reads the second record with the second key"
+    );
+
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let rbacs = cluster_rbacs_route("c-a");
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| l.ends_with(rbacs.as_str()))
+            .count(),
+        2,
+        "one read with each key: {calls}"
+    );
+    assert!(
+        !calls.contains("PUT") && !calls.contains("POST") && !calls.contains("PATCH"),
+        "the stage writes nothing: {calls}"
+    );
+    for stage_name in ["== stage 6", "== stage 8", "== stage 9"] {
+        assert!(!steps.contains(stage_name), "stage 10 runs alone: {steps}");
+    }
+    let printed = format!("{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        !printed.contains("second-k"),
+        "the key is not printed: {printed}"
+    );
+    for (name, content) in files_under(&stage.path("out")) {
+        assert!(!content.contains("second-k"), "{name} holds the key");
+    }
+}
+
+#[test]
+fn tiers_sh_stage_10_fails_the_checks_of_the_system_binding_when_both_keys_read_each_subject() {
+    // an answer with each subject of the binding of the system, the same to both keys
+    let all = system_rbacs();
+    let (o, steps) = second_key_stage(&all, &all).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["second-system", "second-others-same"]);
+    failed(&steps, &["second-own-subject", "second-system-differs"]);
+
+    // a cluster with no binding of the system
+    let mut none = system_rbacs();
+    none["items"].as_array_mut().unwrap().remove(0);
+    let (o, steps) = second_key_stage(&none, &none).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["second-system", "second-system-differs"]);
+}
+
+#[test]
+fn tiers_sh_stage_10_says_could_not_check_and_exits_2_without_the_second_key() {
+    let stage = baseline_stage();
+    let (o, steps) = stage.run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("could not check")
+            && text(&o.stderr).contains("STRATA_LIVE_SECOND_KEY"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("second-"), "no check ran: {steps}");
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
+    assert!(
+        !calls.contains(&cluster_rbacs_route("c-a")),
+        "no request: {calls}"
+    );
 }
 
 /// A `strata` for tiers.sh stage 7. strata-preflight writes the create body of cluster A into the

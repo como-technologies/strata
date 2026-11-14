@@ -73,8 +73,8 @@ pub struct ClusterSource {
     pub pending_repave: Option<PendingRepave>,
     /// Why strata could not read a part of the cluster that is beside the copy. The key names the
     /// part, and the field of the cluster is then absent. The reason is the HTTP error of Palette,
-    /// such as `HTTP 403: forbidden`. The tiers have their own `errors`, in the same shape. Outside
-    /// the root.
+    /// such as `HTTP 500: {"code":"OperationForbidden",...}` for a key whose role does not give
+    /// `cluster.get`. The tiers have their own `errors`, in the same shape. Outside the root.
     ///
     /// A record of strata 0.24 and before holds `updatesPendingError` and `pendingRepaveError`
     /// instead. Strata reads them into this map.
@@ -340,9 +340,10 @@ pub struct ClusterTier {
     pub hash: String,
     /// What the tier covers, as Palette gives it.
     pub fields: Value,
-    /// Each field that strata could not read, with why: `rbacs` and `HTTP 403: <body>`. `fields`
-    /// does not hold such a field, and `compare` and `verify` do not compare it. The errors are
-    /// not part of the hash either. A record of strata 0.19 holds the field as null.
+    /// Each field that strata could not read, with why: `rbacs` and `HTTP 500: <body>` for a key
+    /// whose role does not give `cluster.get`. `fields` does not hold such a field, and `compare`
+    /// and `verify` do not compare it. The errors are not part of the hash either. A record of
+    /// strata 0.19 holds the field as null.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub errors: BTreeMap<String, String>,
 }

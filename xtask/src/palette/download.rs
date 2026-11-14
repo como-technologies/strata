@@ -222,6 +222,7 @@ mod tests {
         let request = Request {
             target: format!("/{}", download_route(uid)),
             project: Some("p1".to_string()),
+            key: None,
             accept: accept.map(str::to_string),
             body: Vec::new(),
         };

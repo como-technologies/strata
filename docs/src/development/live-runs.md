@@ -1246,6 +1246,11 @@ API, and removes it. It needs the example at its baseline with cluster A.
   that key (#620).
 - Stage 9 only reads. It makes a key of 400 characters that no tenant has, so
   it needs no other key. It runs only as `tiers.sh 9`.
+- Stage 10 only reads. It needs the key of a second user in
+  `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project
+  that gives `cluster.get`. Cluster A must have a role binding of the system.
+  The stage runs only as `tiers.sh 10`. With no key set, it says
+  `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1286,6 +1291,17 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `narrow-list-profiles` | 0 | #620: the listing holds the release profile, because the role gives `clusterProfile.list`. No result yet: no live window ran stage 8. |
 | `narrow-list-says` | 0 | #620: the listing has the line `clusters: not read (...)` with the answer of Palette to the cluster listing: HTTP 500 with the code `ResourceAccessDenied`. The code of Palette shows this answer for a role in the project without `cluster.list`, and the stand-in gives it. No result yet: no live window ran stage 8. |
 | `narrow-list-once` | 1 | #620: standard error of `narrow-list` holds no line `retry`, so strata asked for the clusters one time. No result yet: no live window ran stage 8. |
+| `unknown-key-read` | 0 | #620: `api.sh get-status` reads the project listing with a key that no tenant has, and prints the status and the body of the answer. No result yet: no live window ran stage 9. |
+| `unknown-key-list` | 2 | #620: `strata list projects` with that key, as text and as JSON, exits `2` with the error. No result yet: no live window ran stage 9. |
+| `unknown-key-masked` | 1 | #620: the output and the errors of `unknown-key-list` hold no copy of the key. No result yet: no live window ran stage 9. |
+| `second-first`, `second-read`, `second-status` | 0 | #838: the key of the example and the second key read the role bindings of cluster A. Palette answers HTTP 200 to both. `api.sh get-status` prints the status and the body of each answer. No result yet: no live window ran stage 10. |
+| `second-system` | 0 | #838: the answer to the key of the example has an item with `spec.isSystem` true, a role binding of the system. No result yet: no live window ran stage 10. |
+| `second-system-first`, `second-system-second` | ? | #838: the role and the names of the subjects of each binding of the system, in the answer to each key. No result yet: no live window ran stage 10. |
+| `second-own-subject` | 0 | #838: in each answer, each binding of the system holds one subject, and all these subjects have one name. The code of Palette shows that this subject is the user of the key. No result yet: no live window ran stage 10. |
+| `second-system-differs` | 1 | #838: the bindings of the system in the two answers differ, so `cmp` exits `1`. No result yet: no live window ran stage 10. |
+| `second-others-same` | 0 | #838: the bindings that are not of the system are the same in the two answers. No result yet: no live window ran stage 10. |
+| `second-record-first`, `second-record-second` | 0 | #838: a record of cluster A with the key of the example, and one with the second key. No result yet: no live window ran stage 10. |
+| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. With the answers that the code of Palette shows, the state is `changed`, because the `policy` tier holds the bindings that each key reads. No result yet: no live window ran stage 10. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says

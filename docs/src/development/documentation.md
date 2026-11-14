@@ -128,6 +128,10 @@ as Palette does. Each chapter of the runner builds the tenant that one page need
 the real pack data in `examples/`. It changes the tenant between commands as
 Palette does.
 
+In a role binding of the system, the stand-in gives only the subject that is the
+user of the key, as Palette does. `key-users.json` at the root of the tenant
+names the user of each key.
+
 A pack version that a chapter adds, such as a pre-release, gets a uid and a
 digest of its own in its registry. An upgrade of a pin takes the uid and the
 digest of the new version from the listing of the registry of the pin. A version

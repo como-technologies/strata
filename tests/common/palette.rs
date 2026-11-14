@@ -197,6 +197,56 @@ pub fn cluster_rbacs_route(uid: &str) -> String {
     format!("{}/config/rbacs", cluster_route(uid))
 }
 
+/// The role bindings of a cluster with all their subjects, before [`rbacs_answer`].
+///
+/// A binding of the system gives fred `cluster-admin`, and wilma and barney `view`. A binding that
+/// is not of the system gives the group platform `view`.
+pub fn system_rbacs() -> Value {
+    let binding = |role: &str, kind: &str, names: &[&str]| {
+        let subjects: Vec<Value> = names
+            .iter()
+            .map(|name| json!({"type": kind, "name": name, "namespace": ""}))
+            .collect();
+        json!({"type": "ClusterRoleBinding", "namespace": "",
+            "role": {"kind": "ClusterRole", "name": role}, "subjects": subjects})
+    };
+    json!({"items": [
+        {"spec": {"isSystem": true, "bindings": [
+            binding("cluster-admin", "User", &["fred@example.com"]),
+            binding("view", "User", &["wilma@example.com", "barney@example.com"])]}},
+        {"spec": {"isSystem": false, "bindings": [binding("view", "Group", &["platform"])]}}]})
+}
+
+/// The answer of [`cluster_rbacs_route`] to the key of the user `user`, from `stored`, the role
+/// bindings of the cluster with all their subjects.
+///
+/// `user` is the email of the user. In a binding of the system, an item with `spec.isSystem` true,
+/// Palette answers only the subject that is the user of the key. It drops a binding with no such
+/// subject. Each other item stays as it is. The code of Palette shows it; no live run shows it yet.
+pub fn rbacs_answer(mut stored: Value, user: &str) -> Value {
+    let items = stored.pointer_mut("/items").and_then(Value::as_array_mut);
+    for item in items.into_iter().flatten() {
+        if item.pointer("/spec/isSystem") != Some(&Value::Bool(true)) {
+            continue;
+        }
+        let Some(bindings) = item
+            .pointer_mut("/spec/bindings")
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        bindings.retain_mut(|binding| {
+            let Some(subjects) = binding.get_mut("subjects").and_then(Value::as_array_mut) else {
+                return false;
+            };
+            subjects.retain(|s| s.get("name").and_then(Value::as_str) == Some(user));
+            subjects.truncate(1);
+            !subjects.is_empty()
+        });
+    }
+    stored
+}
+
 /// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
 pub fn cluster_namespaces_route(uid: &str) -> String {
     format!("{}/config/namespaces", cluster_route(uid))

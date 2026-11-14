@@ -195,6 +195,25 @@ check() {
   printf '%-4s  %-32s expected %s, got %s\n' "$verdict" "$id" "$want" "$got" | tee -a steps.log
 }
 
+# answered STATUS FILE...: the first line of each FILE, the output of api.sh get-status or
+# post-status, is HTTP STATUS
+answered() {
+  local status=$1 f
+  shift
+  for f in "$@"; do [ "$(head -n 1 "$f")" = "HTTP $status" ] || return 1; done
+}
+# body_of FILE: the body of the answer that FILE holds after its status line
+body_of() { sed 1d "$1"; }
+# answer_is STATUS FILE FILTER [OPTION...]: FILE holds HTTP STATUS, and the jq FILTER is true of
+# its body. Each OPTION goes to jq, such as --slurpfile d FILE.
+answer_is() {
+  local status=$1 file=$2 filter=$3
+  shift 3
+  answered "$status" "$file" && body_of "$file" | jq -e "$@" "$filter" > /dev/null
+}
+# refused STATUS CODE FILE: FILE holds HTTP STATUS and an answer with the code CODE
+refused() { answer_is "$1" "$3" '.code == $c' --arg c "$2"; }
+
 # summary_table: the checks in steps.log as a markdown table, with what each shows
 summary_table() {
   echo "| result | check | expected exit | got | what it shows |"

@@ -147,6 +147,23 @@ facts:
       - src/api/codes.rs
       - src/error/class.rs
 
+  - id: limit-system-rbacs-user
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.isSystem
+        - items[].spec.bindings[].subjects
+    stand_in:
+      - v1/spectroclusters/{uid}/config/rbacs
+    unchecked: The code of Palette shows that config/rbacs gives, in each binding of a role binding of the system, only the subject that is the user of the key. The checks second-own-subject and second-system-differs of tiers.sh stage 10 have no result yet.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/clusters.md#cluster-tiers
+      - reference/palette-api.md#a-cluster
+      - development/live-runs.md#tierssh
+    code:
+      - src/snapshot/policy.rs
+
   - id: limit-repave-variable-move
     kind: behavior
     reads:

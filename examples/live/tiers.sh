@@ -37,16 +37,23 @@
 #   9  a key that no tenant has, which the stage makes: the stage reads with it, and the error of
 #      strata list with that key holds no copy of it (#620). The stage writes nothing, and the key
 #      is no secret. `tiers.sh 9` runs it alone, and no other FROM_STAGE runs it
+#  10  a key of a second user, from STRATA_LIVE_SECOND_KEY. The user is active, and has a role in
+#      the project that gives cluster.get. The key of the example and the second key read the role
+#      bindings of cluster A, which has a binding of the system (spec.isSystem true). The code of
+#      Palette shows that such a binding holds only the subject that is the user of the key (#838).
+#      The stage records both answers, a record of cluster A with each key, and compare of the two
+#      records. It writes nothing. `tiers.sh 10` runs it alone, and no other FROM_STAGE runs it.
+#      With no variable set, it says "could not check" and exits 2
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 9
+# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 10
 # add no machine. Results go under
 # runs/<UTC time>/tiers/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=tiers
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2|3|4|5|6|7|8|9) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7|8|9|10) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/tiers}
@@ -63,8 +70,8 @@ load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid)
 release=$(out profile_name)
 [ -n "$C" ] || die "no cluster A; run just live-up"
-# the role bindings of cluster A: stage 5 reads and puts them, and stages 6 and 8 read them with
-# another key
+# the role bindings of cluster A: stage 5 reads and puts them, and stages 6, 8, and 10 read them
+# with another key
 rbacs_route=/v1/spectroclusters/$C/config/rbacs
 export PALETTE_PROJECT_UID=$(out project_uid)
 
@@ -193,9 +200,10 @@ fi
 # environment of that one call, and no argument holds it.
 read_with() { PALETTE_API_KEY=${!1} "$live/api.sh" get-status "$2"; }
 # refusal_code FILE: the error code in the body of the refusal that FILE holds after its status line
-refusal_code() { sed 1d "$1" | jq -r '.code // empty'; }
-# limited_record: a record of cluster A that strata reads with the second key
-limited_record() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$strata" snapshot "cluster:$C" -o limited-record.json; }
+refusal_code() { body_of "$1" | jq -r '.code // empty'; }
+# record_with VAR FILE: a record of cluster A in FILE, which strata reads with the key in the
+# variable VAR. The key never leaves the environment of that one call.
+record_with() { PALETTE_API_KEY=${!1} "$strata" snapshot "cluster:$C" -o "$2"; }
 
 # stage 6 runs only when its number is given: it needs a second key
 if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of cluster A"; then
@@ -204,12 +212,13 @@ if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of clust
   check limited-control 0 "#276: the key of the example reads the role bindings of cluster A" -- rbacs
   check limited-read 0 "#276: the second key does not read them: api.sh get-status prints the refusal of Palette" -- \
     read_with STRATA_LIVE_LIMITED_KEY "$rbacs_route"
-  check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- grep -qx 'HTTP 500' limited-read.out
+  check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- answered 500 limited-read.out
   check limited-code ? "#276: the error code of the body that Palette answers" -- refusal_code limited-read.out
   check limited-code-says 0 "#276: the code is ResourceAccessDenied" -- grep -qx ResourceAccessDenied limited-code.out
   check limited-message 0 "#276: the message names the project: Project '<uid>' access denied" -- \
     grep -q "Project '$PALETTE_PROJECT_UID' access denied" limited-read.out
-  check limited-record ? "#276: what strata does with the answer: a record of cluster A with the second key" -- limited_record
+  check limited-record ? "#276: what strata does with the answer: a record of cluster A with the second key" -- \
+    record_with STRATA_LIVE_LIMITED_KEY limited-record.json
   check limited-record-errors ? "#276: the errors of the policy tier of that record, if strata wrote one" -- \
     jq '.source.cluster.tiers.policy.errors' limited-record.json
 fi
@@ -292,9 +301,7 @@ EOF
 # forbidden_says FILE: the answer that FILE holds is HTTP 500 with the code OperationForbidden, and
 # its message names the permission 'cluster.get'
 forbidden_says() {
-  [ "$(head -n 1 "$1")" = "HTTP 500" ] || return 1
-  sed 1d "$1" | jq -e --arg p "'cluster.get'" \
-    '.code == "OperationForbidden" and (.message // "" | contains($p))' > /dev/null
+  answer_is 500 "$1" '.code == "OperationForbidden" and (.message // "" | contains($p))' --arg p "'cluster.get'"
 }
 
 # narrow_list: strata list with the third key. The run keeps its progress notes, so that standard
@@ -338,6 +345,57 @@ if [ "$from" = 9 ] && stage 9 "a key that no tenant has"; then
   check unknown-key-list 2 "#620: strata list projects with that key, as text and as JSON, exits 2 with the error" -- unknown_list
   check unknown-key-masked 1 "#620: the errors of strata hold no copy of the key" -- \
     grep -qF "$unknown_key" unknown-key-list.out unknown-key-list.err
+fi
+
+# has_system FILE: the answer in FILE has an item with spec.isSystem true, a binding of the system
+has_system() { body_of "$1" | jq -e 'any(.items[]?; .spec.isSystem == true)' > /dev/null; }
+# system_bindings FILE: the role and the subject names of each binding of the system in the answer
+# in FILE. The output is one line of JSON.
+system_bindings() {
+  body_of "$1" | jq -c '[.items[]? | select(.spec.isSystem == true) | .spec.bindings[]?
+    | {role: .role.name, subjects: [.subjects[]?.name]}]'
+}
+# own_subject FILE...: in each answer, each binding of the system holds one subject, and all these
+# subjects have one name
+own_subject() {
+  local f
+  for f in "$@"; do
+    system_bindings "$f" | jq -e 'all(.subjects | length == 1) and ([.[].subjects[]] | unique | length <= 1)' \
+      > /dev/null || return 1
+  done
+}
+# other_bindings FILE: each binding of an item that is not of the system, in the answer in FILE
+other_bindings() { body_of "$1" | jq -S '[.items[]? | select(.spec.isSystem != true) | .spec.bindings]'; }
+# same_others FILE FILE: the two answers have the same bindings that are not of the system
+same_others() { diff <(other_bindings "$1") <(other_bindings "$2"); }
+
+# stage 10 runs only when its number is given: it needs the key of a second user
+if [ "$from" = 10 ] && stage 10 "the key of a second user reads a role binding of the system"; then
+  [ -n "${STRATA_LIVE_SECOND_KEY:-}" ] \
+    || die "could not check: set STRATA_LIVE_SECOND_KEY to the key of a second user with a role in the project that gives cluster.get"
+  check second-first 0 "#838: GET the role bindings of cluster A with the key of the example: api.sh get-status prints the answer" -- \
+    "$live/api.sh" get-status "$rbacs_route"
+  check second-read 0 "#838: GET them with the second key" -- read_with STRATA_LIVE_SECOND_KEY "$rbacs_route"
+  check second-status 0 "#838: Palette answers HTTP 200 to both keys" -- answered 200 second-first.out second-read.out
+  check second-system 0 "#838: cluster A has a role binding of the system: an item with spec.isSystem true" -- \
+    has_system second-first.out
+  check second-system-first ? "#838: the role and the subjects of each binding of the system, to the key of the example" -- \
+    system_bindings second-first.out
+  check second-system-second ? "#838: the role and the subjects of each binding of the system, to the second key" -- \
+    system_bindings second-read.out
+  check second-own-subject 0 "#838: each binding of the system holds one subject, and each answer names one user" -- \
+    own_subject second-first.out second-read.out
+  check second-system-differs 1 "#838: the bindings of the system differ between the two keys" -- \
+    cmp -s second-system-first.out second-system-second.out
+  check second-others-same 0 "#838: the bindings that are not of the system are the same for both keys" -- \
+    same_others second-first.out second-read.out
+  check second-record-first 0 "#838: a record of cluster A with the key of the example" -- \
+    "$strata" snapshot "cluster:$C" -o first-key.json
+  check second-record-second 0 "#838: a record of cluster A with the second key" -- \
+    record_with STRATA_LIVE_SECOND_KEY second-key.json
+  check second-compare ? "#838: compare of the two records, as JSON" -- "$strata" compare first-key.json second-key.json --json
+  check second-policy ? "#838: the state of the policy tier between the two records: same or changed" -- \
+    tier_state second-compare.out policy
 fi
 
 echo

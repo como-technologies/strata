@@ -76,11 +76,11 @@ check by-filter 0 '#80: list clusters --filter finds cluster A' -- \
 check filters-project 0 '#539: the listing of the saved filters, asked with the project of cluster A' -- \
   "$live/api.sh" get-status '/v1/filters/metadata?filterType=tag'
 check filters-project-says 0 '#539: Palette answers HTTP 403 with the code ProjectUidIsNotEmpty' -- \
-  bash -c "head -n 1 filters-project.out | grep -qx 'HTTP 403' && sed 1d filters-project.out | jq -e '.code == \"ProjectUidIsNotEmpty\"'"
+  refused 403 ProjectUidIsNotEmpty filters-project.out
 check filter-project 0 "#539: the saved filter $FILTER, asked with the project of cluster A" -- \
   "$live/api.sh" get-status "/v1/filters/tag/$F"
 check filter-project-says 0 '#539: Palette answers HTTP 403 with the code ProjectUidIsNotEmpty' -- \
-  bash -c "head -n 1 filter-project.out | grep -qx 'HTTP 403' && sed 1d filter-project.out | jq -e '.code == \"ProjectUidIsNotEmpty\"'"
+  refused 403 ProjectUidIsNotEmpty filter-project.out
 
 echo "== 3. a record of each cluster of the set" | tee -a steps.log
 mkdir -p fleet
