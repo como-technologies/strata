@@ -102,7 +102,7 @@ reviewer approved, by its content and not by a tag or a name.
 
 Only the observer answers the last question, because it reads the pods of one
 cluster. It sees a tag that moves only after a pod pulls it. [What the read catches
-and what it does not](./automation/observer.md#what-the-read-catches-and-what-it-does-not)
+and what it does not](./development/observer.md#what-the-read-catches-and-what-it-does-not)
 gives the cases.
 
 ## Where to start

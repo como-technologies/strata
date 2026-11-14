@@ -1149,7 +1149,7 @@ field, a value, an input, or an option is in the sections above.
   `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
   and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
   does not count a record with the new status. See
-  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  [A version that the cluster no longer runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs).
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
@@ -1710,7 +1710,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer gives the status `newer` to a profile with a newer version.** Before, such
   a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
-  [Run it once](../automation/observer.md#run-it-once).
+  [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **`behind` names the move to the newest profile version.** A new line
   `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
   `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
@@ -1724,7 +1724,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the move to the newest version of a profile.** `newerVersion` holds the
   new field `move`, or `unread` when the compare failed. The detail route takes the side
   `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
-  See [Run it once](../automation/observer.md#run-it-once).
+  See [The move to the newest version of a profile](../development/observer.md#the-move-to-the-newest-version-of-a-profile).
 - **`behind` names the newer profile version that carries a newer pack.** A new line under each
   pin that is behind names it. The line is `<name>@<version> carries <pack>@<version>`, or it says
   that no newer version of the profile carries one. `pins[].carriers[]` of `--json` holds the
@@ -1738,7 +1738,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the carrier of a pack that is behind.** A pack row of `/v1/profiles` holds
   the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
   of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
-  badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
+  badge "Changed". See [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **The tiles of the page of the newer versions say "newer", and not "behind".** The tile
   "Packs behind" is now "Packs with a newer version". The tile "Versions behind" is now
   "Versions newer than the pins". The numbers and the lines under them stay the same. A check

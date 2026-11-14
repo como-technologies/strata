@@ -243,13 +243,13 @@ The glob also writes the records of the older versions. After you move the clust
 page names no newer version for them. It lists each of them in a fold under the table of
 the profiles, as "Not on this cluster". A record with a finding stays in the table as a
 drift. See [A version that the cluster no longer
-runs](./automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+runs](./development/observer.md#a-version-that-the-cluster-no-longer-runs).
 
 The script stops when two records are for one version. So the glob must not match
 the records of `prod`, which hold the same versions. It stops for a record of a
 cluster too, such as `fleet/prod/payments.json`. This layout keeps the records of `dev`
 and of `prod` in each version folder. So the glob names `dev`, and it differs from the
-glob `releases/*.json` of [Install](./automation/observer.md#install), which fits a
+glob `releases/*.json` of [Install with kubectl](./automation/observer.md#install-with-kubectl), which fits a
 folder with the records of one project.
 
 The observer can also read the pods of the cluster, to show the digest that each tag

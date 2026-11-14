@@ -115,7 +115,7 @@ See
 - Read the full diff of the move before you move a cluster:
   `strata compare aws-stack@1.0.0 aws-stack@1.1.0 --full`. See
   [strata compare](../commands/compare.md). The
-  [observer](../automation/observer.md#run-it-once) shows the same move on the page
+  [observer](../development/observer.md#the-move-to-the-newest-version-of-a-profile) shows the same move on the page
   of the profile.
 - Ask Palette about the move of the cluster:
   `strata compare cluster:payments aws-stack@1.1.0 --repave`. See
