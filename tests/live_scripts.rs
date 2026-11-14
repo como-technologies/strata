@@ -7038,6 +7038,46 @@ fn validate_packs_sh_stage_5_asks_the_two_routes_for_each_rule_that_they_answer(
     assert_eq!(manifests[0]["name"], manifests[1]["name"]);
 }
 
+/// The last line of `snapshot --validate` when Palette accepts the record of `reference`, as strata
+/// writes it. `candidate` is true for a record of a candidate file.
+fn accepted_line(reference: &str, candidate: bool) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    make_fixtures(dir.path());
+    let mut snap = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    snap.source.reference = reference.to_string();
+    if candidate {
+        snap.source.template = strata::snapshot::Template::Candidate.into();
+    }
+    snap.source.palette_validation =
+        Some(serde_json::from_value(serde_json::json!({"accepts": true})).unwrap());
+    let sentence = strata::render::acceptance_sentence(&snap).unwrap();
+    format!("{}: {sentence}\n", strata::TOOL_NAME)
+}
+
+#[test]
+fn validate_packs_sh_stage_1_says_that_palette_accepts_the_candidate_in_the_line_of_strata() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    let line = accepted_line("strata-validate-barney.yaml", true);
+    stage.strata_err(
+        "snapshot --from-candidate strata-validate-barney.yaml --validate *",
+        0,
+        &format!("strata: wrote barney.json (root 088136c929bd)\n{line}"),
+    );
+
+    let (_, steps) = stage.run("validate-packs.sh", &["1"]);
+    passed(&steps, &["validate-accepts", "validate-accepts-says"]);
+
+    // the line of 0.33.0 is no answer now
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.strata_err(
+        "snapshot --from-candidate strata-validate-barney.yaml --validate *",
+        0,
+        "palette    accepts\n",
+    );
+    let (_, steps) = stage.run("validate-packs.sh", &["1"]);
+    failed(&steps, &["validate-accepts-says"]);
+}
+
 #[test]
 fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_of_profile() {
     let mut stage = Stage::new(serde_json::json!({}));
@@ -7045,7 +7085,7 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     stage.strata_err(
         "snapshot strata-live-profile@1.0.0 --validate *",
         0,
-        "palette    accepts\n",
+        &accepted_line("strata-live-profile@1.0.0", false),
     );
     stage.strata_err(
         "snapshot --from-candidate exists.yaml --validate *",

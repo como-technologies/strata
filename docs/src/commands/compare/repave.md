@@ -159,6 +159,21 @@ strata reads the file, and that read is no request:
 {{#include ../../output/edited-repave-usage.txt}}
 ```
 
+Two records with no cluster get an error that names the commands to use.
+`--validate` gives the same error, with its own option:
+
+```text
+{{#include ../../output/repave-records-usage.txt}}
+```
+
+A record can be the profile side, so give the cluster in place of one record.
+Palette then answers for that cluster. Plain `compare` of the two records needs
+no cluster, and prints the impact from the table:
+
+```text
+{{#include ../../output/repave-records-forward.txt}}
+```
+
 A cluster and an update that waits, `cluster:<a>` and `cluster:<b>@pending`,
 can name two clusters. A name and a uid can name one cluster, so only the reads
 show it. Strata then gives the same `usage` error after the reads.

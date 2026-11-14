@@ -1,0 +1,7 @@
+$ strata snapshot aws-stack@1.1.1 --validate
+strata: looking up project dev
+strata: fetching profile 64e0000000000000000000c3
+{
+...
+}
+strata: Palette accepts the packs of 'aws-stack@1.1.1' as an update of itself
