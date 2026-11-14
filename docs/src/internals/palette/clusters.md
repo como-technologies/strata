@@ -59,6 +59,16 @@ itself. A cluster on AWS gives these fields:
   code of Palette shows it; no live run shows it yet. Stage 8 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes
   with such a key.
+- An item of the bindings route with `spec.isSystem` true is a role binding of
+  the system. In such an item, each binding holds only the subject that is the
+  user of the key. The answer drops a binding with no such subject, and keeps
+  the item. This is true for each key, also the key of a tenant admin. So the
+  keys of two users can get different bindings for one cluster. The code of
+  Palette shows it; no live run shows it yet. Stage 10 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads the bindings of one
+  cluster with the keys of two users. Strata keeps each such binding out of
+  the hash of the policy tier: see
+  [A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.
@@ -332,8 +342,8 @@ A request without its permission gets one of these answers:
 The profile listing and the cluster listing check the role in the project of
 the request: `clusterProfile.list` and `cluster.list`. When no role there gives
 the permission, each listing answers HTTP 500 with `ResourceAccessDenied`, and
-not 403. The message names the project by its name, as in
-`Project 'dev' access denied`.
+not 403. The message names the project by its name, or by its uid when the key
+has no role in the project, as in `Project 'dev' access denied`.
 
 The saved tag filters need `filter.list` in the tenant. Without it, Palette
 answers HTTP 403 with `AccessDenied`, and the

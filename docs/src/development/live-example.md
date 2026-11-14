@@ -292,6 +292,7 @@ back to false with the default variables (`apply_baseline`).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
 - For `tiers.sh 8` only: a third key in `STRATA_LIVE_NARROW_KEY`. Its user has a role in the project that does not give `cluster.get`, such as Cluster Profile Viewer. The script never prints it.
+- For `tiers.sh 10` only: the key of a second user in `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project that gives `cluster.get`, such as Project Viewer. Cluster A must have a role binding of the system. The script never prints the key.
 - For `projects.sh` only: the name of a second project of the tenant in `STRATA_LIVE_SECOND_PROJECT`. The script makes one profile there, and deletes it at its end.
 - For `observer-role.sh` only: the key of a user with the role under test in `OBSERVER_ROLE_KEY`, and the name of the role in `OBSERVER_ROLE`. The script never prints the key.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
@@ -580,6 +581,7 @@ just live-tiers-limited                                                        #
 just live-tiers-pool                                                           # #515, needs just live-up; sets an override on a pool of cluster A, and puts the pool back
 just live-tiers-narrow                                                         # #665, #620, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
 just live-tiers-unknown-key                                                    # #620, needs just live-up; reads only, with a key that no tenant has
+just live-tiers-second-key                                                     # #838, needs just live-up and STRATA_LIVE_SECOND_KEY; reads only
 just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows

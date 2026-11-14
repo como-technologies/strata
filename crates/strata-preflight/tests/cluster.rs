@@ -3,7 +3,10 @@
 //! Palette quotes in a refusal.
 
 use serde_json::json;
-use strata::api::codes::{Denial, INVALID_VARIABLE_CODE};
+use strata::api::codes::{
+    CLUSTER_CREATE_FORBIDDEN_CODES, CLUSTER_CREATE_LIMIT_CODES, Denial, INVALID_VARIABLE_CODE,
+    PACK_FORBIDDEN_CODE, ValidateRoute,
+};
 use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -341,31 +344,62 @@ fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_
     }
 }
 
-/// The refusal of a machine pool with no subnet, for AWS with a VPC, as Palette writes it.
-const NO_SUBNET: &str = "Parameter 'Subnets' is required";
+/// The message of the refusal in the test of each code of the cluster validate route.
+const REFUSED: &str = "the body is refused";
 
-/// The route refuses a body for AWS with a VPC and a pool with no subnet with HTTP 500 and
-/// `RequiredParam`, as a live run shows.
-///
-/// `palette-validate` reads it as the answer of the route, as it reads HTTP 400. The verdict is
-/// `failed`, with the message of Palette. Strata sends the body one time (#824).
+/// The cluster validate route refuses the body with HTTP 500 and a code of its checks: see
+/// [`ValidateRoute::ClusterCreate`]. `palette-validate` reads each such refusal as the answer of
+/// the route, as it reads HTTP 400. The verdict is `failed`, with the message of Palette, and
+/// strata sends the body one time (#829). The test reads the codes from `refusal_codes`, so a new
+/// code of the route needs no new case.
 #[test]
-fn a_pool_with_no_subnet_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400() {
-    let said = format!("Palette refused the entity: RequiredParam: {NO_SUBNET}");
-    for status in [500, 400] {
-        let api = refusing(&[], status, "RequiredParam", NO_SUBNET);
+fn each_refusal_code_of_the_cluster_validate_route_fails_palette_validate_at_http_500_and_400() {
+    let codes: Vec<&str> = ValidateRoute::ClusterCreate.refusal_codes().collect();
+    assert!(!codes.is_empty());
+    for code in codes {
+        let said = format!("Palette refused the entity: {code}: {REFUSED}");
+        for status in [500, 400] {
+            let api = refusing(&[], status, code, REFUSED);
+            let check = palette_validate(&api);
+            assert_eq!(
+                check.verdict,
+                Verdict::Failed,
+                "{code} {status}: {:?}",
+                check.messages
+            );
+            assert_eq!(check.messages, [said.as_str()], "{code} {status}");
+            assert_eq!(
+                api.calls("POST /v1/spectroclusters/aws/validate"),
+                1,
+                "{code} {status}"
+            );
+        }
+    }
+}
+
+/// The cluster validate route refuses four faults of the body, and a tenant at three limits, with
+/// HTTP 403 and not with 500. `palette-validate` reads each one as the answer of the route, and not
+/// as a refusal of the key. The verdict is `failed`, with the message of Palette (#829).
+#[test]
+fn each_refusal_of_the_route_with_http_403_fails_palette_validate_with_the_message_of_palette() {
+    let codes = CLUSTER_CREATE_FORBIDDEN_CODES
+        .iter()
+        .chain(&CLUSTER_CREATE_LIMIT_CODES)
+        .copied()
+        .chain([PACK_FORBIDDEN_CODE]);
+    for code in codes {
+        let api = refusing(&[], 403, code, REFUSED);
         let check = palette_validate(&api);
         assert_eq!(
             check.verdict,
             Verdict::Failed,
-            "{status}: {:?}",
+            "{code}: {:?}",
             check.messages
         );
-        assert_eq!(check.messages, [said.as_str()], "{status}");
         assert_eq!(
-            api.calls("POST /v1/spectroclusters/aws/validate"),
-            1,
-            "{status}"
+            check.messages,
+            [format!("Palette refused the entity: {code}: {REFUSED}")],
+            "{code}"
         );
     }
 }
