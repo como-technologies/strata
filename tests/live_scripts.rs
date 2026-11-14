@@ -2600,6 +2600,54 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
     );
 }
 
+/// The criterion of #872: the summary of preflight-plan.sh puts the ledger entry in a fenced
+/// block. The fence is longer than each run of backticks in the entry, as `text::code_block` writes
+/// it. So a note with three backticks does not end the block.
+#[test]
+fn preflight_plan_keeps_a_ledger_entry_with_three_backticks_in_its_block() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script.find("\nsummary() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let summary = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let strata = dir.path().join("strata");
+    executable(&strata, "#!/usr/bin/env bash\necho strata 0.0.0\n");
+    // `record` keeps the line breaks of a note, so a note can hold a line of three backticks
+    let entry = "  - run: r1\n    results:\n      - {rule: a, result: missed, note: \"it said:\n```\n<b>x</b>\"}\n";
+    for (case, written) in [("an entry", Some(entry)), ("no entry", None)] {
+        let run = dir.path().join(case.replace(' ', "-"));
+        std::fs::create_dir(&run).unwrap();
+        if let Some(entry) = written {
+            std::fs::write(run.join("ledger-entry.yaml"), entry).unwrap();
+        }
+        let o = Command::new("bash")
+            .arg("-c")
+            .arg(format!(
+                "script=plan; . '{lib}'\nrun_id=r1; engine=aws; R=p1; release=\n{summary}\nsummary",
+                lib = live_script("lib.sh").display()
+            ))
+            .current_dir(&run)
+            .env("STRATA_BIN", &strata)
+            .output_locked()
+            .unwrap();
+        assert!(o.status.success(), "{case}: {}", text(&o.stderr));
+        let md = std::fs::read_to_string(run.join("summary.md")).unwrap();
+        assert_eq!(
+            common::code_blocks(&md, "yaml"),
+            [written.unwrap_or("").trim_end_matches('\n')],
+            "{case}: {md}"
+        );
+        let fence = if written.is_some() { "````" } else { "```" };
+        assert!(
+            md.ends_with(&format!(
+                "\n{fence}yaml\n{}{fence}\n",
+                written.unwrap_or("")
+            )),
+            "{case}: {md}"
+        );
+    }
+}
+
 /// Run `offering_edit` of preflight-plan.sh for `engine`, with the `account_kind` that `create_body`
 /// sets, against an `api.sh` that answers every `get` with the file `answer`. Gives the output, and
 /// the path that the function asked for.

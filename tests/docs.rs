@@ -2772,18 +2772,13 @@ fn the_read_of_a_text_gives_its_code_spans_and_the_text_outside_them() {
 }
 
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
-/// link is lost, and the page shows the raw target. Code fences are skipped.
+/// link is lost, and the page shows the raw target. A row in a fenced code block is no row of a
+/// table, so the read skips each block as GitHub reads it.
 fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
-    let mut fenced = false;
-    let mut found = Vec::new();
-    for line in text.lines() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-        }
-        if fenced || !line.starts_with('|') {
-            continue;
-        }
-        found.extend(
+    common::outside_code_blocks(text)
+        .lines()
+        .filter(|line| line.starts_with('|'))
+        .flat_map(|line| {
             cells(line)
                 .into_iter()
                 .filter(|cell| {
@@ -2791,10 +2786,10 @@ fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
                         .iter()
                         .any(|start| cell.starts_with(start))
                 })
-                .map(str::to_string),
-        );
-    }
-    found
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// The row "A service in one cluster" of `boundary.md` lost the text of its link, and no check saw
@@ -2811,6 +2806,9 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
     assert!(link_targets_alone_in_a_cell(fixed).is_empty());
     let fenced = "```text\n| (./a.md) | b |\n```\n";
     assert!(link_targets_alone_in_a_cell(fenced).is_empty());
+    // a line of three backticks does not end a block of four, so the row stays in the block
+    let nested = "````markdown\n```\n| (./a.md) | b |\n```\n````\n";
+    assert!(link_targets_alone_in_a_cell(nested).is_empty());
 
     let mut faults = Vec::new();
     for file in walk(&docs()) {

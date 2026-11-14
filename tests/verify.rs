@@ -3685,9 +3685,10 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
         text.ends_with("  second reading: not done (--list-only)\n  edge hosts: 0 read\n"),
         "{text}"
     );
+    // the markdown escapes the whole line as a quoted text, so the flag is in no code span
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
-        md.contains("Second reading: not done (`--list-only`)."),
+        md.contains("Second reading: not done (--list-only)."),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -17012,6 +17013,9 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
         assert_eq!(ver.status, VerifyStatus::Drifted);
         assert!(ver.gone && ver.deleted_at.is_none());
         assert_eq!(verdict_of(&v), line);
+        // the markdown escapes the whole line as a quoted text, so the uid is in no code span
+        let md = common::markdown().verdict(&v.diff).unwrap();
+        assert_eq!(md, format!("\n**DRIFT**: {}", &line["DRIFT: ".len()..]));
     }
 
     // a host that is not in a cluster, and a group that is not active, say their state
@@ -18261,6 +18265,60 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
         "{md}"
     );
     common::assert_answer_tags_as_text(&md);
+}
+
+/// The criteria of #872: a message of Palette with a link, an emphasis, and two backticks shows
+/// each mark as text in a note and in a verdict. So the two backticks open no code span, and the
+/// tag between them shows as text.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_message_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
+        repave_route(),
+        403,
+        common::ANSWER_MARKS,
+    );
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let md = common::markdown()
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        md.contains("(strata could not read its reasons: HTTP 403: \\[x\\]"),
+        "{md}"
+    );
+    common::assert_answer_marks_as_text(&md);
+
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        403,
+        common::ANSWER_MARKS,
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().verdict(&v.diff).unwrap();
+    assert!(md.contains("\n\nwho: not read: HTTP 403: \\[x\\]"), "{md}");
+    common::assert_answer_marks_as_text(&md);
+
+    let mut doc = serde_json::to_value(&v.diff).unwrap();
+    doc["verify"]["registrySync"] = serde_json::json!({
+        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_MARKS
+    });
+    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().verdict(&synced).unwrap();
+    assert!(
+        md.contains("; the last sync of the registry failed: \\[x\\]"),
+        "{md}"
+    );
+    common::assert_answer_marks_as_text(&md);
 }
 
 /// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text

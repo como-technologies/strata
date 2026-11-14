@@ -81,13 +81,18 @@ profile_cloud=$(jq -r .source.cloudType release.json)
 summary() {
   write_summary "the test plan of #91: $engine" ", preflight \`$("$strata" preflight --version)\`," \
     "release profile \`$R\`, Palette release \`${release:-not given}\`."
+  # a note of the entry can quote a message, so no line of the entry can end the block
+  local fence
+  fence=$(cat ledger-entry.yaml 2> /dev/null | jq -Rrs "$markdown_jq fence")
   {
     echo
     echo "## the ledger entry"
     echo
-    echo '```yaml'
+    echo "${fence}yaml"
     cat ledger-entry.yaml 2> /dev/null
-    echo '```'
+    # the last line gets its line break, or the fence joins it
+    [ -z "$(tail -c 1 ledger-entry.yaml 2> /dev/null)" ] || echo
+    echo "$fence"
   } >> summary.md
 }
 trap summary EXIT

@@ -507,7 +507,8 @@ A review in Git approves the records, and a pipeline publishes them. No person e
 the Secrets. Strata gives two jobs for this:
 
 - **`observer-propose`** runs on a schedule. It reads the first-seen records from the
-  Secrets. It keeps one pull request open that adds them to `releases/observer/`.
+  Secrets. It keeps one pull request open that adds them to `releases/observer/`. The body
+  names the cluster and the path of each record in code spans that no backtick of a name ends.
 - **`observer-publish`** runs after the merge. It writes the approved records into the
   Secrets, with the revision of the merge.
 

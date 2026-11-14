@@ -389,7 +389,13 @@ fn the_three_reports_write_a_mark_in_place_of_each_value_that_a_refusal_of_palet
             for (file, text) in reports(report) {
                 let at = format!("{code}, HTTP {status}, {file}");
                 assert!(text.contains(code), "{at}");
-                assert!(text.contains(&format!("[value of {name}]")), "{at}");
+                // the markdown puts a `\` before each `[` and `]`, and GitHub shows the same text
+                let mark = format!("[value of {name}]");
+                let mark = match file {
+                    "report.md" => strata::text::markdown_cell(&mark),
+                    _ => mark,
+                };
+                assert!(text.contains(&mark), "{at}");
                 for (_, value) in QUOTED {
                     assert!(!text.contains(value), "{at}: {value}");
                 }

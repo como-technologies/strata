@@ -116,6 +116,12 @@ shows as it is. [same-release](../commands/same-release.md#the-archives-of-the-t
 shows the answer of the host of a chart in a reason. `strata-preflight` writes
 its markdown in the same way.
 
+The markdown also writes a `\` before each mark of markdown in a text: `*`,
+`_`, `[`, `]`, `~`, a backtick, and a `\`. GitHub shows the same characters. So
+a link, an emphasis, or a code span in a message of Palette shows as text. A
+run of `_` with a letter or a digit on each side starts no emphasis. So such a
+run stays as it is, as in `aws_stack`.
+
 Each fenced block has a fence of three backticks. When its text holds a run of
 three or more backticks, the fence is longer than each run. So a line of the
 values of a pack cannot end the block of `--full`, and the text after that line
