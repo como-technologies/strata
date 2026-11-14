@@ -1,6 +1,7 @@
 //! The tests of the masks of a secret: the values of a pack, of a cluster group, and of an answer.
 
 use super::*;
+use crate::api::routes as palette;
 use serde_json::json;
 
 fn fields(names: &[&str]) -> Vec<String> {
@@ -325,8 +326,8 @@ fn the_mask_of_a_secret_takes_each_whole_copy_and_leaves_a_part_of_a_word() {
     );
     // a short key masks its whole copies only
     assert_eq!(
-        mask_secret(r#"{"code":"PackNotFound","message":"key 'k'"}"#, "k"),
-        r#"{"code":"PackNotFound","message":"key '********'"}"#
+        mask_secret(&palette::error_body("PackNotFound", "key 'k'"), "k"),
+        palette::error_body("PackNotFound", "key '********'")
     );
     // a copy next to a letter or a digit is a part of another word
     assert_eq!(

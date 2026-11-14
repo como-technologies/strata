@@ -1707,7 +1707,7 @@ fn document_entry(facts: &[Fact], status: u16, body: &str) -> super::document::E
 
 #[test]
 fn a_404_with_a_code_that_the_fact_names_is_skipped_with_the_code_in_its_reason() {
-    let body = format!(r#"{{"code":"{ABSENT}","message":"Resource not found for the type 'x'"}}"#);
+    let body = common_palette::error_body(ABSENT, "Resource not found for the type 'x'");
     let entry = document_entry(
         &facts_naming_the_absent_code("cluster-document"),
         404,

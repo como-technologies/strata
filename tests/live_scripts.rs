@@ -3810,7 +3810,7 @@ fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_
         403,
         &error_body(
             Denial::Route.as_str(),
-            "cluster.get operation is not permitted",
+            &access_denied_message("cluster.get", "project"),
         ),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
@@ -3891,8 +3891,7 @@ fn narrow_stage(status: u16, code: &str) -> Stage {
     stage.wrap_strata(FAKE_STRATA_NARROW);
     narrow_list(&stage, &narrow_listing(), "", 2);
     stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
-    let refusal =
-        format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);
+    let refusal = error_body(code, &operation_forbidden_message("cluster.get"));
     for (_, route) in narrow_routes() {
         stage.route_as(&route, "narrow-k", status, &refusal);
     }
@@ -4000,9 +3999,9 @@ fn unknown_key() -> String {
 /// prints `stderr` and exits 2 for `list projects`, as text and as JSON.
 fn unknown_key_stage(stderr: &str) -> Stage {
     let mut stage = baseline_stage();
-    let body = format!(
-        r#"{{"code":"ResourceNotFound","message":"API Key '{}' is not found"}}"#,
-        unknown_key()
+    let body = error_body(
+        "ResourceNotFound",
+        &format!("API Key '{}' is not found", unknown_key()),
     );
     // a file of the stand-in has no room for the key in its name, so each key gets the answer
     let route = Stage::route_key(PROJECT_LISTING);
@@ -7753,7 +7752,7 @@ const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overla
 /// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
 /// shows it; no live run shows it yet. Strata reads it as a refusal.
 fn cidr_overlap_answer() -> String {
-    serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
+    error_body("K8SCidrOverlap", CIDR_OVERLAP_MESSAGE)
 }
 
 /// The case of `AWS_CASES` that the route takes.
@@ -13810,7 +13809,7 @@ fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_
         let body = if code.is_empty() {
             "{}".to_string()
         } else {
-            format!(r#"{{"code":"{code}","message":"no validate"}}"#)
+            error_body(code, "no validate")
         };
         stage.route_as(OBSERVER_ROLE_VALIDATE, "role-k", status, &body);
         let (o, steps) = stage.run("observer-role.sh", &[]);

@@ -4,7 +4,8 @@
 //! route again, in one place. `tests/common/mod.rs` re-exports it for the tests. The libraries
 //! of `benches/` and `fuzz/`, the tests of `strata-preflight`, and the unit tests of
 //! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists. The
-//! stand-in of `xtask/` builds the body and the message of a denial with it, as the tests do.
+//! stand-in of `xtask/` builds the body of each error and the message of a denial with it, as the
+//! tests do.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test

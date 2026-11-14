@@ -93,7 +93,7 @@ fn a_code_of_a_refusal_at_a_5xx_is_a_refusal_code_and_the_class_of_its_error_is_
         method: Method::Post,
         path: "/v1/clouds/aws/properties/validate".into(),
         status,
-        body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
+        body: palette::error_body(code, "refused"),
         retry_after: None,
     };
     let mut listed: Vec<&str> = REFUSAL_CODES.to_vec();
@@ -160,15 +160,13 @@ fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type_a_var
 
 #[test]
 fn a_route_reads_a_refusal_from_the_body_of_a_palette_error() {
-    let body = r#"{"code":"ClusterProfilesNotSupported","message":"Cluster profiles 'p' are not supported with 'aws' environment"}"#;
+    let message = "Cluster profiles 'p' are not supported with 'aws' environment";
+    let body = &palette::error_body("ClusterProfilesNotSupported", message);
     let refusal = ValidateRoute::ClusterCreate
         .refusal(500, body)
         .expect("the route refuses its own code with HTTP 500");
     assert_eq!(refusal.code, "ClusterProfilesNotSupported");
-    assert_eq!(
-        refusal.message,
-        "Cluster profiles 'p' are not supported with 'aws' environment"
-    );
+    assert_eq!(refusal.message, message);
     assert_eq!(ValidateRoute::ClusterCreate.refusal(502, body), None);
     assert_eq!(ValidateRoute::ProfilePacks.refusal(500, body), None);
     let error: Value = serde_json::from_str(body).unwrap();
@@ -277,7 +275,7 @@ fn a_retry_does_not_send_again_the_refusal_of_the_cluster_validate_route() {
             method: crate::api::Method::Post,
             path: "/v1/spectroclusters/aws/validate".into(),
             status: 500,
-            body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
+            body: palette::error_body(code, "refused"),
             retry_after: None,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");

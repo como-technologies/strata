@@ -9531,8 +9531,9 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
         (raw, calls, slept.borrow().len())
     };
     // the answer that the code of Palette shows for each of the three routes
-    let refusal = format!(
-        r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden"}}"#
+    let refusal = error_body(
+        OPERATION_FORBIDDEN_CODE,
+        &operation_forbidden_message("cluster.get"),
     );
     let classes = routes.clone().map(|path| {
         Error::Api {
@@ -17280,7 +17281,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
     let path = key.as_str();
     // Palette sends each refusal of the whole request as HTTP 500
     for code in ValidateRoute::ProfilePacks.refusal_codes() {
-        let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
+        let body = error_body(code, "refused");
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
             method: Method::Post,
@@ -17371,7 +17372,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     };
     let import = post(IMPORT_ROUTE);
     let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
-    let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
+    let body_of = |code: &str| error_body(code, "refused");
     let class_of = |status: u16, code: &str| {
         Error::Api {
             method: Method::Post,

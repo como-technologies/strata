@@ -325,11 +325,7 @@ fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
     };
     // a refusal by design stays while the inputs stay
     assert_eq!(
-        api(
-            500,
-            &format!(r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"m"}}"#)
-        )
-        .class(),
+        api(500, &palette::error_body(OPERATION_FORBIDDEN_CODE, "m")).class(),
         FailureClass::Terminal
     );
     // another 5xx can go away
@@ -713,8 +709,9 @@ fn api_message(status: u16, body: &str) -> String {
 
 #[test]
 fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_not_the_key() {
-    let body = format!(
-        r#"{{"code":"{PROJECT_SCOPE_CODE}","message":"Operation is not allowed in project scope and ProjectUid should be empty"}}"#
+    let body = palette::error_body(
+        PROJECT_SCOPE_CODE,
+        "Operation is not allowed in project scope and ProjectUid should be empty",
     );
     let text = api_message(403, &body);
     assert!(
@@ -838,7 +835,7 @@ fn the_denial_of_an_error_is_the_code_of_the_body_of_an_answer_of_palette() {
         retry_after: None,
     };
     for denial in Denial::ALL {
-        let body = format!(r#"{{"code":"{}","message":"m"}}"#, denial.as_str());
+        let body = palette::error_body(denial.as_str(), "m");
         assert_eq!(api(&body).denial(), Some(*denial));
     }
     for body in [

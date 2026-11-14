@@ -1156,7 +1156,7 @@ fn the_cut_of_the_body_of_an_error_leaves_no_part_of_a_value_of_a_variable() {
     let mut cut_in_the_mark = 0;
     for pad in 0..400 {
         let message = format!("{} '{VALUE}'", "a".repeat(pad));
-        let body = json!({"code": "K8SCidrOverlap", "message": message}).to_string();
+        let body = error_body("K8SCidrOverlap", &message);
         let api = strata::api::MemoryApi::new().failing("/v1/x", 500, body);
         let out = run_check(&r, &world, &LiveBackend::new(Some(&api), false), &jq);
         assert_eq!(out.verdict, Verdict::Error, "{pad}");
