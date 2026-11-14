@@ -411,6 +411,12 @@ a note. A new id breaks each reader of the document, and the sum of `failed`, `p
 `warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
 action.
 
+One value changes after 0.33.0 with no new id. In `strata-snapshot/1`, the policy tier of a
+cluster names each role binding of the system in the new field `systemRbacs`, and not in `rbacs`.
+So the `hash` of the tier changes for a cluster with such a binding. The tier is not part of the root, so no root changes. A new id breaks each reader of
+the record, and the change touches only a cluster with such a binding.
+[Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
+
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
@@ -1326,6 +1332,14 @@ field, a value, an input, or an option is in the sections above.
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **A role binding of the system leaves the hash of the policy tier.** Its subjects depend on the
+  user of the key. So before, the keys of two users gave two hashes of the tier for one cluster. Now `rbacs` of `fields` does not
+  hold the binding, and the new field `systemRbacs` of the tier names it. `compare` and `verify`
+  do not compare it. See
+  [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
+  - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
+    policy tier at the binding. The exit does not change. Record the cluster again.
+  - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
 
 ### For a user of the CI drop-ins
 
@@ -1425,6 +1439,9 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `snapshot::ClusterTier` has the new field `system_rbacs`, the role bindings of the system of
+  the policy tier. A struct literal must set it, and a pattern with no `..` must name it.
+  `snapshot::cluster_tiers` keeps these bindings out of `fields` and out of `hash`.
 
 ### For a user of the library of strata-preflight
 

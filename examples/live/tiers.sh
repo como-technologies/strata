@@ -42,8 +42,9 @@
 #      bindings of cluster A, which has a binding of the system (spec.isSystem true). The code of
 #      Palette shows that such a binding holds only the subject that is the user of the key (#838).
 #      The stage records both answers, a record of cluster A with each key, and compare of the two
-#      records. It writes nothing. `tiers.sh 10` runs it alone, and no other FROM_STAGE runs it.
-#      With no variable set, it says "could not check" and exits 2
+#      records: the policy tier is the same, and each record names the bindings of the system that
+#      its key reads, outside the hash. It writes nothing. `tiers.sh 10` runs it alone, and no
+#      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 to 10
@@ -368,6 +369,9 @@ own_subject() {
 other_bindings() { body_of "$1" | jq -S '[.items[]? | select(.spec.isSystem != true) | .spec.bindings]'; }
 # same_others FILE FILE: the two answers have the same bindings that are not of the system
 same_others() { diff <(other_bindings "$1") <(other_bindings "$2"); }
+# recorded_system FILE...: the policy tier of each record names one binding of the system or more,
+# in systemRbacs
+recorded_system() { jq -e -s 'all(.[]; .source.cluster.tiers.policy.systemRbacs | length > 0)' "$@" > /dev/null; }
 
 # stage 10 runs only when its number is given: it needs the key of a second user
 if [ "$from" = 10 ] && stage 10 "the key of a second user reads a role binding of the system"; then
@@ -396,6 +400,10 @@ if [ "$from" = 10 ] && stage 10 "the key of a second user reads a role binding o
   check second-compare ? "#838: compare of the two records, as JSON" -- "$strata" compare first-key.json second-key.json --json
   check second-policy ? "#838: the state of the policy tier between the two records: same or changed" -- \
     tier_state second-compare.out policy
+  check second-policy-same 0 "#838: the policy tier is the same in the two records: its hash does not cover the bindings of the system" -- \
+    grep -qx same second-policy.out
+  check second-system-recorded 0 "#838: each record names the bindings of the system that its key reads, in systemRbacs" -- \
+    recorded_system first-key.json second-key.json
 fi
 
 echo

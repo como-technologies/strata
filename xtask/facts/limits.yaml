@@ -161,6 +161,7 @@ facts:
       - internals/palette/clusters.md#cluster-tiers
       - reference/palette-api.md#a-cluster
       - development/live-runs.md#tierssh
+      - commands/snapshot/cluster.md#a-role-binding-of-the-system
     code:
       - src/snapshot/policy.rs
 

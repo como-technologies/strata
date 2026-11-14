@@ -61,11 +61,14 @@ itself. A cluster on AWS gives these fields:
   with such a key.
 - An item of the bindings route with `spec.isSystem` true is a role binding of
   the system. In such an item, each binding holds only the subject that is the
-  user of the key. The answer drops a binding with no such subject. So the keys
-  of two users can get different bindings for one cluster. The code of Palette
-  shows it; no live run shows it yet. Stage 10 of
+  user of the key. The answer drops a binding with no such subject, and keeps
+  the item. This is true for each key, also the key of a tenant admin. So the
+  keys of two users can get different bindings for one cluster. The code of
+  Palette shows it; no live run shows it yet. Stage 10 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads the bindings of one
-  cluster with the keys of two users.
+  cluster with the keys of two users. Strata keeps each such binding out of
+  the hash of the policy tier: see
+  [A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.

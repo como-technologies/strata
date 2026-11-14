@@ -106,7 +106,7 @@ The `policy` tier holds the settings of the cluster:
 | `machineHealth` | the machine health checks | `spec.clusterConfig.machineHealthConfig` |
 | `timezone` | the timezone of the scheduled tasks of the cluster | `spec.clusterConfig.timezone` |
 | `fips` | the FIPS mode | `status.fips.mode` |
-| `rbacs` | each role binding, with its `namespace`, `role`, `subjects`, and `type` | `GET /v1/spectroclusters/{uid}/config/rbacs` |
+| `rbacs` | each role binding that is not of the system, with its `namespace`, `role`, `subjects`, and `type`. See [A role binding of the system](#a-role-binding-of-the-system) | `GET /v1/spectroclusters/{uid}/config/rbacs` |
 | `namespaces` | each namespace, with its `name`, `isRegex`, and `resourceAllocation` | `GET /v1/spectroclusters/{uid}/config/namespaces` |
 | `updateWorkerPoolsInParallel` | `true` when Palette updates all the worker pools at one time, and `false` when it updates them one after the other | `spec.clusterConfig` |
 | `controlPlaneHealthCheckTimeout` | how long Palette waits for a new control plane node to become ready, before it replaces the node | `spec.clusterConfig` |
@@ -177,6 +177,40 @@ or `paused`, in place of `spectroComponentsUpgradeForbidden`. When only one of
 two records holds it, `compare` and `verify` compare each other field, and not
 these two. So the older record still verifies. Two records of strata 0.18
 compare on each field.
+
+### A role binding of the system
+
+Palette can give a cluster a role binding of the system: an item of the
+bindings route with `spec.isSystem` true. Palette gives each binding of such an
+item only with the subject that is the user of the key. So the keys of two
+users read different bindings for one cluster: see
+[Cluster tiers](../../internals/palette/clusters.md#cluster-tiers).
+
+Strata keeps each such binding out of `rbacs`, so the hash of the tier does not
+cover it. The tier names each one in `systemRbacs`, beside `fields`, in the
+form of `rbacs`. `compare` and `verify` do not compare `systemRbacs`. So a
+pipeline can write a record with its key, and a job can verify it with the key
+of another user.
+
+Here fred and wilma record the cluster `payments`, each with a key of their
+own. The two records have one hash of the policy tier. Each record names the
+binding of the system that its key reads:
+
+```text
+{{#include ../../output/tiers-system.txt}}
+```
+
+`compare` of the two records finds no change of a tier:
+
+```text
+{{#include ../../output/tiers-system-compare-lines.txt}}
+```
+
+A record of strata 0.33.0 and before holds a binding of the system in `rbacs`.
+`verify` of such a record names the policy tier at that binding, and the exit
+does not change. Record the cluster again. Stage 10 of
+[tiers.sh](../../development/live-runs.md#tierssh) records a cluster with such a
+binding with the keys of two users.
 
 ## The shape on each cloud
 

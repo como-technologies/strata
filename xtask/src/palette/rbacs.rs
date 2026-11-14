@@ -61,7 +61,7 @@ mod tests {
 
     use crate::common_palette::system_rbacs;
     use crate::palette::{Request, served};
-    use crate::tenant::{KEY_USERS, rbacs_route};
+    use crate::tenant::{Tenant, rbacs_route};
 
     /// The bindings of each item of `answer`, as the role and the names of the subjects of each.
     fn bindings(answer: &Value) -> Vec<Vec<(String, Vec<String>)>> {
@@ -91,9 +91,10 @@ mod tests {
         let file = dir.join(format!("p1/{}.json", rbacs_route("c1")));
         fs::create_dir_all(file.parent().unwrap()).unwrap();
         fs::write(&file, system_rbacs().to_string()).unwrap();
-        let users =
-            serde_json::json!({"k-fred": "fred@example.com", "k-wilma": "wilma@example.com"});
-        fs::write(dir.join(KEY_USERS), users.to_string()).unwrap();
+        Tenant::new(dir, dir).key_users(&[
+            ("k-fred", "fred@example.com"),
+            ("k-wilma", "wilma@example.com"),
+        ]);
         let answer = |target: &str, key: Option<&str>| {
             let request = Request {
                 target: target.to_string(),

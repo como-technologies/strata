@@ -4257,18 +4257,31 @@ fn tiers_sh_stage_8_says_could_not_check_and_exits_2_without_the_third_key() {
 }
 
 /// A stage of tiers.sh stage 10. The role bindings of cluster A answer `first` to the key of the
-/// example, and `second` to the second key. compare of the two records names the policy tier as
-/// changed.
+/// example, and `second` to the second key. Each record names a binding of the system, and compare
+/// of the two records names the policy tier as the same.
 fn second_key_stage(first: &serde_json::Value, second: &serde_json::Value) -> Stage {
+    let record = r#"{"source":{"cluster":{"tiers":{"policy":{"systemRbacs":[{"type":"x"}]}}}}}"#;
+    keyed_stage(first, second, record, true)
+}
+
+/// The stage of [`second_key_stage`], where the fake `strata` writes `record` with each key.
+/// `compare` of the two records gives the policy tier as the same when `same` is true.
+fn keyed_stage(
+    first: &serde_json::Value,
+    second: &serde_json::Value,
+    record: &str,
+    same: bool,
+) -> Stage {
     let mut stage = baseline_stage();
-    stage.wrap_strata(&fake_strata_keyed("second-k", "{}"));
+    stage.wrap_strata(&fake_strata_keyed("second-k", record));
     let rbacs = &cluster_rbacs_route("c-a");
     stage.route(rbacs, &first.to_string());
     stage.route_as(rbacs, "second-k", 200, &second.to_string());
+    let compare = serde_json::json!({"clusterTiers": [{"tier": "policy", "same": same}]});
     stage.strata(
         "compare first-key.json second-key.json --json",
         0,
-        r#"{"clusterTiers":[{"tier":"policy","same":false}]}"#,
+        &compare.to_string(),
     );
     stage.env("STRATA_LIVE_SECOND_KEY", "second-k");
     stage
@@ -4299,6 +4312,8 @@ fn tiers_sh_stage_10_reads_a_role_binding_of_the_system_with_the_keys_of_two_use
             "second-status",
             "second-record-first",
             "second-record-second",
+            "second-policy-same",
+            "second-system-recorded",
         ],
     );
     passed(&steps, &SECOND_KEY_CHECKS);
@@ -4319,7 +4334,7 @@ fn tiers_sh_stage_10_reads_a_role_binding_of_the_system_with_the_keys_of_two_use
         out("second-system-second.out"),
         "[{\"role\":\"view\",\"subjects\":[\"wilma@example.com\"]}]\n"
     );
-    assert_eq!(out("second-policy.out"), "changed\n");
+    assert_eq!(out("second-policy.out"), "same\n");
     assert!(out("first-key.json").contains(r#""readWith":"first""#));
     assert!(
         out("second-key.json").contains(r#""readWith":"second""#),
@@ -4368,6 +4383,20 @@ fn tiers_sh_stage_10_fails_the_checks_of_the_system_binding_when_both_keys_read_
     let (o, steps) = second_key_stage(&none, &none).run("tiers.sh", &["10"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     failed(&steps, &["second-system", "second-system-differs"]);
+}
+
+#[test]
+fn tiers_sh_stage_10_fails_the_checks_of_the_records_when_the_policy_tier_holds_the_bindings_of_the_system()
+ {
+    // a strata that keeps the bindings of the system in the fields, as 0.33.0 does. The policy
+    // tier differs between the keys, and no record names them in systemRbacs
+    let fred = rbacs_answer(system_rbacs(), "fred@example.com");
+    let wilma = rbacs_answer(system_rbacs(), "wilma@example.com");
+    let record = r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[]}}}}}}"#;
+    let (o, steps) = keyed_stage(&fred, &wilma, record, false).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &SECOND_KEY_CHECKS);
+    failed(&steps, &["second-policy-same", "second-system-recorded"]);
 }
 
 #[test]

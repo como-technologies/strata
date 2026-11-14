@@ -6,7 +6,8 @@ use super::ids::{
     A111, ADDONS_DEV, ADDONS_PACK, DEV, DEV_GROUP, LAB, PAYMENTS, SEARCH, SHOP, SHOP_DEV, STORE_1,
     STORE_2, TEAM_A_APPS, TENANT_A, TENANT_B,
 };
-use crate::book::Runner;
+use crate::book::{EXAMPLE_KEY, Runner};
+use crate::common_palette::system_rbacs;
 use crate::tenant::rbacs_route;
 use serde_json::json;
 
@@ -75,6 +76,7 @@ fn cluster_tiers(r: &mut Runner) {
     );
     cluster_tiers_change(r);
     cluster_tiers_verify(r);
+    cluster_tiers_system(r);
     cluster_tiers_forbidden(r);
 }
 
@@ -186,13 +188,53 @@ fn cluster_tiers_verify(r: &mut Runner) {
     );
 }
 
+/// The key of a second user, wilma, in the part of the chapter `cluster-tiers` that reads a role
+/// binding of the system.
+const WILMA_KEY: &str = "wilma-example-key";
+
+/// The part of the chapter `cluster-tiers` where payments has a role binding of the system, and
+/// the keys of two users record it (#838).
+fn cluster_tiers_system(r: &mut Runner) {
+    // The binding of the group stays as it was. Palette gives the binding of the system to each
+    // key only with the subject that is the user of the key.
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/rbacs", system_rbacs()));
+    r.tenant(|t| {
+        t.key_users(&[
+            (EXAMPLE_KEY, "fred@example.com"),
+            (WILMA_KEY, "wilma@example.com"),
+        ])
+    });
+    r.serve_here(); // state 3: payments has a role binding of the system
+    r.quiet("strata snapshot cluster:payments -o runs/payments-fred.json");
+    r.quiet(&format!(
+        "PALETTE_API_KEY={WILMA_KEY} strata snapshot cluster:payments -o runs/payments-wilma.json"
+    ));
+    r.step(
+        "tiers-system",
+        0,
+        false,
+        r#"jq -c '.source.cluster.tiers.policy | {hash: .hash[0:12], systemRbacs: [.systemRbacs[] | "\(.role.name): \(.subjects[].name)"]}' runs/payments-fred.json runs/payments-wilma.json"#,
+    );
+    r.step(
+        "tiers-system-compare",
+        0,
+        false,
+        "strata compare runs/payments-fred.json runs/payments-wilma.json",
+    );
+    r.excerpt(
+        "tiers-system-compare-lines",
+        "tiers-system-compare",
+        r"^(runs/|root |  cluster tiers)",
+    );
+}
+
 /// The part of the chapter `cluster-tiers` where Palette refuses the role bindings.
 fn cluster_tiers_forbidden(r: &mut Runner) {
     // The key loses the permission to read the role bindings of payments. The record holds the
     // error in the policy tier and no value for the field. Verify does not compare the field
     // (#251, #274)
     r.tenant(|t| t.forbid(DEV, &rbacs_route(PAYMENTS)));
-    r.serve_here(); // state 3: Palette refuses the role bindings of payments
+    r.serve_here(); // state 4: Palette refuses the role bindings of payments
     r.step(
         "tiers-forbidden-record",
         0,

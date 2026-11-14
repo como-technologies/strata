@@ -130,7 +130,8 @@ Palette does.
 
 In a role binding of the system, the stand-in gives only the subject that is the
 user of the key, as Palette does. `key-users.json` at the root of the tenant
-names the user of each key.
+names the user of each key, and `Tenant::key_users` writes it. The key of a
+chapter is `EXAMPLE_KEY` of `xtask/src/book.rs`.
 
 A pack version that a chapter adds, such as a pre-release, gets a uid and a
 digest of its own in its registry. An upgrade of a pin takes the uid and the

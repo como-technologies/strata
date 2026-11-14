@@ -1301,7 +1301,9 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `second-system-differs` | 1 | #838: the bindings of the system in the two answers differ, so `cmp` exits `1`. No result yet: no live window ran stage 10. |
 | `second-others-same` | 0 | #838: the bindings that are not of the system are the same in the two answers. No result yet: no live window ran stage 10. |
 | `second-record-first`, `second-record-second` | 0 | #838: a record of cluster A with the key of the example, and one with the second key. No result yet: no live window ran stage 10. |
-| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. With the answers that the code of Palette shows, the state is `changed`, because the `policy` tier holds the bindings that each key reads. No result yet: no live window ran stage 10. |
+| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. No result yet: no live window ran stage 10. |
+| `second-policy-same` | 0 | #838: the state of the `policy` tier is `same`. Strata keeps each binding of the system out of the hash, so the tier does not depend on the user of the key. No result yet: no live window ran stage 10. |
+| `second-system-recorded` | 0 | #838: the `policy` tier of each record names one binding of the system or more, in `systemRbacs`. No result yet: no live window ran stage 10. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says

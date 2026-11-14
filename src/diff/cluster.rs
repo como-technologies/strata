@@ -284,6 +284,7 @@ mod tests {
                 .iter()
                 .map(|key| (key.to_string(), "HTTP 403".to_string()))
                 .collect::<BTreeMap<_, _>>(),
+            system_rbacs: Vec::new(),
         }
     }
 

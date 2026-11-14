@@ -156,6 +156,18 @@ impl Tenant {
         self.write(TENANT, PROJECT_LISTING, &json!({"items": items}));
         self.listings();
     }
+
+    /// The user of each key, as `key=email` pairs, in the file [`KEY_USERS`]. The stand-in answers
+    /// a role binding of the system to that user.
+    pub fn key_users(&self, pairs: &[(&str, &str)]) {
+        let users: serde_json::Map<String, Value> = pairs
+            .iter()
+            .map(|(key, email)| (key.to_string(), Value::from(*email)))
+            .collect();
+        let file = self.root.join(KEY_USERS);
+        std::fs::write(&file, Value::Object(users).to_string())
+            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+    }
 }
 
 #[cfg(test)]
