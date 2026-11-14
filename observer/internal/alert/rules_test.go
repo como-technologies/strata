@@ -20,9 +20,12 @@ const theFile = `{
     {"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall"},
     {"level": "profile", "match": "fred-identity", "news": "drift", "send": "now", "to": "platform-oncall"},
     {"level": "cluster", "news": "newer", "send": "digest", "to": "platform-oncall"},
-    {"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"}
+    ` + muteBarney + `
   ]
 }`
+
+// muteBarney mutes each newer version of barney-base until 2026-12-01.
+const muteBarney = `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"}`
 
 func TestTheFileOfThePlanParses(t *testing.T) {
 	rules, err := Parse([]byte(theFile))
@@ -88,8 +91,7 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 		{"a mute with a channel", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01", "to": "platform-oncall"}`), 4, "no to"},
 		{"a rule that sends and mutes", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall", "muteUntil": "2026-12-01"}`), 4, "second rule"},
 		{testkit.NewerNow.Name, testkit.OncallRules("f", testkit.NewerNow.Rule), 4, testkit.NewerNow.Want},
-		{"two rules for one thing", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall"}`,
-			`{"level": "cluster", "news": "drift", "send": "digest", "to": "platform-oncall"}`), 5, "rule 2"},
+		{"two rules for one thing", testkit.OncallRules("f", testkit.DriftNow, `{"level": "cluster", "news": "drift", "send": "digest", "to": "oncall"}`), 5, "rule 2"},
 		{"a channel with no file", testkit.Rules([]string{`"a": {}`}), 2, "needs urlFile"},
 	}
 	for _, c := range cases {

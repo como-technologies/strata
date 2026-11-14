@@ -65,10 +65,7 @@ func TestNoCalmWordGoesAroundTheGate(t *testing.T) {
 			"", calm, false},
 		{"the page is stale", map[string]func([]byte) []byte{"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Page = model.PageStale; lastRead(v) })},
 			"", calm, false},
-		{podsUnread, map[string]func([]byte) []byte{"images.json": func(raw []byte) []byte {
-			return podsRefused(t)(calmImages(t)(raw))
-		}},
-			"", calm, false},
+		{podsUnread, map[string]func([]byte) []byte{"images.json": chain(calmImages(t), podsRefused(t))}, "", calm, false},
 		{"the page is offline", nil, "S.offline = true", calm, false},
 	}
 	// The control: with no fault, the set shows each calm word, and the tile of the images is green.

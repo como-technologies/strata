@@ -44,7 +44,7 @@ func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 
 func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T) {
 	for _, c := range []testkit.BadRule{testkit.NoEndDate, testkit.NewerNow} {
-		bad := rulesFileAt(t, "https://hooks.example/", c.Rule)
+		bad := rulesFileAt(t, "https://"+testkit.HooksExample, c.Rule)
 		for _, command := range []string{"once", "serve"} {
 			t.Run(c.Name+", "+command, func(t *testing.T) {
 				args := append(onceArgs(t, "strata"), "--alerts", bad)
@@ -60,7 +60,7 @@ func TestAFileOfRulesThatIsAbsentStopsTheStart(t *testing.T) {
 }
 
 func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddress(t *testing.T) {
-	rules := rulesFileAt(t, "http://hooks.example/"+testkit.AddressMarker)
+	rules := rulesFileAt(t, "http://"+testkit.HooksExample+testkit.AddressMarker)
 	stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https")
 	testkit.HoldsNone(t, "the error", stderr, testkit.AddressMarker)
 }

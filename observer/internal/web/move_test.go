@@ -45,17 +45,8 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
 	mustNotHold(t, "the added pack", added, goToStart, "<a ")
 
-	var found bool
-	for _, r := range termRows(t, page) {
-		if r.question == moveQuestion {
-			found = true
-			if r.command != compareRecord+"wilma-gateway@3.2.0 --full" || r.answer != badge("y", "In place") {
-				t.Errorf("the row of the move: %+v", r)
-			}
-		}
-	}
-	if !found {
-		t.Error("the card Check this yourself has no row for the move")
+	if r := rowAsking(t, page, moveQuestion); r.command != compareRecord+"wilma-gateway@3.2.0 --full" || r.answer != badge("y", "In place") {
+		t.Errorf("the row of the move: %+v", r)
 	}
 	// a profile with no newer version shows no move
 	other := shown(t, devdata.StateOK, fredHash)[0]
@@ -109,16 +100,8 @@ func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) 
 			writeTool(t, filepath.Join(bin, "strata"), standIn)
 			profile := c.value("p")
 			set := renamedSet(t, devdata.StateOK, [][2]string{{"wilma-gateway", profile}})
-			var rows []termRow
-			for _, r := range termRows(t, pagesOf(t, set, "#p-"+encodeURIComponent(profile+"@3.1.2"))[0]) {
-				if r.question == moveQuestion {
-					rows = append(rows, r)
-				}
-			}
-			if len(rows) != 1 {
-				t.Fatalf("%d rows of the move", len(rows))
-			}
-			argsAre(t, "the move", bin, dir, rows[0].command, []string{"compare", "record.json", profile + "@3.2.0", "--full"})
+			row := rowAsking(t, pagesOf(t, set, "#p-"+encodeURIComponent(profile+"@3.1.2"))[0], moveQuestion)
+			argsAre(t, "the move", bin, dir, row.command, []string{"compare", "record.json", profile + "@3.2.0", "--full"})
 			noMarkers(t, dir)
 		})
 	}

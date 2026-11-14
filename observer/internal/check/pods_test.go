@@ -69,7 +69,7 @@ func once(t *testing.T, o *Observer) model.Summary {
 	t.Helper()
 	s, err := o.Once(context.Background())
 	if err != nil {
-		t.Fatalf("the cycles failed: %v", err)
+		t.Fatalf(testkit.CyclesFailed, err)
 	}
 	return s
 }

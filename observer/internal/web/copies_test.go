@@ -132,13 +132,7 @@ func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 	same := badge("g", "Same content")
 	page := pagesOf(t, dir, fredHash)[0]
 	mustHold(t, "the card of the versions", page, `<div class="h">This cluster's copy in Palette `+same+`</div>`)
-	var answer string
-	for _, r := range termRows(t, page) {
-		if r.question == qClusterRuns {
-			answer = r.answer
-		}
-	}
-	if answer != same {
+	if answer := rowAsking(t, page, qClusterRuns).answer; answer != same {
 		t.Errorf("the card Check this yourself says %q for the copy, want %q", answer, same)
 	}
 }

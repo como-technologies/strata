@@ -68,13 +68,20 @@ func WhenMissing(ci, tool string, fail, skip func(args ...any)) {
 	skip(tool + " is not on the PATH")
 }
 
-// NeedTools ends the test with WhenMissing for the first of the tools that is not on the PATH.
+// NeedTools ends the test with ToolPath for the first of the tools that is not on the PATH.
 func NeedTools(t *testing.T, tools ...string) {
 	t.Helper()
 	for _, tool := range tools {
-		if _, err := exec.LookPath(tool); err != nil {
-			WhenMissing(os.Getenv("CI"), tool, t.Fatal, t.Skip)
-			return
-		}
+		ToolPath(t, tool)
 	}
+}
+
+// ToolPath gives the path of tool on the PATH. When tool is not there, it ends the test with WhenMissing.
+func ToolPath(t *testing.T, tool string) string {
+	t.Helper()
+	path, err := exec.LookPath(tool)
+	if err != nil {
+		WhenMissing(os.Getenv("CI"), tool, t.Fatal, t.Skip)
+	}
+	return path
 }

@@ -61,12 +61,7 @@ func renamedSet(t *testing.T, from devdata.State, swaps [][2]string) string {
 		}
 		edits = append(edits, replaceText(s[0], to))
 	}
-	rename := func(raw []byte) []byte {
-		for _, edit := range edits {
-			raw = edit(raw)
-		}
-		return raw
-	}
+	rename := chain(edits...)
 	edit := map[string]func([]byte) []byte{"alerts.json": rename}
 	for _, name := range devdata.Files {
 		edit[name] = rename

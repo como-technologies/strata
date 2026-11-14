@@ -313,7 +313,7 @@ func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
 }
 
 func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
-	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"}`,
+	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, muteBarney,
 		`{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
 	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
 	muted := Subject{ID: "n2", News: NewsNewer, Profile: "barney-base@1.5.0", Detail: "x"}

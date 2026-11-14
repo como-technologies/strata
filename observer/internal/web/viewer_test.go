@@ -505,8 +505,11 @@ func pressedAttrs(attr, view string, on bool) string {
 }
 
 func pressedAttrsOf(attr, view, pressed string) string {
-	return `data-` + attr + `="` + view + `" aria-pressed="` + pressed + `"`
+	return viewAttr(attr, view) + ` aria-pressed="` + pressed + `"`
 }
+
+// viewAttr gives the attribute data-<attr> of a button that names the view.
+func viewAttr(attr, view string) string { return `data-` + attr + `="` + view + `"` }
 
 // Both layouts have the same control in the head of each diff, on the Values tab and on the Manifests
 // tab. One state serves the whole page: a click on Split changes each diff, and the choice stays when the
@@ -585,7 +588,7 @@ func registryUidOf(t *testing.T, set *devdata.Set, name string) string {
 func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	set := loadSet(t, devdata.StateTextTooLarge)
 	screens := render(t, devdata.StateTextTooLarge, false)
-	tooLarge := placeNamed(t, "a text too large")
+	tooLarge := placeNamed(t, placeTooLarge)
 	uid := registryUidOf(t, set, "kubernetes")
 	published := cardOf(t, pageOf(t, screens, dexHash, ""), tabOf(dexPublished))
 	where := "the values of dex"
@@ -656,7 +659,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
 	table := pageOf(t, screens, "#newer", "")
-	mustHold(t, "the table", table, `data-sort="nt" `+sortCol("listed", "Listed")+sortIcon, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
+	mustHold(t, "the table", table, sortButton("nt", "listed", "", "Listed")+sortIcon, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
 	if got := strings.Count(table, askButtonEnd); got != len(set.Newer.Newer) {
 		t.Errorf("the table has %d buttons for %d rows", got, len(set.Newer.Newer))
 	}

@@ -474,11 +474,14 @@ func runNode(t *testing.T, state devdata.State, extra ...string) []byte {
 	return runNodeIn(t, "testdata/api", state, extra...)
 }
 
+// renderOutput names the output of render.js in a failure.
+const renderOutput = "the output of render.js"
+
 // nodeJSON decodes the output of render.js into a value of T, and fails the test when the output is no JSON.
 func nodeJSON[T any](t *testing.T, raw []byte) T {
 	t.Helper()
 	var v T
-	testkit.Decode(t, "the output of render.js", raw, &v)
+	testkit.Decode(t, renderOutput, raw, &v)
 	return v
 }
 
@@ -487,7 +490,7 @@ func showIn(t *testing.T, dir string, state devdata.State, hashes ...string) []s
 	t.Helper()
 	out := nodeJSON[[]string](t, runNodeIn(t, dir, state, append([]string{"show"}, hashes...)...))
 	if len(out) != len(hashes) {
-		t.Fatalf("the output of render.js holds %d screens for %d hashes", len(out), len(hashes))
+		t.Fatalf(renderOutput+" holds %d screens for %d hashes", len(out), len(hashes))
 	}
 	return out
 }
@@ -534,11 +537,7 @@ func runNodeIn(t *testing.T, apiDir string, state devdata.State, extra ...string
 // render.js gets the files of the scripts in the order of the index.html of that directory.
 func runNodeAssets(t *testing.T, assets, apiDir string, state devdata.State, extra ...string) []byte {
 	t.Helper()
-	node, err := exec.LookPath("node")
-	if err != nil {
-		testkit.WhenMissing(os.Getenv("CI"), "node", t.Fatal, t.Skip)
-		return nil
-	}
+	node := testkit.ToolPath(t, "node")
 	names, err := scriptsOf(os.DirFS(assets))
 	if err != nil {
 		t.Fatal(err)
@@ -839,7 +838,7 @@ func TestAMoveThatWasNotReadShowsNoCount(t *testing.T) {
 // slot, so the next render asks again.
 func TestAFailedDetailRequestAsksAgainOnTheNextRender(t *testing.T) {
 	pages := retried(t, dexHash)
-	checkPlace(t, placeNamed(t, "a diff that a cycle holds"), pages[0])
+	checkPlace(t, placeNamed(t, placeBusy), pages[0])
 	if strings.Contains(pages[1], busyTitle) || !strings.Contains(pages[1], dexIDTokens) {
 		t.Errorf("the second render did not ask again: %.600s", pages[1])
 	}
@@ -1362,9 +1361,7 @@ func themeProblems(css string) []string {
 	if strings.Contains(css, schemeQuery) {
 		out = append(out, "it has a "+schemeQuery+" rule: a color would have a second copy")
 	}
-	if p := lackProblem(css, ":root", noSchemeOnRoot); p != "" {
-		out = append(out, p)
-	}
+	out = append(out, rulesProblems(css, map[string][]string{":root": {noSchemeOnRoot}})...)
 	choices := map[string]string{
 		lightTheme: "color-scheme:light;",
 		darkTheme:  "color-scheme:dark;",
@@ -1442,7 +1439,7 @@ func TestTheOldBlueIsGone(t *testing.T) {
 	})
 }
 
-var themeButton = regexp.MustCompile(`<button type="button" ` + pressedAttrsOf("theme-choice", `([a-z]+)`, `(true|false)`) + `>([A-Za-z]+)</button>`)
+var themeButton = regexp.MustCompile(buttonOpen + pressedAttrsOf("theme-choice", `([a-z]+)`, `(true|false)`) + `>([A-Za-z]+)</button>`)
 
 // The foot of the nav has three buttons, Auto, Light, and Dark. Each says its state with aria-pressed,
 // and Auto is pressed until theme.js reads the choice. theme.js is a file of its own in the head, so
@@ -1459,7 +1456,7 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 			t.Errorf("button %d is %q, want %q", i, b[1:], want[i])
 		}
 	}
-	mustHoldInOrder(t, "the nav of index.html", index, `id="navl"`, `<div class="navfoot">`, `data-theme-choice="dark"`, "</aside>")
+	mustHoldInOrder(t, "the nav of index.html", index, `id="navl"`, `<div class="navfoot">`, viewAttr("theme-choice", "dark"), "</aside>")
 	head, body, _ := strings.Cut(index, "</head>")
 	if !strings.Contains(head, `<script src="`+themeScript+`"></script>`) || strings.Contains(body, themeScript) {
 		t.Error(themeScript + " must be a plain script in the head, and only there")
@@ -1641,7 +1638,7 @@ func sortAria(state string) string { return `aria-sort="` + state + `"` }
 // sortButton gives the button of the head of a column that sorts the table by col, up to its label. on follows the
 // class sort: "" for a column that is not sorted now, " on asc", or " on desc".
 func sortButton(table, col, on, label string) string {
-	return `<button type="button" class="sort` + on + `" data-sort="` + table + `" ` + sortCol(col, label)
+	return buttonOpen + `class="sort` + on + `" data-sort="` + table + `" ` + sortCol(col, label)
 }
 
 // sortCol gives the end of the button of a column that sorts by col, up to its label. sortIcon starts the icon of the
@@ -1981,7 +1978,7 @@ func TestWithThePodsOffTheScreenOfTheImagesSaysHowToTurnTheReadOn(t *testing.T) 
 	for _, state := range []devdata.State{devdata.StateImagesOff, devdata.StateQuiet} {
 		t.Run(string(state), func(t *testing.T) {
 			list := pageOf(t, render(t, state, false), "#images", "")
-			checkPlace(t, placeNamed(t, "the pods off"), list)
+			checkPlace(t, placeNamed(t, placePodsOff), list)
 			mustHold(t, "the screen", list, `<span class="sub">Pods not read</span>`,
 				`The read needs a role that can list pods, and that role can also read their <span class="m">env</span>.`)
 			mustNotHold(t, "the screen", list, "<table", comparedFirst)
@@ -2075,6 +2072,16 @@ func editJSON[T any](t *testing.T, change func(*T)) func([]byte) []byte {
 // replaceText gives an edit of a file of a set for writeSet. It puts to in place of each from in the text.
 func replaceText(from, to string) func([]byte) []byte {
 	return func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), from, to)) }
+}
+
+// chain gives a writeSet edit that makes each edit, in order.
+func chain(edits ...func([]byte) []byte) func([]byte) []byte {
+	return func(raw []byte) []byte {
+		for _, edit := range edits {
+			raw = edit(raw)
+		}
+		return raw
+	}
 }
 
 // podsRefused edits the document of the pods of a set: the last read failed, because the API server refused it with a 403.

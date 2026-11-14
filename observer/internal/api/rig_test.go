@@ -45,12 +45,8 @@ const (
 	replicaPath = "controller.replicaCount"
 )
 
-// cyclesFailed is the failure of a test whose cycles of the rig failed. noSuchSide names a side of a diff that does
-// not exist, in the names of the cases.
-const (
-	cyclesFailed = "the cycles failed: %v"
-	noSuchSide   = "a side that does not exist"
-)
+// noSuchSide names a side of a diff that does not exist, in the names of the cases.
+const noSuchSide = "a side that does not exist"
 
 // The paths of the routes, with the profile aws-stack@1.1.0 of testdata/. awsPacks starts the route of a pack of the
 // profile, and kubernetesDiff is the route of the diff of its pack kubernetes, with no side.
@@ -248,7 +244,7 @@ func (r *rig) once(o *check.Observer) model.Summary {
 	r.t.Helper()
 	s, err := o.Once(context.Background())
 	if err != nil {
-		r.t.Fatalf(cyclesFailed+"\n%s", err, r.log.String())
+		r.t.Fatalf(testkit.CyclesFailed+"\n%s", err, r.log.String())
 	}
 	return s
 }

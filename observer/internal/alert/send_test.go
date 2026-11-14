@@ -133,7 +133,7 @@ func TestACheckGivesTheFirstChannelWhoseAddressCannotBeUsedAndNamesNoAddress(t *
 		{"a file that is absent", filepath.Join(dir, "absent"), "cannot be read"},
 		{"a file that holds no address", testkit.WriteIn(t, dir, "empty", "  \n"), noAddress},
 		{"a file that holds a plain word", testkit.WriteIn(t, dir, "word", "SECRET-WORD"), noAddress},
-		{"an address that is not https", testkit.WriteIn(t, dir, "plain", "http://hooks.example/SECRET-PATH"), "must use https"},
+		{"an address that is not https", testkit.WriteIn(t, dir, "plain", "http://"+testkit.HooksExample+"SECRET-PATH"), "must use https"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -143,7 +143,7 @@ func TestACheckGivesTheFirstChannelWhoseAddressCannotBeUsedAndNamesNoAddress(t *
 			}
 		})
 	}
-	good, _ := hook(t, "https://hooks.example/SECRET-PATH", false, nil)
+	good, _ := hook(t, "https://"+testkit.HooksExample+"SECRET-PATH", false, nil)
 	if err := good.Check(); err != nil {
 		t.Errorf("check %v", err)
 	}

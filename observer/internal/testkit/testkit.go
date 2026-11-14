@@ -79,8 +79,10 @@ const (
 	// StateFile is the file of the state of an observer, which StateText reads.
 	StateFile = "state.json"
 	// AddressMarker is in the address of the webhook of a test. It stands for the token that a real address holds, and
-	// it must reach no route, no log, and no file of the state.
+	// it must reach no route, no log, and no file of the state. HooksExample is the host and the path of the address of
+	// a webhook that no test sends to.
 	AddressMarker = "TOKEN-SECRET"
+	HooksExample  = "hooks.example/"
 	// NoPacks is the member of a record that holds no pack, after a comma.
 	NoPacks = `,"packs":[]`
 	// Revision and NewRevision are two revisions of the records that a pipeline approved, in the meta file that
@@ -209,6 +211,8 @@ const (
 	FirstCycles = "the first cycle of each timer"
 	// ExitStderr is the failure of a check of the exit code of a command, with the text of its stderr.
 	ExitStderr = "exit %d, stderr %q"
+	// CyclesFailed is the failure of a test whose cycles of an observer failed.
+	CyclesFailed = "the cycles failed: %v"
 )
 
 // ExitsTwo fails the test when a command did not exit 2, with nothing on stdout and each of the words on stderr. code,

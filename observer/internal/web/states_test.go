@@ -77,7 +77,7 @@ func bookNext(step, section string) string {
 
 // retryButton gives the button of a place that asks again for what, such as the page or a diff.
 func retryButton(what string) string {
-	return `<button type="button" class="btn" data-retry="` + what + `">Try now</button>`
+	return buttonOpen + `class="btn" data-retry="` + what + `">Try now</button>`
 }
 
 // span gives a span of the text with no class, such as the label of a row or of an item of the nav.
@@ -97,7 +97,7 @@ func upstreamRow(digest string) string {
 // checkPlace fails when the screen lacks the mark of the tone, the title, the fact, or the next step of the place.
 func checkPlace(t *testing.T, p place, html string) {
 	t.Helper()
-	mark := slabsSVG + p.tone + `" viewBox="0 0 100 100" width="\d+" height="\d+" aria-hidden="true">` + strings.Repeat(`<path class="s s\d" d="M[^"]+"/>`, 4) + `</svg>`
+	mark := "<svg " + markClass(p.tone) + ` viewBox="0 0 100 100" width="\d+" height="\d+" aria-hidden="true">` + strings.Repeat(`<path class="s s\d" d="M[^"]+"/>`, 4) + `</svg>`
 	var head string
 	if p.size == "inl" {
 		head = regexp.QuoteMeta(`<div class="inl tone-`+p.tone+`">`) + mark
@@ -179,9 +179,12 @@ const (
 	lostContact = "Lost contact with Palette"
 	repaveHint  = "is a hint from strata"
 	// alertBar starts the bar of an alert, before the letter of its tone. amberBar starts an amber bar.
-	alertBar    = `<div class="alertbar `
-	amberBar    = alertBar + `a">`
-	linkButton  = `<button type="button" class="lnk" `
+	alertBar = `<div class="alertbar `
+	amberBar = alertBar + `a">`
+	// buildWords starts the words of a pack whose build changed and whose content stays the same.
+	buildWords  = "Only the build of the pack"
+	buttonOpen  = `<button type="button" `
+	linkButton  = buttonOpen + `class="lnk" `
 	changedHere = " changed here."
 	refSpan     = `<span class="m ref">`
 	flagWrap    = `<span class="flagw">`
@@ -210,9 +213,9 @@ const (
 // no match, and no events. The page also has a place for a first read that the observer has not ended, the stop of the checks
 // before a good one, and the read of the pods that is not done yet.
 var places = []place{
-	{"the first check", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", "") }, "build", "lg", "Reading the layers",
+	{placeFirstCheck, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", "") }, "build", "lg", "Reading the layers",
 		[]string{firstCheck + ", and this page fills in when it ends. The observer reads each record, then asks Palette for the same version."}, nil},
-	{"no records", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateNoRecords), "#overview", "") }, "off", "lg", noRecordsTitle,
+	{placeNoRecords, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateNoRecords), "#overview", "") }, "off", "lg", noRecordsTitle,
 		[]string{noRecordsFact},
 		[]string{`<p class="sub"><b>Start now.</b> An install with the chart runs a job that records what each profile of this cluster holds now. Its log says what it did.</p>`,
 			"<code>" + kubeLogs + " -l app.kubernetes.io/name=strata-observer-seed --tail=20</code>",
@@ -220,7 +223,7 @@ var places = []place{
 			"<code>" + firstSeenCmd + applyEnd,
 			`<p class="sub"><b>From your pipeline.</b> Publish the records that a review approved.</p>`,
 			"<code>" + testkit.RecordsTool + " --revision &quot;$GIT_SHA&quot; releases/*.json" + applyEnd}},
-	{"lost with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", "") }, "lost", "lg", lostTitle,
+	{placeLostUnread, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", "") }, "lost", "lg", lostTitle,
 		[]string{lostFact + ", and " + noClear + "."},
 		[]string{nextStep + checkTheKey + ` <span class="m">` + keySecret + `</span>` + readTheLog + `</div>`, logCommand}},
 	{"checks stopped with nothing read", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateStaleUnchecked), "#overview", "") }, "warn", "lg", stoppedTitle,
@@ -233,7 +236,7 @@ var places = []place{
 		[]string{"<code>" + kubeNS + " port-forward deploy/strata-observer 18080:8080</code>", retryButton("page")}},
 	{"a route that does not exist", func(t *testing.T) string { return shown(t, devdata.StateOK, "#p-old-profile@1.0.0")[0] }, "off", "lg", "This profile is not here",
 		[]string{`<span class="m">old-profile@1.0.0</span> is in no record now. A new revision of the records can remove it.`}, []string{`<a class="btn" href="#profiles">All profiles</a>`}},
-	{"no findings", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
+	{placeNoFindings, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
 		[]string{calmNothing + ". <b>29 of 29 packs</b> were checked in full, ", " ago."},
 		[]string{span("profiles match their records"), span("not checked"), newerFact}},
 	{"no newer versions", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#newer", "") }, "calm", "md", "Nothing newer to dig up",
@@ -241,13 +244,13 @@ var places = []place{
 	{"nothing unchecked", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#notchecked", "") }, "calm", "md", "Every layer was read",
 		[]string{"Each pack was checked in full. Strata read each record, and each answer came back. A check still does not cover the items below."},
 		[]string{linkButton + `data-jump="coverage">` + coverJump + `</button>`}},
-	{"the pods off", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", podsOffTitle,
+	{placePodsOff, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", podsOffTitle,
 		[]string{podsOffFact + " With the read on, the page shows the digest that each tag runs, and finds a tag that moved."},
 		[]string{bookNext(podsOffNext, "The pods of the cluster")}},
 	{podsUnread, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", "") }, "warn", "md", podsTitle,
 		[]string{podsRefusedWords + " The findings of the content check are not affected."},
 		[]string{askListPods, canListPods}},
-	{"alerts not set", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", alertsOffTitle,
+	{placeAlertsOff, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", alertsOffTitle,
 		[]string{alertsOffFact + " A message goes to a webhook when a finding opens and when it clears."},
 		[]string{bookNext(alertsNext, "Alerts")}},
 	{matchesRecord, func(t *testing.T) string {
@@ -263,9 +266,9 @@ var places = []place{
 		return pageOf(t, crawl(t, devdata.StateOK), "#k-gazoo-backup@1.2.0/addon/velero", "")
 	}, "warn", "md", hiddenTitle,
 		[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
-	{"a diff that a cycle holds", func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
+	{placeBusy, func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
 		[]string{retryButton("diff")}},
-	{"a text too large", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateTextTooLarge), dexHash, "") }, "off", "sm", tooLargeTitle,
+	{placeTooLarge, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateTextTooLarge), dexHash, "") }, "off", "sm", tooLargeTitle,
 		[]string{tooLargeFact},
 		[]string{dexFullCompare}},
 	{"an empty tab", func(t *testing.T) string {
@@ -277,6 +280,18 @@ var places = []place{
 	{"no events", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#overview", "") }, "calm", "inl", "",
 		[]string{span(calmQuiet + ": no events in the last 7 days.")}, nil},
 }
+
+// The names of the places that other tests check with placeNamed.
+const (
+	placeFirstCheck = "the first check"
+	placeNoRecords  = "no records"
+	placeLostUnread = "lost with nothing read"
+	placeNoFindings = "no findings"
+	placeAlertsOff  = "alerts not set"
+	placePodsOff    = "the pods off"
+	placeBusy       = "a diff that a cycle holds"
+	placeTooLarge   = "a text too large"
+)
 
 // placeNamed gives the place of the table places with the name.
 func placeNamed(t *testing.T, name string) place {
@@ -299,13 +314,12 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 
 // Each of the five tones is drawn by a place above: calm breathes, build stacks, off marches, warn pulses, and lost slips.
 func TestEachToneIsDrawnByAPlaceWithItsMark(t *testing.T) {
-	seen := map[string]string{
-		"calm": pageOf(t, crawl(t, devdata.StateQuiet), "#findings", ""), "build": pageOf(t, crawl(t, devdata.StateFirstLoad), "#overview", ""),
-		"off": pageOf(t, crawl(t, devdata.StateNoRecords), "#overview", ""), "warn": pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", ""),
-		"lost": pageOf(t, crawl(t, devdata.StateLostUnchecked), "#overview", ""),
-	}
-	for tone, html := range seen {
-		mustHold(t, tone, html, markClass(tone), splashOpen)
+	for tone, name := range map[string]string{"calm": placeNoFindings, "build": placeFirstCheck, "off": placeNoRecords, "warn": podsUnread, "lost": placeLostUnread} {
+		p := placeNamed(t, name)
+		if p.tone != tone {
+			t.Errorf("the place %q has the tone %s, want %s", name, p.tone, tone)
+		}
+		mustHold(t, tone, p.screen(t), markClass(tone), splashOpen)
 	}
 }
 
@@ -673,7 +687,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 			// A change of the build alone shows the build and one line, and no tab: each tab would be empty.
 			buildOnly++
 			mustHold(t, where, page, "<th>The build of the pack</th>", "<td>Version</td>", "<td>Upstream digest</td>",
-				"Only the build of the pack changes. Strata says: "+d.Impact.Text+".")
+				buildWords+" changes. Strata says: "+d.Impact.Text+".")
 			mustNotHold(t, where, page, tabAttrs(tabId(d), "values"))
 			continue
 		}
@@ -685,7 +699,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	// The card of the move says the same, and it gives no count of 0 of 0.
 	ubuntu := pageOf(t, screens, packPage(k8sSubject, "os", "ubuntu-aws"), "")
 	where := "the move of ubuntu-aws"
-	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", "Only the build of the pack"), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
+	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", buildWords), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
 	mustNotHold(t, where, ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
@@ -861,7 +875,7 @@ func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 
 // ---- The card "Check this yourself" and the header of a pack ----
 
-var rowPattern = regexp.MustCompile(qaRow + `<span class="q">([^<]*)</span><span class="a">(.*?)</span></div><div class="cmd">` + codeOf + `<button type="button" class="copy" data-copy="([^"]*)">Copy</button></div></li>`)
+var rowPattern = regexp.MustCompile(qaRow + `<span class="q">([^<]*)</span><span class="a">(.*?)</span></div><div class="cmd">` + codeOf + buttonOpen + `class="copy" data-copy="([^"]*)">Copy</button></div></li>`)
 
 // termRow is a row of the card: a question, the command that answers it, and what the page says now.
 type termRow struct{ question, command, answer string }
@@ -882,16 +896,20 @@ func termRows(t *testing.T, page string) []termRow {
 	return out
 }
 
-// answerTo gives what the card "Check this yourself" of the page says now for the question.
-func answerTo(t *testing.T, page, question string) string {
+// rowAsking gives the row of the card "Check this yourself" of the page that asks the question. It fails the test
+// unless one row asks it.
+func rowAsking(t *testing.T, page, question string) termRow {
 	t.Helper()
+	var rows []termRow
 	for _, r := range termRows(t, page) {
 		if r.question == question {
-			return r.answer
+			rows = append(rows, r)
 		}
 	}
-	t.Fatalf("the card has no question %q", question)
-	return ""
+	if len(rows) != 1 {
+		t.Fatalf("the card has %d rows that ask %q, want 1", len(rows), question)
+	}
+	return rows[0]
 }
 
 const recordRead = "for i in 0 1 2 3; do " + kubeNS + " get secret " + recordsSecret + "$i -o json | jq -r --arg k '%s' '.data[$k] // empty'; done | base64 -d | gunzip > record.json"
@@ -1166,7 +1184,7 @@ func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 		tileLabel("New this week"), tileLabel("Versions newer than the pins")+tileValue("16"))
 	mustNotHold(t, "the words of the table", strings.ToLower(textOf(table)), "behind")
 	mustHold(t, "the head", table, pressedButton("nview", "table", "Table", true), `id="q-newer"`)
-	mustHold(t, "the row of ubuntu-aws", rowTo(t, table, ubuntuHash), `title="Only the build of the pack changes: the values stay the same">same</span>`)
+	mustHold(t, "the row of ubuntu-aws", rowTo(t, table, ubuntuHash), `title="`+buildWords+` changes: the values stay the same">same</span>`)
 	timeline := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.newerView = "timeline"`)
 	mustNotHold(t, "the words of the timeline", strings.ToLower(textOf(timeline)), "behind")
 	lanes := lanePattern.FindAllStringSubmatch(timeline, -1)

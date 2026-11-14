@@ -72,7 +72,7 @@ const lostTop = ".slabs.tone-lost .s0"
 
 // The parts of the rules for less motion, and the problems that motionProblems gives. noAnimation stops the animation of
 // a slab. buildSlabs are the slabs of a mark that builds, and buildHeld holds them in their state. lostMoved holds the
-// top slab of a lost mark off its place. slabsSVG starts the markup of a mark.
+// top slab of a lost mark off its place.
 const (
 	noAnimation     = "animation:none!important"
 	wantNoAnimation = `want "` + noAnimation + `;"`
@@ -80,7 +80,6 @@ const (
 	buildHeld       = buildSlabs + "{opacity:.7}"
 	lostMoved       = "{transform:translate(9px,-8px)}"
 	noMotionRule    = "no rule for " + motionQuery
-	slabsSVG        = `<svg ` + markOpen
 )
 
 // motionProblems lists what is wrong in the way that a style stops its animations for a person who asks for less motion. Each
@@ -107,11 +106,10 @@ func motionProblems(css string) []string {
 			}
 		}
 	}
-	for _, p := range []string{ruleProblem(still, ".slabs .s", noAnimation+";"), lackProblem(still, buildSlabs, "opacity:"), lackProblem(still, lostTop, "transform:")} {
-		if p != "" {
-			out = append(out, p)
-		}
+	if p := ruleProblem(still, ".slabs .s", noAnimation+";"); p != "" {
+		out = append(out, p)
 	}
+	out = append(out, rulesProblems(still, map[string][]string{buildSlabs: {"opacity:"}, lostTop: {"transform:"}})...)
 	return out
 }
 
@@ -234,7 +232,7 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	script := readScripts(t)
 	mustNotHold(t, "the scripts", script, []string{"<img", "new Image", "@import", "<link", "<style"}...)
 	// The mark is drawn in markup through h``, like every other part of the page.
-	mustHold(t, "the scripts", script, slabsSVG+`${tone}"`)
+	mustHold(t, "the scripts", script, "<svg "+markClass("${tone}"))
 	var got []string
 	problemsInScreens(script, func(p string) { got = append(got, p) })
 	noProblems(t, "the scripts", got)
