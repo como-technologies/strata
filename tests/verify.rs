@@ -166,6 +166,61 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
 }
 
 #[test]
+fn a_profile_name_with_no_version_gives_its_versions_and_latest_in_each_command_that_reads_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+    ]});
+    let api =
+        serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A).with(PROFILE_LISTING, listing);
+    // the unit test of the read gives the whole message; each command gives the same refs
+    let words = |refs: &str, latest: &str| format!(": {refs}. Or give {latest}, the highest");
+    let plain = words(
+        "lab-profile@1.2.0, lab-profile@1.10.0",
+        "lab-profile@latest",
+    );
+    let draft = words(
+        "lab-profile@1.2.0@draft, lab-profile@1.10.0@draft",
+        "lab-profile@latest@draft",
+    );
+    let quiet = Progress::silent();
+    let consumers = |text: &str| {
+        ops::consumers_with(
+            &Ref::parse(text),
+            &ops::ConsumersOptions { list_only: true },
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &quiet,
+        )
+        .map(drop)
+    };
+    let candidate = |text: &str| {
+        ops::snapshot_for_candidate(text, || Ok(Palette::new(&api)), "t1", &quiet).map(drop)
+    };
+    // snapshot, compare, and same-release read a ref with snapshot_for
+    for (read, refs) in [
+        (snapshot_of(&api, "lab-profile").map(drop), &plain),
+        (snapshot_of(&api, "lab-profile@draft").map(drop), &draft),
+        (candidate("lab-profile"), &plain),
+        (consumers("lab-profile"), &plain),
+    ] {
+        let err = read.unwrap_err();
+        let message = err.to_string();
+        assert_eq!(err.kind(), "usage", "{err}");
+        assert!(
+            message.starts_with("'lab-profile' is a profile name with no version."),
+            "{message}"
+        );
+        assert!(message.contains(refs.as_str()), "{message}");
+    }
+    // a text that no profile has as its name keeps the 404 of Palette
+    let err = snapshot_of(&api, "barney").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+}
+
+#[test]
 fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -5566,14 +5621,17 @@ fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_den
 
     let text = common::terminal().render_list(&l).unwrap();
     assert!(text.contains("\n  lab-profile@1.9.0"), "{text}");
+    // the line gives the code and the message of Palette, and not the JSON of the body
     assert!(
         text.ends_with(&format!(
-            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}: {}; \
              no role of the key in the project gives the access of the request)\n",
-            clusters_denied()
+            Denial::Project.as_str(),
+            common::project_denied_message("lab")
         )),
         "{text}"
     );
+    assert_eq!(error["body"], clusters_denied());
     let json = serde_json::to_value(&l).unwrap();
     assert_eq!(json["errors"]["clusters"]["status"], 500);
     assert!(json.get("clusters").is_none(), "{json}");

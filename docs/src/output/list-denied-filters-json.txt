@@ -1,0 +1,2 @@
+$ strata list filters --json --quiet
+{"error":{"body":"{\"code\":\"AccessDenied\",\"message\":\"filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant\"}","kind":"api","message":"GET /v1/filters/metadata?filterType=tag failed with HTTP 403: AccessDenied: filter.list operation is not permitted, required permissions 'filter.list' in the scope(s) tenant; the role of the key does not give the permission 'filter.list'","method":"GET","path":"/v1/filters/metadata?filterType=tag","status":403}}

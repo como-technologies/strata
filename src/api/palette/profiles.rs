@@ -104,6 +104,58 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
+    /// `answer`, the answer to a read of the profile version that `reference` names, or the error
+    /// of a profile name with no version.
+    ///
+    /// Strata reads a ref with no version as a uid: `<uid>` and `<uid>@draft`. Palette answers
+    /// HTTP 404 with `ResourceNotFound` to the document of a uid that it does not have. When the
+    /// listing of the scope has versions of a profile with the name of that uid, the error is
+    /// [`Error::Usage`]. It names each version as a ref, and the ref with [`LATEST`]. Each other
+    /// answer, and each other ref, returns as it is.
+    ///
+    /// # Errors
+    ///
+    /// The error of `answer`, or the `Usage` above. The error of the listing, when strata reads it.
+    pub(crate) fn or_name_with_no_version<T>(
+        &self,
+        reference: &Ref,
+        answer: Result<T>,
+    ) -> Result<T> {
+        let (id, draft) = match reference {
+            Ref::Uid(id) => (id, false),
+            Ref::Draft { id, version: None } => (id, true),
+            _ => return answer,
+        };
+        match answer {
+            Err(e) if is_missing_document(&e, id) => {
+                let listing = self.profile_listing()?;
+                // a profile of the tenant and a profile of the project can have one version
+                let named: BTreeSet<String> =
+                    listed_versions(&listing, id).map(|(v, _)| v).collect();
+                if named.is_empty() {
+                    return Err(e);
+                }
+                let mut versions: Vec<String> = named.into_iter().collect();
+                versions.sort_by(|a, b| version::compare(a, b));
+                let with_version = |version: &str| {
+                    if draft {
+                        Ref::Draft {
+                            id: id.clone(),
+                            version: Some(version.to_string()),
+                        }
+                    } else {
+                        Ref::NameVersion {
+                            name: id.clone(),
+                            version: version.to_string(),
+                        }
+                    }
+                };
+                Err(name_with_no_version(id, &versions, with_version))
+            }
+            answer => answer,
+        }
+    }
+
     /// The uid of an app profile that a ref names. `id` is a uid when there is no `version`, and
     /// else a name that [`Palette::resolve_app_profile`] finds at `version`. For [`LATEST`],
     /// `progress` notes the version that the pick takes, as [`Palette::profile_uid`] does.
@@ -635,6 +687,34 @@ pub(super) struct PickedUid {
     pub(super) uid: String,
     /// The version, and the highest pre-release above it that [`LATEST`] skips.
     pub(super) picked: Picked,
+}
+
+/// True when `error` is the HTTP 404 of the document of the profile version `uid`: Palette has no
+/// profile version with that uid.
+fn is_missing_document(error: &Error, uid: &str) -> bool {
+    matches!(error, Error::Api { status: 404, path, .. } if *path == route(PROFILES, &[uid]))
+}
+
+/// The refusal of `name`, a profile name in a ref with no version. It names each of `versions` as
+/// the ref that `with_version` gives, and the ref with [`LATEST`].
+fn name_with_no_version(
+    name: &str,
+    versions: &[String],
+    with_version: impl Fn(&str) -> Ref,
+) -> Error {
+    let refs: Vec<String> = versions
+        .iter()
+        .map(|v| with_version(v).to_string())
+        .collect();
+    Error::Usage {
+        message: format!(
+            "'{name}' is a profile name with no version. Strata reads a ref with no version as a \
+             uid, and Palette has no profile with that uid. Give one of the versions: {}. Or give \
+             {}, the highest version that is not a pre-release",
+            refs.join(", "),
+            with_version(LATEST)
+        ),
+    }
 }
 
 /// The segments of the route of the download of a profile version, after its uid.

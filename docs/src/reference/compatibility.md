@@ -1335,9 +1335,21 @@ field, a value, an input, or an option is in the sections above.
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **The message of the error `api` gives the code and the message of Palette.** It read the
+  JSON of the body. Now it reads `failed with HTTP 404: ResourceNotFound: <message>`, and a
+  body with no code keeps its text. A script that matches the JSON in the message must read the
+  new key `body` of the error document. It holds the body as Palette sent it. A line `not read`
+  of `list` gives the same words. See [Errors](./errors.md).
+- **A ref with no version that names a profile gives the error `usage`.** Before, it was `api`.
+  Strata reads such a ref as a uid, Palette answers HTTP 404, and strata then reads the listing
+  of the scope. The message lists each version of the name and names `<name>@latest`. A name
+  that no profile has keeps the error `api`. `snapshot`, `compare`, `same-release`, `candidate`,
+  and `consumers` give it. See [A name with no version](./refs.md#a-name-with-no-version).
 
 ### For a user of the CI drop-ins
 
+- **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
+  names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
@@ -1434,6 +1446,13 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
+  `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
+  body.
+- `ops::snapshot_for`, `ops::snapshot_object`, `ops::snapshot_for_candidate`, and
+  `ops::consumers_with` give `Error::Usage` for a profile name in a ref with no version. Such a
+  ref is `Ref::Uid`, or `Ref::Draft` with no version. Before, they gave the `Error::Api` of the
+  404.
 
 ### For a user of the library of strata-preflight
 

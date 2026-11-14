@@ -9,7 +9,7 @@ use crate::closed_set::ClosedSet;
 use crate::config::{MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
 use crate::model::pack_state::PackState;
 use crate::snapshot::SNAPSHOT_SCHEMA;
-use crate::text::{and_list, cut, plural};
+use crate::text::{and_list, plural};
 
 mod class;
 mod hint;
@@ -18,7 +18,7 @@ mod json;
 pub(crate) use json::{ErrorDocument, MESSAGE_AT};
 
 pub use class::FailureClass;
-use hint::status_hint;
+use hint::{answer_words, status_hint};
 
 /// Everything that can go wrong in the library.
 #[derive(Debug, thiserror::Error)]
@@ -34,13 +34,15 @@ pub enum Error {
         /// The accepted alternate variable name.
         alternate: &'static str,
     },
-    /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
-    /// message names where a key comes from. The body alone names nothing that the reader can set.
-    /// A 403 with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the
-    /// route is of the tenant scope and that the request named a project. A [`Denial`] names what
-    /// Palette denied, such as the permission, and a 403 names the key only when no answer of the
-    /// run proved it.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body.trim(), BODY_IN_MESSAGE), status_hint(*status, path, body))]
+    /// Palette answered with a non-2xx status. The message gives the code and the message of
+    /// Palette, and not the JSON of the body. [`to_json`](Error::to_json) keeps the body.
+    ///
+    /// A 401 or a 403 is almost always the key, so the message names where a key comes from. A 403
+    /// with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the route
+    /// is of the tenant scope and that the request named a project. A [`Denial`] names what Palette
+    /// denied, such as the permission, and a 403 names the key only when no answer of the run
+    /// proved it.
+    #[error("{method} {path} failed with HTTP {status}: {}{}", answer_words(body), status_hint(*status, path, body))]
     Api {
         /// The request method.
         method: Method,
@@ -48,8 +50,9 @@ pub enum Error {
         path: String,
         /// HTTP status code.
         status: u16,
-        /// The response body, on one line. The message shows its first part; a caller that reads
-        /// the answer of a validate route parses the whole of it.
+        /// The response body, on one line. The message shows its code and its message, and
+        /// [`to_json`](Error::to_json) gives it whole. A caller that reads the answer of a
+        /// validate route parses the whole of it.
         body: String,
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
@@ -529,10 +532,6 @@ pub enum Error {
     #[error("serializing: {0}")]
     Serialize(#[from] serde_json::Error),
 }
-
-/// The most characters of a body that the message of [`Error::Api`] shows. The field keeps the
-/// whole body.
-const BODY_IN_MESSAGE: usize = 300;
 
 /// What strata says after a rule that only the create of Palette checks: why strata checks it.
 const CREATE_GAP: &str = "Palette checks this only at the create, and no route that takes a \

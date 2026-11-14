@@ -15,7 +15,7 @@ the kind.
 | Kind | Cause | Fields |
 | --- | --- | --- |
 | `missing-credential` | No API key. | `variable`, `alternate` |
-| `api` | Palette answered with an error status. The body holds no copy of the API key: strata writes `********` over it. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. A denial names what Palette denied, such as a permission: see [Refusals that strata does not send again](#refusals-that-strata-does-not-send-again). | `method`, `path`, `status` |
+| `api` | Palette answered with an error status. The message gives the code and the message of Palette, not the JSON of the body. `body` holds the body as Palette sent it, with no copy of the API key: strata writes `********` over it. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. A denial names what Palette denied, such as a permission: see [Refusals that strata does not send again](#refusals-that-strata-does-not-send-again). | `method`, `path`, `status`, `body` |
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
@@ -62,6 +62,14 @@ the kind.
 | `file-not-json` | A file in a `--from-raw` directory is not JSON. | `path` |
 | `serialize` | Strata could not write a document. | |
 
+The `message` of `api` gives the code and the message of Palette. `body`
+holds the body as Palette sent it. Here the role of the key does not give
+`filter.list`:
+
+```text
+{{#include ../output/list-denied-filters-json.txt}}
+```
+
 A record that is empty or is not JSON is `not-snapshot`.
 
 The error `snapshot-schema` names the field that does not match. Here a person
@@ -92,9 +100,16 @@ A `usage` error comes before any request in these cases:
 A record file shows its side when strata reads the file. That read is no
 request, so these errors come before any request too.
 
-One `usage` error can come after a request. `compare --repave cluster:<a>
-cluster:<b>@pending` gives it when `a` and `b` name two clusters. A name and a
-uid can name one cluster, so only the reads show that they name two.
+Two `usage` errors can come after a request:
+
+- `compare --repave cluster:<a> cluster:<b>@pending` gives one when `a` and `b`
+  name two clusters. A name and a uid can name one cluster, so only the reads
+  show that they name two.
+- A ref with no version, such as `aws-stack`, gives one when it is the name of
+  a profile. Strata reads such a ref as a uid, and Palette answers HTTP `404`.
+  The listing of the scope then shows the name. The message lists each version
+  of the name, and names `<name>@latest`. See
+  [A name with no version](./refs.md#a-name-with-no-version).
 
 `snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
 of `snapshot` prints as a `strata:` line.

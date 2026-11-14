@@ -1,6 +1,6 @@
 //! The chapters of the first pages of the book: the help text, and the quick start.
 
-use super::ids::{A100, A110, A111, DEV, PROD};
+use super::ids::{A100, A110, A111, DEV, PAYMENTS, PROD};
 use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 
@@ -54,6 +54,9 @@ fn quickstart(r: &mut Runner) {
     // the cluster runs the release and three add-on profiles, and the compare answers for the
     // release (#615)
     payments_cluster(r, A110);
+    // Palette answers for a move of payments: the move to aws-stack@1.1.1 replaces no node. A
+    // reader of the quick start tries --repave in the playground too (#632)
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
     r.step("quickstart-offline", 1, false, "strata compare examples/profiles/aws-stack@1.1.0.json examples/profiles/aws-stack@1.1.1.json");
     r.step("quickstart-list", 0, false, "strata list");
     r.step(
@@ -79,5 +82,16 @@ fn quickstart(r: &mut Runner) {
         1,
         false,
         "strata compare aws-stack@1.1.0 aws-stack@1.1.1",
+    );
+    r.step(
+        "quickstart-repave-full",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1 --repave",
+    );
+    r.excerpt(
+        "quickstart-repave",
+        "quickstart-repave-full",
+        r"^(\$|aws-stack|root |palette|~ \[|      impact)",
     );
 }
