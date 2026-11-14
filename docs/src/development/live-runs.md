@@ -1539,7 +1539,7 @@ needs the example at its baseline with cluster A.
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
 | `override-undo`, `override-gone` | 0 | the override is undone, and the record of cluster A verifies again |
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
-| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
+| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job with no `--dry-run` opens an issue for the add-on record. The dry run says so in its note: `a run with no --dry-run opens or updates the issue for releases/addon.json`. |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
 | `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`. It names the last write, an update by a user of the tenant. |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |

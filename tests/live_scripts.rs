@@ -9830,8 +9830,10 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     assert!(!quick.contains("palette"), "{quick}");
 }
 
+/// The checks of the nightly job run the script of CI, so `nightly-names` reads the words of its
+/// note. When the note changes and the check does not, this test fails.
 #[test]
-fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issue() {
+fn loop_sh_stage_7_names_the_issue_of_the_edited_record_and_puts_the_writer_of_the_edit_in_it() {
     let mut stage = lab_stage();
     stage.strata(
         "verify --summary --quiet --format json *",
@@ -9852,7 +9854,15 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
     // the stage edits the add-on through the API, and this test does not serve that route, so the
     // first step fails. The checks of the nightly job do not need that step
     let (_, steps) = stage.run("loop.sh", &["7"]);
-    passed(&steps, &["nightly-who", "nightly-who-says"]);
+    passed(
+        &steps,
+        &[
+            "nightly-drift",
+            "nightly-names",
+            "nightly-who",
+            "nightly-who-says",
+        ],
+    );
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
     assert!(
         calls

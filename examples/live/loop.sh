@@ -226,7 +226,7 @@ if stage 4 "before a build"; then
 fi
 
 if stage 5 "the nightly jobs"; then
-  check nightly 0 '#81: verify-report.sh: every record verifies, and each issue would close' -- \
+  check nightly 0 '#81: verify-report.sh: every record verifies, so a run with no --dry-run closes each open issue' -- \
     in_repo "$ci/verify-report.sh" 'releases/*.json' 'runs/*.json' --dry-run
   check fleet 0 '#81: the fleet of a label, one record for each cluster' -- \
     in_repo "$strata" snapshot tag:purpose=strata-live-example --dir fleet --prune
@@ -257,10 +257,10 @@ fi
 if stage 7 "an edit of a published version in place"; then
   check edit 0 '#81: a person edits the add-on version in place, through the API' -- \
     "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
-  check nightly-drift 1 '#81: the nightly job would open an issue for the add-on record' -- \
+  check nightly-drift 1 '#81: the nightly job with no --dry-run opens an issue for the add-on record' -- \
     in_repo "$ci/verify-report.sh" 'releases/*.json' 'runs/*.json' --dry-run
   check nightly-names 0 '#81: the issue is for releases/addon.json' -- \
-    grep -q 'would open or update the issue for releases/addon.json' nightly-drift.err
+    grep -q 'a run with no --dry-run opens or updates the issue for releases/addon.json' nightly-drift.err
   check who 1 '#81: --who names who wrote the edit' -- "$strata" verify repo/releases/addon.json --who
   check who-says 0 '#81: the last write is an update by a person' -- \
     grep -Eq '^  [0-9TZ:.-]+  .+ \(user\)  update(: .+)?$' <(grep -E '^  [0-9]{4}-' who.out | tail -1)
