@@ -18340,6 +18340,15 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_mess
     }
 }
 
+/// The criterion of #890: a bare address in a message of Palette stays as it is in a note and in
+/// a verdict. So the link that GitHub makes of it holds no escape, and keeps its target.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_keeps_a_bare_address_of_a_message_as_it_is() {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESSES, common::ANSWER_ADDRESSES) {
+        common::assert_answer_addresses_as_they_are(&md);
+    }
+}
+
 /// The criterion of #890: a `@name` in a message of Palette notifies nobody in a note and in a
 /// verdict. So an issue or a pull request comment that quotes the message mentions no person.
 #[test]

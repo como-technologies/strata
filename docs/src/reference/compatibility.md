@@ -1163,6 +1163,11 @@ field, a value, an input, or an option is in the sections above.
     after a letter or a digit of ASCII does not change, as in `kubernetes@1.30.1` or an address
     of mail.
   - `strata-preflight` writes its markdown in the same way.
+- **A bare address that GitHub surely links keeps its form.** It gets no entity, no `\`, and no
+  zero width space, as in 0.33.0. So the link that GitHub makes of it goes to the target of the
+  text. A `*` or a `_` that GitHub cuts from the end of the link reads `&ast;` or `&lowbar;`.
+  [The markdown comment](./formats.md#the-markdown-comment) gives the forms of such an address.
+  - `strata-preflight` writes its markdown in the same way.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1350,6 +1355,9 @@ field, a value, an input, or an option is in the sections above.
 - **`verify-report.sh` and `upstream-report.sh` write a zero width space after each `@` of a
   mention in a quoted text.** They do it as the markdown form does. So a `@name` in a message of
   Palette notifies nobody.
+- **`verify-report.sh` and `upstream-report.sh` keep a bare address that GitHub surely links as it
+  is.** They do it as the markdown form does. So the link of the address in an issue goes to its
+  target.
 - **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
   fence longer than each run of backticks in its value. The body names the cluster and the path
   of each record in such a span. A name and a path with no backtick do not change.
@@ -1400,6 +1408,8 @@ field, a value, an input, or an option is in the sections above.
 - `text::markdown_cell` also writes the entity `&#8203;` after each `@` that can start a mention
   of GitHub. A caller that compares the cell with a text must read `@&#8203;name` in place of
   `@name`.
+- `text::markdown_cell` keeps a bare address that GitHub surely links as it is, with no entity,
+  no `\`, and no zero width space in it.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get

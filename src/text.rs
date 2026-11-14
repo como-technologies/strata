@@ -139,14 +139,134 @@ pub fn html_text(s: &str) -> String {
 
 /// `s` as the text of one cell of a markdown table, or of one line of markdown.
 ///
-/// A `|` ends a cell, and a line break ends the row. So the text escapes each `|`, and writes a
-/// line break as a space. It is also [`html_text`], with a `\` before each mark of markdown. So a
-/// text that strata quotes from an answer, such as a message of Palette, shows as text. A tag of
-/// HTML, a link, an emphasis, and a code span in it show as text too, and a `@name` in it
-/// notifies nobody. A code span shows an entity and a `\` as they are, so [`code_cell`] writes a
-/// value in a code span.
+/// A `|` ends a cell, and a line break ends the row. So the cell escapes each `|`, and writes a
+/// line break as a space. A bare address that GitHub surely links stays as it is, so its link goes
+/// to its target. Each other word is [`html_text`], with a `\` before each mark of markdown and a
+/// zero width space in each mention. So a text that strata quotes from an answer, such as a
+/// message of Palette, shows as text, and a `@name` in it notifies nobody. A code span shows an
+/// entity and a `\` as they are, so [`code_cell`] writes a value in a code span.
+///
+/// GitHub links an address with a scheme only when no letter comes before the scheme. So a
+/// caller puts no letter right before the cell.
 pub fn markdown_cell(s: &str) -> String {
-    table_text(&mention_text(&html_text(&markdown_text(s))))
+    let text: String = s
+        .split_inclusive(|c: char| c.is_ascii_whitespace())
+        .enumerate()
+        .map(|(i, piece)| {
+            let word = piece.trim_end_matches(|c: char| c.is_ascii_whitespace());
+            markdown_word(word, i == 0) + &piece[word.len()..]
+        })
+        .collect();
+    table_text(&text)
+}
+
+/// `word`, a text with no space of ASCII, as markdown. `first` is true for the first word of the
+/// text, which can follow the text of the caller with no space.
+///
+/// A bare address stays as it is. GitHub cuts the marks at the end of the address from the link,
+/// and a `\` before such a mark stays in the link. So a cut `*` is `&ast;` and a cut `_` is
+/// `&lowbar;`, and GitHub shows each one as text. HTML names no entity for a `~`. A cut `~` stays
+/// as it is, and GitHub shows it as text, as its markdown route shows.
+fn markdown_word(word: &str, first: bool) -> String {
+    let Some(link) = bare_address(word, first) else {
+        return quoted_text(word);
+    };
+    let cut = word[link.end..]
+        .replace('*', "&ast;")
+        .replace('_', "&lowbar;");
+    format!("{}{}{cut}", quoted_text(&word[..link.start]), &word[link])
+}
+
+/// `s` with the escapes of a quoted text that is no bare address. It is [`html_text`], with a `\`
+/// before each mark of markdown and a zero width space in each mention.
+fn quoted_text(s: &str) -> String {
+    mention_text(&html_text(&markdown_text(s)))
+}
+
+/// The schemes of a bare address that GitHub links after each character that is not a letter.
+const SCHEMES: [&str; 2] = ["https://", "http://"];
+
+/// The start of a bare address with no scheme. GitHub links it only after a space or a `(`.
+const WWW: &str = "www.";
+
+/// The characters that GitHub cuts from the end of a bare address, as the end of a sentence. The
+/// link ends before them.
+const LINK_CUTS: [char; 11] = ['?', '!', '.', ',', ':', '*', '_', '~', '\'', '"', ';'];
+
+/// The range of `word` that GitHub surely links as a bare address, or `None`. `word` is a text
+/// with no space of ASCII, and `first` is true when it starts the text.
+///
+/// The address starts with `https://` or `http://`, after an optional `(`, `"`, or `'`. Or it
+/// starts with `www.` after a `(`, or after a space when `first` is false. Its host has two
+/// labels or more of letters, digits, and `-` of ASCII, with a letter or a digit at each end of a
+/// label. The word holds only printable characters of ASCII, and no `<`. The markdown route of
+/// GitHub links each such address, with each mark and each `@` in it as text. The range ends where
+/// the link ends: see [`link_end`].
+fn bare_address(word: &str, first: bool) -> Option<std::ops::Range<usize>> {
+    if !word.bytes().all(|b| b.is_ascii_graphic()) || word.contains('<') {
+        return None;
+    }
+    let start = usize::from(word.starts_with(['(', '"', '\'']));
+    let rest = &word[start..];
+    let www = rest.starts_with(WWW)
+        && if start == 0 {
+            !first
+        } else {
+            word.starts_with('(')
+        };
+    let scheme = match SCHEMES.iter().find(|s| rest.starts_with(**s)) {
+        Some(s) => s.len(),
+        None if www => WWW.len(),
+        None => return None,
+    };
+    let end = start + link_end(rest)?;
+    let host = word
+        .get(start + scheme..end)?
+        .split(['/', '?', '#', ':'])
+        .next()?;
+    (host.contains('.') && host.split('.').all(is_label)).then_some(start..end)
+}
+
+/// True for a label of a host that GitHub links: letters, digits, and `-` of ASCII, with a letter
+/// or a digit at each end.
+fn is_label(label: &str) -> bool {
+    let ends = |c: Option<&u8>| c.is_some_and(u8::is_ascii_alphanumeric);
+    let bytes = label.as_bytes();
+    ends(bytes.first())
+        && ends(bytes.last())
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'-')
+}
+
+/// The length of `text`, a bare address from its scheme on, that GitHub keeps in its link. `None`
+/// when GitHub cuts an entity from the end of the text.
+///
+/// GitHub cuts each character of [`LINK_CUTS`] from the end. It cuts a `)` from the end while
+/// the text holds more `)` than `(`. It cuts an entity, such as `&amp;`, and shows the character
+/// that the entity names. So an address that ends with an entity does not stay as it is.
+fn link_end(text: &str) -> Option<usize> {
+    let open = text.matches('(').count();
+    let mut close = text.matches(')').count();
+    let mut end = text.len();
+    while let Some(c) = text[..end].chars().next_back() {
+        if c == ')' && close > open {
+            close -= 1;
+        } else if c == ';' && is_entity_end(&text[..end]) {
+            return None;
+        } else if !LINK_CUTS.contains(&c) {
+            break;
+        }
+        end -= c.len_utf8();
+    }
+    Some(end)
+}
+
+/// True when `text` ends with an entity of a name: a `&`, letters of ASCII, and a `;`.
+fn is_entity_end(text: &str) -> bool {
+    let name = text.strip_suffix(';').unwrap_or(text);
+    let before = name.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+    before.len() < name.len() && before.ends_with('&')
 }
 
 /// The entity of a zero width space. GitHub shows no character for it.
@@ -334,7 +454,8 @@ mod span_read;
 #[cfg(test)]
 mod tests {
     use super::answer_tags::{
-        ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS, assert_answer_marks_as_text,
+        ANSWER_ADDRESSES, ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS,
+        assert_answer_addresses_as_they_are, assert_answer_marks_as_text,
         assert_answer_mentions_as_text,
     };
     use super::*;
@@ -476,6 +597,63 @@ mod tests {
         // the space is an entity of strata, so its `&` gets no escape, and an `&` of the text does
         assert_eq!(markdown_cell("&@a <@b"), "&amp;@&#8203;a &lt;@&#8203;b");
         assert_eq!(code_cell("@a"), "`@a`");
+    }
+
+    #[test]
+    fn a_cell_of_a_markdown_table_keeps_each_bare_address_that_github_links_as_it_is() {
+        assert_answer_addresses_as_they_are(&markdown_cell(ANSWER_ADDRESSES));
+        assert_eq!(markdown_cell(ANSWER_ADDRESSES), ANSWER_ADDRESSES);
+        for address in [
+            "https://example.com/?a=1&b=2",
+            "http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
+            "https://xn--bcher-kva.example/a\\b>c",
+        ] {
+            assert_eq!(markdown_cell(address), address);
+            assert_eq!(
+                markdown_cell(&format!("*a* {address} @b")),
+                format!("\\*a\\* {address} @&#8203;b")
+            );
+        }
+        // GitHub links `www.` only after a space or a `(`, and a scheme also after a quote
+        assert_eq!(
+            markdown_cell("a www.example.com/@b (www.example.com/@b) 'https://example.com/@b'"),
+            "a www.example.com/@b (www.example.com/@b) 'https://example.com/@b'"
+        );
+        assert_eq!(
+            markdown_cell("www.example.com/@b"),
+            "www.example.com/@&#8203;b"
+        );
+        assert_eq!(
+            markdown_cell("a \"www.example.com/@b\""),
+            "a \"www.example.com/@&#8203;b\""
+        );
+        // GitHub cuts the marks at the end from the link, and no `\` comes before them
+        assert_eq!(
+            markdown_cell("https://example.com/a_(b)) https://example.com/x_*~.\""),
+            "https://example.com/a_(b)) https://example.com/x&lowbar;&ast;~.\""
+        );
+        // a form that GitHub does not surely link keeps each escape, and each `@` gets its space
+        for (text, escaped) in [
+            ("https://-a.example/@b", "https://-a.example/@&#8203;b"),
+            ("https://a_b.example/@b", "https://a_b.example/@&#8203;b"),
+            ("https://localhost/@b", "https://localhost/@&#8203;b"),
+            ("xhttps://example.com/@b", "xhttps://example.com/@&#8203;b"),
+            ("ftp://example.com/@b", "ftp://example.com/@&#8203;b"),
+            ("https://example.com/é@b", "https://example.com/é@&#8203;b"),
+            ("https://example.com/<b>", "https://example.com/&lt;b&gt;"),
+            (
+                "https://example.com/a&amp;",
+                "https://example.com/a&amp;amp;",
+            ),
+            ("https://", "https://"),
+            ("www.", "www."),
+        ] {
+            assert_eq!(markdown_cell(text), escaped, "{text}");
+        }
+        assert_eq!(
+            markdown_cell("https://example.com/a|b"),
+            "https://example.com/a\\|b"
+        );
     }
 
     #[test]

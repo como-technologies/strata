@@ -1,5 +1,6 @@
-//! A text of an answer with tags of HTML, one with the marks of markdown, and one with mentions of
-//! GitHub. The checks that a markdown output shows each such tag, mark, and mention as text.
+//! A text of an answer with tags of HTML, one with the marks of markdown, one with mentions of
+//! GitHub, and one with bare addresses. The checks that a markdown output shows each such tag,
+//! mark, and mention as text, and each such address as it is.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
 //! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
@@ -55,6 +56,21 @@ pub fn assert_answer_mentions_as_text(markdown: &str) {
             && !word(i.checked_sub(1))
     });
     assert_eq!(mention, None, "a mention of GitHub in\n{markdown}");
+}
+
+/// The body of an answer with three bare addresses that GitHub links: one with a query of two
+/// values, one with `~`, `*`, and `_`, and one with `/@name`. A `,`, a `)`, and a `.` end them, as
+/// in a sentence.
+pub const ANSWER_ADDRESSES: &str = "see https://example.com/?a=1&b=2, \
+     https://example.com/~a/*b*/c_d and (https://example.com/@octocat).";
+
+/// Make sure that `markdown` holds [`ANSWER_ADDRESSES`] as it is. So the link that GitHub makes
+/// of each address holds no escape, and each address keeps its target.
+pub fn assert_answer_addresses_as_they_are(markdown: &str) {
+    assert!(
+        markdown.contains(ANSWER_ADDRESSES),
+        "the addresses of the answer as they are in\n{markdown}"
+    );
 }
 
 /// The tags of HTML that the markdown of strata writes itself.

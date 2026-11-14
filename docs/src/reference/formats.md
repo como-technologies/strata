@@ -127,11 +127,29 @@ person or the team. So the markdown writes the entity of a zero width space
 after each `@` that can start a mention: `@&#8203;name`. GitHub shows the same
 text, and the mention notifies nobody. A `@` after a letter or a digit of ASCII
 starts no mention, as in an address of mail or in `kubernetes@1.30.1`. Such a
-`@` stays as it is.
+`@` stays as it is. A value in a code span shows no mention, so it stays as it
+is too.
 
-A value in a code span shows no mention, so it stays as it is too. GitHub
-links a bare address with its text as it is. So in an address such as
-`https://example.com/@name`, the link shows the entity as text.
+GitHub makes a link of a bare address from its text as it is. So an escape in
+the address shows in the link, and the link goes to another target. The
+markdown keeps an address that GitHub surely links as it is, with each `&`,
+mark, and `@` in it. GitHub reads no mention in a link. Each other part of the
+text keeps its escapes. The markdown keeps an address that has each of these
+forms:
+
+- It starts with `https://` or `http://`, after a space, a `(`, a `"`, or a
+  `'`, or at the start of the text.
+- Or it starts with `www.` after a space or a `(`.
+- Its host has two labels or more, as in `docs.example.com`. A label holds
+  letters, digits, and `-` of ASCII, with a letter or a digit at each end.
+- It holds only printable characters of ASCII, and no `<`.
+- It does not end with an entity, such as `&amp;`.
+
+GitHub ends the link before the marks at the end of an address, such as the
+`.` or the `)` of a sentence. A `\` before such a mark stays in the link. So the
+markdown writes a `*` there as `&ast;`, and a `_` as `&lowbar;`. A `~` there
+stays as it is. Each other address, such as `https://localhost/`, keeps its
+escapes, and GitHub shows them in its link.
 
 Each fenced block has a fence of three backticks. When its text holds a run of
 three or more backticks, the fence is longer than each run. So a line of the

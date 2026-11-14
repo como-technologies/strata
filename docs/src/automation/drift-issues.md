@@ -76,8 +76,8 @@ The issue of a record that strata could not check gives the error and the
 output of strata. The error can quote the body of an answer. The issue shows
 each tag of HTML and each mark of markdown in it as text, as
 [the markdown comment](../reference/formats.md#the-markdown-comment) does. A
-`@name` in it notifies nobody. The output is in a fenced block that no line of
-the output ends.
+`@name` in it notifies nobody, and a bare address in it keeps its link. The
+output is in a fenced block that no line of the output ends.
 
 When `verify` checks nothing, for example when no pattern matches a file, the
 script exits `2` and touches no issue. The script also exits `2` when `verify`
