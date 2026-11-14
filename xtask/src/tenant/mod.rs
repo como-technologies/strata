@@ -20,6 +20,7 @@
 //! - `registries.rs`: the pack registries, and the versions of a pack.
 //! - `notifications.rs`: the notifications of a cluster, and the updates that wait for it.
 //! - `answers.rs`: the answers of the routes that check a change.
+//! - `times.rs`: the times of the documents that a chapter makes one after the other.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,7 @@ mod notifications;
 mod profiles;
 mod registries;
 mod routes;
+mod times;
 
 pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;

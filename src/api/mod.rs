@@ -34,6 +34,7 @@ pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
 pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
+pub use mask::MASKED;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,

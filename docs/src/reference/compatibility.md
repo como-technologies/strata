@@ -319,6 +319,10 @@ After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` a
 `render::Reading` names each row of the block `searched:` of `consumers`. Three structs of
 `consumers` have new fields: see [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `api::MASKED` is public: the text `********` that Palette writes over a secret.
+`model::input_type::InputType` is public: the input type of a profile variable, as Palette gives
+it in `inputType`.
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -1456,6 +1460,12 @@ field, a value, an input, or an option is in the sections above.
   - The markdown has a table of the rows in place of the two sentences, a
     sentence for the scope, and `NOT CHECKED` in bold. A script that reads the
     text must read the new rows, or read `--json`.
+- **`same-release --allow renumber` gives a reason for a missing pack file.**
+  Before, strata refused the download with the error `not-archive`, and the command exited `2`.
+  Now strata reads the other packs of the download. A renumber of the pack of that file gets
+  the fact `archive: not readable`, with the reason `the download does not hold <path>` in
+  `archivesNotReadable`. Its pair fails, and the command exits `1`. See
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
 
 ### For a user of the CI drop-ins
 
@@ -1598,6 +1608,9 @@ field, a value, an input, or an option is in the sections above.
   strata could not search, so `ConsumersReport::exit_code` gives `2` for it.
 - `ops::consumers` and `ops::consumers_with` search each project of the tenant listing for a
   profile of the tenant or of the system. They call `connect` with the uid of each project.
+- `api::Palette::profile_download` gives a download, and no `Error::NotArchive`, when the list
+  of the download names a file that the download does not hold. The pack of that file has
+  `api::PackFile::NotReadable`, with the reason `the download does not hold <path>`.
 
 ### For a user of the library of strata-preflight
 
