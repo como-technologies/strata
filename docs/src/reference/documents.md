@@ -132,6 +132,13 @@ profile, or pack version.
         error. `fields` then does not hold the field, so the hash does not
         cover it. `errors` is not part of the hash either. A record of strata
         0.19 holds `null` for the field.
+      - `systemRbacs`, only in `policy` of a cluster: each role binding of the
+        system that the key reads, in the form of `rbacs`. Palette gives such a
+        binding only with the subject that is the user of the key. So `fields`
+        does not hold it, the hash does not cover it, and `compare` and `verify`
+        do not compare it. A record of strata 0.33.0 and before holds such a
+        binding in `rbacs` of `fields`. See
+        [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
       - The schema lists the keys of `fields` for each of these four tiers. It
         also takes the name of a tier of a later release, with any `fields`.
     - The `fields` of `policy` are in

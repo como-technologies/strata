@@ -221,7 +221,9 @@ The tiers of a cluster record are outside the root. Each tier has its own hash:
 the sha256 of the canonical JSON of its fields, in [The canonical form](#the-canonical-form).
 The `running` tier is in the order of profile uid and then pack name, and the
 `shape` tier holds its machine pools in the order of their names, so the order
-that Palette lists them in does not change a hash. See
+that Palette lists them in does not change a hash. The hash of `policy` does not
+cover a role binding of the system: see
+[A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system). See
 [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
 
 ## Other objects that hold profiles
