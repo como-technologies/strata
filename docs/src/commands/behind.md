@@ -236,8 +236,9 @@ on each side, its flags, and `valuesChanged` when its values change:
   a cluster, run `strata compare cluster:<cluster> <name>@<newest> --repave`. See
   [Ask Palette if the change repaves](./compare/repave.md).
 - **Strata names what the update checks.** A line names each required variable
-  with no default value that the newest version adds. A dropdown variable with
-  a default option does not count. Palette refuses an update
+  with no default value that the newest version adds. A dropdown variable does
+  not count when it has a default option, or a default value that is the label
+  of an option. Palette refuses an update
   that gives such a variable no value, with `InvalidVariable`. The profile
   version 1.0.0 in [The pins that are behind](#the-pins-that-are-behind) has
   this line for `platform_owner`. Another line names a move of Kubernetes that

@@ -87,13 +87,17 @@ impl RequiredVariables {
 
 /// True when Palette accepts an update that gives the variable `v` no value.
 ///
-/// Palette accepts a default value. It accepts a default option only for a dropdown variable. A
-/// record of strata 0.33 and before holds no default mark, so a dropdown variable of such a
-/// record has no default option here.
+/// Palette accepts a default value. For a dropdown variable, Palette accepts the default value only
+/// when it is the label of an option. When it is not, Palette accepts a default option. A record
+/// of strata 0.33 and before holds no default mark, so a dropdown variable of such a record has no
+/// default option here.
 fn takes_a_default(v: &Variable) -> bool {
-    !v.default_value.is_empty()
-        || (InputType::from_text(&v.input_type) == Some(InputType::Dropdown)
-            && v.options.iter().any(|o| o.default))
+    if InputType::from_text(&v.input_type) != Some(InputType::Dropdown) {
+        return !v.default_value.is_empty();
+    }
+    let is_label =
+        !v.default_value.is_empty() && v.options.iter().any(|o| o.label == v.default_value);
+    is_label || v.options.iter().any(|o| o.default)
 }
 
 /// A move of the Kubernetes pack of more than one minor version, or to a higher major version.
@@ -323,6 +327,29 @@ mod tests {
         ];
         let added = RequiredVariables::added(&[], &to).unwrap();
         assert_eq!(added.names, ["label", "size"]);
+    }
+
+    #[test]
+    fn a_required_dropdown_variable_whose_default_value_is_no_label_needs_a_value_with_no_default_option()
+     {
+        let dropdown = |name: &str, default_value: &str, default: bool| {
+            variable(
+                json!({"name": name, "required": true, "inputType": "dropdown",
+                "defaultValue": default_value,
+                "options": [{"label": "small", "value": "s"},
+                    {"label": "large", "value": "l", "default": default}]}),
+            )
+        };
+        let to = [
+            // a text that is no option, and the value of an option and not its label
+            dropdown("tier", "medium", false),
+            dropdown("size", "s", false),
+            // Palette accepts the default option in place of a default value that is no label
+            dropdown("zone", "medium", true),
+            dropdown("plan", "large", false),
+        ];
+        let added = RequiredVariables::added(&[], &to).map(|a| a.names);
+        assert_eq!(added, Some(vec!["size".to_string(), "tier".to_string()]));
     }
 
     #[test]

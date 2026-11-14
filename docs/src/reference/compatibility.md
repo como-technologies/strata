@@ -1343,9 +1343,10 @@ field, a value, an input, or an option is in the sections above.
   [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
 - **`behind` and `compare --validate` name a required dropdown variable with no default
   option.** Before, strata named no required variable that has options. Now it names a
-  required dropdown variable with no default value and no option with the mark `default`. It
-  also names a required variable of another input type with a default option and no default
-  value, because Palette refuses it. The line and `requiredVariables` keep their form. See
+  required dropdown variable with no option with the mark `default`, when its default value is
+  not the label of an option. It also names a required variable of another input type with a
+  default option and no default value. Palette refuses each one. The line and
+  `requiredVariables` keep their form. See
   [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
 - **A record keeps the `default` mark of an option of a variable.** The default option has
   `variables[].options[].default: true`, and another option has no field. The root does not
@@ -1478,7 +1479,8 @@ field, a value, an input, or an option is in the sections above.
   `PACK_FORBIDDEN_CODE`.
 - `snapshot::VariableOption` has the new field `default: bool`. A struct literal must set it, and
   a pattern with no `..` must name it. `RequiredVariables` of `UpdateChecks` counts a required
-  dropdown variable with no default value and no default option.
+  dropdown variable with no default option, when its default value is not the label of an
+  option.
 - The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
   `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
   body.

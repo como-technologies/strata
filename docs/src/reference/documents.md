@@ -375,7 +375,8 @@ A comparison of two sides, `a` and `b`.
   See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
   - `requiredVariables`: the required variables with no default value that the
     profile side adds. A dropdown variable counts only when no option has the
-    mark `default`. It has `code`, the code of the refusal of Palette,
+    mark `default`, and its default value is not the label of an option. It
+    has `code`, the code of the refusal of Palette,
     `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
     an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a

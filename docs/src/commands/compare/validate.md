@@ -92,11 +92,11 @@ the owner of each rule: see
 
 - **A required variable with no default value.** The body of the route holds no
   value of a variable. Palette refuses an update that gives such a variable no
-  value, with `InvalidVariable` and HTTP 500. Palette accepts such a dropdown
-  variable when it has a default option, the option with the mark `default`.
-  Strata names each such variable with no default value and no default option
-  that the profile version adds. The move of the cluster `payments` to
-  `aws-stack@1.1.1` adds `platform_owner`: see
+  value, with `InvalidVariable` and HTTP 500. For a dropdown variable, Palette
+  accepts a default value that is the label of an option, or a default option,
+  the option with the mark `default`. Strata names each required variable with
+  no such default that the profile version adds. The move of the cluster
+  `payments` to `aws-stack@1.1.1` adds `platform_owner`: see
   [Compare a profile version with a cluster](./clusters.md#compare-a-profile-version-with-a-cluster).
 - **A move of Kubernetes that skips a minor version.** Palette refuses the
   update with `K8sUpgradeNotSupported` and HTTP 400. Here the cluster `search`

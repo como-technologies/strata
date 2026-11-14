@@ -540,14 +540,18 @@ version at a time.
 ### A value of each required variable
 
 - The update gives each variable of the new profile version a value: the value
-  of the body, or the default value of the variable.
+  of the body, or a default of the variable.
 - Palette refuses a required variable with no value, and changes nothing. The
   answer is HTTP 500 and `InvalidVariable`. The message ends with
   `can't be empty for required variable '<name>'`.
-- Palette accepts a required dropdown variable with no default value when it
-  has a default option, the option with `default: true`. It refuses a required
-  variable of another input type with no default value, also with a default
-  option. The code of Palette shows it; no live run shows it yet.
+- Palette accepts a required variable with no value when it has a default
+  value. A dropdown variable is different: Palette accepts its default value
+  only when the value is the label of one of its options. When it is not,
+  Palette accepts the variable only with a default option, the option with
+  `default: true`. A default value that is the value of an option, and not its
+  label, does not count. Palette refuses a required variable of another input
+  type with no default value, also with a default option.
+- The code of Palette shows each rule of a default; no live run shows it yet.
 - No validate route checks a variable. The body of the profile routes has no
   field for one.
 

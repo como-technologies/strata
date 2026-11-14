@@ -669,7 +669,7 @@ check each rule for a move, and print a line under the answer of Palette:
 | Rule | Code |
 | --- | --- |
 | One update moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | `K8sUpgradeNotSupported` |
-| Each required variable has a value or a default value. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no default value and no default option that the move adds. | `InvalidVariable` |
+| Each required variable has a value or a default value. The default value of a dropdown variable counts only when it is the label of an option. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no such default that the move adds. | `InvalidVariable` |
 
 Palette is the owner of each rule. When a validate route checks a rule, strata
 removes its check and reads the answer of the route. See
