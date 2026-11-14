@@ -1359,6 +1359,12 @@ field, a value, an input, or an option is in the sections above.
   says "a run with no --dry-run closes the open issue". Its "if any" is now "if one is open".
   "would open or update" is now "a run with no --dry-run opens or updates". A script that reads
   the notes on standard error must read the new words.
+- **A note of `--dry-run` of `pr-comment.sh` has new words.** It says what a run with no
+  `--dry-run` does. "would add label" is now "a run with no --dry-run adds label". "would remove
+  label ... if present" is now "a run with no --dry-run removes label ..., if the pull request has
+  it". "would post the preflight comment, or update" is now "a run with no --dry-run posts the
+  preflight comment, or updates". A script that reads the notes on standard error must read the
+  new words.
 - **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
   names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor

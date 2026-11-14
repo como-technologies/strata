@@ -1485,10 +1485,12 @@ fn pr_comment_dry_run_prints_the_comment_and_calls_no_host() {
         text(&o.stdout)
     );
     assert!(
-        text(&o.stderr).contains("would add label repave"),
+        text(&o.stderr).contains("a run with no --dry-run adds label repave"),
         "{}",
         text(&o.stderr)
     );
+    // the note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
     assert!(h.calls().is_empty(), "{:?}", h.calls());
 }
 
@@ -1713,7 +1715,7 @@ fn pr_comment_repave_sends_the_question_for_a_cluster_and_a_version_and_the_labe
         "the table is read: {said}"
     );
     assert!(
-        said.contains("label repave: Palette says no repave; would remove label repave if present"),
+        said.contains("label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{said}"
     );
 
@@ -1733,7 +1735,9 @@ fn pr_comment_repave_sends_the_question_for_a_cluster_and_a_version_and_the_labe
     let said = text(&o.stderr);
     assert!(said.contains("max impact: none;"), "{said}");
     assert!(
-        said.contains("label repave: Palette says repave; would add label repave"),
+        said.contains(
+            "label repave: Palette says repave; a run with no --dry-run adds label repave"
+        ),
         "{said}"
     );
 }
@@ -1798,7 +1802,7 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert!(
         text(&o.stderr).contains(
-            "label repave: Palette says no repave, and the table decides below may-repave; would add label repave"
+            "label repave: Palette says no repave, and the table decides below may-repave; a run with no --dry-run adds label repave"
         ),
         "{}",
         text(&o.stderr)
@@ -1819,7 +1823,7 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
     );
     assert!(
         text(&o.stderr)
-            .contains("label repave: Palette says no repave; would remove label repave if present"),
+            .contains("label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{}",
         text(&o.stderr)
     );
@@ -1869,7 +1873,9 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
             "{said}"
         );
         assert!(
-            said.contains("label repave: the table decides; would add label repave"),
+            said.contains(
+                "label repave: the table decides; a run with no --dry-run adds label repave"
+            ),
             "{said}"
         );
         assert!(!text(&o.stdout).contains("Palette:"), "{}", text(&o.stdout));
@@ -1936,7 +1942,7 @@ fn pr_comment_without_repave_asks_palette_nothing_and_adds_no_clause_to_the_note
     assert!(
         text(&o.stderr)
             .trim_end()
-            .ends_with("max impact: repave; would add label repave"),
+            .ends_with("max impact: repave; a run with no --dry-run adds label repave"),
         "{}",
         text(&o.stderr)
     );
@@ -2166,6 +2172,15 @@ fn pr_comment_preflight_dry_run_prints_the_comment_and_calls_no_host() {
         "{}",
         text(&o.stdout)
     );
+    // the note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(
+        text(&o.stderr).contains(
+            "a run with no --dry-run posts the preflight comment, or updates the one that carries <!-- strata-preflight -->"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
     assert!(h.calls().is_empty(), "{:?}", h.calls());
 }
 

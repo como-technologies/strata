@@ -9721,7 +9721,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     assert!(comment.contains("**Palette:** no repave"), "{comment}");
     let note = std::fs::read_to_string(stage.path("out/ask-repave-comment.err")).unwrap();
     assert!(
-        note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
+        note.contains("max impact: repave; label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{note}"
     );
     // the comment records the cluster side by the ref that strata names for it
