@@ -169,6 +169,11 @@ Some refusals quote a value after Palette puts it in place:
 When the text comes from a variable, the refusal holds the value of the
 variable. So the report of `strata preflight` writes a mark in place of each
 value: see [The values in a message](../../commands/preflight/report.md#the-values-in-a-message).
+The case `cidr-variable` of
+[`validate-route.sh`](../../development/live-runs.md#validate-routesh) sends a
+body whose pod CIDR comes from the variable `pod_cidr` of a profile. Its checks
+make sure that the three reports hold the mark of the variable, and not its
+value. No live run shows it yet.
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 

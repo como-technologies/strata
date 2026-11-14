@@ -11,7 +11,7 @@
 # route must take each one. A case makes its fault with one jq edit of the body of its engine. A
 # case whose body is not there is skipped, and steps.log names it.
 #
-# Six cases need a body of their own, BODIES/<case>.json, because the fault is in a profile or
+# Seven cases need a body of their own, BODIES/<case>.json, because the fault is in a profile or
 # needs a VPC of the lab:
 #   edge-two-node-pxk      a two-node cluster whose Kubernetes pack is not K3s
 #   pack-state-disabled    a profile with a disabled pack
@@ -19,8 +19,11 @@
 #   profile-cloud-mismatch a profile of another cloud type
 #   pack-cloud-support     a pack version that does not list the cloud type
 #   cidr-overlap           a VPC, and a pod CIDR of the Kubernetes pack that is the CIDR of the VPC
-# Each of the last five runs on AWS, with the engine of its body. route-bodies.sh writes
-# aws-clean.json and cidr-overlap.json, and the body of each of the four whose profile Palette takes.
+#   cidr-variable          the same, with the pod CIDR from the variable pod_cidr of a profile
+# Each of the last six runs on AWS, with the engine of its body. route-bodies.sh writes
+# aws-clean.json and cidr-overlap.json, and the body of each of the five whose profile Palette
+# takes. For cidr-variable, two more checks run palette-validate with --out, and make sure that
+# the three reports hold the mark of the variable and not its value.
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
@@ -63,6 +66,30 @@ route_says() {
 # names TEXT FILE: the messages of palette-validate in the report FILE match TEXT, with no case
 names() {
   jq -e --arg s "$1" '[.checks[] | select(.id == "palette-validate") | (.messages // [])[]] | any(.[]; test($s; "i"))' "$2" > /dev/null
+}
+
+# masked BODY DIR: each of the three reports in DIR holds the mark of each variable of BODY, and
+# no value of a variable of BODY
+masked() {
+  local file name value
+  for file in report.md report.json report.html; do
+    [ -f "$2/$file" ] || { echo "no $file in $2"; return 1; }
+    while IFS=$'\t' read -r name value; do
+      grep -qF "[value of $name]" "$2/$file" || { echo "$file holds no mark of $name"; return 1; }
+      ! grep -qF "$value" "$2/$file" || { echo "$file holds the value of $name"; return 1; }
+    done < <(jq -r '.spec.profiles[].variables[]? | "\(.name)\t\(.value)"' "$1")
+  done
+}
+
+# marks CASE ENGINE: palette-validate writes the three reports of BODIES/CASE.json with --out.
+# Each report holds the mark of each variable of the body in place of its value (#614).
+marks() {
+  local id=$1 body=$bodies/$1.json
+  [ -f "$body" ] || { echo "skipped $id-marks: no $body" | tee -a steps.log; return; }
+  check "$id-reports" ? "#829: palette-validate writes the three reports of $id" -- \
+    "$strata" preflight "$body" --cloud "$2" --rule palette-validate --out "$PWD/$id-reports" --quiet --no-color
+  check "$id-marks" 0 "#614, #829: each report holds the mark of each variable of $id, and not its value" -- \
+    masked "$body" "$id-reports"
 }
 
 # no_message FILE: palette-validate has no message in the report FILE
@@ -133,6 +160,10 @@ takes pack-cloud-support aws
 # route refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run
 # shows it yet. palette-validate reads the refusal as an answer (#816).
 fault cidr-overlap aws 'K8SCidrOverlap' -
+# cidr-variable: the pod CIDR comes from the variable pod_cidr of a profile, and the body gives the
+# variable a CIDR in the VPC. The refusal quotes the value, and the reports hold the mark (#829).
+fault cidr-variable aws 'K8SCidrOverlap' -
+marks cidr-variable aws
 # vsphere-static-ip-pool: a static network with no pool, and a DHCP cluster with a static network
 network='(.spec.cloudConfig.placement.network, (.spec.machinepoolconfig[].cloudConfig.placements[]?.network))'
 fault vsphere-static-ip-pool-empty vsphere 'ParentPoolUid' \

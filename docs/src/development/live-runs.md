@@ -1082,6 +1082,8 @@ two checks expect the verdict `passed` and no message.
 | `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. |
 | `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. |
 | `cidr-overlap`, `cidr-overlap-says` | 0 | #816: the route refuses a body whose pod CIDR overlaps the CIDR of its VPC, with `K8SCidrOverlap`. `palette-validate` gives the verdict `failed` with the message of Palette, also when the status is `500`. A live run of the first body, with no subnet for the pools, failed both checks. The route refused that body with `RequiredParam` (#824). A live run of the body with the subnets passes both checks. |
+| `cidr-variable`, `cidr-variable-says` | 0 | #829: the route refuses a body whose pod CIDR comes from the variable `pod_cidr` of a profile, with `K8SCidrOverlap`. The body gives the variable a CIDR in the VPC. No result yet: no live window ran the case `cidr-variable`. |
+| `cidr-variable-reports`, `cidr-variable-marks` | ?, 0 | #614, #829: `palette-validate` writes `report.md`, `report.json`, and `report.html` with `--out`. Each report holds `[value of pod_cidr]`, the mark of the variable, and not the value of the variable. No result yet: no live window ran the case `cidr-variable`. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet: the lab has no cloud account of vSphere (#409). |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet: the lab has no cloud account of vSphere or Edge (#409). |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet: the lab has no cloud account of Azure (#409). |
@@ -1090,10 +1092,10 @@ two checks expect the verdict `passed` and no message.
 ## route-bodies.sh
 
 No cluster, and no cost that stays. It writes the bodies that
-[`validate-route.sh`](#validate-routesh) needs for five cases on AWS. The fault
-of four cases is in a profile, and the fault of `cidr-overlap` needs a VPC. The
-script needs the key, the release profile of the live example on AWS, and the
-cloud account of `terraform.tfvars`.
+[`validate-route.sh`](#validate-routesh) needs for six cases on AWS. The fault
+of four cases is in a profile, and the faults of `cidr-overlap` and
+`cidr-variable` need a VPC. The script needs the key, the release profile of the
+live example on AWS, and the cloud account of `terraform.tfvars`.
 
 A case body is the clean body of a create on AWS with one more profile. The
 script makes that profile through the API, with the name `strata-route-<case>`,
@@ -1149,14 +1151,26 @@ the status and the code. Then `validate-route.sh` sends it through
 CIDR, or when the Kubernetes pack has no `podCIDR`. It also skips the case when
 no VPC with a CIDR has a subnet in each zone of the pools.
 
+The case `cidr-variable` makes a profile too (#829). The profile
+`strata-route-cidr-variable` is a copy of the release profile with the variable
+`pod_cidr`: `api.sh variable-copy`. Its Kubernetes pack reads the pod CIDR from
+that variable. The body is `cidr-overlap.json` with the copy in place of the
+release profile. The value of the variable is the first half of the CIDR of the
+VPC.
+
+The script skips the case with no `cidr-overlap.json`, and when Palette refuses
+the copy. It deletes the copy after `validate-route.sh`, as it deletes the
+profile of each case above.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. |
 | `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. |
 | `cidr-overlap-body` | 0 | #816, #824: `cidr-overlap.json` names a VPC of the region, and each pool names a subnet of that VPC in each of its zones. The Kubernetes pack of the release profile has the CIDR of that VPC as its pod CIDR. A case that is skipped has no check. A live run of the first body, with no subnet for the pools, passed. A live run of the body with the subnets passes. |
 | `cidr-overlap-status`, `cidr-overlap-code` | 0, 0 | #816: the route answers the body of `cidr-overlap`, and `cidr-overlap-status.out` holds the status and the answer. The route refuses the body with HTTP `500` and `K8SCidrOverlap`: the code of Palette shows it. A live run of the first body, with no subnet for the pools, gave `0` and `1`. The route refused that body with HTTP `500` and `RequiredParam`: `Parameter 'Subnets' is required` (#824). A live run of the body with the subnets gives `0` and `0`: HTTP `500` and `K8SCidrOverlap`. |
+| `cidr-variable-body` | 0 | #829: `cidr-variable.json` is `cidr-overlap.json` with the copy of the release profile. The copy reads the pod CIDR from the variable `pod_cidr`, and the body gives the variable the first half of the CIDR of the VPC. A case that is skipped has no check. No result yet: no live window ran the case `cidr-variable`. |
 | `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. |
-| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
+| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted`, `cidr-variable-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
 
 ## export.sh
 

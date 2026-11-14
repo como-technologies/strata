@@ -183,8 +183,12 @@ facts:
         - InvalidDropDownVariable
         - InvalidVariable
     stand_in: []
-    live: []
-    unchecked: No live run shows how the route reads the variables.
+    live:
+      - route-bodies.sh:cidr-variable-body
+      - validate-route.sh:cidr-variable
+      - validate-route.sh:cidr-variable-says
+      - validate-route.sh:cidr-variable-reports
+      - validate-route.sh:cidr-variable-marks
     pages:
       - internals/palette/validate-routes.md#the-variables-of-the-body
       - reference/errors.md#refusals-that-strata-does-not-send-again

@@ -7818,6 +7818,17 @@ const CIDR_CASE: &str = "cidr-overlap";
 /// writes it.
 const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
 
+/// The case of validate-route.sh whose pod CIDR comes from the variable `pod_cidr` of a profile
+/// that route-bodies.sh makes (#829).
+const CIDR_VARIABLE_CASE: &str = "cidr-variable";
+
+/// The name of the profile of `CIDR_VARIABLE_CASE`.
+const CIDR_VARIABLE_PROFILE: &str = "strata-route-cidr-variable";
+
+/// What `palette-validate` says of the body of `CIDR_VARIABLE_CASE`: the code and the message of
+/// Palette. The mark of `pod_cidr` is in place of its value `172.31.0.0/17`.
+const CIDR_VARIABLE_SAID: &str = "K8SCidrOverlap: Kubernetes podCIDR '[value of pod_cidr]' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
+
 /// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
 /// shows it; no live run shows it yet. Strata reads it as a refusal.
 fn cidr_overlap_answer() -> String {
@@ -7832,20 +7843,26 @@ fn aws_case_taken() -> &'static AwsCase {
         .expect("one case of AWS_CASES has no refusal")
 }
 
-/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, and for
-/// `CIDR_CASE`. The route refuses a case with its refusal. It takes a case with no refusal, and a
-/// case in `takes`.
+/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, for
+/// `CIDR_CASE`, and for `CIDR_VARIABLE_CASE`. The route refuses a case with its refusal. It takes a
+/// case with no refusal, and a case in `takes`. The three reports of `CIDR_VARIABLE_CASE` hold the
+/// message with the mark.
 fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     stage.strata(
         "preflight */aws-clean.json --cloud aws *",
         0,
         &route_report("passed", &[]),
     );
+    let reports = stage.path(&format!("strata/out/{CIDR_VARIABLE_CASE}"));
+    std::fs::create_dir_all(&reports).unwrap();
+    for file in ["report.md", "report.json", "report.html"] {
+        std::fs::write(reports.join(file), CIDR_VARIABLE_SAID).unwrap();
+    }
     let cidr = format!("K8SCidrOverlap: {CIDR_OVERLAP_MESSAGE}");
-    let cases = AWS_CASES
-        .iter()
-        .map(|case| (case.id, case.refusal))
-        .chain([(CIDR_CASE, Some(cidr.as_str()))]);
+    let cases = AWS_CASES.iter().map(|case| (case.id, case.refusal)).chain([
+        (CIDR_CASE, Some(cidr.as_str())),
+        (CIDR_VARIABLE_CASE, Some(CIDR_VARIABLE_SAID)),
+    ]);
     for (id, refusal) in cases {
         let (code, report) = match refusal {
             Some(message) if !takes.contains(&id) => (1, route_report("failed", &[message])),
@@ -8118,6 +8135,61 @@ fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
 }
 
 #[test]
+fn validate_route_sh_checks_that_the_three_reports_of_cidr_variable_hold_the_mark_and_not_the_value()
+ {
+    let body = serde_json::json!({"spec": {"profiles": [{"uid": format!("uid-{CIDR_VARIABLE_PROFILE}"),
+        "packValues": [], "variables": [{"name": "pod_cidr", "value": "172.31.0.0/17"}]}]}});
+    let run = |reports: &[(&str, String)]| {
+        let mut stage = Stage::new(serde_json::json!({}));
+        std::fs::create_dir_all(stage.path("bodies")).unwrap();
+        std::fs::write(stage.path("bodies/aws-clean.json"), "{}").unwrap();
+        std::fs::write(
+            stage.path(&format!("bodies/{CIDR_VARIABLE_CASE}.json")),
+            body.to_string(),
+        )
+        .unwrap();
+        stage.wrap_strata(FAKE_STRATA_ROUTE);
+        answer_aws_cases(&mut stage, &[]);
+        let dir = stage.path(&format!("strata/out/{CIDR_VARIABLE_CASE}"));
+        for (file, text) in reports {
+            std::fs::write(dir.join(file), text).unwrap();
+        }
+        let bodies = stage.path("bodies");
+        let (_, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+        let marks = format!("{CIDR_VARIABLE_CASE}-marks");
+        let out = std::fs::read_to_string(stage.path(&format!("out/{marks}.out"))).unwrap();
+        (steps, marks, out)
+    };
+
+    // the three reports hold the mark of pod_cidr
+    let (steps, marks, _) = run(&[]);
+    passed(&steps, &[CIDR_VARIABLE_CASE, "cidr-variable-says", &marks]);
+    assert!(
+        has_verdict(&steps, "SEEN", "cidr-variable-reports"),
+        "{steps}"
+    );
+
+    // a report that holds the mark and the value, and a report with no mark
+    let value = format!("{CIDR_VARIABLE_SAID}\npod CIDR 172.31.0.0/17");
+    for (file, text, says) in [
+        (
+            "report.html",
+            value.as_str(),
+            "report.html holds the value of pod_cidr",
+        ),
+        (
+            "report.json",
+            "no message",
+            "report.json holds no mark of pod_cidr",
+        ),
+    ] {
+        let (steps, marks, out) = run(&[(file, text.to_string())]);
+        failed(&steps, &[&marks]);
+        assert_eq!(out.trim(), says, "{steps}");
+    }
+}
+
+#[test]
 fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let mut stage = Stage::new(serde_json::json!({}));
     std::fs::create_dir_all(stage.path("bodies")).unwrap();
@@ -8256,8 +8328,9 @@ fn route_packs(without_aws: bool) -> String {
 
 /// A `strata` for route-bodies.sh. `preflight BODY` keeps a copy of BODY in strata/seen/, and logs
 /// `VALIDATE <file>` to the log of the stand-in curl. Palette answers 404 for a profile of BODY
-/// that the log shows a DELETE for. Strata then exits 2 with no report. A call it does not answer
-/// goes to the answers of the stage.
+/// that the log shows a DELETE for. Strata then exits 2 with no report. With `--out DIR`, it copies
+/// the files of strata/out/CASE into DIR, for the body CASE.json. A call it does not answer goes to
+/// the answers of the stage.
 const FAKE_STRATA_ROUTE: &str = r#"#!/usr/bin/env bash
 if [ "$1" = preflight ]; then
   mkdir -p "$FAKE_STRATA/seen"
@@ -8269,6 +8342,11 @@ if [ "$1" = preflight ]; then
       exit 2
     fi
   done
+  # --out DIR writes the reports of the case from $FAKE_STRATA/out/<case>, when that is there
+  out=""; prev=""
+  for a in "$@"; do [ "$prev" = --out ] && out=$a; prev=$a; done
+  reports="$FAKE_STRATA/out/$(basename "$2" .json)"
+  if [ -n "$out" ] && [ -d "$reports" ]; then mkdir -p "$out" && cp "$reports"/* "$out"/; fi
 fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
@@ -8346,14 +8424,26 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
         &stage.path("routes/v1_clusterprofiles.sh"),
         "#!/usr/bin/env bash\njq -c '{uid: (\"uid-\" + .metadata.name)}' \"$FAKE_ROUTES/sent/POST_v1_clusterprofiles\"\n",
     );
-    for case in &AWS_CASES {
-        let name = case.profile;
+    // the copy of the release profile for the case of the variable reads its manifests
+    stage.route(&manifests_route("r-1"), r#"{"spec":{"packs":[]}}"#);
+    let profiles = AWS_CASES.iter().map(|case| case.profile);
+    for name in profiles.chain([CIDR_VARIABLE_PROFILE]) {
         stage.route(&format!("/v1/clusterprofiles/uid-{name}/publish"), "{}");
         stage.route(&format!("/v1/clusterprofiles/uid-{name}"), "{}");
     }
     stage.wrap_strata(FAKE_STRATA_ROUTE);
     answer_aws_cases(&mut stage, takes);
     stage
+}
+
+/// The uids of the profiles that route-bodies.sh makes, in order. The profile of each case of
+/// `AWS_CASES` comes first, and then the copy of the release profile for `CIDR_VARIABLE_CASE`.
+fn made_profiles() -> Vec<String> {
+    let names = AWS_CASES.iter().map(|case| case.profile);
+    names
+        .chain([CIDR_VARIABLE_PROFILE])
+        .map(|name| format!("uid-{name}"))
+        .collect()
 }
 
 /// The profiles that the script deleted, in order, as the uids.
@@ -8384,6 +8474,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     }
     for check in ["body", "status", "code"] {
         ids.push(format!("{CIDR_CASE}-{check}"));
+    }
+    for check in ["body", "deleted"] {
+        ids.push(format!("{CIDR_VARIABLE_CASE}-{check}"));
     }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
 
@@ -8456,9 +8549,47 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         assert_eq!(body, clean, "{case}: nothing else changes");
     }
 
-    // each profile is an add-on profile with the pack of its case, of the cloud type of its case
-    let made: Vec<(String, String, String, String, String, String)> = stage
-        .sent("POST", "/v1/clusterprofiles")
+    // the body of cidr-variable is the body of cidr-overlap with the copy of the release profile.
+    // The copy reads the pod CIDR from pod_cidr, and the body gives it the first half of the CIDR
+    // of the VPC (#829)
+    let mut variable = read_json(&stage.path(&format!("strata/seen/{CIDR_VARIABLE_CASE}.json")));
+    assert_eq!(
+        variable["spec"]["profiles"],
+        serde_json::json!([{"uid": format!("uid-{CIDR_VARIABLE_PROFILE}"), "packValues": [],
+            "variables": [{"name": "pod_cidr", "value": "172.31.0.0/17"}]}])
+    );
+    variable["spec"]["profiles"] = cidr["spec"]["profiles"].clone();
+    let mut overlap = read_json(&cidr_file);
+    overlap["spec"]["profiles"] = cidr["spec"]["profiles"].clone();
+    assert_eq!(variable, overlap, "nothing else changes");
+    let mut posted = stage.sent("POST", "/v1/clusterprofiles");
+    let copy = posted
+        .pop()
+        .expect("the copy is the last profile that the script makes");
+    assert_eq!(copy["metadata"]["name"], CIDR_VARIABLE_PROFILE);
+    assert_eq!(
+        copy["spec"]["variables"],
+        serde_json::json!([{"name": "pod_cidr", "displayName": "pod_cidr", "format": "string",
+            "required": false, "defaultValue": ""}])
+    );
+    let values: Vec<&str> = copy["spec"]["template"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["values"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        values,
+        [
+            "pack:\n  podCIDR: \"not of the Kubernetes pack\"\n",
+            "pack:\n  podCIDR: \"{{.spectro.var.pod_cidr}}\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n",
+        ],
+        "only the Kubernetes pack reads the variable"
+    );
+
+    // each other profile is an add-on profile with the pack of its case, of the cloud type of its
+    // case
+    let made: Vec<(String, String, String, String, String, String)> = posted
         .iter()
         .map(|p| {
             let template = &p["spec"]["template"];
@@ -8523,8 +8654,8 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         .collect();
     assert_eq!(
         sent.len(),
-        6,
-        "aws-clean, the four cases, and cidr-overlap: {log:?}"
+        8,
+        "aws-clean, the four cases, cidr-overlap, and cidr-variable with its reports: {log:?}"
     );
     assert!(
         sent.iter().all(|&i| last_create < i && i < first_delete),
@@ -8532,21 +8663,29 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     );
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     let mut answered = vec!["aws-clean".to_string()];
-    for case in AWS_CASES.iter().map(|case| case.id).chain([CIDR_CASE]) {
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    for case in cases.chain([CIDR_CASE, CIDR_VARIABLE_CASE]) {
         answered.push(case.to_string());
         answered.push(format!("{case}-says"));
     }
+    answered.push(format!("{CIDR_VARIABLE_CASE}-marks"));
     passed(
         &route_steps,
         &answered.iter().map(String::as_str).collect::<Vec<_>>(),
     );
+    assert!(
+        has_verdict(
+            &route_steps,
+            "SEEN",
+            &format!("{CIDR_VARIABLE_CASE}-reports")
+        ),
+        "{route_steps}"
+    );
 
     // the script deletes each profile that it made, and the body of each case, and nothing else
-    assert_eq!(
-        deleted_profiles(&stage),
-        AWS_CASES.map(|case| format!("uid-{}", case.profile))
-    );
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    assert_eq!(deleted_profiles(&stage), made_profiles());
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    for case in cases.chain([CIDR_VARIABLE_CASE]) {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
     for body in ["aws-clean.json", "cidr-overlap.json"] {
@@ -8655,18 +8794,15 @@ fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault()
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     failed(&route_steps, &["profile-cloud-mismatch"]);
     // the failure does not leave a profile or a body
-    assert_eq!(
-        deleted_profiles(&stage),
-        AWS_CASES.map(|case| format!("uid-{}", case.profile))
-    );
+    assert_eq!(deleted_profiles(&stage), made_profiles());
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    let cases: Vec<&str> = cases.chain([CIDR_VARIABLE_CASE]).collect();
+    let deleted: Vec<String> = cases.iter().map(|case| format!("{case}-deleted")).collect();
     passed(
         &steps,
-        &AWS_CASES
-            .map(|case| format!("{}-deleted", case.id))
-            .each_ref()
-            .map(String::as_str),
+        &deleted.iter().map(String::as_str).collect::<Vec<_>>(),
     );
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    for case in cases {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
 }
@@ -8801,7 +8937,8 @@ esac
         deleted_profiles(&stage),
         [
             "uid-strata-route-cloud-mismatch",
-            "uid-strata-route-cloud-support"
+            "uid-strata-route-cloud-support",
+            "uid-strata-route-cidr-variable"
         ]
     );
 }
@@ -8834,7 +8971,8 @@ fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_withou
         assert!(!bodies.join(format!("{case}.json")).exists(), "{name}");
     }
     assert!(!stage.path("strata/seen/pack-cloud-support.json").exists());
-    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 3);
+    // three cases, and the copy of the release profile for the case of the variable
+    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 4);
 
     // a pack that the lab names takes the place of the search
     let mut stage = route_bodies_stage(&route_packs(false), &[]);
@@ -8845,7 +8983,13 @@ fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_withou
         &steps,
         &["pack-cloud-support-body", "pack-cloud-support-deleted"],
     );
-    let last = stage.sent("POST", "/v1/clusterprofiles").pop().unwrap();
+    // the copy for the case of the variable comes last, after the profile of pack-cloud-support
+    let mut posted = stage.sent("POST", "/v1/clusterprofiles");
+    assert_eq!(
+        posted.pop().unwrap()["metadata"]["name"],
+        CIDR_VARIABLE_PROFILE
+    );
+    let last = posted.pop().unwrap();
     assert_eq!(last["metadata"]["name"], "strata-route-cloud-support");
     assert_eq!(last["spec"]["template"]["packs"][0]["name"], "all-clouds");
     assert_eq!(last["spec"]["template"]["packs"][0]["tag"], "4.0.0");

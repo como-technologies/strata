@@ -27,6 +27,12 @@
 #       request has the header ProjectUid PROJECT_UID. The source is a published version of the
 #       project of PALETTE_PROJECT_UID. Print the uid of the new profile. Delete it with
 #       PALETTE_PROJECT_UID=PROJECT_UID api.sh delete.
+#   api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO
+#       Create and publish the profile NAME, a copy of a published version, with one more
+#       variable VARIABLE. The variable is of the format string, is not required, and has no
+#       default value. In the one pack values that hold the text FROM, the copy has TO in its
+#       place. TO can read the variable, as in podCIDR: "{{.spectro.var.VARIABLE}}". Print the uid
+#       of the new profile. Exit 2 when no pack values, or more than one, hold FROM.
 #   api.sh delete-tenant PROFILE_UID
 #       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
 #       error.
@@ -358,6 +364,19 @@ copy_into() {
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   copy_body "$uid" "$name" "$tmp"
   PROJECT=$scope create_published "$tmp/body" || exit 2
+}
+
+variable_copy() {
+  local uid=${1:-} name=${2:-} variable=${3:-} from=${4:-} to=${5:-} tmp hits
+  [ -n "$to" ] || die "usage: api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  copy_body "$uid" "$name" "$tmp"
+  hits=$(jq --arg f "$from" '[.spec.template.packs[] | select(.values | contains($f))] | length' "$tmp/body")
+  [ "$hits" = 1 ] || die "$hits pack values of $uid contain the text to replace; want exactly 1"
+  jq --arg f "$from" --arg t "$to" --arg v "$variable" '
+    .spec.variables = [{name: $v, displayName: $v, format: "string", required: false, defaultValue: ""}]
+    | .spec.template.packs[].values |= (split($f) | join($t))' "$tmp/body" > "$tmp/variable-body"
+  create_published "$tmp/variable-body" || exit 2
 }
 
 # create_tenant_copy UID NAME: copy_into with no ProjectUid header. Palette lists a profile of the
@@ -971,6 +990,7 @@ case "${1:-}" in
   create-unpublished) shift; create_unpublished "$@" ;;
   create-tenant-copy) shift; create_tenant_copy "$@" ;;
   create-copy) shift; create_copy "$@" ;;
+  variable-copy) shift; variable_copy "$@" ;;
   delete-tenant) shift; delete_tenant "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;

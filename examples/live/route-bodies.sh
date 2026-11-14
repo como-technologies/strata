@@ -43,6 +43,13 @@
 # lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. It also skips the case
 # when no VPC with a CIDR has a subnet in each zone of the pools.
 #
+# The case cidr-variable makes the profile strata-route-cidr-variable (#829). It is a copy of the
+# release profile with the variable pod_cidr, and its Kubernetes pack reads the pod CIDR from that
+# variable. cidr-variable.json is cidr-overlap.json with that profile, and with pod_cidr in the VPC.
+# The route quotes the value of the variable in its refusal, and validate-route.sh checks that the
+# three reports of palette-validate hold the mark of the variable and not its value (#614). The
+# script deletes the profile and the body after validate-route.sh, as for the four cases.
+#
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
 # that stays. Results go under runs/<UTC time>/route-bodies/, or OUT. Exit 0 only when no check
@@ -154,6 +161,40 @@ cidr_body() {
 }
 cidr_body
 
+# cidr_variable_body: make the profile strata-route-cidr-variable, a copy of the release profile
+# whose Kubernetes pack reads the pod CIDR from the variable pod_cidr. Write
+# BODIES/cidr-variable.json: cidr-overlap.json with that profile in place of the release profile,
+# and with pod_cidr in the VPC, as the first half of its CIDR. The values of the pack come from the
+# profile, so the route puts the value of the variable in place (#614, #829). Skip the case when
+# there is no cidr-overlap.json, and when Palette refuses the profile.
+cidr_variable_body() {
+  local id=cidr-variable name=strata-route-cidr-variable from vpc_cidr pod_cidr uid
+  echo "== $id: the pod CIDR of the Kubernetes pack comes from the variable pod_cidr (#829)" | tee -a steps.log
+  rm -f "$bodies/$id.json"
+  [ -f "$bodies/cidr-overlap.json" ] || { echo "skipped $id: no cidr-overlap.json" | tee -a steps.log; return; }
+  from=$(jq -r '[.spec.published.packs[]? | select(.layer == "k8s") | (.values // "")
+      | capture("(?<line>podCIDR:[^\n]*)").line][0] // empty' release.json)
+  vpc_cidr=$(jq -r --arg v "$(jq -r '.spec.cloudConfig.vpcId' "$bodies/cidr-overlap.json")" \
+    '[.vpcs[] | select(.vpcId == $v)][0].cidrBlock' vpcs.json)
+  # the first half of the CIDR of the VPC: the same address, with one more bit in the prefix
+  [ "${vpc_cidr#*/}" -lt 32 ] 2> /dev/null ||
+    { echo "skipped $id: the CIDR $vpc_cidr of the VPC has no half" | tee -a steps.log; return; }
+  pod_cidr=${vpc_cidr%/*}/$((${vpc_cidr#*/} + 1))
+  "$live/api.sh" delete-named "$name" > /dev/null || die "cannot delete the profile $name of an earlier run"
+  if ! uid=$("$live/api.sh" variable-copy "$R" "$name" pod_cidr "$from" 'podCIDR: "{{.spectro.var.pod_cidr}}"' 2> "$id.err"); then
+    "$live/api.sh" delete-named "$name" > /dev/null 2>&1
+    echo "skipped $id: Palette refuses the copy of the release profile with the variable pod_cidr: $(head -n 1 "$id.err")" | tee -a steps.log
+    return
+  fi
+  made+="$id $uid"$'\n'
+  jq --arg u "$uid" --arg c "$pod_cidr" \
+    '.spec.profiles[0] = {uid: $u, packValues: [], variables: [{name: "pod_cidr", value: $c}]}' \
+    "$bodies/cidr-overlap.json" > "$bodies/$id.json" || { rm -f "$bodies/$id.json"; die "cannot write $bodies/$id.json"; }
+  check "$id-body" 0 "#829: $id.json names $name with pod_cidr $pod_cidr, the first half of the VPC CIDR $vpc_cidr" -- \
+    jq -e --arg u "$uid" --arg c "$pod_cidr" \
+      '.spec.profiles == [{uid: $u, packValues: [], variables: [{name: "pod_cidr", value: $c}]}]' "$bodies/$id.json"
+}
+
 # case_body CASE NAME PACK VERSION [CLOUD]: make and publish the add-on profile NAME with PACK at
 # VERSION from the registry of the lab, of the cloud type CLOUD or all. Then write BODIES/CASE.json:
 # the clean body and that profile. When Palette refuses the profile, skip the case.
@@ -199,6 +240,8 @@ else
   echo "skipped pack-cloud-support: $public_repo lists no pack in the layer addon without aws; give PACK_CLOUD_SUPPORT=<pack>@<version>. $(head -n 1 pack-cloud-support.err)" |
     tee -a steps.log
 fi
+
+cidr_variable_body
 
 # A body names a profile, and Palette answers 404 for a profile that is gone. So the profiles stay
 # until validate-route.sh has sent each body (#413).
