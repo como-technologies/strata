@@ -662,7 +662,7 @@ reads the answer too.
 
 The install of the observer has eight steps. That is right for a team, and it is
 too much for a test. `observer-up.sh` puts the observer on a test cluster with one
-command. A team uses the steps of [Install](../automation/observer.md#install), and
+command. A team uses the steps of [Install with kubectl](../automation/observer.md#install-with-kubectl), and
 not this script. The script needs no profile of the live example. It works on any
 cluster that Palette lists in your project.
 

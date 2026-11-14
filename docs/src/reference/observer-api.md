@@ -21,10 +21,10 @@ person reaches the port with a port-forward:
 kubectl -n strata-observer port-forward deploy/strata-observer 8080
 ```
 
-The Kubernetes verb `create` on `pods/portforward` is the gate. Another pod cannot
-connect to the address of the pod. A person without that verb cannot open the page.
-[The server of the observer](../development/observer-api.md#the-gate) shows how to test
-the verb.
+The Kubernetes verb `create` on `pods/portforward` controls the access to the page.
+Another pod cannot connect to the address of the pod. A person without that verb cannot
+open the page. [The server of the observer](../development/observer-api.md#access-to-the-page)
+shows how to test the verb.
 
 The page and `curl` both work. A `GET` needs nothing more than the port-forward. The
 clicks "Ask Palette" and "Check now" are each a `POST`, and each needs the header
@@ -79,7 +79,7 @@ plain text. The route `/` serves the page of the dashboard.
   names it. `counts.profiles` does not count a record with the status
   `not-on-this-cluster`. An observer of 0.33.0 and before gives it a
   status such as `ok` or `newer`, and counts it. See [A version that the cluster no
-  longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  longer runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs).
 - `newerVersion.move` is what a move from the record to that version changes, from
   the compare of the two: `impact`, `flags`, and `packs[]`. Each pack that the move
   changes, adds, or removes has `key`, `status`, `from`, `to`, `flags`, and
@@ -207,9 +207,112 @@ A finding of the pods changes no status of a profile or of a pack. `counts.drift
 
 ## The alerts
 
-`GET /v1/alerts` shows the rules of the alerts. It is a summary route: it names the
-channels and holds no address and no value. The rules are a file that no route
-writes. [Alerts](../automation/observer.md#alerts) tells what the observer sends.
+With `--alerts`, the observer sends a message to a webhook when a finding opens and
+when it clears: see [Alerts](../automation/observer.md#alerts). A file of rules says
+which news goes where. `GET /v1/alerts` shows the rules and their states.
+
+### The file of the rules
+
+The file is JSON. Your team keeps it in Git, and a ConfigMap carries it to the pod.
+The page only reads it, and no route of the observer writes a rule. A mute is a line
+of the file, so Git shows who muted what.
+
+```json
+{{#include ../../../examples/observer-alerts/alerts.json}}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `channels` | A name for each webhook. `urlFile` is the path of the file that holds its address. |
+| `level` | `cluster`, `profile`, or `pack`. |
+| `match` | A profile name or `name@version`, for `profile`. A pack name or `layer/name`, for `pack`. A `cluster` rule has none. |
+| `news` | The kind of news: `drift`, `image`, `lost`, or `newer`. |
+| `send` | `now` sends at once. `digest` waits for the next digest. A rule with no `send` is a mute. |
+| `to` | The name of a channel. A mute has none. |
+| `muteUntil` | The last day of a mute, as `YYYY-MM-DD`, in UTC. Only a mute has it. |
+
+| News | What it follows |
+| --- | --- |
+| `drift` | A finding of the kinds `published-changed`, `overwritten`, `renamed`, `gone`, `cluster-differs`, and `image-id-changed`. |
+| `image` | A finding `image-moved` or `image-split`. These need `--read-pods`. |
+| `lost` | The page state `lost`: the observer cannot reach Palette. It is a rule of the level `cluster`. |
+| `newer` | A newer version of a pack in a profile. Each profile that pins the pack makes one item. |
+
+- **A lower level overrides a higher one.** The level `pack` wins over `profile`, and
+  `profile` wins over `cluster`. If two rules of one level cover the item, a live mute
+  wins. If no mute is live, the first rule in the file wins.
+- **A mute always has an end date.** The observer does not start with a mute that has
+  no end date. A mute holds until the end of the day of its end date. After that day,
+  it counts as no mute, and the rule of the next level decides.
+- **A mute can be beside a rule that sends.** Write the mute as a second rule with
+  the same level, match, and news. The mute wins until its end date. Then the rule that
+  sends decides again, and the item sends its message.
+- **A newer version never pages a person.** The observer does not start with a rule
+  `newer` that has `send: now`. Use `digest`.
+- **`serve` does not start with a file that does not parse.** The error names the line
+  of the fault. `serve` also does not start with two rules that send, with the same
+  level, match, and news. A mute is not part of this check. `once` reads the file the
+  same way, and it sends nothing. It is a check of the file:
+
+```text
+{{#include ../output/observer-alerts-fault.txt}}
+```
+
+### The states
+
+The Alerts screen shows one state for each rule, with the words of Prometheus:
+
+| State | Meaning |
+| --- | --- |
+| Firing | An item is open, and its message went. |
+| Pending | An item is open. It waits for its digest or for a retry. |
+| Inactive | No item is open for this rule. A mute that has ended is inactive too. |
+| Muted | A mute holds. |
+
+- **One message goes when a finding opens, and one when it clears.** A clear needs a
+  check that proves it. A failed read clears nothing, so a finding that the observer
+  could not check again stays open. A cycle that read no pod clears no finding of an
+  image. A mute stops the clear of a message that went.
+- **A failed send keeps the message.** The state holds it, and the next content cycle
+  sends it again. When the send works, the message goes once. The log names the
+  channel, the error kind, and the status, and never the address or the text. The
+  Alerts screen shows a bar while a message waits.
+- **A digest goes at most once in each period of `--digest-every`.** The default
+  period is 7 days. A digest lists each open item of the digest rules of one channel.
+  So an item that stays open is in each digest. A digest lists 30 items at most, and
+  then the line `and <n> more.`
+- **A digest has no clear message.** With no item open, the digest waits for the first
+  item. A channel that got its digest gets no second one in the period, also when the
+  send to another channel failed.
+- **`once` sends nothing.** With no `--alerts`, nothing sends.
+
+### What a message holds
+
+A message holds the cluster, the kind of news, the profile, its packs, one fixed
+sentence, and the time of the first sight. It holds no value, no path, and no
+name of a person. The observer builds it from the summary tier of the page. The
+Alerts screen shows a sample.
+
+The body of the request is `{"text": "<message>"}`, which Slack and Teams both read.
+The observer sends it with `POST` to the address of the channel.
+
+### What an alert does not do
+
+- **A rebuild makes no finding until a pod pulls it.** An alert starts only from a
+  finding. With `--read-pods`, the pull opens a finding, and the news `image` sends
+  it. A mirror that serves the old digest stays `steady`, and it sends nothing. See [A
+  vendor rebuilds an image under one tag](../use-cases/image-tag.md).
+- **A dead observer sends nothing.** The message comes from the pod. Alert on the
+  Deployment with the monitoring of your team. The observer sends no heartbeat, and it
+  never reads the health of a workload.
+- **A new pod sends the open findings again, once.** The volume `state` is an
+  `emptyDir`, so the new pod knows nothing of the old pod. The observer chooses a
+  second message over a missed one.
+
+### The route of the alerts
+
+`GET /v1/alerts` is a summary route: it names the channels and holds no address and
+no value. The rules are a file that no route writes.
 
 | Field | Type | Content |
 | --- | --- | --- |
@@ -220,18 +323,10 @@ writes. [Alerts](../automation/observer.md#alerts) tells what the observer sends
 | `rules` | list | The rules, in the order of the file. |
 | `sample` | text | The message of a finding for a made-up profile. It shows what a channel gets. |
 
-A rule has these fields. `match`, `send`, `to`, and `muteUntil` are absent when the
-rule has none.
-
-| Field | Content |
-| --- | --- |
-| `level` | `cluster`, `profile`, or `pack`. |
-| `match` | The profile or the pack that the rule is about. A `cluster` rule has none. |
-| `news` | `drift`, `image`, `lost`, or `newer`. |
-| `send` | `now` or `digest`. A mute has none. |
-| `to` | The name of the channel. A mute has none. |
-| `muteUntil` | The last day of a mute, as `YYYY-MM-DD`. Only a mute has it. |
-| `state` | `firing`, `pending`, `inactive`, or `muted`. A mute that has ended is `inactive`. |
+A rule of `rules` has the fields of [the file](#the-file-of-the-rules) and the field
+`state`. `match`, `send`, `to`, and `muteUntil` are absent when the rule has none.
+`state` is `firing`, `pending`, `inactive`, or `muted`: the word of [the
+states](#the-states), in lower case.
 
 ## The detail route
 
@@ -265,14 +360,14 @@ A pack with no diff on a side gets `404`.
 `values.unified` and `manifests[].unified` hold the text that `strata compare --full`
 prints, and the cycles read it with `--full`: see [See the full
 diff](../commands/compare/versions.md#see-the-full-diff). It is the text of the
-records. The mask `********` that Palette writes over a secret stays a placeholder.
-The text holds no value of a cluster variable.
+records. Palette writes the mask `********` in place of a secret, and the text keeps
+it as a placeholder. The text holds no value of a cluster variable.
 
 A pack keeps 256 KiB of text at most for each side of a diff. The limit counts the
 values and the manifests of the pack together. Above it, the observer drops all the
 text of the pack: `values.unified` and each `manifests[].unified` are empty, and
 `textTooLarge` is true. The settings, the `op` of each manifest, and its `name` stay.
-Half a diff misleads, so a pack keeps all of its text or none.
+A part of a diff can mislead a reader, so a pack keeps all of its text or none.
 
 When `textTooLarge` is true, the page says that the text is too large. It gives the
 command `strata compare ... --full`, which prints the whole diff.
@@ -370,7 +465,8 @@ statuses:
 | `429` | `wait` | A cycle of that kind ended less than one minute ago. `retryAfter` and the header `Retry-After` give the seconds to wait. |
 
 So a person who clicks again and again starts at most one cycle of each kind in one
-minute and the time of its run. The clicks cannot flood Palette or the registries.
+minute and the time of its run. The clicks cannot send many requests to Palette or to
+the registries.
 
 The observer also starts a content cycle when the records change. Every 15 seconds,
 it compares the names, the sizes, and the times of change of the record files. It
@@ -398,5 +494,5 @@ to no answer, no log, and no state. `/v1/alerts` names the channels only.
 
 The detail tier is the one place where a value leaves the process. It shows the old
 and the new value of a pack, the text of its diff, and the answers of Palette. A
-secret in a value that the schema does not mark as masked passes through. See [What
+secret in a value that the schema does not mark as masked shows there. See [What
 you give the observer](../automation/observer.md#what-you-give-the-observer).

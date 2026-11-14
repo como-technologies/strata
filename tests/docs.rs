@@ -767,19 +767,26 @@ fn sentences(block: &str) -> Vec<String> {
     out
 }
 
-/// The words of a sentence: each run of characters between spaces that holds a letter or a
-/// digit. The target of a link is not a word.
-fn words(sentence: &str) -> usize {
-    let mut text = String::new();
-    let mut rest = sentence;
+/// `text` without the target of each link: `[words](target)` keeps `[words]`. A target is a path
+/// or an address, and no word of the prose.
+fn without_link_targets(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
     while let Some(at) = rest.find("](") {
-        text.push_str(&rest[..=at]);
+        out.push_str(&rest[..=at]);
         rest = rest[at + 2..]
             .find(')')
             .map_or("", |end| &rest[at + 2 + end + 1..]);
     }
-    text.push_str(rest);
-    text.split_whitespace()
+    out.push_str(rest);
+    out
+}
+
+/// The words of a sentence: each run of characters between spaces that holds a letter or a
+/// digit. The target of a link is not a word.
+fn words(sentence: &str) -> usize {
+    without_link_targets(sentence)
+        .split_whitespace()
         .filter(|w| w.chars().any(char::is_alphanumeric))
         .count()
 }
@@ -2670,15 +2677,57 @@ const OBSERVER_PAGES: [&str; 3] = [
     "reference/observer-api.md",
 ];
 
+/// The words and the phrases that the review of the observer pages named (#699). They add to the
+/// lists of [`wording_faults`]: "verify" in prose, phrasal verbs, and figures of speech. Each one
+/// has a plain form: "make sure" for "verify", "holds the content again" for "goes back", "is the
+/// one check" for "is the gate".
+const OBSERVER_REFUSED: [&str; 21] = [
+    "verify",
+    "verifies",
+    "verified",
+    "go back",
+    "goes back",
+    "come back",
+    "comes back",
+    "fill in",
+    "fills in",
+    "starts again",
+    "turn it on",
+    "turn them on",
+    "moves on",
+    "slips off",
+    "passes through",
+    "stopgap",
+    "is the gate",
+    "one message too many",
+    "have some fun",
+    "on its way",
+    "on purpose",
+];
+
+/// The six pages of the observer that keep to "The style rules" (#699). They are the pages of
+/// [`observer_book_pages`], and the page of the image and the manifests.
+fn observer_style_pages() -> impl Iterator<Item = &'static str> {
+    observer_book_pages().chain(["development/observer-deploy.md"])
+}
+
 /// The pages of the observer keep to the limits of "The style rules" like the pages of the report.
+/// The prose of the six pages also has no word or phrase of `OBSERVER_REFUSED`. A code span and the
+/// target of a link are no prose, so `strata verify` and `../commands/verify.md` stay.
 #[test]
 fn the_pages_of_the_observer_keep_to_the_style_rules() {
     let mut faults = Vec::new();
-    for page in OBSERVER_PAGES {
+    for page in observer_style_pages() {
         let text = read(&docs().join(page));
         for block in blocks_of(&text) {
             faults.extend(block_faults(page, &block));
             faults.extend(wording_faults(page, &block));
+            let prose = without_link_targets(&without_code(&block)).to_lowercase();
+            for phrase in OBSERVER_REFUSED {
+                if has_phrase(&prose, phrase) {
+                    faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
+                }
+            }
         }
     }
     assert_no_faults(&faults);
@@ -2833,9 +2882,9 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
 
 /// The lead ran `image-digest.sh`, `observer-kind.sh`, `observer.sh`, `observer-images.sh`,
 /// `observer-role.sh`, and stage 3 of `who.sh` in the live windows of Wave 15. Their sections state
-/// the results. The observer page states the request counts of cluster A and the answer of each
-/// role. `limits.md` no longer says that no run covers a layer taken off, a digest in the image
-/// list, or a role.
+/// the results. The page of the checks states the request counts of cluster A, and the service
+/// page states the answer of each role. `limits.md` no longer says that no run covers a layer taken
+/// off, a digest in the image list, or a role.
 #[test]
 fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     let runs = read(&docs().join("development/live-runs.md"));
@@ -2876,31 +2925,41 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "| `behind`, the first command of a versions cycle | 13 | 13 |",
         "| The moves of the first versions cycle after a start | 28 | 28 |",
     ];
-    let page = read(&docs().join("automation/observer.md"));
     for row in rows {
         assert!(part.contains(row), "live-runs.md lacks {row:?}");
     }
-    let page = one_line(&page);
-    for needle in [
-        "| A content cycle | 12 | 13 |",
-        "| `strata behind`, the first command of a versions cycle | 13 | 13 |",
-        "| The moves of the first versions cycle after a start | 28 | 28 |",
-        "on a cluster with two profiles and five packs. The counts grow with the number of profiles and packs.",
-        "A pod on a cluster that Palette built reaches the API",
-        "## Install with a profile in Palette",
-        "Palette replaces no node when it applies the layer.",
-        "With that role, the verdict and the finding stay, and `who` is empty.",
-        "**A live run used both roles.**",
-        "The audit log then answers HTTP 403 with the code `AccessDenied`.",
-        "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
-    ] {
-        assert!(page.contains(needle), "observer.md lacks {needle:?}");
-    }
-    for old in [
-        "No live run has used this role yet",
-        "No run shows yet which way a mirror works",
-    ] {
-        assert!(!page.contains(old), "observer.md still says {old:?}");
+    // The service page keeps what a team gives the observer. The counts and the read of the pods
+    // are on the page of the checks (#699).
+    let pages = [
+        ("automation/observer.md", [
+            "A pod on a cluster that Palette built reaches the API",
+            "## Install with a profile in Palette",
+            "Palette replaces no node when it applies the layer.",
+            "With that role, the verdict and the finding stay, and `who` is empty.",
+            "**A live run used both roles.**",
+            "The audit log then answers HTTP 403 with the code `AccessDenied`.",
+        ]
+        .as_slice()),
+        ("development/observer.md", [
+            "| A content cycle | 12 | 13 |",
+            "| `strata behind`, the first command of a versions cycle | 13 | 13 |",
+            "| The moves of the first versions cycle after a start | 28 | 28 |",
+            "on a cluster with two profiles and five packs. The counts grow with the number of profiles and packs.",
+            "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
+        ]
+        .as_slice()),
+    ];
+    for (page, needles) in pages {
+        let text = one_line(&read(&docs().join(page)));
+        for needle in needles {
+            assert!(text.contains(needle), "{page} lacks {needle:?}");
+        }
+        for old in [
+            "No live run has used this role yet",
+            "No run shows yet which way a mirror works",
+        ] {
+            assert!(!text.contains(old), "{page} still says {old:?}");
+        }
     }
     let role = section(&runs, "## observer-role.sh", Some("\n## "));
     assert!(

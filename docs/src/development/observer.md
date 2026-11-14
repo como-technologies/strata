@@ -27,14 +27,44 @@ a loopback address: see [The server of the observer](./observer-api.md).
 ## Run it once
 
 ```bash
-strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR
+strata-observer once --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE]
+strata-observer serve --cluster-uid UID --records DIR --work DIR --state DIR [--read-pods [--kube-dir DIR]] [--alerts FILE [--digest-every DURATION]] [--listen ADDR]
 ```
 
 `once` runs one content cycle and one versions cycle. It prints the summary as
 JSON on standard output, and the log on standard error. It prints the summary
-also when a cycle failed.
+also when a cycle failed. [Run it once](../automation/observer.md#run-it-once) shows
+the output of a run.
 
-[The service page](../automation/observer.md#run-it-once) gives the exit codes and the flags, with the output of a run.
+`serve` takes the flags of `once` and the flag `--listen`. It keeps the answers, and it
+serves them on a loopback address. [Run it](./observer-api.md#run-it) gives `--listen`
+and the exit codes of `serve`. [The API of the observer](../reference/observer-api.md)
+lists the routes.
+
+### Exit codes
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | No finding exists, and the two cycles ended well. |
+| `1` | A finding exists, as with `strata verify`. The other cycle can have failed: `failedRuns` says so. |
+| `2` | No finding exists and a cycle failed, or a flag is wrong. |
+
+### Options
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--strata` | `strata`, on `PATH` | Names the binary, as a path or as a name on `PATH`. A relative path starts at the directory where the observer starts. The image has `/usr/local/bin/strata`. |
+| `--cluster-uid` | required | Names the cluster. The name comes from the read of the cluster. |
+| `--records` | required | The directory of `*.json.gz` records and `meta.json`. |
+| `--work` | required | A volume in memory for the files of a cycle. |
+| `--state` | required | A directory for `state.json`. It holds times and counts, and no value. |
+| `--content-every` | `15m` | The period of the content cycle. |
+| `--versions-every` | `6h` | The period of the versions cycle. |
+| `--read-pods` | off | Reads the pods of the cluster at the start of each content cycle. With no flag, the observer makes no Kubernetes call. The process exits 2 when `KUBERNETES_SERVICE_HOST` or `KUBERNETES_SERVICE_PORT` is not set. |
+| `--kube-dir` | `/var/run/secrets/kubernetes.io/serviceaccount` | Names the directory with the files `token` and `ca.crt` of the projected volume. It has an effect only with `--read-pods`. |
+| `--alerts` | off | Names the file of the alert rules. `serve` sends the alerts. `once` only checks the file and sends nothing. With no flag, nothing sends: see [Alerts](../automation/observer.md#alerts). |
+| `--digest-every` | `168h` | The period of a digest of the alerts. It has an effect only with `--alerts`. |
+| `--alerts-allow-http` | off | Allows an `http` address for a webhook. The tests of the observer use it. Do not use it on a cluster. |
 
 ## The two cycles
 
@@ -74,18 +104,18 @@ the pods](#the-read-of-the-pods).
   period again. A click while a cycle of that kind runs joins it. The loop removes a
   click that came during a run, so no second cycle follows. A cycle that ended less
   than one minute ago gets no new one.
-- A third loop looks at the record files every 15 seconds. When their names, sizes,
-  or times change, it starts a content cycle. So the page shows the records of a
-  pipeline soon after the kubelet updates the mount.
+- A third loop reads the list of the record files every 15 seconds. When their
+  names, sizes, or times change, it starts a content cycle. So the page shows the
+  records of a pipeline soon after the kubelet updates the mount.
 - Each timer runs in its own loop, and each kind of cycle has its own slot. So a
   content cycle never waits for a versions cycle, and one cycle of each kind runs at
   a time. A pool of 4 tokens bounds the `strata` processes of both cycles and of the
-  detail tier, to keep the memory of the pod in its limit. A run ends after 10
+  detail tier. The pool keeps the memory of the pod in its limit. A run ends after 10
   minutes.
 - A content cycle compares the side of each record at the same time. A versions
-  cycle runs `behind` on each record at the same time, and then compares each move
-  that it does not know at the same time, as many as the pool lets. Then it compares
-  the record of each profile version that is behind, in the same way. It joins the
+  cycle runs `behind` on each record at the same time. Then it compares each move
+  that it does not know, as many at a time as the pool lets. Then it compares the
+  record of each profile version that is behind, in the same way. It joins the
   answers of `behind` into one: one pin for each pack name, registry, pinned version,
   and tag, with each record that pins it. A pack that many records pin gets one read
   for each record.
@@ -105,6 +135,28 @@ the pods](#the-read-of-the-pods).
 - The observer reads the directory of the records again at each cycle,
   because the kubelet updates a mounted Secret.
 
+### The requests of a cycle
+
+A live run counted the requests of each cycle on a cluster with two profiles and
+five packs. The counts grow with the number of profiles and packs.
+
+| Command | At the baseline | With a finding |
+| --- | --- | --- |
+| A content cycle | 12 | 13 |
+| `strata behind`, the first command of a versions cycle | 13 | 13 |
+| The moves of the first versions cycle after a start | 28 | 28 |
+
+The one extra request reads the audit log. `verify --who` sends it for a record
+that drifted. A later versions cycle sends the 13 requests of `behind`, and
+the requests of the moves that are new. [observer.sh](./live-runs.md#observersh)
+holds the counts.
+
+With `--read-pods`, a content cycle also sends one request to the Kubernetes API
+for each 500 pods. The request lists the pods, and it never reads one pod alone.
+
+A click sends the reads of `strata behind` for one pack, and one `POST` to Palette.
+[One pack](../commands/behind.md#one-pack) says what `behind` reads for a pack.
+
 ### A failed cycle
 
 A content cycle fails in these cases:
@@ -120,8 +172,8 @@ A versions cycle fails in these cases:
 - The directory of the records cannot be read, or a record cannot be written.
 - The `behind` command fails, or each pin of its answer has an `error`.
 
-In both cycles, a command fails when it exits with a code that is no answer, when
-it gives no document, or when the `schema` of its document is not the expected one.
+In both cycles, a command fails when its exit code is no answer, when it gives no
+document, or when its document has another `schema`.
 A row with an `error` beside good rows is a cause in [Not checked](#not-checked), and
 not a failed cycle. A failed `compare` of a move does not fail the cycle: see [The
 newer versions](#the-newer-versions). A failed read of one part of a record is not a
@@ -173,10 +225,10 @@ bad gzip, or it holds another `schema`. The file gives no record in this cycle.
 - When the last cycle read a record from that file, this record replaces the file,
   with both parts carried. Its findings stay with their first sights, and no clear
   goes for them. The cause `read-error` names the profile and the file.
-- A file with no last record is blind. A new process has no last record, and a file
-  can be bad from the first cycle. The observer then holds each first sight of the
-  state that no readable record can give, and it sends no clear for it. A readable
-  record still decides for its own profile.
+- A file with no last record gives the observer no record at all. A new process has no
+  last record, and a file can be bad from the first cycle. The observer then holds each
+  first sight of the state that no readable record can give, and it sends no clear for
+  it. A readable record still decides for its own profile.
 - A later read of the file decides: the finding clears, or it keeps its date.
 
 ## The read of the pods
@@ -262,12 +314,55 @@ The status of an image comes from its real digests. The first row that holds win
 
 A real digest is `first-digest` when it is the first digest, or when the state holds
 no first digest for the reference. Another real digest is `another-digest`. `moved`
-clears when the digest comes back, or at a new revision of the records.
+clears when the first digest runs again, or at a new revision of the records.
 
 An image makes a finding when its `match` is not `none`, its reference names a tag,
 and its status is `moved` or `split`. A reference that names a digest cannot move, so
 `byDigest` is true and no finding exists. An image that no pack names, such as an
 agent of Palette, shows in the list and makes no finding.
+
+### What the read catches and what it does not
+
+A pod runs the digest that its node pulled. A registry can move a tag, but the move
+reaches a pod only when a node pulls the tag again. So the read catches these cases:
+
+- **A tag that a new node pulls from a mutable registry.** The new node runs the
+  new digest. The old nodes keep the old one. The tag then has two digests, and the
+  finding is `image-split`. On cluster A, the API server runs the admission plugin
+  `AlwaysPullImages`. Each new pod there gets the policy `Always`, and it runs the new
+  digest, also on an old node: see [The pods of a
+  cluster](../internals/palette/clusters.md#the-pods-of-a-cluster).
+- **A pull at a restart.** A pod with the pull policy `Always`, or with the tag
+  `:latest`, pulls the tag again when it starts. When each pod runs the new digest,
+  the finding is `image-moved`.
+- **A mutable mirror.** A mirror can serve another digest under one tag. A pod that
+  pulls from the mirror then runs the new digest.
+
+The read does not catch these cases:
+
+- **A move with no new pull.** A pod that runs keeps the digest that it pulled. The
+  read shows no move until a pod pulls the new image.
+- **An image that no pod runs.** The read sees the pods that exist now. A pack that
+  names an image that no pod runs has no row.
+- **A difference between clusters.** One observer reads one cluster. It compares no
+  two clusters.
+
+[A vendor rebuilds an image under one tag](../use-cases/image-tag.md) describes a
+team that copies each image, by digest, to a private registry. The pods of that team
+pull an unchanged digest from the mirror. The read then shows the status `steady`,
+and it makes no finding. That is the right answer, because nothing that runs
+changed. The read finds a rebuilt tag only when a pod pulls the rebuilt image.
+
+A mirror can work in two ways. The pod can name the image string of the mirror.
+Or the node can fetch from the mirror and keep the string of the pod. A string of
+the mirror matches a pack only when the pack names the same string. Otherwise the
+image shows as `no pack` and makes no finding.
+
+A live run on kind used both ways. A mirror at the level of the node keeps the name
+of the pack in `spec.image` and in `imageID`, so the match by text works. A
+rewritten image string names the mirror in both, so it matches no pack. The checks
+`mirror-image-string` and `mirror-image-id` of
+[observer-kind.sh](./live-runs.md#observer-kindsh) show both ways.
 
 ## The records
 
@@ -300,16 +395,16 @@ summary](#the-summary).
 ### The seed
 
 `strata-observer seed --cluster-uid <uid>` writes the first-seen records from inside
-the cluster, so a team gets a baseline with no clone and no build of strata. A job of
+the cluster. So a team gets a baseline with no clone and no build of strata. A job of
 the install runs it once.
 
 - **It keeps records that are there.** When a Secret holds a record, the seed writes
   nothing and exits 0. So it never replaces records that a pipeline published.
 - **It writes what the script writes.** It runs `strata snapshot cluster:<uid>`, then
-  `strata snapshot` of each profile that the cluster runs, and it writes the records
-  as `observer-records.sh --first-seen` does: the same keys, the same order of the
-  four Secrets, and the same `meta.json`. A test runs both on one cluster and compares
-  the Secrets.
+  `strata snapshot` of each profile that the cluster runs. It writes the records as
+  `observer-records.sh --first-seen` does: the same keys, the same order of the four
+  Secrets, and the same `meta.json`. A test runs both on one cluster and compares the
+  Secrets.
 - **Its role is small.** It needs `get` and `update` on the four Secrets by name. The
   install makes the four Secrets empty first, so the role needs no `create`. The
   observer itself holds no verb on Secrets.
@@ -320,8 +415,10 @@ The seed runs once, but a cluster can run a new profile version later. So while
 that the cluster runs and that no record holds. It runs the `strata snapshot` of the
 seed through the pool, and it starts the next content cycle at once. The observer keeps
 these records in memory, and the versions cycle reads them too. A restart takes them
-again. A record of the Secrets for the same profile version drops the one in memory,
-and so does a profile version that the cluster no longer runs. With an approved
+again.
+
+A record of the Secrets for the same profile version drops the record in memory. A
+profile version that the cluster no longer runs drops it too. With an approved
 `meta.json`, the observer drops all of them and takes none. A snapshot that fails is a
 log line, the version stays `no-record`, and the content cycle stays good.
 
@@ -375,10 +472,12 @@ The observer makes no finding. The profile stays `ok`, `clusterCopy.status` is
 
 A new version of `strata` can move a root with no change of content. A finding
 has `reBaselineNeeded` true when `tool.version` of its record is lower than the
-version of the binary in the major number, or in the minor number with the same
-major number. The patch number plays no part. The finding stays. The observer
-never writes a record. This is the one compare of versions in the observer.
-`behind` gives the order of the pack versions.
+version of the binary. The compare reads the major number, and the minor number
+when the two major numbers are equal. The patch number plays no part. The finding
+stays, and the observer never writes a record.
+
+This is the one compare of versions in the observer. `behind` gives the order of
+the pack versions.
 
 ## Not checked
 
@@ -404,13 +503,22 @@ its packs are `not-checked`, and `counts.packsInFull` does not count them.
 
 A pin with `behind` true is one row. The row holds `newest` and `listed` from
 `newer[0]`, and `profiles` from `pinnedBy[].subject`. The observer compares the
-pinned version with the newest version. It keeps `impact`, the words of strata
-for the impact in `impactText`, the flags, the counts of images and charts, and the
-three counts of `fold`. `new` is true when `listed` is in the last 7 days. `steps`
-lists each version in `newer[]`, from the oldest to the newest, with its `listed`
-time.
+pinned version with the newest version.
 
-A move of an OS pack can change no value, manifest, image, or chart: the version
+The row keeps `impact` and the words of strata for the impact in `impactText`. It also
+keeps the flags, the counts of images and charts, and the three counts of `fold`.
+`new` is true when `listed` is in the last 7 days. `steps` lists each version in
+`newer[]`, from the oldest to the newest, with its `listed` time.
+
+In the run of [Run it once](../automation/observer.md#run-it-once), four pins have a
+newer version. `impact` is the impact of the move to the newest version, as
+`strata compare` gives it:
+
+```text
+{{#include ../output/observer-newer.txt}}
+```
+
+A move of an OS pack can change no value, manifest, image, or chart. The version
 and the upstream digest change, and the image of the nodes with them. The counts are
 then all 0, so the card of the move says that the content is the same, and it gives
 `impactText`.
@@ -438,28 +546,82 @@ It holds the `version` and the `created` time of `newer[0]`. `new` is true when
 finding makes it `drift`. `counts.newerProfileVersions` counts the rows that hold
 `newerVersion`.
 
+The tenant of the chapter `observer` holds `aws-stack` 1.1.0, a newer published
+version of the profile `aws-stack@1.0.0`. The row of the profile holds it:
+
+```text
+{{#include ../output/observer-profile-version.txt}}
+```
+
 The observer orders no version: `behind` gives the newest one first. A profile
 version that strata could not check gives no `newerVersion` and no cause.
 
-Each pin that is behind also holds `carriers[]`: for each profile version of the
-record that has a newer version, the newer version that carries a newer version of
-the pack. The answer of `behind` on one record names the profile versions of that
-record. So the join of the pins keeps the carriers of each answer, one for each
-profile version, and a read with no error takes the place of a read that failed. The
-pack row of each profile version gets its carrier in `carried`, and the row of the
-newer versions gets each one in `carriers`. The observer adds no rule: a carrier with
-no version says that `behind` found none.
+The page shows the two kinds of newer version with different words. The row of a
+profile says "Newer profile version `aws-stack@1.1.0`" for a newer version of the
+profile itself. A pack with a newer version shows the badge "Newer", and the move
+of the pack. The tile "Newer versions" counts the packs, and its last line counts the
+profiles with a newer version. The filter "Newer" of the profiles holds both kinds.
+
+Each pin that is behind also holds `carriers[]`. A carrier is for one profile version
+of the record that has a newer version. It names the newer version that carries a
+newer version of the pack. The answer of `behind` on one record names the profile
+versions of that record. So the join of the pins keeps the carriers of each answer,
+one for each profile version. A read with no error takes the place of a read that
+failed.
+
+The pack row of each profile version gets its carrier in `carried`, and the row of
+the newer versions gets each one in `carriers`. The observer adds no rule: a carrier
+with no version says that `behind` found none.
+
+```text
+{{#include ../output/observer-carried.txt}}
+```
+
+Read the chain from the pack to the cluster:
+
+1. **The pack.** The row names the version that the record pins, and the newest
+   version in the registry.
+2. **The profile version.** `version` of a carrier is the newest version of the
+   profile that pins a newer version of the pack. `pack` is that version of the
+   pack. A carrier with no `version` says that no newer version of the profile pins
+   a newer version of the pack. So the change stopped at the registry. `unread`
+   says that strata could not read a newer version.
+3. **The cluster.** The record of the profile is the version that the definition of
+   the cluster pins. When a newer profile version carries the pack, the definition
+   of the cluster is the step that waits.
+
+The page shows the same words. The slab of a pack with a newer version says "carried
+by `aws-stack@1.1.0`", or "carried by no newer profile version". A version of the
+pack below the newest one comes first, as in "1.65.0 carried by `aws-stack@1.1.0`".
+The row of the pack in the table of the newer versions has the same line under the
+name of the pack. A profile with no newer version has no carrier, so its rows have no
+such line. See [The newer profile version that carries a newer
+pack](../commands/behind.md#the-newer-profile-version-that-carries-a-newer-pack).
 
 ### The move to the newest version of a profile
 
 The cycle runs `behind` with `--no-impact`, so its answer holds no `bump` of a
-profile version. For each profile version with a `newerVersion`, the cycle
-compares the record with the newest version, by the uid of that version:
-`strata compare <record> <uid> --full --json`. The row then holds
-`newerVersion.move`: the impact level of the compare, each change flag of its
-packs, and each pack that the move changes, adds, or removes. A pack holds its
-key, its status, its version on each side, its flags, and `valuesChanged`. The
-compare gives each field, so the observer adds no rule of a change.
+profile version. For each profile version with a `newerVersion`, the cycle compares
+the record with the newest version, by the uid of that version. The command is
+`strata compare <record> <uid> --full --json`.
+
+The row then holds `newerVersion.move`: the impact level of the compare, and each
+change flag of its packs. It also holds each pack that the move changes, adds, or
+removes. A pack holds its key, its status, its version on each side, its flags, and
+`valuesChanged`. The compare gives each field, so the observer adds no rule of a
+change.
+
+```text
+{{#include ../output/observer-profile-move.txt}}
+```
+
+The page of the profile shows the move in the card "Move to", with the impact level
+and the five flags. Its table lists each pack whose version changes, as `old → new`,
+each pack that the move adds or removes, and each pack whose values change. A pack
+of the record links to its page, where the dropdown "Compare" has the choice "Record →
+Newest version". The card "Check this yourself" gives the command of the same compare.
+When the compare fails, the card says that strata could not compare the two, and the
+dropdown has no such choice.
 
 A published version can change in place, so the move of a profile has no cache.
 Each cycle compares it again. The memory holds the diff for the side `newest` of
@@ -483,7 +645,7 @@ move again when it has the slot.
 | --- | --- |
 | `no-error` | `bump.paletteValidation` is there, and its `accepts` is true. |
 | `refuses` | `accepts` is false. `refusals` holds each error: `pack`, `code`, `message`, and `clusters`. |
-| `no-answer` | The pin has an `error`, `bump.paletteValidationError` is set, the document has no such pin, the document does not list the newest version of the page, or the run failed. `status` is the HTTP status of the failure, or 0. |
+| `no-answer` | The run failed, the pin has an `error`, or `bump.paletteValidationError` is set. Or the document has no such pin, or it does not list the newest version of the page. `status` is the HTTP status of the failure, or 0. |
 
 - A pin that failed, or that is not behind any more, has no newer version in the
   document. The answer then names the newest version of the last versions cycle, the
@@ -548,16 +710,9 @@ A pack is never `no-record` or `not-on-this-cluster`. A finding of the kind
 `overwritten`, `renamed`, or `gone` names no pack. A pack of its profile that has
 changes is `drift`.
 
-A record that the cluster does not run is `not-on-this-cluster`, the word of its
-`clusterCopy`, unless a finding names it. The versions cycle asks about each record, and
-the summary drops such a record from its answers, also a drift: no pin, no profile
-version, and no carrier names it. So the record has no `newerVersion`, and no pack of it
-has `newer` or `carried`. A pin or a profile version that only such records hold gives no
-row of `newer` and no event. It gives no cause `pin-error` or `older-registry-copy`
-either. Before the first good content cycle, the observer does not know what the cluster
-runs, so it keeps each answer.
-
-`counts.profiles` does not count a record with the status `not-on-this-cluster`.
+A record that the cluster does not run is `not-on-this-cluster`, unless a finding
+names it: see [A version that the cluster no longer
+runs](#a-version-that-the-cluster-no-longer-runs).
 
 `clusterCopy.status` is `same`, `same-content`, `differs`,
 `not-on-this-cluster`, or `not-read`. `not-read` says that the side or the
@@ -568,14 +723,73 @@ read](#a-failed-read).
 The pack row joins the record with the other answers. `registry` is the name in
 the pin with the same `registryUid`, or the uid. `kind` is
 `registryProviderType`, or `type`. `upstream` is `hash.upstreamRaw`.
+
 A pack row holds `fold`, the three counts of its changed values. It names no
 path, because a path can hold the name of a list item, and that name is a value
 of the cluster. Only the detail tier sends a path. The profile row holds `scope`:
 `tenant` when `source.projectUid` is empty, and `project` otherwise.
 
-The limits show what a check does not cover. They count the images that a tag
-names (an image with no `@sha256`), the packs of the type `helm`, and the
-masked paths of each diff.
+The limits show what a check does not cover. `imagesNamedByATag` counts the images
+that a tag names, with no `@sha256`. `helmPacks` counts the packs of the type `helm`,
+and `maskedPaths` counts the masked paths of each diff. Each of them is a place where
+`OK` says less: see [What the observer does not
+see](../automation/observer.md#what-the-observer-does-not-see). The summary of [Run it
+once](../automation/observer.md#run-it-once) holds the limits and the status of each
+profile:
+
+```text
+{{#include ../output/observer-limits.txt}}
+```
+
+### A version that the cluster no longer runs
+
+A cluster moves to the next version of a profile, and the record of the old version
+stays. The seed keeps its first-seen record, and a pipeline can publish a record for
+each version. The observer still checks that record against Palette. The cluster
+`payments` does not run `aws-stack@1.1.0`, and no finding names that version. So the
+summary above gives its record the status `not-on-this-cluster`, the word of its
+`clusterCopy`.
+
+- **A status of its own.** A record of a version that the cluster does not run is
+  `not-on-this-cluster`, unless a finding names it.
+- **No newer version.** The record and its packs have no newer version, because the
+  cluster does not run the version. No row of the newer versions names the record, and
+  no event or alert of a newer version names it.
+- **The counts.** `counts.profiles` does not count the record, so `payments` has 2
+  profiles for 3 records. The filters of the table of the profiles, the tile
+  "Profiles", and the tile "Newer versions" do not count it.
+- **The page.** A fold under the table of the profiles lists the record, with the
+  filter "All" only. The fold says "1 record of a profile version that this cluster
+  does not run". On the page of the version, no pack says "newer" or "current", and
+  no card "Move to" shows. The page of each of its packs shows no fact of a newer
+  version, such as "Current". The row has the badge "Not on this cluster", and the
+  message "This cluster does not run this version."
+
+A finding wins. The cluster `ledger` runs `aws-stack@1.1.0`, and a person changed the
+copy that Palette holds for the cluster. It does not run `aws-stack@1.0.0` or
+`platform-addons@1.0.0`. A person edited `aws-stack@1.0.0`, so its record is a `drift`:
+
+```text
+{{#include ../output/observer-ledger-profiles.txt}}
+```
+
+- **The status.** The record of `aws-stack@1.0.0` stays in the table of the profiles,
+  with the badge "Drift". The filters "All" and "Drift", the tile "Drift", and
+  `counts.profiles` count it. The fold does not list it.
+- **No newer version.** A record with the `clusterCopy` `not-on-this-cluster` has no
+  newer version, also when it is a drift. On `payments`, the same record has 4 packs
+  with a newer version. On `ledger`, it has none, and no pack of it says "current".
+  The page of each of its packs shows no fact of a newer version.
+- **The counts.** `counts.packs` does not count its packs. The 5 packs of `ledger`
+  are the packs of `aws-stack@1.1.0`.
+
+The versions cycle asks about each record, also a record that the cluster does not
+run. The summary drops such a record from its answers, also a drift: no pin, no
+profile version, and no carrier names it. So the record has no `newerVersion`, and no
+pack of it has `newer` or `carried`. A pin or a profile version that only such records
+hold gives no row of `newer` and no event. It gives no cause `pin-error` or
+`older-registry-copy` either. Before the first good content cycle, the observer does
+not know what the cluster runs, so it keeps each answer.
 
 ### The events
 
@@ -605,7 +819,8 @@ The two messages of the pods are:
 
 ## The alerts
 
-[Alerts](../automation/observer.md#alerts) tells a team what the observer sends. This
+[Alerts](../automation/observer.md#alerts) tells a team what the observer sends, and
+[the alerts](../reference/observer-api.md#the-alerts) gives the file of the rules. This
 section tells how the code decides. It runs only with `--alerts`. Without the flag, the
 observer has no engine, and the step does nothing.
 
@@ -619,25 +834,29 @@ rules decide what it queues:
 2. **The rule of an item is the rule of the lowest level that covers it.**
    The levels run from `pack` to `cluster`. In one level, a live mute wins over a rule
    that sends. Among the rules that send, the first one in the file wins. A mute
-   that has ended is not live. An item under a mute stays as it is, and queues nothing.
-   A message of the item that waits for a retry goes no more. An item with no rule leaves
-   the state.
+   that has ended is not live.
+
+   An item under a mute stays as it is, and queues nothing. A message of the item
+   that waits for a retry does not go. An item with no rule leaves the state.
 3. **An item that opens under a rule `now` queues one message.** An item under a rule
    `digest` queues none, and it waits for the digest.
-4. **An item that is gone queues one clear message.** It does so only when its open
-   message went, its channel is still in the rules, and its rule still sends at once. A
-   cycle clears an item only when it read the news of the item. A failed cycle clears
+4. **An item that is gone queues one clear message.** It needs an open message that
+   went. Its channel must still be in the rules, and its rule must still send at once.
+   A clear needs a check that proves it.
+
+   A cycle clears an item only when it read the news of the item. A failed cycle clears
    nothing. `HeldIDs` keeps the findings of a part that the cycle could not read. A cycle
    that read no pod clears no image finding. A versions cycle that never ended well clears
-   no newer version. A clear needs a check that proves it.
+   no newer version.
 5. **A digest queues one message for each channel.** It does so when a period has
    passed and an item is open under a digest rule. The message lists the open items.
-   A digest has no clear message. A digest that did not go is made again from the items
-   that are open at the next step, for its channel only. So a channel that comes back
-   gets one digest, and a channel that got its digest gets no second one in the period.
+   A digest has no clear message. When a digest did not go, the next step makes it
+   again from the items that are open then, for its channel only. So a channel that
+   works again gets one digest, and a channel that got its digest gets no second one
+   in the period.
 
 The step plans under the lock of the observer, and it sends after it releases the lock.
-So a slow webhook never holds a request of the page. A channel that fails keeps its later
+So a slow webhook never stops a request of the page. A channel that fails keeps its later
 messages, so the order of a channel holds. The step removes the messages that went, and it
 marks their items as sent. The queue keeps 100 messages at most. An item whose open
 message the queue dropped queues it again at the next step.
@@ -673,13 +892,23 @@ text of a diff and no answer of Palette. A restart drops both.
 
 The manifests make `state` an `emptyDir`. A new pod of the observer then starts with
 an empty state. It loses the first sight of each finding. It takes the first digests
-again from the pods that it sees.
+again from the pods that it sees, so a tag that moved before that start reads
+`steady`.
 
-A log line holds a verdict, an exit code, a duration, an error kind, and a
-status. One more line says that strata could not read the audit log. It names
-the profile and the status of `verify.whoError`: `HTTP <status>`, or
-`no answer` when the text has no status. The line for a click holds the verdict and
-the status, and no profile and no pack. The line for an alert holds the name of the
-channel, a verdict, and, for a send that failed, the error kind and the status. A log
-line holds no output of a process. It holds no body of an answer of Palette, no
-address of a webhook, and no text of a message.
+### The log
+
+The log goes to standard error. A log line holds a verdict, an exit code, a duration,
+an error kind, and a status, and never a value. It holds no output of a process. It
+holds no body of an answer of Palette, no address of a webhook, and no text of a
+message. The example shows only the lines of the cycles, and it drops the time and the
+duration, because they change at each run:
+
+```text
+{{#include ../output/observer-log.txt}}
+```
+
+One more line says that strata could not read the audit log. It names the profile
+and the status of `verify.whoError`: `HTTP <status>`, or `no answer` when the text
+has no status. The line for a click holds the verdict and the status, and no profile
+and no pack. The line for an alert holds the name of the channel and a verdict. For a
+send that failed, it also holds the error kind and the status.

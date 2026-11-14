@@ -3,8 +3,8 @@
 ## The problem
 
 A person edits a published profile version through the API, and the number of the
-version stays. The scheduled verify job of your pipeline finds the edit at its next
-run, and it opens an issue. Between the edit and that run, a new cluster can take
+version stays. The scheduled job of `strata verify` in your pipeline finds the edit at
+its next run, and it opens an issue. Between the edit and that run, a new cluster can take
 the edited content. See [A published version is edited in place](./edited-in-place.md).
 
 The observer runs in the cluster and checks every 15 minutes. It also keeps a page
@@ -37,13 +37,13 @@ The pipeline of the team records each profile that its clusters run, and it writ
 the records into the cluster as Secrets. The observer reads them as files:
 `aws-stack_1.0.0.json.gz`, `aws-stack_1.1.0.json.gz`, and
 `platform-addons_1.0.0.json.gz`, with `meta.json`. See
-[Install](../automation/observer.md#install).
+[Install with kubectl](../automation/observer.md#install-with-kubectl).
 
 At this time, nobody has edited a version. The page shows no finding.
 
 `payments` does not run `aws-stack@1.1.0`. So its page lists that record in a fold
 under the table of the profiles, as "Not on this cluster", and counts 2 profiles. See [A
-version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+version that the cluster no longer runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs).
 
 ## 2. A person edits the version
 
@@ -113,14 +113,14 @@ that `strata verify --full` prints, and the cycle reads it with `--full`:
 
 The Manifests tab shows the text of each changed, added, or removed manifest. A
 control "Unified / Split" on both tabs chooses between two layouts of the same text.
-Palette writes the mask `********` over a secret, and the text keeps it as a
+Palette writes the mask `********` in place of a secret, and the text keeps it as a
 placeholder.
 
 A pack with more than 256 KiB of text for a side shows no text. The page shows the splash
 "Too much rock to carry", and it gives the command `strata compare record.json ... --full`. [The
-text of a diff](../automation/observer.md#the-text-of-a-diff) gives the rules. The
-check `diff-text` of [What the live example verifies](../development/live-runs.md#observersh)
-reads the text from the pod on a cluster that Palette built, through the port-forward.
+text of a diff](../reference/observer-api.md#the-text-of-a-diff) gives the rules. The
+check `diff-text` of [observer.sh](../development/live-runs.md#observersh) reads the
+text from the pod on a cluster that Palette built, through the port-forward.
 
 The head of the card shows the five change flags. A lit flag is violet, and a flag that
 did not light is dim. A hover, or a focus from the keyboard, shows what a flag means,
@@ -146,8 +146,8 @@ The first command reads the record out of the Secrets of the observer into `reco
 The other commands read that file. The two kinds of row need different access:
 
 - **The first row needs `kubectl` and a role that reads Secrets.** The reader role of
-  [Install](../automation/observer.md#install) gives no Secret. A person with only that
-  role cannot run this row.
+  [Install with kubectl](../automation/observer.md#install-with-kubectl) gives no
+  Secret. A person with only that role cannot run this row.
 - **Each other row runs `strata`.** It needs the `strata` binary and a key of Palette at
   your terminal: see [Configure](../configure.md).
 
@@ -159,8 +159,8 @@ it. It sits in the table of the newer versions. It also sits on the card "Move t
 a pack, where it reads "Ask Palette about this move".
 
 A click sends one `POST` to Palette. The observer runs `strata behind` with `--pin`,
-on the record of the profile, so the question is about one pack. The answer reads in
-one of three ways:
+on the record of the profile, so the question is about one pack. The answer is one of
+these three:
 
 - **Palette gave no error.** Palette checked the default values of the new version.
   It did not check the values of your team: see [Palette accepts the move, or refuses
@@ -179,7 +179,7 @@ A second click on an answered move sends nothing. The observer asks again after
 "Palette gave no answer". Nothing asks on a timer. The column "Palette" of the table
 shows the short words "No error", "Refuses", and "No answer".
 
-The checks `ask-one-post` and `ask-words` of [What the live example verifies](../development/live-runs.md#observersh)
+The checks `ask-one-post` and `ask-words` of [observer.sh](../development/live-runs.md#observersh)
 test the click. `ask-one-post` runs the observer on the machine of the script, behind a
 request counter. `ask-words` clicks on the pod on a cluster that Palette built, through the
 port-forward.
@@ -189,7 +189,7 @@ port-forward.
 The steps above use Palette alone. A vendor can also rebuild an image under the tag
 that a pack names. Palette gets no notice, and no record changes: see [A vendor
 rebuilds an image under one tag](./image-tag.md). The pods show the rebuild
-once a node pulls the image.
+when a node pulls the image.
 
 The read of the pods is optional. It needs a role and a token, and
 [The pods of the cluster](../automation/observer.md#the-pods-of-the-cluster) gives
@@ -225,9 +225,9 @@ list "Needs attention" shows it.
 ## 7. Send an alert when a finding opens
 
 A page shows a finding to a person who opens it. An alert tells your team without
-that visit. Palette has no event for a published version that changed, so the observer
-sends one as a stopgap: see [Alerts](../automation/observer.md#alerts). The send is
-off until you turn it on.
+that visit. Palette has no event for a published version that changed. So the observer
+sends a message until Palette has that event: see [Alerts](../automation/observer.md#alerts).
+The send is off until you add the alerts.
 
 Write the rules in a file in Git. This file sends a finding at once to the team on
 call, and it sends the newer versions in a weekly digest. A mute has an end date:
@@ -237,7 +237,7 @@ call, and it sends the newer versions in a weekly digest. A mute has an end date
 ```
 
 Make the Secret with the address of each webhook, as in
-[Turn them on](../automation/observer.md#turn-them-on). Then name the component and
+[Add the alerts](../automation/observer.md#add-the-alerts). Then name the component and
 the ConfigMap in the kustomization of the observer, and apply it again. Keep the line
 `namespace: strata-observer` of that file, because the ConfigMap needs the namespace of
 the pod:
@@ -256,9 +256,9 @@ generatorOptions:
 The nav item "Alerts" lists each rule with its state: Firing, Pending, Inactive, or
 Muted. In this example, the edit of `aws-stack@1.0.0` opens a finding, and the rule
 `drift` sends one message to the channel `platform-oncall`. The next cycle sends
-nothing, because the finding stays open. When the version goes back to its record, a
-check proves it, and one message tells that the finding cleared. A cycle that failed
-clears nothing.
+nothing, because the finding stays open. When the version holds the content of its
+record again, a check proves it, and one message tells that the finding cleared. A
+cycle that failed clears nothing.
 
 A message holds the cluster, the profile, its packs, one fixed sentence, and the time
 of the first sight. It holds no value, so a channel of your team can show it.
@@ -269,14 +269,14 @@ of the first sight. It holds no value, so a channel of your team can show it.
   version with the change through review, and move the clusters to it. See
   [What to do](./edited-in-place.md#what-to-do).
 - Read `who` first. It names the person and the time of the write.
-- When the version goes back to its record, the next content cycle clears the
-  finding. A new record, written after a review, ends the finding too.
+- When the version holds the content of its record again, the next content cycle
+  clears the finding. A new record, written after a review, ends the finding too.
 - A cluster that differs needs its own decision: see
   [A cluster does not run its release](./cluster-release.md).
 - For `image-split` or `image-moved`, fix the pin, not the finding. Name the digest
   where the chart or the manifest reads it, or copy each image, by digest, to a
   registry with immutable tags. See [What to do](./image-tag.md#what-to-do).
-- `image-moved` clears when the digest comes back, or when you write new records.
+- `image-moved` clears when the first digest runs again, or when you write new records.
   `image-split` clears when each pod runs one digest.
 - Give each mute an end date, and keep the file in Git. The file shows who muted what.
   A mute that has ended counts as no mute. Write a mute beside the rule that sends,
@@ -293,16 +293,16 @@ of the first sight. It holds no value, so a channel of your team can show it.
 
 - The observer sees what Palette holds. It does not see an edit on the cluster with
   `kubectl`, or the health of a workload. See [What the observer does not see](../automation/observer.md#what-the-observer-does-not-see).
-- The read of the pods sees a rebuilt tag only after a pod pulls the image. It stays
-  silent when the pods pull an unchanged digest from a mirror, and that is right. See
-  [What the read catches and what it does not](../automation/observer.md#what-the-read-catches-and-what-it-does-not).
+- The read of the pods sees a rebuilt tag only after a pod pulls the image. It makes
+  no finding when the pods pull an unchanged digest from a mirror, and that is right. See
+  [What the read catches and what it does not](../development/observer.md#what-the-read-catches-and-what-it-does-not).
 - A rebuilt tag makes no finding until a pod pulls the image. With `--read-pods`, the pull
   opens a finding, and the news `image` sends it. A mirror that serves the old digest stays
   `steady`. A dead observer sends nothing: alert on the Deployment with the monitoring of
   your team.
 - A new pod sends the open findings again, once, because it starts with an empty state.
-  One message too many is better than one too few.
+  The observer chooses a second message over a missed one.
 - The check is as old as the last content cycle. The page shows the time of that
   cycle, and it shows `stale` when the cycle is more than two periods old.
 - The click asks about the newest version of a pin only. The observer keeps the
-  answers in memory, so a restart of the pod forgets them.
+  answers in memory, so a restart of the pod deletes them.

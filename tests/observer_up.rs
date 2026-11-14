@@ -887,7 +887,7 @@ fn the_live_example_names_the_script_and_the_three_recipes_with_what_each_needs(
         "`kubectl`",
         "`gh`",
         "The key of Palette",
-        "A team uses the steps of [Install](../automation/observer.md#install)",
+        "A team uses the steps of [Install with kubectl](../automation/observer.md#install-with-kubectl)",
         "`~/.kube/strata-<cluster>.yaml`",
     ] {
         assert!(section.contains(needle), "the section lacks {needle}");
@@ -972,9 +972,14 @@ fn the_page_of_the_observer_has_the_five_steps_from_the_baseline_to_the_check() 
             .position(|x| *x == h)
             .unwrap_or_else(|| panic!("no {h}"))
     };
+    // A new user reads what the service does and how to install it first (#699).
+    assert_eq!(
+        at("## Install with Helm"),
+        at("## What the service does") + 1
+    );
     assert_eq!(
         at("## The baseline and the check"),
-        at("## What the service does") + 1
+        at("## Install with Helm") + 1
     );
     assert_eq!(
         at("## Run it once"),
