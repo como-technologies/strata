@@ -1400,6 +1400,11 @@ field, a value, an input, or an option is in the sections above.
   - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
     policy tier at the binding. The exit does not change. Record the cluster again.
   - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
+- **`compare` and `verify` print each note one time.** Before, two records of one cluster gave
+  some notes two times, one for each side. These notes are `cluster <c> runs <pack> <version>,
+  and its profile declares <version>` and `cluster <c> is behind`. A script that counts the
+  `note` lines of the text reads one line for each such note now. The JSON does not change:
+  `runningBehind` keeps one row for each side. See [Notes in the report](../commands/compare.md#notes-in-the-report).
 
 ### For a user of the CI drop-ins
 

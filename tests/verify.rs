@@ -9292,6 +9292,10 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
+    // two records of one cluster that is behind get one note
+    let d = ops::compare(&now, &now, "t1");
+    let text = common::terminal().render(&d, &now, &now, false).unwrap();
+    assert_eq!(text.matches("is behind").count(), 1, "{text}");
 }
 
 /// The repave status of the cluster fixture.
@@ -12141,6 +12145,43 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
         )),
         "{text}"
     );
+}
+
+#[test]
+fn compare_and_verify_of_one_cluster_that_runs_behind_print_its_note_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    // the cluster runs its first pack at another version than its profile declares
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read_json(&path);
+    doc["status"]["packs"][0]["version"] = Value::from("0.0.1");
+    let first = doc["status"]["packs"][0]["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let a = snapshot_cluster(&api, None).unwrap();
+    let b = snapshot_cluster(&api, None).unwrap();
+    let note = format!("runs {first} 0.0.1, and its profile declares");
+
+    // each side runs the pack behind its profile, and the report names it one time
+    let d = ops::compare(&a, &b, "t1");
+    let sides: Vec<Side> = d.running_behind.iter().map(|r| r.side).collect();
+    assert_eq!(sides, [Side::A, Side::B]);
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    assert_eq!(md.matches(&note).count(), 1, "{md}");
+
+    // a record of the cluster when it already ran behind, against the cluster now
+    let v = ops::verify(&a, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.diff.running_behind.len(), 2);
+    let text = common::terminal()
+        .render(&v.diff, &a, &v.live, false)
+        .unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
 }
 
 #[test]
