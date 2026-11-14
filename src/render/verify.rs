@@ -8,6 +8,7 @@ use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
+use crate::error::reason_words;
 use crate::model::cluster_state::ClusterState;
 use crate::ops::{ACTIVE_STATE, IN_USE_STATE, RecordStatus, VerifiedRecord, VerifySummary};
 use crate::reference::name_version;
@@ -258,10 +259,10 @@ const NO_AUDIT_ENTRY: &str = "no audit entry since the record";
 
 /// What `verify --who` states when strata could not read the audit log.
 ///
-/// The line is `who: not read: <error>`, where the error is `HTTP 403: <body>` for a key without
-/// the permission.
+/// The line is `who: not read: <error>`. `error` is the reason of `verify.whoError`, and the line
+/// gives its words: `HTTP 403: AccessDenied: <message>` for a key without the permission.
 fn who_not_read(error: &str) -> String {
-    format!("who: not read: {error}")
+    format!("who: not read: {}", reason_words(error))
 }
 
 /// What `verify --who` found: `who: 2 writes in the audit log since the record`, `who: no audit

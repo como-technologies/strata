@@ -4576,7 +4576,10 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let (out, err) = (text(&o.stdout), text(&o.stderr));
     assert!(out.contains("**DRIFT**"), "{out}");
     assert!(
-        out.contains(&format!("who: not read: HTTP 403: {denied}")),
+        out.contains(&format!(
+            "who: not read: HTTP 403: {}",
+            Denial::Route.as_str()
+        )),
         "{out}"
     );
     assert!(

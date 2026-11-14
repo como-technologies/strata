@@ -14328,7 +14328,7 @@ fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answer
         "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
         error_body(
             Denial::Route.as_str(),
-            &access_denied_message("cluster.create", "project or tenant or system"),
+            &access_denied_message("cluster.create", EACH_SCOPE),
         )
     );
     std::fs::write(
@@ -14565,7 +14565,7 @@ case "$*" in
   "verify noaudit.json --who")
     if [ -n "$refused" ]; then
       echo 'DRIFT: published version strata-live-addon@1.0.0 differs'
-      echo 'who: not read: HTTP 403: {"code":"AccessDenied"}'
+      echo 'who: not read: HTTP 403: AccessDenied: audit.list operation is not permitted'
       exit 1
     fi ;;
   "verify noaudit.json --who --json")
