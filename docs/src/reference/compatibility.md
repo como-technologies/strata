@@ -1154,6 +1154,15 @@ field, a value, an input, or an option is in the sections above.
     each of these lines as one text.
   - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
     backticks as text, as the terminal form does.
+- **The markdown form writes a zero width space after each `@` of a mention in a text.** It
+  writes the entity `&#8203;`, so `@name` reads `@&#8203;name`. GitHub shows the same text, and
+  the mention notifies nobody. Before, a `@name` in a message of Palette notified the person or
+  the team in an issue or a pull request comment. See
+  [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `@&#8203;name` in place of `@name`. A `@`
+    after a letter or a digit of ASCII does not change, as in `kubernetes@1.30.1` or an address
+    of mail.
+  - `strata-preflight` writes its markdown in the same way.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1338,6 +1347,9 @@ field, a value, an input, or an option is in the sections above.
 - **`verify-report.sh` and `upstream-report.sh` write a `\` before each mark of markdown in a
   quoted text.** They do it as the markdown form does. So an issue shows a link, an emphasis, or
   a code span in a message of Palette as text.
+- **`verify-report.sh` and `upstream-report.sh` write a zero width space after each `@` of a
+  mention in a quoted text.** They do it as the markdown form does. So a `@name` in a message of
+  Palette notifies nobody.
 - **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
   fence longer than each run of backticks in its value. The body names the cluster and the path
   of each record in such a span. A name and a path with no backtick do not change.
@@ -1385,6 +1397,9 @@ field, a value, an input, or an option is in the sections above.
 - `text::markdown_cell` also writes a `\` before each mark of markdown, such as a backtick. A
   caller that puts a code span of its own in the text must write the span outside the cell. The
   cell shows the backticks of the span as text.
+- `text::markdown_cell` also writes the entity `&#8203;` after each `@` that can start a mention
+  of GitHub. A caller that compares the cell with a text must read `@&#8203;name` in place of
+  `@name`.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get

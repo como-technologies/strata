@@ -142,10 +142,36 @@ pub fn html_text(s: &str) -> String {
 /// A `|` ends a cell, and a line break ends the row. So the text escapes each `|`, and writes a
 /// line break as a space. It is also [`html_text`], with a `\` before each mark of markdown. So a
 /// text that strata quotes from an answer, such as a message of Palette, shows as text. A tag of
-/// HTML, a link, an emphasis, and a code span in it show as text too. A code span shows an entity
-/// and a `\` as they are, so [`code_cell`] writes a value in a code span.
+/// HTML, a link, an emphasis, and a code span in it show as text too, and a `@name` in it
+/// notifies nobody. A code span shows an entity and a `\` as they are, so [`code_cell`] writes a
+/// value in a code span.
 pub fn markdown_cell(s: &str) -> String {
-    table_text(&html_text(&markdown_text(s)))
+    table_text(&mention_text(&html_text(&markdown_text(s))))
+}
+
+/// The entity of a zero width space. GitHub shows no character for it.
+const ZERO_WIDTH_SPACE: &str = "&#8203;";
+
+/// `s` with a zero width space after each `@` that can start a mention of GitHub, such as
+/// `@name` or `@org/team`. So a quoted name notifies nobody.
+///
+/// A mention starts at a `@` with a letter or a digit of ASCII after it. A `@` after such a
+/// character starts no mention, as in an address of mail or in `k@1.0`. So such a `@` stays as it
+/// is, and a ref keeps its form. GitHub reads no mention in a code span, so [`code_cell`] writes
+/// no space.
+fn mention_text(s: &str) -> String {
+    let word = |c: Option<char>| c.is_some_and(|c| c.is_ascii_alphanumeric());
+    let mut out = String::with_capacity(s.len());
+    let mut before = None;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        out.push(c);
+        if c == '@' && !word(before) && word(chars.peek().copied()) {
+            out.push_str(ZERO_WIDTH_SPACE);
+        }
+        before = Some(c);
+    }
+    out
 }
 
 /// The marks of markdown that get a `\` in each place. [`markdown_text`] gives a `_` its `\` only
@@ -307,7 +333,10 @@ mod span_read;
 
 #[cfg(test)]
 mod tests {
-    use super::answer_tags::{ANSWER_MARKS, ANSWER_TAGS, assert_answer_marks_as_text};
+    use super::answer_tags::{
+        ANSWER_MARKS, ANSWER_MENTIONS, ANSWER_TAGS, assert_answer_marks_as_text,
+        assert_answer_mentions_as_text,
+    };
     use super::*;
 
     #[test]
@@ -430,6 +459,23 @@ mod tests {
         );
         // a `\` of the text stays a `\`, also before a mark and before a `|`
         assert_eq!(markdown_cell("a\\*b\\|c"), "a\\\\\\*b\\\\\\|c");
+    }
+
+    #[test]
+    fn a_cell_of_a_markdown_table_holds_no_mention_of_github_from_a_quoted_text() {
+        assert_answer_mentions_as_text(&markdown_cell(ANSWER_MENTIONS));
+        // a `@` with no letter or digit of ASCII after it, or with one before it, starts no mention
+        assert_eq!(
+            markdown_cell("ops@example.com k@1.0 a@-b @ @-"),
+            "ops@example.com k@1.0 a@-b @ @-"
+        );
+        assert_eq!(
+            markdown_cell("(@a) @@b é@c _@d *@e\n@f|@g"),
+            "(@&#8203;a) @@&#8203;b é@&#8203;c \\_@&#8203;d \\*@&#8203;e @&#8203;f\\|@&#8203;g"
+        );
+        // the space is an entity of strata, so its `&` gets no escape, and an `&` of the text does
+        assert_eq!(markdown_cell("&@a <@b"), "&amp;@&#8203;a &lt;@&#8203;b");
+        assert_eq!(code_cell("@a"), "`@a`");
     }
 
     #[test]

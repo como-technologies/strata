@@ -195,14 +195,18 @@ check() {
   printf '%-4s  %-32s expected %s, got %s\n' "$verdict" "$id" "$want" "$got" | tee -a steps.log
 }
 
-# summary_table: the checks in steps.log as a markdown table, with what each shows
+# summary_table: the checks in steps.log as a markdown table, with what each shows. The id is a
+# `code` of markdown_jq, and each other value is a `cell`. A SEEN line that a script writes itself
+# puts its own words in the place of the exit codes. So a `|` or a mark of markdown in a value
+# shows as text.
 summary_table() {
   echo "| result | check | expected exit | got | what it shows |"
   echo "|---|---|---|---|---|"
   [ -f steps.log ] || return 0
   command grep -E '^(PASS|FAIL|SEEN) ' steps.log | while read -r verdict id _ want _ got; do
     what=$(awk -F '\t' -v id="$id" '$1 == id { w = $2 } END { print w }' checks.tsv 2>/dev/null)
-    echo "| $verdict | \`$id\` | ${want%,} | $got | $what |"
+    jq -rn --arg v "$verdict" --arg id "$id" --arg want "${want%,}" --arg got "$got" --arg what "$what" \
+      "$markdown_jq"' "| \($v) | \($id | code) | \($want | cell) | \($got | cell) | \($what | cell) |"'
   done
 }
 
@@ -232,13 +236,16 @@ write_summary() {
 # `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
 # `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
 # as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
-# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
-# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
-# `text::code_block`, so that no line of the text ends the block.
+# it as it is. `mentions` puts a zero width space after each `@` that can start a mention of
+# GitHub, so a `@name` of the text notifies nobody. `span` is `text::code_span`: its fence is
+# longer than each run of backticks in the text. `code` is `text::code_cell`, a `span` in a cell
+# of a table. `fence` is the fence of `text::code_block`, so that no line of the text ends the
+# block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
   def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def cell: marks | html | table;
+  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
+  def cell: marks | html | mentions | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
