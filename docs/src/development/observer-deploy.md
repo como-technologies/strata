@@ -1,10 +1,10 @@
 # The image and the manifests of the observer
 
-The observer ships as a signed image with the manifests in `deploy/observer/`.
-The pipeline of a team writes the records into four Secrets with
-`scripts/ci/observer-records.sh`. This page is for a maintainer. It tells what
-each file does and how to check it. For the code, see [The checks of the
-observer](./observer.md).
+Each release of strata publishes the observer as a signed image, and
+`deploy/observer/` holds its manifests. The pipeline of a team writes the records
+into four Secrets with `scripts/ci/observer-records.sh`. This page is for a
+maintainer. It tells what each file does and how to check it. For the code, see [The
+checks of the observer](./observer.md).
 
 ## The image
 
@@ -26,7 +26,7 @@ It takes two inputs. `version` is the release of the binaries, such as
 
 | Start | `version` | `tag` |
 | --- | --- | --- |
-| The job `observer-image` of `release.yml`, after the release is published | The tag of the release | The tag of the release |
+| The job `observer-image` of `release.yml`, after the workflow publishes the release | The tag of the release | The tag of the release |
 | A pull request that changes `observer/`, `deploy/observer/`, or the workflow | `latest` | `test-` and the first seven characters of the commit |
 | A manual run (`workflow_dispatch`) | `latest`, or your value | Your value, or the tag of a pull request |
 
@@ -36,18 +36,20 @@ test tag stays in the registry. Delete it when the check ends.
 
 A test tag holds the `strata` binary of the last release, and never the binary of the
 commit. So a test tag cannot run a change that adds a flag of `strata` in the same
-pull request: the observer then calls a flag that its binary does not have. A
+pull request. The observer then calls a flag that its binary does not have. A
 maintainer runs such a check on the image of the release.
 
 The workflow does these steps in order:
 
-1. Install `cosign`, and install the binaries of both platforms with
+1. It installs `cosign`.
+2. It installs the binaries of both platforms with
    `install-strata.sh --bin-only --require-signature`. The installer checks the
    signature and the checksums. The workflow has no copy of that check.
-2. Build both platforms and push the image.
-3. Make sure that the image lists both platforms.
-4. Sign the digest with `cosign sign`, and check the signature with `cosign
-   verify`. The check names the workflow that signs.
+3. It builds the image for both platforms, and it pushes the image.
+4. It makes sure that the image lists both platforms.
+5. It signs the digest with `cosign sign`.
+6. It checks the signature with `cosign verify`. The check names the workflow that
+   signs.
 
 To check a signature by hand, give the digest of the image:
 
@@ -57,11 +59,11 @@ cosign verify ghcr.io/como-technologies/strata-observer@sha256:<digest> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-> **Set the permissions of the job that calls the workflow.** A called workflow
-> cannot have more permission than the job that calls it. When the job grants
-> less, GitHub refuses the whole run at its start, and the release does not ship.
-> The job `observer-image` of `release.yml` sets `contents: read`, `packages:
-> write`, and `id-token: write`. `tests/workflows.rs` requires the three.
+> **Set the permissions of the job that calls the workflow.** A workflow that a job
+> calls cannot have more permission than that job. When the job grants less, GitHub
+> refuses the whole run at its start, and the workflow publishes no release. The job
+> `observer-image` of `release.yml` sets `contents: read`, `packages: write`, and
+> `id-token: write`. `tests/workflows.rs` requires the three.
 
 The image and the chart are public, so a pod pulls the image with no Secret. A team
 that keeps a copy of the image in a registry with a login names a pull Secret in
@@ -75,7 +77,7 @@ that keeps a copy of the image in a registry with a login names a pull Secret in
 | --- | --- | --- |
 | `namespace.yaml` | `Namespace` | Sets `pod-security.kubernetes.io/enforce: restricted`. |
 | `serviceaccount.yaml` | `ServiceAccount` | Has no role. The pod gets no token, because the base calls no Kubernetes API. [The component](#the-component-that-reads-the-pods) adds both. |
-| `networkpolicy.yaml` | `NetworkPolicy` | Lets no pod connect to the observer. The observer connects to DNS and to HTTPS only. A team that narrows the HTTPS rule must list Palette, each webhook, and, with the read of the pods, the API server: see [What you give the observer](../automation/observer.md#what-you-give-the-observer). |
+| `networkpolicy.yaml` | `NetworkPolicy` | Lets no pod connect to the observer. The observer connects to DNS and to HTTPS only. A team that narrows the HTTPS rule must list Palette and each webhook. With the read of the pods, it must also list the API server: see [What you give the observer](../automation/observer.md#what-you-give-the-observer). |
 | `deployment.yaml` | `Deployment` | Runs one pod with `Recreate`, as non-root, with a read-only root and no capability. |
 
 `reader-role.yaml` is outside the kustomization, because a team binds it to its
@@ -121,7 +123,7 @@ components:
 `just observer-manifests-pods` renders it, and makes sure that it holds six
 objects and the flag `--read-pods`. CI runs that recipe. The folder is outside
 `deploy/observer/`, because kustomize stops with a cycle when a kustomization
-that lists the base sits inside the base.
+that lists the base is inside the base.
 
 | File | What it adds |
 | --- | --- |
@@ -130,7 +132,7 @@ that lists the base sits inside the base.
 | `kustomization.yaml` | A patch of the Deployment and a patch of the NetworkPolicy. |
 
 The patch of the Deployment adds the flags `--read-pods` and `--kube-dir`. It
-adds a `projected` volume, mounted read-only at
+adds a `projected` volume, which the pod mounts read-only at
 `/var/run/secrets/kubernetes.io/serviceaccount`. The volume holds a token of the
 service account and `ca.crt` of the ConfigMap `kube-root-ca.crt`. The token
 expires in 3600 seconds, and the kubelet renews it. The observer reads both files
@@ -145,9 +147,8 @@ address of the service changes to the address of a node, and that address uses
 port 6443. The lab cluster runs Cilium.
 
 > **Ask the owner of the cluster before you list the component.** The verb `list`
-> on pods gives the whole spec of each pod to the holder of the token. The spec
-> holds the `env` of each container. The observer decodes no `env`, but the token
-> can read it.
+> on pods gives the token the whole spec of each pod. The spec holds the `env` of
+> each container. The observer decodes no `env`, but the token can read it.
 
 A delete of the namespace does not delete the role or the binding, because they
 are not in a namespace. Delete both by name:
@@ -201,9 +202,9 @@ absent. The network policy of the base already lets the observer connect to port
 and the observer sends to an `https` address only. The component changes no other
 object.
 
-The observer reads the address of each channel when it starts, and it exits 2 when a
-file is absent or does not hold an `https` address. It reads the files again at each
-send, because the kubelet renews a Secret.
+The observer reads the address of each channel when it starts. It exits 2 when a file
+is absent or does not hold an `https` address. It reads the files again at each send,
+because the kubelet renews a Secret.
 
 ## The chart
 
@@ -213,7 +214,7 @@ version is the version of strata, so `just version` sets it with the others.
 
 | File | Holds |
 | --- | --- |
-| `values.yaml` | The uids, the name of the Secret of the key, the name of the pull Secret, the periods, `readPods`, the seed, and the block `pack` that a layer of a profile in Palette reads. |
+| `values.yaml` | The uids, the name of the Secret of the key, the name of the pull Secret, the periods, `readPods`, and the seed. It also holds the block `pack`, which a layer of a profile in Palette reads. |
 | `templates/deployment.yaml`, `networkpolicy.yaml`, `serviceaccount.yaml`, `configmap.yaml` | The objects of `deploy/observer/`, with the values. |
 | `templates/records.yaml` | The four Secrets of the records, empty. An upgrade keeps their data, because the chart names none. |
 | `templates/seed.yaml` | The job of the seed, its service account, its role on the four Secrets by name, and its network policy. Each revision of the release has its own job. |
@@ -223,12 +224,14 @@ version is the version of strata, so `just version` sets it with the others.
 The chart holds no key and no token. The release workflow packages the chart, pushes
 it to `oci://ghcr.io/<owner>/charts`, and signs its digest with cosign, as it does for
 the image. `just observer-chart` lints the chart and renders it with the least values
-and with each option. A run on kind showed that both pods pass the Pod Security
-standard `restricted`, that the seed can get and update the four Secrets and do
-nothing else, and that a second run of the seed writes nothing. A second run on kind
-showed that the publisher has the same rights as the seed. The kubeconfig commands of
-[Approve the records with a pipeline](../automation/observer.md#approve-the-records-with-a-pipeline)
-gave it a kubeconfig that works.
+and with each option.
+
+A run on kind showed three facts. Both pods pass the Pod Security standard
+`restricted`. The seed can get and update the four Secrets and do nothing else. A
+second run of the seed writes nothing. A second run on kind showed that the publisher
+has the same rights as the seed. The kubeconfig commands of [Approve the records with a
+pipeline](../automation/observer.md#approve-the-records-with-a-pipeline) gave it a
+kubeconfig that works.
 
 ## The records
 
@@ -259,7 +262,12 @@ removed it. A `helm upgrade` after a replace kept the records.
 The script gzips each record. It puts the records in four Secrets, each in the
 first Secret that has room, with a limit of 900 000 characters for each Secret.
 `meta.json` is in the first Secret. A Secret with no record is empty, and the
-apply then removes the content that an older apply put there.
+apply then removes the content that an older apply put there. The step shows the
+names of the Secrets and of the records, and cuts the content:
+
+```text
+{{#include ../output/observer-records.txt}}
+```
 
 The script stops with exit `2`, and writes nothing to standard output, in these
 cases:
@@ -294,7 +302,7 @@ just live-observer-images   # the observer on cluster A reads the digest of each
 sure of these facts:
 
 - The pod is Ready, runs as non-root, has a read-only root, and has no token.
-- The output of the records script applies with `--server-side`, also for
+- `kubectl apply --server-side` accepts the output of the records script, also for
   `--first-seen`.
 - The page answers through `kubectl port-forward deploy/strata-observer` for a
   user with only the reader role.
@@ -302,8 +310,8 @@ sure of these facts:
 - A mirror for `vendor.example` serves a pod, and the component lets the observer read
   the pods (stage 7).
 
-`tests/observer_deploy.rs` ties each manifest and the component to the code of the
-observer and to the records script. `tests/ci_scripts.rs` tests the script with a stand-in
+`tests/observer_deploy.rs` compares each manifest and the component with the code of
+the observer and with the records script. `tests/ci_scripts.rs` tests the script with a stand-in
 for `strata`. `tests/workflows.rs` tests the steps of the workflow.
 
 ## Check a real cluster
@@ -317,11 +325,13 @@ The script installs the observer in two ways, one after the other. Way 1 is a
 plain `kubectl apply` of the output of `kubectl kustomize`. An overlay in the
 folder of the run sets the image and two short periods. Way 2
 is an add-on profile in Palette. The profile holds the rendered manifests as one
-manifest layer. The namespace and the Secret of the key are made with `kubectl`
-first, because the key must not be in a profile.
+manifest layer. The script makes the namespace and the Secret of the key with
+`kubectl` first, because the key must not be in a profile.
 
 The script makes sure of these facts:
 
+- The namespace enforces `restricted`, the standard admits the pod, and the pod is
+  Ready.
 - The pod runs the public image and names no pull Secret.
 - The first cycle of the pod reaches Palette from a node of the cluster.
 - The page holds no finding at the baseline, and its status of each profile is
@@ -330,17 +340,17 @@ The script makes sure of these facts:
   A pod of another namespace cannot connect.
 - An edit in place of the add-on version gives the finding `published-changed`
   with the actor. No route and no line of the log shows the value of a variable.
-- A wrong key sends the page to `lost`, and the right key returns the page to
-  `ok`. A restart starts the state again.
+- A wrong key gives the page state `lost`, and the right key gives `ok` again. A
+  restart empties the state.
 - A profile of the observer shows as `no-record` under "Not checked". It is not a
   drift, and the other profiles of the cluster stay the same.
 
 The script counts the requests of a content cycle and of a versions cycle.
-`count-requests` sits between `strata` and Palette, and writes one line for each
+`count-requests` is between `strata` and Palette, and it writes one line for each
 request. The lines hold the method and the path, and no query and no key.
 
-The undo runs at the end, also after a failed check. The edit goes back, the
-profile leaves the cluster, and the namespace goes. The script deletes no
+The undo runs at the end, also after a failed check. It reverts the edit, removes
+the profile from the cluster, and deletes the namespace. The script deletes no
 cluster. `just live-down` deletes it.
 
 ## Check the digests on a real cluster
@@ -357,22 +367,22 @@ Secret, as in [Check a real cluster](#check-a-real-cluster). The script never
 pushes that image to another registry. A pull request that changes the observer
 builds the image with the tag `test-<short sha>`.
 
-A throwaway tag on `ttl.sh` holds one image, and then another. The images on
+A temporary tag on `ttl.sh` holds one image, and then another. The images on
 `ttl.sh` are copies of public images. The script runs pods on the tag and makes
 sure of these facts:
 
 - The first pod shows the first digest, and no finding names the tag.
-- A new pod on the moved tag gives the finding `image-split`. When the first pod
-  is replaced, the finding is `image-moved`.
-- A container that never started reads Not checked. A container in a crash loop
+- A new pod on the moved tag gives the finding `image-split`. When a new pod
+  replaces the first pod, the finding is `image-moved`.
+- A container that never started reads "Not checked". A container in a crash loop
   keeps its digest.
 - The images that match no pack, such as the images of the agents of Palette,
   make no finding.
 - The token of the observer gets and lists pods, and does nothing else.
 
-The check `pull-policy` shows what the cluster does with a pod made with
-`IfNotPresent`. The undo removes the pods, the observer, the role, and the
-binding, and it puts the values of the add-on back.
+The check `pull-policy` shows what the cluster does with a pod that has the pull
+policy `IfNotPresent`. The undo removes the pods, the observer, the role, and the
+binding, and it restores the values of the add-on.
 
 [`observer-kind.sh`](./live-runs.md#observer-kindsh) has a stage with a local
 registry and a containerd mirror for `vendor.example`. It shows how pods reach a

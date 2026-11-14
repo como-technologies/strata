@@ -6566,7 +6566,7 @@ fn observer_records_sh_accepts_the_folder_of_records_that_the_install_steps_name
         let file = format!("releases/{name}_{version}.json");
         job.file(&file, &profile_doc(name, version));
     }
-    let steps = page_section("docs/src/automation/observer.md", "## Install");
+    let steps = page_section("docs/src/automation/observer.md", "## Install with kubectl");
     let command = block_with(&steps, "bash", "observer-records.sh");
     let envs = [("GIT_SHA", "abc123")];
     let o = job.run_shell(&command, &envs);

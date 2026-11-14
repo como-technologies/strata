@@ -1138,13 +1138,13 @@ fn the_recipe_observer_manifests_alerts_passes_for_five_objects_and_the_flag_and
 
 const BOOK_ALERT_KEYS: [&str; 3] = ["components", "configMapGenerator", "generatorOptions"];
 
-/// The kustomization that the book gives for the alerts: the file of step 5 of "Install", with the
-/// lines of step 3 of "Turn them on" added to it, as that step says.
+/// The kustomization that the book gives for the alerts: the file of step 5 of "Install with
+/// kubectl", with the lines of step 3 of "Add the alerts" added to it, as that step says.
 fn book_alerts_kustomization() -> Value {
     let mut file: Value =
         serde_yaml::from_str(&block_with(&install_steps(), "yaml", "kind: Kustomization")).unwrap();
     let added: Value = serde_yaml::from_str(&block_with(
-        &page_section("docs/src/automation/observer.md", "### Turn them on"),
+        &page_section("docs/src/automation/observer.md", "### Add the alerts"),
         "yaml",
         "configMapGenerator",
     ))
@@ -1262,9 +1262,9 @@ fn kubectl_kustomize_renders_the_book_kustomization_with_the_config_map_in_the_n
 
 // ---- the steps of the page "The observer" ------------------------------------------------------------
 
-/// The section "Install" of the page of the service, up to the next section.
+/// The section "Install with kubectl" of the page of the service, up to the next section.
 fn install_steps() -> String {
-    page_section("docs/src/automation/observer.md", "## Install")
+    page_section("docs/src/automation/observer.md", "## Install with kubectl")
 }
 
 /// The word of `block` after the word `before`.
