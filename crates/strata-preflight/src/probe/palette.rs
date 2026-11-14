@@ -202,7 +202,7 @@ pub(super) fn run_palette(
 
 /// The message of a request that failed. The message of an HTTP error shows the start of the body
 /// of the answer. So the mask of the values of the variables of `world` goes over the body before
-/// the cut, and the cut leaves no part of a value.
+/// the cut. So the cut leaves no part of a value.
 fn failed_message(error: &Error, world: &Value) -> String {
     match error {
         Error::Palette(strata::Error::Api {

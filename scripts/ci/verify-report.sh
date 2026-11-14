@@ -7,13 +7,16 @@
 #
 # Runs `strata verify --summary --format json` over the records; strata expands a quoted pattern
 # such as 'releases/**/*.json'. Each record that did not verify is checked again on its own for its
-# markdown report, and that check decides. A record that drifted, is unverified (it holds a pack
-# with no upstream digest, which --allow-no-digest accepts), or could not be checked, has one open
-# issue labeled NAME (default strata-drift), found by the marker
-# <!-- strata-verify: <path> --> on the first line of its body: opened on the first run that finds
-# it, updated with the latest report on each later run, and closed with a comment on the first run
-# where the record verifies again. Issues of records not given are left alone. --dry-run prints
-# each issue body and what would happen, and calls no host.
+# markdown report, and that check decides.
+#
+# An unverified record holds a pack with no upstream digest, which --allow-no-digest accepts. A
+# record that drifted, is unverified, or could not be checked has one open issue labeled NAME
+# (default strata-drift). The marker <!-- strata-verify: <path> --> on the first line of its body
+# finds it. The first run that finds the record opens the issue, and each later run updates it
+# with the latest report. The first run where the record verifies again closes it with a comment.
+#
+# The script leaves the issue of each other record as it is. --dry-run prints each issue body and
+# the change to each issue, and calls no host.
 #
 # --who adds to the issue who changed a record that drifted, and when. `strata verify --who` reads
 # the audit log of Palette, and the issue body lists each write since the record. When the key
@@ -259,7 +262,7 @@ while IFS= read -r record <&3; do
       unchanged=$((unchanged + 1))
       recorded=$(jq -r '.recordedAt // ""' <<<"$record")
       if [ -n "$dry" ]; then
-        note "would close the open issue for $path, if any"
+        note "a run with no --dry-run closes the open issue for $path, if one is open"
         continue
       fi
       number=$(issue_for "$path")
@@ -309,7 +312,7 @@ while IFS= read -r record <&3; do
   if [ -n "$dry" ]; then
     cat "$body"
     echo
-    note "would open or update the issue for $path: $title"
+    note "a run with no --dry-run opens or updates the issue for $path: $title"
     continue
   fi
   number=$(issue_for "$path")

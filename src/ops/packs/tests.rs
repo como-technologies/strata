@@ -364,7 +364,7 @@ fn the_marks_agree_for_two_pre_releases_and_differ_for_a_release_below_a_pre_rel
 
 #[test]
 fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
-    // Palette reads a version with four numbers as its first three, so it reads `1.30.0.1` and
+    // Palette reads a version with four numbers as its first three. So it reads `1.30.0.1` and
     // `1.30.0` as one version, and it marks one of them. Strata puts `1.30.0.1` above `1.30.0`
     let options = PackOptions {
         latest: true,

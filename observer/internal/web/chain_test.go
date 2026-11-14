@@ -8,17 +8,18 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below show the chain of a pack that is behind (#709): the pack, the newer profile version that carries a newer version of
-it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and wilma-gateway@3.2.0 carries
-that version. They need node, like the other tests of the page. */
+/* The tests below show the chain of a pack that is behind (#709). The chain is the pack, the newer profile version that carries a
+newer version of it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and
+wilma-gateway@3.2.0 carries that version. They need node, like the other tests of the page. */
 
 const (
 	carriedByWilma = `carried by <span class="m">wilma-gateway<span class="ver">@3.2.0</span></span>`
 	traefikSlab    = `<span class="m ref">traefik<span class="ver">@38.0.1</span></span>`
 )
 
-// The slab of a pack that is behind, on the page of its profile, and its row in the table of the newer versions name the newer
-// profile version that carries a newer version of the pack. A pack of a profile with no newer version names no carrier.
+// Two places name the newer profile version that carries a newer version of a pack that is behind. One is the slab of the pack
+// on the page of its profile. The other is the row of the pack in the table of the newer versions. A pack of a profile with no
+// newer version names no carrier.
 func TestThePackThatIsBehindNamesTheNewerProfileVersionThatCarriesIt(t *testing.T) {
 	pages := shown(t, devdata.StateOK, wilmaHash, "#newer", "#p-fred-identity@2.3.0")
 	mustHold(t, "the slab of traefik", slabOf(t, pages[0], traefikSlab),
@@ -61,8 +62,9 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 	}
 }
 
-// The Compare badge of a side of a newer version keeps the neutral badge "Newer" that #643 rules for a newer version: the move of
-// a pack to its newest version, and the move of the profile to its newest version. A side of a drift keeps the red badge "Changed".
+// The Compare badge of a side of a newer version keeps the neutral badge "Newer" that #643 rules for a newer version. These sides
+// are the move of a pack to its newest version, and the move of the profile to its newest version. A side of a drift keeps the
+// red badge "Changed".
 func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	vendor := packPage(wilmaSubject, "addon", "vendor-product")

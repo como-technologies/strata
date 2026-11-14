@@ -42,8 +42,8 @@ function ring(r) {
   return h`<svg class="ring${open ? " open" : ""}" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path class="track" d="${CIRCLE}"/>${arc ? h`<path class="arc" d="${arc}"/>` : ""}</svg>`;
 }
 
-// CYCLES are the two cycles that a person can start from the menu of their pill: the field of the end of the last good cycle,
-// and the words of the menu.
+// CYCLES are the two cycles that a person can start from the menu of their pill. Each holds the field of the end of the last good
+// cycle, and the words of the menu.
 const CYCLES = {
   content: {at: "checkedAt", label: "Content", run: "Check the content now", does: "Compares the records with the cluster and with Palette."},
   versions: {at: "readAt", label: "Versions", run: "Read the versions now", does: "Reads the registries for newer versions of each pack."},
@@ -90,7 +90,7 @@ function periodMs(every) {
 }
 
 // cyclePanel is the menu of a cycle: the facts of its timer, what it does, and the button that starts it now. The button is off
-// while the cycle runs, while a click waits for its cycle, and for a minute after a cycle ends, and a note says why.
+// while the cycle runs, while a click waits for its cycle, and for a minute after a cycle ends. A note says why.
 function cyclePanel(name) {
   const m = CYCLES[name], c = D.cluster[name], last = c[m.at], r = runningOf(name, c);
   const facts = [["Last good end", last ? `${ago(last)} ago · ${clock(last)}` : "none yet"], ["Every", c.every]];
@@ -322,8 +322,8 @@ function findingLine(f, x) {
   return text;
 }
 
-// newsOf gives the news of a profile. A finding of the pods sets no status, so a profile that does not
-// drift adds the line of the finding to its other news, and an OK profile gives only that line.
+// newsOf gives the news of a profile. A finding of the pods sets no status. So a profile that does not
+// drift adds the line of the finding to its other news. An OK profile gives only that line.
 function newsOf(x) {
   const news = recordNews(x);
   if (x.status === STATUS.DRIFT) return news;

@@ -1173,7 +1173,8 @@ field, a value, an input, or an option is in the sections above.
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
-  and `same-release` send it for each side that Palette answers. A key needs the permission
+  and `same-release` send it for each side that Palette answers, and `snapshot` of a set for
+  each project of the set. A key needs the permission
   `packRegistry.list` for it, which each built-in role with `clusterProfile.get` holds. A key
   without it gets HTTP 403, and the command exits `2` with the error `api`. Before, these
   commands did not read the listing. See
@@ -1181,6 +1182,9 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **`pack-in-several-registries` names a registry with a `/` by its uid.** Before, it gave
+  the name, and a ref with that name named another registry. A script that looks for such a
+  name in `registries` must look for the uid. See [Refs](refs.md#rules).
 - **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
   it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
   `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
@@ -1190,6 +1194,12 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
+- **The rows of the observer name the registry of the record.** Before, `registry` held the
+  name in a pin of `behind`, or the uid. This holds for a pack of `/v1/profiles` and a row of
+  `/v1/newer`. A record of strata 0.33.0 and before names no registry, so its rows keep the
+  earlier value. A program that reads the uid there must read `registryUid` of the row of
+  `/v1/newer`, or `packs[].registryUid` of the record. See
+  [The summary](../development/observer.md#the-summary).
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
   request comment shows a tag in a message of Palette as text. The reason of
@@ -1383,6 +1393,12 @@ field, a value, an input, or an option is in the sections above.
   [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
   said "in the same forms as the first". The refs and the exit codes stay the same.
+- **The help of two options and three descriptions of the schemas have shorter sentences.** Each
+  sentence has 25 words or fewer. The options are `--repave` of `compare` and `--no-impact` of
+  `behind`. `strata schema behind` gives new words for `carriers` and the definition `Bump`.
+  `strata schema diff` and `strata schema verify-summary` give new words for `renumbered`. The
+  options, the fields, and their meaning stay the same. A script that matches the whole text of a
+  help or of a description must match the new text.
 - **`palette-validate` reads each refusal of the body of the cluster validate route as
   `FAILED`.** It reads more codes, such as `ControlPlanePoolRequired`. Before, the rule was
   `ERROR` for such a refusal with HTTP 500 or 403, with exit `2`. Now it is `FAILED` with the
@@ -1475,6 +1491,17 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **A note of `--dry-run` of `verify-report.sh` and `upstream-report.sh` has new words.** It
+  says what a run with no `--dry-run` does. A note said "would close the open issue", and now
+  says "a run with no --dry-run closes the open issue". Its "if any" is now "if one is open".
+  "would open or update" is now "a run with no --dry-run opens or updates". A script that reads
+  the notes on standard error must read the new words.
+- **A note of `--dry-run` of `pr-comment.sh` has new words.** It says what a run with no
+  `--dry-run` does. "would add label" is now "a run with no --dry-run adds label". "would remove
+  label ... if present" is now "a run with no --dry-run removes label ..., if the pull request has
+  it". "would post the preflight comment, or update" is now "a run with no --dry-run posts the
+  preflight comment, or updates". A script that reads the notes on standard error must read the
+  new words.
 - **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
   names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The line `who: not read` in an issue of `verify-report.sh --who` gives the words of

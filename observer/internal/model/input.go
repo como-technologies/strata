@@ -132,9 +132,9 @@ func MoveOf(d docs.Diff) Move {
 	return m
 }
 
-// ProfileMoveOf reads the move of a profile from the compare of its record and the newest version:
-// the impact level, the flags, and each pack that the move changes, adds, or removes. It keeps
-// whether the values of a pack change, and drops the values.
+// ProfileMoveOf reads the move of a profile from the compare of its record and the newest version.
+// It reads the impact level, the flags, and each pack that the move changes, adds, or removes. It
+// keeps whether the values of a pack change, and drops the values.
 func ProfileMoveOf(d docs.Diff) ProfileMove {
 	m := ProfileMove{Impact: d.Summary.MaxImpact, Flags: d.Flags(), Packs: []MovePack{}}
 	for _, p := range d.Packs {

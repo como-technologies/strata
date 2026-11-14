@@ -1,0 +1,15 @@
+# The config of CodeQL for the Rust code. The workflow codeql gives it to the analysis of Rust and to
+# the test of the rule. See "CodeQL" in docs/src/development/build-test.md.
+#
+# The default queries run, and so do the queries of strata in .github/codeql/rust/. The query of
+# strata for rust/cleartext-logging has the id of the query of CodeQL, and the tag `strata`. The
+# filters drop each query with that id, and then keep each query with the tag. A later filter wins,
+# so the query of strata stays and the query of CodeQL goes.
+name: strata rust
+queries:
+  - uses: ./.github/codeql/rust
+query-filters:
+  - exclude:
+      id: rust/cleartext-logging
+  - include:
+      tags contain: strata

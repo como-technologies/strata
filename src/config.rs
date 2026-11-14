@@ -119,7 +119,7 @@ impl Config {
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
     ///
     /// Strata reads the file only when `HOME` is an absolute path. An empty or a relative `HOME`
-    /// names a folder from the working folder, not the home of the user, so strata then reads the
+    /// names a folder from the working folder, not the home of the user. So strata then reads the
     /// environment alone.
     ///
     /// # Errors

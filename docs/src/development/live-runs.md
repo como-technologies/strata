@@ -1155,7 +1155,9 @@ The script sends the body to the route with `api.sh post-status`, and records
 the status and the code. Then `validate-route.sh` sends it through
 `palette-validate`. The script skips the case when Palette lists no VPC with a
 CIDR, or when the Kubernetes pack has no `podCIDR`. It also skips the case when
-no VPC with a CIDR has a subnet in each zone of the pools.
+no VPC with a CIDR has a subnet in each zone of the pools. A pool of
+`aws-clean.json` with no zone names no subnet, so the script skips the case for
+it too (#822).
 
 The case `cidr-variable` makes a profile too (#829). The profile
 `strata-route-cidr-variable` is a copy of the release profile with the variable
@@ -1220,7 +1222,9 @@ repository, a Helm repository with credentials, an OCI registry with basic
 auth, and a Spectro pack registry. The variable also adds a Palette registry
 over each. The script removes each at its end.
 [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind)
-states what it shows.
+and
+[The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack)
+state what it shows.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1232,6 +1236,11 @@ states what it shows.
 | `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading |
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
+| `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. No result yet: no live window ran these checks. |
+| `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. No result yet: no live window ran this check. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran these checks. |
+| `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. No result yet: no live window ran these checks. |
+| `slash-delete` | 0 | the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |
@@ -1525,7 +1534,7 @@ needs the example at its baseline with cluster A.
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. |
 | `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. |
-| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
+| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`. Its note says `label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier. On aws, no rule of the static tier is a preflight check, so the verdict is `**NOT COUNTED: no check counted on aws**` (#619). |
 | `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. |
@@ -1543,7 +1552,7 @@ needs the example at its baseline with cluster A.
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
 | `override-undo`, `override-gone` | 0 | the override is undone, and the record of cluster A verifies again |
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
-| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
+| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job with no `--dry-run` opens an issue for the add-on record. The dry run says so in its note: `a run with no --dry-run opens or updates the issue for releases/addon.json`. |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
 | `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`. It names the last write, an update by a user of the tenant. |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |

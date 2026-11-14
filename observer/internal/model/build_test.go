@@ -316,6 +316,34 @@ func TestTheRegistryIsTheUidWhenNoPinNamesIt(t *testing.T) {
 	}
 }
 
+func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.65.0")
+	csi.RegistryUID, csi.RegistryName = "reg2", "Palette Registry"
+	// behind pins another pack of another registry, so no pin names reg2
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", "aws-stack@1.1.0")}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if got := s.Profiles[0].Packs[0].Registry; got != "Palette Registry" {
+		t.Errorf("registry %q", got)
+	}
+}
+
+// The page joins a pack row and its row of a newer version by the name of the registry. So the two
+// rows give the name of the record, also when the pin of behind names no registry.
+func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.63.1")
+	csi.RegistryName = "Palette Registry"
+	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", "aws-stack@1.1.0")
+	behind.Registry = ""
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{behind}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if len(s.Newer) != 1 {
+		t.Fatalf("newer %+v", s.Newer)
+	}
+	if pack, row := s.Profiles[0].Packs[0].Registry, s.Newer[0].Registry; pack != "Palette Registry" || row != pack {
+		t.Errorf("the pack row names %q, and the newer row %q", pack, row)
+	}
+}
+
 func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
 		docs.Diff{Packs: []docs.Pack{{Key: "csi/csi-aws-ebs", Masked: []string{"a.b", "a.c"}}}})
@@ -483,8 +511,9 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 }
 
 // Issue #708. The row of a profile with a newer published version holds the move from the record to
-// that version: the impact level, the flags of its packs, each pack whose version changes, each pack
-// that the move adds or removes, and each pack whose values change. It holds no value.
+// that version. The move holds the impact level and the flags of its packs. It names each pack whose
+// version changes, each pack that it adds or removes, and each pack whose values change. The row
+// holds no value.
 func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
 	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
 	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
@@ -532,9 +561,9 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 }
 
-// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709), as `behind`
-// names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed read says that
-// the carrier was not read. A profile that the pin does not name has no carrier on its row.
+// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709). They name it
+// as `behind` names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed
+// read says that the carrier was not read. A profile that the pin does not name has no carrier on its row.
 func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
 	fred.Carriers = []docs.PinCarrier{

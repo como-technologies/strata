@@ -801,6 +801,57 @@ symlink. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
 
+### CodeQL
+
+`.github/workflows/codeql.yml` runs CodeQL on each push to `main`, on each pull
+request, and once a week. It analyzes the Rust code, the Go code and the
+JavaScript of the observer, and the workflows, with the default queries of
+CodeQL. The category of each analysis is `/language:<language>`, as the default
+setup of GitHub gave it, so each alert keeps its history. GitHub refuses the
+results of a workflow while the default setup is on, so the repository has the
+default setup off.
+
+The rule `rust/cleartext-logging` finds a sensitive value that goes to a log,
+such as a `println!`, an `eprintln!`, or the message of an `assert!`. It knows a
+sensitive value by the name of its variable, its field, or its function. To the
+rule, a name with `uid`, `account`, a user name, a user id, or a session id is
+account information. Strata prints the uid and the name of each object of
+Palette by design. So the rule gave 197 alerts, and most of them named a uid
+(#843).
+
+`.github/codeql/rust.yml` gives the analysis of Rust a copy of the rule, in
+`.github/codeql/rust/CleartextLogging.ql`. The copy has the same id and one more
+tag, `strata`. The config drops each query with that id, and then keeps each
+query with the tag. A later filter wins, so the copy stays. The copy has two
+changes:
+
+- A name that the rule reads only as account information is no source. A
+  secret, a password, an API key, a certificate, and a private value stay
+  sources. So the rule still gives an alert when the API key goes to a log.
+- The copy does not observe the diff of a pull request. The rule of CodeQL
+  does, and in a pull request it then gives only the alerts in the lines of the
+  diff. The crate of the test is in no diff.
+
+What the copy omits: an alert for a value whose name the rule reads only
+as account information. A session id or a session key is in that set too, and
+strata has no such value. A maintainer reads each alert that stays. An alert of
+the code that masks a secret, or of a test, gets the reason "false positive" or
+"used in tests".
+
+The job `the test of the rule rust/cleartext-logging` runs the copy on the crate
+that `scripts/dev/codeql-rule.sh crate` writes. Its lines send a uid, the name of
+an account, a field `uid`, the result of `name_or_uid`, and the API key to
+`println!`. Then `codeql-rule.sh check` reads the results. It passes only when
+they hold one rule with the id and the tag `strata`, and one alert, on the line
+of the API key. The results stay in the job, so the alert of the crate is no
+alert of the repository.
+
+When a release of CodeQL changes the rule, copy the new rule, and keep the two
+changes. The pack depends on `codeql/rust-all` at any version, so the copy
+builds with the library of the CodeQL that the action runs. When a change of
+that library stops the build of the copy, the analysis of Rust and the test
+fail.
+
 ### Dependency updates
 
 `.github/dependabot.yml` asks Dependabot for pull requests of version updates

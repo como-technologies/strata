@@ -1,5 +1,5 @@
 $ PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet --out preflight > /dev/null && scripts/ci/pr-comment.sh --preflight preflight/report.md --dry-run | sed -n '1,4p'
-pr-comment: would post the preflight comment, or update the one that carries <!-- strata-preflight -->
+pr-comment: a run with no --dry-run posts the preflight comment, or updates the one that carries <!-- strata-preflight -->
 <!-- strata-preflight -->
 ## strata-preflight: aws cluster `ledger`
 

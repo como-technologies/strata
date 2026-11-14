@@ -12,8 +12,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-// firstSeenWithANewProfile makes a world with first-seen records of aws-stack@1.1.0, and a cluster
-// that also runs fred-edge@1.0.0, which no record holds: the pipeline of the team added it after the seed.
+// firstSeenWithANewProfile makes a world with first-seen records of aws-stack@1.1.0. The cluster of
+// the world also runs fred-edge@1.0.0, which no record holds. The pipeline of the team added it after
+// the seed.
 func firstSeenWithANewProfile(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, unchanged())

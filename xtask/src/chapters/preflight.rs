@@ -173,7 +173,7 @@ pub(super) fn run(r: &mut Runner) {
         false,
         "strata preflight cluster.json --cloud aws --tier static --offline --verbose 2>&1 > /dev/null | sed -n '1,6p'",
     );
-    // The job of a pipeline with no key: the script says in the log that the run is offline, and
+    // The job of a pipeline with no key. The script says in the log that the run is offline, and
     // the report says it after the tiers. An empty variable is no key, for the script and strata.
     r.step(
         "preflight-job-offline",

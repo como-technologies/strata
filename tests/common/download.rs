@@ -36,8 +36,8 @@ use super::PackType;
 ///
 /// Palette puts the answer in the download in place of the chart, with the name of the chart, and
 /// the route answers HTTP 200. The live run of stage 4 of `export.sh` shows such an answer of 263
-/// bytes, with the code `AccessDenied`, for the chart `nginx` of the registry Bitnami. The ids of
-/// the request are examples.
+/// bytes, with the code `AccessDenied`. That answer is for the chart `nginx` of the registry
+/// Bitnami. The ids of the request are examples.
 pub const CHART_HOST_REFUSAL: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
 <Error><Code>AccessDenied</Code><Message>Access Denied</Message>\
 <RequestId>4V6Q3ZKX8T2M9R1B</RequestId>\

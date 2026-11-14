@@ -2,11 +2,12 @@
 //! that a record holds. The document of a version gives the published versions of its profile in
 //! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
 //! each profile version that is behind with the newest version (#708). For a pin that is behind,
-//! it names the newer profile version that carries a newer version of the pack (#709). On a cluster
-//! with many profiles, each row names the profile that holds its pack, the counts of the heading
-//! add up, `--behind-only` omits the rows that are current, and a pin names the newest patch of
-//! its own minor version (#622). The move of a profile version names the required variables that
-//! it adds, and a move of Kubernetes that skips a minor version (#623).
+//! it names the newer profile version that carries a newer version of the pack (#709).
+//!
+//! On a cluster with many profiles, each row names the profile that holds its pack, and the counts
+//! of the heading add up (#622). `--behind-only` omits the rows that are current, and a pin names
+//! the newest patch of its own minor version (#622). The move of a profile version names the
+//! required variables that it adds, and a move of Kubernetes that skips a minor version (#623).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,7 @@ use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
 use strata::model::scope::ProfileScope;
 use strata::ops;
+use strata::reference::Ref;
 use strata::render::RowState;
 use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, Snapshot, Tier};
 
@@ -1369,4 +1371,48 @@ fn a_pin_with_a_next_patch_names_the_patch_and_the_command_under_its_line() {
     let doc = serde_json::to_value(&r).unwrap();
     assert_eq!(doc["pins"][0]["nextPatch"], "1.36.4");
     assert!(!doc.to_string().contains("next patch"), "{doc}");
+}
+
+#[test]
+fn the_next_patch_of_a_registry_with_a_slash_in_its_name_gives_refs_that_parse_to_that_registry() {
+    // Palette takes a `/` in the name of a registry and in the name of a pack
+    let mut slash_registry = pin_doc("nginx", "1.27.0", &["1.28.0", "1.27.4"]);
+    slash_registry["registry"] = json!("team/charts");
+    slash_registry["nextPatch"] = json!("1.27.4");
+    let mut slash_pack = pin_doc("team/nginx", "1.27.0", &["1.27.4"]);
+    slash_pack["registry"] = json!("quarry-charts");
+    slash_pack["nextPatch"] = json!("1.27.4");
+    let r = report_of(vec![slash_registry, slash_pack], Vec::new());
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter_map(|l| {
+            l.trim_start()
+                .strip_prefix("next patch 1.27.4: strata compare ")
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            format!("pack:{PUBLIC_REGISTRY}/nginx@1.27.0 pack:{PUBLIC_REGISTRY}/nginx@1.27.4"),
+            "pack:quarry-charts/team/nginx@1.27.0 pack:quarry-charts/team/nginx@1.27.4".to_string(),
+        ],
+        "{text}"
+    );
+    let no_files = |_: &Path| false;
+    for (line, registry, name) in [
+        (lines[0], PUBLIC_REGISTRY, "nginx"),
+        (lines[1], "quarry-charts", "team/nginx"),
+    ] {
+        let refs: Vec<Ref> = line
+            .split(' ')
+            .map(|word| Ref::parse_with(word, no_files))
+            .collect();
+        let pack = |version: &str| Ref::Pack {
+            registry: Some(registry.to_string()),
+            name: name.to_string(),
+            version: version.to_string(),
+        };
+        assert_eq!(refs, [pack("1.27.0"), pack("1.27.4")], "{line}");
+    }
 }
