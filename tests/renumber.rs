@@ -1,5 +1,5 @@
 //! A release under new version numbers: `same-release --allow renumber` passes a pair whose packs
-//! differ only by their versions, and `compare` gives such a pack the impact `none` with
+//! differ only by their versions. `compare` gives such a pack the impact `none` with
 //! `renumber only` when its version keeps its numbers.
 
 use std::path::Path;
@@ -36,7 +36,8 @@ fn values_file(p: &Pack) -> Option<Vec<(&'static str, String)>> {
 }
 
 /// The files of the build of the pack `p`. The CSI pack is a chart of a Helm registry: its
-/// `Chart.yaml` names the version of the app `app`, and the files `more` follow its values.
+/// `Chart.yaml` names the version of the app `app`. The files `more` follow the values of the CSI
+/// pack.
 fn chart_build(
     p: &Pack,
     app: &str,
@@ -81,7 +82,7 @@ fn pack_entries<'a>(
 
 /// The record of a copy of the fixture `a`, as the profile version `version` with the uid `uid`.
 ///
-/// Each pack of `builds` is a build of the same content under another version: its version, its
+/// Each pack of `builds` is a build of the same content under another version. Its version, its
 /// tag, its pack uid, and its digest change, and its values stay. `edit` then changes the profile
 /// document and the packs/manifests document, as a person or a pipeline does.
 fn release(
@@ -578,8 +579,8 @@ fn an_os_pack_with_new_numbers_and_the_same_values_keeps_its_repave_and_same_rel
     assert_eq!(p.archives_compared, ["os/ubuntu-aws"]);
 }
 
-/// The criterion of #751: a pair whose archives differ only in `version` of `pack.json` passes, and
-/// a pair whose archives differ in another file fails and names the file.
+/// The criterion of #751: a pair whose archives differ only in `version` of `pack.json` passes. A
+/// pair whose archives differ in another file fails and names the file.
 #[test]
 fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_the_file() {
     let dir = fixtures();
@@ -846,10 +847,10 @@ fn the_markdown_of_a_reason_shows_the_answer_of_a_chart_host_as_text_with_no_tag
     common::assert_only_strata_tags(&markdown);
 }
 
-/// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of
-/// Helm charts or of Zarf packages. The list of the download names such a pack with no file. Such
-/// a renumber keeps `archive: not compared`, and the pair passes. A manifest pack has no archive:
-/// its content is its manifests, which the records hold.
+/// Palette serves no archive of a pack of a private registry. It also serves no archive of a pack
+/// of an OCI registry of Helm charts or of Zarf packages. The list of the download names such a
+/// pack with no file. Such a renumber keeps `archive: not compared`, and the pair passes. A
+/// manifest pack has no archive: its content is its manifests, which the records hold.
 #[test]
 fn a_renumber_whose_download_holds_no_archive_keeps_archive_not_compared_in_each_case_of_palette() {
     let dir = fixtures();

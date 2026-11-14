@@ -31,8 +31,8 @@ first line, and the label `strata-behind`:
 For a pin that is behind a newer minor version, the newer column ends with
 `; next patch <version>`. A pin with no newer patch of its own minor version
 does not have this text. The patch is the newest patch of the minor version of
-the pin, and a team can take it before the move to the newest version. The
-script reads it from `nextPatch` of `strata behind`: see
+the pin. A team can take it before the move to the newest version. The script
+reads it from `nextPatch` of `strata behind`: see
 [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
 
 A pack that strata could not check keeps its issue as it is. An issue of a pack

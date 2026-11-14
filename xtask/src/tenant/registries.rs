@@ -31,7 +31,7 @@ pub(super) const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
 /// The uid and the digest that the stand-in gives to a version that `examples/packs/` does not
-/// hold, as an item of the pack listing of the registry `registry`.
+/// hold. The stand-in gives them as an item of the pack listing of the registry `registry`.
 ///
 /// Palette keeps each version of a pack in each registry in a record of its own, with a uid and a
 /// digest of its own. A hash of the registry, the name `name`, and the version `version` gives the

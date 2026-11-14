@@ -17,9 +17,9 @@ palette_curl() {
 # The kinds of registry_base, for a usage line.
 REGISTRY_KINDS="oci-ecr, oci-basic, helm, or pack"
 
-# registry_base KIND UID: the path of the registry UID of KIND: oci-ecr, oci-basic (an OCI registry of the type basic),
-# helm, or pack (a Spectro pack registry). It fails for another KIND. A test makes sure that no other script builds
-# such a path.
+# registry_base KIND UID: the path of the registry UID of KIND. KIND is oci-ecr, oci-basic (an OCI registry of the
+# type basic), helm, or pack (a Spectro pack registry). It fails for another KIND. A test makes sure that no other
+# script builds such a path.
 registry_base() {
   case "$1" in
     oci-ecr) echo "/v1/registries/oci/$2/ecr" ;;

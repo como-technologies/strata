@@ -1,8 +1,8 @@
 //! The `curl` to Palette that a person runs by hand, and what Palette saves at its request.
 //!
 //! A `reproduce` line of a rule starts with it, through the filter
-//! [`PALETTE_CURL`](crate::jq::PALETTE_CURL), and so does each line that the report adds for a
-//! request of a check.
+//! [`PALETTE_CURL`](crate::jq::PALETTE_CURL). Each line that the report adds for a request of a
+//! check also starts with it.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

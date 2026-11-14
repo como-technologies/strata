@@ -105,8 +105,8 @@ fn loop_publish(r: &mut Runner) {
         "strata same-release candidate.json releases/1.1.0/dev.json",
     );
     r.quiet("git add releases && git commit -qm \"record aws-stack@1.1.0 in dev\"");
-    // the release that the clusters run has a newer published version now (#707), and the line
-    // under it says what the move to it does (#708)
+    // the release that the clusters run has a newer published version now (#707). The line under
+    // it says what the move to it does (#708)
     r.step(
         "loop-behind-profile",
         1,

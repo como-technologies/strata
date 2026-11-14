@@ -3,10 +3,10 @@
 //! A chapter reads as the page does: the tenant, then the steps, with a change to the tenant
 //! where the page describes one. `serve_here` marks a state the playground can hand over.
 //!
-//! One file holds the chapters of one group of pages: the first pages, the everyday loop, the
-//! command pages, each group of use cases, and the pages of How it works. `ids.rs` and `edits.rs`
-//! hold what the files share. This file holds the settings, the candidate, and the cluster
-//! `payments` of dev with its add-on profiles, which several files use.
+//! One file holds the chapters of one group of pages. The groups are the first pages, the everyday
+//! loop, the command pages, each group of use cases, and the pages of How it works. `ids.rs` and
+//! `edits.rs` hold what the files share. This file holds the settings, the candidate, and the
+//! cluster `payments` of dev with its add-on profiles, which several files use.
 
 use crate::book::Runner;
 use ids::{

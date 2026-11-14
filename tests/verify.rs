@@ -14973,7 +14973,7 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
 
 #[test]
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
-    // Palette reads a version with four numbers as its first three, so it reads 1.65.0.1 and
+    // Palette reads a version with four numbers as its first three. So it reads 1.65.0.1 and
     // 1.65.0 as one version, and here it calls 1.65.0 the latest. Strata puts 1.65.0.1 above it
     let mut release = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
@@ -15189,9 +15189,9 @@ fn the_json_of_behind_gives_the_next_patch_of_a_pin_that_is_behind_a_newer_minor
     assert_eq!(back.pins[0].next_patch.as_deref(), Some("1.63.4"));
 }
 
-/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
-/// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
-/// 1.66.develop, with two numbers and a tail of text.
+/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse. 1.63.1.1 has a tail of
+/// numbers. The develop builds 1.65.0.develop and 1.66.0.develop have a tail of text. 1.66.develop
+/// has two numbers and a tail of text.
 fn serve_develop_builds() -> MemoryApi {
     let more = [
         "1.63.1.1",

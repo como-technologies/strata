@@ -1355,6 +1355,12 @@ field, a value, an input, or an option is in the sections above.
   [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
   said "in the same forms as the first". The refs and the exit codes stay the same.
+- **The help of two options and three descriptions of the schemas have shorter sentences.** Each
+  sentence has 25 words or fewer. The options are `--repave` of `compare` and `--no-impact` of
+  `behind`. `strata schema behind` gives new words for `carriers` and the definition `Bump`.
+  `strata schema diff` and `strata schema verify-summary` give new words for `renumbered`. The
+  options, the fields, and their meaning stay the same. A script that matches the whole text of a
+  help or of a description must match the new text.
 - **`palette-validate` reads each refusal of the body of the cluster validate route as
   `FAILED`.** It reads more codes, such as `ControlPlanePoolRequired`. Before, the rule was
   `ERROR` for such a refusal with HTTP 500 or 403, with exit `2`. Now it is `FAILED` with the
@@ -1453,6 +1459,17 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **A note of `--dry-run` of `verify-report.sh` and `upstream-report.sh` has new words.** It
+  says what a run with no `--dry-run` does. A note said "would close the open issue", and now
+  says "a run with no --dry-run closes the open issue". Its "if any" is now "if one is open".
+  "would open or update" is now "a run with no --dry-run opens or updates". A script that reads
+  the notes on standard error must read the new words.
+- **A note of `--dry-run` of `pr-comment.sh` has new words.** It says what a run with no
+  `--dry-run` does. "would add label" is now "a run with no --dry-run adds label". "would remove
+  label ... if present" is now "a run with no --dry-run removes label ..., if the pull request has
+  it". "would post the preflight comment, or update" is now "a run with no --dry-run posts the
+  preflight comment, or updates". A script that reads the notes on standard error must read the
+  new words.
 - **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
   names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The line `who: not read` in an issue of `verify-report.sh --who` gives the words of

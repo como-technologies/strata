@@ -37,7 +37,7 @@ trim() {
 }
 
 # in_file NAME: 0 when a line of the file on standard input gives NAME a value. Strata reads each
-# line in this order: it removes the white space at the two ends, then `export `, and it splits the
+# line in this order. It removes the white space at the two ends, then `export `, and it splits the
 # line at the first =. It removes the white space and then each quote at the two ends of the
 # value: first the double quotes, then the single quotes. A line with an empty value gives no key,
 # and the next lines still count.

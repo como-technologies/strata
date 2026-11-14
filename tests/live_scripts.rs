@@ -1182,6 +1182,81 @@ fn lib_sh_gives_git_the_author_of_the_script_and_no_setting_of_the_machine() {
     }
 }
 
+/// lib.sh stops on a strata-preflight that is older than its sources, as it stops on such a
+/// strata. `strata preflight` runs the strata-preflight beside strata, so an older one tests old
+/// rules (#822).
+#[test]
+fn live_scripts_refuse_a_strata_preflight_binary_older_than_the_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("examples/live");
+    let release = root.path().join("target/release");
+    let rules = root.path().join("crates/strata-preflight/rules");
+    for d in [&live, &release, &rules, &root.path().join("src")] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    copy_scripts(
+        root.path(),
+        &["examples/live/lib.sh", "examples/live/common.sh"],
+    );
+    executable(
+        &live.join("probe.sh"),
+        "script=probe\n. \"$(dirname \"$0\")/lib.sh\"\necho ran\n",
+    );
+    let now = std::time::SystemTime::now();
+    let built_at = |binary: &Path, seconds: i64| {
+        let at = if seconds < 0 {
+            now - std::time::Duration::from_secs(seconds.unsigned_abs())
+        } else {
+            now + std::time::Duration::from_secs(seconds.unsigned_abs())
+        };
+        std::fs::File::options()
+            .write(true)
+            .open(binary)
+            .unwrap()
+            .set_modified(at)
+            .unwrap();
+    };
+    let strata = release.join("strata");
+    let preflight = release.join("strata-preflight");
+    executable(&strata, "#!/bin/sh\n");
+    executable(&preflight, "#!/bin/sh\n");
+    let rule = rules.join("compute.yaml");
+    std::fs::write(&rule, "# changed after the build of strata-preflight\n").unwrap();
+    // strata is newer than each source, and strata-preflight is older than a rule
+    built_at(&strata, 5);
+    built_at(&preflight, -600);
+    let probe = |strata_bin: Option<&Path>| {
+        let mut c = Command::new("bash");
+        c.arg(live.join("probe.sh")).env_remove("STRATA_BIN");
+        if let Some(bin) = strata_bin {
+            c.env("STRATA_BIN", bin);
+        }
+        c.output_locked().unwrap()
+    };
+
+    let o = probe(None);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
+    assert_eq!(
+        text(&o.stderr),
+        format!(
+            "probe: {} is older than {}; run just build\n",
+            preflight.display(),
+            rule.display()
+        )
+    );
+
+    // rebuilt: the binary is newer than each source
+    built_at(&preflight, 5);
+    let o = probe(None);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), "ran\n");
+
+    // the strata-preflight beside a strata of STRATA_BIN is the caller's to keep current
+    built_at(&preflight, -600);
+    let o = probe(Some(&strata));
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+}
+
 #[test]
 fn common_sh_defines_die_and_usage_and_nothing_else_and_it_prints_nothing_when_a_script_sources_it()
 {
@@ -1426,11 +1501,23 @@ fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
     assert_eq!(named, ["examples/live/palette-curl.sh"]);
 }
 
-/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
-/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
-#[test]
-fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+/// True when the script line `line` builds the path of one registry of Palette: a folder of a
+/// kind of registry, then a `$`. A quote can close the text before the `$`, as in
+/// `"/v1/registries/oci/"$uid`.
+fn builds_a_registry_path(line: &str) -> bool {
+    ["oci", "helm", "pack"].iter().any(|kind| {
+        let route = format!("/v1/registries/{kind}/");
+        line.match_indices(&route).any(|(at, _)| {
+            line[at + route.len()..]
+                .trim_start_matches(['"', '\''])
+                .starts_with('$')
+        })
+    })
+}
+
+/// The scripts of the tree `root` that build the path of one registry of Palette, by their path
+/// from `root`.
+fn registry_path_builders(root: &Path) -> Vec<String> {
     let mut built = Vec::new();
     for dir in ["examples", "scripts", "deploy", "crates"] {
         for path in walk(&root.join(dir)) {
@@ -1438,18 +1525,52 @@ fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
                 continue;
             }
             let code = std::fs::read_to_string(&path).unwrap();
-            if code_lines(&code).any(|l| {
-                ["oci", "helm", "pack"].iter().any(|kind| {
-                    let route = format!("/v1/registries/{kind}/");
-                    l.match_indices(&route)
-                        .any(|(at, _)| l[at + route.len()..].starts_with('$'))
-                })
-            }) {
+            if code_lines(&code).any(builds_a_registry_path) {
                 built.push(path.strip_prefix(root).unwrap().display().to_string());
             }
         }
     }
-    assert_eq!(built, ["examples/live/palette-curl.sh"]);
+    built
+}
+
+/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
+/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
+#[test]
+fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert_eq!(
+        registry_path_builders(root),
+        ["examples/live/palette-curl.sh"]
+    );
+}
+
+/// The check of the registry paths finds a path with a `$` after the folder of the kind, also
+/// after a quote that closes the text. A route with no uid, and a comment, build no path (#822).
+#[test]
+fn the_check_of_the_registry_paths_finds_a_quoted_path_outside_palette_curl_sh() {
+    for (line, builds) in [
+        (r#"palette_curl "/v1/registries/oci/$uid""#, true),
+        (r#"palette_curl "/v1/registries/oci/"$uid"#, true),
+        (r#"palette_curl '/v1/registries/helm/'"$uid""#, true),
+        (r#"palette_curl "/v1/registries/pack/${uid}/sync""#, true),
+        (r#"palette_curl "/v1/registries/oci/summary""#, false),
+        (r#"palette_curl "/v1/registries/oci/" "$uid""#, false),
+    ] {
+        assert_eq!(builds_a_registry_path(line), builds, "{line}");
+    }
+
+    let tree = tempfile::tempdir().unwrap();
+    let live = tree.path().join("examples/live");
+    std::fs::create_dir_all(&live).unwrap();
+    std::fs::write(
+        live.join("tenant.sh"),
+        "# \"/v1/registries/oci/\"$uid in a comment\nuid=r-1\npalette_curl \"/v1/registries/oci/\"$uid\n",
+    )
+    .unwrap();
+    assert_eq!(
+        registry_path_builders(tree.path()),
+        ["examples/live/tenant.sh"]
+    );
 }
 
 #[test]
@@ -1877,11 +1998,16 @@ fn stuck_cluster_routes(routes: &Path, kubeconfig: bool) {
 }
 
 fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
+    run_live_at(&live_script(script), args, root, extra)
+}
+
+/// [`run_live`] for the script at `path`, such as a script of [`Stage::copy_live`].
+fn run_live_at(path: &Path, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
     let bin = fake_bin(root, &[("curl", FAKE_API_CURL), ("kubectl", FAKE_KUBECTL)]);
     let tmp = root.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     let mut c = Command::new("bash");
-    c.arg(live_script(script))
+    c.arg(path)
         .args(args)
         .env("PATH", path_with(&bin))
         .env("HOME", root)
@@ -3458,6 +3584,8 @@ struct Stage {
     answers: usize,
     /// More variables of the environment of the script.
     env: Vec<(String, String)>,
+    /// The copy of `examples/live` that the scripts run from, after [`Stage::copy_live`].
+    live: Option<PathBuf>,
 }
 
 impl Stage {
@@ -3481,7 +3609,27 @@ impl Stage {
             root,
             answers: 0,
             env: Vec::new(),
+            live: None,
         }
+    }
+
+    /// Copy the scripts of `examples/live` and the bodies of `preflight/` into the stage, and run
+    /// the scripts from the copy. Gives the directory of the copy, so that a test can change a file
+    /// that a script reads.
+    fn copy_live(&mut self) -> PathBuf {
+        let from = live_script("");
+        let to = self.path("live");
+        let top = std::fs::read_dir(&from)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.is_file());
+        for path in top.chain(walk(&from.join("preflight"))) {
+            let copy = to.join(path.strip_prefix(&from).unwrap());
+            std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
+            executable(&copy, &std::fs::read_to_string(&path).unwrap());
+        }
+        self.live = Some(to.clone());
+        to
     }
 
     /// The name of the route file of `path`: the path without its first `/`, with `_` for each other.
@@ -3630,7 +3778,11 @@ fi
             .append(true)
             .open(root.join("out/steps.log"))
             .unwrap();
-        let o = run_live(script, args, root, &env);
+        let path = match &self.live {
+            Some(live) => live.join(script),
+            None => live_script(script),
+        };
+        let o = run_live_at(&path, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
         // the harness shows the standard output of a test that fails, so its log holds the output
         // of each step that failed
@@ -9310,6 +9462,46 @@ fn route_bodies_sh_skips_cidr_overlap_with_no_vpc_that_has_a_cidr_and_a_subnet_i
     }
 }
 
+/// The script skips `cidr-overlap` when a pool of the clean body has no zone. Each pool names the
+/// subnet of each of its zones, so such a pool names no subnet. The route refuses a pool with no
+/// subnet for a body with a VPC (#824). The template of the body gives a zone to each pool today,
+/// so the test removes one (#822).
+#[test]
+fn route_bodies_sh_skips_cidr_overlap_when_a_pool_of_the_clean_body_has_no_zone() {
+    let mut stage = route_bodies_stage(&route_packs(true), &[]);
+    let template = stage.copy_live().join("preflight/aws.json");
+    let mut body = read_json(&template);
+    let pool = body["spec"]["machinepoolconfig"][1]["cloudConfig"]
+        .as_object_mut()
+        .unwrap();
+    assert!(pool.remove("azs").is_some(), "{pool:?}");
+    std::fs::write(&template, body.to_string()).unwrap();
+    let bodies = stage.path("bodies");
+    std::fs::create_dir_all(&bodies).unwrap();
+    std::fs::write(bodies.join("cidr-overlap.json"), "{}").unwrap();
+
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.lines().any(|l| l
+            == "skipped cidr-overlap: a pool of aws-clean.json has no zone, so it names no subnet, and the route refuses such a pool (#824)"),
+        "{steps}"
+    );
+    assert!(!steps.contains("cidr-overlap-body"), "{steps}");
+    assert!(!bodies.join("cidr-overlap.json").exists());
+    assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty());
+    // the script asks for no VPC
+    assert!(
+        !stage
+            .path(&format!(
+                "routes/sent/GET_{}.request",
+                Stage::route_key(LAB_VPCS_ROUTE)
+            ))
+            .exists()
+    );
+    passed(&steps, &["aws-clean-body", "validate-route"]);
+}
+
 #[test]
 fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault() {
     let stage = route_bodies_stage(&route_packs(true), &["profile-cloud-mismatch"]);
@@ -9682,8 +9874,10 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     assert!(!quick.contains("palette"), "{quick}");
 }
 
+/// The checks of the nightly job run the script of CI, so `nightly-names` reads the words of its
+/// note. When the note changes and the check does not, this test fails.
 #[test]
-fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issue() {
+fn loop_sh_stage_7_names_the_issue_of_the_edited_record_and_puts_the_writer_of_the_edit_in_it() {
     let mut stage = lab_stage();
     stage.strata(
         "verify --summary --quiet --format json *",
@@ -9704,7 +9898,15 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
     // the stage edits the add-on through the API, and this test does not serve that route, so the
     // first step fails. The checks of the nightly job do not need that step
     let (_, steps) = stage.run("loop.sh", &["7"]);
-    passed(&steps, &["nightly-who", "nightly-who-says"]);
+    passed(
+        &steps,
+        &[
+            "nightly-drift",
+            "nightly-names",
+            "nightly-who",
+            "nightly-who-says",
+        ],
+    );
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
     assert!(
         calls
@@ -10051,7 +10253,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     assert!(comment.contains("**Palette:** no repave"), "{comment}");
     let note = std::fs::read_to_string(stage.path("out/ask-repave-comment.err")).unwrap();
     assert!(
-        note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
+        note.contains("max impact: repave; label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{note}"
     );
     // the comment records the cluster side by the ref that strata names for it

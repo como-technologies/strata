@@ -194,10 +194,11 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 }
 
 // Issue #708. The versions cycle compares the record of each profile version that is behind with the
-// newest version of its profile, by the uid of that version. The row holds the move, and the newest
-// side of the detail tier gives a pack of the diff with its values. A compare that fails names the
-// newer version with no move, and the other versions keep theirs. Each cycle compares again, because
-// a published version can change in place, and the state holds no move of a profile.
+// newest version of its profile. The compare names that version by its uid. The row holds the move,
+// and the newest side of the detail tier gives a pack of the diff with its values. A compare that
+// fails names the newer version with no move, and the other versions keep theirs. Each cycle
+// compares again, because a published version can change in place, and the state holds no move of a
+// profile.
 func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *testing.T) {
 	r, w := withBehind(t)
 	r.record("barney-addons", "1.3.1", "addon/fred-compositions")

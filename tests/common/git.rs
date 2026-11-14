@@ -26,8 +26,8 @@ const SETTINGS: [(&str, &str); 6] = [
 /// git with them.
 const FROM_THE_ENVIRONMENT: &str = "GIT_CONFIG";
 
-/// Give `command` no git setting of the machine and one author, so that the machine cannot change
-/// what git does in a test or in a chapter of the book.
+/// Give `command` no git setting of the machine, and one author. So the machine cannot change what
+/// git does in a test or in a chapter of the book.
 ///
 /// The command reads no global or system file, and no setting from the environment. The function
 /// removes each variable whose name starts with [`FROM_THE_ENVIRONMENT`], also when the caller gave

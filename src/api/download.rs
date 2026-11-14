@@ -78,8 +78,8 @@ pub struct DownloadedPack {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackFile {
     /// The download holds no archive of the pack: its entry has an empty `filePath`. Palette serves
-    /// none for a pack of a private pack registry or Helm registry, or of an OCI registry of Helm
-    /// charts or of Zarf packages.
+    /// none for a pack of a private pack registry or Helm registry. It also serves none for a pack
+    /// of an OCI registry of Helm charts or of Zarf packages.
     NoArchive,
     /// The archive of the pack.
     Archive(PackArchive),
@@ -89,7 +89,7 @@ pub enum PackFile {
     /// The reason gives the size of the file. When the file is text, it gives the start of the
     /// text on one line, such as `263 bytes of text: <?xml ...`. Else it gives the error of the
     /// read. Palette puts the answer of the host of a Helm chart in the download in place of the
-    /// chart, also an error answer, and the route answers HTTP 200. When the list names a file
+    /// chart, also an error answer. The route still answers HTTP 200. When the list names a file
     /// that the download does not hold, the reason is `the download does not hold <path>`.
     NotReadable(String),
 }
@@ -285,8 +285,8 @@ fn pack_file(bytes: &[u8], budget: &mut Budget) -> std::result::Result<PackFile,
     }
 }
 
-/// The reason of the file `bytes` of a pack, whose read gave `error`: its size, and the start of
-/// its text when it is text, else `error`.
+/// The reason of the file `bytes` of a pack, whose read gave `error`. It gives the size of the
+/// file, and the start of its text when the file is text, else `error`.
 ///
 /// The file is text when it is UTF-8 with no control character other than white space. An example
 /// is `263 bytes of text: <?xml version="1.0" ...`. See [`one_line`] for the form of the text.

@@ -2268,7 +2268,7 @@ fn the_help_of_repave_says_what_palette_saves_at_the_request() {
         help.out.contains(
             "With the pack virtual-machine-orchestrator, spectro-vm-dashboard, or \
              vm-migration-assistant on either side, Palette can save the address that the \
-             console of that pack forwards to, and the question can move it"
+             console of that pack forwards to. The question can move that address"
         ),
         "{}",
         help.out

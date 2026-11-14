@@ -19,7 +19,7 @@
 #
 # PROFILES holds the versions, by <name>@<version>, in the project of the key. The default is the
 # three versions that `just live-up` publishes. Palette can refuse an export with HTTP 429 and
-# the message "only 1 request in 10 seconds is allowed", so the script waits 11 seconds before
+# the message "only 1 request in 10 seconds is allowed". So the script waits 11 seconds before
 # each export. Palette takes one download of a version in 10 seconds too, so the script waits 11
 # seconds before each download.
 #
@@ -71,7 +71,7 @@ archive_tops() {
 }
 
 # download_archives FILE LIST: each archive of a pack that the list LIST of the download FILE names
-# has one top folder, and its pack.json names the version of its entry. A chart of a Helm registry
+# has one top folder. Its pack.json names the version of its entry. A chart of a Helm registry
 # has no pack.json, so the check reads the archives of the other packs, and download_charts reads
 # the charts
 download_archives() {
@@ -250,8 +250,8 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
   check export-accepts-json-no-file 0 '#156: the answer is {"Reader":{}}, and not the file' -- \
     grep -qx '{"Reader":{}}' export-accepts-json.out
   sleep 11
-  # three exports with no wait between them: some runs see HTTP 429 TooManyRequests, and some do
-  # not, so the check records the exit code and the answers, and does not judge them
+  # three exports with no wait between them. Some runs see HTTP 429 TooManyRequests, and some do
+  # not. So the check records the exit code and the answers, and does not judge them
   check export-limit '?' '#156: three exports with no wait between them; exit 2 when Palette refused one or more' -- \
     bash -c 'refused=0; for i in 1 2 3; do "$1" export "$2" yaml > /dev/null || refused=2; done; exit $refused' _ \
     "$live/api.sh" "$uid"
@@ -274,13 +274,13 @@ if [ "$stage" = all ] || [ "$stage" = 4 ]; then
   # the form of the top folder of each archive: the check records it, and does not judge it
   check download-top-folders '?' '#815: the top folders of each archive of a pack in each download, a Helm chart too' -- \
     download_tops ./*.list.json
-  # which packs have no archive, and why: the records name the registry of each pack, and the
-  # check records the entries and does not judge them
+  # which packs have no archive, and why. The records name the registry of each pack. The check
+  # records the entries and does not judge them
   check download-no-archive '?' '#751: the entry of each pack with no archive: its name, its type, and isRegistryPrivate' -- \
     bash -c 'for f in "$@"; do jq -r --arg f "$f" ".packs[] | select(.filePath == \"\" and (.manifestName // \"\") == \"\") | [\$f, .name, .type, .isRegistryPrivate] | @tsv" "$f"; done' _ ./*.list.json
   # Palette puts the chart of a Helm registry that is not private in the file as the host of the
-  # chart serves it, also an error answer of the host. same-release does not compare the line
-  # version of its Chart.yaml (#817). The check records what Palette gives (#828)
+  # chart serves it. An error answer of the host goes in the file too. same-release does not
+  # compare the line version of its Chart.yaml (#817). The check records what Palette gives (#828)
   check download-chart '?' '#817, #828: each chart of a Helm registry: its top folder and its Chart.yaml, or the size and the start of a file that is no archive' -- \
     download_charts ./*.list.json
   # the reason that strata gives for each chart whose file is no archive (#828). The check reads

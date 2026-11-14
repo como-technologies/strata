@@ -86,9 +86,9 @@ const (
 // Side is the comparison that a detail diff of a pack comes from.
 type Side string
 
-// The sides of a pack diff. The published side is the record against the published version, the
-// cluster side is the record against the cluster, and the newer side is the pinned version against
-// the newest version. The newest side is the record against the newest published version of its
+// The sides of a pack diff. The published side is the record against the published version. The
+// cluster side is the record against the cluster. The newer side is the pinned version against the
+// newest version. The newest side is the record against the newest published version of its
 // profile.
 const (
 	SidePublished Side = "published"

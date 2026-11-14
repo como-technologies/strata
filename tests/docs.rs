@@ -7275,3 +7275,40 @@ fn the_pages_and_the_template_of_a_real_pipeline_keep_to_the_style_rules() {
     }
     assert_no_faults(&faults);
 }
+
+// ---- the style of the comments and the book (#879) ----------------------------------------------
+
+/// The area of the style named two sentences of the book over the limit of 25 words. They are the
+/// next patch of `upstream-issues.md` (the verify of #881), and the row of `api.sh` (#822).
+#[test]
+fn the_sentences_that_the_area_of_the_style_named_keep_to_25_words() {
+    for (page, anchor) in [
+        (
+            "automation/upstream-issues.md",
+            "The patch is the newest patch of the minor version",
+        ),
+        ("development/live-example.md", "| `api.sh` |"),
+    ] {
+        let block = block(&read(&docs().join(page)), anchor);
+        assert_no_faults(&word_faults(page, &block_sentences(&block), MOST_WORDS));
+    }
+}
+
+/// The help of `verify-report.sh` said "what would happen" for `--dry-run`. The help of each
+/// report script now names the change to each issue, with no refused word (#881).
+#[test]
+fn the_help_of_each_report_script_names_the_change_to_each_issue_for_a_dry_run() {
+    for file in [
+        "scripts/ci/verify-report.sh",
+        "scripts/ci/upstream-report.sh",
+    ] {
+        let help = comment(file, "--dry-run prints");
+        assert!(
+            one_line(&help).contains(
+                "--dry-run prints each issue body and the change to each issue, and calls no host."
+            ),
+            "{file}: {help}"
+        );
+        assert_no_faults(&wording_faults(file, &help));
+    }
+}

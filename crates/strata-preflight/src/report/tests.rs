@@ -194,8 +194,8 @@ rules:
         &subject,
         Some("out"),
     );
-    // the body holds the values of the variables, so it goes beside world.json, and not into the
-    // current directory; so does the answer, which strata does not read for a value
+    // the body holds the values of the variables. So it goes beside world.json, and not into the
+    // current directory. So does the answer, which strata does not read for a value
     assert_eq!(
         lines[0],
         "jq '.account.spec' out/world.json > out/request.json"
@@ -227,8 +227,8 @@ rules:
 }
 
 /// Palette can save the address of the console of a pack of virtual machines at `validate/repave`.
-/// So the line of the request of a check that names it in `saves` says it, and the line of
-/// another request has no comment (#717).
+/// So the line of the request of a check that names it in `saves` says it. The line of another
+/// request has no comment (#717).
 #[test]
 fn the_line_of_a_request_at_which_palette_saves_something_says_what_it_saves() {
     let section = r#"

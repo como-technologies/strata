@@ -49,7 +49,7 @@ pub enum Edit {
     /// a repave for the OS and Kubernetes layers.
     ///
     /// The tag and the version change. The `packUid` and the digest become those of the other
-    /// version in the pack listing, as Palette takes them from the record of that version: see
+    /// version in the pack listing. Palette takes them from the record of that version: see
     /// [`listed_version`].
     Upgrade {
         /// The pack that moves.
@@ -152,9 +152,9 @@ impl Edit {
     /// The part of an edit that lands in the answer of `packs/manifests`: the name of the answer,
     /// and the build of its pack summaries. `listing` gives the pack listing that an upgrade reads.
     ///
-    /// Palette gives the summary of a pack from the record of the version that the profile pins:
-    /// its uid, its version, its registry, and its digest. The answer has the metadata of the
-    /// profile, so it takes the name of the profile.
+    /// Palette gives the summary of a pack from the record of the version that the profile pins.
+    /// That record gives its uid, its version, its registry, and its digest. The answer has the
+    /// metadata of the profile, so it takes the name of the profile.
     fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
         match self {
             Edit::Name(name) => manifests["metadata"]["name"] = json!(name),
@@ -550,8 +550,9 @@ mod tests {
         }
     }
 
-    /// The pin and the pack summary of `csi-aws-ebs` after an edit in place with `edits`, on the
-    /// profile of [`csi_profile`] at 1.65.0 in the project `dev`. Also the pack listing of the pack.
+    /// The pin and the pack summary of `csi-aws-ebs` after an edit in place with `edits`. The
+    /// edit is on the profile of [`csi_profile`] at 1.65.0 in the project `dev`. Also the pack
+    /// listing of the pack.
     fn csi_after_edit_in_place(edits: &[Edit]) -> (Value, Value, Value) {
         let dir = tempfile::tempdir().unwrap();
         let tenant = Tenant::new(dir.path(), &crate::repository());

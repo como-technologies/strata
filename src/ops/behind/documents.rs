@@ -1,7 +1,8 @@
 //! `behind`: the documents of the profile versions of one scope, each read one time.
 //!
-//! Three parts of `behind` read the document of a profile version: the newer versions of a
-//! profile, the move to the newest version, and the names of the clusters in a refusal of Palette.
+//! Three parts of `behind` read the document of a profile version. They are the newer versions of
+//! a profile, the move to the newest version, and the names of the clusters in a refusal of
+//! Palette.
 //! They read the same versions, so the scope keeps each document that it read.
 
 use std::collections::BTreeMap;

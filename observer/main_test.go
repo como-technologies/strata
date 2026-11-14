@@ -153,12 +153,15 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 
 // The code of the observer sends no HTTP POST to Palette. It asks Palette only through strata, and a POST to
 // Palette comes from the click "Ask Palette" alone: see runner.FlagPin. The server takes that one POST, so the
-// file of its routes names the method. The observer has four HTTP clients: the health check, which calls a
-// loopback address, the read of the pods, which sends one GET to the API server of Kubernetes, the seed, which
-// gets and updates the four Secrets of the records, and the alerts, which send one POST of a message to the
-// webhook of a team. Only internal/api, internal/kube, and
-// internal/alert import a package of the network, and so do the stand-in for the API server and the
-// webhook of the tests in internal/testkit, which only test files import. Only internal/alert/send.go names the method for the webhook.
+// file of its routes names the method.
+//
+// The observer has four HTTP clients. The health check calls a loopback address. The read of the pods sends
+// one GET to the API server of Kubernetes. The seed gets and updates the four Secrets of the records. The
+// alerts send one POST of a message to the webhook of a team.
+//
+// Only internal/api, internal/kube, and internal/alert import a package of the network. So do the stand-in
+// for the API server and the webhook of the tests in internal/testkit, which only test files import. Only
+// internal/alert/send.go names the method for the webhook.
 func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string

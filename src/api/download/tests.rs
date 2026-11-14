@@ -1,6 +1,6 @@
-//! The tests of the download: the files of two builds, the packs with no archive, a pack file that
-//! is no archive or that the download does not hold and its reason, and the refusals of the whole
-//! download.
+//! The tests of the download: the files of two builds, the packs with no archive, and a pack file
+//! that is no archive. They also test a pack file that the download does not hold, the reason of
+//! each such file, and the refusals of the whole download.
 
 use super::written::{
     DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download,

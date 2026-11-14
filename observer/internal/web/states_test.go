@@ -278,8 +278,9 @@ func TestAPageWithAFindingAFailedReadOrACauseShowsNoCalmTone(t *testing.T) {
 }
 
 // The test above fails without the rule. A copy of the scripts whose gate of the calm tone always says yes shows a calm tone on
-// the set ok with no events, which holds a finding and two causes: the card of the events says "All quiet". A place that one
-// check found the same takes the tone same, which is no claim about the page, so the set ok needs the empty list of events.
+// the set ok with no events. That set holds a finding and two causes. The card of the events on that set says "All quiet". A
+// place that one check found the same takes the tone same, which is no claim about the page. So the set ok needs the empty list
+// of events.
 func TestTheRuleOfACalmToneIsWhatKeepsItOffAPageWithAFinding(t *testing.T) {
 	gate := regexp.MustCompile(`(?m)^const calmOk = .*$`)
 	if got := len(gate.FindAllString(readScripts(t), -1)); got != 1 {
@@ -986,7 +987,7 @@ func searchOf(t *testing.T, html string) string {
 }
 
 // Issue #707. A column of versions sorts in the order of strata. testdata/versions.json holds the cases,
-// with those of #616 and each form of the order, and a test of strata sorts the same file with the order of
+// with those of #616 and each form of the order. A test of strata sorts the same file with the order of
 // strata. The page sorts the cases from the last one to the first, and it must give the order of the file.
 // A sort compares only some pairs, so the page also compares each pair of cases in the two directions.
 func TestTheVersionSortOfThePageGivesTheOrderOfStrata(t *testing.T) {

@@ -1,6 +1,5 @@
-//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, the
-//! numbers of a text where it holds them, and the natural order of any other text, below each
-//! version.
+//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, and the
+//! numbers of a text where it holds them. Any other text has its natural order, below each version.
 
 use std::cmp::Ordering;
 use std::ops::Range;
@@ -297,7 +296,7 @@ impl<'a> Version<'a> {
             None => number_and_text(tail).is_some(),
         });
         // text right after the third number: the crate reads that number and the text as one part,
-        // as in `3rc1b`, so it reads two numbers and a tail after a dot
+        // as in `3rc1b`. So it reads two numbers and a tail after a dot
         let joined = tail.is_none() && !rest.is_empty();
         let third = v[..found.end].rfind('.').map_or(found.start, |dot| dot + 1);
         Some(Version {
@@ -496,10 +495,10 @@ fn part(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// A part of a tail as the crate `versions` reads the last part of a version: a number, the
-/// letters right after it, and a number after the letters. The letters and the second number can
-/// be empty. So `4` gives `4`, `4rc` gives `4` and `rc`, and `4rc1` gives `4`, `rc`, and `1`. None
-/// for each other part, such as `develop` or `4a1b`.
+/// A part of a tail as the crate `versions` reads the last part of a version. It gives a number,
+/// the letters right after it, and a number after the letters. The letters and the second number
+/// can be empty. So `4` gives `4`, `4rc` gives `4` and `rc`, and `4rc1` gives `4`, `rc`, and `1`.
+/// None for each other part, such as `develop` or `4a1b`.
 fn number_and_text(part: &str) -> Option<(&str, &str, &str)> {
     let end = |s: &str, f: fn(&char) -> bool| s.chars().take_while(f).count();
     let (number, rest) = part.split_at(end(part, char::is_ascii_digit));
