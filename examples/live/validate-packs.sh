@@ -81,8 +81,8 @@ if [ "$stage" = all ] || [ "$stage" = 1 ]; then
   candidate strata-validate-barney ""
   check validate-accepts 0 '#152: snapshot --from-candidate --validate writes the record when Palette takes the packs' -- \
     "$strata" snapshot --from-candidate strata-validate-barney.yaml --validate -o barney.json
-  check validate-accepts-says 0 '#152: it prints palette accepts' -- \
-    grep -qx 'palette    accepts' validate-accepts.err
+  check validate-accepts-says 0 '#152, #633: it says in a sentence that Palette accepts the candidate' -- \
+    grep -qx "strata: Palette accepts the name, the version, and the packs of 'strata-validate-barney.yaml'" validate-accepts.err
   check validate-accepts-record 0 '#152: the record holds source.paletteValidation.accepts true' -- \
     jq -e '.source.paletteValidation == {"accepts": true}' barney.json
 fi
@@ -137,8 +137,8 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
     echo "== a version that Palette holds, as an update of itself (#152)" | tee -a steps.log
     check validate-version 0 "#152: snapshot $PROFILE --validate asks the route of an update, and Palette takes the version as it is" -- \
       "$strata" snapshot "$PROFILE" --validate -o version.json
-    check validate-version-says 0 '#152: it prints palette accepts' -- \
-      grep -qx 'palette    accepts' validate-version.err
+    check validate-version-says 0 '#152, #633: it says in a sentence that Palette accepts the packs of the version' -- \
+      grep -qx "strata: Palette accepts the packs of '$PROFILE' as an update of itself" validate-version.err
     echo "== a candidate with the name and the version of $PROFILE (#273)" | tee -a steps.log
     {
       echo "name: ${PROFILE%@*}"

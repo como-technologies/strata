@@ -10457,13 +10457,37 @@ fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_sho
                 .is_ok()
         );
     }
-    // two profile records: the records show no cluster, and the other side is a ref
+    // two profile records show no cluster: the error says so, names the command with a cluster in
+    // place of one record, and names plain compare (#633). That command passes the check
+    for (questions, option) in [(repave, "--repave"), (validate, "--validate")] {
+        let said = refused(questions, &a_file, &b_file);
+        assert!(
+            said.starts_with(&format!("{option} needs one side that is a cluster, ")),
+            "{said}"
+        );
+        assert!(
+            said.contains("both sides are records with no cluster"),
+            "{said}"
+        );
+        assert!(
+            said.contains(&format!("strata compare cluster:<name> <record> {option}")),
+            "{said}"
+        );
+        assert!(
+            said.contains("Plain compare of the two records prints the impact"),
+            "{said}"
+        );
+        assert!(
+            questions
+                .check(&Ref::parse("cluster:payments"), &b_file)
+                .is_ok()
+        );
+    }
+    // a record beside a ref that is no cluster gets the error of two refs
     assert!(
-        refused(repave, &a_file, &b_file).starts_with("--repave needs one side that is a cluster")
-    );
-    assert!(
-        refused(validate, &a_file, &Ref::parse("aws-stack@1.1.6"))
-            .starts_with("--validate needs one side that is a cluster")
+        refused(validate, &a_file, &Ref::parse("aws-stack@1.1.6")).starts_with(
+            "--validate needs one side that is a cluster and one that is a profile version"
+        )
     );
     // a record of an edge host is no cluster, and a record with no uid is no profile that
     // Palette holds
@@ -10480,6 +10504,10 @@ fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_sho
     assert!(
         refused(validate, &cluster_file, &candidate_file)
             .contains("a profile version that Palette holds")
+    );
+    assert!(
+        refused(repave, &candidate_file, &a_file)
+            .contains("both sides are records with no cluster")
     );
     // a record of the update that waits: the same cluster, or two uids that show two clusters
     let mut waiting = cluster.clone();
@@ -17235,6 +17263,14 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
         err.to_json()["errors"][0]["code"],
         "DependencyPackWithMinVersionRequired"
     );
+    // the lines of the refusal come before its error, and no sentence of an accept follows
+    assert_eq!(
+        strata::render::refusal_lines(&snap),
+        [format!(
+            "palette    refuses: DependencyPackWithMinVersionRequired kubernetes: {message}"
+        )]
+    );
+    assert_eq!(strata::render::acceptance_sentence(&snap), None);
 
     // a 200 with no error: Palette accepts, and the record holds the answer and the same root
     let api = registry
@@ -17253,6 +17289,15 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     assert_eq!(
         json["source"]["paletteValidation"],
         serde_json::json!({"accepts": true})
+    );
+    // the last line names what Palette checks for a candidate (#633)
+    assert!(strata::render::refusal_lines(&snap).is_empty());
+    assert_eq!(
+        strata::render::acceptance_sentence(&snap),
+        Some(format!(
+            "Palette accepts the name, the version, and the packs of '{}'",
+            snap.source.reference
+        ))
     );
     // without --validate, the record has no such field
     let plain = ops::snapshot_from_candidate(

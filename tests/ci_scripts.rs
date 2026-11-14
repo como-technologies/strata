@@ -1835,10 +1835,13 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         source["cluster"] = serde_json::json!({"uid": "c-2", "name": "billing", "profiles": []});
     });
     let pairs = [
-        // two profile versions: no cluster
+        // two records of profile versions: no cluster, and the commands to use
         (
             [h.a.clone(), h.b.clone()],
-            "strata: --repave needs one side that is a cluster and one that is a profile version\n",
+            "strata: --repave needs one side that is a cluster, and both sides are records with \
+             no cluster. Palette answers only for a cluster, so give the cluster in place of one \
+             record: strata compare cluster:<name> <record> --repave. Plain compare of the two \
+             records prints the impact\n",
         ),
         // a candidate is not in Palette
         (

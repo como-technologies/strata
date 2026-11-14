@@ -181,8 +181,9 @@ refusal of the whole request, for example values that are not YAML, names no
 pack. The API schema refuses two equal layers with HTTP 422, and the code is
 the number `610`. Fix the candidate, and ask again.
 
-When Palette takes the packs, strata prints `palette    accepts` and writes the
-record. The record holds the answer in `source.paletteValidation`:
+When Palette takes the packs, strata writes the record. Then a sentence says
+what Palette accepts, as the last line. The record holds the answer in
+`source.paletteValidation`:
 
 ```text
 {{#include ../output/candidate-validate-accepts.txt}}
@@ -199,6 +200,16 @@ packs against the clusters that run the version:
 ```text
 {{#include ../output/snapshot-validate-version.txt}}
 ```
+
+Without `-o`, the record goes to standard output, and the sentence comes after
+it. So on a terminal, the record does not hide the answer:
+
+```text
+{{#include ../output/snapshot-validate-stdout-lines.txt}}
+```
+
+The `-q` option does not drop the sentence, because the answer is what
+`--validate` asks for.
 
 `--validate` needs the network, so strata refuses it with `--from-raw`:
 

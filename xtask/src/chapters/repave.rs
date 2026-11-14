@@ -53,12 +53,47 @@ pub(super) fn run(r: &mut Runner) {
         false,
         "grep '^\\*\\*Palette' comment.md",
     );
+    repave_records(r);
     r.serve_here(); // state 1: Palette says that the kubeadm change repaves
     repave_csi(r);
     repave_disagree(r);
     repave_validate(r);
     repave_approval(r);
     repave_template(r);
+}
+
+/// The part of the chapter `repave` for two records with no cluster: the error, and the two
+/// commands that it names.
+fn repave_records(r: &mut Runner) {
+    for version in ["1.1.1", "1.1.6"] {
+        r.step(
+            "repave-records-usage",
+            0,
+            true,
+            &format!("strata snapshot aws-stack@{version} -q -o {version}.json"),
+        );
+    }
+    for question in ["--repave", "--validate"] {
+        r.step(
+            "repave-records-usage",
+            2,
+            true,
+            &format!("strata compare 1.1.1.json 1.1.6.json {question}"),
+        );
+    }
+    // a record is the profile side beside a cluster, and plain compare gives the impact
+    r.step(
+        "repave-records-forward",
+        1,
+        false,
+        "strata compare cluster:payments 1.1.6.json --repave | grep -E '^(aws-stack|palette)'",
+    );
+    r.step(
+        "repave-records-forward",
+        1,
+        false,
+        "strata compare 1.1.1.json 1.1.6.json | grep -E '^(aws-stack|      impact)'",
+    );
 }
 
 /// The part of the chapter `repave` for a change that does not repave.

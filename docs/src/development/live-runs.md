@@ -965,12 +965,14 @@ mark `disabled`. These are the stages and the options:
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
+| `validate-accepts`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` writes the record with `source.paletteValidation` `{"accepts": true}` |
+| `validate-accepts-says` | 0 | #633: the line `strata: Palette accepts the name, the version, and the packs of '<file>'` says that Palette takes the candidate. No result yet: the line is new, and no live window ran it |
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`. It refuses the whole request with `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
-| `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `validate-version` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `validate-version-says` | 0 | #633: the line `strata: Palette accepts the packs of '<ref>' as an update of itself` says that Palette takes the version. No result yet: the line is new, and no live window ran it |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |

@@ -521,6 +521,18 @@ fn candidate_validate_snapshot(r: &mut Runner) {
         true,
         "strata snapshot aws-stack@1.1.1 --validate -o checked.json",
     );
+    // with no -o, the record goes to standard output, and the answer follows it
+    r.step(
+        "snapshot-validate-stdout",
+        0,
+        true,
+        "strata snapshot aws-stack@1.1.1 --validate",
+    );
+    r.excerpt(
+        "snapshot-validate-stdout-lines",
+        "snapshot-validate-stdout",
+        r"^(strata|\{|\})",
+    );
     r.step(
         "snapshot-validate-usage",
         2,

@@ -259,8 +259,8 @@ impl OutputArgs {
 pub(crate) struct CompareArgs {
     /// The first side: a ref or a snapshot file
     pub(crate) a: String,
-    /// The second side, in the same forms as the first. Beside a profile version,
-    /// cluster:<cluster> holds only the profile that the version replaces, as
+    /// The second side: a ref or a snapshot file. The two sides can be of different kinds. Beside a
+    /// profile version, cluster:<cluster> holds only the profile that the version replaces, as
     /// cluster:<cluster>/<profile> does. Beside a cluster group, it holds the profiles of the group
     pub(crate) b: String,
     /// Also print the unified diffs of the values and the manifests
@@ -304,7 +304,7 @@ pub(crate) struct SnapshotArgs {
     pub(crate) from_candidate: Option<PathBuf>,
     /// Ask Palette whether it takes a candidate or a profile version. Palette checks the name, the
     /// version, and the packs of a candidate, and the packs of a version as an update of itself.
-    /// A refusal exits 2 and writes no record
+    /// The last line gives the answer. A refusal exits 2 and writes no record
     #[arg(long)]
     pub(crate) validate: bool,
     #[command(flatten)]

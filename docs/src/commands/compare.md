@@ -1,7 +1,8 @@
 # strata compare
 
 Compare two refs: profile versions, snapshot files, clusters, or pack versions
-from a registry. `strata A B` is the same as `strata compare A B`.
+from a registry. The two sides can be of different kinds, such as a cluster and
+a profile version. `strata A B` is the same as `strata compare A B`.
 
 Two pack refs answer what changed between two versions of a pack:
 [What changed between two pack versions](../use-cases/pack-versions.md).
