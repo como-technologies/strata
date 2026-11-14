@@ -426,9 +426,10 @@ clear whose name reads as a secret. The id stays, and a reader that ignores
 unknown fields reads it. The exit does not change: see
 [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
-After 0.33.0, a pin of `strata-behind/1` can have the new field `nextPatch`. A pin that is
-behind a newer minor version gives it: the newest patch of the minor version of the pin. The id
-stays, and `--since` reads a report of 0.33.0 and before. See
+After 0.33.0, a pin of `strata-behind/1` can have the new field `nextPatch`: the newest patch of
+the minor version of the pin. Only a pin that is behind a newer minor version can have it. A pin
+with no newer patch of its own minor version does not have it. The id stays, and `--since` reads
+a report of 0.33.0 and before. See
 [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
 
 After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a

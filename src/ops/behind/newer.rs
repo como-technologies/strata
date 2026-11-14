@@ -51,7 +51,8 @@ pub(super) fn newer_versions(
 /// A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives `1.36.4`. A team can take that
 /// patch before the move to the newest version. `newer` is newest first, as [`newer_versions`]
 /// gives it. None when `newer` is empty, when the newest version is of the minor version of
-/// `pinned`, and when `pinned` does not parse. [`version::line`] gives the minor version.
+/// `pinned`, when `newer` has no version of that minor version, and when `pinned` does not parse.
+/// [`version::line`] gives the minor version.
 pub(super) fn next_patch(pinned: &str, newer: &[Newer]) -> Option<String> {
     let minor = |v: &str| version::line(v, 2);
     let own = minor(pinned)?;

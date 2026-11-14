@@ -338,19 +338,13 @@ impl Renderer for MarkdownRenderer {
         let mut o = format!("### same release: {}\n\n", chain_verdict(c));
         o.push_str("| status | from | to | detail |\n|---|---|---|---|\n");
         for (index, p) in c.pairs.iter().enumerate() {
-            let mut detail = markdown_cell(&pair_detail(p));
-            for line in pair_projects(c, index).into_iter().chain(renumber_lines(p)) {
-                detail.push_str("<br>");
-                detail.push_str(&markdown_cell(&line));
-            }
-            for r in &p.reasons {
-                detail.push_str("<br>");
-                detail.push_str(&markdown_cell(r));
-            }
-            for note in pair_notes(p) {
-                detail.push_str("<br>");
-                detail.push_str(&markdown_cell(&note));
-            }
+            let detail = lines_cell(
+                std::iter::once(pair_detail(p))
+                    .chain(pair_projects(c, index))
+                    .chain(renumber_lines(p))
+                    .chain(p.reasons.iter().cloned())
+                    .chain(pair_notes(p)),
+            );
             o.push_str(&format!(
                 "| {} | {} | {} | {} |\n",
                 pair_word(p.status),

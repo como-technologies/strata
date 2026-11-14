@@ -170,8 +170,8 @@ pub struct Pin {
     /// For a pin that is behind a newer minor version: the newest version in `newer` of the minor
     /// version of the pin. A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives `1.36.4`. A
     /// team can take that patch before the move to the newest version. Absent when the pin is
-    /// current, when its version does not parse, and when the newest version is of its minor
-    /// version.
+    /// current, when its version does not parse, when the newest version is of its minor version,
+    /// and when `newer` has no version of its minor version.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_patch: Option<String>,
     /// For a pin that is behind: what a move to the newest version does, from `compare` of the

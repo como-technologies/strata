@@ -748,8 +748,9 @@ of the secret does not show, because the two sides hold the mask: see
   - `behind`: `true` when `newer` is not empty.
   - `nextPatch`, for a pin that is behind a newer minor version: the newest
     version in `newer` of the minor version of the pin. It is absent when the
-    newest version is of the minor version of the pin, and when the version of
-    the pin does not parse. See
+    newest version is of the minor version of the pin, when `newer` has no
+    version of the minor version of the pin, and when the version of the pin
+    does not parse. See
     [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`. `flags[]` holds
