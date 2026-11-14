@@ -8,7 +8,6 @@ use serde_json::Value;
 use super::mask::mask_secret;
 use super::{Method, PaletteApi};
 use crate::config::Config;
-use crate::content::canon::sha256_hex;
 use crate::error::{Error, Result};
 
 /// The header that carries the API key.
@@ -39,17 +38,14 @@ static PROVED_KEYS: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
 /// client of the key. Then the key is right, and a 403 that is a
 /// [`Denial`](super::codes::Denial) is a refusal of the role of the key.
 ///
-/// It holds the digest of the address and the key, and [`PROVED_KEYS`] holds no key either. A
-/// client with another key starts with no proof.
+/// It holds [`Config::key_digest`], so [`PROVED_KEYS`] holds no key either. A client with another
+/// key starts with no proof, also at the same address.
 struct KeyProof(String);
 
 impl KeyProof {
     /// The proof of the key of `config`.
     fn of(config: &Config) -> Self {
-        KeyProof(sha256_hex(&format!(
-            "{}\n{}",
-            config.base_url, config.api_key
-        )))
+        KeyProof(config.key_digest())
     }
 
     /// Note an answer with a 2xx status: Palette took the key.
@@ -291,6 +287,7 @@ mod tests {
             ("200 OK", "{}"),
             ("403 Forbidden", &denied),
             ("403 Forbidden", &denied),
+            ("403 Forbidden", &denied),
         ]);
         let first = HttpApi::new(Config::new(url.as_str(), "first-key"));
         first.get_json("/v1/dashboard/projects/metadata").unwrap();
@@ -301,11 +298,9 @@ mod tests {
         let again = HttpApi::new(Config::new(url.as_str(), "first-key"));
         let text = again.get_json(path).unwrap_err().to_string();
         assert!(!text.contains("the key can be wrong"), "{text}");
-        // the second client on the same thread, with another key: no answer proved that key
-        let second = HttpApi::new(Config::new(
-            serve_each(&[("403 Forbidden", &denied)]),
-            "second-key",
-        ));
+        // the second client on the same thread and at the same address, with another key: no
+        // answer proved that key
+        let second = HttpApi::new(Config::new(url.as_str(), "second-key"));
         let text = second.get_json(path).unwrap_err().to_string();
         assert!(text.contains("does not give the permission"), "{text}");
         assert!(text.contains("the key can be wrong"), "{text}");

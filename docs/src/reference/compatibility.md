@@ -1437,6 +1437,9 @@ field, a value, an input, or an option is in the sections above.
   key only when it is false. Before, the message read a flag of the thread. So a client with a
   second key on the same thread got no hint about that key. `api::HttpApi` sets it for each
   key and address of Palette in the process, and `api::MemoryApi` for each client.
+- `api::project_uid_named` keeps the uid that it finds with the name, the address, and the key
+  of the `Config`. Before, it kept the uid with the name alone. So a program with two tenants or
+  two keys, and one project name, got the uid of the first tenant.
 - `snapshot::Snapshot::from_raw`, `Snapshot::from_raw_draft`, and `Snapshot::from_cluster` write
   `********` over the console address of a pack of virtual machines. They give
   `Error::Serialize` when strata cannot write the masked values. `api::RawProfile::save_dir`
