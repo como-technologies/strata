@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi, named_entries};
-use crate::closed_set::{ClosedSet, Open, impl_closed_set};
+use crate::closed_set::{Open, impl_closed_set};
 use crate::error::{Error, ErrorDocument, Result};
 use crate::model::cloud::Cloud;
 use crate::model::profile_type::ProfileType;
@@ -26,10 +26,12 @@ use super::{ConsumerCounts, client_for};
 
 mod profiles;
 mod registries;
+mod unread;
 
 use profiles::list_profiles;
 pub use registries::ListedRegistry;
 use registries::list_registries;
+use unread::Unread;
 
 /// Schema id of the document `list` writes.
 pub const LIST_SCHEMA: &str = "strata-list/1";
@@ -463,15 +465,10 @@ where
         String::new()
     };
 
-    let mut unread = Unread::default();
-    let profiles = if options.wants(ListKind::Profiles) {
-        progress.note("listing profiles");
-        unread.read(ListKind::Profiles, || {
-            list_profiles(&home, options, &mut registries, progress)
-        })?
-    } else {
-        None
-    };
+    let mut unread = Unread::new(options, progress);
+    let profiles = unread.wanted(ListKind::Profiles, "listing profiles", || {
+        list_profiles(&home, options, &mut registries, progress)
+    })?;
     let ClusterSection {
         clusters,
         includes_virtual,
@@ -482,30 +479,17 @@ where
             cluster_section(options, &home, &mut connect, &mut listings, progress)
         })?
         .unwrap_or_default();
-    let filters = if options.wants(ListKind::Filters) {
-        progress.note("listing saved tag filters");
-        unread.read(ListKind::Filters, || {
-            super::saved_filters(&super::tenant_of(&mut connect)?)
-        })?
-    } else {
-        None
-    };
-    let projects = if options.wants(ListKind::Projects) {
-        progress.note("listing projects");
-        unread.read(ListKind::Projects, || {
-            let tenant = connect(Some(TENANT_SCOPE))?;
-            Ok(listings.of(&tenant)?.to_vec())
-        })?
-    } else {
-        None
-    };
-    let listed_registries = if options.wants(ListKind::Registries) {
-        progress.note("listing registries");
-        unread.read(ListKind::Registries, || list_registries(&mut registries))?
-    } else {
-        None
-    };
-    let errors = unread.into_errors(options)?;
+    let filters = unread.wanted(ListKind::Filters, "listing saved tag filters", || {
+        super::saved_filters(&super::tenant_of(&mut connect)?)
+    })?;
+    let projects = unread.wanted(ListKind::Projects, "listing projects", || {
+        let tenant = connect(Some(TENANT_SCOPE))?;
+        Ok(listings.of(&tenant)?.to_vec())
+    })?;
+    let listed_registries = unread.wanted(ListKind::Registries, "listing registries", || {
+        list_registries(&mut registries)
+    })?;
+    let errors = unread.into_errors()?;
     let project_name = scope_name(&project_uid, projects.as_deref(), &home, &mut listings);
 
     Ok(Listing {
@@ -527,50 +511,6 @@ where
         registries: listed_registries,
         errors,
     })
-}
-
-/// The kinds of a listing that strata could not read, each with its error, in the order of the
-/// reads.
-#[derive(Default)]
-struct Unread(Vec<(ListKind, Error)>);
-
-impl Unread {
-    /// The answer of `read`, the read of `kind`. When Palette refuses the read, or the read does
-    /// not complete, the answer is `None`, and the error stays here under `kind`. So a kind that
-    /// strata cannot read leaves the other kinds of the listing.
-    ///
-    /// # Errors
-    ///
-    /// Each other error of `read`, such as a saved tag filter that does not exist.
-    fn read<T>(&mut self, kind: ListKind, read: impl FnOnce() -> Result<T>) -> Result<Option<T>> {
-        match read() {
-            Ok(answer) => Ok(Some(answer)),
-            Err(e) if e.is_failed_read() => {
-                self.0.push((kind, e));
-                Ok(None)
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// The error document of each kind that strata could not read, for [`Listing::errors`].
-    ///
-    /// # Errors
-    ///
-    /// The error of the first kind, when strata read no kind that `options` asks for. Then the
-    /// listing holds nothing to print, and the command fails as one read.
-    fn into_errors(self, options: &ListOptions) -> Result<BTreeMap<Open<ListKind>, Value>> {
-        let asked = ListKind::ALL.iter().filter(|k| options.wants(**k)).count();
-        let read_none = self.0.len() == asked;
-        let mut errors = BTreeMap::new();
-        for (kind, error) in self.0 {
-            if read_none {
-                return Err(error);
-            }
-            errors.insert(Open::Known(kind), error.to_json());
-        }
-        Ok(errors)
-    }
 }
 
 /// The part of a [`Listing`] that the read of the clusters fills. It is empty when `list` reads
