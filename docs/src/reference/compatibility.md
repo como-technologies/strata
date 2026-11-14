@@ -1121,7 +1121,8 @@ field, a value, an input, or an option is in the sections above.
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
-  and `same-release` send it for each side that Palette answers. A key needs the permission
+  and `same-release` send it for each side that Palette answers. A snapshot of a set sends it
+  one time for each project of the set. A key needs the permission
   `packRegistry.list` for it, which each built-in role with `clusterProfile.get` holds. A key
   without it gets HTTP 403, and the command exits `2` with the error `api`. Before, these
   commands did not read the listing. See
@@ -1138,6 +1139,11 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
+- **`registry` of a pack of `/v1/profiles` is the name that the record gives.** Before, a pack
+  that no pin of `behind` holds had the uid of its registry there. A record of strata 0.33.0
+  and before names no registry, so its packs keep the earlier value. A program that reads the
+  uid there must read `packs[].registryUid` of the record. See
+  [The summary](../development/observer.md#the-summary).
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
   request comment shows a tag in a message of Palette as text. The reason of

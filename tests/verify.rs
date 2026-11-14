@@ -16947,6 +16947,76 @@ fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps
     );
 }
 
+/// `snapshot tag:env=prod --dir fleet` over three clusters of one definition, in the projects
+/// `projects`, with the registry listing of the fixtures. Gives the count of the requests of the
+/// registry listing.
+fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
+    common::make_fixtures(dir);
+    let doc = read_json(&dir.join("cluster-a").join("cluster.json"));
+    let uids = [CLUSTER_UID, "c-two", "c-three"];
+    let rows = uids
+        .iter()
+        .zip(projects)
+        .map(|(uid, project)| fleet_row(uid, uid, project, serde_json::json!({"env": "prod"})))
+        .collect();
+    let mut api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
+        rows,
+        vec![],
+    )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+        ]}),
+    );
+    for uid in &uids[1..] {
+        api = api.with(cluster_route(uid), doc.clone());
+    }
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &dir.join("fleet"),
+        false,
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.summary.recorded, 3, "{:?}", report.records);
+    for r in &report.records {
+        let snap = Snapshot::load(&r.path).unwrap();
+        assert!(!snap.packs.is_empty());
+        for p in &snap.packs {
+            assert_eq!(
+                p.registry_name,
+                "Public Repo",
+                "{}: {}",
+                r.path.display(),
+                p.key
+            );
+        }
+    }
+    api.calls(REGISTRY_LISTING)
+}
+
+#[test]
+fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"]);
+    assert_eq!(calls, 1, "one read for the set");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_the_registry_listing_one_time_for_each_project() {
+    // Palette lists the registries that the project of the request can see
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"]);
+    assert_eq!(calls, 2, "one read for p1, and one for p2");
+}
+
 // ---- what happened to the object of a record --------------------------------------------------
 
 /// The cluster of fixture `cluster-a`, whose document says `state`, with `extra` merged into its

@@ -41,11 +41,26 @@ pub(crate) struct Registries<'a, A: PaletteApi> {
 impl<'a, A: PaletteApi> Registries<'a, A> {
     /// Listings that no check has read yet. `palette` reads each one.
     pub(crate) fn new(palette: &'a Palette<A>) -> Self {
+        Self::with_metadata(palette, None)
+    }
+
+    /// [`Registries::new`], with `metadata`, the entries of [`Registries::metadata`] that another
+    /// client of the same project read. [`Registries::into_metadata`] gives them back.
+    ///
+    /// Palette lists the registries that the project of the request can see. So a command that
+    /// reads several records of one project reads the listing one time.
+    pub(crate) fn with_metadata(palette: &'a Palette<A>, metadata: Option<Vec<Value>>) -> Self {
         Registries {
             palette,
-            metadata: None,
+            metadata,
             summaries: BTreeMap::new(),
         }
+    }
+
+    /// The entries of [`Registries::metadata`], when a check read them, for the next client of
+    /// the same project.
+    pub(crate) fn into_metadata(self) -> Option<Vec<Value>> {
+        self.metadata
     }
 
     /// The client that reads the listings.
@@ -466,6 +481,24 @@ mod tests {
             api.calls(OCI_SUMMARY_TEMPLATE),
             1,
             "one read of the OCI summary"
+        );
+    }
+
+    #[test]
+    fn a_client_of_the_same_project_takes_the_listing_that_another_client_read() {
+        let api = tenant();
+        let (first, next) = (Palette::new(&api), Palette::new(&api));
+        let mut registries = Registries::new(&first);
+        assert_eq!(registries.names().unwrap().len(), 3);
+        let mut registries = Registries::with_metadata(&next, registries.into_metadata());
+        assert_eq!(
+            registries.name_of("reg-auth").unwrap().as_deref(),
+            Some("charts-auth")
+        );
+        assert_eq!(api.calls(METADATA), 1, "one read for the two clients");
+        assert!(
+            Registries::new(&next).into_metadata().is_none(),
+            "no check read it"
         );
     }
 
