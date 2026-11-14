@@ -7966,6 +7966,48 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
 }
 
 #[test]
+fn the_refusal_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
+    let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mirror_entity =
+        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    // Palette takes a `/` in the name of a registry
+    let api = serve_registry(
+        vec![mirrored],
+        &[
+            ("reg-public", public_entity()),
+            ("reg-mirror", mirror_entity),
+        ],
+    )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+            {"name": "team/mirror", "uid": "reg-mirror", "kind": "oci"},
+        ]}),
+    );
+
+    let err = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap_err();
+    let Error::PackInSeveralRegistries { registries, .. } = &err else {
+        panic!("unexpected {err}");
+    };
+    assert_eq!(registries, &["Public Repo", "reg-mirror"], "{err}");
+    // the ref that the refusal asks for parses, and records the pack of that registry
+    let named = format!("pack:{}/csi-aws-ebs@1.65.0", registries[1]);
+    let mirror = snapshot_of(&api, &named).unwrap();
+    assert_eq!(mirror.packs[0].hash.upstream_raw, "sha256:ccc");
+    assert_eq!(mirror.packs[0].registry_name, "team/mirror");
+    // a ref ends the registry at the first `/`, because a pack name can hold one too
+    assert_eq!(
+        Ref::parse_with("pack:team/mirror/csi-aws-ebs@1.65.0", |_| false),
+        Ref::Pack {
+            registry: Some("team".into()),
+            name: "mirror/csi-aws-ebs".into(),
+            version: "1.65.0".into(),
+        }
+    );
+}
+
+#[test]
 fn verify_rechecks_a_pack_version_against_its_registry() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
@@ -17260,6 +17302,76 @@ fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps
             r.path.display()
         )]
     );
+}
+
+/// `snapshot tag:env=prod --dir fleet` over three clusters of one definition, in the projects
+/// `projects`, with the registry listing of the fixtures. Gives the count of the requests of the
+/// registry listing.
+fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
+    common::make_fixtures(dir);
+    let doc = read_json(&dir.join("cluster-a").join("cluster.json"));
+    let uids = [CLUSTER_UID, "c-two", "c-three"];
+    let rows = uids
+        .iter()
+        .zip(projects)
+        .map(|(uid, project)| fleet_row(uid, uid, project, serde_json::json!({"env": "prod"})))
+        .collect();
+    let mut api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
+        rows,
+        vec![],
+    )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+        ]}),
+    );
+    for uid in &uids[1..] {
+        api = api.with(cluster_route(uid), doc.clone());
+    }
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &dir.join("fleet"),
+        false,
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.summary.recorded, 3, "{:?}", report.records);
+    for r in &report.records {
+        let snap = Snapshot::load(&r.path).unwrap();
+        assert!(!snap.packs.is_empty());
+        for p in &snap.packs {
+            assert_eq!(
+                p.registry_name,
+                "Public Repo",
+                "{}: {}",
+                r.path.display(),
+                p.key
+            );
+        }
+    }
+    api.calls(REGISTRY_LISTING)
+}
+
+#[test]
+fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"]);
+    assert_eq!(calls, 1, "one read for the set");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_the_registry_listing_one_time_for_each_project() {
+    // Palette lists the registries that the project of the request can see
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"]);
+    assert_eq!(calls, 2, "one read for p1, and one for p2");
 }
 
 // ---- what happened to the object of a record --------------------------------------------------

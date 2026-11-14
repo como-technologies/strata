@@ -681,3 +681,24 @@ A live run shows it. The pack reference of `ubuntu-aws` 24.04 in a profile has
 the eight annotations and no `imageId`. They are the annotations of the pack
 version in the registry. A record of the profile keeps no annotation of the
 pack. See [packs.sh](../../development/live-runs.md#packssh).
+
+## The names of a registry and a pack
+
+Palette takes any text as the name of a registry, also a text with a `/`. It
+refuses an empty name with the code `ShouldNotBeEmpty`. It refuses the name of
+another registry of the same scope with the code `ResourceNameAlreadyExists`.
+The code of Palette shows it; no live run shows it yet. Stage 1 of
+[registry-kinds.sh](../../development/live-runs.md#registry-kindssh) makes a
+registry with a `/` in its name.
+
+Palette takes the name of a pack as its registry gives it, also with a `/`. This
+holds for a Spectro pack registry, a Helm repository, and an OCI registry of the
+provider type `pack`. The code of Palette shows it; no live run shows it yet. So
+a pack ref names a registry whose name holds a `/` by its uid: see
+[Refs](../../reference/refs.md#rules).
+
+`GET /v1/registries/metadata` lists the registries that the project of the
+request can see. So two projects can get two listings. A snapshot of a set reads
+the listing one time for each project: see
+[A set of clusters](../../commands/snapshot/set.md). The code of Palette shows
+it; no live run shows it yet.
