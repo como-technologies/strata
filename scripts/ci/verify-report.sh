@@ -13,7 +13,7 @@
 # <!-- strata-verify: <path> --> on the first line of its body: opened on the first run that finds
 # it, updated with the latest report on each later run, and closed with a comment on the first run
 # where the record verifies again. Issues of records not given are left alone. --dry-run prints
-# each issue body and what would happen, and calls no host.
+# each issue body and the change to each issue, and calls no host.
 #
 # --who adds to the issue who changed a record that drifted, and when. `strata verify --who` reads
 # the audit log of Palette, and the issue body lists each write since the record. When the key
