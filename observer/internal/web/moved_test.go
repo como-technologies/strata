@@ -28,7 +28,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	}
 	mustNotHold(t, "the table", table, `data-go="#p-`+moved+`"`)
 	mustHold(t, "the fold", fold, "<summary>1 record of a profile version that this cluster does not run</summary>")
-	row := rowWith(t, fold, `data-go="#p-`+moved+`"`)
+	row := rowTo(t, fold, "#p-"+moved)
 	mustHold(t, "the row", row, `<span class="badge y">Not on this cluster</span>`, `<span class="mut">This cluster does not run this version.</span>`)
 	mustNotHold(t, "the row", row, "Newer", "newer")
 	for _, variant := range []string{"filter newer", "filter ok", "filter drift", "filter not-checked"} {
@@ -54,7 +54,7 @@ func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersio
 	mustHold(t, "the filters", profiles, `<button data-filter="all" class="on">All 2</button>`, `<button data-filter="drift" class="">Drift 1</button>`,
 		`<button data-filter="newer" class="">Newer 1</button>`)
 	mustNotHold(t, "the profiles", profiles, `data-open="not-on-cluster"`)
-	mustHold(t, "the row", rowWith(t, profiles, `data-go="#p-`+moved+`"`), `<span class="badge r">Drift</span>`, "traefik changed in the published version.")
+	mustHold(t, "the row", rowTo(t, profiles, "#p-"+moved), `<span class="badge r">Drift</span>`, "traefik changed in the published version.")
 	overview := pageOf(t, screens, "#overview", "")
 	mustHold(t, "the overview", overview, `<div class="l">Profiles</div><div class="v">2</div>`)
 	page := pageOf(t, screens, "#p-"+moved, "")
