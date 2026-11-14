@@ -195,12 +195,13 @@ Each project of the tenant can use an app profile of the tenant or of the
 system. So for such an app profile, strata lists the app deployments of each
 project of the tenant listing. The line `scope:` then counts the projects, and
 `NOT CHECKED` names each one that refuses the listing, as for
-[a profile of the tenant](#a-profile-of-the-tenant). The listing of the app
-deployments goes to each project. So strata also sends one page of the cluster
-search at tenant scope. When Palette refuses it, `NOT CHECKED` names each
-project that this key cannot list. When the search fails in another way, strata
-lists no project, and the row `app deployments` gives the error. No edge host
-binds an app profile. See
+[a profile of the tenant](#a-profile-of-the-tenant).
+
+The listing of the app deployments goes to each project. So strata also sends
+one page of the cluster search at tenant scope. When Palette refuses it,
+`NOT CHECKED` names each project that this key cannot list. When the search
+fails in another way, strata lists no project, and the row `app deployments`
+gives the error. No edge host binds an app profile. See
 [App profiles](../internals/palette/other-objects.md#app-profiles) and
 [An app profile is updated in place](../use-cases/app-profiles.md#5-find-the-app-deployments-before-a-delete).
 
@@ -255,7 +256,7 @@ The search beside the list costs these requests:
 - For a profile of a project, one for each 50 edge hosts of its project.
 - For an app profile, one for each 50 app deployments of each project that can
   use the version. For an app profile of the tenant or of the system, one more
-  for the project listing, and one for the page of the cluster search.
+  for the project listing, and one for the cluster search.
 
 When the search of Palette takes no `clusterProfiles`, the listing costs one
 request for each cluster of the fleet. With `--list-only`, the rows of the

@@ -71,7 +71,7 @@ same with its own document. See
 | Request | Gives |
 | --- | --- |
 | `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. `list` searches when it names `tags`, and the second reading of `consumers` when it names `clusterProfiles`. `list clusters`, `cluster:<name>`, and the second reading of `consumers` ask the search for the virtual clusters when it names `environment`. |
-| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the body selects, every page, in the scope of the request: each with its labels, project, cloud, and profiles. The search gives a virtual cluster only when a condition asks for the environment `nested`, with its cluster group and its host cluster in `status.virtual`. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, send it at tenant scope, and again with that condition added. `list clusters` and `cluster:<name>` send it with that one condition, in their scope. The second reading of `consumers` sends `clusterProfiles eq <profile name>`, a name and not a uid, in the scope of the profile. It sends it again with that condition when the search takes `environment`, and in each project for a [profile of the tenant](../internals/palette/clusters.md#the-reach-of-a-search). For an app profile of the tenant or of the system, `consumers` sends one page with no condition at tenant scope. Palette refuses it to a key with no `project.list` in the tenant, so the answer shows if the project listing holds each project. |
+| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the body selects, every page, in the scope of the request: each with its labels, project, cloud, and profiles. The search gives a virtual cluster only when a condition asks for the environment `nested`, with its cluster group and its host cluster in `status.virtual`. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, send it at tenant scope, and again with that condition added. `list clusters` and `cluster:<name>` send it with that one condition, in their scope. The second reading of `consumers` sends `clusterProfiles eq <profile name>`, a name and not a uid, in the scope of the profile. It sends it again with that condition when the search takes `environment`, and in each project for a [profile of the tenant](../internals/palette/clusters.md#the-reach-of-a-search). |
 | `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. A request that names a project gets HTTP 403. |
 | `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. A request that names a project gets HTTP 403. |
 
@@ -134,7 +134,9 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
   app deployment that the app profile lists, in its own project. Then it lists
   the app deployments of each project that can use the version. For an app
   profile of the tenant or of the system, it also sends one page of the cluster
-  search at tenant scope. `--list-only` stops both.
+  search at tenant scope. The page has no condition. Palette refuses it to a key
+  with no `project.list` in the tenant, so the answer shows if the project
+  listing holds each project. `--list-only` stops both.
 - `verify` on a cluster record reads each profile that the cluster runs.
 
 A command reads the project listing of a scope one time. A record, a resolve
