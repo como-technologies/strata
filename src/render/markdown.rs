@@ -38,7 +38,7 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::{code_block, code_cell, code_span, dash, html_text, markdown_cell};
+use crate::text::{code_block, code_cell, code_span, dash, html_text, lines_cell, markdown_cell};
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
@@ -562,26 +562,14 @@ fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
         markdown_cell(dash(&pr.cloud_type))
     );
     if with_packs {
-        // each line gets its escape before the join, so that the `<br>` of strata stays a tag
         let packs = match entry_error(pr.error.as_ref()) {
             Some(msg) => markdown_cell(&format!("error: {msg}")),
-            None => pr
-                .packs
-                .iter()
-                .flatten()
-                .map(|pk| {
-                    let registry = pack_registry(pk)
-                        .map(|r| format!(" in {r}"))
-                        .unwrap_or_default();
-                    markdown_cell(&format!(
-                        "{}/{} {}{registry}",
-                        pk.layer,
-                        pk.name,
-                        pack_version(pk)
-                    ))
-                })
-                .collect::<Vec<_>>()
-                .join("<br>"),
+            None => lines_cell(pr.packs.iter().flatten().map(|pk| {
+                let registry = pack_registry(pk)
+                    .map(|r| format!(" in {r}"))
+                    .unwrap_or_default();
+                format!("{}/{} {}{registry}", pk.layer, pk.name, pack_version(pk))
+            })),
         };
         row.push_str(&format!(
             " {} | {} | {} |",
@@ -589,7 +577,7 @@ fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
             pr.consumers
                 .map(consumer_count)
                 .unwrap_or_else(|| "-".into()),
-            dash(&packs)
+            packs
         ));
     }
     row.push('\n');
@@ -701,25 +689,24 @@ fn cluster_row(c: &ListedCluster, columns: &ClusterColumns) -> String {
 
 /// The cells of the profiles that a cluster runs, and of the updates that wait for it.
 fn applied_cells(c: &ListedCluster) -> String {
-    // each line gets its escape before the join, so that the `<br>` of strata stays a tag
     let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {
         markdown_cell(&format!("error: {msg}"))
     } else if let Some(note) = super::list::imported_note(c) {
         markdown_cell(note)
     } else {
-        c.profiles
-            .iter()
-            .flatten()
-            .map(|a| markdown_cell(&format!("{} ({})", applied_ref(a), dash(&a.kind))))
-            .collect::<Vec<_>>()
-            .join("<br>")
+        lines_cell(
+            c.profiles
+                .iter()
+                .flatten()
+                .map(|a| format!("{} ({})", applied_ref(a), dash(&a.kind))),
+        )
     };
     let behind = match c.updates_pending {
         Some(true) => format!("yes: {}", pending_profile_names(&c.pending_updates)),
         Some(false) => "no".to_string(),
         None => "-".to_string(),
     };
-    format!(" {} | {} |", dash(&profiles), markdown_cell(&behind))
+    format!(" {profiles} | {} |", markdown_cell(&behind))
 }
 
 /// The table of the projects of a listing, with its count.

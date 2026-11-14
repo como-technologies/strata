@@ -97,8 +97,8 @@ fn behind(r: &mut Runner) {
     behind_skip(r);
 }
 
-/// The steps of the chapter `behind` that show the line `next patch` and the option
-/// `--behind-only` (#622).
+/// The steps of the chapter `behind` that show the line `next patch`, its field in the JSON, and
+/// the option `--behind-only` (#622, #854).
 fn behind_rows(r: &mut Runner) {
     // the command of the line `next patch` gives what the move to the patch does
     r.step(
@@ -106,6 +106,12 @@ fn behind_rows(r: &mut Runner) {
         1,
         false,
         "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'",
+    );
+    r.step(
+        "behind-next-patch-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.pins[] | select(.nextPatch) | {name, version, newest: .newer[0].version, nextPatch}'",
     );
     // the rows that are behind, or that strata could not check, under the heading of all the pins
     r.step(

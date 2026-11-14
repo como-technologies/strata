@@ -1,0 +1,2 @@
+$ strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.pins[] | select(.nextPatch) | {name, version, newest: .newer[0].version, nextPatch}'
+{"name":"kubernetes","version":"1.35.3","newest":"1.36.2","nextPatch":"1.35.6"}

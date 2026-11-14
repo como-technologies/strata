@@ -147,6 +147,18 @@ pub fn markdown_cell(s: &str) -> String {
     table_text(&html_text(s))
 }
 
+/// `lines` as the text of one cell of a markdown table: each line as [`markdown_cell`] writes it,
+/// with `<br>` between two lines. [`dash`] when the lines give no text.
+///
+/// Each line gets its escape before the join, so that the `<br>` of strata stays a tag.
+pub(crate) fn lines_cell<S: AsRef<str>>(lines: impl IntoIterator<Item = S>) -> String {
+    let cells: Vec<String> = lines
+        .into_iter()
+        .map(|line| markdown_cell(line.as_ref()))
+        .collect();
+    dash(&cells.join("<br>")).to_string()
+}
+
 /// `s` with each `|` escaped and each line break as a space, so that it cannot end a cell or a
 /// row of a markdown table.
 fn table_text(s: &str) -> String {

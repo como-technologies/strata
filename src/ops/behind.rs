@@ -25,7 +25,7 @@ use self::carriers::read_carriers;
 pub use self::carriers::{Carrier, PinCarrier};
 pub use self::change::{Bump, BumpPack};
 use self::documents::ProfileDocuments;
-use self::newer::newer_versions;
+use self::newer::{newer_versions, next_patch};
 use self::profiles::{Held, ProfileKey, check_profile, collect};
 pub use self::profiles::{NewerProfile, ProfilePin};
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
@@ -167,6 +167,13 @@ pub struct Pin {
     pub newer: Vec<Newer>,
     /// True when `newer` is not empty.
     pub behind: bool,
+    /// For a pin that is behind a newer minor version: the newest version in `newer` of the minor
+    /// version of the pin. A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives `1.36.4`. A
+    /// team can take that patch before the move to the newest version. Absent when the pin is
+    /// current, when its version does not parse, and when the newest version is of its minor
+    /// version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_patch: Option<String>,
     /// For a pin that is behind: what a move to the newest version does, from `compare` of the
     /// two pack versions, and whether Palette accepts it. Absent with `--no-impact`, or when strata
     /// could not compare them.
@@ -303,6 +310,7 @@ impl Pin {
             pinned_by: Vec::new(),
             newer: Vec::new(),
             behind: false,
+            next_patch: None,
             bump: None,
             carriers: Vec::new(),
             arrived: None,
@@ -718,6 +726,7 @@ fn read_pin<A: PaletteApi>(
     }
     pin.newer = newer_versions(pin, offered, pinned, pre_release);
     pin.behind = !pin.newer.is_empty();
+    pin.next_patch = next_patch(&pin.version, &pin.newer);
     // a pin that is current is current against the copy of the registry in Palette. When
     // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
     // says so. A pin that is behind needs no note: a newer version in the copy is a newer

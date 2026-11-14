@@ -5196,6 +5196,51 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
     );
 }
 
+/// The criterion of #854: the issue of a pin that is behind a newer minor version names the next
+/// patch, from `nextPatch` of `strata behind`. The script splits no version. The patch is a text of
+/// an answer, so each tag of HTML in it shows as text.
+#[test]
+fn upstream_report_names_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0", "1.63.4"], None);
+    let issue_with = |patch: &str| {
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        report["pins"][0]["nextPatch"] = serde_json::json!(patch);
+        u.put("report.json", &report.to_string());
+        let o = u.run(&["releases/*.json", "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+        text(&o.stdout)
+    };
+    let body = issue_with("1.63.4");
+    assert!(
+        body.contains(
+            "| `1.63.1` | 1.65.0, 1.63.4; next patch 1.63.4 | 1.65.0: cluster-wide IDENTITY \
+             AUTHORED | - |"
+        ),
+        "{body}"
+    );
+    // the state line keeps the field, so the next run gives it to `--since`
+    assert!(
+        body.lines()
+            .nth(1)
+            .unwrap()
+            .contains("\"nextPatch\":\"1.63.4\""),
+        "{body}"
+    );
+
+    let body = issue_with(common::ANSWER_TAGS);
+    let cell = strata::text::markdown_cell(&format!(
+        "1.65.0, 1.63.4; next patch {}",
+        common::ANSWER_TAGS
+    ));
+    assert!(
+        body.contains(&format!("| `1.63.1` | {cell} |")),
+        "{cell}\n{body}"
+    );
+    let shown: Vec<&str> = body.lines().skip(2).collect();
+    common::assert_answer_tags_as_text(&shown.join("\n"));
+}
+
 /// A dry run calls no host, so it needs no token. The three scripts that have a host agree on
 /// this on GitLab too, where the token is the only credential.
 #[test]

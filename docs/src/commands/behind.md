@@ -45,6 +45,13 @@ it. Run the command:
 {{#include ../output/behind-next-patch.txt}}
 ```
 
+`--json` gives the patch in `pins[].nextPatch`. A script reads the patch there,
+and does not split a version:
+
+```text
+{{#include ../output/behind-next-patch-json.txt}}
+```
+
 - **A newer version** is one that a person can move to. A version that Spectro
   Cloud disabled or deleted is not, and a version for none of the clouds of the
   pinned version is not either. A pre-release is not one, unless the pin is a

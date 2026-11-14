@@ -426,6 +426,11 @@ clear whose name reads as a secret. The id stays, and a reader that ignores
 unknown fields reads it. The exit does not change: see
 [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
+After 0.33.0, a pin of `strata-behind/1` can have the new field `nextPatch`. A pin that is
+behind a newer minor version gives it: the newest patch of the minor version of the pin. The id
+stays, and `--since` reads a report of 0.33.0 and before. See
+[The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+
 After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a
 comparison of `strata-diff/1` with `compare --validate`. The field holds the rules that Palette
 checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
@@ -1233,7 +1238,8 @@ field, a value, an input, or an option is in the sections above.
 - **A pin that is behind a newer minor version can have the line `next patch`.** It names the
   newest patch of its minor version. It also gives the command `strata compare` of the two pack
   versions. The markdown adds the line to the cell of the status. A script that reads the lines
-  under a pin must skip it. The JSON does not change.
+  under a pin must skip it. The JSON gives the patch in the new field `nextPatch`: see
+  [The documents](#the-documents).
 - **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
   commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
   `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
@@ -1278,6 +1284,10 @@ field, a value, an input, or an option is in the sections above.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
+- **The issue of `upstream-report.sh` names the next patch of a pin.** The newer column ends
+  with `; next patch <version>`. Only a pin that is behind a newer minor version has it. The
+  version comes from `nextPatch` of `strata behind`. A script that reads the cell must read the
+  new text. See [Upstream issues](../automation/upstream-issues.md).
 - **`verify-report.sh` and `upstream-report.sh` write a quoted text as the markdown form does.**
   An issue shows a tag of HTML in it as text.
   - The state line of an issue of `upstream-report.sh` writes each `<`, `>`, and `&` of its
@@ -1329,6 +1339,8 @@ field, a value, an input, or an option is in the sections above.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
+- `ops::Pin` has the new field `next_patch: Option<String>`, the patch of `nextPatch`. A struct
+  literal must set it, and a pattern with no `..` must name it.
 - `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
   a pattern with no `..` must name it.
 - `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
