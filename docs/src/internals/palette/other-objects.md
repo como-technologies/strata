@@ -71,6 +71,11 @@ same.
   them with no profiles.
 - `status.inUseClusters` of a profile names clusters and never an edge host. So
   `consumers` searches the edge hosts.
+- The edge host search gives the edge hosts of the projects where a role of the
+  key gives `edgehost.list`: see
+  [The reach of a search](clusters.md#the-reach-of-a-search). So the row
+  `edge hosts` of `consumers` says `none found` when the search names no edge
+  host that the key can list.
 
 ## Cluster groups
 

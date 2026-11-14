@@ -45,6 +45,11 @@ impl Tenant {
         let mut doc: Value = serde_json::from_str(&text).expect("an example profile is JSON");
         doc["metadata"]["uid"] = json!(uid);
         doc["metadata"]["annotations"]["scope"] = json!(scope.as_str());
+        // Palette names the project of a profile of a project in its annotations, and no project
+        // for each other scope
+        if scope == ProfileScope::Project {
+            doc["metadata"]["annotations"]["projectUid"] = json!(project);
+        }
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
@@ -173,7 +178,7 @@ impl Tenant {
             &profile_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str(), "projectUid": project}},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
                     "packs": [{"name": pack, "layer": "addon", "type": "manifest",
                         "tag": "1.0.0", "version": "1.0.0", "packUid": pack_uid,
