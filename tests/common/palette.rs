@@ -487,9 +487,65 @@ pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
 pub fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
     json!({
         "name": name, "displayName": display, "defaultValue": default, "format": "string",
-        "inputType": "text", "required": true, "hidden": false, "immutable": false,
+        "inputType": strata::model::input_type::InputType::Text.as_str(),
+        "required": true, "hidden": false, "immutable": false,
         "isSensitive": sensitive, "options": [],
     })
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and the UI asks for its value with
+/// its options.
+fn is_sensitive_dropdown(variable: &Value) -> bool {
+    use strata::model::input_type::InputType;
+    variable["isSensitive"] == true
+        && variable["inputType"]
+            .as_str()
+            .and_then(InputType::from_text)
+            == Some(InputType::Dropdown)
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and is not a dropdown. Palette
+/// masks its default value and the value that a cluster gives it.
+pub fn is_masked_variable(variable: &Value) -> bool {
+    variable["isSensitive"] == true && !is_sensitive_dropdown(variable)
+}
+
+/// The variable `stored` of a profile, as `GET /v1/clusterprofiles/{uid}/variables` serves it.
+///
+/// Palette writes `********` over the value of each option of a sensitive dropdown variable. It
+/// also writes the mask over a default value that is not empty of a variable of
+/// [`is_masked_variable`]. The code of Palette shows it; no live run shows it yet.
+pub fn profile_route_variable(stored: &Value) -> Value {
+    let mut served = stored.clone();
+    if is_masked_variable(stored)
+        && stored["defaultValue"]
+            .as_str()
+            .is_some_and(|d| !d.is_empty())
+    {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    if is_sensitive_dropdown(stored)
+        && let Some(options) = served["options"].as_array_mut()
+    {
+        for option in options {
+            option["value"] = json!(strata::api::MASKED);
+        }
+    }
+    served
+}
+
+/// The variable `stored` of a profile, as `GET /v1/spectroclusters/{uid}/variables` serves its
+/// fields beside the value of the cluster.
+///
+/// The route masks the fields that [`profile_route_variable`] masks. It also writes `********`
+/// over an empty default value of a variable of [`is_masked_variable`]. The code of Palette shows
+/// it; no live run shows it yet.
+pub fn cluster_route_variable(stored: &Value) -> Value {
+    let mut served = profile_route_variable(stored);
+    if is_masked_variable(stored) {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    served
 }
 
 /// Serve the three documents of the profile version `uid`: its document, its pack manifests,

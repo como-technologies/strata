@@ -109,6 +109,12 @@ pub(super) fn cluster_variables_route(uid: &str) -> String {
     format!("{}/variables", cluster_route(uid))
 }
 
+/// The pack manifests of each profile of the cluster `uid`,
+/// `GET /v1/spectroclusters/{uid}/profiles/packs/manifests`.
+pub(super) fn cluster_manifests_route(uid: &str) -> String {
+    format!("{}/profiles/packs/manifests", cluster_route(uid))
+}
+
 /// The last part of the route of the role bindings of a cluster.
 const RBACS: &str = "config/rbacs";
 

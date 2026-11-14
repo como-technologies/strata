@@ -26,7 +26,9 @@
 //!   cluster-merged-reversed  the same, with the two templates listed the other way round
 //!
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
-//! variable always gets `SECRET_VALUE`. No document must contain it.
+//! variable always gets `SECRET_VALUE`. No document must contain it. The variables of a cluster
+//! give `********` as the default value of a sensitive variable that is not a dropdown, as Palette
+//! does.
 
 use std::fs;
 use std::path::Path;
@@ -219,7 +221,8 @@ pub fn text_matches_schema(schema: &Value, value: &str) -> bool {
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it. The cluster has applied templates, per-profile pack manifests, and per-profile variables
 /// with values. A variable gets its value from `values` by name, else its default. A sensitive
-/// variable gets `SECRET_VALUE`.
+/// variable gets `SECRET_VALUE`. The other fields of a variable are as the route of Palette serves
+/// them: see [`cluster_route_variable`].
 fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &str)]) {
     let out = root.join(dir);
     fs::create_dir_all(&out).unwrap();
@@ -235,9 +238,9 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
             .unwrap()
             .iter()
             .map(|v| {
-                let mut v = v.clone();
+                let mut row = cluster_route_variable(v);
                 let name = v["name"].as_str().unwrap_or("");
-                v["value"] = if v["isSensitive"] == json!(true) {
+                row["value"] = if v["isSensitive"] == json!(true) {
                     json!(SECRET_VALUE)
                 } else {
                     match values.iter().find(|(n, _)| *n == name) {
@@ -245,7 +248,7 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
                         None => v["defaultValue"].clone(),
                     }
                 };
-                v
+                row
             })
             .collect();
         variables.push(json!({"profileUid": prof["metadata"]["uid"], "variables": with_values}));

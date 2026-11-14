@@ -741,6 +741,18 @@ can read the profile, it records no variables and sets `variablesUnavailable`.
 [`verify.sh`](../../development/live-example.md#the-checks-of-verifysh) checks
 these answers on the live tenant.
 
+The route gives `********` in place of a secret of a sensitive variable:
+
+| Variable | `defaultValue` | `options[].value` |
+| --- | --- | --- |
+| Sensitive, not a dropdown, with a default value | `********` | as it is |
+| Sensitive, not a dropdown, with no default value | `""` | as it is |
+| Sensitive dropdown | as it is | `********` |
+
+The label and the description of each option stay. The code of Palette shows
+it; no live run shows it yet. The variables route of a cluster gives one more
+mask: see [Cluster copies](./clusters.md#cluster-copies).
+
 ## The body of a swap
 
 `tenant.sh repave` asks `POST /v1/spectroclusters/<uid>/validate/repave` if a

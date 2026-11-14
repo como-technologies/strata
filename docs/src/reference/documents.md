@@ -179,6 +179,11 @@ profile, or pack version.
   empty text for the rest. A variable with no `name` has an empty `name`. The
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
+  - `defaultValue` is as Palette gives it. A copy on a cluster holds
+    `********` for each sensitive variable that is not a dropdown, also when the
+    profile has no default value. `variablesHash` reads that `********` as an
+    empty default value: see
+    [The node hash and the root](../internals/hashes.md#the-node-hash-and-the-root).
   - `options[].default`, only when it is `true`: the option is the default of
     the variable. Palette accepts an update that gives no value to a required
     dropdown variable with such an option. A record of strata 0.33 and before

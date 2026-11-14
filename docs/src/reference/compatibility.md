@@ -1467,6 +1467,19 @@ field, a value, an input, or an option is in the sections above.
   the fact `archive: not readable`, with the reason `the download does not hold <path>` in
   `archivesNotReadable`. Its pair fails, and the command exits `1`. See
   [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+- **The root of two kinds of record moves.** The variables hash reads `********` as an empty
+  default value now. This is for a sensitive variable that is not a dropdown. So
+  `variablesHash`, `root`, and `contentDigest` move for the records below. Each other record
+  keeps its root. See [Cluster copies](../internals/palette/clusters.md#cluster-copies).
+  - A record of a cluster, of a profile on a cluster, or of `@pending`, when a profile of the
+    cluster has such a variable. Palette gives `********` as its default value on a cluster,
+    also when the profile has none. The new root is the root of the record of the profile.
+    Before, `compare` of the two showed a change of the variables, and `same-release` failed.
+  - A record of a profile, an edge host, a cluster group, or a candidate, when such a variable
+    has the default value `********`. Palette gives the mask for a default value that is not
+    empty.
+  - `verify` of an older record of each kind reports `DRIFT`: the variables changed, and no
+    field of a variable changed. Take the record again with 0.34.0.
 
 ### For a user of the CI drop-ins
 

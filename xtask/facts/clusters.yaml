@@ -95,8 +95,10 @@ facts:
     kind: behavior
     reads:
       fields:
+        - "[].variables[].defaultValue"
         - "[].variables[].inputType"
         - "[].variables[].isSensitive"
+        - "[].variables[].options[].value"
         - "[].variables[].value"
     stand_in:
       - v1/spectroclusters/{uid}/variables
@@ -104,8 +106,10 @@ facts:
     unchecked: The code of Palette shows it. No run gives a cluster a sensitive variable.
     pages:
       - internals/palette/clusters.md#cluster-copies
+      - internals/hashes.md#the-node-hash-and-the-root
     code:
       - src/snapshot/cluster.rs
+      - src/snapshot/variable.rs
     rules: []
 
   - id: cluster-rbacs

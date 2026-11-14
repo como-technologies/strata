@@ -39,11 +39,18 @@ The hash keeps a fixed set of fields of each variable, and drops the rest:
 It keeps no id, and no `default` mark of an option. Strata sorts the variables by name before it hashes them, so the
 order in which Palette lists them does not reach the hash either.
 
-A sensitive variable arrives masked. Palette serves asterisks in place of the
-secret, in the default value or in the option values. So the hash reads the
-mask, and a change to the secret does not move the root. A pack value whose
-schema format is `password` arrives masked too: see
+A sensitive variable arrives masked. Palette serves `********` in place of the
+secret, in the default value or in the option values: see
+[The variables route](./palette/profiles.md#the-variables-route). So the hash
+reads the mask, and a change to the secret does not move the root. A pack value
+whose schema format is `password` arrives masked too: see
 [What the root does not cover](#what-the-root-does-not-cover).
+
+The hash reads `********` as an empty default value for a sensitive variable
+that is not a dropdown. The variables route of a cluster gives the mask also for
+an empty default value, and the route of a profile does not. So the hash cannot
+tell an empty default value from a secret one. A record holds the default value
+as Palette gives it.
 
 ```mermaid
 flowchart TD
@@ -204,8 +211,9 @@ copy exactly as it hashes the profile:
 
 So a cluster that runs a recorded version has the root of that record. The
 cluster variables endpoint repeats the definition fields of the profile
-endpoint, so the copy of a profile with a variable has the variables hash of the
-profile: see [Cluster copies](./palette/clusters.md#cluster-copies). A cluster on a
+endpoint, with one more mask over a default value. The hash reads no mask of a
+default value. So the copy of a profile with a variable has the variables hash
+of the profile: see [Cluster copies](./palette/clusters.md#cluster-copies). A cluster on a
 version that pins other pack builds shows `IDENTITY`. An edit of the pack values
 on the cluster, and a version that differs in values alone, each show
 `AUTHORED`.
