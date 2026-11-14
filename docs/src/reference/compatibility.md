@@ -315,6 +315,8 @@ of an accept. The command line prints the sentence last, after the record: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
 After 0.33.0, `api::MASKED` is public: the text `********` that Palette writes over a secret.
+`model::input_type::InputType` is public: the input type of a profile variable, as Palette gives
+it in `inputType`.
 
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.

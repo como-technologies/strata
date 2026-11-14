@@ -95,6 +95,7 @@ facts:
     kind: behavior
     reads:
       fields:
+        - "[].variables[].inputType"
         - "[].variables[].isSensitive"
         - "[].variables[].value"
     stand_in:
