@@ -191,7 +191,8 @@ actions=()
 while IFS= read -r record <&3; do
   path=$(jq -r .path <<<"$record")
   status=$(jq -r .status <<<"$record")
-  subject=$(jq -r 'if (.name // "") == "" then .path else "\(.name)@\(.version)" end' <<<"$record")
+  # the words of the heading of compare, which name a record of many profiles by their count
+  subject=$(jq -r 'if (.subject // "") == "" then .path else .subject end' <<<"$record")
   body="$work/body.md"
   if [ "$status" != unchanged ]; then
     rc=0

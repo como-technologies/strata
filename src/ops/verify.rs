@@ -486,6 +486,14 @@ pub struct VerifiedRecord {
     pub name: String,
     /// Profile version from the record.
     pub version: String,
+    /// What the record holds, in the words of the heading of `compare`: `aws-stack@1.1.1`,
+    /// `aws-stack@1.1.1 on cluster payments`, or `4 profiles on cluster payments`.
+    ///
+    /// [`Source::title`](crate::snapshot::Source::title) gives the words. A record of two or more
+    /// profiles joins their names in `name` and their versions in `version`, and these words give
+    /// the count. Empty when strata could not read the file.
+    #[serde(default)]
+    pub subject: String,
     /// Profile uid from the record.
     pub uid: String,
     /// The project the record was checked in; empty for tenant scope.
@@ -541,6 +549,8 @@ impl VerifiedRecord {
             status: RecordStatus::Error,
             name: field(|s| &s.name),
             version: field(|s| &s.version),
+            // a file that strata could not read holds nothing to name
+            subject: src.map(crate::snapshot::Source::title).unwrap_or_default(),
             uid: field(|s| &s.uid),
             project_uid: field(|s| &s.project_uid),
             recorded_at: field(|s| &s.fetched_at),
@@ -569,6 +579,7 @@ impl VerifiedRecord {
             status: RecordStatus::from(v.status),
             name: recorded.source.name.clone(),
             version: recorded.source.version.clone(),
+            subject: recorded.source.title(),
             uid: recorded.source.uid.clone(),
             // no scope is the scope of the key, and the row names no project
             project_uid: scope.unwrap_or_default().to_string(),

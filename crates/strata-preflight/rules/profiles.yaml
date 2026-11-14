@@ -48,12 +48,13 @@ rules:
     when: (.profiles | length) > 0 and (.entity.spec.profiles | length) > 0
     what: |
       Some readers of a cluster read the profile at position 0 as the infrastructure profile. The
-      console puts an add-on at position 0 on each cluster it creates with an add-on. Each reader
-      then reads the wrong profile, in one case only. The FIPS guard of the console matters in a
-      FIPS tenant, and the `clusterProfileTemplate` field of the dashboard API matters to a client
-      that reads it. The repave check of CNI and CSI matters when an add-on profile holds a CNI or
-      a CSI pack. The check reads the record of the first profile of the entity, whose `type` must
-      be `cluster` or `infra`.
+      console creates each cluster with an add-on at position 0, and an upgrade of the
+      infrastructure profile puts that profile last. Each reader then reads the wrong profile, in
+      one case only. The FIPS guard of the console matters in a FIPS tenant, and the
+      `clusterProfileTemplate` field of the dashboard API matters to a client that reads it. The
+      repave check of CNI and CSI matters when an add-on profile holds a CNI or a CSI pack. The
+      check reads the record of the first profile of the entity, whose `type` must be `cluster` or
+      `infra`.
     check:
       kind: static
       expr: |
@@ -70,8 +71,8 @@ rules:
                 then "the repave check of CNI and CSI can read \($layers | join(", "))"
                 else "no add-on profile holds a CNI or a CSI pack, so the repave check of CNI and CSI is right" end),
               (if $cluster == null
-                then "put the infrastructure profile at position 0 of spec.profiles of the create"
-                else ("a PUT of the profiles in another order keeps the stored order of the cluster",
+                then "put the infrastructure profile at position 0 of spec.profiles of the create: it stays there until a new version of it goes to the end of the stored order"
+                else ("a PUT of the profiles in another order keeps the stored order of the cluster, and a new version of the infrastructure profile goes to the end",
                       "read the infrastructure profile by its type in spec.clusterProfileTemplates, and the FIPS mode in status.fips.mode") end) ]
     fix:
       owner: palette
@@ -84,6 +85,8 @@ rules:
         note: the position-0 reads and the first-match pack lookups
       - kind: source
         note: the console of Palette guards the FIPS choice when it shows the details of a cluster
+      - kind: source
+        note: an added profile and a new version of the infrastructure profile go to the end of the stored order, and the summary gives position 0 as clusterProfileTemplate
     tests:
       - fault: fixtures/eks/addon-first.json
         clean: fixtures/eks/full-records.json

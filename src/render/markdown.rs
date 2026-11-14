@@ -25,9 +25,7 @@ use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
     renumber_lines,
 };
-use super::verify::{
-    counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
-};
+use super::verify::{counts_line, record_detail, verdict_parts, who_entry, who_heading};
 use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
@@ -327,7 +325,7 @@ impl Renderer for MarkdownRenderer {
                 "| {} | `{}` | `{}` | {} |\n",
                 record_word(r.status),
                 markdown_cell(&r.path),
-                record_label(&r.name, &r.version),
+                markdown_cell(dash(&r.subject)),
                 markdown_cell(&record_detail(r))
             ));
         }

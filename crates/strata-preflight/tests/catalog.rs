@@ -3290,8 +3290,8 @@ fn a_rule_that_only_the_lab_can_reproduce_says_so_in_words() {
 }
 
 /// F-026: `position-zero` says when each effect applies, and what a person can do. A create can
-/// put the infrastructure profile first. A cluster keeps its order, so a reader takes the profile
-/// by its type.
+/// put the infrastructure profile first. A cluster keeps its order, and puts a new version of the
+/// infrastructure profile last (#844). So a reader takes the profile by its type.
 #[test]
 fn position_zero_says_when_each_effect_applies_and_what_a_person_can_do() {
     let catalog = catalog::builtin().unwrap();
@@ -3310,7 +3310,7 @@ fn position_zero_says_when_each_effect_applies_and_what_a_person_can_do() {
             fips,
             dashboard,
             "the repave check of CNI and CSI can read the cni pack cni-aws-vpc-eks of strata-live-profile, the csi pack csi-aws-ebs of strata-live-profile",
-            "put the infrastructure profile at position 0 of spec.profiles of the create",
+            "put the infrastructure profile at position 0 of spec.profiles of the create: it stays there until a new version of it goes to the end of the stored order",
         ]
     );
     // a cluster that Palette holds, whose add-on profile holds no CNI and no CSI pack
@@ -3326,7 +3326,7 @@ fn position_zero_says_when_each_effect_applies_and_what_a_person_can_do() {
             fips,
             dashboard,
             "no add-on profile holds a CNI or a CSI pack, so the repave check of CNI and CSI is right",
-            "a PUT of the profiles in another order keeps the stored order of the cluster",
+            "a PUT of the profiles in another order keeps the stored order of the cluster, and a new version of the infrastructure profile goes to the end",
             "read the infrastructure profile by its type in spec.clusterProfileTemplates, and the FIPS mode in status.fips.mode",
         ]
     );

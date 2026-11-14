@@ -472,9 +472,14 @@ of the secret does not show, because the two sides hold the mask: see
   the exit status in words. `unverified`, only when it is not `0`: the records
   whose content is the same and that hold a pack with no upstream digest.
 - `records[]`: one entry for each file, in the order given. An entry has
-  `path`, `status`, `name`, `version`, `uid`, `projectUid`, `recordedAt`,
-  `rootRecorded`, and `rootLive`. `rootLive` is there when strata read the live
-  profile. `recordedAt` is empty when strata could not read the file.
+  `path`, `status`, `name`, `version`, `subject`, `uid`, `projectUid`,
+  `recordedAt`, `rootRecorded`, and `rootLive`. `rootLive` is there when strata
+  read the live profile. `recordedAt` and `subject` are empty when strata could
+  not read the file.
+  - `subject` names the record in the words of the heading of `compare`, such
+    as `aws-stack@1.1.1 on cluster payments`. A record of two or more profiles
+    joins their names in `name` and their versions in `version`. Its `subject`
+    gives their count, such as `4 profiles on cluster payments`.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
     unverified record adds the `diff`, which names the packs. With `--full`, the
     `diff` of each such record holds `unified`: see

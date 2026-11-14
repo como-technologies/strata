@@ -442,14 +442,29 @@ place.
 
 ## order.sh
 
-Read-write. It needs the example at its baseline with cluster A. It sends a
-`PUT` of two published versions with their packs in the other order. It also
-sends a `PUT` of the cluster's profiles in the other order. It reads what
-Palette stores, what it audits, and what `verify` says.
+Read-write. Each stage needs the example at its baseline with cluster A. Stages
+1 to 3 send a `PUT` of two published versions with their packs in the other
+order. They also send a `PUT` of the cluster's profiles in the other order. They
+read what Palette stores, what it audits, and what `verify` says.
 
-It leaves the two versions edited, so
-`live-down` follows it. A second run reverses them again, and passes the same
+They leave the two versions edited, so
+`live-down` follows them. A second run reverses them again, and passes the same
 way.
+
+Stage 4 runs only when you give its number: `just live-order-append`. It builds
+cluster B from the same definition, as the control. It makes the release
+version 1.0.2, with a new uid and the content of 1.0.0. It adds an add-on
+profile of one ConfigMap to cluster A, with a `PUT` that gives that profile
+first. Then it sends the `PATCH` of an upgrade of cluster A to 1.0.2, in the
+form of the provider: one entry with `replaceWithProfile`.
+
+After each step, stage 4 reads `spec.clusterProfileTemplates` of each cluster,
+and `spec.clusterProfileTemplate` of the summary of each cluster. Then it
+returns cluster A to its baseline profiles, deletes the added profile, and
+removes cluster B and 1.0.2. The release profile of cluster A then stays last
+in the stored order. When it stops early, run `just live-down`. The checks
+state what each read must show, from [The order of the profiles of a
+cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -460,6 +475,16 @@ way.
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
 | `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: Palette accepts a `PUT` of the cluster's profiles in the other order. The document keeps the stored order. The audit log still has an update of the cluster |
 | `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
+| `append-release` | 0 | #844: the release version 1.0.0. Version 1.0.2 pins the OS pack under the tag of 1.0.0, so it has the content of 1.0.0 |
+| `order-a-<step>`, `summary-a-<step>`, `order-b-<step>`, `summary-b-<step>` | 0 | #844: the document and the summary of cluster A and of cluster B. The step is `before`, `added` after the add, or `upgraded` after the upgrade |
+| `append-profile`, `append-add` | 0 | #844: an add-on profile of one ConfigMap, and the `PUT` of the profiles of cluster A that gives it first. Palette takes the `PUT`. No result yet: the check is new, and no live window ran it |
+| `added-last` | 0 | #844: the stored order of cluster A is the order from before, with the new profile last. No result yet: the check is new, and no live window ran it |
+| `append-upgrade` | 0 | #844: Palette takes the `PATCH` of the upgrade of cluster A from 1.0.0 to 1.0.2. No result yet: the check is new, and no live window ran it |
+| `upgraded-last` | 0 | #844: the stored order drops 1.0.0, keeps the other profiles in their order, and puts 1.0.2 last. So an add-on profile is at position 0. No result yet: the check is new, and no live window ran it |
+| `summary-first` | 0 | #844: in each read of each cluster, `spec.clusterProfileTemplate` of the summary is the profile at position 0 of the document. No result yet: the check is new, and no live window ran it |
+| `summary-addon` | 0 | #844: after the upgrade, `spec.clusterProfileTemplate` of the summary of cluster A has the type `add-on`. No result yet: the check is new, and no live window ran it |
+| `control-kept` | 0 | #844: cluster B, with no change, gives the order and the `spec.clusterProfileTemplate` of its first read in each read. No result yet: the check is new, and no live window ran it |
+| `append-back`, `append-detach`, `append-delete`, `append-baseline` | 0 | #844: cluster A gets 1.0.0 again and loses the added profile, and the profile is deleted. The example is at its baseline: no cluster B and no 1.0.2 |
 
 ## who.sh
 
@@ -2397,8 +2422,8 @@ create itself breaks it. The two new rules find the risk before the create. See
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
   `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
   provider that Terraform used, and give the same answers. `drift-report.sh` has
-  run under Terraform only. `order.sh` reads the OpenTofu outputs and applies
-  nothing.
+  run under Terraform only. Stages 1 to 3 of `order.sh` read the OpenTofu
+  outputs and apply nothing. No live window ran stage 4.
 - On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
   `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and

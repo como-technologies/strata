@@ -63,10 +63,16 @@
 #       cluster's profiles, with the content of each profile and the one change, and without
 #       resolveNotification. The profile keeps what it holds. Exit 2 unless exactly one value or
 #       manifest holds FROM.
-#   api.sh attach CLUSTER_UID PROFILE_UID
-#       The same PUT with PROFILE_UID added, which puts that profile on the cluster.
+#   api.sh attach CLUSTER_UID PROFILE_UID [--first]
+#       The same PUT with PROFILE_UID added, which puts that profile on the cluster. The body
+#       gives PROFILE_UID after the profiles of the cluster, or before them with --first.
 #   api.sh detach CLUSTER_UID PROFILE_UID
 #       The same PUT without PROFILE_UID, which takes that profile off the cluster.
+#   api.sh replace CLUSTER_UID OLD_UID NEW_UID
+#       PATCH the profiles of a cluster with one entry: NEW_UID, with replaceWithProfile OLD_UID,
+#       and resolveNotification=true. The entry has each pack's values and manifests of NEW_UID.
+#       The Spectro Cloud provider sends a new version of a profile in this form. Palette takes
+#       OLD_UID off the cluster and puts NEW_UID on it.
 #   api.sh delete PROFILE_UID
 #       Delete a profile version; a missing one is not an error.
 #   api.sh delete-named NAME...
@@ -466,12 +472,17 @@ override() {
 }
 
 attach() {
-  local cluster=${1:-} profile=${2:-} tmp
-  [ -n "$profile" ] || die "usage: api.sh attach CLUSTER_UID PROFILE_UID"
+  local cluster=${1:-} profile=${2:-} first=${3:-} tmp
+  [ -n "$profile" ] && { [ -z "$first" ] || [ "$first" = --first ]; } \
+    || die "usage: api.sh attach CLUSTER_UID PROFILE_UID [--first]"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   profiles_body "$cluster" "$tmp" "" "$profile"
+  if [ -n "$first" ]; then
+    jq --arg p "$profile" '.profiles |= ([.[] | select(.uid == $p)] + [.[] | select(.uid != $p)])' \
+      "$tmp/body" > "$tmp/first" && mv "$tmp/first" "$tmp/body"
+  fi
   call PUT "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/body" > /dev/null || exit 2
-  echo "attached profile $profile to cluster $cluster"
+  echo "attached profile $profile to cluster $cluster: $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body")"
 }
 
 detach() {
@@ -481,6 +492,17 @@ detach() {
   profiles_body "$cluster" "$tmp" "$profile"
   call PUT "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/body" > /dev/null || exit 2
   echo "detached profile $profile from cluster $cluster"
+}
+
+replace() {
+  local cluster=${1:-} old=${2:-} new=${3:-} tmp
+  [ -n "$old" ] && [ -n "$new" ] || die "usage: api.sh replace CLUSTER_UID OLD_UID NEW_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  profiles_body "$cluster" "$tmp" "$old" "$new"
+  jq --arg old "$old" --arg new "$new" \
+    '{profiles: [.profiles[] | select(.uid == $new) | . + {replaceWithProfile: $old}]}' "$tmp/body" > "$tmp/patch"
+  call PATCH "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/patch" > /dev/null || exit 2
+  echo "replaced profile $old with $new on cluster $cluster"
 }
 
 delete() {
@@ -937,6 +959,7 @@ case "${1:-}" in
   apply) shift; apply "$@" ;;
   attach) shift; attach "$@" ;;
   detach) shift; detach "$@" ;;
+  replace) shift; replace "$@" ;;
   override) shift; override "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;

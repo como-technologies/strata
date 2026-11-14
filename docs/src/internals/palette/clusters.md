@@ -371,11 +371,24 @@ A `PUT` of a cluster's profiles in the other order, with the uids it has,
 changes nothing: the document keeps the stored order. The audit log gets an
 update of the cluster.
 
-An added profile goes to the end of the list. A new uid of the infrastructure
-profile, such as a new version of it, moves that profile to the end too. So an
-add-on profile can reach position 0, and the rule `position-zero` of
-`strata preflight` warns about it. The code of Palette shows it; no live run
-shows it yet.
+A `PUT` and a `PATCH` of the profiles of a cluster keep the order of the
+profiles that the cluster has. Each new uid goes to the end, also when the
+body gives it first. A `PUT` drops each profile that its body does not name. A
+`PATCH` keeps them, and drops the profile that the field `replaceWithProfile`
+of an entry names. Provider 0.30.1 sends a new version of a profile in that
+form.
+
+So an added profile goes to the end of the list. A new version of the
+infrastructure profile has a new uid, so it goes to the end too. After that
+upgrade, an add-on profile is at position 0 on each cluster that has one. The
+cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives the profile
+at position 0 as `spec.clusterProfileTemplate`, so it then names that add-on
+profile. The rule `position-zero` of `strata preflight` warns about it.
+
+A cluster with no change keeps its stored order. The code of Palette shows it;
+no live run shows it yet. Stage 4 of
+[order.sh](../../development/live-runs.md#ordersh) is the live check, with a
+second cluster as the control.
 
 The order that strata gives a cluster record does not depend on the stored
 order. So a change of the stored order changes no root of a record.

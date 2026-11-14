@@ -19,9 +19,7 @@ use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
     renumber_lines,
 };
-use super::verify::{
-    counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
-};
+use super::verify::{counts_line, record_detail, verdict_parts, who_entry, who_heading};
 use super::{Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
@@ -196,7 +194,7 @@ impl Renderer for TerminalRenderer {
             out.push_str(&format!(
                 "{word}  {}  {}  {}\n",
                 r.path,
-                p.bold(&record_label(&r.name, &r.version)),
+                p.bold(dash(&r.subject)),
                 record_detail(r)
             ));
         }

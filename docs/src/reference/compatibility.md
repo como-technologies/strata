@@ -395,6 +395,11 @@ record of 0.33.0 and before has no `registryName`, and strata reads it as before
 record again to name the registries: see
 [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
 
+After 0.33.0, each row of `strata-verify-summary/1` has the new field `subject`.
+It names the record in the words of the heading of `compare`, such as
+`4 profiles on cluster payments`. The row keeps `name` and `version`, and the id
+stays. See [Check many records](../commands/verify.md#check-many-records).
+
 One value changes after 0.33.0 with no new id. In `strata-preflight/1`, `sections[].failed`
 counts the counted failures alone, as `summary.failed` does. Before, it counted each failure but
 a note. A new id breaks each reader of the document, and the sum of `failed`, `probeFailed`, and
@@ -1122,6 +1127,14 @@ field, a value, an input, or an option is in the sections above.
   So does `pinnedBy[].subject` of `strata-behind/1`. The record keeps the joined
   `source.name` and `source.version`. See
   [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+- **A row of `verify --summary` names the record as the heading of `compare`
+  does.** Before, it gave `name@version` alone. A record of a cluster now reads
+  `aws-stack@1.1.1 on cluster payments`, and a record of an edge host names the
+  host. A record of two or more profiles reads `4 profiles on cluster payments`,
+  where the row joined the names and the versions. The markdown table gives the
+  same words. A script that reads the text of a row must match the new words, or
+  read `subject` of `--json`. See
+  [Check many records](../commands/verify.md#check-many-records).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
 - **`list` keeps each kind that it read.** When strata cannot read one kind, such
@@ -1195,6 +1208,8 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+  The message of the way forward also says that a new version of the infrastructure profile goes
+  to the end of the stored order.
 - **The first line of `behind` counts each pin one time.** The counts after the colon add up to
   the pins. They are `behind`, `current`, and `not checked`, and a count in parentheses gives the
   pins with a floating tag. An example is
@@ -1236,6 +1251,13 @@ field, a value, an input, or an option is in the sections above.
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
   `in-place` adds no label for such a pair.
+- **`verify-report.sh` names a record as the heading of `compare` does.** It
+  reads `subject`. The title of the issue of a drift reads
+  `strata verify: 4 profiles on cluster payments drifted`. The comment of its
+  close uses the same words. Before, they gave `name@version`, and joined the
+  names and the versions of many profiles. The next run gives the new title to
+  the open issue of a record that still drifts. See
+  [Drift issues](../automation/drift-issues.md).
 
 ### For a user of the library of strata
 
@@ -1255,6 +1277,8 @@ field, a value, an input, or an option is in the sections above.
 - `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
   accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
   one of them.
+- `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
+  pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
