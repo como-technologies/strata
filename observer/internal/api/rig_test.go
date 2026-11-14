@@ -183,7 +183,7 @@ type rig struct {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
-	record, err := json.Marshal(map[string]any{
+	record := testkit.MustJSON(t, map[string]any{
 		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
 		"source": map[string]any{"uid": "u1", "name": "aws-stack", "version": "1.1.0", "type": "cluster"},
 		"packs": []map[string]any{
@@ -192,9 +192,6 @@ func newRig(t *testing.T) *rig {
 		},
 		"variables": []map[string]any{{"name": "team", "value": sentinelVariable}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	testkit.WriteGzip(t, r.records, "aws-stack@1.1.0.json.gz", string(record))
 	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(`{"baseline":"approved","revision":"4e1c7a2"}`), 0o600); err != nil {
 		t.Fatal(err)

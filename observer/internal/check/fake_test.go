@@ -299,15 +299,12 @@ func (r *rig) record(name, version string, keys ...string) {
 		layer, pack, _ := strings.Cut(k, "/")
 		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{"a/b:1"}})
 	}
-	body, err := json.Marshal(map[string]any{
+	body := testkit.MustJSON(r.t, map[string]any{
 		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
 		"source":    map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"},
 		"packs":     packs,
 		"variables": []map[string]any{{"name": "team", "value": sentinel}},
 	})
-	if err != nil {
-		r.t.Fatal(err)
-	}
 	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", string(body))
 }
 

@@ -298,10 +298,7 @@ func asMap(t *testing.T, v any) map[string]any {
 	t.Helper()
 	raw, ok := v.(json.RawMessage)
 	if !ok {
-		var err error
-		if raw, err = json.Marshal(v); err != nil {
-			t.Fatal(err)
-		}
+		raw = testkit.MustJSON(t, v)
 	}
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
