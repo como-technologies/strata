@@ -1,7 +1,7 @@
 //! The mask of the value of each variable of the entity in the messages of a report.
 //!
 //! Palette can quote the value of a cluster variable in a refusal, after it puts the value in place
-//! of a `{{.spectro.var.NAME}}` reference. `K8SCidrOverlap` quotes a pod or service CIDR,
+//! of a `{{.spectro.var.NAME}}` reference. `K8SCidrOverlap` quotes a pod or service CIDR.
 //! `CidrParseError` quotes a value that is not a CIDR, and `InvalidDropDownVariable` quotes a label
 //! that is not an option. A cloud tool can quote a value in its output too. A job keeps the report
 //! in its artifact, its log, and a comment. So each message gets a mark that names the variable in
@@ -20,8 +20,8 @@ use strata::json::{arr, str_at, value_at};
 /// before a change.
 const ENTITIES: [&str; 2] = ["/entity", "/before"];
 
-/// The characters that continue a value, such as the `.` of `10.0.0.3` and the `-` of
-/// `us-east-1a`, when a letter or a digit is on their other side.
+/// The characters that continue a value when a letter or a digit is on their other side. The `.`
+/// of `10.0.0.3` and the `-` of `us-east-1a` are examples.
 const JOINS: &str = "-_./:@";
 
 /// The characters that a JSON encoder can write as an escape, beside the escapes of

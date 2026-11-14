@@ -4,8 +4,8 @@ use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::impl_texts;
 use crate::model::validation::answer_lines;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
-use crate::reference::{Ref, name_version};
-use crate::text::{and_list, name_or_uid, shell_words};
+use crate::reference::{Ref, name_version, pack_registry};
+use crate::text::{and_list, shell_words};
 
 /// The state of a pin or of a profile version in the report of `behind`, as its status names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,11 +185,12 @@ pub(crate) fn listed_since(pin: &Pin) -> Option<String> {
 /// command that gives what a move to it does.
 ///
 /// An example is `next patch 1.36.4: strata compare <pin> <patch>`, with the pack ref of each
-/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. Strata sends no request for the
-/// line. None when the pin has no such patch: see [`Pin::next_patch`].
+/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. The ref names the registry as
+/// [`pack_registry`] gives it, so that it parses. Strata sends no request for the line. None when
+/// the pin has no such patch: see [`Pin::next_patch`].
 pub(crate) fn next_patch_line(pin: &Pin) -> Option<String> {
     let patch = pin.next_patch.as_deref()?;
-    let registry = name_or_uid(&pin.registry, &pin.registry_uid);
+    let registry = pack_registry(&pin.registry, &pin.registry_uid);
     let pack = |version: &str| {
         Ref::Pack {
             registry: Some(registry.to_string()),
@@ -209,10 +210,10 @@ pub(crate) fn arrived_line(pin: &Pin) -> Option<String> {
     Some(format!("arrived: {}", arrived.join(", ")))
 }
 
-/// One line for each profile version that holds a pin that is behind, and has a newer version:
-/// `barney-addons@1.4.0 carries fred-compositions@0.2.0`, or `no newer version of
-/// barney-addons@1.3.1 carries a newer fred-compositions`. When strata could not read a version,
-/// the line gives the error.
+/// One line for each profile version that holds a pin that is behind, and has a newer version.
+/// Examples are `barney-addons@1.4.0 carries fred-compositions@0.2.0` and
+/// `no newer version of barney-addons@1.3.1 carries a newer fred-compositions`. When strata could
+/// not read a version, the line gives the error.
 pub(crate) fn carrier_lines(pin: &Pin) -> Vec<String> {
     pin.carriers
         .iter()
@@ -294,8 +295,8 @@ pub(crate) fn bump_line(pin: &Pin) -> Option<String> {
     Some(line)
 }
 
-/// `bump to 1.4.0: in-place IDENTITY AUTHORED`, for a profile version with a bump: the impact
-/// level and the flags of the packs that the move changes.
+/// `bump to 1.4.0: in-place IDENTITY AUTHORED`, for a profile version with a bump. The line gives
+/// the impact level and the flags of the packs that the move changes.
 pub(crate) fn profile_bump_line(p: &ProfilePin) -> Option<String> {
     p.bump.as_ref().map(bump_text)
 }

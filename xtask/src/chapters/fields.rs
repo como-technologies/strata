@@ -16,20 +16,17 @@ use strata::json::set_at;
 use strata::model::cluster_state::ClusterState;
 use strata::model::scope::ProfileScope;
 
-use super::ids::DEV;
+use super::ids::{
+    DEV, FIELDS_ACCOUNT, FIELDS_APP_PROFILE, FIELDS_AUDIT_OF_A_SERVICE, FIELDS_AUDIT_WITH_A_NOTE,
+    FIELDS_CLUSTER, FIELDS_CONTAINER_REGISTRY, FIELDS_DISABLED_PACK, FIELDS_GROUP,
+    FIELDS_OCI_CHARTS, FIELDS_OCI_PACKS, FIELDS_PACKS_STOPPED, FIELDS_PACKS_SYNCED, FIELDS_PROFILE,
+};
 use crate::book::Runner;
 use crate::tenant::{
     AUDITS, CLUSTER_LISTING, RegistrySync, app_profile_route, app_tier_manifest_route,
     app_tiers_route, group_route, pack_listing, profile_route, registry_summary_route,
     registry_sync, variables_route,
 };
-
-/// The uids of the objects of this chapter. No other chapter uses them.
-const CLUSTER: &str = "64f7000000000000000000a1";
-const ACCOUNT: &str = "64f7000000000000000000a2";
-const GROUP: &str = "64f7000000000000000000b1";
-const APP_PROFILE: &str = "64f7000000000000000000c1";
-const PROFILE: &str = "64f7000000000000000000d1";
 
 /// Build the documents of the chapter.
 pub(super) fn run(r: &mut Runner) {
@@ -47,13 +44,14 @@ fn cluster_and_group(r: &mut Runner) {
         DEV,
         CLUSTER_LISTING,
         &json!([{
-            "metadata": {"name": "ledger", "uid": CLUSTER,
+            "metadata": {"name": "ledger", "uid": FIELDS_CLUSTER,
                 "creationTimestamp": "2026-09-01T10:00:00.000Z",
                 "lastModifiedTimestamp": "2026-09-17T08:00:00.000Z",
                 "deletionTimestamp": "2026-09-18T09:00:00.000Z",
                 "labels": {"managed-by": "opentofu"}},
             "spec": {"cloudType": "aws", "clusterType": "PureManage",
-                "cloudAccountUid": ACCOUNT, "cloudRegion": "us-east-2", "archType": ["amd64"],
+                "cloudAccountUid": FIELDS_ACCOUNT, "cloudRegion": "us-east-2",
+                "archType": ["amd64"],
                 "location": {"countryCode": "US", "countryName": "United States",
                     "regionCode": "OH", "regionName": "Ohio"},
                 "tags": ["env:dev"]},
@@ -62,8 +60,8 @@ fn cluster_and_group(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &group_route(GROUP),
-        &json!({"metadata": {"name": "vclusters", "uid": GROUP},
+        &group_route(FIELDS_GROUP),
+        &json!({"metadata": {"name": "vclusters", "uid": FIELDS_GROUP},
             "spec": {"clusterProfileTemplates": [],
                 "clustersConfig": {"endpointType": "LoadBalancer"}},
             "status": {"isActive": true}}),
@@ -72,34 +70,34 @@ fn cluster_and_group(r: &mut Runner) {
 
 /// An app profile with a container tier, whose manifest has a digest.
 fn app_profile(r: &mut Runner) {
-    let route = app_profile_route(APP_PROFILE);
+    let route = app_profile_route(FIELDS_APP_PROFILE);
     r.answer(
         DEV,
         &route,
-        &json!({"metadata": {"name": "jobs", "uid": APP_PROFILE,
+        &json!({"metadata": {"name": "jobs", "uid": FIELDS_APP_PROFILE,
                 "lastModifiedTimestamp": "2026-09-17T09:00:00.000Z"},
             "spec": {"version": "1.0.0"},
             "status": {"inUseApps": []}}),
     );
     r.answer(
         DEV,
-        &app_tiers_route(APP_PROFILE),
+        &app_tiers_route(FIELDS_APP_PROFILE),
         &json!({"spec": {"appTiers": [
-            {"metadata": {"name": "worker", "uid": format!("{APP_PROFILE}1")},
+            {"metadata": {"name": "worker", "uid": format!("{FIELDS_APP_PROFILE}1")},
                 "spec": {"type": "container", "version": "1.0.0",
-                    "containerRegistryUid": "64f7000000000000000000e1",
+                    "containerRegistryUid": FIELDS_CONTAINER_REGISTRY,
                     "values": "replicas: 1\n", "properties": []}},
-            {"metadata": {"name": "settings", "uid": format!("{APP_PROFILE}2")},
+            {"metadata": {"name": "settings", "uid": format!("{FIELDS_APP_PROFILE}2")},
                 "spec": {"type": "manifest", "version": "1.0.0",
-                    "manifests": [{"uid": format!("{APP_PROFILE}3")}]}},
+                    "manifests": [{"uid": format!("{FIELDS_APP_PROFILE}3")}]}},
         ]}}),
     );
     r.answer(
         DEV,
         &app_tier_manifest_route(
-            APP_PROFILE,
-            &format!("{APP_PROFILE}2"),
-            &format!("{APP_PROFILE}3"),
+            FIELDS_APP_PROFILE,
+            &format!("{FIELDS_APP_PROFILE}2"),
+            &format!("{FIELDS_APP_PROFILE}3"),
         ),
         &json!({"spec": {"published": {
             "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
@@ -110,13 +108,13 @@ fn app_profile(r: &mut Runner) {
 /// A profile of a project. Its manifest pack has a manifest with a uid in the published template
 /// and in the draft. Its variable has every property that Palette gives.
 fn profile(r: &mut Runner) {
-    let manifests = json!([{"name": "namespace-policy", "uid": format!("{PROFILE}m")}]);
+    let manifests = json!([{"name": "namespace-policy", "uid": format!("{FIELDS_PROFILE}m")}]);
     let pack = json!({"name": "namespace-policy", "layer": "addon", "type": "manifest",
         "tag": "1.0.0", "version": "1.0.0", "manifests": manifests});
     r.answer(
         DEV,
-        &profile_route(PROFILE),
-        &json!({"metadata": {"name": "platform-policy", "uid": PROFILE,
+        &profile_route(FIELDS_PROFILE),
+        &json!({"metadata": {"name": "platform-policy", "uid": FIELDS_PROFILE,
                 "annotations": {"scope": ProfileScope::Project.as_str(), "projectUid": DEV}},
             "spec": {"version": "1.0.0",
                 "published": {"type": "add-on", "cloudType": "all", "packs": [pack]},
@@ -125,7 +123,7 @@ fn profile(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &variables_route(PROFILE),
+        &variables_route(FIELDS_PROFILE),
         &json!({"variables": [{
             "name": "owner", "displayName": "Owner",
             "description": "The team that owns the cluster", "defaultValue": "platform",
@@ -147,9 +145,9 @@ fn registries_and_packs(r: &mut Runner) {
         DEV,
         &registry_summary_route("oci"),
         &json!({"items": [
-            {"metadata": {"uid": "64f7000000000000000000e2"}, "spec": {"providerType": "pack"},
+            {"metadata": {"uid": FIELDS_OCI_PACKS}, "spec": {"providerType": "pack"},
                 "status": {"sync": recovered}},
-            {"metadata": {"uid": "64f7000000000000000000e3"}, "spec": {"providerType": "helm"},
+            {"metadata": {"uid": FIELDS_OCI_CHARTS}, "spec": {"providerType": "helm"},
                 "status": {"sync": stopped}},
         ]}),
     );
@@ -157,14 +155,14 @@ fn registries_and_packs(r: &mut Runner) {
         DEV,
         &registry_summary_route("pack"),
         &json!({"items": [
-            {"metadata": {"uid": "64f7000000000000000000e4"}, "status": {"sync": recovered}},
-            {"metadata": {"uid": "64f7000000000000000000e5"}, "status": {"sync": stopped}},
+            {"metadata": {"uid": FIELDS_PACKS_SYNCED}, "status": {"sync": recovered}},
+            {"metadata": {"uid": FIELDS_PACKS_STOPPED}, "status": {"sync": stopped}},
         ]}),
     );
     r.answer(
         DEV,
         &pack_listing("gloo"),
-        &json!({"items": [{"metadata": {"uid": "64f7000000000000000000f1"},
+        &json!({"items": [{"metadata": {"uid": FIELDS_DISABLED_PACK},
                 "spec": {"name": "gloo", "version": "1.2.18",
                     "annotations": {"disabled": "true"}}}],
             "listmeta": {"count": 1}}),
@@ -177,23 +175,24 @@ fn audit_log(r: &mut Runner) {
         DEV,
         AUDITS,
         &json!({"items": [
-            {"metadata": {"uid": "64fa00000000000000000101",
+            {"metadata": {"uid": FIELDS_AUDIT_OF_A_SERVICE,
                     "creationTimestamp": "2026-09-18T14:05:11.482Z"},
                 "spec": {"actionType": "update",
                     "actor": {"actorType": "service", "serviceName": "system"},
                     "resource": {"kind": "clusterprofile", "name": "platform-policy",
-                        "uid": PROFILE}}},
-            {"metadata": {"uid": "64fa00000000000000000102",
+                        "uid": FIELDS_PROFILE}}},
+            {"metadata": {"uid": FIELDS_AUDIT_WITH_A_NOTE,
                     "creationTimestamp": "2026-09-18T14:06:11.482Z"},
                 "spec": {"actionType": "update",
                     "actor": {"actorType": "user",
+                        // the user of each audit entry that the stand-in writes, with the same uid
                         "user": {"uid": "64fb00000000000000000001",
                             "firstName": "John", "lastName": "Doe",
                             "emailId": "john.doe@example.com"}},
                     "contentMsg": "version is updated 1.0.1 > 1.0.2",
                     "userMsg": "bumped for the patch window",
                     "resource": {"kind": "clusterprofile", "name": "platform-policy",
-                        "uid": PROFILE}}},
+                        "uid": FIELDS_PROFILE}}},
         ], "listmeta": {"continue": ""}}),
     );
 }

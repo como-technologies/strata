@@ -232,9 +232,9 @@ fn newer_of<A: PaletteApi>(
     Ok(Some((scope, newer)))
 }
 
-/// Give `profile` its bump: what a move to the newest version of its profile does, from `compare`
-/// of the two versions, with the checks of [`UpdateChecks::between`]. `at` is the time of the
-/// report, in RFC 3339. A comparison that fails is the error of `profile`.
+/// Give `profile` its bump: what a move to the newest version of its profile does. `compare` of
+/// the two versions gives it, with the checks of [`UpdateChecks::between`]. `at` is the time of
+/// the report, in RFC 3339. A comparison that fails is the error of `profile`.
 fn read_move<A: PaletteApi>(
     documents: &mut ProfileDocuments<'_, A>,
     profile: &mut ProfilePin,

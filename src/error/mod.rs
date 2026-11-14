@@ -433,7 +433,8 @@ pub enum Error {
         name: String,
         /// Pack version.
         version: String,
-        /// The registries that have it, by name.
+        /// The registries that have it, as a pack ref names each: by name, or by uid when the name
+        /// holds a `/`.
         registries: Vec<String>,
     },
     /// A candidate names a registry that is not visible with this key.

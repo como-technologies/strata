@@ -49,11 +49,24 @@ if : | command jq -e . > /dev/null 2>&1; then
   export -f jq
 fi
 
-# The default binary must be built from these sources: a run with an older one tests old code.
-# `just build`, and each live recipe, builds it. A binary set with STRATA_BIN is the caller's.
-if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then
-  stale=$(find "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock" -type f -newer "$strata" -print -quit 2>/dev/null)
-  [ -z "$stale" ] || die "$strata is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+# refuse_stale BINARY SOURCE...: stop the script when BINARY exists and a file of SOURCE is newer.
+refuse_stale() {
+  local binary=$1 stale
+  shift
+  [ -e "$binary" ] || return 0
+  stale=$(find "$@" -type f -newer "$binary" -print -quit 2>/dev/null)
+  [ -z "$stale" ] || die "$binary is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+}
+
+# The default binaries must be built from these sources: a run with an older one tests old code.
+# `just build`, and each live recipe, builds both. `strata preflight` runs the strata-preflight
+# beside strata, and it holds the code of strata too. A binary set with STRATA_BIN is the
+# caller's, and so is the strata-preflight beside it.
+if [ -z "${STRATA_BIN:-}" ]; then
+  refuse_stale "$strata" "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock"
+  refuse_stale "$(dirname "$strata")/strata-preflight" "$live/../../src" "$live/../../Cargo.toml" \
+    "$live/../../Cargo.lock" "$live/../../crates/strata-preflight/src" \
+    "$live/../../crates/strata-preflight/rules" "$live/../../crates/strata-preflight/Cargo.toml"
 fi
 
 # ---- OpenTofu outputs ----------------------------------------------------------------------------
@@ -349,10 +362,10 @@ try_apply() {
 }
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
-# flag-on version bump replaces the profile resource, and the provider deletes the replaced object with
-# the skip_destroy its state holds, not the new value (provider 0.30.1): without this, the bump asks
-# Palette to delete the old version, which Palette refuses while a cluster runs it
-# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
+# flag-on version bump replaces the profile resource. The provider deletes the replaced object with
+# the skip_destroy that its state holds, not the new value (provider 0.30.1). Without this, the bump
+# asks Palette to delete the old version. Palette refuses the delete while a cluster runs that
+# version (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
 hold_versions() { tf_apply "$flag"; }
 # apply_baseline: the default variables with the flag off, which is the baseline's configuration;
 # skip_destroy goes back to false on every profile. A profile resource this removes stays in
@@ -532,7 +545,7 @@ pf_stop() {
 }
 # pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The log is
 # port-forward.log. The wait ends at the line "Forwarding from" in the log, or at the end of the process.
-# Its limit is 30 seconds, not 30 looks: the stand-in sleep of the tests returns at once, so 30 looks take
+# Its limit is 30 seconds, not 30 looks. The stand-in sleep of the tests returns at once, so 30 looks take
 # less than a second there. When the function fails, it says why on standard error.
 pf_start() {
   local end why
@@ -579,9 +592,9 @@ pods_read() {
 
 # The image of the observer. It is on a public package of GitHub, so a node pulls it with no pull
 # Secret. A run never pushes it to another registry, so the pod runs the image that CI built.
-# observer_image [TAG]: set $image from OBSERVER_IMAGE (default: the image with the tag TAG, or with the
-# tag of the version in Cargo.toml), and $image_name and $image_pin for a kustomization. It stops the
-# script for an image with neither a tag nor a digest.
+# observer_image [TAG]: set $image from OBSERVER_IMAGE, and $image_name and $image_pin for a
+# kustomization. The default of $image is the image with the tag TAG, or with the tag of the version
+# in Cargo.toml. It stops the script for an image with neither a tag nor a digest.
 observer_image() {
   local version
   version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)

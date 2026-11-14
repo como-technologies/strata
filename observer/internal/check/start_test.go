@@ -251,7 +251,7 @@ func TestMergeBehindKeepsOneProfileVersionForEachSubjectWithEachRecordThatHoldsI
 
 // Each answer of `behind` on one record names the carriers of the profile versions of that record (#709). The merge keeps the
 // carriers of each answer, one for each profile version, also when a later answer reads the pin again. A carrier with no error
-// takes the place of one that failed, and the pin keeps it when its own read takes the place of a read that failed.
+// takes the place of one that failed. The pin keeps that carrier when its own read takes the place of a read that failed.
 func TestMergeBehindKeepsTheCarriersOfEachAnswer(t *testing.T) {
 	failed := &docs.Error{Kind: docs.KindAPI, Status: 500}
 	carrier := func(profile, version, carries string, err *docs.Error) docs.PinCarrier {

@@ -725,14 +725,19 @@ compare of one profile failed while the others worked, and that no last good
 answer exists. With a last good answer, `clusterCopy` shows it: see [A failed
 read](#a-failed-read).
 
-The pack row joins the record with the other answers. `registry` is the name in
-the pin with the same `registryUid`, or the uid. `kind` is
+The pack row joins the record with the other answers. `kind` is
 `registryProviderType`, or `type`. `upstream` is `hash.upstreamRaw`.
 
 A pack row holds `fold`, the three counts of its changed values. It names no
 path, because a path can hold the name of a list item, and that name is a value
 of the cluster. Only the detail tier sends a path. The profile row holds `scope`:
 `tenant` when `source.projectUid` is empty, and `project` otherwise.
+
+`registry` of a pack row and of a row of `newer` is the name that a record gives
+the registry in `registryName`. A record of strata 0.33.0 and before has no
+`registryName`. Then `registry` is the name in the pin with the same
+`registryUid`, or the uid. The page joins a pack row and its row of `newer` by
+that name, so the two rows take it from one place.
 
 The limits show what a check does not cover. `imagesNamedByATag` counts the images
 that a tag names, with no `@sha256`. `helmPacks` counts the packs of the type `helm`,

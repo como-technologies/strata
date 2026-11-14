@@ -41,6 +41,6 @@ who: 1 write in the audit log since the record
 
 - 2026-09-18T14:02:11.482Z  John Doe (user)  update
 
-verify-report: would open or update the issue for releases/1.1.1/dev.json: strata verify: aws-stack@1.1.1 drifted (releases/1.1.1/dev.json)
-verify-report: would close the open issue for runs/payments.json, if any
+verify-report: a run with no --dry-run opens or updates the issue for releases/1.1.1/dev.json: strata verify: aws-stack@1.1.1 drifted (releases/1.1.1/dev.json)
+verify-report: a run with no --dry-run closes the open issue for runs/payments.json, if one is open
 verify-report: 2 records: 1 unchanged, 1 drifted, 0 could not be checked

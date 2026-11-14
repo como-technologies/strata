@@ -9,8 +9,8 @@ use crate::diff::{ChangeFlag, Diff, ImpactLevel, PackDiff, Status};
 use crate::model::update::UpdateChecks;
 use crate::model::validation::ProfileValidation;
 
-/// What a move to the newest version does: the move of a pin to the newest version of its pack, or
-/// the move of a profile version to the newest version of its profile.
+/// What a move to the newest version does. A pin moves to the newest version of its pack, or a
+/// profile version moves to the newest version of its profile.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Bump {

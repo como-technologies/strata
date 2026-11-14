@@ -11,7 +11,7 @@ function settingRow(r, jump) {
   return h`<tr><td class="m">${r.path}</td>${cells}</tr>`;
 }
 
-// A long value shows the lines between its common start and its common end, with at most CONTEXT lines of the common
+// A long value shows the lines between its common start and its common end. It shows at most CONTEXT lines of the common
 // start and end around them: up to CONTEXT - 1 above, and the rest below. More than MAX_DIFFER lines between them show as
 // a count. It is no full diff: the text of the values holds that.
 const CONTEXT = 3;
@@ -35,7 +35,7 @@ function sharedEnds(a, b) {
 const valueLine = (cls, n, mark, text) => h`<div class="vl ${cls}"><span class="no">${n}</span><span class="mk">${mark}</span><span class="t">${text}</span></div>`;
 const GAP = valueLine("e", "", "", "…");
 
-// sideLines draws one side of a long value: the lines from win.top to the end less win.tail, with win.before lines
+// sideLines draws one side of a long value: the lines from win.top to the end less win.tail. It draws win.before lines
 // above them and win.after lines below them. When the other side has as many lines, a line that it holds at the same
 // place did not change.
 function sideLines(lines, other, win, cls, mark) {
@@ -110,10 +110,11 @@ function changesPanel(list, noun, head, id, d) {
 /* The text of a diff, as `strata compare --full` prints it. A line is a value of the cluster, so each line goes through h``. */
 const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
-// parseUnified reads a unified diff into rows. A row is one line of a hunk with its number on each side: t is
-// " " for a line on both sides, "-" for a removed line, and "+" for an added line. A row with t "@" is the head
-// of a hunk that follows another hunk, and it shows the gap. noEol says that the line has no end of line. The
-// two header lines come before the first hunk and give no row. In a hunk, a line "--- x" is a removed line.
+// parseUnified reads a unified diff into rows. A row is one line of a hunk with its number on each side. In a row, t
+// is " " for a line on both sides, "-" for a removed line, and "+" for an added line. A row with t "@" is the head
+// of a hunk that follows another hunk, and it shows the gap. noEol says that the line has no end of line.
+//
+// The two header lines come before the first hunk and give no row. In a hunk, a line "--- x" is a removed line.
 function parseUnified(text) {
   const rows = [];
   let a = 0, b = 0, hunks = 0;
@@ -186,7 +187,7 @@ function splitRows(rows) {
 const NARROW = "(max-width: 640px)";
 const narrow = () => typeof matchMedia === "function" && matchMedia(NARROW).matches;
 
-// The columns of each layout. A table with a fixed layout takes its widths from these, so a long line wraps in its own
+// The columns of each layout. A table with a fixed layout takes its widths from these. So a long line wraps in its own
 // column and never pushes the other side away.
 const COLS = {
   unified: h`<colgroup><col class="no"><col class="no"><col></colgroup>`,
@@ -229,10 +230,14 @@ function valuesPanel(d, id, command) {
   return h`${lead}${s.length ? settingsTable(s, jump) : ""}${masked}${text}${follows}${repeats}`;
 }
 
-/* A comparison of a pack has one card, and one dropdown "Compare" in its head: the record against the published version, the
-   record against the copy of this cluster, the pack against its newer version, and the record against the newest version of
-   its profile. The card opens on the first side that holds a change. A side with no change sends no request, and it shows the
-   facts of the three sides. */
+/* A comparison of a pack has one card, with one dropdown "Compare" in its head. The dropdown has four sides:
+   - the record against the published version
+   - the record against the copy of this cluster
+   - the pack against its newer version
+   - the record against the newest version of its profile
+
+   The card opens on the first side that holds a change. A side with no change sends no request, and it shows the facts of the
+   three sides. */
 
 // The commands of the card "Check this yourself" and of the splash for a text above the cap. record.json is the file that
 // the first row of the card writes. Each value from the data goes through shq(), so a command pastes as the arguments it means.
@@ -308,8 +313,9 @@ function comparePanel(id, d, href, command) {
   }
 }
 
-// sidesOf lists the comparisons that a pack can show: the record against the published version, against the copy of this cluster when
-// strata read it, the pack against its newer version, and the record against the newest version of its profile when strata compared them.
+// sidesOf lists the comparisons that a pack can show. The first is the record against the published version. The next is the record
+// against the copy of this cluster, when strata read it. The last two are the pack against its newer version, and the record against
+// the newest version of its profile when strata compared them.
 function sidesOf(x, row) {
   const out = [[SIDE.PUBLISHED, "Record → Published now"]];
   if (COPY_READ.includes(copyStatusOf(x))) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
@@ -384,8 +390,8 @@ function comparePack(subject, x, p, row) {
   const command = side === SIDE.CLUSTER ? clusterCommand(x, true) : side === SIDE.NEWER ? moveCommand(row) : side === SIDE.NEWEST ? newestCommand(x) : publishedCommand(subject);
   // Only a side with a change sends a request. The route says "unchanged" for a side that the findings did not name.
   const d = unread || !changed[side] ? null : diffOf(subject, p, side);
-  // A side with no change reads as hidden when the pack was not checked, or when the last read of the profile failed in part and the side
-  // itself was not the one that failed.
+  // A side with no change reads as hidden when the pack was not checked. It also reads as hidden when the last read of the profile failed
+  // in part, and the side itself was not the one that failed.
   const hidden = !changed[side] && (p.status === STATUS.NOT_CHECKED || (readErrorOf(subject) && !unread));
   let state = "", flags = "", inner;
   if (hidden) {
@@ -429,7 +435,7 @@ function moveCard(subject, p, row) {
 
 /* ---- The card "Check this yourself" ----
    Each row is a question, the command that answers it, and what the page says now. The names are real, and the rows change with
-   the page: a pack with a newer version adds the move and the question about the newer versions. */
+   the page. A pack with a newer version adds the move and the question about the newer versions. */
 const copyBadge = (cp, carried) => carried && COPY_KEPT.includes(cp.status) ? statusBadge(STATUS.NOT_CHECKED) : badgeOf(COPY_BADGE, COPY_BADGE[cp.status] ? cp.status : COPY.NOT_READ);
 const publishedBadge = (pub, carried) => pub.status === VERIFY.DRIFTED ? statusBadge(STATUS.DRIFT) : pub.status === VERIFY.UNCHANGED && !carried ? statusBadge(STATUS.OK) : statusBadge(STATUS.NOT_CHECKED);
 
@@ -448,7 +454,7 @@ function terminalRows(subject, x, p, row) {
     rows.push(["What does the move change?", moveCommand(row), impactCell(subject, p, row)]);
     rows.push(["Which newer versions does Palette list?", pinCommand(p), h`<span class="mut">Newest ${ref(row.name, row.newest)}</span>`]);
   }
-  // The page of a pack shows the move of its profile in the card of its comparison, so only the page of the profile has this row.
+  // The page of a pack shows the move of its profile in the card of its comparison. So only the page of the profile has this row.
   if (!p && x.newerVersion) rows.push(["What does the move to the newest version change?", newestCommand(x), newestImpact(x.newerVersion)]);
   return rows;
 }

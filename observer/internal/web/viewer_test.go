@@ -14,9 +14,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
-/* The tests below hold the viewer: the text of the diffs in two layouts, the note for a text above the cap,
-and the question to Palette. They read the markup that the scripts write, and they check it against a second
-reading of the same data in Go. */
+/* The tests below hold the viewer. They test the text of the diffs in two layouts, the note for a text above
+the cap, and the question to Palette. They read the markup that the scripts write, and they check it against a
+second read of the same data in Go. */
 
 var tagPattern = regexp.MustCompile(`<[^>]*>`)
 

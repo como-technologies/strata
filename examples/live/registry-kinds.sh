@@ -6,7 +6,8 @@
 #   examples/live/registry-kinds.sh
 #
 #   1  push version 1.0.0 into each kind, sync, and record the pack: the digest Palette lists, and
-#      the provider type that a record of an OCI pack names
+#      the provider type that a record of an OCI pack names. Then a second Palette registry over
+#      the Spectro pack registry, with a / in its name, which a pack ref names by its uid (#853)
 #   2  a Helm registry with credentials, which Palette does not synchronize: a candidate with a
 #      chart from it, a profile that pins the chart, the pack reference with no digest, and what
 #      verify and same-release say
@@ -43,6 +44,7 @@ CHART=strata-live-chart
 PACK=strata-live-pack
 ZARF=strata-live-zarf
 PACK_REG=""
+SLASH_REG=""
 PINNED=""
 # The script needs no cluster, so its applies keep the cluster as they find it: none after
 # live-profiles, and cluster A after live-up. The default of the variable is a cluster.
@@ -55,6 +57,7 @@ summary() {
 cleanup() {
   [ -z "$PINNED" ] || "$live/api.sh" delete "$PINNED" >> steps.log 2>&1
   [ -z "$PACK_REG" ] || "$live/api.sh" registry-delete pack "$PACK_REG" >> steps.log 2>&1
+  [ -z "$SLASH_REG" ] || "$live/api.sh" registry-delete pack "$SLASH_REG" >> steps.log 2>&1
   tf_apply false "${cluster_var[@]}" >> steps.log 2>&1
   summary
 }
@@ -192,6 +195,31 @@ check packs-digest 0 "#75: the Spectro pack registry: the digest of the push" --
   test "$(upstream packs-first.json)" = "$(spectro_digest push-packs.out)"
 check provider-types 0 "#75: each record of an OCI pack names the provider type of its registry, and no other names one" -- \
   test "$(field charts-first.json registryProviderType)/$(field oci-pack-first.json registryProviderType)/$(field oci-helm-first.json registryProviderType)/$(field oci-zarf-first.json registryProviderType)/$(field packs-first.json registryProviderType)" = "/pack/helm/zarf/"
+
+# #853: a second Palette registry over the Spectro pack registry, with a / in its name. A pack ref
+# ends the registry at the first /, so strata names such a registry by its uid. The registry goes
+# at the end of the stage, so that the later stages see one registry with the pack.
+SLASH_NAME=strata-live/packs
+check slash-registry 0 "#853: Palette takes the registry name $SLASH_NAME" -- \
+  "$live/api.sh" pack-registry-create "$SLASH_NAME" "https://packs.$H" "$U"
+SLASH_REG=$(tail -1 slash-registry.out)
+[ "$SLASH_REG" != null ] || SLASH_REG=""
+check slash-listing 0 "the registry listing" -- "$live/api.sh" get /v1/registries/metadata
+check slash-listed 0 "#853: the registry listing names $SLASH_NAME" -- \
+  jq -e --arg n "$SLASH_NAME" --arg u "$SLASH_REG" '.items | any(.name == $n and .uid == $u)' slash-listing.out
+check slash-sync 0 "Palette reads the registry $SLASH_NAME" -- "$live/api.sh" sync pack "$SLASH_REG"
+check slash-several 2 "#853: a ref of $PACK@1.0.0 with no registry: several registries have the version" -- \
+  "$strata" snapshot "pack:$PACK@1.0.0" -o slash-several.json --json -q
+check slash-several-uid 0 "#853: the error names $SLASH_NAME by its uid, and not by its name" -- \
+  jq -e --arg n "$SLASH_NAME" --arg u "$SLASH_REG" '.error.kind == "pack-in-several-registries"
+    and any(.error.registries[]; . == $u) and all(.error.registries[]; . != $n)' slash-several.err
+check slash-record 0 "#853: a record of pack:<uid>/$PACK@1.0.0, the ref that the error asks for" -- \
+  "$strata" snapshot "pack:$SLASH_REG/$PACK@1.0.0" -o slash.json
+check slash-named 0 "#853: the record names the registry $SLASH_NAME and its uid" -- \
+  test "$(field slash.json registryName)/$(field slash.json registryUid)" = "$SLASH_NAME/$SLASH_REG"
+check slash-delete 0 "the registry $SLASH_NAME goes" -- \
+  "$live/api.sh" registry-delete pack "$SLASH_REG"
+[ "$(tail -1 slash-delete.out)" != "deleted pack registry $SLASH_REG" ] || SLASH_REG=""
 
 # ---- 2. a Helm registry with credentials -------------------------------------------------------
 

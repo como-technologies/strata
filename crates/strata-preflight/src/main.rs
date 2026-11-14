@@ -440,7 +440,7 @@ fn print_json(doc: &serde_json::Value, compact: bool) -> Result<()> {
 
 /// Write the reports, and the world when `world` is given (`--world`). The reports hold no value of
 /// a variable, and the world and its entity do. With a watch, `reading` is the world with the last
-/// reading of the cluster in it, so `world.json` holds the conditions and the events the rules saw.
+/// reading of the cluster in it. So `world.json` holds the conditions and the events the rules saw.
 fn write_out(
     dir: &std::path::Path,
     report: &Report,

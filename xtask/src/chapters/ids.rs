@@ -99,18 +99,20 @@ pub(super) const A1117: &str = "64e000000000000000000105";
 pub(super) const DEVELOP_118: &str = "64e000000000000000000106";
 pub(super) const DEVELOP_BUILD: &str = "64e000000000000000000107";
 pub(super) const DEVELOP_1110: &str = "64e000000000000000000108";
-// aws-stack@1.1.2 of the sample pipeline: the content of 1.1.1 with the reclaim policy Retain, as
-// the candidate of a merge request, the pre-release of the merge, and the final version
+// aws-stack@1.1.2 of the sample pipeline: the content of 1.1.1 with the reclaim policy Retain. It
+// has a uid as the candidate of a merge request, as the pre-release of the merge, and as the final
+// version
 pub(super) const SAMPLE_CANDIDATE: &str = "64e000000000000000000109";
 pub(super) const SAMPLE_PRE: &str = "64e00000000000000000010a";
 pub(super) const SAMPLE_FINAL: &str = "64e00000000000000000010b";
-// aws-stack@1.1.3 of the sample pipeline: the content of 1.1.1 with a new build of the CSI pack, as
-// the pre-release that pins the pre-release of the pack, and the final version that pins its final
+// aws-stack@1.1.3 of the sample pipeline: the content of 1.1.1 with a new build of the CSI pack. It
+// has a uid as the pre-release that pins the pre-release of the pack, and as the final version that
+// pins its final
 pub(super) const SAMPLE_PIN_PRE: &str = "64e00000000000000000010c";
 pub(super) const SAMPLE_PIN_FINAL: &str = "64e00000000000000000010d";
-// aws-stack@1.2.0 of the use case of a renumber: the pre-release pins a pre-release of the
-// Kubernetes pack and of the CSI pack, and the final version pins the final build of each. 1.2.1 is
-// the final version with one more value
+// aws-stack@1.2.0 of the use case of a renumber. The pre-release pins a pre-release of the
+// Kubernetes pack and of the CSI pack. The final version pins the final build of each. 1.2.1 is the
+// final version with one more value
 pub(super) const RENUMBER_PRE: &str = "64e00000000000000000010e";
 pub(super) const RENUMBER_FINAL: &str = "64e00000000000000000010f";
 pub(super) const RENUMBER_EDITED: &str = "64e000000000000000000110";
@@ -126,8 +128,8 @@ pub(super) const A200_TENANT: &str = "64e400000000000000000111";
 // of the registry Bitnami, at 25.1.5 and at 25.1.6. The host of the charts refuses each file
 pub(super) const WEB_ADDONS_OLD: &str = "64e000000000000000000114";
 pub(super) const WEB_ADDONS_NEW: &str = "64e000000000000000000115";
-// aws-stack@1.2.2 of the use case of a renumber: the final build of the CSI pack has another default
-// value, and the profile gives the pin the same values
+// aws-stack@1.2.2 of the use case of a renumber. The final build of the CSI pack has another
+// default value, and the profile gives the pin the same values
 pub(super) const RENUMBER_REBUILT: &str = "64e000000000000000000113";
 // aws-stack@1.1.18 of the chapter packs (#627): the content of 1.1.1, with the CSI pack from the
 // OCI registry Palette Registry. Public Repo has the same version of the pack
@@ -138,6 +140,23 @@ pub(super) const A1119: &str = "64e000000000000000000117";
 // aws-stack@1.1.20 of the chapter behind (#623): the content of 1.1.1, with kubernetes 1.34.9, two
 // minor versions below the newest version
 pub(super) const A1120: &str = "64e000000000000000000118";
+// the chapter fields: a cluster that Palette deletes, its cloud account, a cluster group, an app
+// profile, and a profile of a project
+pub(super) const FIELDS_CLUSTER: &str = "64fd000000000000000000a1";
+pub(super) const FIELDS_ACCOUNT: &str = "64fd000000000000000000a2";
+pub(super) const FIELDS_GROUP: &str = "64fd000000000000000000b1";
+pub(super) const FIELDS_APP_PROFILE: &str = "64fd000000000000000000c1";
+pub(super) const FIELDS_PROFILE: &str = "64fd000000000000000000d1";
+// the chapter fields: the container registry of the app tier, two OCI registries, and two pack
+// registries. Then a pack version that Spectro Cloud marks disabled, and two audit entries
+pub(super) const FIELDS_CONTAINER_REGISTRY: &str = "64fd000000000000000000e1";
+pub(super) const FIELDS_OCI_PACKS: &str = "64fd000000000000000000e2";
+pub(super) const FIELDS_OCI_CHARTS: &str = "64fd000000000000000000e3";
+pub(super) const FIELDS_PACKS_SYNCED: &str = "64fd000000000000000000e4";
+pub(super) const FIELDS_PACKS_STOPPED: &str = "64fd000000000000000000e5";
+pub(super) const FIELDS_DISABLED_PACK: &str = "64fd000000000000000000f1";
+pub(super) const FIELDS_AUDIT_OF_A_SERVICE: &str = "64fd00000000000000000101";
+pub(super) const FIELDS_AUDIT_WITH_A_NOTE: &str = "64fd00000000000000000102";
 
 #[cfg(test)]
 mod tests {

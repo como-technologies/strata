@@ -320,6 +320,8 @@ type Record struct {
 }
 
 // RecordPack is one pack of a record. Images is a list of references. Values are not here.
+// RegistryName is empty in a record of strata 0.33.0 and before, and for a registry that the key
+// cannot see.
 type RecordPack struct {
 	Key                  string   `json:"key"`
 	Layer                string   `json:"layer"`
@@ -327,6 +329,7 @@ type RecordPack struct {
 	Type                 string   `json:"type"`
 	Version              string   `json:"version"`
 	RegistryUID          string   `json:"registryUid"`
+	RegistryName         string   `json:"registryName"`
 	RegistryProviderType string   `json:"registryProviderType"`
 	Images               []string `json:"images"`
 	Hash                 PackHash `json:"hash"`

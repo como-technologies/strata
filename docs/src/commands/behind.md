@@ -46,6 +46,10 @@ it. Run the command:
 {{#include ../output/behind-next-patch.txt}}
 ```
 
+The command names the registry of the pin by its name, or by its uid when the
+name holds a `/`. A pack ref ends the registry at the first `/`: see
+[Refs](../reference/refs.md#rules).
+
 `--json` gives the patch in `pins[].nextPatch`. A script reads the patch there,
 and does not split a version:
 

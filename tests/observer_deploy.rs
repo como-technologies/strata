@@ -1138,8 +1138,8 @@ fn the_recipe_observer_manifests_alerts_passes_for_five_objects_and_the_flag_and
 
 const BOOK_ALERT_KEYS: [&str; 3] = ["components", "configMapGenerator", "generatorOptions"];
 
-/// The kustomization that the book gives for the alerts: the file of step 5 of "Install with
-/// kubectl", with the lines of step 3 of "Add the alerts" added to it, as that step says.
+/// The kustomization that the book gives for the alerts. It is the file of step 5 of "Install with
+/// kubectl", with the lines of step 3 of "Add the alerts" added to it. That step says to add them.
 fn book_alerts_kustomization() -> Value {
     let mut file: Value =
         serde_yaml::from_str(&block_with(&install_steps(), "yaml", "kind: Kustomization")).unwrap();
