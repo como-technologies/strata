@@ -488,6 +488,13 @@ tests a new version of the same project. No result yet: the live window of wave
 check. The command page is
 [Newer versions of a profile](../../commands/behind.md#newer-versions-of-a-profile).
 
+`GET /v1/clusterprofiles/{uid}` answers HTTP `404` with the code
+`ResourceNotFound` for a uid that no profile has. A text that is no uid, such
+as the name `aws-stack`, gets the same answer. So after that 404, strata reads
+the listing for a profile of that name: see
+[A name with no version](../../reference/refs.md#a-name-with-no-version). The
+code of Palette shows the answer to a name, and no live check asks for one yet.
+
 ## The lock of a cluster template
 
 A cluster template links profile versions and a maintenance policy, and applies

@@ -92,7 +92,7 @@ fn summary(r: &mut Runner, name: &str, uid: &str, state: &str, filter: &str) {
 }
 
 /// The answers of the observer after the edit: the finding of `payments`, the newer versions, the
-/// limits, the log, the text of the edit, and the finding of `ledger`.
+/// limits, the log, the text of the edit, and the answers for `ledger`.
 fn answers(r: &mut Runner) {
     summary(
         r,
@@ -160,6 +160,12 @@ fn answers(r: &mut Runner) {
         "observer-text-all",
         r"^([$]|--- |[+][+][+] |[-+] +reclaimPolicy)",
     );
+    ledger(r);
+}
+
+/// The answers of the observer for `ledger`, which runs `aws-stack@1.1.0` only: the findings, and the
+/// status of each record.
+fn ledger(r: &mut Runner) {
     // ledger runs aws-stack@1.1.0, and its own copy differs from the record
     summary(
         r,
@@ -167,6 +173,14 @@ fn answers(r: &mut Runner) {
         LEDGER,
         "state-ledger",
         "-c '.findings[] | {kind, profile, packs}'",
+    );
+    // ledger does not run aws-stack@1.0.0. A finding wins, so its edit stays a drift, with no newer version (#834)
+    summary(
+        r,
+        "observer-ledger-profiles",
+        LEDGER,
+        "state-ledger",
+        "-c '(.counts | {profiles, drift, newer, packs}), (.profiles[] | {name, version, status, clusterCopy: .clusterCopy.status, newer: [.packs[].newer // empty]})'",
     );
 }
 
