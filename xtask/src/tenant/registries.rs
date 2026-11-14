@@ -112,18 +112,20 @@ pub(crate) fn registry_sync(sync: RegistrySync) -> Value {
 }
 
 impl Tenant {
+    /// Add the Helm registry `name`, with the uid `uid`, to the registry listing of `project`.
+    /// `private` is its `isPrivate`.
+    fn list_helm_registry(&self, project: &str, name: &str, uid: &str, private: bool) {
+        let mut listing = self.read(project, REGISTRY_LISTING);
+        if let Some(items) = listing["items"].as_array_mut() {
+            items.push(json!({"name": name, "uid": uid, "kind": "helm", "isPrivate": private}));
+        }
+        self.write(project, REGISTRY_LISTING, &listing);
+    }
+
     /// A Helm registry that is private, `charts-auth`. Palette does not sync it, so the pack
     /// listing has no chart of it until a profile pins one.
     pub fn private_charts(&self, project: &str) {
-        let path = REGISTRY_LISTING;
-        let mut listing = self.read(project, path);
-        if let Some(items) = listing["items"].as_array_mut() {
-            items.push(
-                json!({"name": "charts-auth", "uid": PRIVATE_CHARTS, "kind": "helm",
-                "isPrivate": true}),
-            );
-        }
-        self.write(project, path, &listing);
+        self.list_helm_registry(project, "charts-auth", PRIVATE_CHARTS, true);
         self.write(
             project,
             &pack_listing(CHART),
@@ -169,13 +171,7 @@ impl Tenant {
     /// of its own: see [`made_version`]. The host of its charts refuses the file of each chart, so
     /// a download holds the answer of the host: see `palette/download.rs`.
     pub fn bitnami(&self, project: &str, versions: &[&str]) {
-        let path = REGISTRY_LISTING;
-        let mut listing = self.read(project, path);
-        if let Some(items) = listing["items"].as_array_mut() {
-            items.push(json!({"name": "Bitnami", "uid": BITNAMI, "kind": "helm",
-                "isPrivate": false}));
-        }
-        self.write(project, path, &listing);
+        self.list_helm_registry(project, "Bitnami", BITNAMI, false);
         let items: Vec<Value> = versions
             .iter()
             .map(|version| {

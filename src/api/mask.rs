@@ -22,8 +22,8 @@ use crate::model::pack_type::PackType;
 
 pub(crate) mod console;
 
-/// The text that Palette writes over a secret.
-pub(crate) const MASKED: &str = "********";
+/// The text that Palette writes over a secret, such as the value of a sensitive variable.
+pub const MASKED: &str = "********";
 
 /// The length of a long secret, in characters. A shorter secret can be a part of a word.
 const LONG_SECRET: usize = 16;
