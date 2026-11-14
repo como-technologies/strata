@@ -425,10 +425,8 @@ pub(crate) fn registry_layer(summary: &Value, tags: &[Value]) -> Option<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::MemoryApi;
+    use crate::api::{MemoryApi, REGISTRY_METADATA};
     use serde_json::json;
-
-    const METADATA: &str = "/v1/registries/metadata";
 
     /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
     fn summary(uid: &str, sync: Value) -> Value {
@@ -440,7 +438,7 @@ mod tests {
     fn tenant() -> MemoryApi {
         MemoryApi::new()
             .with(
-                METADATA,
+                REGISTRY_METADATA,
                 json!({"items": [
                     {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
                     {"name": "charts-auth", "uid": "reg-auth", "kind": "helm", "isPrivate": true},
@@ -497,7 +495,7 @@ mod tests {
             registries.unsynced_names(&names).unwrap(),
             vec!["charts-auth", "zarf"]
         );
-        assert_eq!(api.calls(METADATA), 1, "one read of the metadata");
+        assert_eq!(api.calls(REGISTRY_METADATA), 1, "one read of the metadata");
         assert_eq!(
             api.calls(OCI_SUMMARY_TEMPLATE),
             1,
@@ -516,7 +514,11 @@ mod tests {
             registries.name_of("reg-auth").unwrap().as_deref(),
             Some("charts-auth")
         );
-        assert_eq!(api.calls(METADATA), 1, "one read for the two clients");
+        assert_eq!(
+            api.calls(REGISTRY_METADATA),
+            1,
+            "one read for the two clients"
+        );
         assert!(
             Registries::new(&next).into_metadata().is_none(),
             "no check read it"
@@ -526,7 +528,7 @@ mod tests {
     #[test]
     fn a_listing_that_palette_does_not_have_is_kept_and_a_check_of_its_entries_gets_the_error() {
         for status in [404, 405] {
-            let api = MemoryApi::new().failing(METADATA, status, "{}");
+            let api = MemoryApi::new().failing(REGISTRY_METADATA, status, "{}");
             let (first, next) = (Palette::new(&api), Palette::new(&api));
             let mut registries = Registries::new(&first);
             assert!(registries.listed().unwrap().is_none());
@@ -534,7 +536,7 @@ mod tests {
             let mut registries = Registries::with_metadata(&next, registries.into_metadata());
             assert!(registries.listed().unwrap().is_none());
             assert_eq!(
-                api.calls(METADATA),
+                api.calls(REGISTRY_METADATA),
                 1,
                 "HTTP {status}: one read for the two clients"
             );
@@ -545,7 +547,7 @@ mod tests {
                 "{err}"
             );
             assert!(registries.listed().unwrap().is_none(), "the answer stays");
-            assert_eq!(api.calls(METADATA), 2, "HTTP {status}");
+            assert_eq!(api.calls(REGISTRY_METADATA), 2, "HTTP {status}");
         }
     }
 
@@ -553,7 +555,7 @@ mod tests {
     fn a_name_that_two_registries_have_is_ambiguous_and_the_uid_names_one() {
         // a registry of the system and a registry of the tenant
         let api = MemoryApi::new().with(
-            METADATA,
+            REGISTRY_METADATA,
             json!({"items": [
                 {"name": "Public Repo", "uid": "reg-system", "kind": "pack"},
                 {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
@@ -576,7 +578,7 @@ mod tests {
     #[test]
     fn a_summary_that_palette_does_not_serve_has_no_entry_and_each_other_error_is_an_error() {
         let api = MemoryApi::new()
-            .with(METADATA, json!({"items": []}))
+            .with(REGISTRY_METADATA, json!({"items": []}))
             .failing("/v1/registries/pack/summary", 500, "{}")
             .failing("/v1/registries/helm/summary", 405, "{}");
         let palette = Palette::new(&api);
