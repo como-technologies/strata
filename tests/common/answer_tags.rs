@@ -1,5 +1,6 @@
-//! A text of an answer with tags of HTML, a text of an answer with the marks of markdown, and the
-//! checks that a markdown output shows each such tag and each such mark as text.
+//! A text of an answer with tags of HTML, one with the marks of markdown, one with mentions of
+//! GitHub, and one with bare addresses. The checks that a markdown output shows each such tag,
+//! mark, and mention as text, and each such address as it is.
 //!
 //! `tests/common/mod.rs` re-exports this file for the tests. The unit tests of `src/text.rs` and
 //! of the report of `strata-preflight` include it with `#[path]`. So one text of each kind and one
@@ -23,6 +24,52 @@ pub fn assert_answer_marks_as_text(markdown: &str) {
     assert!(
         markdown.contains(ANSWER_MARKS_AS_TEXT),
         "the marks of the answer as text in\n{markdown}"
+    );
+}
+
+/// The body of an answer with a mention of a person and of a team, as GitHub reads them. Its
+/// address of mail and its pack ref hold a `@` that starts no mention.
+pub const ANSWER_MENTIONS: &str = "@octocat and @acme/ops, ops@example.com, k@1.0";
+
+/// [`ANSWER_MENTIONS`] as GitHub must get it to notify nobody: the entity of a zero width space
+/// after the `@` of each mention. The other two `@` stay as they are.
+const ANSWER_MENTIONS_AS_TEXT: &str =
+    "@&#8203;octocat and @&#8203;acme/ops, ops@example.com, k@1.0";
+
+/// Make sure that `markdown` shows [`ANSWER_MENTIONS`] as text, and holds no mention of GitHub.
+///
+/// GitHub reads a mention at a `@` with a letter or a digit of ASCII after it. The `@` is the
+/// first character, or the character before it is no letter, no digit of ASCII, and no `_`.
+pub fn assert_answer_mentions_as_text(markdown: &str) {
+    assert!(
+        markdown.contains(ANSWER_MENTIONS_AS_TEXT),
+        "the mentions of the answer as text in\n{markdown}"
+    );
+    let chars: Vec<char> = markdown.chars().collect();
+    let word = |i: Option<usize>| {
+        i.and_then(|i| chars.get(i))
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+    };
+    let mention = (0..chars.len()).find(|&i| {
+        chars[i] == '@'
+            && chars.get(i + 1).is_some_and(char::is_ascii_alphanumeric)
+            && !word(i.checked_sub(1))
+    });
+    assert_eq!(mention, None, "a mention of GitHub in\n{markdown}");
+}
+
+/// The body of an answer with three bare addresses that GitHub links: one with a query of two
+/// values, one with `~`, `*`, and `_`, and one with `/@name`. A `,`, a `)`, and a `.` end them, as
+/// in a sentence.
+pub const ANSWER_ADDRESSES: &str = "see https://example.com/?a=1&b=2, \
+     https://example.com/~a/*b*/c_d and (https://example.com/@octocat).";
+
+/// Make sure that `markdown` holds [`ANSWER_ADDRESSES`] as it is. So the link that GitHub makes
+/// of each address holds no escape, and each address keeps its target.
+pub fn assert_answer_addresses_as_they_are(markdown: &str) {
+    assert!(
+        markdown.contains(ANSWER_ADDRESSES),
+        "the addresses of the answer as they are in\n{markdown}"
     );
 }
 
