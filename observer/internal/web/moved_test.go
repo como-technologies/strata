@@ -48,7 +48,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 	if !found {
 		t.Fatal("the screen has no fold of the versions that the cluster does not run")
 	}
-	mustNotHold(t, "the table", table, `data-go="`+movedHash+`"`)
+	mustNotHold(t, "the table", table, goTo(movedHash))
 	mustHold(t, "the fold", fold, "<summary>"+foldWords+"</summary>")
 	row := rowTo(t, fold, movedHash)
 	mustHold(t, "the row", row, badge("y", notOnCluster), `<span class="mut">`+notRunFact+`</span>`)

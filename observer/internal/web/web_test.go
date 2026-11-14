@@ -1559,12 +1559,15 @@ func rowWith(t *testing.T, html, text string) string {
 // linkRowStart starts a row of a table that leads to a screen. linkRow gives the start of the row that leads to the screen hash.
 const linkRowStart = `<tr class="link"`
 
-func linkRow(hash string) string { return linkRowStart + ` data-go="` + hash + `">` }
+func linkRow(hash string) string { return linkRowStart + ` ` + goTo(hash) + `>` }
+
+// goTo gives the data attribute of an element that leads to the screen hash.
+func goTo(hash string) string { return `data-go="` + hash + `"` }
 
 // rowTo finds the row of a table that leads to the screen hash.
 func rowTo(t *testing.T, html, hash string) string {
 	t.Helper()
-	return rowWith(t, html, `data-go="`+hash+`"`)
+	return rowWith(t, html, goTo(hash))
 }
 
 // tileLabel gives the label of a tile of the overview. tileLink gives the start of the link of a tile to the screen hash, up
@@ -1994,7 +1997,7 @@ func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T
 	row := rowTo(t, notChecked, "#images")
 	mustHold(t, "the row", row, `<td class="m"><span class="mut">The pods</span></td>`, `<td class="m"><span class="mut">-</span></td>`,
 		"<td>The observer could not read the pods, so the list of images is old or empty.</td>")
-	mustHold(t, "the other rows", notChecked, `data-go="#p-gazoo-backup@1.2.0"`, `data-go="#p-hoppy-autoscale@1.3.0"`)
+	mustHold(t, "the other rows", notChecked, goTo("#p-gazoo-backup@1.2.0"), goTo("#p-hoppy-autoscale@1.3.0"))
 	mustHold(t, "the heading", notChecked, wordNotChecked+` on this run <span class="sub">3.`)
 }
 

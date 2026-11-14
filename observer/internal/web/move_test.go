@@ -39,7 +39,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	mustHold(t, "the values change", rowWith(t, card, testkit.VendorPack),
 		`<td>Changed</td>`, `2026.2.0 <span class="mut">same version</span>`, `<td>Change</td>`)
 	mustHold(t, "the removed pack", rowWith(t, card, "addon/"+albPack),
-		`data-go="`+packPage(wilmaSubject, "addon", albPack)+`"`, `<td>Removed</td>`, `>2.13.4</td>`)
+		goTo(packPage(wilmaSubject, "addon", albPack)), `<td>Removed</td>`, `>2.13.4</td>`)
 	// a pack that the move adds is in no record, so it has no page
 	added := rowWith(t, card, "addon/aws-load-balancer-controller")
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
