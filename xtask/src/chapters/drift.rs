@@ -78,6 +78,32 @@ fn edited_in_place(r: &mut Runner) {
     edited_in_place_cluster(r);
     edited_in_place_clusters(r);
     edited_in_place_stale(r);
+    edited_in_place_who_denied(r);
+}
+
+/// The part of the chapter `edited-in-place` for a key that cannot read the audit log.
+fn edited_in_place_who_denied(r: &mut Runner) {
+    // the key loses audit.list: the verdict stays, and the note and the line give the words of
+    // the refusal of Palette, not the JSON of its body (#887)
+    r.tenant(|t| t.deny_audit_log(DEV, A111));
+    r.step(
+        "edited-verify-who-denied-full",
+        1,
+        true,
+        "strata verify releases/1.1.1/dev.json --who",
+    );
+    r.excerpt(
+        "edited-verify-who-denied",
+        "edited-verify-who-denied-full",
+        r"^(strata: note: the audit log|DRIFT|who:)",
+    );
+    // the document keeps the body as Palette sent it
+    r.step(
+        "edited-verify-who-denied-json",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json --who --json | jq '.verify.whoError'",
+    );
 }
 
 /// The part of the chapter `edited-in-place` for the cluster that runs the version, and the update

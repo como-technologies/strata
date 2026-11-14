@@ -5,6 +5,7 @@ use super::verify::edited_in_place_note;
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
+use crate::error::reason_words;
 use crate::model::repave::PaletteRepaveReason;
 use crate::reference::name_version;
 use crate::snapshot::{PendingUpdate, Source, Tier};
@@ -428,7 +429,10 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
                     note.push_str(&format!(": {}", reasons.join("; ")));
                 }
             } else if let Some(e) = c.pending_repave_error() {
-                note.push_str(&format!(" (strata could not read its reasons: {e})"));
+                note.push_str(&format!(
+                    " (strata could not read its reasons: {})",
+                    reason_words(e)
+                ));
             }
             note.push_str(". Palette refuses an update of its profiles until a person approves it");
             note
@@ -438,9 +442,12 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
     notes
 }
 
-/// One note for each field of a cluster tier that strata could not read on a side: `strata could
-/// not read policy.rbacs of cluster fred (HTTP 403: forbidden), so it does not compare it`, in
-/// text order. Two sides that say the same get one note.
+/// One note for each field of a cluster tier that strata could not read on a side, in text order.
+/// Two sides that say the same get one note.
+///
+/// For example, for a key whose role does not give `cluster.get`:
+/// `strata could not read policy.rbacs of cluster fred (HTTP 500: OperationForbidden: Operation 'cluster.get' is forbidden. ...), so it does not compare it`.
+/// The record keeps the body of the answer in `errors`, and the note gives its words.
 fn unread_notes(d: &Diff) -> Vec<String> {
     let notes: std::collections::BTreeSet<String> = [&d.a, &d.b]
         .into_iter()
@@ -449,9 +456,10 @@ fn unread_notes(d: &Diff) -> Vec<String> {
             c.tiers.iter().flat_map(move |(tier, t)| {
                 t.errors.iter().map(move |(field, e)| {
                     format!(
-                        "strata could not read {} of cluster {} ({e}), so it does not compare it",
+                        "strata could not read {} of cluster {} ({}), so it does not compare it",
                         tier_path(tier, field),
-                        c.name
+                        c.name,
+                        reason_words(e)
                     )
                 })
             })

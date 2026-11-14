@@ -58,7 +58,9 @@ logs.
 
 When the key cannot read the audit log, the issue keeps the verdict. It has the
 line `who: not read: <the error>` in place of the writes, and the exit status is
-that of a check without `--who`.
+that of a check without `--who`. The error gives the status, then the code and the
+message of Palette: see
+[When strata cannot read the log](../commands/verify.md#when-strata-cannot-read-the-log).
 
 ## Exit status
 

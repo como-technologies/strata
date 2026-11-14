@@ -573,6 +573,23 @@ pub(crate) fn unread_reason(status: u16, body: &str) -> String {
     format!("HTTP {status}: {}", body.trim())
 }
 
+/// The words of `reason`, the reason that a record or a verdict keeps for a read that failed:
+/// `HTTP 403: AccessDenied: <message>`. A text form gives them in place of the reason.
+///
+/// A reason of the form of [`unread_reason`] gives its status, then the code and the message of
+/// Palette, as the message of [`Error::Api`] gives them. Each other reason, such as the message of
+/// a request that did not complete, stays as it is.
+pub(crate) fn reason_words(reason: &str) -> String {
+    let answer = reason
+        .strip_prefix("HTTP ")
+        .and_then(|rest| rest.split_once(": "))
+        .filter(|(status, _)| status.parse::<u16>().is_ok());
+    match answer {
+        Some((status, body)) => format!("HTTP {status}: {}", answer_words(body)),
+        None => reason.to_string(),
+    }
+}
+
 /// `answer`, or `None` when Palette answered HTTP 404: it does not have the object. Each other
 /// error returns.
 pub(crate) fn found<T>(answer: Result<T>) -> Result<Option<T>> {
@@ -706,7 +723,7 @@ impl Error {
     /// The reason that a record or a verdict keeps for a read that failed.
     ///
     /// An answer of Palette that is an error gives `HTTP <status>: <body>`. Each other error gives
-    /// its message.
+    /// its message. A text form gives the reason through [`reason_words`].
     pub(crate) fn reason(&self) -> String {
         match self {
             Error::Api { status, body, .. } => unread_reason(*status, body),
