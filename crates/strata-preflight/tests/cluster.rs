@@ -3,7 +3,10 @@
 //! Palette quotes in a refusal.
 
 use serde_json::json;
-use strata::api::codes::{Denial, INVALID_VARIABLE_CODE, ValidateRoute};
+use strata::api::codes::{
+    CLUSTER_CREATE_FORBIDDEN_CODES, Denial, INVALID_VARIABLE_CODE, PACK_FORBIDDEN_CODE,
+    ValidateRoute,
+};
 use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -371,6 +374,32 @@ fn each_refusal_code_of_the_cluster_validate_route_fails_palette_validate_at_htt
                 "{code} {status}"
             );
         }
+    }
+}
+
+/// The cluster validate route refuses four faults of the body with HTTP 403, and not with 500.
+/// `palette-validate` reads each one as the answer of the route, and not as a refusal of the key.
+/// The verdict is `failed`, with the message of Palette (#829).
+#[test]
+fn each_refusal_of_the_body_with_http_403_fails_palette_validate_with_the_message_of_palette() {
+    let codes = CLUSTER_CREATE_FORBIDDEN_CODES
+        .iter()
+        .copied()
+        .chain([PACK_FORBIDDEN_CODE]);
+    for code in codes {
+        let api = refusing(&[], 403, code, REFUSED);
+        let check = palette_validate(&api);
+        assert_eq!(
+            check.verdict,
+            Verdict::Failed,
+            "{code}: {:?}",
+            check.messages
+        );
+        assert_eq!(
+            check.messages,
+            [format!("Palette refused the entity: {code}: {REFUSED}")],
+            "{code}"
+        );
     }
 }
 

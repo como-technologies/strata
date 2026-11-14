@@ -22,6 +22,39 @@ facts:
         - K8SCidrOverlap
         - CidrParseError
         - RequiredParam
+        - ControlPlanePoolRequired
+        - AwsWorkerPoolAzsValidate
+        - AwsDynamicWorkerPoolAzsRequired
+        - InvalidName
+        - DuplicatePacksForbidden
+        - DuplicatePackManifestsForbidden
+        - MultiPackVersionsForbidden
+        - ClusterProfileDeleted
+        - ClusterProfileIsNotValid
+        - ClusterProfileIsNotPublished
+        - MissingClusterInfraProfile
+        - ClusterDashboardPacksMutuallyExclusive
+        - DuplicateClusterPacksForbidden
+        - PackValuesYamlInvalid
+        - PackManifestYamlInvalid
+        - InvalidPackVariable
+        - PackSpectroIntegrationNotSupported
+        - ClusterProfileOidcNotConfigured
+        - DisabledPacksForbidden
+        - SubResourceLimitValidationFailure
+        - PackForbidden
+        - ClusterVariablesNotFound
+        - ClusterVariableCreateFailure
+        - NoRegionSpecified
+        - InstanceTypeNotFound
+        - CustomInstanceTypeNotFound
+        - ReservedTags
+        - GcpTagValidationFailure
+        - SshKeyValidationFailure
+        - MultipleSystemProfilesNotSupported
+        - ClusterOperationNotAllowedInvalidPackState
+        - PackValuesOverrideForbidden
+        - ClusterFipsNotSupported
       values:
         cloudType:
           - aws
@@ -42,6 +75,7 @@ facts:
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
       - reference/preflight-rules.md#a-check-that-a-validate-route-answers
+      - reference/errors.md#refusals-that-strata-does-not-send-again
       - reference/palette-api.md#the-checks-of-strata-preflight
     code:
       - src/api/codes.rs

@@ -14,7 +14,7 @@ const RULES: [CreateRule; 4] = [
 ];
 
 /// Each table of one check.
-const CHECKS: [Check; 16] = [
+const CHECKS: [Check; 22] = [
     PACK_YAML,
     DASHBOARD_PACKS,
     PACK_METADATA,
@@ -31,6 +31,12 @@ const CHECKS: [Check; 16] = [
     BODY_VARIABLES,
     VPC_CIDRS,
     POOL_SUBNETS,
+    BODY_PROFILES,
+    PACK_VARIABLES,
+    FIPS_PACKS,
+    CREATE_POOLS,
+    POOL_MACHINES,
+    CLOUD_FIELDS,
 ];
 
 #[test]
@@ -46,6 +52,7 @@ fn each_code_of_palette_is_in_one_table() {
         &denials[..],
         &PROFILE_IMPORT_MATCH_CODES[..],
         &other_status[..],
+        &CLUSTER_CREATE_FORBIDDEN_CODES[..],
     ]);
     let mut codes: Vec<&str> = tables.flat_map(|table| table.iter().copied()).collect();
     let count = codes.len();
@@ -134,6 +141,7 @@ fn the_routes_that_check_the_packs_of_a_profile_refuse_a_disabled_pack() {
             ValidateRoute::ClusterPacks,
             ValidateRoute::ProfilePacks,
             ValidateRoute::ProfileImport,
+            ValidateRoute::ClusterCreate,
         ] {
             assert!(route.refuses(500, code), "{route:?} {code}");
         }
@@ -142,9 +150,21 @@ fn the_routes_that_check_the_packs_of_a_profile_refuse_a_disabled_pack() {
 }
 
 #[test]
-fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type_a_variable_a_cidr_or_a_pool_with_no_subnet()
+fn only_the_cluster_validate_route_refuses_the_profiles_the_variables_the_pools_and_the_cloud_of_a_create()
  {
-    for code in [PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS, POOL_SUBNETS].concat() {
+    let only_create = [
+        PROFILE_CLOUD,
+        BODY_VARIABLES,
+        VPC_CIDRS,
+        POOL_SUBNETS,
+        BODY_PROFILES,
+        PACK_VARIABLES,
+        FIPS_PACKS,
+        CREATE_POOLS,
+        POOL_MACHINES,
+        CLOUD_FIELDS,
+    ];
+    for code in only_create.concat() {
         assert!(ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
         assert!(!ValidateRoute::ClusterCreate.refuses(503, code), "{code}");
         for route in [
@@ -287,6 +307,15 @@ fn the_refusals_that_set_another_type_belong_to_their_routes() {
     assert!(ValidateRoute::ClusterPacks.refuses(403, PACK_FORBIDDEN_CODE));
     assert!(!ValidateRoute::ClusterPacks.refuses(403, "Forbidden"));
     assert!(!ValidateRoute::ProfilePacks.refuses(403, PACK_FORBIDDEN_CODE));
+    // the cluster validate route refuses four faults of the body with HTTP 403, and the denial of
+    // the role of the key is no refusal of the body
+    assert!(ValidateRoute::ClusterCreate.refuses(403, PACK_FORBIDDEN_CODE));
+    for code in CLUSTER_CREATE_FORBIDDEN_CODES {
+        assert!(ValidateRoute::ClusterCreate.refuses(403, code), "{code}");
+        assert!(!ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
+        assert!(!ValidateRoute::ClusterPacks.refuses(403, code), "{code}");
+    }
+    assert!(!ValidateRoute::ClusterCreate.refuses(403, Denial::Route.as_str()));
     for route in [ValidateRoute::ProfileName, ValidateRoute::ProfileImport] {
         assert!(route.refuses(409, PROFILE_EXISTS_CODE), "{route:?}");
         assert!(!route.refuses(409, "Conflict"), "{route:?}");
