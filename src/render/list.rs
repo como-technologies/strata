@@ -8,7 +8,7 @@ use super::verify::record_label;
 use super::{count_of, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
-use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
+use crate::ops::{ListKind, Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::{SecretLikeVariable, Snapshot};
 use crate::text::{and_list, dash, name_or_uid};
 
@@ -16,6 +16,19 @@ use crate::text::{and_list, dash, name_or_uid};
 /// when the listing has no type.
 pub(crate) fn profile_type_cell(pr: &crate::ops::ListedProfile) -> &str {
     dash(pr.profile_type.as_ref().map_or("", Open::as_str))
+}
+
+/// `clusters: not read (<the message of the error>)`: one line for each kind of the listing that
+/// strata could not read, in the order of [`ListKind`].
+pub(crate) fn unread_lines(l: &Listing) -> Vec<String> {
+    ListKind::ALL
+        .iter()
+        .filter_map(|kind| {
+            let error = l.errors.get(&Open::Known(*kind))?;
+            let message = error_text(Some(error));
+            Some(format!("{}: not read ({message})", kind.as_str()))
+        })
+        .collect()
 }
 
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
@@ -272,7 +285,7 @@ pub fn secret_like_notes(variables: &[SecretLikeVariable], record: Option<&Path>
 
 /// Why strata could not record a cluster of a set: the message of its error.
 pub(crate) fn set_error(r: &SetRecord) -> &str {
-    entry_error(r.error.as_ref()).unwrap_or("see the error")
+    error_text(r.error.as_ref())
 }
 
 /// The mark of a listed version that nobody published: `draft`, or nothing.
@@ -308,4 +321,9 @@ pub(crate) fn profile_marks(
 /// `<name>@<version>` of a profile a cluster applies, as `list` and the reports print it.
 pub(crate) fn applied_ref(a: &crate::snapshot::AppliedProfile) -> String {
     record_label(&a.name, &a.version)
+}
+
+/// The message of the error document `error`, or `see the error` when it holds none.
+fn error_text(error: Option<&serde_json::Value>) -> &str {
+    entry_error(error).unwrap_or("see the error")
 }

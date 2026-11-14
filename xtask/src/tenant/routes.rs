@@ -38,6 +38,8 @@ pub(super) const APP_PROFILES: &str = "v1/appProfiles";
 pub(crate) const REGISTRY_LISTING: &str = "v1/registries/metadata";
 /// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
 pub(crate) const CLUSTER_LISTING: &str = "v1/dashboard/spectroclusters/meta";
+/// The saved tag filters of the tenant, `GET /v1/filters/metadata?filterType=tag`, as a file.
+pub(crate) const TAG_FILTER_LISTING: &str = "v1/filters/metadata@filterType=tag";
 
 /// The last sync of each registry of the kind `kind`, `GET /v1/registries/{kind}/summary`.
 pub(crate) fn registry_summary_route(kind: &str) -> String {

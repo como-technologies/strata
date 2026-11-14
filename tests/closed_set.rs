@@ -22,7 +22,7 @@ use strata::model::pack_state::PackState;
 use strata::model::pack_type::PackType;
 use strata::model::profile_type::ProfileType;
 use strata::model::scope::ProfileScope;
-use strata::ops::{PairStatus, Policy, RecordStatus};
+use strata::ops::{ListKind, PairStatus, Policy, RecordStatus};
 use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier, UpstreamSource};
 
 /// Each closed set in a document that strata writes and reads, with the text of each value that
@@ -31,7 +31,7 @@ use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier,
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id. If it does, a record
 /// of an earlier release reads the value as unknown.
-fn sets() -> [Set; 23] {
+fn sets() -> [Set; 24] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
@@ -62,6 +62,7 @@ fn sets() -> [Set; 23] {
             "unknown-upstream",
         ]),
         set::<Policy>(&["exact", "registry-move"]),
+        set::<ListKind>(&["profiles", "clusters", "projects", "filters"]),
         set::<PackState>(&["deprecated", "disabled", "deleted", "absent"]),
         set::<OciProvider>(&["pack", "helm", "zarf"]),
         set::<PackType>(&["spectro", "helm", "oci", "manifest"]),

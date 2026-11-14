@@ -1,5 +1,6 @@
 # Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the usage and the
-# stages, the checks and their summary, the edits of the lab, the OpenTofu applies, and the baseline.
+# stages, the checks and their summary, the markdown of a text, the edits of the lab, the OpenTofu
+# applies, and the baseline.
 # Set `script` to the script's name, `flag` to the immutable-clusterprofiles setting the script runs
 # with, and `from` to the first stage of the run, then source it.
 #
@@ -223,6 +224,30 @@ write_summary() {
     summary_table
   } > summary.md
 }
+
+# ---- markdown ----------------------------------------------------------------------------------------
+
+# The jq functions that write a text into markdown, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
+# `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
+# as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
+# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
+# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
+# `text::code_block`, so that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def cell: marks | html | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
 
 # ---- OpenTofu ----------------------------------------------------------------------------------------
 #

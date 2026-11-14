@@ -176,13 +176,10 @@ impl VerdictParts {
 /// `same` is whether the root did not move, from [`Diff::same`](crate::diff::Diff::same): a macro
 /// value that moved is drift
 /// outside the root only then. `recorded` is the source of the record, side A of the diff.
-/// `code` puts a uid in the form of the report.
-pub(crate) fn verdict_parts(
-    v: &Verify,
-    same: bool,
-    recorded: &Source,
-    code: fn(&str) -> String,
-) -> VerdictParts {
+///
+/// The parts hold no code span and no other mark of markdown of strata. So the markdown escapes the
+/// whole line as one quoted text.
+pub(crate) fn verdict_parts(v: &Verify, same: bool, recorded: &Source) -> VerdictParts {
     let at = recorded.fetched_at.as_str();
     let case = verdict_case(v, same);
     // verdict_case picks a case only when the value of that case is there, so no default of
@@ -196,7 +193,7 @@ pub(crate) fn verdict_parts(
         VerdictCase::ProfilesOverwritten => {
             profiles_overwritten_sentence(v, recorded).unwrap_or_default()
         }
-        VerdictCase::Gone => gone_sentence(v, recorded, code),
+        VerdictCase::Gone => gone_sentence(v, recorded),
         VerdictCase::Renamed => format!(
             "was renamed to {}",
             v.renamed_to.as_deref().unwrap_or_default()
@@ -366,7 +363,7 @@ fn record_sentence(r: &VerifiedRecord) -> String {
             .unwrap_or("could not be checked")
             .to_string(),
         (_, Some((d, v))) => {
-            let parts = verdict_parts(v, d.same, &d.a, str::to_string);
+            let parts = verdict_parts(v, d.same, &d.a);
             // the report of one record shows the impact of its diff above the verdict, and a row
             // of the summary states it
             let impact = match parts.case {
@@ -456,15 +453,13 @@ fn gone_subject(recorded: &Source) -> String {
 
 /// `cluster c no longer exists: deleted <time>` when Palette keeps the document of the deleted
 /// object, else `... no longer exists: uid u is gone from Palette since the record of <time>`.
-/// `code` puts the uid in the form of the report.
-fn gone_sentence(v: &Verify, recorded: &Source, code: fn(&str) -> String) -> String {
+fn gone_sentence(v: &Verify, recorded: &Source) -> String {
     let what = gone_subject(recorded);
     match &v.deleted_at {
         Some(at) => format!("{what} no longer exists: deleted {at}"),
         None => format!(
             "{what} no longer exists: uid {} is gone from Palette since the record of {}",
-            code(&v.uid),
-            recorded.fetched_at
+            v.uid, recorded.fetched_at
         ),
     }
 }

@@ -306,6 +306,10 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
+Strata writes `********` over each whole copy of the key of the run in the body
+of an error, before it prints or keeps the error. So the terminal, `--json`, a
+record, and the log of a job hold no copy of the key.
+
 The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
 sends more requests. The validate route of a create needs a permission that a viewer role
 does not give. The code of Palette shows this table; no live run shows it yet.
@@ -320,10 +324,27 @@ A request without its permission gets one of these answers:
 
 | Code | HTTP status | When |
 | --- | --- | --- |
-| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, and the validate route of a create. |
+| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, the saved tag filters, and the validate route of a create. |
 | `OperationForbidden` | 500 | One object is refused: a profile, a cluster, or a registry. |
 | `NoRolesAssociated` | 500 | The user has no role at all. |
-| `ResourceAccessDenied` | 500 | The user has no role in the project of the request. |
+| `ResourceAccessDenied` | 500 | No role of the user in the project of the request gives the access: the user has no role there, or a role without the permission of a listing. |
+
+The profile listing and the cluster listing check the role in the project of
+the request: `clusterProfile.list` and `cluster.list`. When no role there gives
+the permission, each listing answers HTTP 500 with `ResourceAccessDenied`, and
+not 403. The message names the project by its name, as in
+`Project 'dev' access denied`.
+
+The saved tag filters need `filter.list` in the tenant. Without it, Palette
+answers HTTP 403 with `AccessDenied`, and the
+message names `filter.list`. The code of Palette shows these answers; no live
+run shows them yet. Stage 8 of [tiers.sh](../../development/live-runs.md#tierssh)
+runs `strata list` with a role in the project that does not give `cluster.list`.
+
+Strata sends no denial again, and its message names what Palette denied: see
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+`strata list` keeps each kind that it read: see
+[A kind that the key cannot read](../../commands/list.md#a-kind-that-the-key-cannot-read).
 
 ## The order of the profiles of a cluster
 

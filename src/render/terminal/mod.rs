@@ -168,7 +168,7 @@ impl Renderer for TerminalRenderer {
     fn verdict(&self, d: &Diff) -> Option<String> {
         let v = d.verify.as_ref()?;
         let p = &self.paint;
-        let parts = verdict_parts(v, d.same, &d.a, str::to_string);
+        let parts = verdict_parts(v, d.same, &d.a);
         let word = paint_status(p, RecordStatus::from(v.status), parts.word());
         let mut line = format!("{word}: {}", parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
@@ -280,7 +280,7 @@ impl Renderer for TerminalRenderer {
         }
         out.push_str(&format!(
             "  {}\n",
-            p.dim(&second_reading_line(&r.clusters_read, str::to_string))
+            p.dim(&second_reading_line(&r.clusters_read))
         ));
         out.push_str(&format!("  {}\n", p.dim(&edge_hosts_line(r))));
         Ok(out)
@@ -412,6 +412,9 @@ impl Renderer for TerminalRenderer {
         }
         if let Some(filters) = &l.filters {
             list_filters(&mut out, p, filters);
+        }
+        for line in super::list::unread_lines(l) {
+            out.push_str(&format!("\n{}\n", p.red(&line)));
         }
         Ok(out)
     }
@@ -656,6 +659,7 @@ mod tests {
             resolved: None,
             query_filter: None,
             filters: None,
+            errors: std::collections::BTreeMap::new(),
         };
         let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
             .into_iter()

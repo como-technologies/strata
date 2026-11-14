@@ -1142,6 +1142,18 @@ field, a value, an input, or an option is in the sections above.
     end the block.
   - `strata-preflight` writes its markdown in the same way. Its terminal form, its HTML form,
     and the JSON documents of both tools do not change.
+- **The markdown form writes a `\` before each mark of markdown in a text.** The marks are `*`,
+  `_`, `[`, `]`, `~`, a backtick, and a `\`. GitHub shows the same characters. So a link, an
+  emphasis, or a code span in a message of Palette shows as text. Before, GitHub read them as
+  markdown. Two backticks opened a code span, and the span showed an entity such as `&lt;`.
+  See [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `\*` in place of `*`. A run of `_` with a
+    letter or a digit on each side does not change, as in `aws_stack`.
+  - The verdict of a gone record writes the uid as plain text, as the terminal does. The line
+    `Second reading:` of `consumers` writes `--list-only` as plain text. The markdown escapes
+    each of these lines as one text.
+  - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
+    backticks as text, as the terminal form does.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1167,6 +1179,27 @@ field, a value, an input, or an option is in the sections above.
   [Check many records](../commands/verify.md#check-many-records).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+- **`list` keeps each kind that it read.** When strata cannot read one kind, such
+  as the clusters, `list` prints the other kinds. The line
+  `<kind>: not read (<error>)` follows them, and the exit is `2`. `--json` gives
+  the error of the kind under `errors` of `strata-list/1`. Before, `list` printed
+  nothing and gave the error alone. When strata reads no kind, the command fails
+  with the error of the first kind, as before. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
+- **The message of `api` names what Palette denied.** A denial, such as
+  `AccessDenied`, adds the permission or the project to the end of the message. A
+  `403` that is a denial names the key only when no earlier answer of the run
+  proved the key. The message has no blank between the body and its end, and the
+  kind and the fields stay. A script that matches the whole message must match
+  the new text. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **Strata sends no 5xx with `ResourceAccessDenied` or `NoRolesAssociated`
+  again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
+  waited between the requests. Each request got the same denial.
+- **The error of an answer holds no copy of the API key.** Strata masks each
+  whole copy of the key in the body with `********`. It does so before it
+  prints or keeps the error. See
+  [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
   [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
   - Only a counted check can fail a run: a preflight check of severity `fail`, or a probe with
@@ -1302,6 +1335,12 @@ field, a value, an input, or an option is in the sections above.
   - The marker on the first line of an issue writes each `&`, `<`, and `>` of the path or of the
     pack name as an entity. A marker with none of these characters does not change, so the next
     run finds an older issue.
+- **`verify-report.sh` and `upstream-report.sh` write a `\` before each mark of markdown in a
+  quoted text.** They do it as the markdown form does. So an issue shows a link, an emphasis, or
+  a code span in a message of Palette as text.
+- **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
+  fence longer than each run of backticks in its value. The body names the cluster and the path
+  of each record in such a span. A name and a path with no backtick do not change.
 - **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
@@ -1328,6 +1367,14 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::Listing` has the new field `errors`. A struct literal must set it, and a
+  pattern with no `..` must name it. `ops::list` gives a listing with the error
+  of a kind that it could not read, in place of the error, when it read another
+  kind. `ops::ListKind` is a closed set of `closed_set::ClosedSet` with serde,
+  and `Listing::exit_code` is new.
+- `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
+  accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
+  one of them.
 - `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
 - `text::code_block` is new. It writes a fenced code block with a fence that no line of the text
   ends.
@@ -1335,6 +1382,9 @@ field, a value, an input, or an option is in the sections above.
   cell in a code span calls `text::code_cell` in its place, because a code span shows an entity as
   it is.
 - `text::code_cell` writes no entity. It escapes a `|` and a line break, as before.
+- `text::markdown_cell` also writes a `\` before each mark of markdown, such as a backtick. A
+  caller that puts a code span of its own in the text must write the span outside the cell. The
+  cell shows the backticks of the span as text.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get

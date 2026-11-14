@@ -140,11 +140,49 @@ pub fn html_text(s: &str) -> String {
 /// `s` as the text of one cell of a markdown table, or of one line of markdown.
 ///
 /// A `|` ends a cell, and a line break ends the row. So the text escapes each `|`, and writes a
-/// line break as a space. It is also [`html_text`]. So a text that strata quotes from an answer,
-/// such as a message of Palette, shows each tag of HTML as text. A code span shows an entity as it
-/// is, so [`code_cell`] writes a value in a code span.
+/// line break as a space. It is also [`html_text`], with a `\` before each mark of markdown. So a
+/// text that strata quotes from an answer, such as a message of Palette, shows as text. A tag of
+/// HTML, a link, an emphasis, and a code span in it show as text too. A code span shows an entity
+/// and a `\` as they are, so [`code_cell`] writes a value in a code span.
 pub fn markdown_cell(s: &str) -> String {
-    table_text(&html_text(s))
+    table_text(&html_text(&markdown_text(s)))
+}
+
+/// The marks of markdown that get a `\` in each place. [`markdown_text`] gives a `_` its `\` only
+/// where the `_` can start or end an emphasis.
+const MARKS: [char; 6] = ['\\', '`', '*', '[', ']', '~'];
+
+/// `s` with a `\` before each mark of markdown, so that GitHub shows each mark as text.
+///
+/// The marks are a `\`, a backtick, `*`, `[`, `]`, `~`, and `_`. A run of `_` with a letter or a
+/// digit on each side, such as the `_` of `aws_stack`, starts no emphasis. So such a run stays as
+/// it is, and a name or a version keeps its form.
+fn markdown_text(s: &str) -> String {
+    let word = |c: Option<char>| c.is_some_and(char::is_alphanumeric);
+    let mut out = String::with_capacity(s.len());
+    let mut before = None;
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '_' {
+            let mut run = 1;
+            while chars.next_if_eq(&'_').is_some() {
+                run += 1;
+            }
+            let mark = if word(before) && word(chars.peek().copied()) {
+                "_"
+            } else {
+                "\\_"
+            };
+            out.push_str(&mark.repeat(run));
+        } else {
+            if MARKS.contains(&c) {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+        before = Some(c);
+    }
+    out
 }
 
 /// `lines` as the text of one cell of a markdown table: each line as [`markdown_cell`] writes it,
@@ -269,7 +307,7 @@ mod span_read;
 
 #[cfg(test)]
 mod tests {
-    use super::answer_tags::ANSWER_TAGS;
+    use super::answer_tags::{ANSWER_MARKS, ANSWER_TAGS, assert_answer_marks_as_text};
     use super::*;
 
     #[test]
@@ -378,6 +416,35 @@ mod tests {
         let cell = markdown_cell(&format!("{ANSWER_TAGS}\n| next"));
         assert!(!cell.contains('<'), "{cell}");
         assert_eq!(cell, format!("{} \\| next", html_text(ANSWER_TAGS)));
+    }
+
+    #[test]
+    fn a_cell_of_a_markdown_table_shows_each_mark_of_markdown_of_a_quoted_text_as_text() {
+        assert_answer_marks_as_text(&markdown_cell(ANSWER_MARKS));
+        // two backticks open no code span, so a code span cannot show an entity as it is
+        assert_eq!(markdown_cell("`a < b`"), "\\`a &lt; b\\`");
+        assert_eq!(markdown_cell("``a``"), "\\`\\`a\\`\\`");
+        assert_eq!(
+            markdown_cell("~~gone~~ _it_ ![i](x)"),
+            "\\~\\~gone\\~\\~ \\_it\\_ !\\[i\\](x)"
+        );
+        // a `\` of the text stays a `\`, also before a mark and before a `|`
+        assert_eq!(markdown_cell("a\\*b\\|c"), "a\\\\\\*b\\\\\\|c");
+    }
+
+    #[test]
+    fn a_run_of_underscores_inside_a_word_has_no_escape_and_each_other_run_has_one() {
+        // a run with a letter or a digit on each side starts no emphasis, so a name keeps its form
+        assert_eq!(
+            markdown_cell("aws_stack LTS__24.x é_ü"),
+            "aws_stack LTS__24.x é_ü"
+        );
+        assert_eq!(
+            markdown_cell("__init__ a_ _b a_-b"),
+            "\\_\\_init\\_\\_ a\\_ \\_b a\\_-b"
+        );
+        assert_eq!(markdown_cell("_"), "\\_");
+        assert_eq!(markdown_cell(""), "");
     }
 
     #[test]

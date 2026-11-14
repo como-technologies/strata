@@ -64,9 +64,10 @@ and [A move that skips a minor version](../commands/behind.md#a-move-that-skips-
 The issue shows each text of an answer as text, as
 [the markdown comment](../reference/formats.md#the-markdown-comment) does. Such
 a text is a message of Palette, the error of a pin, the name of a registry, or
-the subject of a record. A tag of HTML in it shows as text. The name of the
-pack, each pinned version, a floating tag, and the path of a record are in code
-spans. The fence of each span is longer than each run of backticks in its value.
+the subject of a record. A tag of HTML or a mark of markdown in it shows as
+text. The name of the pack, each pinned version, a floating tag, and the path of
+a record are in code spans. The fence of each span is longer than each run of
+backticks in its value.
 The marker writes each `&`, `<`, and `>` of the pack name as an entity, so a
 `-->` cannot end the comment.
 

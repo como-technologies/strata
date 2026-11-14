@@ -45,15 +45,18 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
-# The jq functions that write a text into the markdown of an issue, as strata writes it. `html` is
+# The jq functions that write a text into markdown, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`: it also escapes each `|`, and writes a line break as a space. `span` is
-# `text::code_span`: its fence is longer than each run of backticks in the text. `code` is
-# `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of `text::code_block`, so
-# that no line of the text ends the block.
+# `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
+# `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
+# as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
+# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
+# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
+# `text::code_block`, so that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
   def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def cell: html | table;
+  def cell: marks | html | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
