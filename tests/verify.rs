@@ -15225,9 +15225,13 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
         "the line comes under the answer of Palette: {text}"
     );
     assert_eq!(text.matches("skips a minor version").count(), 1, "{text}");
+    // the markdown writes the `->` of the line as `-&gt;`
     let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
-        md.contains(&format!("<br>palette accepts<br>{line} |")),
+        md.contains(&format!(
+            "<br>palette accepts<br>{} |",
+            strata::text::html_text(&line)
+        )),
         "{md}"
     );
 

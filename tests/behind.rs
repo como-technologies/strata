@@ -670,9 +670,13 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
         )),
         "{text}"
     );
+    // the markdown writes the `->` of the skip as `-&gt;`
     let markdown = common::markdown().render_behind(&r, false).unwrap();
     assert!(
-        markdown.contains(&format!("<br>{variables_line}<br>{skip_line} |")),
+        markdown.contains(&format!(
+            "<br>{variables_line}<br>{} |",
+            strata::text::html_text(&skip_line)
+        )),
         "{markdown}"
     );
     let doc = serde_json::to_value(&r).unwrap();
