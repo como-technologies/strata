@@ -89,21 +89,29 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 	if f.Code != "DependencyPackUpgradeNotSupported" || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{"payments"}) {
 		t.Errorf("refusal %+v", f)
 	}
-	for pattern, path := range summaryRoutes {
-		if body := get(h, path).Body.String(); strings.Contains(body, "DependencyPackUpgradeNotSupported") || strings.Contains(body, "SENTINEL") {
-			t.Errorf("%s holds the answer: %s", pattern, body)
+	noSummaryRouteStateOrLogHolds(t, r, h, "DependencyPackUpgradeNotSupported", "SENTINEL")
+	// The answer stays in memory: the state holds none of it. The log names the verdict of each answer.
+	if state := r.stateText(); strings.Contains(state, "refuses") {
+		t.Errorf("the state holds the answer: %s", state)
+	}
+}
+
+// noSummaryRouteStateOrLogHolds fails when a summary route, the state, or the log holds one of the words.
+func noSummaryRouteStateOrLogHolds(t *testing.T, r *rig, h http.Handler, words ...string) {
+	t.Helper()
+	state := r.stateText()
+	for _, word := range words {
+		for pattern, path := range summaryRoutes {
+			if body := get(h, path).Body.String(); strings.Contains(body, word) {
+				t.Errorf("%s holds %s: %s", pattern, word, body)
+			}
 		}
-	}
-	// The answer stays in memory: the state holds none of it.
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), "DependencyPackUpgradeNotSupported") || strings.Contains(string(raw), "refuses") {
-		t.Errorf("the state holds the answer: %s", raw)
-	}
-	if strings.Contains(r.log.String(), "DependencyPackUpgradeNotSupported") || strings.Contains(r.log.String(), "SENTINEL") {
-		t.Errorf("the log holds the answer:\n%s", r.log.String())
+		if strings.Contains(state, word) {
+			t.Errorf("the state holds %s: %s", word, state)
+		}
+		if strings.Contains(r.log.String(), word) {
+			t.Errorf("the log holds %s:\n%s", word, r.log.String())
+		}
 	}
 }
 
@@ -133,20 +141,7 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 	if len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0].UpdateChecks, got.UpdateChecks) {
 		t.Errorf("the list of answers %+v", list)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, word := range []string{"K8sUpgradeNotSupported", "InvalidVariable", "platform_owner", "nextStep"} {
-		for pattern, path := range summaryRoutes {
-			if body := get(h, path).Body.String(); strings.Contains(body, word) {
-				t.Errorf("%s holds %s: %s", pattern, word, body)
-			}
-		}
-		if strings.Contains(string(raw), word) || strings.Contains(r.log.String(), word) {
-			t.Errorf("the state or the log holds %s", word)
-		}
-	}
+	noSummaryRouteStateOrLogHolds(t, r, h, "K8sUpgradeNotSupported", "InvalidVariable", "platform_owner", "nextStep")
 }
 
 func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T) {
@@ -343,21 +338,10 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 		}
 	}
 	click(h, pathAsk)
-	for pattern, path := range summaryRoutes {
-		if body := get(h, path).Body.String(); strings.Contains(body, sentinelText) {
-			t.Errorf("%s holds the text: %s", pattern, body)
-		}
-	}
 	if body := get(h, "/v1/asks").Body.String(); strings.Contains(body, sentinelText) {
 		t.Errorf("the list of answers holds the text: %s", body)
 	}
-	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(raw), sentinelText) || strings.Contains(r.log.String(), sentinelText) {
-		t.Errorf("the state or the log holds the text:\n%s\n%s", raw, r.log.String())
-	}
+	noSummaryRouteStateOrLogHolds(t, r, h, sentinelText)
 }
 
 // recorded makes the strata of a test from a script that keeps the command line of each call in calls.log.

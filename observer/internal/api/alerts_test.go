@@ -86,21 +86,14 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 	if !strings.Contains(got, "Drift") || !strings.Contains(got, "aws-stack@1.1.0") {
 		t.Fatalf("the receiver got %q", got)
 	}
-	state, err := os.ReadFile(filepath.Join(r.state, "state.json"))
-	if err != nil {
-		t.Fatal(err)
+	h, host := handlerOf(o), strings.TrimPrefix(w.URL, "http://")
+	noSummaryRouteStateOrLogHolds(t, r, h, addressMarker, host)
+	if body := get(h, "/v1/asks").Body.String(); strings.Contains(body, addressMarker) || strings.Contains(body, host) {
+		t.Error("the list of answers shows the address")
 	}
-	routes := strings.Builder{}
-	for _, path := range append(routePaths(), "/v1/asks") {
-		routes.WriteString(get(handlerOf(o), path).Body.String())
-	}
-	for _, place := range []struct{ name, text string }{{"the log", r.log.String()}, {"the state", string(state)}, {"the routes", routes.String()}} {
-		if strings.Contains(place.text, addressMarker) || strings.Contains(place.text, strings.TrimPrefix(w.URL, "http://")) {
-			t.Errorf("%s shows the address", place.name)
-		}
-	}
+	state := r.stateText()
 	for _, banned := range []string{"SENTINEL", sentinelValue, sentinelVariable, sentinelText, "Betty"} {
-		if strings.Contains(got, banned) || strings.Contains(string(state), banned) {
+		if strings.Contains(got, banned) || strings.Contains(state, banned) {
 			t.Errorf("a message or the state holds %q", banned)
 		}
 	}
@@ -109,13 +102,4 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 			t.Errorf("the log lacks %q:\n%s", want, r.log.String())
 		}
 	}
-}
-
-// routePaths lists the path of each summary route of the sentinel table.
-func routePaths() []string {
-	var paths []string
-	for _, p := range summaryRoutes {
-		paths = append(paths, p)
-	}
-	return paths
 }

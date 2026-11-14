@@ -14,24 +14,15 @@ each check that strata gives beside the answer of Palette. */
 
 // The words of the card for the checks of the set update-checks.
 const (
-	skipHead      = "The move skips a minor version: kubernetes@1.35.3 → kubernetes@1.37.0"
-	skipStep      = "Palette refuses the update with K8sUpgradeNotSupported. Move to kubernetes@1.36.2 first."
-	oneVariable   = "The move adds a required variable: gateway_owner"
-	oneValue      = "It has no default value. Give it a value at the update, or Palette refuses the update with InvalidVariable."
-	twoVariables  = "The move adds 2 required variables: identity_owner, issuer_url"
-	twoValues     = "They have no default value. Give each one a value at the update, or Palette refuses the update with InvalidVariable."
-	oneRule       = "Strata checks this rule, because the question to Palette does not check it."
-	twoRules      = "Strata checks these rules, because the question to Palette does not check them."
-	noErrorCovers = "Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack."
+	skipHead     = "The move skips a minor version: kubernetes@1.35.3 → kubernetes@1.37.0"
+	skipStep     = "Palette refuses the update with K8sUpgradeNotSupported. Move to kubernetes@1.36.2 first."
+	oneVariable  = "The move adds a required variable: gateway_owner"
+	oneValue     = "It has no default value. Give it a value at the update, or Palette refuses the update with InvalidVariable."
+	twoVariables = "The move adds 2 required variables: identity_owner, issuer_url"
+	twoValues    = "They have no default value. Give each one a value at the update, or Palette refuses the update with InvalidVariable."
+	oneRule      = "Strata checks this rule, because the question to Palette does not check it."
+	twoRules     = "Strata checks these rules, because the question to Palette does not check them."
 )
-
-// before fails when the text first does not come before the text then in the words.
-func before(t *testing.T, where, words, first, then string) {
-	t.Helper()
-	if i, j := strings.Index(words, first), strings.Index(words, then); i < 0 || j < 0 || i > j {
-		t.Errorf("%s: %q does not come before %q", where, first, then)
-	}
-}
 
 // The column "Palette" gives the word of the answer, then the short words of each check. The card gives the answer of Palette, then
 // a note with each check, what Palette does at the update, and the next step. A request that failed keeps its checks.
@@ -47,20 +38,16 @@ func TestTheCardAndTheColumnShowEachCheckOfStrataWithTheAnswerOfPalette(t *testi
 	}
 
 	k8s := textOf(cardOf(t, pageOf(t, screens, k8sHash, ""), "Palette gave no error"))
-	mustHold(t, "the skip", k8s, noErrorCovers, skipHead, skipStep, oneRule)
-	before(t, "the skip", k8s, noErrorCovers, skipHead)
+	mustHoldInOrder(t, "the skip", k8s, noErrorCovers, skipHead, skipStep, oneRule)
 	mustNotHold(t, "the skip", k8s, "required variable", "Ask Palette about this move")
 
 	traefik := textOf(cardOf(t, pageOf(t, screens, traefikHash, ""), "Palette refuses"))
-	mustHold(t, "the variable", traefik, "Palette refuses: DependencyPackUpgradeNotSupported", "Nothing on this cluster changed.", oneVariable, oneValue, oneRule)
-	before(t, "the variable", traefik, "Nothing on this cluster changed.", oneVariable)
+	mustHoldInOrder(t, "the variable", traefik, "Palette refuses: DependencyPackUpgradeNotSupported", "Nothing on this cluster changed.", oneVariable, oneValue, oneRule)
 	mustNotHold(t, "the variable", traefik, "skips a minor version", "Ask again")
 
 	dex := pageOf(t, screens, dexHash, "")
 	words := textOf(cardOf(t, dex, "Palette gave no answer"))
-	mustHold(t, "the variables", words, "Palette gave no answer: HTTP 403.", twoVariables, twoValues, oneRule)
-	before(t, "the variables", words, "Palette gave no answer: HTTP 403.", twoVariables)
-	before(t, "the variables", words, twoValues, "Ask again")
+	mustHoldInOrder(t, "the variables", words, "Palette gave no answer: HTTP 403.", twoVariables, twoValues, oneRule, "Ask again")
 	// The checks are a note of their own, in the tone of a refusal. The answer that failed stays neutral.
 	mustHold(t, "the variables", dex, `<div class="note small"><b>Palette gave no answer: HTTP 403.</b> This is not a finding.</div><div class="note a small"><div class="mt3"><b>The move adds 2 required variables:</b> <span class="m">identity_owner</span>, <span class="m">issuer_url</span></div>`)
 }
@@ -102,10 +89,7 @@ func TestTwoChecksComeInTheOrderOfStrataAndASkipWithNoStepNamesTheMinorVersion(t
 			}})
 			pages := pagesOf(t, dir, k8sHash, "#newer")
 			words := textOf(cardOf(t, pages[0], "Palette gave no error"))
-			mustHold(t, "the card", words, c.words...)
-			for i := 1; i < len(c.words); i++ {
-				before(t, "the card", words, c.words[i-1], c.words[i])
-			}
+			mustHoldInOrder(t, "the card", words, c.words...)
 			mustHold(t, "the column", rowWith(t, pages[1], `data-go="`+k8sHash+`"`), c.cell)
 		})
 	}
@@ -132,20 +116,14 @@ func TestAClickShowsTheChecksOfTheAnswerAtOnce(t *testing.T) {
 // The checks are words of the detail tier, and they raise no severity. The screens that do not show a move have the nav and the
 // tiles of the set ok, and no word of a check.
 func TestTheChecksChangeNoScreenThatShowsNoMove(t *testing.T) {
-	ok, checks := render(t, devdata.StateOK, false), render(t, devdata.StateUpdateChecks, false)
-	tiles := regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)
-	for _, hash := range []string{"#overview", "#findings", "#profiles", "#notchecked", "#images"} {
-		a, b := pageOf(t, ok, hash, ""), pageOf(t, checks, hash, "")
-		navA, _, _ := strings.Cut(a, "\n")
-		navB, _, _ := strings.Cut(b, "\n")
-		if navA != navB || tiles.FindString(a) != tiles.FindString(b) {
-			t.Errorf("%s: the nav or the tiles differ from the set ok", hash)
-		}
-		mustNotHold(t, hash, b, "Skips a minor version", "required variable", "Strata checks th")
+	checks := render(t, devdata.StateUpdateChecks, false)
+	sameNavAndTiles(t, render(t, devdata.StateOK, false), checks)
+	for _, hash := range noMoveScreens {
+		mustNotHold(t, hash, pageOf(t, checks, hash, ""), "Skips a minor version", "required variable", "Strata checks th")
 	}
 }
 
-// A code, a version, a pack, and the name of a variable with the text of a tag show as text, on the card and in the table.
+// A code, a version, and the name of a variable of a check with the text of a tag show as text on the card.
 func TestACheckWithMarkupShowsAsText(t *testing.T) {
 	var reached int
 	for _, s := range render(t, devdata.StateUpdateChecks, true) {

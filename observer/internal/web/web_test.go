@@ -1736,13 +1736,11 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 			if !c.noTile {
 				tiles = slices.Insert(tiles, 1, `href="#images"><div class="l">Image changes`)
 			}
-			if at := indexes(overview, tiles); tileSection.MatchString(overview) && (!slices.IsSorted(at) || slices.Contains(at, -1)) {
-				t.Errorf("the tiles are not in the order of the sections: %v", at)
+			if tileSection.MatchString(overview) {
+				mustHoldInOrder(t, "the tiles", overview, tiles...)
 			}
 			nav := []string{`<a href="#findings" class=`, `<a href="#images" class=`, `<a href="#newer" class=`, `<a href="#notchecked" class=`, `<a href="#profiles" class=`}
-			if at := indexes(overview, nav); !slices.IsSorted(at) || slices.Contains(at, -1) {
-				t.Errorf("the nav is not in the order of the sections: %v", at)
-			}
+			mustHoldInOrder(t, "the nav", overview, nav...)
 		})
 	}
 }
@@ -1754,6 +1752,14 @@ func indexes(s string, words []string) []int {
 		at[i] = strings.Index(s, w)
 	}
 	return at
+}
+
+// mustHoldInOrder fails when the html does not hold each of the words, or holds them in another order.
+func mustHoldInOrder(t *testing.T, where, html string, words ...string) {
+	t.Helper()
+	if at := indexes(html, words); !slices.IsSorted(at) || slices.Contains(at, -1) {
+		t.Errorf("%s does not hold %q in this order: %v", where, words, at)
+	}
 }
 
 var tileSection = regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)

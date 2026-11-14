@@ -205,6 +205,16 @@ func (r *rig) config() check.Config {
 	return check.Config{ClusterUID: "c1", Records: r.records, Work: r.work, State: r.state, ContentEvery: 15 * time.Minute, VersionsEvery: 6 * time.Hour}
 }
 
+// stateText gives the text of the state file that the observer wrote.
+func (r *rig) stateText() string {
+	r.t.Helper()
+	raw, err := os.ReadFile(filepath.Join(r.state, "state.json"))
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	return string(raw)
+}
+
 // observer makes an observer on the directories. A second call is a restart of the process.
 func (r *rig) observer(s check.Strata) *check.Observer {
 	r.t.Helper()

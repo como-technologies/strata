@@ -297,20 +297,14 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 			added, removed := headCounts(text)
 			mustHold(t, where, card, fmt.Sprintf(`<div class="diffhead"><span>%s values <span class="now">+%d</span> <span class="was">-%d</span></span>`, c.key, added, removed),
 				`data-k="values">Values`)
-			if strings.Index(card, "<th>Setting</th>") > strings.Index(card, `class="diffhead"`) {
-				t.Errorf("%s: the table of the settings comes after the text", where)
-			}
+			mustHoldInOrder(t, where+": the table of the settings, then the text", card, "<th>Setting</th>", `class="diffhead"`)
 		}
 	}
 	// The order on the Values tab: the table of the settings, the masked note, the text, and then the folded parts.
 	dex := cardOf(t, pageOf(t, screens, dexHash, ""), `data-tab="`+dexPublished+`"`)
-	if !(strings.Index(dex, "<th>Setting</th>") < strings.Index(dex, "Masked:") && strings.Index(dex, "Masked:") < strings.Index(dex, `class="diffhead"`)) {
-		t.Error("the Values tab of dex does not show the table, then the masked note, then the text")
-	}
+	mustHoldInOrder(t, "the Values tab of dex", dex, "<th>Setting</th>", "Masked:", `class="diffhead"`)
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), `data-tab="`+k8sMove+`"`)
-	if !(strings.Index(k8s, `class="diffhead"`) < strings.Index(k8s, "<details")) {
-		t.Error("the Values tab of kubernetes does not show the text before the folded parts")
-	}
+	mustHoldInOrder(t, "the Values tab of kubernetes", k8s, `class="diffhead"`, "<details")
 	// The text of kubernetes holds three hunks, so the text shows two gaps.
 	if got := len(regexp.MustCompile(`<tr class="h">`).FindAllString(k8s, -1)); got != 2 {
 		t.Errorf("the text of kubernetes shows %d gap rows, want 2", got)
@@ -638,6 +632,9 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	mustNotHold(t, "a pack with no move", pageOf(t, screens, "#k-fred-identity@2.3.0/addon/reloader", ""), "Ask Palette")
 }
 
+// noErrorCovers is the note of the card "Move to" for the answer "no error": what Palette checked, and what it did not check.
+const noErrorCovers = "Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack."
+
 // The set asks holds one answer of each verdict. The Newer table and the card say each answer in its
 // words, and the word "accepts" is not there. A request that failed is no finding.
 func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
@@ -661,14 +658,12 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 	}
 	// The cards: the words of the issue, exactly.
 	noError := textOf(cardOf(t, pageOf(t, screens, k8sHash, ""), "Palette gave no error"))
-	mustHold(t, "no error", noError, `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
+	mustHold(t, "no error", noError, noErrorCovers)
 	mustNotHold(t, "no error", noError, "It read default values", "Ask Palette about this move")
 	refuses := textOf(cardOf(t, pageOf(t, screens, traefikHash, ""), "Palette refuses"))
 	mustHold(t, "refuses", refuses, "Palette refuses: "+refusal.Code, refusal.Message, "on "+refusal.Clusters[0], "Nothing on this cluster changed.")
 	mustNotHold(t, "refuses", refuses, "Ask again", "Ask Palette about this move")
-	if strings.Index(refuses, refusal.Message) > strings.Index(refuses, "on "+refusal.Clusters[0]) {
-		t.Error("the clusters come before the message")
-	}
+	mustHoldInOrder(t, "refuses", refuses, refusal.Message, "on "+refusal.Clusters[0])
 	dex := pageOf(t, screens, dexHash, "")
 	noAnswer := textOf(cardOf(t, dex, "Palette gave no answer"))
 	mustHold(t, "no answer", noAnswer, "Palette gave no answer: HTTP 403.", "Ask again")
@@ -680,23 +675,31 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 	mustNotHold(t, "no answer", block, "badge", `note r`, `note a`, "Drift")
 }
 
-// A no-answer raises no severity. The summary tier does not see an answer: the screens that do not show a
-// move are the same as in ok, and the rows of the move hold no badge for it.
-func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
-	ok, asks := render(t, devdata.StateOK, false), render(t, devdata.StateAsks, false)
-	for _, hash := range []string{"#overview", "#findings", "#profiles", "#notchecked", "#images"} {
-		a, b := pageOf(t, ok, hash, ""), pageOf(t, asks, hash, "")
-		// The nav, the tiles, and every count are the same.
+// noMoveScreens are the screens that show no move. They show no answer of Palette and no check of strata.
+var noMoveScreens = []string{"#overview", "#findings", "#profiles", "#notchecked", "#images"}
+
+// sameNavAndTiles fails when a screen that shows no move has another nav or other tiles in got than in want.
+// The nav and the tiles hold every count.
+func sameNavAndTiles(t *testing.T, want, got []screen) {
+	t.Helper()
+	for _, hash := range noMoveScreens {
+		a, b := pageOf(t, want, hash, ""), pageOf(t, got, hash, "")
 		navA, _, _ := strings.Cut(a, "\n")
 		navB, _, _ := strings.Cut(b, "\n")
 		if navA != navB {
 			t.Errorf("%s: the nav differs\n%s\n%s", hash, navA, navB)
 		}
-		tiles := regexp.MustCompile(`(?s)<section class="tiles".*?</section>`)
-		if tiles.FindString(a) != tiles.FindString(b) {
+		if tileSection.FindString(a) != tileSection.FindString(b) {
 			t.Errorf("%s: the tiles differ", hash)
 		}
 	}
+}
+
+// A no-answer raises no severity. The summary tier does not see an answer: the screens that do not show a
+// move are the same as in ok, and the rows of the move hold no badge for it.
+func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
+	ok, asks := render(t, devdata.StateOK, false), render(t, devdata.StateAsks, false)
+	sameNavAndTiles(t, ok, asks)
 	table := pageOf(t, asks, "#newer", "")
 	dexRow := rowWith(t, table, `data-go="`+dexHash+`"`)
 	mustNotHold(t, "the row of a no-answer", dexRow, "badge r", ">Drift<", "Not checked")
@@ -720,7 +723,7 @@ func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
 	mustHold(t, "before", r.Before, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
 	mustHold(t, "during", r.During, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex" disabled>Asking...</button>`)
 	mustNotHold(t, "during", r.During, "Ask Palette about this move", "Palette gave")
-	mustHold(t, "after", textOf(r.After), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
+	mustHold(t, "after", textOf(r.After), noErrorCovers)
 	mustNotHold(t, "after", r.After, "Asking...", "Ask Palette about this move", "The observer could not ask now")
 	if len(r.Posts) != 1 || r.Posts[0].Method != "POST" || r.Posts[0].Path != "/v1/packs/fred-identity@2.3.0/addon/dex/ask" {
 		t.Fatalf("the posts: %+v", r.Posts)
@@ -799,7 +802,7 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 func TestAnotherClickOnANoAnswerReplacesIt(t *testing.T) {
 	r := click(t, devdata.StateAsks, dexHash, "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
 	mustHold(t, "before", textOf(r.Before), "Palette gave no answer: HTTP 403.")
-	mustHold(t, "after", textOf(r.After), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
+	mustHold(t, "after", textOf(r.After), noErrorCovers)
 	mustNotHold(t, "after", textOf(r.After), "Palette gave no answer", "HTTP 403")
 	mustNotHold(t, "after", r.After, "Ask again")
 }
@@ -812,7 +815,7 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 		return []byte(strings.ReplaceAll(string(raw), `"newest":"1.36.2"`, `"newest":"1.37.0"`))
 	}})
 	pages := pagesOf(t, dir, k8sHash, "#newer")
-	mustHold(t, "the card", textOf(pages[0]), `Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack.`)
+	mustHold(t, "the card", textOf(pages[0]), noErrorCovers)
 	mustNotHold(t, "the card", pages[0], ">Ask Palette about this move</button>")
 	mustHold(t, "the table", rowWith(t, pages[1], `data-go="`+k8sHash+`"`), `<td class="narrow-hide"><span class="fw">No error</span></td>`)
 }
