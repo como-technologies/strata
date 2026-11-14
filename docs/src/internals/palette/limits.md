@@ -80,6 +80,13 @@ These are open:
   [Cluster tiers](clusters.md#cluster-tiers). `strata snapshot` of the cluster
   writes no record and exits `2`: see
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
+- The answer of the profile listing and the cluster listing to a key whose
+  roles in the project do not give `clusterProfile.list` or `cluster.list`.
+  The code of Palette shows HTTP 500 with the code `ResourceAccessDenied`, and
+  the stand-in gives that answer to the cluster listing. Stage 8 of
+  [tiers.sh](../../development/live-runs.md#tierssh) runs `strata list` with
+  such a key, and has no result yet. See
+  [The role that a key needs](clusters.md#the-role-that-a-key-needs).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.
   The stand-in of the book models them. See

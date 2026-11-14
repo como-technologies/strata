@@ -281,7 +281,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ) -> Result<RegistrySyncNote> {
         match self.sync(uid, pack_type) {
             Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
-            Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
+            Err(e) if e.is_failed_read() => {
                 let reason = e.reason();
                 progress.note(&format!(
                     "note: the sync status of registry {uid} is unavailable ({reason})"

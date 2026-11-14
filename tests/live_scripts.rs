@@ -9,7 +9,7 @@ use std::process::{Command, Output};
 use common::*;
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
-    INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
+    Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
     PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
 use strata::model::pack_type::PackType;
@@ -1450,7 +1450,7 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     std::fs::write(routes.join("v1_x_found"), r#"{"items":[]}"#).unwrap();
     std::fs::write(
         routes.join("v1_x_refused"),
-        r#"{"code":"ResourceAccessDenied","message":"access denied"}"#,
+        error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     )
     .unwrap();
     std::fs::write(routes.join("v1_x_refused.status"), "500").unwrap();
@@ -1464,7 +1464,10 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(
         text(&o.stdout),
-        "HTTP 500\n{\"code\":\"ResourceAccessDenied\",\"message\":\"access denied\"}"
+        format!(
+            "HTTP 500\n{}",
+            error_body(Denial::Project.as_str(), &project_denied_message("p-1"))
+        )
     );
     assert_eq!(text(&o.stderr), "");
 
@@ -3791,7 +3794,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
         rbacs,
         "limited-k",
         500,
-        r#"{"code":"ResourceAccessDenied","message":"Project 'p-1' access denied"}"#,
+        &error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
 
@@ -3813,7 +3816,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
-        "ResourceAccessDenied\n",
+        format!("{}\n", Denial::Project.as_str()),
         "the check records the error code of the body"
     );
     assert!(
@@ -3860,7 +3863,10 @@ fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_
         rbacs,
         "limited-k",
         403,
-        r#"{"code":"AccessDenied","message":"cluster.get operation is not permitted"}"#,
+        &error_body(
+            Denial::Route.as_str(),
+            &access_denied_message("cluster.get", "project"),
+        ),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
     let (o, steps) = stage.run("tiers.sh", &["6"]);
@@ -3901,19 +3907,60 @@ fn narrow_routes() -> [(&'static str, String); 3] {
     ]
 }
 
+/// A `strata` for tiers.sh stage 8. `strata list` with the third key and its progress notes prints
+/// `list.out`, writes `list.err` to standard error, and exits with `list.code`. With another key, or
+/// with no notes, it prints nothing. Any other call goes to the answers of the stage.
+const FAKE_STRATA_NARROW: &str = r#"#!/usr/bin/env bash
+if [ "$*" = list ]; then
+  { [ "${PALETTE_API_KEY:-}" = narrow-k ] && [ -z "${STRATA_QUIET+set}" ]; } || exit 0
+  cat "$FAKE_STRATA/list.out"
+  cat "$FAKE_STRATA/list.err" >&2
+  exit "$(cat "$FAKE_STRATA/list.code")"
+fi
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+/// What `strata list` of tiers.sh stage 8 prints and exits with: `stdout`, `stderr`, and `code`.
+fn narrow_list(stage: &Stage, stdout: &str, stderr: &str, code: i32) {
+    std::fs::write(stage.path("strata/list.out"), stdout).unwrap();
+    std::fs::write(stage.path("strata/list.err"), stderr).unwrap();
+    std::fs::write(stage.path("strata/list.code"), code.to_string()).unwrap();
+}
+
+/// The listing of the project with the third key: the release profile, and the clusters as not
+/// read. The answer of the clusters is the one that the code of Palette shows.
+fn narrow_listing() -> String {
+    format!(
+        "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
+         clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+         no role of the key in the project gives the access of the request)\n",
+        clusters_denied()
+    )
+}
+
 /// A stage of tiers.sh stage 8. Each route of [`narrow_routes`] answers the third key with
-/// `status` and the code `code`, with a message that names `cluster.get`.
+/// `status` and the code `code`, with a message that names `cluster.get`. `strata list` with the
+/// third key prints [`narrow_listing`] and exits 2.
 fn narrow_stage(status: u16, code: &str) -> Stage {
     let mut stage = baseline_stage();
+    stage.wrap_strata(FAKE_STRATA_NARROW);
+    narrow_list(&stage, &narrow_listing(), "", 2);
     stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
-    let refusal =
-        format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);
+    let refusal = error_body(code, &operation_forbidden_message("cluster.get"));
     for (_, route) in narrow_routes() {
         stage.route_as(&route, "narrow-k", status, &refusal);
     }
     stage.env("STRATA_LIVE_NARROW_KEY", "narrow-k");
     stage
 }
+
+/// The checks of `strata list` of tiers.sh stage 8.
+const NARROW_LIST_CHECKS: [&str; 4] = [
+    "narrow-list",
+    "narrow-list-profiles",
+    "narrow-list-says",
+    "narrow-list-once",
+];
 
 #[test]
 fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_records_each_refusal() {
@@ -3923,6 +3970,8 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(&steps, &["narrow-control"]);
+    // strata lists the profiles that the role reads, and names the clusters, with no retry
+    passed(&steps, &NARROW_LIST_CHECKS);
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     for (name, route) in narrow_routes() {
         passed(
@@ -3966,12 +4015,91 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
 #[test]
 fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access_denied() {
     // the answer that the stand-in gave before #665
-    let (o, steps) = narrow_stage(403, "AccessDenied").run("tiers.sh", &["8"]);
+    let (o, steps) = narrow_stage(403, Denial::Route.as_str()).run("tiers.sh", &["8"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     for (name, _) in narrow_routes() {
         passed(&steps, &[&format!("narrow-{name}")]);
         failed(&steps, &[&format!("narrow-{name}-says")]);
     }
+}
+
+#[test]
+fn tiers_sh_stage_8_fails_the_checks_of_list_when_strata_retries_and_prints_no_profile() {
+    // the strata of before #620: it sends the read again, and one refused kind loses each kind
+    let stage = narrow_stage(500, OPERATION_FORBIDDEN_CODE);
+    let error = format!(
+        "strata: GET {CLUSTER_LISTING} failed with HTTP 500: {{\"code\":\"{}\"}}; retry 1 of 3 in 1s\n",
+        Denial::Project.as_str()
+    );
+    narrow_list(&stage, "", &error, 2);
+    let (o, steps) = stage.run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["narrow-list"]);
+    failed(
+        &steps,
+        &[
+            "narrow-list-profiles",
+            "narrow-list-says",
+            "narrow-list-once",
+        ],
+    );
+}
+
+/// The key that tiers.sh stage 9 makes: no tenant has it.
+fn unknown_key() -> String {
+    format!("strata-unknown-key-{}", "0".repeat(381))
+}
+
+/// A stage of tiers.sh stage 9. The project listing gives an error status for each key. strata
+/// prints `stderr` and exits 2 for `list projects`, as text and as JSON.
+fn unknown_key_stage(stderr: &str) -> Stage {
+    let mut stage = baseline_stage();
+    let body = error_body(
+        "ResourceNotFound",
+        &format!("API Key '{}' is not found", unknown_key()),
+    );
+    // a file of the stand-in has no room for the key in its name, so each key gets the answer
+    let route = Stage::route_key(PROJECT_LISTING);
+    std::fs::write(stage.path(&format!("routes/{route}")), body).unwrap();
+    std::fs::write(stage.path(&format!("routes/{route}.keyed.status")), "401").unwrap();
+    stage.strata_err("list projects", 2, stderr);
+    stage.strata_err("list projects --json", 2, stderr);
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_9_reads_with_a_key_that_no_tenant_has_and_finds_no_copy_of_it_in_strata() {
+    let masked = format!(
+        "strata: GET {PROJECT_LISTING} failed with HTTP 401: {{\"code\":\"ResourceNotFound\",\
+         \"message\":\"API Key '********' is not found\"}}\n"
+    );
+    let stage = unknown_key_stage(&masked);
+    let (o, steps) = stage.run("tiers.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &["unknown-key-read", "unknown-key-list", "unknown-key-masked"],
+    );
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        !calls.contains("PUT") && !calls.contains("POST") && !calls.contains("PATCH"),
+        "the stage writes nothing: {calls}"
+    );
+    for stage_name in ["== stage 6", "== stage 7", "== stage 8"] {
+        assert!(!steps.contains(stage_name), "stage 9 runs alone: {steps}");
+    }
+}
+
+#[test]
+fn tiers_sh_stage_9_fails_the_check_of_the_mask_when_strata_prints_the_key() {
+    let printed = format!(
+        "strata: GET {PROJECT_LISTING} failed with HTTP 401: {}\n",
+        unknown_key()
+    );
+    let (o, steps) = unknown_key_stage(&printed).run("tiers.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["unknown-key-read", "unknown-key-list"]);
+    failed(&steps, &["unknown-key-masked"]);
 }
 
 #[test]
@@ -7654,9 +7782,10 @@ fn skip_compared() -> serde_json::Value {
 
 /// The refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0.
 fn skip_refused() -> String {
-    serde_json::json!({"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
-        "message": "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported"})
-    .to_string()
+    error_body(
+        K8S_UPGRADE_NOT_SUPPORTED_CODE,
+        "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported",
+    )
 }
 
 #[test]
@@ -7710,9 +7839,10 @@ fn validate_packs_sh_stage_7_sends_the_update_of_a_move_that_adds_a_required_var
     let compared = serde_json::json!({
         "paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
         "updateChecks": {"requiredVariables": {"code": INVALID_VARIABLE_CODE, "names": ["owner"]}}});
-    let refused = serde_json::json!({"code": INVALID_VARIABLE_CODE,
-        "message": "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'"})
-    .to_string();
+    let refused = error_body(
+        INVALID_VARIABLE_CODE,
+        "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'",
+    );
     let (stage, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &refused);
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(
@@ -7832,7 +7962,7 @@ const CIDR_VARIABLE_SAID: &str = "K8SCidrOverlap: Kubernetes podCIDR '[value of 
 /// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
 /// shows it; no live run shows it yet. Strata reads it as a refusal.
 fn cidr_overlap_answer() -> String {
-    serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
+    error_body("K8SCidrOverlap", CIDR_OVERLAP_MESSAGE)
 }
 
 /// The case of `AWS_CASES` that the route takes.
@@ -13841,10 +13971,16 @@ fn observer_role_stage() -> Stage {
 #[test]
 fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answers_the_role() {
     let stage = observer_role_stage();
-    let denied = "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system\"}";
+    let denied = format!(
+        "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
+        error_body(
+            Denial::Route.as_str(),
+            &access_denied_message("cluster.create", "project or tenant or system"),
+        )
+    );
     std::fs::write(
         stage.path("strata/preflight-role.json"),
-        observer_role_preflight("error", Some(denied)),
+        observer_role_preflight("error", Some(&denied)),
     )
     .unwrap();
     let (o, steps) = stage.run("observer-role.sh", &["3"]);
@@ -13889,7 +14025,7 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         "/v1/audits",
         "role-k",
         403,
-        r#"{"code":"AccessDenied","message":"no audit.list"}"#,
+        &error_body(Denial::Route.as_str(), "no audit.list"),
     );
     let (o, steps) = stage.run("observer-role.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
@@ -13904,7 +14040,10 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         );
     }
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
-    assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
+    assert_eq!(
+        said("role-audits").trim(),
+        format!("HTTP 403 {}", Denial::Route.as_str())
+    );
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
     let line = step_line(&steps, "role-audits");
     assert!(
@@ -14004,12 +14143,16 @@ fn observer_role_sh_sends_the_validate_request_with_the_body_of_the_record_with_
 #[test]
 fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_judges_none_of_it()
 {
-    for (status, code) in [(403, "AccessDenied"), (500, "InternalError"), (422, "")] {
+    for (status, code) in [
+        (403, Denial::Route.as_str()),
+        (500, "InternalError"),
+        (422, ""),
+    ] {
         let stage = observer_role_stage();
         let body = if code.is_empty() {
             "{}".to_string()
         } else {
-            format!(r#"{{"code":"{code}","message":"no validate"}}"#)
+            error_body(code, "no validate")
         };
         stage.route_as(OBSERVER_ROLE_VALIDATE, "role-k", status, &body);
         let (o, steps) = stage.run("observer-role.sh", &[]);

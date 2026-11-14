@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::api::codes::{Denial, UPGRADE_NOT_SUPPORTED_CODE};
 use strata::model::update::MinorSkip;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
@@ -4316,6 +4316,124 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
     );
 }
 
+/// The criterion of #832: the issue of a record that strata could not check shows the error as
+/// text. The error can quote an answer with tags of HTML. A line of three backticks in the output
+/// of strata does not end the block of the output.
+#[test]
+fn verify_report_shows_each_tag_of_an_answer_in_the_error_of_a_record_as_text() {
+    let d = Report::verify();
+    d.summary(2, &[("releases/c.json", "error", "lab-profile", "1.0.0")]);
+    let message = format!("GET /v1/x failed with HTTP 403: {}", common::ANSWER_TAGS);
+    let mut summary = read_json(&d.dir.path().join("summary.json"));
+    summary["records"][0]["error"]["message"] = serde_json::json!(message);
+    d.put("summary.json", &summary.to_string());
+    d.record(
+        "c",
+        2,
+        "",
+        &format!("strata: {message}\n```\n{}\n", common::ANSWER_TAGS),
+    );
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    let body = out
+        .strip_prefix("<!-- strata-verify: releases/c.json -->\n")
+        .unwrap_or_else(|| panic!("the marker starts the body:\n{out}"));
+    assert!(
+        body.contains(&format!(
+            ": api: GET /v1/x failed with HTTP 403: {}\n",
+            strata::text::html_text(common::ANSWER_TAGS)
+        )),
+        "{body}"
+    );
+    assert!(body.contains("\n````\nstrata: GET /v1/x"), "{body}");
+    common::assert_only_strata_tags(&common::outside_code_blocks(body));
+}
+
+/// A name, a version, or a tag of an answer with tags of HTML and a backtick. A code span that
+/// counts no backtick ends at the backtick, and the tags after it are HTML.
+fn with_tags(value: &str) -> String {
+    format!("{value}`{}", common::ANSWER_TAGS)
+}
+
+/// Make sure that GitHub shows each tag of an answer as text in `markdown`, a body or a comment of
+/// a report script. The marker and the state at the start of a body are each one whole comment of
+/// HTML, with no tag. A code span or a code block shows a tag as text.
+fn assert_issue_shows_tags_as_text(markdown: &str) {
+    let mut rest = markdown;
+    while let Some(comment) = rest.strip_prefix("<!-- ") {
+        let (line, next) = comment.split_once('\n').unwrap_or((comment, ""));
+        assert!(
+            line.ends_with(" -->") && !line.contains('<') && line.matches("-->").count() == 1,
+            "one whole comment with no tag: <!-- {line}"
+        );
+        rest = next;
+    }
+    common::assert_only_strata_tags(&common::without_code(&common::outside_code_blocks(rest)));
+}
+
+/// The criterion of #832: each body and each comment of verify-report.sh shows each text of a
+/// record as text. The name and the version hold tags of HTML and a backtick. The path holds a
+/// tag, a backtick, and the end of a comment of HTML.
+#[test]
+fn verify_report_shows_the_tags_and_the_backtick_of_a_record_as_text_in_each_issue_and_comment() {
+    use strata::text::{code_span, html_text, markdown_cell};
+    let d = Report::verify();
+    let key = |k: &str| format!("{k}` --> <b>");
+    let path = |k: &str| format!("releases/{}.json", key(k));
+    let (name, version) = (with_tags("lab-profile"), with_tags("1.2.0"));
+    let paths = [path("a"), path("b"), path("c"), path("e")];
+    let records: Vec<(&str, &str, &str, &str)> = paths
+        .iter()
+        .zip(["unchanged", "drifted", "unverified", "error"])
+        .map(|(p, status)| (p.as_str(), status, name.as_str(), version.as_str()))
+        .collect();
+    d.summary(2, &records);
+    d.record(&key("b"), 1, "## a report\n\n**Result:** CHANGED\n", "");
+    d.record(&key("c"), 1, "## a report\n\n**Result:** UNVERIFIED\n", "");
+    d.record(&key("e"), 2, "", "strata: failed\n");
+    let marker = |p: &str| format!("<!-- strata-verify: {} -->", html_text(p));
+    let issue = serde_json::json!([{"number": 7, "title": "t", "body": format!("{}\nold", marker(&paths[0]))}]);
+    d.put("issues.json", &issue.to_string());
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+
+    // the marker of the escaped path finds the issue, and the comment closes it
+    let calls = d.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r"),
+        "{calls:#?}"
+    );
+    let comment = d.handed("comment", 2);
+    assert!(
+        comment.starts_with(&format!(
+            "{} verifies again: {} is unchanged since 2026-09-16T01:56:23Z (checked ",
+            code_span(&paths[0]),
+            markdown_cell(&format!("{name}@{version}"))
+        )),
+        "{comment}"
+    );
+    assert_issue_shows_tags_as_text(&comment);
+
+    // the issues of the other records: the calls after `label list` and `label create`
+    for (call, p, said) in [
+        (5, &paths[1], "reports drift"),
+        (6, &paths[2], "cannot verify the record"),
+        (7, &paths[3], "could not check the record"),
+    ] {
+        let body = d.handed("body", call);
+        assert!(
+            body.starts_with(&format!(
+                "{}\n{} {said}, checked ",
+                marker(p),
+                code_span(&format!("strata verify {p}"))
+            )),
+            "{body}"
+        );
+        assert_issue_shows_tags_as_text(&body);
+    }
+}
+
 #[test]
 fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_digest_on() {
     let d = Report::verify();
@@ -4427,13 +4545,13 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let dir = tempfile::tempdir().unwrap();
     make_fixtures(dir.path());
     let recorded = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(strata::api::MemoryApi::new(), dir.path(), "b", UID_A).failing(
         format!(
             "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
         ),
         403,
-        denied,
+        denied.as_str(),
     );
     let options = strata::ops::VerifyOptions {
         who: true,
@@ -4826,6 +4944,16 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             refuses(vec![upgrade(&["fred"])]),
             Some("1 record of project prod was not asked"),
         ),
+        // a message with tags of HTML shows each tag as text, as in the markdown of `behind`
+        (
+            refuses(vec![error(
+                "csi-aws-ebs",
+                "PackValidationFailed",
+                common::ANSWER_TAGS,
+                &[],
+            )]),
+            Some(common::ANSWER_TAGS),
+        ),
     ];
     // the skip of a minor version of Kubernetes comes under the answer of Palette. It names the
     // next step, or only the next minor version (#623)
@@ -4907,6 +5035,144 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
         "{}",
         text(&o.stdout)
     );
+}
+
+/// The criterion of #832: the issue of a pack that is behind shows each text of an answer as text.
+/// These are the name of the registry, the error of a pin that strata could not check, and a
+/// refusal of Palette. The state line holds the same texts, and a `-->` in a text does not end its
+/// comment. So the next run reads the same pins.
+#[test]
+fn upstream_report_shows_each_tag_of_an_answer_as_text_and_keeps_the_state_line_whole() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0"], None);
+    let answer = format!("{} -->", common::ANSWER_TAGS);
+    let mut report = read_json(&u.dir.path().join("report.json"));
+    let mut failed = report["pins"][0].clone();
+    failed["version"] = serde_json::json!("1.62.0");
+    failed["behind"] = serde_json::json!(false);
+    failed["newer"] = serde_json::json!([]);
+    failed.as_object_mut().unwrap().remove("bump");
+    failed["error"] = serde_json::json!({"kind": "api",
+        "message": format!("GET /v1/x failed with HTTP 403: {answer}")});
+    report["pins"][0]["bump"]["paletteValidation"] = serde_json::json!({"accepts": false,
+        "errors": [{"pack": "csi-aws-ebs", "code": "PackValidationFailed", "message": answer,
+                    "clusters": []}]});
+    report["pins"].as_array_mut().unwrap().push(failed);
+    for pin in report["pins"].as_array_mut().unwrap() {
+        if pin["name"] == "csi-aws-ebs" {
+            pin["registry"] = serde_json::json!(common::ANSWER_TAGS);
+        }
+    }
+    u.put("report.json", &report.to_string());
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let body = text(&o.stdout);
+    let lines: Vec<&str> = body.lines().collect();
+    let state = lines[1]
+        .strip_prefix("<!-- strata-behind-state: ")
+        .and_then(|l| l.strip_suffix(" -->"))
+        .unwrap_or_else(|| panic!("the second line holds the state:\n{body}"));
+    assert!(!state.contains(['<', '>', '&']), "{state}");
+    let state: serde_json::Value = serde_json::from_str(state).unwrap();
+    assert_eq!(
+        state["pins"][0]["bump"]["paletteValidation"]["errors"][0]["message"],
+        answer.as_str()
+    );
+    let shown = lines[2..].join("\n");
+    common::assert_answer_tags_as_text(&shown);
+    let html = strata::text::html_text;
+    for line in [
+        format!("behind in {}, checked", html(common::ANSWER_TAGS)),
+        format!(
+            "<br>palette refuses: PackValidationFailed csi-aws-ebs: {} |",
+            html(&answer)
+        ),
+        format!(
+            "| not checked: GET /v1/x failed with HTTP 403: {} |",
+            html(&answer)
+        ),
+    ] {
+        assert!(shown.contains(&line), "{line}\n{shown}");
+    }
+
+    // the next run gives the same pins to `strata behind --since`
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let previous = read_json(&u.dir.path().join("since-used.json"));
+    assert_eq!(previous["pins"], state["pins"]);
+}
+
+/// The criterion of #832: the body and the close comment of upstream-report.sh show each text of
+/// an answer as text. The name of the pack, its version, and its floating tag hold tags of HTML
+/// and a backtick. The path that pins it holds a backtick.
+#[test]
+fn upstream_report_shows_the_tags_and_the_backtick_of_a_pack_as_text_in_its_issue_and_comment() {
+    use strata::text::{code_cell, code_span, html_text};
+    let u = Report::upstream();
+    let (name, version, tag) = (
+        with_tags("csi-aws-ebs"),
+        with_tags("1.63.1"),
+        with_tags("latest"),
+    );
+    let path = "releases/a`b.json";
+    let tagged = |newer: &[&str]| {
+        u.report(if newer.is_empty() { 0 } else { 1 }, newer, None);
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        let pin = &mut report["pins"][0];
+        pin["name"] = serde_json::json!(name);
+        pin["version"] = serde_json::json!(version);
+        pin["floating"] = serde_json::json!(true);
+        pin["tag"] = serde_json::json!(tag);
+        pin["registry"] = serde_json::json!(common::ANSWER_TAGS);
+        pin["pinnedBy"][0] = serde_json::json!({"path": path, "subject": common::ANSWER_TAGS});
+        u.put("report.json", &report.to_string());
+    };
+
+    tagged(&["1.65.0"]);
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let body = text(&o.stdout);
+    let marker = format!("<!-- strata-behind: {} reg-public -->\n", html_text(&name));
+    assert!(body.starts_with(&marker), "{body}");
+    let registry = html_text(common::ANSWER_TAGS);
+    for line in [
+        format!(
+            "`strata behind` finds {} behind in {registry}, checked ",
+            code_span(&name)
+        ),
+        format!(
+            "| {} (floating tag {}) | 1.65.0 |",
+            code_cell(&version),
+            code_cell(&tag)
+        ),
+        format!("| - | {} ({registry}) |", code_cell(path)),
+    ] {
+        assert!(body.contains(&line), "{line}\n{body}");
+    }
+    assert_issue_shows_tags_as_text(&body);
+
+    // the next run finds the issue by its marker, and the comment closes it
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    tagged(&[]);
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = u.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 41 --repo o/r"),
+        "{calls:#?}"
+    );
+    let comment = u.handed("comment", 2);
+    assert!(
+        comment.starts_with(&format!(
+            "Each pin of {} in {registry} is at the newest version",
+            code_span(&name)
+        )),
+        "{comment}"
+    );
+    assert_issue_shows_tags_as_text(&comment);
 }
 
 #[test]

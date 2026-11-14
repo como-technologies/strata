@@ -230,9 +230,9 @@ ASD-STE100.
   pins the text of a schema id on purpose can stay, with a comment that says so.
 - A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
   helper. Put such a helper in a file of its own, not in `mod.rs`, which only the root package
-  uses. `answer.rs`, `closed_set.rs`, `code_span.rs`, `download.rs`, `git.rs`, `palette.rs`,
-  `process.rs`, `route.rs`, `table.rs`, `toml.rs`, `variants.rs`, and `walk.rs` have such users. A file that
-  uses some of the helpers allows `dead_code` on the include.
+  uses. `answer.rs`, `answer_tags.rs`, `closed_set.rs`, `code_block.rs`, `code_span.rs`,
+  `download.rs`, `git.rs`, `palette.rs`, `process.rs`, `route.rs`, `table.rs`, `toml.rs`,
+  `variants.rs`, and `walk.rs` have such users. A file that uses some of the helpers allows `dead_code` on the include.
 - A test that needs one value of each variant of an enum makes its list with `one_of_each!` of
   `tests/common/variants.rs`. Do not write the list with `vec!`. The build then fails on a new
   variant until the list holds a value of it. The tests of `error/` and of
@@ -245,6 +245,10 @@ ASD-STE100.
 - A test or a check that reads the code spans of a text uses `tests/common/code_span.rs`.
   `code_spans` gives the text of each code span, and `without_code` gives the text outside them.
   Do not split a text at its backticks by hand.
+- A test that reads the fenced code blocks of a text uses `tests/common/code_block.rs`.
+  `code_blocks` gives the blocks of one language, and `outside_code_blocks` gives the lines
+  outside each block. Both files read the markdown as GitHub reads it. So a test reads each
+  fence that `text::code_span` and `text::code_block` write.
 - A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
   does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
   the two give the same route.

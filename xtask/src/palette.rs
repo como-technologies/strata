@@ -49,6 +49,7 @@ use std::{fs, thread};
 use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROJECT_SCOPE_CODE;
 
+use crate::common_palette::error_body;
 use crate::tenant::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, profile_route,
     validated_cloud,
@@ -147,11 +148,10 @@ fn project_refusal(request: &Request) -> Option<Vec<u8>> {
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     });
     on_tenant_route.then(|| {
-        serde_json::json!({
-            "code": PROJECT_SCOPE_CODE,
-            "message": "Operation is not allowed in project scope and ProjectUid should be empty",
-        })
-        .to_string()
+        error_body(
+            PROJECT_SCOPE_CODE,
+            "Operation is not allowed in project scope and ProjectUid should be empty",
+        )
         .into_bytes()
     })
 }
@@ -190,11 +190,10 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
         }
         _ => (
             404,
-            serde_json::json!({
-                "code": "ResourceNotFound",
-                "message": format!("no file for {}", request.target),
-            })
-            .to_string()
+            error_body(
+                "ResourceNotFound",
+                &format!("no file for {}", request.target),
+            )
             .into_bytes(),
         ),
     })
@@ -237,11 +236,7 @@ fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
         "Cluster profiles '{}' are not supported with '{cloud}' environment",
         names.join(", ")
     );
-    Some(
-        serde_json::json!({"code": "ClusterProfilesNotSupported", "message": message})
-            .to_string()
-            .into_bytes(),
-    )
+    Some(error_body("ClusterProfilesNotSupported", &message).into_bytes())
 }
 
 /// True when `target` asks for the route `path` with a query, as a search or a log does.

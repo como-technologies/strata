@@ -38,7 +38,9 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 use strata::model::pack_type::PackType;
 
 mod answer;
+mod answer_tags;
 pub mod closed_set;
+mod code_block;
 mod code_span;
 mod download;
 mod git;
@@ -50,7 +52,9 @@ mod toml;
 mod walk;
 
 pub use answer::*;
+pub use answer_tags::*;
 pub use closed_set::schema_values;
+pub use code_block::*;
 pub use code_span::*;
 pub use download::*;
 pub use git::isolate_git;
@@ -858,31 +862,6 @@ pub fn page_section(path: &str, heading: &str) -> String {
     page[from..from + 1 + to].to_string()
 }
 
-/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
-/// opening fence, so the block of a list item reads as it does in a terminal.
-pub fn code_blocks(text: &str, lang: &str) -> Vec<String> {
-    let opening = format!("```{lang}");
-    let mut blocks = Vec::new();
-    let mut open: Option<(usize, Vec<&str>)> = None;
-    for line in text.lines() {
-        let body = line.trim_start();
-        let indent = line.len() - body.len();
-        match open.take() {
-            None => {
-                if body == opening {
-                    open = Some((indent, Vec::new()));
-                }
-            }
-            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
-            Some((strip, mut lines)) => {
-                lines.push(line.get(strip..).unwrap_or(""));
-                open = Some((strip, lines));
-            }
-        }
-    }
-    blocks
-}
-
 /// The first block of `lang` in `text` that holds `needle`.
 pub fn block_with(text: &str, lang: &str, needle: &str) -> String {
     code_blocks(text, lang)
@@ -1242,6 +1221,28 @@ pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::r
         profile: profile.map(str::to_string),
         pending,
     }
+}
+
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`. It is HTTP 500, not 403, with the code of [`Denial::Project`].
+///
+/// [`Denial::Project`]: strata::api::codes::Denial::Project
+pub fn clusters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Project.as_str(),
+        &project_denied_message("lab"),
+    )
+}
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
+///
+/// [`Denial::Route`]: strata::api::codes::Denial::Route
+pub fn filters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Route.as_str(),
+        &access_denied_message("filter.list", "tenant"),
+    )
 }
 
 /// The listing that `options` asks for, from the in-memory Palette `api`, read at `t1` with no
