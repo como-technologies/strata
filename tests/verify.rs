@@ -14760,6 +14760,63 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     );
 }
 
+/// The criterion of #854: `--json` of `behind` gives the next patch of a pin that is behind a newer
+/// minor version. So a script names the patch, and splits no version.
+#[test]
+fn the_json_of_behind_gives_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    // 1.63.1 is behind 1.65.2, 1.65.0, and 1.63.4. 1.65.0 is behind 1.65.2 alone, of its own minor
+    // version, so the bump names that patch
+    let more = ["1.63.4", "1.65.2"];
+    let mut entity = public_entity();
+    for v in more {
+        entity = with_tag(entity, v, &format!("pk-{v}"));
+    }
+    let api = serve_registry(
+        more.map(|v| csi_summary_with(v, None, &["aws"])).to_vec(),
+        &[("reg-public", entity)],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let records: Vec<std::path::PathBuf> = ["1.63.1", "1.65.0"]
+        .iter()
+        .map(|pin| {
+            let path = dir.path().join(format!("{pin}.json"));
+            let record = snapshot_of(&api, &format!("pack:csi-aws-ebs@{pin}")).unwrap();
+            common::write_snapshot(&path, &record, false);
+            path
+        })
+        .collect();
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    let json = render::renderer(Format::Json, Paint::off(), false)
+        .render_behind(&r, false)
+        .unwrap();
+    let doc: Value = serde_json::from_str(&json).unwrap();
+    let pins: Vec<(&Value, &Value, &Value)> = doc["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (&p["version"], &p["newer"][0]["version"], &p["nextPatch"]))
+        .collect();
+    assert_eq!(
+        pins,
+        [
+            (
+                &serde_json::json!("1.63.1"),
+                &serde_json::json!("1.65.2"),
+                &serde_json::json!("1.63.4")
+            ),
+            (
+                &serde_json::json!("1.65.0"),
+                &serde_json::json!("1.65.2"),
+                &Value::Null
+            ),
+        ],
+        "{json}"
+    );
+    // `--since` reads the field of a previous report
+    let back: ops::BehindReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.pins[0].next_patch.as_deref(), Some("1.63.4"));
+}
+
 /// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
 /// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
 /// 1.66.develop, with two numbers and a tail of text.

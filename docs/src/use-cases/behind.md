@@ -175,6 +175,8 @@ See [A cluster with many profiles](../commands/behind.md#a-cluster-with-many-pro
   does not.
 - When the newest version is too far, run the command of the line `next patch`.
   It says what the move to the newest patch of the minor version of the pin does.
+  The issue of the scheduled job names the same patch, from `nextPatch` of
+  `--json`.
 - On many records, or on a cluster with many profiles, add `--behind-only`. Each
   line `pinned by` names the profile to move.
 - To report one pack, give its key to `--pin`, such as `--pin k8s/kubernetes`.
