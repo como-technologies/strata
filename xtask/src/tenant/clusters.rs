@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 use strata::api::MASKED;
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
+use strata::model::input_type::InputType;
 use strata::model::scope::ProfileScope;
 
 use super::edit::with_reclaim_policy;
@@ -353,12 +354,14 @@ impl Tenant {
 /// The value that `GET /v1/spectroclusters/{uid}/variables` serves for the variable `row` when
 /// the cluster gives it `value`.
 ///
-/// Palette serves [`MASKED`] in place of the value of a sensitive variable that is not empty.
-/// The code of Palette shows it; no live run shows it yet. The route serves each other value as
-/// it is.
+/// Palette serves [`MASKED`] in place of the value of a sensitive variable that is not empty and
+/// is not a dropdown. A sensitive dropdown variable keeps its value, the label of an option. The
+/// code of Palette shows it; no live run shows it yet. The route serves each other value as it is.
 fn served_value(row: &Value, value: Value) -> Value {
     let sensitive = row["isSensitive"] == true;
-    if sensitive && value.as_str().is_some_and(|v| !v.is_empty()) {
+    let dropdown =
+        row["inputType"].as_str().and_then(InputType::from_text) == Some(InputType::Dropdown);
+    if sensitive && !dropdown && value.as_str().is_some_and(|v| !v.is_empty()) {
         json!(MASKED)
     } else {
         value
@@ -471,8 +474,9 @@ mod tests {
     const CLEAR: &str = "example-only-not-a-secret";
 
     /// A tenant with the profile [`PROFILE`] in the project `dev`, with a sensitive variable
-    /// `db_password`, a sensitive variable `api_token`, and the variable `owner`. The cluster
-    /// [`CLUSTER`] runs it, and gives `db_password` and `owner` a value.
+    /// `db_password`, a sensitive variable `api_token`, the sensitive dropdown variable `size`, and
+    /// the variable `owner`. The cluster [`CLUSTER`] runs it, and gives `db_password`, `size`, and
+    /// `owner` a value.
     fn tenant_with_sensitive_variables(dir: &Path) -> Tenant {
         let tenant = Tenant::new(dir, Path::new("/nowhere"));
         let metadata = json!({"uid": PROFILE, "name": "aws-stack",
@@ -489,18 +493,26 @@ mod tests {
             &manifests_route(PROFILE),
             &json!({"metadata": metadata, "spec": {"packs": []}}),
         );
-        let variable = |name: &str, sensitive: bool| {
-            json!({"name": name, "defaultValue": "", "format": "string", "inputType": "text",
-                "required": false, "hidden": false, "immutable": false,
-                "isSensitive": sensitive, "options": []})
+        let variable = |name: &str, sensitive: bool, input: InputType| {
+            json!({"name": name, "defaultValue": "", "format": "string",
+                "inputType": input.as_str(), "required": false, "hidden": false,
+                "immutable": false, "isSensitive": sensitive, "options": []})
         };
+        let mut size = variable("size", true, InputType::Dropdown);
+        size["options"] = json!([{"label": "small", "value": "t3.small"},
+            {"label": "large", "value": "m5.large"}]);
         tenant.put(
             "dev",
             &variables_route(PROFILE),
-            &json!({"variables": [variable("db_password", true), variable("api_token", true),
-                variable("owner", false)]}),
+            &json!({"variables": [variable("db_password", true, InputType::Text),
+                variable("api_token", true, InputType::Text), size,
+                variable("owner", false, InputType::Text)]}),
         );
-        let values = [("db_password", CLEAR), ("owner", "team-payments")];
+        let values = [
+            ("db_password", CLEAR),
+            ("size", "large"),
+            ("owner", "team-payments"),
+        ];
         tenant.cluster("dev", CLUSTER, "payments", &[PROFILE], &values);
         tenant
     }
@@ -533,6 +545,19 @@ mod tests {
         assert_eq!(served(&tenant, "owner"), "team-platform");
         let answer = tenant.read("dev", &cluster_variables_route(CLUSTER));
         assert!(!answer.to_string().contains(CLEAR), "{answer}");
+    }
+
+    /// A sensitive dropdown variable is the exception: the route serves its value, the label of
+    /// an option, after the create and after a change of the value.
+    #[test]
+    fn the_cluster_variables_route_serves_the_label_of_a_sensitive_dropdown_variable() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = tenant_with_sensitive_variables(dir.path());
+        assert_eq!(served(&tenant, "size"), "large");
+
+        tenant.set_value("dev", CLUSTER, "size", "small");
+        assert_eq!(served(&tenant, "size"), "small");
+        assert_eq!(served(&tenant, "db_password"), MASKED);
     }
 
     /// The second criterion of #857: the record of such a cluster holds no value of a sensitive
@@ -572,6 +597,7 @@ mod tests {
         };
         assert_eq!(value_of("db_password"), (None, true));
         assert_eq!(value_of("api_token"), (None, true));
+        assert_eq!(value_of("size"), (None, true));
         assert_eq!(
             value_of("owner"),
             (Some("team-payments".to_string()), false)

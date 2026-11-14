@@ -141,10 +141,11 @@ values of the profile. A rule over `.entity.spec.profiles[].variables` reads
 them too. See
 [The validate routes](../../internals/palette/validate-routes.md#the-variables-of-the-body).
 
-Strata sends the value of a sensitive variable as the mask that Palette gives,
-so the validate route gets a mask and not the secret. A change file merges over
-the variables by name. A variable of the file replaces the value of the variable
-with that name. A new name adds a variable.
+Strata sends the value of a sensitive variable as Palette gives it. That is the
+mask, so the validate route gets no secret. A dropdown variable is different:
+Palette gives the label of its option, and strata sends that label. A change
+file merges over the variables by name. A variable of the file replaces the
+value of the variable with that name. A new name adds a variable.
 
 ## A rule over a list
 

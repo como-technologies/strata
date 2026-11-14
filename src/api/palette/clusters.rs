@@ -80,8 +80,9 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// The answer is an array with one entry for each applied profile that declares a variable:
     /// [`profile_variables`](crate::api::profile_variables) reads it. Palette masks the value of
-    /// a sensitive variable, and the answer holds the mask. An older Palette has no route: the
-    /// answer is then `[]` and `route_missing` is true.
+    /// a sensitive variable that is not a dropdown, and the answer holds the mask. A sensitive
+    /// dropdown variable keeps its value, the label of an option. An older Palette has no route:
+    /// the answer is then `[]` and `route_missing` is true.
     ///
     /// # Errors
     ///

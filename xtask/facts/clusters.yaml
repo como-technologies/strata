@@ -96,11 +96,12 @@ facts:
     reads:
       fields:
         - "[].variables[].isSensitive"
+        - "[].variables[].inputType"
         - "[].variables[].value"
     stand_in:
       - v1/spectroclusters/{uid}/variables
     live: []
-    unchecked: The code of Palette shows it. No run gives a cluster a sensitive variable.
+    unchecked: The code of Palette shows the mask for a sensitive variable that is not a dropdown, and the label for a sensitive dropdown variable. No run gives a cluster a sensitive variable.
     pages:
       - internals/palette/clusters.md#cluster-copies
     code:
