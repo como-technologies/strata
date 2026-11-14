@@ -189,8 +189,9 @@ mod tests {
             .failing("POST /v1/y", 403, "forbidden");
         let err = api.get_json("/v1/x").unwrap_err();
         let text = err.to_string();
+        // a body with a code and no message gives the code
         assert!(
-            text.starts_with(r#"GET /v1/x failed with HTTP 401: {"code":"MissingAuthHeader"}"#),
+            text.starts_with("GET /v1/x failed with HTTP 401: MissingAuthHeader; "),
             "{text}"
         );
         // a 401 is almost always the key, and the body names nothing the reader can set

@@ -90,6 +90,17 @@ alone. Palette lists `payments` as one of the clusters that use the version.
 Exit `1`: the versions differ. The report names each changed layer and the
 impact on running clusters.
 
+### 6. Ask Palette if the move repaves the cluster
+
+```text
+{{#include output/quickstart-repave.txt}}
+```
+
+`--repave` sends the move of `payments` to `aws-stack@1.1.1` to Palette. The
+`palette` line gives the answer of Palette: no repave. The impact of step 5,
+`in-place`, agrees: it replaces no node. See
+[Ask Palette if the change repaves](./commands/compare/repave.md).
+
 ## Next
 
 - [The everyday loop](./loop.md): when to use strata, how to add it to your

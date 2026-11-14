@@ -267,6 +267,9 @@ fn snapshot(r: &mut Runner) {
         "strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json",
     );
     r.step("snapshot-record", 0, false, r#"jq '{root, source: (.source | {ref, uid, projectUid, name, version, template, fetchedAt}), packs: [.packs[] | {key, version, node: .hash.node}]}' releases/1.1.1/dev.json"#);
+    // a ref with no version reads as a uid. When it is a profile name, the error gives its versions
+    // and the ref with latest (#632); the refs page shows it
+    r.step("refs-name-no-version", 2, true, "strata snapshot aws-stack");
     // What a ref that looks like a file gets when no such file is there; the refs page shows it.
     r.step(
         "refs-missing-file",

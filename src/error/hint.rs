@@ -1,10 +1,28 @@
-//! The end of the message of [`Error::Api`](super::Error::Api): what the status and the body of
-//! the answer tell the reader to do.
+//! The parts of the message of [`Error::Api`](super::Error::Api) that the answer gives: the words
+//! of Palette, and what the status and the body tell the reader to do.
 
 use crate::api::codes::{Denial, PROJECT_SCOPE_CODE};
 use crate::api::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit, key_proved};
 use crate::config::{ENV_FILE, KEY_VARS};
 use crate::model::validation::PaletteRefusal;
+use crate::text::cut;
+
+/// The most characters of the words of an answer that the message of
+/// [`Error::Api`](super::Error::Api) shows. The field `body` keeps the whole body.
+const WORDS_IN_MESSAGE: usize = 300;
+
+/// The words of Palette in `body`, the body of an answer that is an error: `<code>: <message>`.
+///
+/// A body with a code and no message gives the code alone. A body with no code, such as the page
+/// of a proxy, gives its text. The words are cut to [`WORDS_IN_MESSAGE`] characters.
+pub(super) fn answer_words(body: &str) -> String {
+    let words = match PaletteRefusal::from_error_body(body) {
+        Some(refusal) if refusal.message.trim().is_empty() => refusal.code,
+        Some(refusal) => refusal.line(),
+        None => body.trim().to_string(),
+    };
+    cut(&words, WORDS_IN_MESSAGE)
+}
 
 /// The hint of an answer with `status` and `body` to a request of `path`.
 ///

@@ -99,14 +99,18 @@ impl Error {
     /// Put the fields of a variant that a request to Palette causes.
     fn put_request_fields(&self, m: &mut Map<String, Value>) {
         match self {
+            // the message gives the words of the body, and a program reads the body as Palette
+            // sent it
             Error::Api {
                 method,
                 path,
                 status,
+                body,
                 ..
             } => {
                 put_request(m, method.as_str(), path);
                 put(m, "status", *status);
+                put(m, "body", body.trim());
             }
             Error::RetryAfterTooLong {
                 method,

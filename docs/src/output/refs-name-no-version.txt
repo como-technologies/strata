@@ -1,0 +1,4 @@
+$ strata snapshot aws-stack
+strata: looking up project dev
+strata: fetching profile aws-stack
+strata: 'aws-stack' is a profile name with no version. Strata reads a ref with no version as a uid, and Palette has no profile with that uid. Give one of the versions: aws-stack@1.1.0, aws-stack@1.1.1. Or give aws-stack@latest, the highest version that is not a pre-release
