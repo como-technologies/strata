@@ -136,6 +136,23 @@ pub(super) const A1119: &str = "64e000000000000000000117";
 // aws-stack@1.1.20 of the chapter behind (#623): the content of 1.1.1, with kubernetes 1.34.9, two
 // minor versions below the newest version
 pub(super) const A1120: &str = "64e000000000000000000118";
+// the chapter fields: a cluster that Palette deletes, its cloud account, a cluster group, an app
+// profile, and a profile of a project
+pub(super) const FIELDS_CLUSTER: &str = "64fd000000000000000000a1";
+pub(super) const FIELDS_ACCOUNT: &str = "64fd000000000000000000a2";
+pub(super) const FIELDS_GROUP: &str = "64fd000000000000000000b1";
+pub(super) const FIELDS_APP_PROFILE: &str = "64fd000000000000000000c1";
+pub(super) const FIELDS_PROFILE: &str = "64fd000000000000000000d1";
+// the chapter fields: the container registry of the app tier, two OCI registries, two pack
+// registries, a pack version that Spectro Cloud marks disabled, and two audit entries
+pub(super) const FIELDS_CONTAINER_REGISTRY: &str = "64fd000000000000000000e1";
+pub(super) const FIELDS_OCI_PACKS: &str = "64fd000000000000000000e2";
+pub(super) const FIELDS_OCI_CHARTS: &str = "64fd000000000000000000e3";
+pub(super) const FIELDS_PACKS_SYNCED: &str = "64fd000000000000000000e4";
+pub(super) const FIELDS_PACKS_STOPPED: &str = "64fd000000000000000000e5";
+pub(super) const FIELDS_DISABLED_PACK: &str = "64fd000000000000000000f1";
+pub(super) const FIELDS_AUDIT_OF_A_SERVICE: &str = "64fd00000000000000000101";
+pub(super) const FIELDS_AUDIT_WITH_A_NOTE: &str = "64fd00000000000000000102";
 
 #[cfg(test)]
 mod tests {
