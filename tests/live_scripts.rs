@@ -7584,9 +7584,10 @@ fn skip_compared() -> serde_json::Value {
 
 /// The refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0.
 fn skip_refused() -> String {
-    serde_json::json!({"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
-        "message": "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported"})
-    .to_string()
+    error_body(
+        K8S_UPGRADE_NOT_SUPPORTED_CODE,
+        "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported",
+    )
 }
 
 #[test]
@@ -7640,9 +7641,10 @@ fn validate_packs_sh_stage_7_sends_the_update_of_a_move_that_adds_a_required_var
     let compared = serde_json::json!({
         "paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
         "updateChecks": {"requiredVariables": {"code": INVALID_VARIABLE_CODE, "names": ["owner"]}}});
-    let refused = serde_json::json!({"code": INVALID_VARIABLE_CODE,
-        "message": "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'"})
-    .to_string();
+    let refused = error_body(
+        INVALID_VARIABLE_CODE,
+        "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'",
+    );
     let (stage, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &refused);
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(
