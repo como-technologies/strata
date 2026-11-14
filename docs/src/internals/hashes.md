@@ -39,11 +39,18 @@ The hash keeps a fixed set of fields of each variable, and drops the rest:
 It keeps no id, and no `default` mark of an option. Strata sorts the variables by name before it hashes them, so the
 order in which Palette lists them does not reach the hash either.
 
-A sensitive variable arrives masked. Palette serves asterisks in place of the
-secret, in the default value or in the option values. So the hash reads the
-mask, and a change to the secret does not move the root. A pack value whose
-schema format is `password` arrives masked too: see
+A sensitive variable arrives masked. Palette serves `********` in place of the
+secret, in the default value or in the option values: see
+[The variables route](./palette/profiles.md#the-variables-route). So the hash
+reads the mask, and a change to the secret does not move the root. A pack value
+whose schema format is `password` arrives masked too: see
 [What the root does not cover](#what-the-root-does-not-cover).
+
+The hash reads `********` as an empty default value for a sensitive variable
+that is not a dropdown. The variables route of a cluster gives the mask also for
+an empty default value, and the route of a profile does not. So the hash cannot
+tell an empty default value from a secret one. A record holds the default value
+as Palette gives it.
 
 ```mermaid
 flowchart TD
@@ -112,7 +119,7 @@ manifest, so such a value shows its change too.
 | The annotations of a pack reference | A record keeps `imageId` alone outside the root, in `annotations`, and names the provider type of an OCI registry as `registryProviderType`. `compare`, `verify`, and `same-release` name a new `imageId`: see [A new machine image](../reference/impact.md#a-new-machine-image). |
 | Whether Palette marks a pack reference invalid | It is what Palette says about the registry: the registry deleted the tag, and the content stays. A record keeps it as `invalid` and `invalidReason`. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). |
 | The bytes of each image and chart that a pack pulls | The values name each image by a tag or a digest, and each chart by a version. `authored` covers that text. An image pushed again under the same tag keeps the text, so the root does not move. A digest in the text moves the root. See [A vendor rebuilds an image under one tag](../use-cases/image-tag.md). A chart pushed again under one version keeps its first digest in Palette, so the root does not move: see [What OK means for a Helm pack](../commands/verify.md#what-ok-means-for-a-helm-pack). |
-| The secret behind a masked value | Palette serves `********` in place of a pack value whose schema format is `password`. `authored` covers the mask, so a change of the secret does not move the root. `same-release`, `compare`, and `verify` name the pack and the path of each masked value. A record holds no list of the paths: the values give them. See [A secret changes in a pack value](../use-cases/masked-value.md). |
+| The secret behind a masked value | Palette serves `********` in place of a pack value whose schema format is `password`. Strata writes the same mask over the console address of a pack of virtual machines: see [The console address of a pack of virtual machines](palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines). `authored` covers the mask, so a change of the secret does not move the root. `same-release`, `compare`, and `verify` name the pack and the path of each masked value. A record holds no list of the paths: the values give them. See [A secret changes in a pack value](../use-cases/masked-value.md). |
 | The value of a macro | The content holds the macro name, `{{.spectro.macro.<name>}}`, and the root covers that text. Palette gives the value when it applies the profile, and a value can be a secret. `snapshot --macros` keeps the digest of each value on a record of a version, a cluster, or a cluster group, outside the root, and `verify` checks it. See [A macro value changes](../use-cases/macros.md). |
 | Whether an update waits for a cluster | It is what Palette says about the copy, not the copy. A cluster record keeps it as `updatesPending`. See [Whether an update waits](../commands/snapshot/cluster.md#whether-an-update-waits). |
 | The cluster templates that link a version | A template links the version, and the content stays the same. Palette shows the templates, and `strata consumers` counts them. See [The cluster templates of a version](../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version). |
@@ -204,8 +211,9 @@ copy exactly as it hashes the profile:
 
 So a cluster that runs a recorded version has the root of that record. The
 cluster variables endpoint repeats the definition fields of the profile
-endpoint, so the copy of a profile with a variable has the variables hash of the
-profile: see [Cluster copies](./palette/clusters.md#cluster-copies). A cluster on a
+endpoint, with one more mask over a default value. The hash reads no mask of a
+default value. So the copy of a profile with a variable has the variables hash
+of the profile: see [Cluster copies](./palette/clusters.md#cluster-copies). A cluster on a
 version that pins other pack builds shows `IDENTITY`. An edit of the pack values
 on the cluster, and a version that differs in values alone, each show
 `AUTHORED`.

@@ -141,6 +141,7 @@ impl Everywhere {
                 status: *status,
                 body: body.clone(),
                 retry_after: None,
+                key_proved: false,
             }),
         }
     }

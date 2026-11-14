@@ -271,12 +271,12 @@ impl Pack {
         self.pack_type() == Some(PackType::Manifest)
     }
 
-    /// The path of each value that Palette masks, sorted, in the form of
-    /// [`crate::diff::leaf_diff`]: each value of [`Pack::values_canon`] that is the text
-    /// `********`.
+    /// The path of each masked value, sorted, in the form of [`crate::diff::leaf_diff`]: each
+    /// value of [`Pack::values_canon`] that is the text `********`.
     ///
-    /// Palette writes that text over a value whose schema format is `password`, so the root
-    /// covers the mask and not the secret. A record holds no list of the paths, because the
+    /// Palette writes that text over a value whose schema format is `password`. Strata writes it
+    /// over the console address of a pack of virtual machines. So the root covers the mask and not
+    /// the secret. A record holds no list of the paths, because the
     /// values give them. A record of strata 0.25 and before holds `masked`, and strata ignores it.
     pub fn masked_paths(&self) -> Vec<String> {
         crate::diff::leaf::paths_of_text(&self.values_canon, MASKED)

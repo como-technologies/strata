@@ -216,6 +216,7 @@ pub(crate) fn errors(bytes: &[u8]) -> bool {
         status,
         body: body.to_string(),
         retry_after: None,
+        key_proved: false,
     };
     check_class(&error, status, refusal.as_ref());
     assert!(!error.to_string().is_empty(), "an error has a message");

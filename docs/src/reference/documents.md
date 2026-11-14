@@ -179,6 +179,11 @@ profile, or pack version.
   empty text for the rest. A variable with no `name` has an empty `name`. The
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
+  - `defaultValue` is as Palette gives it. A copy on a cluster holds
+    `********` for each sensitive variable that is not a dropdown, also when the
+    profile has no default value. `variablesHash` reads that `********` as an
+    empty default value: see
+    [The node hash and the root](../internals/hashes.md#the-node-hash-and-the-root).
   - `options[].default`, only when it is `true`: the option is the default of
     the variable. Palette accepts an update that gives no value to a required
     dropdown variable with such an option. A record of strata 0.33 and before
@@ -555,11 +560,13 @@ of the secret does not show, because the two sides hold the mask: see
     whose two archives differ in another file, with `key` and `files[]`. The
     pair is then `different`, and `reasons[]` names the files too.
   - `archivesNotReadable[]`, only when it is not empty: each pack of
-    `renumbers[]` whose file in the download of a side is no archive. The list
-    names the pack once for each such side, with `key`, the `version` of that
-    side, and `reason`.
+    `renumbers[]` whose file in the download of a side is no archive, or is
+    missing. The list names the pack once for each such side, with `key`, the
+    `version` of that side, and `reason`.
     `reason` gives the size of the file, and the start of its text when it is
-    text. Else it gives the error of the read. The pair is then `different`, and
+    text. Else it gives the error of the read. For a file that the list of the
+    download names and the download does not hold, it is
+    `the download does not hold <path>`. The pair is then `different`, and
     `reasons[]` names the pack too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
     `renumbers[]` whose archive can differ, and whose archives strata did not
@@ -572,7 +579,7 @@ of the secret does not show, because the two sides hold the mask: see
     is a pack uid that Palette mints. This is the case for a manifest pack, and
     for a pack from a registry that Palette does not sync.
   - `masked[]`, only when it is not empty: `key` and `paths` of each pack with
-    a value that Palette masks, on either side. It does not change `status`.
+    a masked value, on either side. It does not change `status`.
   - `macrosChanged`, only when it is not empty: when both records hold the
     digests of their macro values, each macro whose value differs. It does not
     change `status`.

@@ -82,5 +82,7 @@ Palette masks a value of the format `password` when it serves the published
 packs of a profile. It does not mask an empty value, or a value that holds a
 variable. Strata masks the packs of a draft in the same way. See
 [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values).
+Strata also masks the console address of a pack of virtual machines: see
+[The console address of a pack of virtual machines](../internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines).
 The rule for each hash is at
 [What the root does not cover](../internals/hashes.md#what-the-root-does-not-cover).

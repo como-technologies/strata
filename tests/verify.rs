@@ -19,6 +19,7 @@ use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
 use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
+use strata::json::str_at;
 use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::model::profile_type::ProfileType;
 use strata::model::update::MinorSkip;
@@ -34,13 +35,14 @@ use common::{
     UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
     behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
     cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
-    cluster_route, cluster_variables_route, clusters_denied, edge_host_route, error_body,
-    fetch_examples, filters_denied, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_roles_message, no_template, no_variables,
-    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
-    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, template, variables_route,
+    cluster_route, cluster_validate_repave_route, cluster_variables_route, clusters_denied,
+    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
+    group_route, listing, manifest_route, manifests_route, no_manifests, no_repave,
+    no_roles_message, no_template, no_variables, operation_forbidden_message, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, system_rbacs, template, template_validate_repave_route, variables_route,
     write_record, write_yaml,
 };
 
@@ -1824,6 +1826,54 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
     );
     assert!(recorded_b.source.cluster.is_none());
     assert_eq!(recorded_b.source.title(), "lab-profile@1.3.0");
+}
+
+/// For a sensitive variable that is not a dropdown, the cluster route gives `********` as the
+/// default value. It does so also when the profile has no default value. The profile route then
+/// gives `""` (#884).
+#[test]
+fn a_cluster_copy_with_a_sensitive_variable_with_no_default_value_is_the_release_of_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let served = read_json(&dir.path().join("cluster-b").join("variables.json"));
+    let mut defaults: Vec<(String, String)> = strata::api::profile_variables(&served, UID_B)
+        .filter(|v| v["isSensitive"] == true)
+        .map(|v| {
+            (
+                str_at(v, "/name").to_string(),
+                str_at(v, "/defaultValue").to_string(),
+            )
+        })
+        .collect();
+    defaults.sort();
+    let masked = |name: &str| (name.to_string(), strata::api::MASKED.to_string());
+    assert_eq!(
+        defaults,
+        [masked("db_password"), masked("grafana_password")]
+    );
+    assert!(
+        recorded_b
+            .variables
+            .iter()
+            .all(|v| v.default_value.is_empty() || !v.is_sensitive)
+    );
+
+    let on_b = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(on_b.variables_hash, recorded_b.variables_hash);
+    let d = ops::compare(&recorded_b, &on_b, "t1");
+    assert!(d.same && !d.variables.changed);
+    let records = [
+        ("b".to_string(), recorded_b),
+        ("cluster-b".to_string(), on_b),
+    ];
+    let chain = ops::same_release(&records, Policy::Exact, "t1");
+    assert_eq!(chain.pairs[0].status, PairStatus::Identical);
+    assert!(chain.same);
 }
 
 #[test]
@@ -9406,7 +9456,7 @@ fn repave_route() -> String {
 
 /// The route that asks Palette if a change of the cluster fixture repaves it.
 fn validate_repave_route() -> String {
-    format!("{}/validate/repave", cluster_route(CLUSTER_UID))
+    cluster_validate_repave_route(CLUSTER_UID)
 }
 
 /// The route that asks Palette if it takes the packs of a change of the cluster fixture.
@@ -9918,6 +9968,7 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
             status: 500,
             body: refusal.clone(),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     });
@@ -10758,7 +10809,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(PaletteRepave::from_palette("c", &answer, ImpactLevel::MayRepave).agrees);
     let r = PaletteRepave::from_palette("c", &answer, ImpactLevel::InPlace);
     assert!(!r.agrees);
-    let none = serde_json::json!({"isRepaveRequired": false});
+    let none = no_repave();
     assert!(!PaletteRepave::from_palette("c", &none, ImpactLevel::Repave).agrees);
 
     let mut d = ops::compare(&cluster, &target, "t1");
@@ -10927,15 +10978,12 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     // on the route of a cluster in a template, Palette compares nothing and answers no repave; it
     // answers for the template on the route of the template
-    let template_route = "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave";
+    let template_route = template_validate_repave_route("tmpl-1");
     let api = cluster_api
         .clone()
+        .with(post(&validate_repave_route()), no_repave())
         .with(
-            post(&validate_repave_route()),
-            serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-        )
-        .with(
-            post(template_route),
+            post(&template_route),
             serde_json::json!({"isRepaveRequired": true, "reasons": [{
                 "code": "PackUpgraded", "message": "Pack 'kubernetes' is upgraded",
                 "pack": {"current": {"name": "kubernetes"}}}]}),
@@ -11193,10 +11241,9 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
         governed.posted().is_empty(),
         "no POST goes out for the template"
     );
-    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {}).with(
-        "POST /v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave",
-        serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-    );
+    let template_route = template_validate_repave_route("tmpl-1");
+    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {})
+        .with(post(&template_route), no_repave());
     let unchanged = pending_of(&api, None);
     let d = ops::compare(&cluster, &unchanged, "t1");
     let r = ops::palette_repave(
@@ -11211,7 +11258,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     assert_eq!(
         api.posted(),
         [(
-            "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave".to_string(),
+            template_route,
             serde_json::json!({"profiles": [{"uid": infra}, {"uid": addon}], "isUpgradeNow": false})
         )]
     );
@@ -17305,9 +17352,11 @@ fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps
 }
 
 /// `snapshot tag:env=prod --dir fleet` over three clusters of one definition, in the projects
-/// `projects`, with the registry listing of the fixtures. Gives the count of the requests of the
-/// registry listing.
-fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
+/// `projects`. Gives the count of the requests of the registry listing.
+///
+/// `missing` is the status of the registry listing when Palette has no such listing: HTTP 404 or
+/// 405. With `None`, Palette gives the registry listing of the fixtures.
+fn snapshot_three_clusters(dir: &Path, projects: [&str; 3], missing: Option<u16>) -> u32 {
     common::make_fixtures(dir);
     let doc = read_json(&dir.join("cluster-a").join("cluster.json"));
     let uids = [CLUSTER_UID, "c-two", "c-three"];
@@ -17320,13 +17369,23 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
         serve_cluster(MemoryApi::new(), dir, "cluster-a"),
         rows,
         vec![],
-    )
-    .with(
-        REGISTRY_LISTING,
-        serde_json::json!({"items": [
-            {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
-        ]}),
     );
+    // a Palette with no listing gives no names
+    let name = match missing {
+        Some(status) => {
+            api = api.failing(REGISTRY_LISTING, status, "{}");
+            ""
+        }
+        None => {
+            api = api.with(
+                REGISTRY_LISTING,
+                serde_json::json!({"items": [
+                    {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+                ]}),
+            );
+            "Public Repo"
+        }
+    };
     for uid in &uids[1..] {
         api = api.with(cluster_route(uid), doc.clone());
     }
@@ -17347,13 +17406,7 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
         let snap = Snapshot::load(&r.path).unwrap();
         assert!(!snap.packs.is_empty());
         for p in &snap.packs {
-            assert_eq!(
-                p.registry_name,
-                "Public Repo",
-                "{}: {}",
-                r.path.display(),
-                p.key
-            );
+            assert_eq!(p.registry_name, name, "{}: {}", r.path.display(), p.key);
         }
     }
     api.calls(REGISTRY_LISTING)
@@ -17362,7 +17415,7 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
 #[test]
 fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
     let dir = tempfile::tempdir().unwrap();
-    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"]);
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], None);
     assert_eq!(calls, 1, "one read for the set");
 }
 
@@ -17370,8 +17423,17 @@ fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
 fn a_snapshot_of_a_set_reads_the_registry_listing_one_time_for_each_project() {
     // Palette lists the registries that the project of the request can see
     let dir = tempfile::tempdir().unwrap();
-    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"]);
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"], None);
     assert_eq!(calls, 2, "one read for p1, and one for p2");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_a_registry_listing_that_palette_does_not_have_one_time() {
+    for status in [404, 405] {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], Some(status));
+        assert_eq!(calls, 1, "HTTP {status}: one read for the set");
+    }
 }
 
 // ---- what happened to the object of a record --------------------------------------------------
@@ -17884,6 +17946,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
             status: 500,
             body: body.clone(),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
@@ -17975,6 +18038,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
             status,
             body: body_of(code),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     };

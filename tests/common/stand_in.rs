@@ -74,33 +74,69 @@ pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
 
 /// [`serve_routes`], and each request that the stand-in took, in the order of arrival.
 pub fn serve_recorded(routes: BTreeMap<String, Value>) -> (String, Arc<Mutex<Vec<Request>>>) {
+    serve_answers(move |request| routes.get(&request.path).cloned())
+}
+
+/// Serve the routes of the tenant of each key on one address, as Palette gives each key the
+/// documents of its own tenant. `tenants` holds the routes of each API key. A key that `tenants`
+/// does not hold gets 404 for each route.
+pub fn serve_tenants(tenants: BTreeMap<String, BTreeMap<String, Value>>) -> String {
+    serve_answers(move |request| {
+        tenants
+            .get(request.key.as_deref()?)?
+            .get(&request.path)
+            .cloned()
+    })
+    .0
+}
+
+/// Serve the document that `answer` gives for each request, or 404 when it gives none. It gives
+/// the address, and each request that the stand-in took, in the order of arrival.
+fn serve_answers(
+    answer: impl Fn(&Request) -> Option<Value> + Send + 'static,
+) -> (String, Arc<Mutex<Vec<Request>>>) {
+    serve(move |request, _| match answer(request) {
+        Some(doc) => Some((200, doc.to_string())),
+        None => Some((404, "{}".to_string())),
+    })
+}
+
+/// Serve on a free port of this machine. `answer` gives the status and the JSON body of the
+/// answer to a request, with the count of the requests before it. `None` gives no answer, so the
+/// sender waits until its timeout. It gives the address, and each request that the server took,
+/// in the order of arrival.
+fn serve(
+    answer: impl Fn(&Request, usize) -> Option<(u16, String)> + Send + 'static,
+) -> (String, Arc<Mutex<Vec<Request>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
+    let address = format!("http://{}", listener.local_addr().unwrap());
     let requests = Arc::new(Mutex::new(Vec::new()));
     let seen = Arc::clone(&requests);
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let path = match read_request(&mut stream) {
-                Some(request) => {
-                    let path = request.path.clone();
-                    seen.lock().unwrap().push(request);
-                    path
+            let Some(request) = read_request(&mut stream) else {
+                continue;
+            };
+            let answered = {
+                let mut seen = seen.lock().unwrap();
+                let answered = answer(&request, seen.len());
+                seen.push(request);
+                answered
+            };
+            match answered {
+                Some((status, body)) => {
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
                 }
-                None => "/".to_string(),
-            };
-            let (status, body) = match routes.get(&path) {
-                Some(doc) => ("200 OK", doc.to_string()),
-                None => ("404 Not Found", "{}".to_string()),
-            };
-            let answer = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = stream.write_all(answer.as_bytes());
+                None => std::thread::sleep(Duration::from_secs(20)),
+            }
         }
     });
-    (format!("http://{address}"), requests)
+    (address, requests)
 }
 
 /// The stand-in of [`serve_recorded`] for some routes, and a home for the runs of strata against
@@ -261,6 +297,8 @@ pub struct Request {
     pub body: String,
     /// The header `ProjectUid`: the project of the request, or `None` for the tenant scope.
     pub project: Option<String>,
+    /// The header `ApiKey`: the key of the request, or `None` when the request has no key.
+    pub key: Option<String>,
 }
 
 impl Request {
@@ -298,40 +336,19 @@ pub struct Endpoint {
 impl Endpoint {
     /// Serve on a free port of this machine.
     pub fn answering(answer: Answer) -> Endpoint {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/", listener.local_addr().unwrap());
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let seen = Arc::clone(&requests);
-        std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                let Ok(mut stream) = stream else { continue };
-                let Some(request) = read_request(&mut stream) else {
-                    continue;
-                };
-                let number = {
-                    let mut seen = seen.lock().unwrap();
-                    seen.push(request);
-                    seen.len() - 1
-                };
-                let (status, body) = match answer {
-                    Answer::Status(status) => (Some(status), TAKEN),
-                    Answer::Statuses(list) => (list.get(number).or(list.last()).copied(), TAKEN),
-                    Answer::Body(status, body) => (Some(status), body),
-                    Answer::Silence => (None, TAKEN),
-                };
-                match status {
-                    Some(status) => {
-                        let _ = write!(
-                            stream,
-                            "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                            body.len()
-                        );
-                    }
-                    None => std::thread::sleep(Duration::from_secs(20)),
-                }
-            }
+        let (address, requests) = serve(move |_, number| {
+            let (status, body) = match answer {
+                Answer::Status(status) => (Some(status), TAKEN),
+                Answer::Statuses(list) => (list.get(number).or(list.last()).copied(), TAKEN),
+                Answer::Body(status, body) => (Some(status), body),
+                Answer::Silence => (None, TAKEN),
+            };
+            status.map(|status| (status, body.to_string()))
         });
-        Endpoint { url, requests }
+        Endpoint {
+            url: format!("{address}/"),
+            requests,
+        }
     }
 
     /// The requests that the endpoint took so far, in order.
@@ -366,13 +383,8 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<Request> {
         }
     };
     let head = String::from_utf8_lossy(&data[..head_end]).into_owned();
-    let length = head
-        .lines()
-        .find_map(|l| {
-            l.to_ascii_lowercase()
-                .strip_prefix("content-length:")
-                .map(|v| v.trim().parse::<usize>().unwrap_or(0))
-        })
+    let length = header(&head, "Content-Length")
+        .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(0);
     while data.len() < head_end + length {
         match stream.read(&mut chunk) {
@@ -385,10 +397,16 @@ fn read_request(stream: &mut std::net::TcpStream) -> Option<Request> {
         method: first.next()?.to_string(),
         path: first.next()?.to_string(),
         body: String::from_utf8_lossy(&data[head_end..]).into_owned(),
-        project: head.lines().find_map(|l| {
-            let (name, value) = l.split_once(':')?;
-            name.eq_ignore_ascii_case(strata::api::PROJECT_UID_HEADER)
-                .then(|| value.trim().to_string())
-        }),
+        project: header(&head, strata::api::PROJECT_UID_HEADER),
+        key: header(&head, strata::api::API_KEY_HEADER),
+    })
+}
+
+/// The value of the header `name` in the head of a request. The name of a header has no case.
+fn header(head: &str, name: &str) -> Option<String> {
+    head.lines().find_map(|l| {
+        let (n, value) = l.split_once(':')?;
+        n.eq_ignore_ascii_case(name)
+            .then(|| value.trim().to_string())
     })
 }

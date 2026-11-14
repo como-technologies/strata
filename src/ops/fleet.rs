@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::RegistryListing;
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, ErrorDocument, Result};
@@ -498,7 +499,7 @@ where
     })?;
     let names = file_names(&selection.clusters);
     // the registry listing of each project, read by the first record of the project that needs it
-    let mut listings: BTreeMap<Option<String>, Option<Vec<Value>>> = BTreeMap::new();
+    let mut listings: BTreeMap<Option<String>, Option<RegistryListing>> = BTreeMap::new();
     let records: Vec<SetRecord> = selection
         .clusters
         .into_iter()
@@ -538,7 +539,7 @@ fn record_cluster<A, F>(
     cluster: ListedCluster,
     path: PathBuf,
     connect: &mut F,
-    listings: &mut BTreeMap<Option<String>, Option<Vec<Value>>>,
+    listings: &mut BTreeMap<Option<String>, Option<RegistryListing>>,
     fetched_at: &str,
     progress: &Progress,
 ) -> SetRecord

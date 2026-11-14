@@ -319,6 +319,10 @@ After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` a
 `render::Reading` names each row of the block `searched:` of `consumers`. Three structs of
 `consumers` have new fields: see [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `api::MASKED` is public: the text `********` that Palette writes over a secret.
+`model::input_type::InputType` is public: the input type of a profile variable, as Palette gives
+it in `inputType`.
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -1133,11 +1137,43 @@ section lists each change that can break a script, a program that reads a
 document, a CI pipeline, or code that uses a library. A change that only adds a
 field, a value, an input, or an option is in the sections above.
 
+### First: a record can hold the console address of a pack of virtual machines in clear
+
+- **Record each such profile, draft, cluster, and candidate again.** The packs
+  `virtual-machine-orchestrator`, `spectro-vm-dashboard`, and
+  `vm-migration-assistant` hold the address of their console in
+  `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`. Palette serves it in
+  clear. Strata writes `********` over it now. See
+  [The console address of a pack of virtual machines](../internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines).
+  - The root of a record moves when the record has such a pack, and the console
+    address of the pack holds a value. This is so for a record of a profile, of
+    a draft, of a cluster, and of a candidate. An empty value and a value that holds a variable get no mask,
+    so their roots stay.
+  - `verify` of an older such record reports `DRIFT` on the values of the pack.
+    Record it again. The observer reports the same drift until its records are
+    new.
+  - A directory that `--raw-dir` saves holds the mask too. An older directory
+    holds the address in clear.
+- **Search each repository for an older record.** This command finds the
+  files:
+  `git grep -l consoleBaseAddress $(git rev-list --all) -- '*.json'`. Read the
+  value in each file. A record in Git keeps the address in its history.
+
 ### For a user of the command line or of a document
 
+- **The line `masked:` of `compare` and `verify` changes.**
+  It reads `masked: <path>: the record holds ******** in place of the secret`. Before, it
+  said `Palette serves ********`. Strata writes the mask over the console address of a pack
+  of virtual machines, and Palette does not. A script that matches the line must match the
+  new text.
+- **An exec check masks a failed read before the cut.** Each value of a variable gets its
+  mark, as in a check of Palette. Before, the cut came first, and a part of a value could stay in the message.
+  See [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+
 - **A pack row of `list --packs` and `list --pack` ends with its registry.** The name of the
-  registry follows the version. When the key cannot see the registry, the row gives its uid. A
-  script that reads the text of a row must read one more column, or read `--json`. With
+  registry follows the version. When the key cannot see the registry, or when its name holds a
+  `/`, the row gives its uid. A `pack:` ref takes that text. A script that reads the text of a
+  row must read one more column, or read `--json`. With
   `--format markdown`, the pack ends with `in` and the registry. See
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
@@ -1249,8 +1285,8 @@ field, a value, an input, or an option is in the sections above.
   [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 - **The message of `api` names what Palette denied.** A denial, such as
   `AccessDenied`, adds the permission or the project to the end of the message. A
-  `403` that is a denial names the key only when no earlier answer of the run
-  proved the key. The message has no blank between the body and its end, and the
+  `403` that is a denial names the key only when no earlier answer to the same
+  key proved the key. The message has no blank between the body and its end, and the
   kind and the fields stay. A script that matches the whole message must match
   the new text. See
   [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
@@ -1258,8 +1294,9 @@ field, a value, an input, or an option is in the sections above.
   again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
   waited between the requests. Each request got the same denial.
 - **The error of an answer holds no copy of the API key.** Strata masks each
-  whole copy of the key in the body with `********`. It does so before it
-  prints or keeps the error. See
+  copy of the key in the body with `********`. It also masks a copy that a
+  letter or a digit touches. For a key of fewer than 16 characters, it masks each whole copy
+  only. It does so before it prints or keeps the error. See
   [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
   [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
@@ -1463,6 +1500,25 @@ field, a value, an input, or an option is in the sections above.
   - The markdown has a table of the rows in place of the two sentences, a
     sentence for the scope, and `NOT CHECKED` in bold. A script that reads the
     text must read the new rows, or read `--json`.
+- **`same-release --allow renumber` gives a reason for a missing pack file.**
+  Before, strata refused the download with the error `not-archive`, and the command exited `2`.
+  Now strata reads the other packs of the download. A renumber of the pack of that file gets
+  the fact `archive: not readable`, with the reason `the download does not hold <path>` in
+  `archivesNotReadable`. Its pair fails, and the command exits `1`. See
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+- **The root of two kinds of record moves.** The variables hash reads `********` as an empty
+  default value now. This is for a sensitive variable that is not a dropdown. So
+  `variablesHash`, `root`, and `contentDigest` move for the records below. Each other record
+  keeps its root. See [Cluster copies](../internals/palette/clusters.md#cluster-copies).
+  - A record of a cluster, of a profile on a cluster, or of `@pending`, when a profile of the
+    cluster has such a variable. Palette gives `********` as its default value on a cluster,
+    also when the profile has none. The new root is the root of the record of the profile.
+    Before, `compare` of the two showed a change of the variables, and `same-release` failed.
+  - A record of a profile, an edge host, a cluster group, or a candidate, when such a variable
+    has the default value `********`. Palette gives the mask for a default value that is not
+    empty.
+  - `verify` of an older record of each kind reports `DRIFT`: the variables changed, and no
+    field of a variable changed. Take the record again with 0.34.0.
 
 ### For a user of the CI drop-ins
 
@@ -1578,6 +1634,18 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `error::Error::Api` has the new field `key_proved: bool`. A struct literal must set it, and a
+  pattern with no `..` must name it. The message reads it: a `403` that is a denial names the
+  key only when it is false. Before, the message read a flag of the thread. So a client with a
+  second key on the same thread got no hint about that key. `api::HttpApi` sets it for each
+  key and address of Palette in the process, and `api::MemoryApi` for each client.
+- `api::project_uid_named` keeps the uid that it finds with the name, the address, and the key
+  of the `Config`. Before, it kept the uid with the name alone. So a program with two tenants or
+  two keys, and one project name, got the uid of the first tenant.
+- `snapshot::Snapshot::from_raw`, `Snapshot::from_raw_draft`, and `Snapshot::from_cluster` write
+  `********` over the console address of a pack of virtual machines. They give
+  `Error::Serialize` when strata cannot write the masked values. `api::RawProfile::save_dir`
+  and `api::RawCluster::save_dir` write the same mask.
 - `api::codes::ValidateRoute::ClusterCreate.refusal_codes()` gives 29 more codes, and
   `is_refusal_code` is true for each of them. `Error::class` gives `Terminal` to a 5xx with one of
   them, from each route. `ValidateRoute::refuses_answer` and `ValidateRoute::refuses_request` are
@@ -1605,6 +1673,9 @@ field, a value, an input, or an option is in the sections above.
   strata could not search, so `ConsumersReport::exit_code` gives `2` for it.
 - `ops::consumers` and `ops::consumers_with` search each project of the tenant listing for a
   profile of the tenant or of the system. They call `connect` with the uid of each project.
+- `api::Palette::profile_download` gives a download, and no `Error::NotArchive`, when the list
+  of the download names a file that the download does not hold. The pack of that file has
+  `api::PackFile::NotReadable`, with the reason `the download does not hold <path>`.
 
 ### For a user of the library of strata-preflight
 
@@ -1616,6 +1687,8 @@ field, a value, an input, or an option is in the sections above.
   `Summary::not_counted` is true when the verdict is `NOT COUNTED`.
 - `probe::LiveBackend` keeps a 401 and a 403 for the run, and gives the same error to each check
   that sends the request.
+- `probe::run_check` writes the marks into the body of a failed read of an exec check before the
+  cut. It does the same for a check of Palette.
 
 ## Release 0.33.0: changes that need action
 

@@ -7,7 +7,7 @@ use crate::closed_set::impl_texts;
 /// A record keeps the text, so a type that a later Palette adds stays in the record. Palette gives
 /// `text` when a variable gives none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum InputType {
+pub enum InputType {
     /// `text`: one line of text.
     Text,
     /// `dropdown`: one of the options of the variable.
@@ -16,7 +16,7 @@ pub(crate) enum InputType {
     Multiline,
 }
 
-impl_texts!(pub(crate) InputType {
+impl_texts!(pub InputType {
     Text => "text",
     Dropdown => "dropdown",
     Multiline => "multiline",

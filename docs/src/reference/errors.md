@@ -21,7 +21,7 @@ the kind.
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `method`, `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `method`, `path` |
-| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. A file of one pack that is no archive does not give this error: see `archivesNotReadable` of [`strata-chain/1`](./documents.md#strata-chain1). See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
+| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. A file of one pack that is no archive, or that the download does not hold, does not give this error: see `archivesNotReadable` of [`strata-chain/1`](./documents.md#strata-chain1). See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
 | `profile-name-ambiguous` | Two or more profile versions in the scope have this name and version: a profile of the tenant and a profile of the project. Give the uid in place of the name. | `name`, `version`, `profiles[]` of `uid` and `scope` |
 | `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |
@@ -39,7 +39,7 @@ the kind.
 | `pack-unavailable` | Spectro Cloud retired the version: its `system_state` in the listing is `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. A version with the mark `disabled` is not this error: Palette serves it, and `--validate` asks Palette. | `name`, `version`, `registry`, `state` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
 | `registry-name-ambiguous` | Two or more visible registries have this name: a registry of the system and a registry of the tenant. Give the uid in place of the name. | `name`, `uids` |
-| `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. The message names `strata list --pack <name>`, which gives the registry of the pack in each profile version. `registries` gives each registry as a ref takes it: by its name, or by its uid when the name holds a `/`. | `name`, `version`, `registries` |
+| `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. The message names `strata list --pack <name>`, which gives the registry of the pack in each profile version, as a ref takes it. `registries` gives each registry as a ref takes it: by its name, or by its uid when the name holds a `/`. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |
 | `cluster-not-found` | No cluster in the scope has this name. | `cluster`, `available` |
 | `cluster-name-ambiguous` | Two or more clusters in the scope have this name. | `name`, `uids` |
@@ -175,8 +175,10 @@ Palette denied:
 | `ResourceAccessDenied` | `no role of the key in the project gives the access of the request` |
 | `NoRolesAssociated` | `the user of the key has no role` |
 
-A `403` that is a denial names the key too, unless an earlier answer of the
-same run proved the key. A lookup of `PALETTE_PROJECT` is such an answer. See
+A `403` that is a denial names the key too, unless an earlier answer to the
+same key proved the key. A lookup of `PALETTE_PROJECT` is such an answer. A
+client with another key starts with no proof, also at the same address in the
+same process. See
 [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 
 `POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with

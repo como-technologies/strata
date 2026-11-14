@@ -4,15 +4,17 @@
 //! for the cluster. `compare --validate` sends the same body for a profile version that the
 //! cluster does not run: see the `validate` module.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 
+use crate::api::mask::console::console_values;
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
 use crate::diff::{ImpactLevel, PaletteRepave, Side};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_str};
+use crate::json::{arr, opt_str, str_at};
 use crate::model::cluster_template::ClusterTemplateRef;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
@@ -424,6 +426,25 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     ))
 }
 
+/// `snap` with the values that a question to Palette sends for each pack of virtual machines: the
+/// console address that the cluster `doc` holds, in place of the mask of strata. See
+/// [`console_values`]. Only the values text of such a pack changes, because a body reads no other
+/// field of it. A record with no such mask gives `snap` as it is.
+pub(super) fn with_console_of<'a>(snap: &'a Snapshot, doc: &Value) -> Result<Cow<'a, Snapshot>> {
+    let mut out: Option<Snapshot> = None;
+    for (i, p) in snap.packs.iter().enumerate() {
+        let held = arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .flat_map(|t| arr(t, "/packs"))
+            .find(|pk| str_at(pk, "/name") == p.name)
+            .and_then(|pk| opt_str(pk, "/values"));
+        if let Some(values) = console_values(&p.name, &p.values, held)? {
+            out.get_or_insert_with(|| snap.clone()).packs[i].values = values;
+        }
+    }
+    Ok(out.map_or(Cow::Borrowed(snap), Cow::Owned))
+}
+
 /// The pack values of one profile in the body of [`pending_body`], or `None` when the update
 /// changes no pack of the profile.
 ///
@@ -452,7 +473,8 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 /// One side must be a cluster. The other is a profile version with a uid, or the record of the
 /// update that waits for that cluster, `cluster:<c>@pending`, in either order. It reads the
 /// cluster document for the profiles it runs now, and sends one POST. The POST changes no setting,
-/// and it can save the address of the console of a pack: see [`Palette::validate_repave`].
+/// and it can save the address of the console of a pack: see [`Palette::validate_repave`]. So the
+/// body holds the console address of the cluster in place of the mask of strata.
 /// `a` and `b` are the two sides of the comparison. `level` is the most severe level of the impact
 /// table, for `agrees`.
 ///
@@ -487,7 +509,7 @@ pub fn palette_repave<A: PaletteApi>(
             let (pending, _) = pick(side, a, b);
             let source = cluster_of(pending, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &source.uid)?;
-            let body = pending_body(&doc, pending, source)?;
+            let body = pending_body(&doc, &*with_console_of(pending, &doc)?, source)?;
             let asked = format!(
                 "the update that waits for the cluster {}: the update changes a profile that the \
                  cluster runs",
@@ -498,7 +520,10 @@ pub fn palette_repave<A: PaletteApi>(
         Plan::Move(side) => {
             let (cluster, target) = moved(side, a, b, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
-            let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
+            let body = validate_body(
+                &AppliedProfile::of_cluster(&doc),
+                &*with_console_of(target, &doc)?,
+            );
             let asked = format!(
                 "{}: the cluster {} runs it",
                 name_version(&target.source.name, &target.source.version),

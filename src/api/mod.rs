@@ -20,7 +20,6 @@ mod raw;
 pub(crate) mod registry;
 mod retry;
 
-use std::cell::Cell;
 use std::fmt;
 
 use schemars::JsonSchema;
@@ -34,6 +33,7 @@ pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
 pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
+pub use mask::MASKED;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
@@ -41,13 +41,14 @@ pub(crate) use palette::{
     is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
-// the unit tests build the route of a download with the one function that builds it
-#[cfg(test)]
-pub(crate) use palette::download_path;
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
 };
+// the unit tests build the route of a download with the one function that builds it, and serve the
+// registry listing at the one const of its route
+#[cfg(test)]
+pub(crate) use palette::{REGISTRY_METADATA, download_path};
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
 pub(crate) use raw::{recorded_packs, recorded_template, save_registries, saved_registries};
 pub use retry::{Retry, RetryPolicy};
@@ -139,23 +140,6 @@ impl<A: PaletteApi + ?Sized> PaletteApi for &A {
     fn project_uid(&self) -> Option<&str> {
         (**self).project_uid()
     }
-}
-
-thread_local! {
-    /// True after an answer with a 2xx status on this thread. A command of strata runs on one
-    /// thread, so the flag holds for the run.
-    static KEY_PROVED: Cell<bool> = const { Cell::new(false) };
-}
-
-/// Note an answer with a 2xx status: Palette took the key of this thread.
-pub(crate) fn prove_key() {
-    KEY_PROVED.set(true);
-}
-
-/// True when an answer on this thread had a 2xx status. Then the key is right, and a 403 that is a
-/// [`codes::Denial`] is a refusal of the role of the key.
-pub(crate) fn key_proved() -> bool {
-    KEY_PROVED.get()
 }
 
 #[cfg(test)]

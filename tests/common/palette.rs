@@ -74,6 +74,28 @@ pub fn no_roles_message(user: &str) -> String {
     format!("No roles associated to user '{user}'")
 }
 
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`. It is HTTP 500, not 403, with the code of [`Denial::Project`].
+///
+/// [`Denial::Project`]: strata::api::codes::Denial::Project
+pub fn clusters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Project.as_str(),
+        &project_denied_message("lab"),
+    )
+}
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
+///
+/// [`Denial::Route`]: strata::api::codes::Denial::Route
+pub fn filters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Route.as_str(),
+        &access_denied_message("filter.list", "tenant"),
+    )
+}
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
@@ -259,6 +281,23 @@ pub fn cluster_namespaces_route(uid: &str) -> String {
 /// The last repave of the cluster `uid`, `GET /v1/spectroclusters/{uid}/repave/status`.
 pub fn cluster_repave_route(uid: &str) -> String {
     format!("{}/repave/status", cluster_route(uid))
+}
+
+/// The question whether the profiles of a body repave the cluster `uid`,
+/// `POST /v1/spectroclusters/{uid}/validate/repave`.
+pub fn cluster_validate_repave_route(uid: &str) -> String {
+    format!("{}/validate/repave", cluster_route(uid))
+}
+
+/// The same question for the clusters of the cluster template `uid`,
+/// `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`.
+pub fn template_validate_repave_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/clusterTemplates/{uid}/validate/repave")
+}
+
+/// The answer of a `validate/repave` route when the body repaves no node.
+pub fn no_repave() -> Value {
+    json!({"isRepaveRequired": false, "reasons": []})
 }
 
 /// The pack listing of the pack `name`, as strata asks for its first page.
@@ -477,6 +516,27 @@ impl<'a> PackFixture<'a> {
     }
 }
 
+/// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the
+/// address that its console forwards to, and the value `replicas` beside it.
+pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {
+    format!(
+        "charts:\n  {pack}:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \
+         {address}\n    replicas: {replicas}\n"
+    )
+}
+
+/// The line of the console address in values that strata wrote, with `address` in quotes.
+pub fn console_address_line(address: &str) -> String {
+    format!("consoleBaseAddress: '{address}'")
+}
+
+/// The field of [`console_pack_values`] that holds the console address, as a path of keys with
+/// dots. The tests pin this text of Palette on purpose, because the type of strata that holds it
+/// is private.
+pub fn console_address_field(pack: &str) -> String {
+    format!("charts.{pack}.appConfig.clusterInfo.consoleBaseAddress")
+}
+
 /// A manifest of a pack, as `packs/manifests` lists it.
 pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
     json!({"name": name, "uid": uid, "digest": digest, "content": content})
@@ -487,9 +547,65 @@ pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
 pub fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
     json!({
         "name": name, "displayName": display, "defaultValue": default, "format": "string",
-        "inputType": "text", "required": true, "hidden": false, "immutable": false,
+        "inputType": strata::model::input_type::InputType::Text.as_str(),
+        "required": true, "hidden": false, "immutable": false,
         "isSensitive": sensitive, "options": [],
     })
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and the UI asks for its value with
+/// its options.
+fn is_sensitive_dropdown(variable: &Value) -> bool {
+    use strata::model::input_type::InputType;
+    variable["isSensitive"] == true
+        && variable["inputType"]
+            .as_str()
+            .and_then(InputType::from_text)
+            == Some(InputType::Dropdown)
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and is not a dropdown. Palette
+/// masks its default value and the value that a cluster gives it.
+pub fn is_masked_variable(variable: &Value) -> bool {
+    variable["isSensitive"] == true && !is_sensitive_dropdown(variable)
+}
+
+/// The variable `stored` of a profile, as `GET /v1/clusterprofiles/{uid}/variables` serves it.
+///
+/// Palette writes `********` over the value of each option of a sensitive dropdown variable. It
+/// also writes the mask over a default value that is not empty of a variable of
+/// [`is_masked_variable`]. The code of Palette shows it; no live run shows it yet.
+pub fn profile_route_variable(stored: &Value) -> Value {
+    let mut served = stored.clone();
+    if is_masked_variable(stored)
+        && stored["defaultValue"]
+            .as_str()
+            .is_some_and(|d| !d.is_empty())
+    {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    if is_sensitive_dropdown(stored)
+        && let Some(options) = served["options"].as_array_mut()
+    {
+        for option in options {
+            option["value"] = json!(strata::api::MASKED);
+        }
+    }
+    served
+}
+
+/// The variable `stored` of a profile, as `GET /v1/spectroclusters/{uid}/variables` serves its
+/// fields beside the value of the cluster.
+///
+/// The route masks the fields that [`profile_route_variable`] masks. It also writes `********`
+/// over an empty default value of a variable of [`is_masked_variable`]. The code of Palette shows
+/// it; no live run shows it yet.
+pub fn cluster_route_variable(stored: &Value) -> Value {
+    let mut served = profile_route_variable(stored);
+    if is_masked_variable(stored) {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    served
 }
 
 /// Serve the three documents of the profile version `uid`: its document, its pack manifests,

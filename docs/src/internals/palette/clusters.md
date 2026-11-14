@@ -173,9 +173,30 @@ A copy has the variables of its profile too. `GET
 /v1/spectroclusters/<uid>/variables` is an array with one entry for each applied
 profile that declares a variable: the profile uid, and each variable with the
 fields that the profile endpoint serves, plus `value`, the value the cluster
-gives it. So the copy of a profile with a variable has the variables hash of the
-profile, and its root equals the root of the profile. The value that a cluster
-gives is in the record, under `source.cluster.variables`, and not in the root.
+gives it. The value that a cluster gives is in the record, under
+`source.cluster.variables`, and not in the root.
+
+The two endpoints mask one field in two ways. For a sensitive variable that is
+not a dropdown, the cluster endpoint gives `defaultValue: "********"`, also when
+the profile has no default value. For no default value, the profile endpoint
+gives `defaultValue: ""`: see
+[The variables route](./profiles.md#the-variables-route). Both endpoints give
+`********` for the value of each option of a sensitive dropdown variable. The
+code of Palette shows it; no live run shows it yet.
+
+For a sensitive variable that is not a dropdown, the variables hash reads
+`********` as an empty default value. See
+[The node hash and the root](../hashes.md#the-node-hash-and-the-root). So the
+copy of a profile with a variable has the variables hash of the profile, and its
+root equals the root of the profile. The record of the copy holds the default
+value as the cluster endpoint gives it.
+
+The endpoint gives `********` in place of the value of a sensitive variable,
+when the value is not empty and the variable is not a dropdown. The value of a
+sensitive dropdown variable is the label of an option, and the endpoint gives
+it as it is. The code of Palette shows it; no live run shows it yet. A record
+holds no value of a sensitive variable: see
+[What a cluster record holds](../../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 A change of that value is a change to the cluster, and not to the copy. The
 Spectro Cloud provider sends it as `variables` of the profile on the cluster
@@ -316,9 +337,12 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
-Strata writes `********` over each whole copy of the key of the run in the body
-of an error, before it prints or keeps the error. So the terminal, `--json`, a
-record, and the log of a job hold no copy of the key.
+Strata writes `********` over each copy of the key of the run in the body of an
+error, before it prints or keeps the error. It also masks a copy that a letter
+or a digit touches, as after the escape `\n` or the URL code `%3D`. A key of
+fewer than 16 characters can be a part of a word, so strata masks only its
+whole copies. So the terminal, `--json`, a record, and the log of a job hold
+no copy of the key.
 
 The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
 sends more requests. The validate route of a create needs a permission that a viewer role

@@ -8,9 +8,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
-use serde_json::Value;
-
-use crate::api::registry::Registries;
+use crate::api::registry::{Registries, RegistryListing};
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::candidate::pack::pack_snapshot;
 use crate::diff::{self, Diff, Side};
@@ -222,7 +220,7 @@ fn snapshot_in<A, F>(
     reference: &Ref,
     options: &SnapshotOptions,
     connect: F,
-    listing: &mut Option<Vec<Value>>,
+    listing: &mut Option<RegistryListing>,
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot>
@@ -305,7 +303,7 @@ where
 fn read_live<A, F>(
     connect: F,
     raw_dir: Option<&Path>,
-    listing: &mut Option<Vec<Value>>,
+    listing: &mut Option<RegistryListing>,
     read: impl FnOnce(&Palette<A>) -> Result<Snapshot>,
 ) -> Result<Snapshot>
 where

@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
     Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
     PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
+use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 
@@ -1375,7 +1375,7 @@ fn the_key_of_palette_is_in_no_argument_of_curl() {
         ),
         (
             "v1_spectroclusters_c-1_validate_repave",
-            r#"{"isRepaveRequired":false,"reasons":[]}"#,
+            no_repave().to_string().as_str(),
         ),
         (
             "v1_spectroclusters_c-1",
@@ -2510,7 +2510,7 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
     )
     .unwrap();
     let validate = routes.join("v1_spectroclusters_c-1_validate_repave");
-    std::fs::write(&validate, r#"{"isRepaveRequired":false,"reasons":[]}"#).unwrap();
+    std::fs::write(&validate, no_repave().to_string()).unwrap();
     let sent = || read_json(&routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"));
     let repave = |env: &[(&str, &str)]| {
         run_live(
@@ -5507,8 +5507,9 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
         r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
             "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
     );
+    let validate = cluster_validate_repave_route("c-a");
     stage.route(
-        "/v1/spectroclusters/c-a/validate/repave",
+        &validate,
         r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
             "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
     );
@@ -5551,7 +5552,7 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     ] {
         assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
-    let sent = stage.sent("POST", "/v1/spectroclusters/c-a/validate/repave");
+    let sent = stage.sent("POST", &validate);
     let variables: Vec<_> = sent
         .iter()
         .map(|b| b["profiles"][0]["variables"].clone())
@@ -5643,10 +5644,8 @@ fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_
             ),
         );
     }
-    stage.route(
-        "/v1/spectroclusters/c-a/validate/repave",
-        r#"{"isRepaveRequired":false,"reasons":[]}"#,
-    );
+    let validate = cluster_validate_repave_route("c-a");
+    stage.route(&validate, &no_repave().to_string());
 
     let (_, steps) = stage.run("tag-only.sh", &["2"]);
     passed(&steps, &["palette-repave-exact", "palette-repave-floating"]);
@@ -5661,7 +5660,7 @@ fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_
     // itself. In stage 4, the cluster of the stand-in still runs 1.0.0, so the swap of the move
     // back stops. The last question is the earlier body of the move back
     let bodies: Vec<serde_json::Value> = stage
-        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+        .sent("POST", &validate)
         .iter()
         .map(|b| {
             let profiles = b["profiles"].as_array().unwrap();
@@ -5728,8 +5727,8 @@ fn vmo_stage(cluster: &str) -> Stage {
         r#"{"status":{"addOnServices":[{"name":"vm-dashboard","endpoint":"https://console.example/v1/tenantApps/f-1"}]}}"#,
     );
     stage.route(
-        "/v1/spectroclusters/v-1/validate/repave",
-        r#"{"isRepaveRequired":false,"reasons":[]}"#,
+        &cluster_validate_repave_route("v-1"),
+        &no_repave().to_string(),
     );
     executable(
         &stage.path("routes/v1_tenantApps_f-1_.sh"),
@@ -5766,6 +5765,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         &[
             "vmo-cluster",
             "vmo-runs",
+            "vmo-clear",
             "vmo-summary",
             "vmo-mark-body",
             "vmo-before",
@@ -5777,7 +5777,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
             "vmo-back",
         ],
     );
-    let sent = stage.sent("POST", "/v1/spectroclusters/v-1/validate/repave");
+    let sent = stage.sent("POST", &cluster_validate_repave_route("v-1"));
     assert_eq!(
         sent[0],
         serde_json::json!({"profiles": [
@@ -5865,7 +5865,8 @@ fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address
 }
 
 /// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
-/// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
+/// Palette saves no record for a cluster that a cluster template governs. A cluster whose document
+/// holds a mask over the console address does not show the fact of #741. A body for a cluster
 /// with no `virtual-machine-orchestrator` holds no mark, so the question shows nothing. A console
 /// that reaches no host before the question shows nothing after it.
 #[test]
@@ -5879,9 +5880,13 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         r#""name":"virtual-machine-orchestrator""#,
         r#""name":"spectro-vm-dashboard""#,
     );
+    // a mask over the console address in the document of the cluster
+    let masked = VMO_CLUSTER.replace(r#"consoleBaseAddress: \"\""#, &console_address_line(MASKED));
+    assert_ne!(masked, VMO_CLUSTER);
     for (cluster, forward, fails, reads) in [
         (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
         (dashboard.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (masked.as_str(), FAKE_CONSOLE_FORWARD, "vmo-clear", 0),
         (
             VMO_CLUSTER,
             "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
@@ -5903,7 +5908,7 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         );
         assert!(
             stage
-                .sent("POST", "/v1/spectroclusters/v-1/validate/repave")
+                .sent("POST", &cluster_validate_repave_route("v-1"))
                 .is_empty(),
             "{fails}: no question"
         );
@@ -6068,10 +6073,8 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
                 "clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.published("n-1", KUBERNETES_PACK, "{}");
-    stage.route(
-        "/v1/spectroclusters/c-t/validate/repave",
-        r#"{"isRepaveRequired":false,"reasons":[]}"#,
-    );
+    let validate = cluster_validate_repave_route("c-t");
+    stage.route(&validate, &no_repave().to_string());
     stage.strata(
         "compare cluster:c-t/strata-live-profile n-1 --repave",
         1,
@@ -6124,8 +6127,7 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
         "the cluster goes before the next stage, and the template stays: {applies:?}"
     );
 
-    let route = "/v1/spectroclusters/c-t/validate/repave";
-    let asked = stage.sent("POST", route);
+    let asked = stage.sent("POST", &validate);
     assert_eq!(asked.len(), 1, "the route of the cluster, once: {asked:?}");
     assert_eq!(
         (

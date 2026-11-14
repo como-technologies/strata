@@ -20,6 +20,7 @@
 //! - `registries.rs`: the pack registries, and the versions of a pack.
 //! - `notifications.rs`: the notifications of a cluster, and the updates that wait for it.
 //! - `answers.rs`: the answers of the routes that check a change.
+//! - `times.rs`: the times of the documents that a chapter makes one after the other.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -39,6 +40,7 @@ mod notifications;
 mod profiles;
 mod registries;
 mod routes;
+mod times;
 
 pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;
@@ -168,6 +170,35 @@ impl Tenant {
         std::fs::write(&file, Value::Object(users).to_string())
             .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     }
+}
+
+/// The time of each record that a test of the tenant builds.
+#[cfg(test)]
+const RECORD_TIME: &str = "2026-09-17T09:30:00Z";
+
+/// The record that `strata snapshot` writes of the profile `doc`, with the pack summaries
+/// `manifests` and the answer `variables` of its variables route. The tests of the edits and of
+/// the clusters read it.
+#[cfg(test)]
+fn profile_record(doc: &Value, manifests: &Value, variables: &Value) -> strata::snapshot::Snapshot {
+    use strata::api::{MemoryApi, Palette};
+    use strata::ops::{self, SnapshotOptions};
+    use strata::reference::Ref;
+    use strata::term::progress::Progress;
+
+    let uid = doc["metadata"]["uid"].as_str().expect("a uid");
+    let api = MemoryApi::new()
+        .with(format!("/{}", profile_route(uid)), doc.clone())
+        .with(format!("/{}", manifests_route(uid)), manifests.clone())
+        .with(format!("/{}", variables_route(uid)), variables.clone());
+    ops::snapshot_for(
+        &Ref::Uid(uid.to_string()),
+        &SnapshotOptions::default(),
+        || Ok(Palette::new(api)),
+        RECORD_TIME,
+        &Progress::silent(),
+    )
+    .expect("the record builds")
 }
 
 #[cfg(test)]

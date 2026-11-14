@@ -899,6 +899,7 @@ console forwards to the mark until Palette starts the forward service again.
 | `var-swap` | ? | #864: `tenant.sh repave` sends the body of a swap. It has the uid of 1.0.1 and its `packValues` in place of 1.0.0, and the uid of the add-on profile. The code of Palette shows the same answer as `var-strata`. No result yet: no live window ran the body of a swap. |
 | `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
 | `vmo-cluster`, `vmo-runs` | 0 | #717: the cluster runs `virtual-machine-orchestrator`, the values of the pack hold `consoleBaseAddress`, and no cluster template governs the cluster. No result yet: no live window ran stage 9. |
+| `vmo-clear` | 0 | #741: no line `consoleBaseAddress` of a pack of virtual machines in the document of the cluster holds `********`. Palette writes no mask over the console address, so strata writes the mask in each record. No result yet: no live window ran stage 9. |
 | `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet: no live window ran stage 9. |
 | `vmo-mark-body`, `vmo-before` | 0 | #717: the body holds the mark `https://strata-live-check.invalid` in `consoleBaseAddress`. Before the question, the console address forwards to a host that answers: no 404, no 502, and an answer in 30 seconds. No result yet: no live window ran stage 9. |
 | `vmo-ask`, `vmo-ask-ok` | 0 | #717: `validate/repave` with the mark answers HTTP 200. No result yet: no live window ran stage 9. |
@@ -1239,7 +1240,7 @@ state what it shows.
 | `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. No result yet: no live window ran this check. |
 | `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran these checks. |
 | `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. No result yet: no live window ran these checks. |
-| `slash-delete` | 0 | the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack |
+| `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. No result yet: no live window ran this check. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |

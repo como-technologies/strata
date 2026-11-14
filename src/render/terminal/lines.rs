@@ -120,7 +120,7 @@ pub(super) fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
         out.push(format!(
             "      {}",
             p.yellow(&format!(
-                "masked: {}: Palette serves {MASKED} in place of the secret",
+                "masked: {}: the record holds {MASKED} in place of the secret",
                 pd.masked.join(", ")
             ))
         ));

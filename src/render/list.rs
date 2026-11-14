@@ -9,6 +9,7 @@ use super::{count_of, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{ListKind, Listing, PackListing, Resolved, SetRecord, SetReport};
+use crate::reference::registry_in_ref;
 use crate::snapshot::{SecretLikeVariable, Snapshot};
 use crate::text::{and_list, dash, name_or_uid};
 
@@ -231,10 +232,13 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
     }
 }
 
-/// The registry that a profile takes a listed pack from: its name, or its uid when the key cannot
-/// see the registry. `None` for a pack with no registry.
-pub(crate) fn pack_registry(pk: &crate::ops::ListedPack) -> Option<&str> {
-    Some(name_or_uid(&pk.registry, &pk.registry_uid)).filter(|r| !r.is_empty())
+/// The registry that a profile takes a listed pack from, as a pack ref names it: see
+/// [`registry_in_ref`]. `None` for a pack with no registry.
+///
+/// The row gives the uid when the key cannot see the registry, and when its name holds a `/`. The
+/// error `pack-in-several-registries` sends the person to this row for the registry of a ref.
+pub(crate) fn listed_registry(pk: &crate::ops::ListedPack) -> Option<&str> {
+    Some(registry_in_ref(&pk.registry, &pk.registry_uid)).filter(|r| !r.is_empty())
 }
 
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.
