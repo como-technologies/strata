@@ -1069,6 +1069,55 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
     );
 }
 
+/// The criterion of #890: `summary_table` of lib.sh writes each value of a row as a cell of
+/// markdown. So a `|`, a tag, a mark of markdown, or a mention in a value shows as text. The row
+/// keeps its five cells. The same holds for a SEEN line that a script writes itself, whose words
+/// take the place of the exit codes.
+#[test]
+fn lib_sh_writes_each_value_of_a_row_of_the_summary_as_a_cell_of_markdown() {
+    let dir = tempfile::tempdir().unwrap();
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            r#"script=demo; . '{lib}'
+check odd-words 1 "$WHAT" -- false
+printf '%-4s  %-32s %s\n' SEEN floating 'the *registry* lists no tag | for <version>' >> steps.log
+summary_table"#,
+            lib = live_script("lib.sh").display()
+        ))
+        .current_dir(dir.path())
+        .env("STRATA_BIN", "/no/such/strata")
+        .env(
+            "WHAT",
+            format!("{} | {}", common::ANSWER_MARKS, common::ANSWER_MENTIONS),
+        )
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let table = text(&o.stdout);
+    let what = format!(
+        "{} \\| {}",
+        strata::text::markdown_cell(common::ANSWER_MARKS),
+        strata::text::markdown_cell(common::ANSWER_MENTIONS)
+    );
+    assert_eq!(
+        common::table_rows(&table, "| result |"),
+        [
+            ["PASS", "`odd-words`", "1", "1", what.as_str()],
+            [
+                "SEEN",
+                "`floating`",
+                "\\*registry\\*",
+                "no tag \\| for &lt;version&gt;",
+                ""
+            ],
+        ],
+        "{table}"
+    );
+    common::assert_answer_marks_as_text(&table);
+    common::assert_answer_mentions_as_text(&table);
+}
+
 #[test]
 fn lib_sh_stops_the_send_of_the_report_whatever_the_machine_says() {
     let dir = tempfile::tempdir().unwrap();
@@ -2646,6 +2695,87 @@ fn preflight_plan_keeps_a_ledger_entry_with_three_backticks_in_its_block() {
             "{case}: {md}"
         );
     }
+}
+
+/// The criterion of #890: the digest table of verify.sh writes each text of a pack as a cell of
+/// markdown. It writes the start of each digest in a code span of strata. So a name with a `|`, a
+/// mark of markdown, or a mention shows as text, and each row keeps its seven cells.
+#[test]
+fn verify_writes_the_name_of_a_pack_with_a_mark_of_markdown_as_text_in_the_digest_table() {
+    let script = std::fs::read_to_string(live_script("verify.sh")).unwrap();
+    let start = script.find("\ndigest_table() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let digest_table = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let helm = format!("{} | x", common::ANSWER_MARKS);
+    let pack = |name: &str, kind: &str, reference: &str, listed: &str, source: &str| {
+        serde_json::json!({"packs": [{
+            "name": name, "type": kind, "refDigest": reference, "registryDigest": listed,
+            "hash": {"upstreamSource": source}
+        }]})
+        .to_string()
+    };
+    let digest = format!("sha256:{}", "a".repeat(64));
+    let files = [
+        (
+            "release.json",
+            pack(&helm, "helm", &digest, &digest, "packRef.digest"),
+        ),
+        (
+            "registries.json",
+            pack(
+                common::ANSWER_MENTIONS,
+                "oci",
+                "",
+                &"b".repeat(64),
+                "packSummary.digest",
+            ),
+        ),
+        ("registry-digest-helm.out", format!("{digest}\n")),
+        ("registry-digest-oci.out", format!("{}\n", "c".repeat(64))),
+    ];
+    for (file, body) in files {
+        std::fs::write(dir.path().join(file), body).unwrap();
+    }
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            "script=verify; . '{lib}'\n{digest_table}\ndigest_table",
+            lib = live_script("lib.sh").display()
+        ))
+        .current_dir(dir.path())
+        .env("STRATA_BIN", "/no/such/strata")
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let table = text(&o.stdout);
+    let start = |s: &str, n: usize| strata::text::code_cell(&s[..n]);
+    assert_eq!(
+        common::table_rows(&table, "| pack |"),
+        [
+            [
+                strata::text::markdown_cell(&helm),
+                "helm".into(),
+                start(&digest, 19),
+                start(&digest, 19),
+                start(&digest, 19),
+                "packRef.digest".into(),
+                "equal".into()
+            ],
+            [
+                strata::text::markdown_cell(common::ANSWER_MENTIONS),
+                "oci".into(),
+                "-".into(),
+                start(&"b".repeat(64), 12),
+                start(&"c".repeat(64), 12),
+                "packSummary.digest".into(),
+                "no ref digest".into()
+            ],
+        ],
+        "{table}"
+    );
+    common::assert_answer_marks_as_text(&table);
+    common::assert_answer_mentions_as_text(&table);
 }
 
 /// Run `offering_edit` of preflight-plan.sh for `engine`, with the `account_kind` that `create_body`

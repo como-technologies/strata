@@ -150,6 +150,8 @@ fn names_a_set(reference: &Ref) -> Error {
 ///
 /// `Usage` for an option that does not fit the ref, and for a set of clusters, before any
 /// request. Then the error of a request, such as a 404 for a uid that Palette does not have.
+/// `Usage` for a uid that Palette does not have and that is the name of a profile: the ref gives
+/// no version.
 ///
 /// # Examples
 ///
@@ -216,11 +218,14 @@ where
             let uid = palette.profile_uid(name, Some(version), progress)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
         }),
-        Ref::Uid(uid) => {
-            live(&|palette| profile_snapshot(palette, uid, options, &text, fetched_at, progress))
-        }
+        // a text with no version can be a name, and the error of the read then says so
+        Ref::Uid(uid) => live(&|palette| {
+            let read = profile_snapshot(palette, uid, options, &text, fetched_at, progress);
+            palette.or_name_with_no_version(reference, read)
+        }),
         Ref::Draft { id, version } => live(&|palette| {
-            draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
+            let read = draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress);
+            palette.or_name_with_no_version(reference, read)
         }),
         Ref::Pack {
             registry,

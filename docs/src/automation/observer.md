@@ -207,6 +207,48 @@ shows the edit of `aws-stack@1.0.0`:
 {{#include ../output/observer-ledger.txt}}
 ```
 
+### A version that the cluster no longer runs
+
+A cluster moves to the next version of a profile, and the record of the old version
+stays. The seed keeps its first-seen record, and a pipeline can publish a record for
+each version. The observer still checks that record against Palette. The cluster
+`payments` does not run `aws-stack@1.1.0`, and no finding names that version. So the
+summary above gives its record the status `not-on-this-cluster`, the word of its
+`clusterCopy`.
+
+- **A status of its own.** A record of a version that the cluster does not run is
+  `not-on-this-cluster`, unless a finding names it.
+- **No newer version.** The record and its packs have no newer version, because the
+  cluster does not run the version. No row of the newer versions names the record, and
+  no event or alert of a newer version names it.
+- **The counts.** `counts.profiles` does not count the record, so `payments` has 2
+  profiles for 3 records. The filters of the table of the profiles, the tile
+  "Profiles", and the tile "Newer versions" do not count it.
+- **The page.** A fold under the table of the profiles lists the record, with the
+  filter "All" only. The fold says "1 record of a profile version that this cluster
+  does not run". On the page of the version, no pack says "newer" or "current", and
+  no card "Move to" shows. The page of each of its packs shows no fact of a newer
+  version, such as "Current". The row has the badge "Not on this cluster", and the
+  message "This cluster does not run this version."
+
+A finding wins. The cluster `ledger` does not run `aws-stack@1.0.0` or
+`platform-addons@1.0.0`. A person edited `aws-stack@1.0.0`, so its record is a
+`drift`:
+
+```text
+{{#include ../output/observer-ledger-profiles.txt}}
+```
+
+- **The status.** The record of `aws-stack@1.0.0` stays in the table of the profiles,
+  with the badge "Drift". The filters "All" and "Drift", the tile "Drift", and
+  `counts.profiles` count it. The fold does not list it.
+- **No newer version.** A record with the `clusterCopy` `not-on-this-cluster` has no
+  newer version, also when it is a drift. On `payments`, the same record has 4 packs
+  with a newer version. On `ledger`, it has none, and no pack of it says "current".
+  The page of each of its packs shows no fact of a newer version.
+- **The counts.** `counts.packs` does not count its packs. The 5 packs of `ledger`
+  are the packs of `aws-stack@1.1.0`.
+
 ### Exit codes
 
 | Exit | Meaning |

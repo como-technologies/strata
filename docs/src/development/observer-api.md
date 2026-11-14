@@ -105,7 +105,7 @@ address names the screen:
 | `#images` | The images that the pods run, with the status of each. |
 | `#newer` | The newer versions, by profile. |
 | `#notchecked` | The causes of "Not checked", and what a check does not cover. |
-| `#profiles` | The table of the profiles. |
+| `#profiles` | The table of the profiles, and a fold with the records of the versions that the cluster does not run. |
 | `#alerts` | The rules of the alerts with their states, and a sample message. |
 | `#i-<reference>` | One image: its digests, and the tabs "This image" and "What pods do catch". |
 | `#p-<name@version>` | One profile: its two sides, its events, its packs as a stack of layers, and its move to the newest version of the profile. |
@@ -486,6 +486,16 @@ them:
   registry listed after it, and the newest, with the day of each.
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
+- The table of the profiles lists the profiles that the cluster runs. A fold under it
+  lists each record with the status `not-on-this-cluster`, with the filter "All" only.
+  No filter counts such a record. A record with a finding stays in the table as a
+  drift, also when the cluster does not run it.
+- For each record of a version that the cluster does not run, also a drift, the slabs
+  of its packs name no newer version. The tile "Versions newer than the pins" does not
+  count them as current. The page of such a pack shows no fact of a newer version. With
+  no change, it has the facts "Published now" and "This cluster's copy". One rule of the
+  scripts gives these words and the count. It reads `clusterCopy`, as the summary does,
+  and not `status`.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the
   words of strata for the impact under them. The panel "Ask Palette" sits beside them in
   its own box, with what it asks, the button, and the answer.
@@ -521,9 +531,9 @@ just observer-dev stale    # the set stale
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
-`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`, and `alerts-unset`. The server
-listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
-and `-data` takes another directory of sets.
+`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
+`alerts-unset`, and `moved-drift`. The server listens on `127.0.0.1:8080`. The flag
+`-listen` takes another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
@@ -533,9 +543,10 @@ the page are those of the data.
 
 - The set `ok` holds made-up data. It has 12 profiles, 29 packs, 1 finding, and 10
   newer versions in 6 profiles. It also has 2 causes of "Not checked", 26 of 29 packs
-  in full, and 8 images that pods run. One text is real: the two texts of
-  `kubeadmconfig.files[2].content` in the pack `kubernetes`, from a run of
-  `strata compare`. The file has 21 lines, and three lines differ.
+  in full, and 8 images that pods run. It holds a 13th record, of
+  `wilma-gateway@3.0.4`, a version that the cluster no longer runs. One text is real:
+  the two texts of `kubeadmconfig.files[2].content` in the pack `kubernetes`, from a
+  run of `strata compare`. The file has 21 lines, and three lines differ.
 - The sets `stale`, `lost`, and `first-seen` name `ok` in a file `base`. They differ in
   `cluster.json` only.
 - The sets `stale-unchecked` and `lost-unchecked` name `first-load` in a file
@@ -544,6 +555,10 @@ the page are those of the data.
 - The set `read-error` holds 3 profiles. One has a `verify` row that strata could
   not read, and one has a cluster side that it could not read. One has a move
   that it could not compare.
+- The set `moved-drift` holds 2 profiles: the record of `wilma-gateway@3.0.4` of `ok`,
+  and the record of `wilma-gateway@3.1.2` that the cluster runs. A person edited the
+  published version 3.0.4 after the move. A finding wins, so the record is a drift. It
+  has no newer version, and no pack of it is current.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
 - The sets `images`, `images-split`, `images-off`, and `images-unread` differ in

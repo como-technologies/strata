@@ -1160,6 +1160,15 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
+  it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
+  `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
+  and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
+  does not count a record with the new status. See
+  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  - A program that reads `status` of `/v1/profiles` must know the new value.
+  - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
+    `counts.profiles`.
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
   request comment shows a tag in a message of Palette as text. The reason of
@@ -1185,6 +1194,20 @@ field, a value, an input, or an option is in the sections above.
     each of these lines as one text.
   - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
     backticks as text, as the terminal form does.
+- **The markdown form writes a zero width space after each `@` of a mention in a text.** It
+  writes the entity `&#8203;`, so `@name` reads `@&#8203;name`. GitHub shows the same text, and
+  the mention notifies nobody. Before, a `@name` in a message of Palette notified the person or
+  the team in an issue or a pull request comment. See
+  [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `@&#8203;name` in place of `@name`. A `@`
+    after a letter or a digit of ASCII does not change, as in `kubernetes@1.30.1` or an address
+    of mail.
+  - `strata-preflight` writes its markdown in the same way.
+- **A bare address that GitHub surely links keeps its form.** It gets no entity, no `\`, and no
+  zero width space, as in 0.33.0. So the link that GitHub makes of it goes to the target of the
+  text. A `*` or a `_` that GitHub cuts from the end of the link reads `&ast;` or `&lowbar;`.
+  [The markdown comment](./formats.md#the-markdown-comment) gives the forms of such an address.
+  - `strata-preflight` writes its markdown in the same way.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1344,9 +1367,21 @@ field, a value, an input, or an option is in the sections above.
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **The message of the error `api` gives the code and the message of Palette.** It read the
+  JSON of the body. Now it reads `failed with HTTP 404: ResourceNotFound: <message>`, and a
+  body with no code keeps its text. A script that matches the JSON in the message must read the
+  new key `body` of the error document. It holds the body as Palette sent it. A line `not read`
+  of `list` gives the same words. See [Errors](./errors.md).
+- **A ref with no version that names a profile gives the error `usage`.** Before, it was `api`.
+  Strata reads such a ref as a uid, Palette answers HTTP 404, and strata then reads the listing
+  of the scope. The message lists each version of the name and names `<name>@latest`. A name
+  that no profile has keeps the error `api`. `snapshot`, `compare`, `same-release`, `candidate`,
+  and `consumers` give it. See [A name with no version](./refs.md#a-name-with-no-version).
 
 ### For a user of the CI drop-ins
 
+- **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
+  names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
@@ -1370,6 +1405,12 @@ field, a value, an input, or an option is in the sections above.
 - **`verify-report.sh` and `upstream-report.sh` write a `\` before each mark of markdown in a
   quoted text.** They do it as the markdown form does. So an issue shows a link, an emphasis, or
   a code span in a message of Palette as text.
+- **`verify-report.sh` and `upstream-report.sh` write a zero width space after each `@` of a
+  mention in a quoted text.** They do it as the markdown form does. So a `@name` in a message of
+  Palette notifies nobody.
+- **`verify-report.sh` and `upstream-report.sh` keep a bare address that GitHub surely links as it
+  is.** They do it as the markdown form does. So the link of the address in an issue goes to its
+  target.
 - **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
   fence longer than each run of backticks in its value. The body names the cluster and the path
   of each record in such a span. A name and a path with no backtick do not change.
@@ -1417,6 +1458,11 @@ field, a value, an input, or an option is in the sections above.
 - `text::markdown_cell` also writes a `\` before each mark of markdown, such as a backtick. A
   caller that puts a code span of its own in the text must write the span outside the cell. The
   cell shows the backticks of the span as text.
+- `text::markdown_cell` also writes the entity `&#8203;` after each `@` that can start a mention
+  of GitHub. A caller that compares the cell with a text must read `@&#8203;name` in place of
+  `@name`.
+- `text::markdown_cell` keeps a bare address that GitHub surely links as it is, with no entity,
+  no `\`, and no zero width space in it.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
@@ -1444,6 +1490,13 @@ field, a value, an input, or an option is in the sections above.
   `********` over the console address of a pack of virtual machines. They give
   `Error::Serialize` when strata cannot write the masked values. `api::RawProfile::save_dir`
   and `api::RawCluster::save_dir` write the same mask.
+- The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
+  `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
+  body.
+- `ops::snapshot_for`, `ops::snapshot_object`, `ops::snapshot_for_candidate`, and
+  `ops::consumers_with` give `Error::Usage` for a profile name in a ref with no version. Such a
+  ref is `Ref::Uid`, or `Ref::Draft` with no version. Before, they gave the `Error::Api` of the
+  404.
 
 ### For a user of the library of strata-preflight
 

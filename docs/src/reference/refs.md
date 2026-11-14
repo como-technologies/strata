@@ -186,6 +186,21 @@ Strata asks Palette nothing:
 {{#include ../output/refs-missing-file.txt}}
 ```
 
+## A name with no version
+
+A ref with no version is a uid, also with `@draft`. When Palette has no profile
+with that uid, it answers HTTP `404`. Strata then reads the listing of the
+scope. When a profile has that name, the error is `usage`. Its message lists
+each version of the name as a ref, and names `<name>@latest`:
+
+```text
+{{#include ../output/refs-name-no-version.txt}}
+```
+
+A ref with `@draft` gets each ref with `@draft`, such as
+`aws-stack@1.1.1@draft`. When no profile has the name either, the error stays
+`api`, with the code `ResourceNotFound` of Palette.
+
 ## Which commands take which refs
 
 | Command | uid, `name@version`, `name@latest`, and each with `@draft` | `pack:` | `cluster:`, `edgehost:`, `clustergroup:`, `appprofile:` | `tag:`, `filter:` | file |
