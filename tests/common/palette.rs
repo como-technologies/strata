@@ -56,11 +56,17 @@ pub fn operation_forbidden_message(permission: &str) -> String {
     format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
 }
 
-/// The message of the refusal of a request in the project `name`, with HTTP 500 and the code
+/// The message of the refusal of a request in the project `project`, with HTTP 500 and the code
 /// `ResourceAccessDenied`. No role of the user in the project gives the access. Palette names the
-/// project by its name.
-pub fn project_denied_message(name: &str) -> String {
-    format!("Project '{name}' access denied")
+/// project by its name or by its uid.
+pub fn project_denied_message(project: &str) -> String {
+    format!("Project '{project}' access denied")
+}
+
+/// The message of the refusal of a request by the user `user`, with HTTP 500 and the code
+/// `NoRolesAssociated`. The user has no role at all. Palette names the user by its user name.
+pub fn no_roles_message(user: &str) -> String {
+    format!("No roles associated to user '{user}'")
 }
 
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.

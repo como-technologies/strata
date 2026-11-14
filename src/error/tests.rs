@@ -703,7 +703,7 @@ fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_
 fn api_message(status: u16, body: &str) -> String {
     Error::Api {
         method: Method::Get,
-        path: "/v1/filters/metadata?filterType=tag".into(),
+        path: palette::TAG_FILTER_LISTING.into(),
         status,
         body: body.into(),
         retry_after: None,
@@ -718,7 +718,10 @@ fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_n
     );
     let text = api_message(403, &body);
     assert!(
-        text.starts_with("GET /v1/filters/metadata?filterType=tag failed with HTTP 403: {"),
+        text.starts_with(&format!(
+            "GET {} failed with HTTP 403: {{",
+            palette::TAG_FILTER_LISTING
+        )),
         "{text}"
     );
     assert!(text.contains("the route is of the tenant scope"), "{text}");
@@ -789,7 +792,7 @@ fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
     );
     let no_role = palette::error_body(
         Denial::NoRole.as_str(),
-        "No roles associated to user 'barney'",
+        &palette::no_roles_message("barney"),
     );
     for (body, denial, sentence) in [
         (

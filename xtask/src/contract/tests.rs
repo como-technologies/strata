@@ -15,10 +15,11 @@ use super::document::{Contract, DifferenceKind, Entry, Outcome, SCHEMA, Unknown}
 use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
+use crate::common_palette;
 use crate::facts::subjects::{Origin, Read, SOURCES, floor, request_of, unsourced};
 use crate::facts::{Fact, Kind, Scope, expand, fill};
 use crate::palette::{TENANT_ROUTES, serve_on};
-use crate::tenant::{TENANT, Tenant};
+use crate::tenant::{TAG_FILTER_LISTING, TENANT, Tenant};
 
 /// The facts of a small list: the cluster listing, the document of a cluster, and its cloud
 /// config. The list also has a search that sends a body and a host that the run cannot find.
@@ -502,7 +503,7 @@ fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_sou
 fn query_documents() -> Vec<(&'static str, Value)> {
     vec![
         (
-            "v1/filters/metadata@filterType=tag",
+            TAG_FILTER_LISTING,
             json!({"items": [{"metadata": {"name": "production", "uid": "f1"}}]}),
         ),
         (
@@ -675,7 +676,7 @@ fn the_stand_in_refuses_a_request_for_a_saved_filter_that_names_a_project_with_e
     let (_dir, client, tenant) = served_with_project(&query_documents());
     let probe = subject::Probe::new(&client, &tenant);
     for path in [
-        "/v1/filters/metadata?filterType=tag",
+        common_palette::TAG_FILTER_LISTING,
         "/v1/filters/metadata",
         "/v1/filters/tag/f1",
     ] {

@@ -329,7 +329,7 @@ impl Tenant {
             let (target, text) = match refusal {
                 Some((status, code, message)) => (
                     crate::palette::refused(&file, status),
-                    json!({"code": code, "message": message}).to_string() + "\n",
+                    error_body(code, message) + "\n",
                 ),
                 None => (file, body.map_or(String::new(), |b| b.to_string() + "\n")),
             };

@@ -289,7 +289,7 @@ fn refusing(variables: &[(&str, &str)], status: u16, code: &str, message: &str) 
         .failing(
             "POST /v1/spectroclusters/aws/validate",
             status,
-            json!({"code": code, "message": message}).to_string(),
+            routes::error_body(code, message),
         )
 }
 

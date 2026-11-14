@@ -34,11 +34,11 @@ use common::{
     cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
     clusters_denied, edge_host_route, error_body, fetch_examples, filters_denied,
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
-    no_manifests, no_template, no_variables, operation_forbidden_message, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
-    resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing, serve_profile,
-    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template,
-    variables_route, write_record, write_yaml,
+    no_manifests, no_roles_message, no_template, no_variables, operation_forbidden_message,
+    pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, template, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -560,10 +560,7 @@ fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
             OPERATION_FORBIDDEN_CODE,
             &operation_forbidden_message("cluster.list"),
         ),
-        error_body(
-            Denial::NoRole.as_str(),
-            "No roles associated to user 'barney'",
-        ),
+        error_body(Denial::NoRole.as_str(), &no_roles_message("barney")),
     ] {
         let api = MemoryApi::new().failing_n_times(CLUSTER_LISTING, 99, 500, &body);
         let (retry, slept) = retrying(&api, 3);
@@ -10936,7 +10933,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
             "Pack 'nginx' values override is forbidden",
         ),
     ] {
-        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        let body = error_body(code, message);
         let api = cluster_api
             .clone()
             .failing_n_times(path.clone(), 99, status, body);
