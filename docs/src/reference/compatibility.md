@@ -1138,12 +1138,12 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
-- **The click "Ask Palette" of the observer shows the checks of strata.** Its answer, and each
-  answer of `/v1/asks`, can hold the new field `updateChecks`: the `bump.updateChecks` of
-  `behind`. The column "Palette" and the card "Move to" show each check beside the answer of
-  Palette. Before, the card said "Palette gave no error." alone for a move of Kubernetes that
-  skips a minor version, and the update then failed. A check that reads the words of the page
-  must read the new lines. See
+- **The click "Ask Palette" of the observer shows the checks of strata.** An answer can hold
+  the new field `updateChecks`, the `bump.updateChecks` of `behind`. The reply of the click and
+  `/v1/asks` give it. The column "Palette" and the card "Move to" show each check beside the
+  answer of Palette. Before, the card said only that Palette gave no error, also for a move of
+  Kubernetes that skips a minor version. A check that reads the words of the page must read the
+  new lines. See
   [Ask Palette about a move](../automation/observer.md#ask-palette-about-a-move).
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull

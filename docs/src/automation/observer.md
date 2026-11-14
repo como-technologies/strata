@@ -858,7 +858,7 @@ under the answer:
   beside "Palette gave no answer" too, because strata makes it with no request. It raises no
   severity. Only the detail tier holds it, as it holds the answer.
 - **The bump of a pack names a required variable only when strata gives one.** A variable
-  belongs to the profile, so for the move of a pack, `behind` gives the skip of a minor version
+  belongs to the profile. So for the move of a pack, `behind` gives the skip of a minor version
   alone. It names the variables that a move adds in the bump of a profile version: see
   [The move to the newest profile version](../commands/behind.md#the-move-to-the-newest-profile-version).
 - **A failed request is no finding.** A request that Palette refuses for the role of
