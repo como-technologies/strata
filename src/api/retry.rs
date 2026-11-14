@@ -61,7 +61,7 @@ impl RetryPolicy {
 ///
 /// A 5xx that is a refusal of Palette (see [`Error::class`]) and other errors return at once.
 /// [`Progress`] announces each retry. After a 429 of the download of a profile version with no
-/// `Retry-After`, the wait is 10 seconds: Palette takes one download of a version in that time.
+/// `Retry-After`, the wait is 10 seconds. Palette takes one download of a version in that time.
 pub struct Retry<A> {
     inner: A,
     policy: RetryPolicy,

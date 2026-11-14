@@ -54,14 +54,16 @@ case "$*" in
 esac
 "##;
 
-/// The `kubectl` of the run. It logs each call with the `KUBECONFIG` of the call to `$FAKE/args.log`,
-/// and it looks in `$HOME` and `$TMPDIR` for the marker of the key at each call: a file that holds
-/// it is in `$FAKE/leak.log`. What a `create` reads from standard input goes to `$FAKE/stdin.log`, and
-/// what an `apply` sends goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the
-/// cluster is in the files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A
-/// delete of a name that is absent fails with `NotFound` unless `--ignore-not-found` is there. A
-/// delete with a selector never fails, as `kubectl` does. `FAKE_NAMESPACE_FAILS` makes the apply of
-/// the namespace fail.
+/// The `kubectl` of the run. It logs each call with the `KUBECONFIG` of the call to
+/// `$FAKE/args.log`. At each call, it searches `$HOME` and `$TMPDIR` for the marker of the key. A
+/// file that holds the marker is in `$FAKE/leak.log`.
+///
+/// What a `create` reads from standard input goes to `$FAKE/stdin.log`, and what an `apply` sends
+/// goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the cluster is in the
+/// files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A delete of a name
+/// that is absent fails with `NotFound` unless `--ignore-not-found` is there. A delete with a
+/// selector never fails, as `kubectl` does. `FAKE_NAMESPACE_FAILS` makes the apply of the
+/// namespace fail.
 ///
 /// A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL: &str = r##"#!/usr/bin/env bash

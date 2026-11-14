@@ -2,11 +2,12 @@
 //! that a record holds. The document of a version gives the published versions of its profile in
 //! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
 //! each profile version that is behind with the newest version (#708). For a pin that is behind,
-//! it names the newer profile version that carries a newer version of the pack (#709). On a cluster
-//! with many profiles, each row names the profile that holds its pack, the counts of the heading
-//! add up, `--behind-only` omits the rows that are current, and a pin names the newest patch of
-//! its own minor version (#622). The move of a profile version names the required variables that
-//! it adds, and a move of Kubernetes that skips a minor version (#623).
+//! it names the newer profile version that carries a newer version of the pack (#709).
+//!
+//! On a cluster with many profiles, each row names the profile that holds its pack, and the counts
+//! of the heading add up (#622). `--behind-only` omits the rows that are current, and a pin names
+//! the newest patch of its own minor version (#622). The move of a profile version names the
+//! required variables that it adds, and a move of Kubernetes that skips a minor version (#623).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};

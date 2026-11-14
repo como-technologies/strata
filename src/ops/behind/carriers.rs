@@ -1,9 +1,9 @@
 //! `behind`: the newer version of a profile that carries a newer version of a pin.
 //!
 //! A pipeline moves a change up three levels. A new pack version goes to a registry, a new profile
-//! version pins it, and the definition of a cluster pins that profile version. So for each pin that
-//! is behind, `behind` says which newer version of each profile that holds the pin pins a newer
-//! version of the pack.
+//! version pins it, and the definition of a cluster pins that profile version. So `behind` gives
+//! an answer for each pin that is behind, and for each profile that holds the pin. The answer says
+//! which newer version of that profile pins a newer version of the pack.
 //!
 //! No route of Palette names the profile versions that pin a version of a pack, and the profile
 //! search takes no pack. So strata reads the template of each newer version from its document, as
@@ -60,8 +60,10 @@ pub struct Carrier {
     pub pack_version: String,
 }
 
-/// Give each pin of `pins` that is behind its carriers: one for each profile version of `held`
-/// that a record of the pin holds, that has a newer version, and whose template holds the pack.
+/// Give each pin of `pins` that is behind its carriers.
+///
+/// A pin has one carrier for each profile version of `held` that a record of the pin holds, and
+/// that has a newer version. The template of that profile version must also hold the pack.
 ///
 /// `documents` holds the documents of each scope that strata connected to. A profile version is in
 /// the scope of its first record. A pin is in the scope of its own first record, so the two scopes

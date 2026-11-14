@@ -90,8 +90,9 @@ fn just_runs_of(job: &serde_yaml::Value) -> Vec<String> {
 /// The arguments of each `just` command in the `run` steps of the sequence `list`, in order.
 ///
 /// A step that uses an action of `.github/actions/` gives the commands of the steps of that
-/// action, and of each action that they use in turn. `inputs` holds the value of each input of
-/// the action that holds `list`. Each `${{ inputs.<name> }}` of a command becomes its value.
+/// action. It also gives the commands of each action that those steps use in turn. `inputs` holds
+/// the value of each input of the action that holds `list`. Each `${{ inputs.<name> }}` of a
+/// command becomes its value.
 ///
 /// # Panics
 ///
