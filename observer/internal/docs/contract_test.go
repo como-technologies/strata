@@ -101,6 +101,8 @@ func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 	}
 }
 
+// decodeFile reads the JSON file name of dir into v. It does the job of testkit.DecodeFile for the tests of docs, because
+// testkit imports docs.
 func decodeFile(t *testing.T, dir, name string, v any) {
 	t.Helper()
 	b, err := os.ReadFile(dir + "/" + name)
@@ -131,10 +133,7 @@ func TestAClearValueDoesNotPassTheAllowList(t *testing.T) {
 	if err := json.Unmarshal(raw, &d); err != nil {
 		t.Fatal(err)
 	}
-	out, err := json.Marshal(d)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := encode(t, d)
 	if strings.Contains(string(out), value) {
 		t.Fatalf("the clear value passed the allow-list: %s", out)
 	}

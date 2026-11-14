@@ -5,7 +5,6 @@ import (
 	"fmt"
 	htmlpkg "html"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -146,7 +146,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{"The published version holds what the record holds."},
 			[]string{`<b class="ok">Same</b><span>Published now</span>`, `<b class="ok">Same</b><span>This cluster&#39;s copy</span>`, `<b class="ok">Current</b><span>No newer version</span>`}},
 		{"a pack that matches its record, on a page with findings", func(t *testing.T) string {
-			return pageOf(t, crawl(t, devdata.StateOK), "#k-fred-identity@2.3.0/addon/reloader", "")
+			return pageOf(t, crawl(t, devdata.StateOK), reloaderHash, "")
 		}, "same", "md", "Undisturbed", []string{"The published version holds what the record holds."},
 			[]string{`<b class="ok">Same</b><span>Published now</span>`, `<b class="ok">Current</b><span>No newer version</span>`}},
 		{"a pack that was not checked", func(t *testing.T) string {
@@ -200,8 +200,8 @@ func TestTryNowAsksTheObserverAgainAndTheDataComesBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	mustHold(t, "before", out.Before, "This page lost its line to the observer")
-	mustNotHold(t, "before", out.Before, "Needs attention", "<table")
-	mustHold(t, "after", out.After, "Needs attention")
+	mustNotHold(t, "before", out.Before, needsAttention, "<table")
+	mustHold(t, "after", out.After, needsAttention)
 	mustNotHold(t, "after", out.After, "This page lost its line to the observer")
 }
 
@@ -316,7 +316,7 @@ func TestLostAndStaleWithFindingsStayABarOverTheFindings(t *testing.T) {
 			screens := crawl(t, c.state)
 			for _, hash := range []string{"#overview", "#findings"} {
 				page := pageOf(t, screens, hash, "")
-				mustHoldInOrder(t, hash, page, c.bar, "Published version changed after its record")
+				mustHoldInOrder(t, hash, page, c.bar, publishedChanged)
 				mustHold(t, hash, page, `<tr class="link" data-go="#k-fred-identity@2.3.0/addon/dex">`)
 				mustNotHold(t, hash, page, `class="splash lg`)
 			}
@@ -565,7 +565,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
 	mustHold(t, "a manifest alone", page, tabOn(dexPublished, "manifests"))
-	mustNotHold(t, "a manifest alone", page, tabOn(dexPublished, "values"), "<th>Setting</th>")
+	mustNotHold(t, "a manifest alone", page, tabOn(dexPublished, "values"), settingsHead)
 }
 
 // An empty tab says so, and it links to the tab that has the change. A click on the link opens that tab.
@@ -792,7 +792,7 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 	mustHold(t, "the move", pack[5].command, "strata compare pack:"+uid+"/dex@2.42.0 pack:"+uid+"/dex@2.44.0 --full")
 	mustHold(t, "the question", pack[6].command, "strata behind record.json --pin addon/dex")
 	// A pack with no newer version shows neither, and a profile page shows neither.
-	for _, rows := range [][]termRow{termRows(t, shown(t, devdata.StateOK, "#k-fred-identity@2.3.0/addon/reloader")[0]), profile} {
+	for _, rows := range [][]termRow{termRows(t, shown(t, devdata.StateOK, reloaderHash)[0]), profile} {
 		for _, r := range rows {
 			if strings.Contains(r.command, "compare pack:") || strings.Contains(r.command, "behind") {
 				t.Errorf("a row with no move holds the command %q", r.command)
@@ -841,17 +841,13 @@ func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 
 // The digest in Upstream reads like the other values, and a blank value reads "none".
 func TestTheHeaderOfAPackShowsTheDigestLikeTheOtherValuesAndNoneForABlank(t *testing.T) {
-	page := shown(t, devdata.StateOK, "#k-fred-identity@2.3.0/addon/reloader")[0]
+	page := shown(t, devdata.StateOK, reloaderHash)[0]
 	mustHold(t, "the header", page, `<div><span>Upstream</span><span class="m bright">sha256:94ccf3b3b185</span></div>`, `<div><span>Registry</span>Public Repo</div>`)
 	css := string(readPage(t, "app.css"))
 	if got := ruleOf(css, ".meta div span.bright"); !strings.Contains(got, "color:var(--ink);") || !strings.Contains(got, "display:inline;") {
 		t.Errorf("the rule of the digest is %q", got)
 	}
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": func(raw []byte) []byte {
-		var v api.ProfilesView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			for j := range v.Profiles[i].Packs {
 				if v.Profiles[i].Packs[j].Name == "reloader" {
@@ -859,13 +855,8 @@ func TestTheHeaderOfAPackShowsTheDigestLikeTheOtherValuesAndNoneForABlank(t *tes
 				}
 			}
 		}
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}})
-	blank := pagesOf(t, dir, "#k-fred-identity@2.3.0/addon/reloader")[0]
+	})})
+	blank := pagesOf(t, dir, reloaderHash)[0]
 	mustHold(t, "a blank value", blank, `<div><span>Registry</span>none</div><div><span>Kind</span>none</div><div><span>Upstream</span><span class="m bright">none</span></div>`)
 }
 
@@ -990,23 +981,10 @@ func TestTheVersionSortOfThePageGivesTheOrderOfStrata(t *testing.T) {
 	var cases struct {
 		Ascending []string `json:"ascending"`
 	}
-	raw, err := os.ReadFile("testdata/versions.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &cases); err != nil {
-		t.Fatal(err)
-	}
+	testkit.DecodeFile(t, "testdata/versions.json", &cases)
 	reversed := slices.Clone(cases.Ascending)
 	slices.Reverse(reversed)
-	given, err := json.Marshal(reversed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ascending, err := json.Marshal(cases.Ascending)
-	if err != nil {
-		t.Fatal(err)
-	}
+	given, ascending := testkit.MustJSON(t, reversed), testkit.MustJSON(t, cases.Ascending)
 	order := searchOf(t, pageWith(t, "testdata/api", devdata.StateOK, "#profiles", fmt.Sprintf(`S.q = %s.sort(versionCmp).join("|")`, given)))
 	if want := strings.Join(cases.Ascending, "|"); order != want {
 		t.Errorf("the order of the versions:\n got %s\nwant %s", order, want)
@@ -1050,7 +1028,7 @@ func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 		`<div class="l">New this week</div>`, `<div class="l">Versions newer than the pins</div><div class="v">16</div>`)
 	mustNotHold(t, "the words of the table", strings.ToLower(textOf(table)), "behind")
 	mustHold(t, "the head", table, `<button data-nview="table" aria-pressed="true" class="on">Table</button>`, `id="q-newer"`)
-	mustHold(t, "the row of ubuntu-aws", rowWith(t, table, `data-go="#k-barney-base@1.5.0/os/ubuntu-aws"`), `title="Only the build of the pack changes: the values stay the same">same</span>`)
+	mustHold(t, "the row of ubuntu-aws", rowTo(t, table, ubuntuHash), `title="Only the build of the pack changes: the values stay the same">same</span>`)
 	timeline := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.newerView = "timeline"`)
 	mustNotHold(t, "the words of the timeline", strings.ToLower(textOf(timeline)), "behind")
 	lanes := lanePattern.FindAllStringSubmatch(timeline, -1)

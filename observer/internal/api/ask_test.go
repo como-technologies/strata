@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -37,6 +38,17 @@ func clickWith(h http.Handler, path, host, site string) *httptest.ResponseRecord
 	return rec
 }
 
+// noAnswers is the list of answers of an observer that holds none. The list is empty, and not null.
+const noAnswers = `"asks":[]`
+
+// answersOf gives the list of answers that the server holds.
+func answersOf(t *testing.T, h http.Handler) AsksView {
+	t.Helper()
+	var list AsksView
+	decode(t, get(h, askRoutes[patternAsks]), &list)
+	return list
+}
+
 // asked makes an observer that ran its cycles, and the fake that answers it.
 func asked(t *testing.T, fixture string) (*rig, *check.Observer, *fakeStrata) {
 	t.Helper()
@@ -48,7 +60,7 @@ func asked(t *testing.T, fixture string) (*rig, *check.Observer, *fakeStrata) {
 func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
-	if body := get(h, "/v1/asks").Body.String(); !strings.Contains(body, `"asks":[]`) {
+	if body := get(h, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, noAnswers) {
 		t.Fatalf("a move that nobody asked about must read not asked: %s", body)
 	}
 	var first model.Answer
@@ -70,8 +82,7 @@ func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing
 	if second.Verdict != first.Verdict || second.Newest != first.Newest {
 		t.Errorf("the second answer %+v is not the first %+v", second, first)
 	}
-	var list AsksView
-	decode(t, get(h, "/v1/asks"), &list)
+	list := answersOf(t, h)
 	if len(list.Asks) != 1 || list.Asks[0].Verdict != model.VerdictNoError {
 		t.Errorf("the list of answers %+v", list)
 	}
@@ -87,11 +98,11 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 	}
 	f := got.Refusals[0]
 	if f.Code != "DependencyPackUpgradeNotSupported" || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{"payments"}) {
-		t.Errorf("refusal %+v", f)
+		t.Fatalf("refusal %+v", f)
 	}
-	noSummaryRouteStateOrLogHolds(t, r, h, "DependencyPackUpgradeNotSupported", "SENTINEL")
+	noSummaryRouteStateOrLogHolds(t, r, h, f.Code, "SENTINEL")
 	// The answer stays in memory: the state holds none of it. The log names the verdict of each answer.
-	if state := r.stateText(); strings.Contains(state, "refuses") {
+	if state := r.stateText(); strings.Contains(state, string(model.VerdictRefuses)) {
 		t.Errorf("the state holds the answer: %s", state)
 	}
 }
@@ -127,23 +138,22 @@ func TestTheChecksOfStrataReachTheDetailTierBesideTheAnswerAndNoOtherRoute(t *te
 		t.Fatalf("answer %+v", got)
 	}
 	if skip.Code != "K8sUpgradeNotSupported" || skip.From != "1.35.3" || skip.To != "1.37.0" || skip.NextMinor != "1.36" || skip.NextStep != "1.36.2" {
-		t.Errorf("the skip %+v", skip)
+		t.Fatalf("the skip %+v", skip)
 	}
 	if variables.Code != "InvalidVariable" || !slices.Equal(variables.Names, []string{"platform_owner"}) {
-		t.Errorf("the variables %+v", variables)
+		t.Fatalf("the variables %+v", variables)
 	}
-	var list AsksView
-	decode(t, get(h, "/v1/asks"), &list)
+	list := answersOf(t, h)
 	if len(list.Asks) != 1 || !reflect.DeepEqual(list.Asks[0].UpdateChecks, got.UpdateChecks) {
 		t.Errorf("the list of answers %+v", list)
 	}
-	noSummaryRouteStateOrLogHolds(t, r, h, "K8sUpgradeNotSupported", "InvalidVariable", "platform_owner", "nextStep")
+	noSummaryRouteStateOrLogHolds(t, r, h, skip.Code, variables.Code, variables.Names[0], "nextStep")
 }
 
 func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T) {
 	r, o, fake := asked(t, ask403)
 	h := handlerOf(o)
-	before := get(h, "/v1/cluster").Body.String() + get(h, "/v1/findings").Body.String() + get(h, "/v1/events").Body.String()
+	before := get(h, summaryRoutes[patternCluster]).Body.String() + get(h, summaryRoutes[patternFindings]).Body.String() + get(h, summaryRoutes[patternEvents]).Body.String()
 	rec := click(h, pathAsk)
 	var got model.Answer
 	decode(t, rec, &got)
@@ -153,7 +163,7 @@ func TestA403FromPaletteReadsNoAnswerWithItsStatusAndMakesNoFinding(t *testing.T
 	if strings.Contains(rec.Body.String(), "SENTINEL") || strings.Contains(r.log.String(), "SENTINEL") {
 		t.Errorf("the body of the answer of Palette left the observer: %s\n%s", rec.Body.String(), r.log.String())
 	}
-	if after := get(h, "/v1/cluster").Body.String() + get(h, "/v1/findings").Body.String() + get(h, "/v1/events").Body.String(); after != before {
+	if after := get(h, summaryRoutes[patternCluster]).Body.String() + get(h, summaryRoutes[patternFindings]).Body.String() + get(h, summaryRoutes[patternEvents]).Body.String(); after != before {
 		t.Errorf("a failed question changed the summary:\n%s\n%s", before, after)
 	}
 	// A request that failed is no answer, so the next click asks again. The role can change meanwhile.
@@ -207,7 +217,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
 	for _, route := range (&Server{}).Routes() {
-		path := map[string]string{patternAsk: pathAsk, patternAsks: "/v1/asks", patternCycle: pathCycle}[route.Pattern]
+		path := cmp.Or(askRoutes[route.Pattern], cycleRoutes[route.Pattern])
 		if route.Method != http.MethodGet && path == "" {
 			t.Fatalf("the route %s takes %s and the test does not know its path", route.Pattern, route.Method)
 		}
@@ -228,7 +238,7 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 		}
 	}
 	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
-	if rec := clickWith(h, "/v1/cluster", "127.0.0.1:8080", sameOrigin); rec.Code != http.StatusMethodNotAllowed {
+	if rec := clickWith(h, summaryRoutes[patternCluster], "127.0.0.1:8080", sameOrigin); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("a POST to a summary route gave %d", rec.Code)
 	}
 	if len(fake.questions()) != 0 {
@@ -284,7 +294,7 @@ func TestAnAnswerIsForgottenAtARestart(t *testing.T) {
 	}
 	// A restart: the state is on disk and the answer is not.
 	restarted := handlerOf(r.cycled(fake))
-	if body := get(restarted, "/v1/asks").Body.String(); !strings.Contains(body, `"asks":[]`) {
+	if body := get(restarted, askRoutes[patternAsks]).Body.String(); !strings.Contains(body, noAnswers) {
 		t.Errorf("a restart kept the answer: %s", body)
 	}
 }
@@ -334,7 +344,7 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 		}
 	}
 	click(h, pathAsk)
-	if body := get(h, "/v1/asks").Body.String(); strings.Contains(body, sentinelText) {
+	if body := get(h, askRoutes[patternAsks]).Body.String(); strings.Contains(body, sentinelText) {
 		t.Errorf("the list of answers holds the text: %s", body)
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, sentinelText)

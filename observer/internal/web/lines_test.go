@@ -302,7 +302,6 @@ func TestTheUnifiedAndSplitViewsDoNotChange(t *testing.T) {
 
 // A line of a value with markup shows as text.
 func TestALineOfAValueOfManyLinesWithMarkupShowsAsText(t *testing.T) {
-	const evil = "<img src=x onerror=alert(1)>"
 	dir := longSet(t, changedLeaf("a: 1\n"+evil+"\n", "a: 2\n"+evil+"\n"))
 	page := pagesOf(t, dir, k8sHash)[0]
 	mustHold(t, "the row", rowWith(t, page, `<td class="m">`+contentPath+`</td>`), `<span class="t">`+injection+`</span>`)

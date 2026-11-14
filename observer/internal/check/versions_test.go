@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -18,17 +17,6 @@ import (
 
 const registryUID = "5eecc89d0b150045ae661cef"
 
-func readDoc(t *testing.T, name string, v any) {
-	t.Helper()
-	raw, err := os.ReadFile(filepath.Join("..", "docs", "testdata", name))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, v); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func move(name, from, to string) string {
 	ref := "pack:" + registryUID + "/" + name + "@"
 	return ref + from + " " + ref + to
@@ -42,11 +30,11 @@ func withBehind(t *testing.T) (*rig, *world) {
 	r.record("aws-stack", "1.0.0", "k8s/kubernetes", "cni/cni-cilium-oss", "csi/csi-aws-ebs", "os/ubuntu-aws", "addon/cert-manager")
 	r.meta(`{"baseline":"approved","revision":"4e1c7a2"}`)
 	w := &world{moves: map[string]docs.Diff{}, behindExit: 1}
-	readDoc(t, "behind.json", &w.behind)
+	testkit.ReadDoc(t, "behind.json", &w.behind)
 	var kubernetes, cilium, other docs.Diff
-	readDoc(t, "move-kubernetes.json", &kubernetes)
-	readDoc(t, "move-cni-cilium-oss.json", &cilium)
-	readDoc(t, "move-cert-manager.json", &other)
+	testkit.ReadDoc(t, "move-kubernetes.json", &kubernetes)
+	testkit.ReadDoc(t, "move-cni-cilium-oss.json", &cilium)
+	testkit.ReadDoc(t, "move-cert-manager.json", &other)
 	w.moves[move("kubernetes", "1.35.3", "1.36.2")] = kubernetes
 	w.moves[move("cni-cilium-oss", "1.19.6", "1.20.1")] = cilium
 	w.moves[move("csi-aws-ebs", "1.63.1", "1.65.0")] = other

@@ -1,11 +1,10 @@
 package model
 
 import (
-	"encoding/json"
-	"os"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // The moves are the documents of the real binary, kept in the test data of docs.
@@ -13,14 +12,8 @@ var realMoves = []string{"move-kubernetes.json", "move-cert-manager.json", "move
 
 func realValues(t *testing.T, file string) docs.Values {
 	t.Helper()
-	raw, err := os.ReadFile("../docs/testdata/" + file)
-	if err != nil {
-		t.Fatal(err)
-	}
 	var d docs.Diff
-	if err := json.Unmarshal(raw, &d); err != nil {
-		t.Fatal(err)
-	}
+	testkit.ReadDoc(t, file, &d)
 	return d.Packs[0].Values
 }
 

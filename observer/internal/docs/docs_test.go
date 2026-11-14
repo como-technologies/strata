@@ -19,6 +19,17 @@ func read(t *testing.T, name string) []byte {
 	return b
 }
 
+// encode encodes v, and fails the test on an error. It does the job of testkit.MustJSON for the tests of docs, because
+// testkit imports docs.
+func encode(t *testing.T, v any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 // plant writes the sentinel at a path of a generic copy of a document. A key of "*" takes each
 // item of a list.
 func plant(t *testing.T, node any, path []string, v any) int {
@@ -69,10 +80,7 @@ func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 			t.Fatalf("the test planted nothing at %s", p)
 		}
 	}
-	raw, err := json.Marshal(doc)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := encode(t, doc)
 	if !bytes.Contains(raw, []byte(sentinel)) {
 		t.Fatal("the test document holds no sentinel")
 	}
@@ -80,10 +88,7 @@ func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	out, err := json.Marshal(got)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := encode(t, got)
 	if bytes.Contains(out, []byte(sentinel)) {
 		t.Fatalf("a field outside the allow-list survived: %s", out)
 	}
@@ -205,9 +210,8 @@ func TestTextTooLargeIsNeverReadFromADocumentOrWrittenToOne(t *testing.T) {
 		t.Error("a document set a field that only the observer sets")
 	}
 	p.TextTooLarge = true
-	out, err := json.Marshal(p)
-	if err != nil || strings.Contains(strings.ToLower(string(out)), "texttoolarge") {
-		t.Errorf("%s %v", out, err)
+	if out := encode(t, p); strings.Contains(strings.ToLower(string(out)), "texttoolarge") {
+		t.Errorf("the observer field shows in %s", out)
 	}
 }
 

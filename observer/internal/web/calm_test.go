@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"os"
 	"regexp"
 	"strings"
@@ -11,22 +10,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
-
-// editCluster changes the answer of /v1/cluster in a set.
-func editCluster(t *testing.T, change func(*api.ClusterView)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var v api.ClusterView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
-		change(&v)
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-}
 
 // calmImages is the document of the pods of the set ok: the pods are read and no image changed.
 func calmImages(t *testing.T) func([]byte) []byte {
@@ -65,14 +48,14 @@ func TestNoCalmWordGoesAroundTheGate(t *testing.T) {
 		banned   []string
 		greenTil bool
 	}{
-		{"the versions are not read", map[string]func([]byte) []byte{"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Versions.ReadAt = nil })},
+		{"the versions are not read", map[string]func([]byte) []byte{"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Versions.ReadAt = nil })},
 			"", []string{packs}, true},
-		{"the page is lost", map[string]func([]byte) []byte{"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Page = model.PageLost; lastRead(v) })},
+		{"the page is lost", map[string]func([]byte) []byte{"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Page = model.PageLost; lastRead(v) })},
 			"", []string{packs, changed, quiet, nothing, current}, false},
-		{"the page is stale", map[string]func([]byte) []byte{"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Page = model.PageStale; lastRead(v) })},
+		{"the page is stale", map[string]func([]byte) []byte{"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Page = model.PageStale; lastRead(v) })},
 			"", []string{packs, changed, quiet, nothing, current}, false},
 		{"the read of the pods failed", map[string]func([]byte) []byte{"images.json": func(raw []byte) []byte {
-			return editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} })(calmImages(t)(raw))
+			return podsRefused(t)(calmImages(t)(raw))
 		}},
 			"", []string{packs, changed, quiet, nothing, current}, false},
 		{"the page is offline", nil, "S.offline = true", []string{packs, changed, quiet, nothing, current}, false},

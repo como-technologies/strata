@@ -38,6 +38,7 @@ const (
 
 // The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
 const (
+	pathHealth    = "/healthz"
 	pathPublished = "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=published"
 	pathCluster   = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=cluster"
 	pathNewer     = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer"

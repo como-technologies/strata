@@ -46,7 +46,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 		t.Fatal(err)
 	}
 	var v alert.View
-	rec := get(handlerOf(o), "/v1/alerts")
+	rec := get(handlerOf(o), summaryRoutes[patternAlerts])
 	decode(t, rec, &v)
 	if rec.Code != http.StatusOK || !v.Set || len(v.Channels) != 1 || v.Channels[0] != "oncall" || len(v.Rules) != 3 {
 		t.Fatalf("status %d, view %+v", rec.Code, v)
@@ -61,7 +61,7 @@ func TestTheRouteAlertsShowsTheRulesTheirStatesAndTheChannelNames(t *testing.T) 
 
 func TestAnObserverWithoutAlertsSaysSoOnTheRoute(t *testing.T) {
 	var v alert.View
-	rec := get(handlerOf(newRig(t).observer(&fakeStrata{dir: newRig(t).fixtures})), "/v1/alerts")
+	rec := get(handlerOf(newRig(t).observer(&fakeStrata{dir: newRig(t).fixtures})), summaryRoutes[patternAlerts])
 	decode(t, rec, &v)
 	if rec.Code != http.StatusOK || v.Set || len(v.Rules) != 0 || v.Channels == nil || v.Rules == nil {
 		t.Errorf("status %d, view %+v, body %s", rec.Code, v, rec.Body.String())
@@ -88,7 +88,7 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 	}
 	h, host := handlerOf(o), strings.TrimPrefix(w.URL, "http://")
 	noSummaryRouteStateOrLogHolds(t, r, h, addressMarker, host)
-	if body := get(h, "/v1/asks").Body.String(); strings.Contains(body, addressMarker) || strings.Contains(body, host) {
+	if body := get(h, askRoutes[patternAsks]).Body.String(); strings.Contains(body, addressMarker) || strings.Contains(body, host) {
 		t.Error("the list of answers shows the address")
 	}
 	state := r.stateText()

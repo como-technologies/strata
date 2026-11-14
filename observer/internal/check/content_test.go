@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,14 +18,8 @@ import (
 // drift reads the real `verify` document that the stand-in gave for an edit in place.
 func drift(t *testing.T) docs.VerifyRow {
 	t.Helper()
-	raw, err := os.ReadFile("../docs/testdata/verify-summary-drift.json")
-	if err != nil {
-		t.Fatal(err)
-	}
 	var s docs.VerifySummary
-	if err := json.Unmarshal(raw, &s); err != nil {
-		t.Fatal(err)
-	}
+	testkit.ReadDoc(t, "verify-summary-drift.json", &s)
 	return s.Records[0]
 }
 
@@ -372,10 +365,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 	if len(s.NotChecked) != 0 || s.Content.FailedRuns != 0 || s.Counts.Drift != 1 {
 		t.Errorf("notChecked %+v, content %+v, counts %+v", s.NotChecked, s.Content, s.Counts)
 	}
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.MustJSON(t, s)
 	if strings.Contains(string(raw), "AccessDenied") {
 		t.Errorf("the summary holds the text of the error: %s", raw)
 	}

@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/como-technologies/strata/observer/internal/docs"
 )
 
 func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing.T) {
@@ -44,5 +46,19 @@ func TestListenAddrReadsTheAddressOfTheLineListeningOfTheLog(t *testing.T) {
 	logger.Info("listening", "addr", "[::1]:41234")
 	if got, ok := listenAddr(log.String()); !ok || got != "[::1]:41234" {
 		t.Errorf("got %q, %v from %s", got, ok, log.String())
+	}
+}
+
+func TestReadDocReadsADocumentOfTheRealBinaryFromTheTestDataOfDocs(t *testing.T) {
+	var s docs.VerifySummary
+	ReadDoc(t, "verify-summary-drift.json", &s)
+	if s.Schema != docs.VerifySummarySchema || len(s.Records) == 0 {
+		t.Errorf("the document gives the schema %q and %d records", s.Schema, len(s.Records))
+	}
+}
+
+func TestMustJSONEncodesAValue(t *testing.T) {
+	if got := string(MustJSON(t, map[string]int{"a": 1})); got != `{"a":1}` {
+		t.Errorf("got %s", got)
 	}
 }

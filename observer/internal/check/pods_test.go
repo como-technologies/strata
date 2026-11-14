@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -267,10 +266,7 @@ func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T
 	}
 	var outputs []string
 	for _, v := range []any{o.Summary(), doc} {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.MustJSON(t, v)
 		outputs = append(outputs, string(raw))
 	}
 	state, err := os.ReadFile(filepath.Join(r.state, stateFile))

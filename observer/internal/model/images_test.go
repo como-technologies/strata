@@ -1,13 +1,13 @@
 package model
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 const (
@@ -342,10 +342,7 @@ func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 	in := Input{Now: t0, ClusterUID: "c1", StartedAt: t0, Files: 1, FilesKnown: true, Content: &c, ContentClock: goodClock(15*60e9, t0),
 		ReadPods: true, FirstDigests: firstOf(vendorRef, d1)}
 	for name, v := range map[string]any{"summary": Build(in), "observed": ObservedOf(in)} {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
+		raw := testkit.MustJSON(t, v)
 		if strings.Contains(string(raw), "MARKER") {
 			t.Errorf("%s holds a marker: %s", name, raw)
 		}

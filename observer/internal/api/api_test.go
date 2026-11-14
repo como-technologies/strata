@@ -13,6 +13,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // The sentinel test fills the server from testdata/, with the sentinel in each Leaf.Old and each
@@ -122,17 +123,18 @@ func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
 }
 
 func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
-	t.Setenv("PALETTE_API_KEY", "SENTINEL-KEY")
+	const key = "SENTINEL-KEY"
+	t.Setenv("PALETTE_API_KEY", key)
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	noSummaryRouteHolds(t, h, "SENTINEL-KEY", sentinelVariable)
+	noSummaryRouteHolds(t, h, key, sentinelVariable)
 	unknown := []string{"/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"}
-	paths := append([]string{"/healthz", "/"}, unknown...)
+	paths := append([]string{pathHealth, "/"}, unknown...)
 	for _, ps := range detailRoutes {
 		paths = append(paths, ps...)
 	}
 	for _, path := range paths {
-		if body := get(h, path).Body.String(); strings.Contains(body, "SENTINEL-KEY") || strings.Contains(body, sentinelVariable) {
+		if body := get(h, path).Body.String(); strings.Contains(body, key) || strings.Contains(body, sentinelVariable) {
 			t.Errorf("%s: %s", path, body)
 		}
 	}
@@ -152,15 +154,15 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		status     int
 		contentTyp string
 	}{
-		{"health", "/healthz", 200, textType},
-		{"cluster", "/v1/cluster", 200, jsonType},
-		{"findings", "/v1/findings", 200, jsonType},
-		{"profiles", "/v1/profiles", 200, jsonType},
-		{"a profile by name and version", "/v1/profiles/aws-stack@1.1.0", 200, jsonType},
+		{"health", pathHealth, 200, textType},
+		{"cluster", summaryRoutes[patternCluster], 200, jsonType},
+		{"findings", summaryRoutes[patternFindings], 200, jsonType},
+		{"profiles", summaryRoutes[patternProfiles], 200, jsonType},
+		{"a profile by name and version", summaryRoutes[patternProfile], 200, jsonType},
 		{"a profile by name", "/v1/profiles/aws-stack", 200, jsonType},
-		{"newer", "/v1/newer", 200, jsonType},
-		{"not checked", "/v1/notchecked", 200, jsonType},
-		{"events", "/v1/events", 200, jsonType},
+		{"newer", summaryRoutes[patternNewer], 200, jsonType},
+		{"not checked", summaryRoutes[patternNotChecked], 200, jsonType},
+		{"events", summaryRoutes[patternEvents], 200, jsonType},
 		{"the diff of the published side", pathPublished, 200, jsonType},
 		{"the diff of the cluster side", pathCluster, 200, jsonType},
 		{"the diff of the newer side", pathNewer, 200, jsonType},
@@ -240,7 +242,7 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 		t.Run(string(c.page), func(t *testing.T) {
 			sum := model.Build(model.Input{Now: now, ClusterUID: "c1", StartedAt: now.Add(-time.Hour), Files: c.files, FilesKnown: true, ContentClock: c.clock})
 			var got ClusterView
-			rec := get(handlerOf(stub{sum}), "/v1/cluster")
+			rec := get(handlerOf(stub{sum}), summaryRoutes[patternCluster])
 			decode(t, rec, &got)
 			if got.Page != c.page {
 				t.Errorf("page %q, want %q", got.Page, c.page)
@@ -253,14 +255,14 @@ func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var got ClusterView
-	decode(t, get(h, "/v1/cluster"), &got)
+	decode(t, get(h, summaryRoutes[patternCluster]), &got)
 	if got.Cluster.Name != "payments" || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
 		got.Records.Baseline != "approved" || got.Records.Revision != "4e1c7a2" || got.Content.Every != "15m" || got.Versions.Every != "6h" ||
 		got.Counts.Findings != 2 || got.Counts.Newer != 1 {
 		t.Errorf("%+v", got)
 	}
 	var top map[string]json.RawMessage
-	decode(t, get(h, "/v1/cluster"), &top)
+	decode(t, get(h, summaryRoutes[patternCluster]), &top)
 	for _, key := range []string{"findings", "profiles", "newer", "notChecked", "limits", "events"} {
 		if _, ok := top[key]; ok {
 			t.Errorf("/v1/cluster holds %s", key)
@@ -275,7 +277,7 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var all ProfilesView
-	decode(t, get(h, "/v1/profiles"), &all)
+	decode(t, get(h, summaryRoutes[patternProfiles]), &all)
 	var one ProfileView
 	decode(t, get(h, "/v1/profiles/aws-stack"), &one)
 	if len(all.Profiles) != 1 || one.Name != "aws-stack" || one.Status != model.StatusDrift || len(one.Findings) != 2 || len(one.Who) != 1 || one.Who[0].Actor != "Betty Rubble" {
@@ -285,7 +287,7 @@ func TestTheProfileRowsHoldTheirFindingsAndWho(t *testing.T) {
 		t.Errorf("the two sides: %+v", one)
 	}
 	var findings FindingsView
-	decode(t, get(h, "/v1/findings"), &findings)
+	decode(t, get(h, summaryRoutes[patternFindings]), &findings)
 	if len(findings.Findings) != 2 {
 		t.Errorf("findings %+v", findings)
 	}
@@ -295,17 +297,17 @@ func TestNewerNotCheckedAndEventsGiveTheirPartsOfTheSummary(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var newer NewerView
-	decode(t, get(h, "/v1/newer"), &newer)
+	decode(t, get(h, summaryRoutes[patternNewer]), &newer)
 	if len(newer.Newer) != 1 || newer.Newer[0].Name != "kubernetes" || newer.Newer[0].Newest != "1.36.2" || newer.Newer[0].Impact != "may-repave" || newer.Newer[0].Fold.Settings != 2 || newer.Newer[0].Fold.Repeats != 2 || !newer.Newer[0].New {
 		t.Errorf("newer %+v", newer)
 	}
 	var notChecked NotCheckedView
-	decode(t, get(h, "/v1/notchecked"), &notChecked)
+	decode(t, get(h, summaryRoutes[patternNotChecked]), &notChecked)
 	if len(notChecked.NotChecked) != 1 || notChecked.NotChecked[0].Cause != model.OlderRegistryCopy || notChecked.Limits.HelmPacks != 0 || notChecked.Limits.ImagesNamedByATag != 1 || notChecked.Limits.MaskedPaths != 1 {
 		t.Errorf("not checked %+v", notChecked)
 	}
 	var events EventsView
-	decode(t, get(h, "/v1/events"), &events)
+	decode(t, get(h, summaryRoutes[patternEvents]), &events)
 	reasons := map[string]int{}
 	for _, e := range events.Events {
 		reasons[e.Reason]++
@@ -396,10 +398,7 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the cycles failed: %v", err)
 	}
-	printed, err := json.Marshal(once)
-	if err != nil {
-		t.Fatal(err)
-	}
+	printed := testkit.MustJSON(t, once)
 	if strings.Contains(string(printed), pathMarker) {
 		t.Errorf("once prints the path: %s", printed)
 	}
@@ -437,7 +436,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	}
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var findings FindingsView
-	decode(t, get(h, "/v1/findings"), &findings)
+	decode(t, get(h, summaryRoutes[patternFindings]), &findings)
 	flagged := 0
 	for _, f := range findings.Findings {
 		if f.Kind == model.PublishedChanged && f.WhoUnread && len(f.Who) == 0 {
@@ -448,14 +447,14 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 		t.Errorf("findings %+v", findings)
 	}
 	var notChecked NotCheckedView
-	decode(t, get(h, "/v1/notchecked"), &notChecked)
+	decode(t, get(h, summaryRoutes[patternNotChecked]), &notChecked)
 	for _, n := range notChecked.NotChecked {
 		if n.Cause == model.ReadError {
 			t.Errorf("the drift is no read-error: %+v", n)
 		}
 	}
 	var events EventsView
-	decode(t, get(h, "/v1/events"), &events)
+	decode(t, get(h, summaryRoutes[patternEvents]), &events)
 	sentences := 0
 	for _, e := range events.Events {
 		if e.Reason == "AuditUnread" && e.Message == "The audit log could not be read, so this does not say who made the change." {

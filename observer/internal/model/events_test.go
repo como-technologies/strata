@@ -1,13 +1,13 @@
 package model
 
 import (
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func at(d time.Duration) string {
@@ -145,10 +145,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("message %q", got)
 	}
 	// the summary carries the flag, and never the text of the error
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.MustJSON(t, s)
 	if strings.Contains(string(raw), "AUDIT-REASON-SENTINEL") || !strings.Contains(string(raw), `"whoUnread":true`) {
 		t.Errorf("the summary %s", raw)
 	}

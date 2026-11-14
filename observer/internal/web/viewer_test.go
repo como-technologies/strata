@@ -39,6 +39,13 @@ func cardOf(t *testing.T, markup, text string) string {
 	return markup[start : at+end]
 }
 
+// The head of the table of the settings, and the classes of the head and of the body of a diff, on the Values tab.
+const (
+	settingsHead = "<th>Setting</th>"
+	diffHead     = `class="diffhead"`
+	diffBody     = `class="diff"`
+)
+
 // diffLine is one line of a hunk, as the second reading of a unified text gives it. The sign "@" stands
 // for the head of a hunk that follows another hunk.
 type diffLine struct {
@@ -250,6 +257,17 @@ const (
 	layoutSplit   = "split"
 )
 
+// The hashes of the packs csi-aws-ebs of barney-base and reloader of fred-identity, and the body of a click on "Ask Palette"
+// for a move of the dev data.
+const (
+	csiHash      = "#k-barney-base@1.5.0/csi/csi-aws-ebs"
+	reloaderHash = "#k-fred-identity@2.3.0/addon/reloader"
+	k8sClick     = `{"ask":"barney-base@1.5.0","pack":"k8s/kubernetes"}`
+	dexClick     = `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`
+	ubuntuClick  = `{"ask":"barney-base@1.5.0","pack":"os/ubuntu-aws"}`
+	csiClick     = `{"ask":"barney-base@1.5.0","pack":"csi/csi-aws-ebs"}`
+)
+
 // variantOf gives the variant of the crawl that sets a side of the dropdown, a layout, and a tab or none. The side is ""
 // for the side that the pack opens on.
 func variantOf(side, layout, tab, k string) string {
@@ -297,14 +315,14 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 			added, removed := headCounts(text)
 			mustHold(t, where, card, fmt.Sprintf(`<div class="diffhead"><span>%s values <span class="now">+%d</span> <span class="was">-%d</span></span>`, c.key, added, removed),
 				`data-k="values">Values`)
-			mustHoldInOrder(t, where+": the table of the settings, then the text", card, "<th>Setting</th>", `class="diffhead"`)
+			mustHoldInOrder(t, where+": the table of the settings, then the text", card, settingsHead, diffHead)
 		}
 	}
 	// The order on the Values tab: the table of the settings, the masked note, the text, and then the folded parts.
 	dex := cardOf(t, pageOf(t, screens, dexHash, ""), `data-tab="`+dexPublished+`"`)
-	mustHoldInOrder(t, "the Values tab of dex", dex, "<th>Setting</th>", "Masked:", `class="diffhead"`)
+	mustHoldInOrder(t, "the Values tab of dex", dex, settingsHead, "Masked:", diffHead)
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), `data-tab="`+k8sMove+`"`)
-	mustHoldInOrder(t, "the Values tab of kubernetes", k8s, `class="diffhead"`, "<details")
+	mustHoldInOrder(t, "the Values tab of kubernetes", k8s, diffHead, "<details")
 	// The text of kubernetes holds three hunks, so the text shows two gaps.
 	if got := len(regexp.MustCompile(`<tr class="h">`).FindAllString(k8s, -1)); got != 2 {
 		t.Errorf("the text of kubernetes shows %d gap rows, want 2", got)
@@ -418,20 +436,9 @@ func entryOf(t *testing.T, ds []api.PackDiff, profile, key string, side model.Si
 	return nil
 }
 
-// editDiffs changes the diffs of a set.
+// editDiffs changes the diffs of a set in place.
 func editDiffs(t *testing.T, change func([]api.PackDiff)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var ds []api.PackDiff
-		if err := devdata.Decode(raw, &ds); err != nil {
-			t.Fatal(err)
-		}
-		change(ds)
-		out, err := json.Marshal(ds)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
+	return editJSON(t, func(ds *[]api.PackDiff) { change(*ds) })
 }
 
 // clicked is what render.js prints for the mode click.
@@ -504,7 +511,6 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 
 // A line of a diff with the text of a tag shows as text, in both layouts, in a value and in a manifest.
 func TestALineOfADiffWithMarkupShowsAsText(t *testing.T) {
-	const evil = "<img src=x onerror=alert(1)>"
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
 		d.Values.Unified = strings.Replace(d.Values.Unified, "+        idTokens: 168h\n", "+        idTokens: 168h\n+"+evil+"\n-"+evil+"\n context "+evil+"\n", 1)
@@ -545,20 +551,20 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	uid := registryUidOf(t, set, "kubernetes")
 	published := cardOf(t, pageOf(t, screens, dexHash, ""), `data-tab="`+dexPublished+`"`)
 	mustHold(t, "the values of dex", published, title, body, tone, "<code>strata compare record.json fred-identity@2.3.0 --full</code>")
-	mustNotHold(t, "the values of dex", published, `class="diffhead"`, `class="diff"`, `data-view=`)
+	mustNotHold(t, "the values of dex", published, diffHead, diffBody, `data-view=`)
 	// The manifest keeps its row in the small table, because it has no text, and the splash comes with the command.
 	manifests := cardOf(t, pageOf(t, screens, dexHash, "tab "+dexPublished+" manifests"), `data-tab="`+dexPublished+`" data-k="manifests"`)
 	mustHold(t, "the manifests of dex", manifests, title, body, "<code>strata compare record.json fred-identity@2.3.0 --full</code>",
 		`<tr><td class="m">changed</td><td>Manifest</td><td class="m">fred-realm-config</td></tr>`)
-	mustNotHold(t, "the manifests of dex", manifests, `class="diffhead"`, `class="diff"`)
+	mustNotHold(t, "the manifests of dex", manifests, diffHead, diffBody)
 	// The newer side of the same pack keeps its text.
 	move := cardOf(t, pageOf(t, screens, dexHash, "side newer"), `data-tab="`+dexMove+`"`)
-	mustHold(t, "the move of dex", move, `class="diffhead"`)
+	mustHold(t, "the move of dex", move, diffHead)
 	mustNotHold(t, "the move of dex", move, title)
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), `data-tab="`+k8sMove+`"`)
 	mustHold(t, "the values of kubernetes", k8s, title, body, "<code>strata compare pack:"+uid+"/kubernetes@1.35.3 pack:"+uid+"/kubernetes@1.36.2 --full</code>")
-	mustNotHold(t, "the values of kubernetes", k8s, `class="diffhead"`)
+	mustNotHold(t, "the values of kubernetes", k8s, diffHead)
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
 	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), `data-tab="`+k8sMove+`" data-k="manifests"`)
 	mustHold(t, "the manifests of kubernetes", none, "No manifest changed here.", `data-tab="`+k8sMove+`" data-k="values">The change is on Values →</button>`)
@@ -581,7 +587,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	r := clickIn(t, dir, "scratch", dexHash, "0")
 	card := cardOf(t, r.After, `data-tab="side-fred-identity@2.3.0-addon/dex-cluster"`)
 	mustHold(t, "the cluster side", card, "This text is too large to keep here.", "<code>"+command+" --full</code>")
-	mustNotHold(t, "the cluster side", card, `class="diffhead"`)
+	mustNotHold(t, "the cluster side", card, diffHead)
 	// The profile page shows the same command, with the pack name left out and no flag.
 	profile := pagesOf(t, dir, "#p-"+dexSubject)[0]
 	mustHold(t, "the profile", profile, "<code>"+command+"</code>")
@@ -590,8 +596,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 // A command with a name that holds markup shows as text. The name has spaces and a "<", so the command puts it in single quotes,
 // and the page escapes each quote.
 func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
-	const evil = "<img src=x onerror=alert(1)>"
-	swap := func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), "quarry-1", evil)) }
+	swap := replaceText("quarry-1", evil)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		d := entryOf(t, ds, dexSubject, "addon/dex", model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
@@ -608,10 +613,10 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	screens := render(t, devdata.StateOK, false)
 	table := pageOf(t, screens, "#newer", "")
 	mustHold(t, "the table", table, `data-sort="nt" data-col="listed">Listed<svg class="sorti"`, `</svg></button></th><th class="narrow-hide" title="Asks Palette whether it would take this move on the clusters that run this profile. It changes nothing.">Palette</th></tr></thead>`)
-	if got := strings.Count(table, ">Ask Palette</button>"); got != len(set.Newer.Newer) {
+	if got := strings.Count(table, askButtonEnd); got != len(set.Newer.Newer) {
 		t.Errorf("the table has %d buttons for %d rows", got, len(set.Newer.Newer))
 	}
-	mustNotHold(t, "the table", table, "No error", "Refuses", "No answer", "Palette gave")
+	mustNotHold(t, "the table", table, wordNoError, wordRefuses, wordNoAnswer, paletteGave)
 	// The group rows span the new column too, and each row keeps its cell in the class narrow-hide.
 	mustHold(t, "the table", table, `<tr class="g"><td colspan="8">`)
 	mustNotHold(t, "the table", table, `colspan="7"`)
@@ -621,19 +626,52 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 		}
 	}
 	// The button is in the row, which opens the pack: its data attributes name the move.
-	row := rowWith(t, table, `data-go="`+dexHash+`"`)
+	row := rowTo(t, table, dexHash)
 	mustHold(t, "the row of dex", row, `<button class="lnk" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette</button>`)
 	for _, hash := range []string{dexHash, k8sHash, traefikHash} {
 		page := pageOf(t, screens, hash, "")
 		mustHold(t, hash, page, `<button class="btn" data-ask="`, ">Ask Palette about this move</button>")
-		mustNotHold(t, hash, page, "Palette gave", "Palette refuses", "Asking...")
+		mustNotHold(t, hash, page, paletteGave, paletteRefuses, asking)
 	}
 	// A pack with no move has no button.
-	mustNotHold(t, "a pack with no move", pageOf(t, screens, "#k-fred-identity@2.3.0/addon/reloader", ""), "Ask Palette")
+	mustNotHold(t, "a pack with no move", pageOf(t, screens, reloaderHash, ""), askButton)
 }
 
+// The words of the column "Palette" and of the card "Move to" for a move and its answer.
+const (
+	askButton      = "Ask Palette"
+	askThisMove    = askButton + " about this move"
+	askAgain       = "Ask again"
+	paletteGave    = "Palette gave"
+	gaveNoError    = paletteGave + " no error"
+	gaveNoAnswer   = paletteGave + " no answer"
+	gave403        = gaveNoAnswer + ": HTTP 403."
+	paletteRefuses = "Palette refuses"
+	nothingChanged = "Nothing on this cluster changed."
+	wordNoError    = "No error"
+	wordRefuses    = "Refuses"
+	wordNoAnswer   = "No answer"
+	askButtonEnd   = ">" + askButton + "</button>"
+	asking         = "Asking..."
+	couldNotAsk    = "The observer could not ask now"
+	cannotReach    = "cannot reach the observer"
+	// refusesWithCode is the head of the note of the refusal of the dev data.
+	refusesWithCode = paletteRefuses + ": DependencyPackUpgradeNotSupported"
+)
+
+// The word of each answer in the column "Palette", and the cell of each answer of the set asks.
+const (
+	noErrorSpan  = `<span class="fw">` + wordNoError + `</span>`
+	refusesSpan  = `<span class="fw">` + wordRefuses + `</span>`
+	noAnswerSpan = `<span class="mut">` + wordNoAnswer + `</span>`
+	paletteCell  = `<td class="narrow-hide">`
+	noErrorCell  = paletteCell + noErrorSpan + `</td>`
+	refusesCell  = paletteCell + refusesSpan + `</td>`
+	noAnswerCell = paletteCell + noAnswerSpan + ` <button class="lnk" data-ask="fred-identity@2.3.0" data-pack="addon/dex">` + askAgain + `</button></td>`
+)
+
 // noErrorCovers is the note of the card "Move to" for the answer "no error": what Palette checked, and what it did not check.
-const noErrorCovers = "Palette gave no error. Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack."
+const noErrorCovers = gaveNoError + ". Palette checked the profile with the new version and its default values against each cluster that runs the profile. It did not check your own values of the pack."
 
 // The set asks holds one answer of each verdict. The Newer table and the card say each answer in its
 // words, and the word "accepts" is not there. A request that failed is no finding.
@@ -647,29 +685,29 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 	}
 	// The table: the word of each answer in the column Palette, and the button where it is not an answer.
 	for _, c := range []struct{ hash, cell string }{
-		{k8sHash, `<td class="narrow-hide"><span class="fw">No error</span></td>`},
-		{traefikHash, `<td class="narrow-hide"><span class="fw">Refuses</span></td>`},
-		{dexHash, `<td class="narrow-hide"><span class="mut">No answer</span> <button class="lnk" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask again</button></td>`},
+		{k8sHash, noErrorCell},
+		{traefikHash, refusesCell},
+		{dexHash, noAnswerCell},
 	} {
-		mustHold(t, c.hash, rowWith(t, table, `data-go="`+c.hash+`"`), c.cell)
+		mustHold(t, c.hash, rowTo(t, table, c.hash), c.cell)
 	}
-	if got, want := strings.Count(table, ">Ask Palette</button>"), len(set.Newer.Newer)-3; got != want {
+	if got, want := strings.Count(table, askButtonEnd), len(set.Newer.Newer)-3; got != want {
 		t.Errorf("%d rows offer the question, want %d", got, want)
 	}
 	// The cards: the words of the issue, exactly.
-	noError := textOf(cardOf(t, pageOf(t, screens, k8sHash, ""), "Palette gave no error"))
+	noError := textOf(cardOf(t, pageOf(t, screens, k8sHash, ""), gaveNoError))
 	mustHold(t, "no error", noError, noErrorCovers)
-	mustNotHold(t, "no error", noError, "It read default values", "Ask Palette about this move")
-	refuses := textOf(cardOf(t, pageOf(t, screens, traefikHash, ""), "Palette refuses"))
-	mustHold(t, "refuses", refuses, "Palette refuses: "+refusal.Code, refusal.Message, "on "+refusal.Clusters[0], "Nothing on this cluster changed.")
-	mustNotHold(t, "refuses", refuses, "Ask again", "Ask Palette about this move")
+	mustNotHold(t, "no error", noError, "It read default values", askThisMove)
+	refuses := textOf(cardOf(t, pageOf(t, screens, traefikHash, ""), paletteRefuses))
+	mustHold(t, "refuses", refuses, paletteRefuses+": "+refusal.Code, refusal.Message, "on "+refusal.Clusters[0], nothingChanged)
+	mustNotHold(t, "refuses", refuses, askAgain, askThisMove)
 	mustHoldInOrder(t, "refuses", refuses, refusal.Message, "on "+refusal.Clusters[0])
 	dex := pageOf(t, screens, dexHash, "")
-	noAnswer := textOf(cardOf(t, dex, "Palette gave no answer"))
-	mustHold(t, "no answer", noAnswer, "Palette gave no answer: HTTP 403.", "Ask again")
+	noAnswer := textOf(cardOf(t, dex, gaveNoAnswer))
+	mustHold(t, "no answer", noAnswer, gave403, askAgain)
 	mustHold(t, "no answer", dex, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask again</button>`)
 	// A request that failed is neutral: no red, no badge, no note of a finding.
-	block := dex[strings.Index(dex, "Palette gave no answer")-40:]
+	block := dex[strings.Index(dex, gaveNoAnswer)-40:]
 	block = block[:strings.Index(block, "</div></div>")]
 	mustHold(t, "no answer", block, `<div class="note small"><b>Palette gave no answer`)
 	mustNotHold(t, "no answer", block, "badge", `note r`, `note a`, "Drift")
@@ -706,9 +744,9 @@ func sameNav(t *testing.T, where, a, b string) {
 // move are the same as in ok, and the rows of the move hold no badge for it.
 func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
 	ok, asks := render(t, devdata.StateOK, false), render(t, devdata.StateAsks, false)
-	sameScreensWithNoMove(t, ok, asks, "No answer", "Refuses", "Palette refuses", "Palette gave")
+	sameScreensWithNoMove(t, ok, asks, wordNoAnswer, wordRefuses, paletteRefuses, paletteGave)
 	table := pageOf(t, asks, "#newer", "")
-	dexRow := rowWith(t, table, `data-go="`+dexHash+`"`)
+	dexRow := rowTo(t, table, dexHash)
 	mustNotHold(t, "the row of a no-answer", dexRow, "badge r", ">Drift<", "Not checked")
 	// The same counts on the cards of the pack: one drift pack, as in ok.
 	sameNav(t, "the pack", pageOf(t, ok, dexHash, ""), pageOf(t, asks, dexHash, ""))
@@ -717,13 +755,12 @@ func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
 // A click asks once. The button is off and reads "Asking..." while the question is on its way, a second click
 // sends nothing, and the answer shows beside the move, in the table and on the card.
 func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
-	const dex = `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`
-	r := click(t, devdata.StateOK, dexHash, "0", dex)
+	r := click(t, devdata.StateOK, dexHash, "0", dexClick)
 	mustHold(t, "before", r.Before, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
 	mustHold(t, "during", r.During, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex" disabled>Asking...</button>`)
-	mustNotHold(t, "during", r.During, "Ask Palette about this move", "Palette gave")
+	mustNotHold(t, "during", r.During, askThisMove, paletteGave)
 	mustHold(t, "after", textOf(r.After), noErrorCovers)
-	mustNotHold(t, "after", r.After, "Asking...", "Ask Palette about this move", "The observer could not ask now")
+	mustNotHold(t, "after", r.After, asking, askThisMove, couldNotAsk)
 	if len(r.Posts) != 1 || r.Posts[0].Method != "POST" || r.Posts[0].Path != "/v1/packs/fred-identity@2.3.0/addon/dex/ask" {
 		t.Fatalf("the posts: %+v", r.Posts)
 	}
@@ -737,30 +774,30 @@ func TestAClickSendsOneQuestionAndTheAnswerShowsBesideTheMove(t *testing.T) {
 	if r.Hash != "#newer" {
 		t.Errorf("the click on the button opened %s", r.Hash)
 	}
-	mustHold(t, "the table before", rowWith(t, r.Before, `data-go="`+dexHash+`"`), ">Ask Palette</button>")
-	mustHold(t, "the table during", rowWith(t, r.During, `data-go="`+dexHash+`"`), `data-pack="addon/dex" disabled>Asking...</button>`)
-	row := rowWith(t, r.After, `data-go="`+dexHash+`"`)
-	mustHold(t, "the table after", row, `<td class="narrow-hide"><span class="fw">No error</span></td>`)
-	mustNotHold(t, "the table after", row, "Ask Palette", "Ask again", "Asking...")
+	mustHold(t, "the table before", rowTo(t, r.Before, dexHash), askButtonEnd)
+	mustHold(t, "the table during", rowTo(t, r.During, dexHash), `data-pack="addon/dex" disabled>Asking...</button>`)
+	row := rowTo(t, r.After, dexHash)
+	mustHold(t, "the table after", row, noErrorCell)
+	mustNotHold(t, "the table after", row, askButton, askAgain, asking)
 	if len(r.Posts) != 1 {
 		t.Errorf("the table sent %d posts", len(r.Posts))
 	}
 	// The other rows keep their button.
-	if got := strings.Count(r.After, ">Ask Palette</button>"); got != 9 {
+	if got := strings.Count(r.After, askButtonEnd); got != 9 {
 		t.Errorf("%d rows still offer the question, want 9", got)
 	}
 
 	// A refusal shows the code, the message, and the clusters, and the words of Palette stay as text.
-	r = click(t, devdata.StateOK, "#k-barney-base@1.5.0/os/ubuntu-aws", "0", `{"ask":"barney-base@1.5.0","pack":"os/ubuntu-aws"}`)
+	r = click(t, devdata.StateOK, ubuntuHash, "0", ubuntuClick)
 	words := textOf(r.After)
-	mustHold(t, "the refusal", words, "Palette refuses: DependencyPackUpgradeNotSupported", "The upgrade of the pack ubuntu-aws from 20.04 to 24.04 is not supported", "on quarry-1", "Nothing on this cluster changed.")
-	mustNotHold(t, "the refusal", words, "Ask again")
+	mustHold(t, "the refusal", words, refusesWithCode, "The upgrade of the pack ubuntu-aws from 20.04 to 24.04 is not supported", "on quarry-1", nothingChanged)
+	mustNotHold(t, "the refusal", words, askAgain)
 
 	// A request that failed is an answer of the kind "no answer". The next click asks again.
-	r = click(t, devdata.StateOK, "#k-barney-base@1.5.0/csi/csi-aws-ebs", "0", `{"ask":"barney-base@1.5.0","pack":"csi/csi-aws-ebs"}`)
-	mustHold(t, "no answer", textOf(r.After), "Palette gave no answer: HTTP 403.")
+	r = click(t, devdata.StateOK, csiHash, "0", csiClick)
+	mustHold(t, "no answer", textOf(r.After), gave403)
 	mustHold(t, "no answer", r.After, ">Ask again</button>")
-	again := click(t, devdata.StateOK, "#k-barney-base@1.5.0/csi/csi-aws-ebs", "0", `{"ask":"barney-base@1.5.0","pack":"csi/csi-aws-ebs"}`, `{"ask":"barney-base@1.5.0","pack":"csi/csi-aws-ebs"}`)
+	again := click(t, devdata.StateOK, csiHash, "0", csiClick, csiClick)
 	if len(again.Posts) != 2 {
 		t.Errorf("each click on a no-answer must ask again: %d posts for 2 clicks", len(again.Posts))
 	}
@@ -772,18 +809,18 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 	const note = "The observer could not ask now. Try again later."
 	for _, status := range []string{"502", "503", "404", "network"} {
 		t.Run(status, func(t *testing.T) {
-			r := click(t, devdata.StateOK, dexHash, status, `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
-			mustHold(t, "during", r.During, "Asking...")
+			r := click(t, devdata.StateOK, dexHash, status, dexClick)
+			mustHold(t, "during", r.During, asking)
 			mustHold(t, "after", r.After, note, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask Palette about this move</button>`)
-			mustNotHold(t, "after", r.After, "Palette gave", "Palette refuses", "No answer", "Asking...")
+			mustNotHold(t, "after", r.After, paletteGave, paletteRefuses, wordNoAnswer, asking)
 			if len(r.Posts) != 1 {
 				t.Errorf("%d posts", len(r.Posts))
 			}
 		})
 	}
 	// The table shows the note in the cell of the row, and the other rows say nothing.
-	r := click(t, devdata.StateOK, "#newer", "503", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
-	mustHold(t, "the table", rowWith(t, r.After, `data-go="`+dexHash+`"`), note, ">Ask Palette</button>")
+	r := click(t, devdata.StateOK, "#newer", "503", dexClick)
+	mustHold(t, "the table", rowTo(t, r.After, dexHash), note, askButtonEnd)
 	if got := strings.Count(r.After, note); got != 1 {
 		t.Errorf("the table says the note %d times", got)
 	}
@@ -799,24 +836,22 @@ func TestAQuestionThatFailsLeavesANoteAndNoAnswer(t *testing.T) {
 
 // The held answer of a request that failed gives way to the new answer, in the table and on the card.
 func TestAnotherClickOnANoAnswerReplacesIt(t *testing.T) {
-	r := click(t, devdata.StateAsks, dexHash, "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
-	mustHold(t, "before", textOf(r.Before), "Palette gave no answer: HTTP 403.")
+	r := click(t, devdata.StateAsks, dexHash, "0", dexClick)
+	mustHold(t, "before", textOf(r.Before), gave403)
 	mustHold(t, "after", textOf(r.After), noErrorCovers)
-	mustNotHold(t, "after", textOf(r.After), "Palette gave no answer", "HTTP 403")
-	mustNotHold(t, "after", r.After, "Ask again")
+	mustNotHold(t, "after", textOf(r.After), gaveNoAnswer, "HTTP 403")
+	mustNotHold(t, "after", r.After, askAgain)
 }
 
 // The observer holds one answer for a pack of a profile, and it drops the answer when the move changes. The
 // registry can gain a version after the last versions cycle. The answer is then for a newer version than the
 // row, and the card and the table show it.
 func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
-	dir := writeSet(t, devdata.StateAsks, map[string]func([]byte) []byte{"asks.json": func(raw []byte) []byte {
-		return []byte(strings.ReplaceAll(string(raw), `"newest":"1.36.2"`, `"newest":"1.37.0"`))
-	}})
+	dir := writeSet(t, devdata.StateAsks, map[string]func([]byte) []byte{"asks.json": replaceText(`"newest":"1.36.2"`, `"newest":"1.37.0"`)})
 	pages := pagesOf(t, dir, k8sHash, "#newer")
 	mustHold(t, "the card", textOf(pages[0]), noErrorCovers)
 	mustNotHold(t, "the card", pages[0], ">Ask Palette about this move</button>")
-	mustHold(t, "the table", rowWith(t, pages[1], `data-go="`+k8sHash+`"`), `<td class="narrow-hide"><span class="fw">No error</span></td>`)
+	mustHold(t, "the table", rowTo(t, pages[1], k8sHash), noErrorCell)
 }
 
 // A click always ends with a word. The observer names the newest version of the row also for a pin that failed
@@ -826,12 +861,12 @@ func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing
 		t.Run("newest "+newest, func(t *testing.T) {
 			reply := `{"asks":[{"profile":"fred-identity@2.3.0","key":"addon/dex","newest":"` + newest + `","verdict":"no-answer","refusals":[],"status":502}]}`
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
-			r := clickIn(t, dir, "scratch", dexHash, "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
+			r := clickIn(t, dir, "scratch", dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), "Palette gave no answer: HTTP 502.")
 			mustHold(t, "after", r.After, `<button class="btn" data-ask="fred-identity@2.3.0" data-pack="addon/dex">Ask again</button>`)
-			mustNotHold(t, "after", r.After, "Ask Palette about this move", "The observer could not ask now")
-			table := clickIn(t, dir, "scratch", "#newer", "0", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`)
-			mustHold(t, "the table", rowWith(t, table.After, `data-go="`+dexHash+`"`), `<span class="mut">No answer</span>`, "Ask again")
+			mustNotHold(t, "after", r.After, askThisMove, couldNotAsk)
+			table := clickIn(t, dir, "scratch", "#newer", "0", dexClick)
+			mustHold(t, "the table", rowTo(t, table.After, dexHash), noAnswerSpan, askAgain)
 		})
 	}
 }
@@ -847,11 +882,11 @@ func TestAFailedListOfAnswersKeepsThePageOnlineAndTheLastList(t *testing.T) {
 		return page
 	}
 	kept := read(devdata.StateAsks)
-	mustHold(t, "the kept list", kept, `<span class="fw">No error</span>`, `<span class="fw">Refuses</span>`, `<span class="mut">No answer</span>`)
-	mustNotHold(t, "the kept list", kept, "cannot reach the observer")
+	mustHold(t, "the kept list", kept, noErrorSpan, refusesSpan, noAnswerSpan)
+	mustNotHold(t, "the kept list", kept, cannotReach)
 	first := read(devdata.StateAsks, "first")
-	mustHold(t, "no list", first, ">Ask Palette</button>", "Newer versions")
-	mustNotHold(t, "no list", first, "cannot reach the observer", `<span class="fw">`, "No answer")
+	mustHold(t, "no list", first, askButtonEnd, newerVersions)
+	mustNotHold(t, "no list", first, cannotReach, `<span class="fw">`, wordNoAnswer)
 }
 
 // Nothing asks Palette by itself. A crawl of every screen of every set sends GET requests only, and the
@@ -925,10 +960,10 @@ func TestTheWordAcceptsIsOnNoScreen(t *testing.T) {
 		state       devdata.State
 		hash, click string
 	}{
-		{devdata.StateOK, dexHash, `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`},
-		{devdata.StateOK, "#k-barney-base@1.5.0/os/ubuntu-aws", `{"ask":"barney-base@1.5.0","pack":"os/ubuntu-aws"}`},
-		{devdata.StateOK, "#k-barney-base@1.5.0/csi/csi-aws-ebs", `{"ask":"barney-base@1.5.0","pack":"csi/csi-aws-ebs"}`},
-		{devdata.StateOK, "#newer", `{"ask":"fred-identity@2.3.0","pack":"addon/dex"}`},
+		{devdata.StateOK, dexHash, dexClick},
+		{devdata.StateOK, ubuntuHash, ubuntuClick},
+		{devdata.StateOK, csiHash, csiClick},
+		{devdata.StateOK, "#newer", dexClick},
 	} {
 		r := click(t, c.state, c.hash, "0", c.click)
 		if accepts.MatchString(r.Before + r.During + r.After) {
@@ -956,7 +991,7 @@ func TestAnAnswerWithMarkupShowsAsText(t *testing.T) {
 	var lines int
 	for _, s := range render(t, devdata.StateOK, true) {
 		for _, row := range diffRowsOf(s.HTML) {
-			if strings.Contains(row, "<img src=x onerror=alert(1)>") {
+			if strings.Contains(row, evil) {
 				lines++
 			}
 		}

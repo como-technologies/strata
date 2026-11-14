@@ -43,7 +43,7 @@ func TestTheWordsOfTheCarrierFollowTheAnswerOfBehind(t *testing.T) {
 		{"a read that failed", "", "", true, "carrier not read"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 				for i := range v.Profiles {
 					for j := range v.Profiles[i].Packs {
 						if k := v.Profiles[i].Packs[j].Carried; k != nil {

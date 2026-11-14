@@ -266,13 +266,7 @@ func TestTheRealOutputWithNoRecordIsTheSetNoRecords(t *testing.T) {
 	var setProfiles struct {
 		Profiles []model.Profile `json:"profiles"`
 	}
-	profiles, err := os.ReadFile(filepath.Join("..", "web", "testdata", "api", "no-records", "profiles.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(profiles, &setProfiles); err != nil {
-		t.Fatal(err)
-	}
+	testkit.DecodeFile(t, filepath.Join("..", "web", "testdata", "api", "no-records", "profiles.json"), &setProfiles)
 	var names []string
 	for _, p := range setProfiles.Profiles {
 		names = append(names, model.Subject(p.Name, p.Version))

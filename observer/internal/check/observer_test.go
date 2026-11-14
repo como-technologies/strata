@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -217,10 +216,7 @@ func TestNothingThatTheObserverWritesHoldsAValueOfTheCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.MustJSON(t, s)
 	summary := string(raw)
 	for name, text := range map[string]string{"summary": summary, "log": r.log.String()} {
 		if strings.Contains(text, sentinel) || strings.Contains(text, "OLD") {

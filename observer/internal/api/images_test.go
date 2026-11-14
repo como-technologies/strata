@@ -17,7 +17,7 @@ import (
 func TestTheImagesRouteServesTheDocumentOfThePods(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	rec := get(h, "/v1/images")
+	rec := get(h, summaryRoutes[patternImages])
 	var got model.Observed
 	decode(t, rec, &got)
 	if rec.Code != http.StatusOK || got.Schema != model.ObservedSchema || got.Pods != model.PodsRead || got.ReadAt == nil || len(got.Images) != 1 ||
@@ -34,7 +34,7 @@ func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
 		code int
 	}{
 		{"/v1/images/" + url.PathEscape("a/b:1"), 200},
-		{"/v1/images/a%2Fb:1", 200},
+		{summaryRoutes[patternImage], 200},
 		{"/v1/images/a/b:1", 404},
 		{"/v1/images/" + url.PathEscape("a/c:9"), 404},
 		{"/v1/images/", 404},
@@ -44,7 +44,7 @@ func TestTheImageRouteTakesTheReferenceAsOneEscapedSegment(t *testing.T) {
 		}
 	}
 	var view model.ImageView
-	decode(t, get(h, "/v1/images/a%2Fb:1"), &view)
+	decode(t, get(h, summaryRoutes[patternImage]), &view)
 	if view.Schema != model.ObservedSchema || view.Image.Ref != "a/b:1" || view.Pods != model.PodsRead {
 		t.Errorf("view %+v", view)
 	}
@@ -58,11 +58,11 @@ func TestWithTheReadOffTheRouteSaysSoAndListsNoImage(t *testing.T) {
 	r.pods = nil
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var got model.Observed
-	decode(t, get(h, "/v1/images"), &got)
+	decode(t, get(h, summaryRoutes[patternImages]), &got)
 	if got.Pods != model.PodsOff || got.ReadAt != nil || got.Images == nil || len(got.Images) != 0 {
 		t.Errorf("document %+v", got)
 	}
-	if rec := get(h, "/v1/images/a%2Fb:1"); rec.Code != http.StatusNotFound {
+	if rec := get(h, summaryRoutes[patternImage]); rec.Code != http.StatusNotFound {
 		t.Errorf("an image with the read off gave %d", rec.Code)
 	}
 }
@@ -73,14 +73,14 @@ func TestAReadThatFailsShowsTheKindAndTheStatusAndNothingElse(t *testing.T) {
 		return nil, &kube.Error{Kind: docs.KindKubeAPI, Status: 403}
 	})
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	rec := get(h, "/v1/images")
+	rec := get(h, summaryRoutes[patternImages])
 	var got model.Observed
 	decode(t, rec, &got)
 	if got.Pods != model.PodsUnread || got.Error == nil || got.Error.Kind != docs.KindKubeAPI || got.Error.Status != 403 || len(got.Images) != 0 {
 		t.Errorf("document %+v", got)
 	}
 	var nc NotCheckedView
-	decode(t, get(h, "/v1/notchecked"), &nc)
+	decode(t, get(h, summaryRoutes[patternNotChecked]), &nc)
 	found := false
 	for _, row := range nc.NotChecked {
 		found = found || row.Cause == model.PodsNotRead

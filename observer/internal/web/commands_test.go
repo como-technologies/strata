@@ -14,6 +14,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -135,7 +136,7 @@ func secretsOf(t *testing.T, record string) string {
 		t.Fatal(err)
 	}
 	for _, s := range readSecrets(t, string(yaml)) {
-		raw, _ := json.Marshal(map[string]any{"data": s.data})
+		raw := testkit.MustJSON(t, map[string]any{"data": s.data})
 		if err := os.WriteFile(filepath.Join(secrets, s.name+".json"), raw, 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -276,20 +277,11 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 	if registry != "" {
 		t.Run("a move to a newer version", func(t *testing.T) {
 			bin, dir := checkWork(t, strata)
-			set := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"newer.json": func(raw []byte) []byte {
-				var v api.NewerView
-				if err := devdata.Decode(raw, &v); err != nil {
-					t.Fatal(err)
-				}
+			set := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"newer.json": editJSON(t, func(v *api.NewerView) {
 				for i := range v.Newer {
 					v.Newer[i].RegistryUID = registry
 				}
-				out, err := json.Marshal(v)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return out
-			}})
+			})})
 			var rows []termRow
 			for _, r := range termRows(t, pagesOf(t, set, k8sHash)[0]) {
 				if strings.Contains(r.command, "compare pack:") || strings.Contains(r.command, "behind") {

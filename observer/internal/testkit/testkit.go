@@ -1,12 +1,14 @@
 // Package testkit holds the helpers that the tests of more than one package of the observer use:
 // a script that stands for the strata binary, a gzip file, a cluster read, the documents that the
-// commands promise, a wait, a count of the calls that run at one time, and a webhook that keeps each
-// request. Only test files import it.
+// commands promise, a read of a JSON file and of the documents of the real binary, an encode of a
+// value, a wait, a count of the calls that run at one time, and a webhook that keeps each request.
+// Only test files import it.
 package testkit
 
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -87,6 +89,35 @@ func Cluster(name string, profiles ...string) docs.ClusterRead {
 		c.Source.Cluster.Profiles = append(c.Source.Cluster.Profiles, docs.ClusterProfile{Name: n, Version: v, Type: "cluster"})
 	}
 	return c
+}
+
+// DecodeFile reads the JSON file at path into v, and fails the test on an error.
+func DecodeFile(t *testing.T, path string, v any) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, v); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+}
+
+// ReadDoc reads the document name of the test data of internal/docs into v. The contract script copies
+// each one there from the real binary. A test of a package of internal/ calls it.
+func ReadDoc(t *testing.T, name string, v any) {
+	t.Helper()
+	DecodeFile(t, filepath.Join("..", "docs", "testdata", name), v)
+}
+
+// MustJSON encodes v, and fails the test on an error.
+func MustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	raw, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }
 
 // OutFile gives the file that a command writes: the argument after -o.

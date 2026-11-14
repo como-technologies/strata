@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,15 +11,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
-
-func marshal(t *testing.T, v any) string {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
 
 func pin(name, layer, version, newest string, subjects ...string) docs.Pin {
 	p := docs.Pin{Name: name, Layer: layer, Registry: "Public Repo", RegistryUID: "reg1", Version: version}
@@ -37,7 +27,7 @@ func pin(name, layer, version, newest string, subjects ...string) docs.Pin {
 func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{Who: who()}, "csi/csi-aws-ebs"),
 		docs.Diff{RootB: "r3", Packs: []docs.Pack{changed("csi/csi-aws-ebs", "charts.a.b")}})
-	out := marshal(t, build(ptr(content(t, r)), nil))
+	out := string(testkit.MustJSON(t, build(ptr(content(t, r)), nil)))
 	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", `"old"`, `"new":"`, "charts.a.", "changedPaths"} {
 		if strings.Contains(out, banned) {
 			t.Errorf("the summary holds %s: %s", banned, out)
@@ -49,13 +39,13 @@ func TestTheSummaryHoldsNoOldValueAndNoNewValue(t *testing.T) {
 }
 
 func TestAnEmptyListIsNeverNull(t *testing.T) {
-	out := marshal(t, Build(Input{Now: t0}))
+	out := string(testkit.MustJSON(t, Build(Input{Now: t0})))
 	for _, name := range []string{"findings", "profiles", "newer", "notChecked", "events"} {
 		if !strings.Contains(out, `"`+name+`":[]`) {
 			t.Errorf("%s is not an empty list: %s", name, out)
 		}
 	}
-	good := marshal(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil))
+	good := string(testkit.MustJSON(t, build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)))
 	for _, banned := range []string{":null,\"flags\"", `"flags":null`, `"packs":null`, `"profiles":null`, `"findings":null`} {
 		if strings.Contains(good, banned) {
 			t.Errorf("a list is null (%s): %s", banned, good)
@@ -65,7 +55,7 @@ func TestAnEmptyListIsNeverNull(t *testing.T) {
 
 func TestTheClusterFlagsAppearOnlyWhenAFindingExists(t *testing.T) {
 	clean := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged))), nil)
-	if clean.Cluster.UpdatesPending != nil || clean.Cluster.RepavePending != nil || strings.Contains(marshal(t, clean.Cluster), "Pending") {
+	if clean.Cluster.UpdatesPending != nil || clean.Cluster.RepavePending != nil || strings.Contains(string(testkit.MustJSON(t, clean.Cluster)), "Pending") {
 		t.Errorf("cluster %+v", clean.Cluster)
 	}
 	drift := build(ptr(content(t, drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}))), nil)
@@ -376,7 +366,7 @@ func TestTheRecordsPartSaysWhereTheBaselineCameFrom(t *testing.T) {
 func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 	in := Input{Now: t0, ContentClock: Clock{Every: 15 * time.Minute, FailedRuns: 1, LastError: &ErrorRef{Kind: docs.KindAPI, Status: 401}},
 		VersionsClock: Clock{Every: 6 * time.Hour, Last: ptr(t0)}}
-	out := marshal(t, Build(in))
+	out := string(testkit.MustJSON(t, Build(in)))
 	for _, want := range []string{
 		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"api","status":401}}`,
 		`"versions":{"readAt":"2026-11-03T14:00:00Z","every":"6h","failedRuns":0,"lastError":null}`,
@@ -513,7 +503,7 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	if !reflect.DeepEqual(*n.Move, want) {
 		t.Errorf("the move\n got %+v\nwant %+v", *n.Move, want)
 	}
-	raw := marshal(t, s)
+	raw := string(testkit.MustJSON(t, s))
 	for _, banned := range []string{"OLD-SENTINEL", "NEW-SENTINEL", "replicas"} {
 		if strings.Contains(raw, banned) {
 			t.Errorf("the summary holds %q", banned)

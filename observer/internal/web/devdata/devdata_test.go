@@ -21,7 +21,9 @@ import (
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/baseline"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // sets is the directory of the sets, as the dev server reads it.
@@ -36,6 +38,30 @@ func load(t *testing.T, state State) *Set {
 	return s
 }
 
+// sameAsOK fails when a part of the set s of the state differs from the same part of the set ok. changed points to each
+// part of s that the state changes, such as &s.Asks, and the test does not compare it.
+func sameAsOK(t *testing.T, ok, s *Set, state State, changed ...any) {
+	t.Helper()
+	want, got := reflect.ValueOf(ok).Elem(), reflect.ValueOf(s).Elem()
+	skipped := 0
+	for i := range got.NumField() {
+		if !got.Type().Field(i).IsExported() {
+			continue
+		}
+		at := got.Field(i).Addr().Pointer()
+		if slices.ContainsFunc(changed, func(p any) bool { return reflect.ValueOf(p).Pointer() == at }) {
+			skipped++
+			continue
+		}
+		if !reflect.DeepEqual(want.Field(i).Interface(), got.Field(i).Interface()) {
+			t.Errorf("%s changes %s of ok", state, got.Type().Field(i).Name)
+		}
+	}
+	if skipped != len(changed) {
+		t.Fatalf("%s: %d of the %d parts that change are parts of the set", state, skipped, len(changed))
+	}
+}
+
 // normal reads JSON into plain values, so that two documents compare with no regard to the layout.
 func normal(t *testing.T, raw []byte) any {
 	t.Helper()
@@ -48,10 +74,7 @@ func normal(t *testing.T, raw []byte) any {
 
 func encoded(t *testing.T, v any) any {
 	t.Helper()
-	raw, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.MustJSON(t, v)
 	return normal(t, raw)
 }
 
@@ -243,9 +266,7 @@ func TestFirstSeenIsTheOKSetWithAFirstSeenBaseline(t *testing.T) {
 	if first.Cluster.Records.Baseline != baseline.FirstSeen || first.Cluster.Records.FirstSeenFrom == "" || first.Cluster.Records.Revision != "" {
 		t.Errorf("records %+v", first.Cluster.Records)
 	}
-	if !reflect.DeepEqual(ok.Profiles, first.Profiles) {
-		t.Error("first-seen does not take the profiles of ok")
-	}
+	sameAsOK(t, ok, first, StateFirstSeen, &first.Cluster)
 }
 
 // The set moved-drift holds the record of ok of a version that the cluster no longer runs, wilma-gateway@3.0.4, with a finding. A
@@ -553,16 +574,13 @@ func TestTheSetsOfThePodsHoldTheirStates(t *testing.T) {
 			t.Errorf("%s: first image %+v, %d findings, counts %+v", state, img, len(s.Findings.Findings), s.Cluster.Counts)
 		}
 	}
-	// Images and images-split change the findings, the events, and the profile of the image. The off and unread sets do not.
-	for _, state := range []State{StateImagesOff, StateImagesUnread} {
-		s := load(t, state)
-		if !reflect.DeepEqual(s.Profiles, ok.Profiles) || !reflect.DeepEqual(s.Findings, ok.Findings) || !reflect.DeepEqual(s.Events, ok.Events) {
-			t.Errorf("%s changes more than the pods", state)
-		}
-	}
-	unread := load(t, StateImagesUnread)
+	// Images and images-split change the findings, the events, and the profile of the image. The off set changes only the
+	// pods. The unread set also changes the cluster and the list of what was not checked.
+	off, unread := load(t, StateImagesOff), load(t, StateImagesUnread)
+	sameAsOK(t, ok, off, StateImagesOff, &off.Images)
+	sameAsOK(t, ok, unread, StateImagesUnread, &unread.Cluster, &unread.Images, &unread.NotChecked)
 	row := model.NotChecked{Cause: model.PodsNotRead, Profiles: []string{}, Packs: []string{}}
-	if unread.Images.Pods != model.PodsUnread || unread.Images.Error == nil || unread.Images.Error.Kind != "kube-api" || unread.Images.Error.Status != 403 ||
+	if unread.Images.Pods != model.PodsUnread || unread.Images.Error == nil || unread.Images.Error.Kind != docs.KindKubeAPI || unread.Images.Error.Status != 403 ||
 		!slices.ContainsFunc(unread.NotChecked.NotChecked, func(r model.NotChecked) bool { return reflect.DeepEqual(r, row) }) ||
 		unread.Cluster.Counts.NotChecked != ok.Cluster.Counts.NotChecked+1 || unread.Cluster.Counts.PacksInFull != ok.Cluster.Counts.PacksInFull {
 		t.Errorf("images-unread: %+v, counts %+v", unread.Images, unread.Cluster.Counts)
@@ -736,9 +754,15 @@ func movesOf(s *Set) []model.Answer {
 	return out
 }
 
-// isMove says whether an answer is about a move of the Newer table.
+// moveOf gives the index of the move of the Newer table that an answer is about, or -1.
+func moveOf(moves []model.Answer, a model.Answer) int {
+	return slices.IndexFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key })
+}
+
+// isMove says whether an answer is about a move of the Newer table, to the newest version of the row.
 func isMove(moves []model.Answer, a model.Answer) bool {
-	return slices.ContainsFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key && m.Newest == a.Newest })
+	i := moveOf(moves, a)
+	return i >= 0 && moves[i].Newest == a.Newest
 }
 
 // The set asks holds one answer of each verdict, for three different moves of the Newer table, and it
@@ -783,10 +807,7 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 	if len(ok.Replies.Asks) == 0 || len(ok.Replies.Asks) >= len(moves) {
 		t.Errorf("ok holds %d replies for %d moves: a move with no reply must stay", len(ok.Replies.Asks), len(moves))
 	}
-	if !reflect.DeepEqual(asks.Cluster, ok.Cluster) || !reflect.DeepEqual(asks.Profiles, ok.Profiles) || !reflect.DeepEqual(asks.Newer, ok.Newer) ||
-		!reflect.DeepEqual(asks.Findings, ok.Findings) {
-		t.Error("asks changes more than the answers")
-	}
+	sameAsOK(t, ok, asks, StateAsks, &asks.Asks)
 }
 
 // The set update-checks holds the answers of the set asks, each with the checks of the update that strata gives beside
@@ -804,7 +825,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		if a.Profile != held.Profile || a.Key != held.Key || a.Verdict != held.Verdict || a.Status != held.Status || !reflect.DeepEqual(a.Refusals, held.Refusals) {
 			t.Errorf("the answer %+v is not the answer %+v of asks", a, held)
 		}
-		row := slices.IndexFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key })
+		row := moveOf(moves, a)
 		if row < 0 {
 			t.Fatalf("the answer for %s %s is not about a move of the table", a.Profile, a.Key)
 		}
@@ -829,10 +850,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 	if skips != 1 || variables != 3 {
 		t.Errorf("%d skips and %d variables, want 1 and 3", skips, variables)
 	}
-	if !reflect.DeepEqual(checks.Cluster, ok.Cluster) || !reflect.DeepEqual(checks.Profiles, ok.Profiles) || !reflect.DeepEqual(checks.Newer, ok.Newer) ||
-		!reflect.DeepEqual(checks.Findings, ok.Findings) || !reflect.DeepEqual(checks.Replies, ok.Replies) {
-		t.Error("update-checks changes more than the answers")
-	}
+	sameAsOK(t, ok, checks, StateUpdateChecks, &checks.Asks)
 }
 
 // A click gives the answer that the set holds. A move with no answer gets its reply, and the set keeps
@@ -956,10 +974,7 @@ func TestTheStatesOfTheRulesInTheSetAlertsAreThoseOfTheEngine(t *testing.T) {
 	for _, r := range list {
 		delete(r.(map[string]any), "state")
 	}
-	file, err := json.Marshal(map[string]any{"channels": channels, "rules": list})
-	if err != nil {
-		t.Fatal(err)
-	}
+	file := testkit.MustJSON(t, map[string]any{"channels": channels, "rules": list})
 	parsed, err := alert.Parse(file)
 	if err != nil {
 		t.Fatalf("the rules of the set do not parse: %v", err)

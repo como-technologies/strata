@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"fmt"
 	htmlpkg "html"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -46,10 +46,7 @@ const sink = "#!/usr/bin/env bash\ncat > /dev/null\n"
 // jsonText gives a text as it stands inside a JSON string.
 func jsonText(t *testing.T, s string) string {
 	t.Helper()
-	raw, err := json.Marshal(s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	raw := testkit.MustJSON(t, s)
 	return string(raw[1 : len(raw)-1])
 }
 

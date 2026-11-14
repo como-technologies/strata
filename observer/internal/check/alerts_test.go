@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -14,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/kube"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // capture is a sender that keeps the text of each message that went. While down is set, it refuses.
@@ -134,10 +134,7 @@ func TestAMessageHoldsNoValueAndTheStateAndTheLogHoldNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	view, err := json.Marshal(o.Alerts())
-	if err != nil {
-		t.Fatal(err)
-	}
+	view := testkit.MustJSON(t, o.Alerts())
 	places := []string{strings.Join(sender.texts, "\n"), string(state), r.log.String(), string(view)}
 	for _, banned := range []string{sentinel, "charts.a.b", "Betty", "John", "OLD", "SENTINEL"} {
 		for i, place := range places {

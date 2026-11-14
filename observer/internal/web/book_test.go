@@ -20,6 +20,9 @@ const (
 	useCasePage = "../../../docs/src/use-cases/observer.md"
 )
 
+// askSection is the section of servicePage about the button "Ask Palette".
+const askSection = "## Ask Palette about a move"
+
 // sectionOf gives the text of a section of a page, from its heading to the next heading of the same level.
 func sectionOf(t *testing.T, page, heading string) string {
 	t.Helper()
@@ -127,7 +130,7 @@ func TestALostPageNamesTheKeyOnlyForARefusal(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			lastError := c.err
 			dir := writeSet(t, devdata.StateLostUnchecked, map[string]func([]byte) []byte{
-				"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
+				"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Content.LastError = &lastError }),
 			})
 			page := pageWith(t, dir, "scratch", "#overview", "")
 			mustHold(t, c.name, page, c.want)
@@ -148,7 +151,7 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 		want  string
 	}{{0, "<span>newer versions</span>"}, {1, "<span>newer version</span>"}, {3, "<span>newer versions</span>"}} {
 		dir := writeSet(t, devdata.StateQuiet, map[string]func([]byte) []byte{
-			"cluster.json": editCluster(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
+			"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
 		})
 		mustHold(t, "the facts of All quiet", pageWith(t, dir, "scratch", "#findings", ""), c.want)
 	}
@@ -173,14 +176,14 @@ func TestTheBookQuotesTheQuestionsOfTheCardCheckThisYourself(t *testing.T) {
 // service quotes both. The words of the button and of each verdict are words of the scripts.
 func TestTheBookQuotesTheWordsOfTheColumnPaletteAndOfTheCardMoveTo(t *testing.T) {
 	script := readScripts(t)
-	rows := tableRows(t, sectionOf(t, servicePage, "## Ask Palette about a move"))
+	rows := tableRows(t, sectionOf(t, servicePage, askSection))
 	if len(rows) != 4 {
 		t.Fatalf("the table of the answers has %d rows", len(rows))
 	}
 	for _, row := range rows {
 		mustHold(t, "the scripts", script, words(row[0]), words(row[1]))
 	}
-	mustHold(t, "the scripts", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, "Ask again", "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
+	mustHold(t, "the scripts", script, `<th class="narrow-hide" title="${ASK_WHAT}">Palette</th>`, askAgain, "${ASK_COVERS}", "It changes nothing.", "It did not check your own values of the pack.")
 }
 
 // The table of the splashes in the page of the server holds the headline of each splash of the scripts, and no other. A place with a

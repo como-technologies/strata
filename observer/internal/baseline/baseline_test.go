@@ -1,7 +1,6 @@
 package baseline
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,10 +154,7 @@ func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 	if err != nil || len(set.Entries) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)
 	}
-	out, err := json.Marshal(set.Entries[0].Record)
-	if err != nil {
-		t.Fatal(err)
-	}
+	out := testkit.MustJSON(t, set.Entries[0].Record)
 	if strings.Contains(string(out), marker) {
 		t.Fatalf("the marker passed the allow-list: %s", out)
 	}

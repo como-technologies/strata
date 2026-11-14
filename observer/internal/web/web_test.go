@@ -26,6 +26,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -553,7 +554,11 @@ func checkMarkup(t *testing.T, s screen) {
 	}
 }
 
-const injection = "&lt;img src=x onerror=alert(1)&gt;"
+// evil is a tag that runs a script, and injection is the same tag as the page must show it: as text.
+const (
+	evil      = "<img src=x onerror=alert(1)>"
+	injection = "&lt;img src=x onerror=alert(1)&gt;"
+)
 
 // A name, a path, and a value with <img src=x> show as text on each screen of each set.
 func TestAValueWithMarkupShowsAsTextOnEachScreen(t *testing.T) {
@@ -592,14 +597,34 @@ func TestAPackNameWithAnImgTagShowsAsText(t *testing.T) {
 	}
 }
 
+// The words of the overview that more than one test reads. publishedChanged is the label of a finding: the published version
+// changed after its record.
+const (
+	needsAttention   = "Needs attention"
+	imageChanges     = "Image changes"
+	podImages        = "8 images in pods"
+	newerVersions    = "Newer versions"
+	publishedChanged = "Published version changed after its record"
+	// The words of the read of the pods.
+	tagMoved     = "A tag runs another digest than the first one seen"
+	tagSplit     = "One tag runs with two digests"
+	movedOrSplit = "Moved or split"
+	notReadYet   = "Not read yet"
+	byNameAndTag = "Strata compares the name and the tag."
+	// notSet is the word of the nav item Alerts of an observer that sends no alert.
+	notSet = "Not set"
+)
+
 // Each set renders each screen with no error, and says what its state says.
 func TestEachSetShowsItsWords(t *testing.T) {
+	// The sets that change no count of ok show these words of its overview.
+	okOverview := []string{needsAttention, "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", newerVersions}
 	cases := []struct {
 		state devdata.State
 		words []string
 	}{
-		{devdata.StateOK, []string{"Needs attention", "What a check does not cover", "Compared with the first digest seen in pods", "Image changes", "8 images in pods", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", "Strata compares the name and the tag."}},
+		{devdata.StateOK, append([]string{"What a check does not cover", "Compared with the first digest seen in pods", imageChanges, podImages}, okOverview...)},
+		{devdata.StateQuiet, []string{"Nothing changed", "All 29 packs current", "29 of 29 packs in full", "All quiet on quarry-1", "Nothing needs attention.", byNameAndTag}},
 		{devdata.StateFirstLoad, []string{"Reading the layers", "The first check is running", "records: <b>unknown</b>"}},
 		{devdata.StateNoRecords, []string{"Nothing to compare against yet", "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later.", "scripts/ci/observer-records.sh --first-seen 7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35", "records: <b>unknown</b>"}},
 		{devdata.StateStale, []string{"Checks stopped", "expected every 15m"}},
@@ -607,17 +632,17 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateFirstSeen, []string{"records: <b>first-seen</b>", "No pipeline approved these records yet."}},
 		{devdata.StateLostUnchecked, []string{"We lost the signal from Palette", "The last 3 checks failed: <b>HTTP 401, the API key was refused.</b> No check has ended well", "strata-observer-key"}},
 		{devdata.StateStaleUnchecked, []string{"Checks stopped before one ended well", "No check has ended well", "kubectl -n strata-observer logs"}},
-		{devdata.StateReadError, []string{"Needs attention", "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
-		{devdata.StateImages, []string{"Needs attention", "Image moved", "A tag runs another digest than the first one seen", "Moved or split", "Image changes"}},
-		{devdata.StateImagesSplit, []string{"Needs attention", "Two digests", "One tag runs with two digests", "Moved or split", "Image changes"}},
-		{devdata.StateImagesOff, []string{"Needs attention", "Strata compares the name and the tag."}},
-		{devdata.StateImagesUnread, []string{"Image changes", "Not read yet", "3 causes · 26 of 29 packs in full", "Strata compares the name and the tag."}},
-		{devdata.StateAsks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
-		{devdata.StateAlerts, []string{"Needs attention", "Alerts"}},
-		{devdata.StateAlertsUnset, []string{"Needs attention", "Not set"}},
-		{devdata.StateMovedDrift, []string{"Needs attention", "Published version changed after its record", "3 of 3 packs in full", "1 profile · 1 this week"}},
-		{devdata.StateUpdateChecks, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
+		{devdata.StateReadError, []string{needsAttention, "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
+		{devdata.StateImages, []string{needsAttention, "Image moved", tagMoved, movedOrSplit, imageChanges}},
+		{devdata.StateImagesSplit, []string{needsAttention, "Two digests", tagSplit, movedOrSplit, imageChanges}},
+		{devdata.StateImagesOff, []string{needsAttention, byNameAndTag}},
+		{devdata.StateImagesUnread, []string{imageChanges, notReadYet, "3 causes · 26 of 29 packs in full", byNameAndTag}},
+		{devdata.StateAsks, okOverview},
+		{devdata.StateTextTooLarge, okOverview},
+		{devdata.StateAlerts, []string{needsAttention, "Alerts"}},
+		{devdata.StateAlertsUnset, []string{needsAttention, notSet}},
+		{devdata.StateMovedDrift, []string{needsAttention, publishedChanged, "3 of 3 packs in full", "1 profile · 1 this week"}},
+		{devdata.StateUpdateChecks, okOverview},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
@@ -1429,6 +1454,15 @@ func rowWith(t *testing.T, html, text string) string {
 	return ""
 }
 
+// rowTo finds the row of a table that leads to the screen hash.
+func rowTo(t *testing.T, html, hash string) string {
+	t.Helper()
+	return rowWith(t, html, `data-go="`+hash+`"`)
+}
+
+// navLink is the start of the link of the nav to the screen hash.
+func navLink(hash string) string { return `<a href="` + hash + `" class=` }
+
 func mustHold(t *testing.T, where, html string, words ...string) {
 	t.Helper()
 	for _, w := range words {
@@ -1496,7 +1530,7 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
 			}
 			for _, img := range o.Images {
-				row := rowWith(t, list, `data-go="`+imageHash(img.Ref)+`"`)
+				row := rowTo(t, list, imageHash(img.Ref))
 				mustHold(t, img.Ref, row, imageBadges[img.Status], `<td class="m wrap"><a href="`+imageHash(img.Ref)+`">`+img.Ref+`</a>`)
 				var pods int
 				var real []string
@@ -1649,13 +1683,13 @@ func TestTheTabWhatPodsDoCatchIsTheSameForEachImage(t *testing.T) {
 // of the image. The Drift tile does not count it.
 func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 	for state, c := range map[devdata.State]struct{ badge, title string }{
-		devdata.StateImages:      {`<span class="badge a">Image moved</span>`, "A tag runs another digest than the first one seen"},
-		devdata.StateImagesSplit: {`<span class="badge r">Two digests</span>`, "One tag runs with two digests"},
+		devdata.StateImages:      {`<span class="badge a">Image moved</span>`, tagMoved},
+		devdata.StateImagesSplit: {`<span class="badge r">Two digests</span>`, tagSplit},
 	} {
 		t.Run(string(state), func(t *testing.T) {
 			overview := pageOf(t, render(t, state, false), "#overview", "")
 			href := imageHash("vendor.example/product:2026.2")
-			row := rowWith(t, overview, `data-go="`+href+`"`)
+			row := rowTo(t, overview, href)
 			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
 				`<span class="lab"><i>profile=</i>"wilma-gateway@3.1.2"</span>`, `<span class="lab wrap"><i>image=</i>"vendor.example/product:2026.2"</span>`)
 			mustNotHold(t, "the finding", row, ">Drift<")
@@ -1703,14 +1737,14 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 		cls, value, sub, counted string
 		noTile                   bool
 	}{
-		{devdata.StateOK, "g", "0", "8 images in pods", "8", false},
-		{devdata.StateImages, "a", "1", "Moved or split", "8", false},
-		{devdata.StateImagesSplit, "a", "1", "Moved or split", "8", false},
+		{devdata.StateOK, "g", "0", podImages, "8", false},
+		{devdata.StateImages, "a", "1", movedOrSplit, "8", false},
+		{devdata.StateImagesSplit, "a", "1", movedOrSplit, "8", false},
 		{devdata.StateQuiet, "", "", "", "Off", true},
 		{devdata.StateNoRecords, "", "", "", "Off", true},
 		{devdata.StateReadError, "", "", "", "Off", true},
 		{devdata.StateImagesOff, "", "", "", "Off", true},
-		{devdata.StateImagesUnread, "y", "-", "Not read yet", "-", false},
+		{devdata.StateImagesUnread, "y", "-", notReadYet, "-", false},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -1736,7 +1770,7 @@ func TestTheTileAndTheNavItemOfTheImagesFollowTheRead(t *testing.T) {
 			if tileSection.MatchString(overview) {
 				mustHoldInOrder(t, "the tiles", overview, tiles...)
 			}
-			nav := []string{`<a href="#findings" class=`, `<a href="#images" class=`, `<a href="#newer" class=`, `<a href="#notchecked" class=`, `<a href="#profiles" class=`}
+			nav := []string{navLink("#findings"), navLink("#images"), navLink("#newer"), navLink("#notchecked"), navLink("#profiles")}
 			mustHoldInOrder(t, "the nav", overview, nav...)
 		})
 	}
@@ -1773,7 +1807,7 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 				t.Errorf("the overview has %d tiles, want 4", got)
 			}
 			mustHold(t, "the tiles", tiles, `<div class="l">Drift</div>`, `<div class="l">Newer versions</div>`, `<div class="l">Not checked</div>`, `<div class="l">Profiles</div>`)
-			mustNotHold(t, "the overview", overview, "Image changes", `href="#images"><div class="l">`)
+			mustNotHold(t, "the overview", overview, imageChanges, `href="#images"><div class="l">`)
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
 				t.Errorf("the nav item is %q, want the count Off", n)
 			}
@@ -1785,7 +1819,7 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 // With the read of the pods on, the tile is there, also when the last read failed: after a good read, and before the first one.
 func TestWithTheReadOfThePodsOnTheTileShowsAlsoAfterAFailedRead(t *testing.T) {
 	failed := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
-		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+		"images.json": podsRefused(t),
 	})
 	for name, overview := range map[string]string{
 		"a good read":                         pagesOf(t, writeSet(t, devdata.StateOK, nil), "#overview")[0],
@@ -1846,7 +1880,7 @@ func TestTheCauseOfPodsNotReadHasARowWithNoProfileAndOpensTheImages(t *testing.T
 // The row "Image behind a tag" says what the check does. With a read of the pods it links the images.
 // The card keeps its four rows.
 func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
-	const compared, named = `<a href="#images">Compared with the first digest seen in pods</a>`, "Strata compares the name and the tag."
+	const compared = `<a href="#images">Compared with the first digest seen in pods</a>`
 	for state, read := range map[devdata.State]bool{devdata.StateOK: true, devdata.StateImages: true, devdata.StateImagesOff: false, devdata.StateImagesUnread: false, devdata.StateQuiet: false} {
 		t.Run(string(state), func(t *testing.T) {
 			for _, hash := range []string{"#overview", "#notchecked"} {
@@ -1854,9 +1888,9 @@ func TestTheCoverageRowOfTheImagesFollowsTheRead(t *testing.T) {
 				mustHold(t, hash, page, "Image behind a tag", "Bytes of a chart", "Masked values", "Edits with kubectl")
 				if read {
 					mustHold(t, hash, page, compared)
-					mustNotHold(t, hash, page, named)
+					mustNotHold(t, hash, page, byNameAndTag)
 				} else {
-					mustHold(t, hash, page, named)
+					mustHold(t, hash, page, byNameAndTag)
 					mustNotHold(t, hash, page, "Compared with the first digest")
 				}
 			}
@@ -1892,36 +1926,27 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 	return dir
 }
 
-// editImages changes the document of the pods of a set.
-func editImages(t *testing.T, change func(*model.Observed)) func([]byte) []byte {
+// editJSON gives an edit of a file of a set for writeSet. It decodes the file into a T, calls change on it, and
+// encodes it again.
+func editJSON[T any](t *testing.T, change func(*T)) func([]byte) []byte {
 	return func(raw []byte) []byte {
-		var o model.Observed
-		if err := devdata.Decode(raw, &o); err != nil {
-			t.Fatal(err)
-		}
-		change(&o)
-		out, err := json.Marshal(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-}
-
-// editFindings changes the findings of a set.
-func editFindings(t *testing.T, change func(*api.FindingsView)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var v api.FindingsView
+		var v T
 		if err := devdata.Decode(raw, &v); err != nil {
 			t.Fatal(err)
 		}
 		change(&v)
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
+		return testkit.MustJSON(t, v)
 	}
+}
+
+// replaceText gives an edit of a file of a set for writeSet. It puts to in place of each from in the text.
+func replaceText(from, to string) func([]byte) []byte {
+	return func(raw []byte) []byte { return []byte(strings.ReplaceAll(string(raw), from, to)) }
+}
+
+// podsRefused edits the document of the pods of a set: the last read failed, because the API server refused it with a 403.
+func podsRefused(t *testing.T) func([]byte) []byte {
+	return editJSON(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403} })
 }
 
 // pagesOf shows some screens of a set in a directory of sets, with no crawl.
@@ -1938,7 +1963,7 @@ func pagesOf(t *testing.T, dir string, hashes ...string) []string {
 // bar, with the words of the error and the time of the read that the list shows.
 func TestAReadThatFailedAfterAGoodOneShowsAnAmberBarOnEachScreen(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
-		"images.json": editImages(t, func(o *model.Observed) { o.Error = &model.ErrorRef{Kind: "kube-api", Status: 403} }),
+		"images.json": podsRefused(t),
 	})
 	const bar = `<div class="alertbar a">The last read of the pods failed: HTTP 403, the role of the observer was refused. <span>The list shows the read of 11:54Z.</span></div>`
 	pages := pagesOf(t, dir, "#overview", "#images", imageHash("vendor.example/product:2026.2"))
@@ -1957,9 +1982,9 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 		err  model.ErrorRef
 		want string
 	}{
-		{model.ErrorRef{Kind: "kube-api", Status: 401}, "HTTP 401, the role of the observer was refused"},
-		{model.ErrorRef{Kind: "kube-api", Status: 403}, "HTTP 403, the role of the observer was refused"},
-		{model.ErrorRef{Kind: "kube-api", Status: 500}, "HTTP 500, the API server gave an error"},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 401}, "HTTP 401, the role of the observer was refused"},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 403}, "HTTP 403, the role of the observer was refused"},
+		{model.ErrorRef{Kind: docs.KindKubeAPI, Status: 500}, "HTTP 500, the API server gave an error"},
 		{model.ErrorRef{Kind: "kube-transport"}, "the link to the API server failed"},
 		{model.ErrorRef{Kind: "kube-config"}, "the observer could not read its token or its CA file"},
 		{model.ErrorRef{Kind: "not-json"}, "the API server sent an answer that is not JSON"},
@@ -1967,7 +1992,7 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 	} {
 		t.Run(c.err.Kind+strconv.Itoa(c.err.Status), func(t *testing.T) {
 			dir := writeSet(t, devdata.StateImagesUnread, map[string]func([]byte) []byte{
-				"images.json": editImages(t, func(o *model.Observed) { o.Error = &c.err }),
+				"images.json": editJSON(t, func(o *model.Observed) { o.Error = &c.err }),
 			})
 			list := pagesOf(t, dir, "#images")[0]
 			mustHold(t, "the list", list, "The last read of the pods failed. <b>"+c.want+".</b>")
@@ -1979,10 +2004,7 @@ func TestTheWordsOfAFailedReadOfThePodsNameTheApiServer(t *testing.T) {
 // An image reference with the text of a tag shows as text on the list, on the page of the image, and in
 // the finding. No screen holds the tag.
 func TestAnImageReferenceWithAnImgTagShowsAsText(t *testing.T) {
-	const evil = "<img src=x onerror=alert(1)>"
-	swap := func(raw []byte) []byte {
-		return []byte(strings.ReplaceAll(string(raw), "vendor.example/product:2026.2", evil))
-	}
+	swap := replaceText("vendor.example/product:2026.2", evil)
 	dir := writeSet(t, devdata.StateImages, map[string]func([]byte) []byte{"images.json": swap, "findings.json": swap, "profiles.json": swap})
 	pages := pagesOf(t, dir, "#overview", "#images", imageHash(evil), imageHash(evil))
 	for i, page := range pages {
@@ -2016,7 +2038,7 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran with two digests in pods at one time."},
 	} {
 		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
-			add := editFindings(t, func(v *api.FindingsView) {
+			add := editJSON(t, func(v *api.FindingsView) {
 				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, "fred-identity@2.3.0"), Kind: c.kind, Profile: "fred-identity@2.3.0", Packs: c.packs,
 					Images: []string{"a/b:1"}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
 			})

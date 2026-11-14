@@ -72,7 +72,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	mustNotHold(t, "the pack page of vendor-product", page, `<span class="badge r">Changed</span>`)
 
 	// the move changes no pack but traefik: vendor-product is the same on that side
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			if n := v.Profiles[i].NewerVersion; n != nil && n.Move != nil {
 				n.Move.Packs = slices.DeleteFunc(n.Move.Packs, func(q model.MovePack) bool { return q.Key != "addon/traefik" })
@@ -84,7 +84,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 		"The newest version of the profile holds what the record holds for this pack.")
 
 	// a compare that failed
-	dir = writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+	dir = writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			if n := v.Profiles[i].NewerVersion; n != nil {
 				n.Move, n.Unread = nil, true

@@ -92,11 +92,12 @@ contract script and the playground script both source it.
 step of the chapter `observer` runs it. The runner puts it on the `PATH` of a step.
 The job `docs` of CI installs Go for this step.
 
-`just observer-contract --write` also copies six documents to
+`just observer-contract --write` also copies seven documents to
 `observer/internal/docs/testdata/`. They hold made-up data of the stand-in. Do
 not edit them by hand. `go test` reads them, so it needs neither the binary nor
-the network, and the contract tests skip. The job `check` of CI runs
-`just observer-contract` after `just examples`.
+the network, and the contract tests skip. A test outside `internal/docs` reads
+one with `testkit.ReadDoc`. The job `check` of CI runs `just observer-contract`
+after `just examples`.
 
 `just lint` builds the rustdoc of `strata-palette`, `strata-preflight`, `xtask`,
 `strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build

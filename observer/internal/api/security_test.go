@@ -29,14 +29,14 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 		name, method, path, host string
 		status                   int
 	}{
-		{"health", "GET", "/healthz", "127.0.0.1:8080", 200},
-		{"a summary route", "GET", "/v1/cluster", "127.0.0.1:8080", 200},
+		{"health", "GET", pathHealth, "127.0.0.1:8080", 200},
+		{"a summary route", "GET", summaryRoutes[patternCluster], "127.0.0.1:8080", 200},
 		{"the detail route", "GET", pathPublished, "localhost:1", 200},
 		{"a profile that does not exist", "GET", "/v1/profiles/nope", "127.0.0.1:8080", 404},
 		{"a side that does not exist", "GET", "/v1/packs/aws-stack/k8s/kubernetes/diff?side=x", "127.0.0.1:8080", 400},
 		{"the page", "GET", "/", "127.0.0.1:8080", 404},
-		{"a post", "POST", "/v1/cluster", "127.0.0.1:8080", 405},
-		{"a host that is not loopback", "GET", "/v1/cluster", "evil.example", 421},
+		{"a post", "POST", summaryRoutes[patternCluster], "127.0.0.1:8080", 405},
+		{"a host that is not loopback", "GET", summaryRoutes[patternCluster], "evil.example", 421},
 		{"a path that the mux redirects", "GET", "/v1//cluster", "127.0.0.1:8080", http.StatusTemporaryRedirect},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
 		{"192.168.1.1", 421},
 		{"", 421},
 	} {
-		rec := do(h, "GET", "/v1/cluster", c.host)
+		rec := do(h, "GET", summaryRoutes[patternCluster], c.host)
 		if rec.Code != c.want {
 			t.Errorf("Host %q gave %d, want %d", c.host, rec.Code, c.want)
 		}
@@ -92,7 +92,7 @@ func TestOnlyGetIsServed(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
-		for _, path := range []string{"/v1/cluster", "/healthz", pathPublished, "/nowhere"} {
+		for _, path := range []string{summaryRoutes[patternCluster], pathHealth, pathPublished, "/nowhere"} {
 			rec := do(h, method, path, "127.0.0.1:8080")
 			if rec.Code != http.StatusMethodNotAllowed || rec.Header().Get("Allow") != "GET" {
 				t.Errorf("%s %s gave %d, Allow %q", method, path, rec.Code, rec.Header().Get("Allow"))

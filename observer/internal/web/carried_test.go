@@ -1,7 +1,6 @@
 package web
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
@@ -15,29 +14,13 @@ const (
 	ubuntuSide = "side-barney-base@1.5.0-os/ubuntu-aws"
 )
 
-// editProfiles changes the profiles of a set.
-func editProfiles(t *testing.T, change func(*api.ProfilesView)) func([]byte) []byte {
-	return func(raw []byte) []byte {
-		var v api.ProfilesView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
-		change(&v)
-		out, err := json.Marshal(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
-}
-
 // carriedSet is the set read-error, where the last read of barney-base@1.5.0 failed in part and the cause
 // read-error names the profile and its packs. The summary keeps the last good answer of the part, and it
 // has no flag for it. The profile has a newer version of the pack os/ubuntu-aws, so the pack reads newer
 // and not not-checked. This copy also says that the cluster copy is the same as the record.
 func carriedSet(t *testing.T) string {
 	t.Helper()
-	return writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"profiles.json": editProfiles(t, func(v *api.ProfilesView) {
+	return writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i, p := range v.Profiles {
 			if p.Name == "barney-base" {
 				v.Profiles[i].ClusterCopy = &model.ClusterCopy{Status: model.CopySame, RootB: p.Published.RootRecorded}

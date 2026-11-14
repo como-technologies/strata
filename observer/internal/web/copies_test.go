@@ -121,18 +121,13 @@ func TestNoTextOfThePageSaysBehindForANewerVersion(t *testing.T) {
 func TestSameContentReadsTheWordsOfTheBookEverywhere(t *testing.T) {
 	book := strings.Join(strings.Fields(string(readFile(t, "../../../docs/src/development/observer-api.md"))), " ")
 	mustHold(t, "observer-api.md", book, "`same-content` reads \"Same content\" on the row of the cluster copy.")
-	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": func(raw []byte) []byte {
-		var v api.ProfilesView
-		if err := devdata.Decode(raw, &v); err != nil {
-			t.Fatal(err)
-		}
+	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
 		for i := range v.Profiles {
 			if v.Profiles[i].ClusterCopy != nil {
 				v.Profiles[i].ClusterCopy.Status = model.CopySameContent
 			}
 		}
-		return mustJSON(t, v)
-	}})
+	})})
 	const same = `<span class="badge g">Same content</span>`
 	page := pagesOf(t, dir, "#p-"+dexSubject)[0]
 	mustHold(t, "the card of the versions", page, `<div class="h">This cluster's copy in Palette `+same+`</div>`)
