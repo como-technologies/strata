@@ -17,7 +17,7 @@ use serde_json::Value;
 use super::{OCI_SUMMARY_TEMPLATE, PACKS, Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
-use crate::error::{Error, Result, served};
+use crate::error::{Error, Result, reason_words, served};
 use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_state::PackState;
@@ -283,9 +283,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
             Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
             Err(e) if e.is_failed_read() => {
                 let reason = e.reason();
-                progress.note(&format!(
-                    "note: the sync status of registry {uid} is unavailable ({reason})"
-                ));
+                progress.note(&unread_sync_note(uid, &reason));
                 Ok(RegistrySyncNote {
                     sync: None,
                     error: Some(reason),
@@ -294,6 +292,15 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
             Err(e) => Err(e),
         }
     }
+}
+
+/// The note for a sync of the registry `uid` that strata could not read. It gives the words of
+/// `reason`, the reason that the answer keeps: see [`reason_words`].
+fn unread_sync_note(uid: &str, reason: &str) -> String {
+    format!(
+        "note: the sync status of registry {uid} is unavailable ({})",
+        reason_words(reason)
+    )
 }
 
 /// The entry of the registry `uid` in `entries`, the items of a registry listing.
@@ -642,5 +649,29 @@ mod tests {
             Some(Open::Unknown("quarantined".to_string()))
         );
         assert_eq!(retired_state(&later), None);
+    }
+
+    #[test]
+    fn a_sync_that_palette_refuses_keeps_the_reason_and_its_note_gives_the_words_of_palette() {
+        let body = crate::api::routes::error_body("InternalError", "the sync status is not ready");
+        // Palette ends a body with a newline
+        let api = MemoryApi::new().failing("/v1/registries/pack/summary", 500, format!("{body}\n"));
+        let palette = Palette::new(api);
+        let note = Registries::new(&palette)
+            .sync_note("reg-pack", Some(PackType::Spectro), &Progress::silent())
+            .unwrap();
+        let reason = note.error.unwrap();
+        assert_eq!(
+            reason,
+            format!("HTTP 500: {body}"),
+            "the document keeps the body"
+        );
+        let line = unread_sync_note("reg-pack", &reason);
+        assert_eq!(
+            line,
+            "note: the sync status of registry reg-pack is unavailable (HTTP 500: InternalError: \
+             the sync status is not ready)"
+        );
+        assert!(!line.contains('{'), "no JSON of the body: {line}");
     }
 }

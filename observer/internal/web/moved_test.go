@@ -111,10 +111,10 @@ func TestTheTilesOfTheNewerVersionsCountNoPackOfAVersionThatTheClusterDoesNotRun
 	}
 }
 
-// The section "A version that the cluster no longer runs" of the page of the service quotes the words of the page for such a
+// The section "A version that the cluster no longer runs" of the page of the checks quotes the words of the page for such a
 // version, and the screens of the sets ok and moved-drift show each of them.
 func TestTheBookQuotesTheWordsOfAVersionThatTheClusterNoLongerRuns(t *testing.T) {
-	section := strings.Join(strings.Fields(sectionOf(t, servicePage, "### A version that the cluster no longer runs")), " ")
+	section := strings.Join(strings.Fields(sectionOf(t, checksPage, "### A version that the cluster no longer runs")), " ")
 	var shown string
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateMovedDrift} {
 		screens := crawl(t, state)

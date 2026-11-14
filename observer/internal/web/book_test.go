@@ -15,6 +15,7 @@ card, and the scripts write it. A word of the book that the scripts lack is a wo
 
 const (
 	servicePage = "../../../docs/src/automation/observer.md"
+	checksPage  = "../../../docs/src/development/observer.md"
 	serverPage  = "../../../docs/src/development/observer-api.md"
 	useCasePage = "../../../docs/src/use-cases/observer.md"
 )
@@ -79,12 +80,12 @@ func words(cell string) string {
 	return strings.Trim(cell, " .:")
 }
 
-// The section "The states of the page" of the page of the service gives the headline of each state. It quotes the buttons and the
+// The section "What each state means" of the page of the server gives the headline of each state. It quotes the buttons and the
 // pages that the next step names. Each of them is a word of the scripts. The note of a lost page and of a failed read of the pods
 // names a key or a role only for a refusal. The scripts do the same.
 func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) {
 	script := readScripts(t)
-	rows := tableRows(t, sectionOf(t, servicePage, "## The states of the page"))
+	rows := tableRows(t, sectionOf(t, serverPage, "### What each state means"))
 	if len(rows) < 13 {
 		t.Fatalf("the table of the states has %d rows", len(rows))
 	}
