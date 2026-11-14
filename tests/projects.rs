@@ -160,27 +160,21 @@ fn lab_tenant(uid: &str) -> BTreeMap<String, Value> {
 #[test]
 fn a_project_name_gives_the_uid_in_the_tenant_of_the_address_and_the_key_of_each_client() {
     // one address with two tenants: each key reads the projects of its own tenant
+    let (first, second) = ("first-key", "second-key");
     let shared = serve_tenants(BTreeMap::from([
-        ("first-key".to_string(), lab_tenant("p-first")),
-        ("second-key".to_string(), lab_tenant("p-second")),
+        (first.to_string(), lab_tenant("p-first")),
+        (second.to_string(), lab_tenant("p-second")),
     ]));
     // another address, where the first key has a tenant too
-    let other = serve_tenants(BTreeMap::from([(
-        "first-key".to_string(),
-        lab_tenant("p-other"),
-    )]));
+    let other = serve_tenants(BTreeMap::from([(first.to_string(), lab_tenant("p-other"))]));
     let uid = |address: &str, key: &str| {
         project_uid_named(&Config::new(address, key), "lab", Progress::silent())
             .unwrap_or_else(|e| panic!("{key} at {address}: {e}"))
     };
-    assert_eq!(uid(&shared, "first-key"), "p-first");
-    assert_eq!(uid(&shared, "second-key"), "p-second", "another key");
-    assert_eq!(uid(&other, "first-key"), "p-other", "another address");
-    assert_eq!(
-        uid(&shared, "first-key"),
-        "p-first",
-        "the first client again"
-    );
+    assert_eq!(uid(&shared, first), "p-first");
+    assert_eq!(uid(&shared, second), "p-second", "another key");
+    assert_eq!(uid(&other, first), "p-other", "another address");
+    assert_eq!(uid(&shared, first), "p-first", "the first client again");
 }
 
 /// The project of each request for the routes of the profile `uid`.

@@ -74,6 +74,28 @@ pub fn no_roles_message(user: &str) -> String {
     format!("No roles associated to user '{user}'")
 }
 
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`. It is HTTP 500, not 403, with the code of [`Denial::Project`].
+///
+/// [`Denial::Project`]: strata::api::codes::Denial::Project
+pub fn clusters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Project.as_str(),
+        &project_denied_message("lab"),
+    )
+}
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
+///
+/// [`Denial::Route`]: strata::api::codes::Denial::Route
+pub fn filters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Route.as_str(),
+        &access_denied_message("filter.list", "tenant"),
+    )
+}
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
@@ -259,6 +281,23 @@ pub fn cluster_namespaces_route(uid: &str) -> String {
 /// The last repave of the cluster `uid`, `GET /v1/spectroclusters/{uid}/repave/status`.
 pub fn cluster_repave_route(uid: &str) -> String {
     format!("{}/repave/status", cluster_route(uid))
+}
+
+/// The question whether the profiles of a body repave the cluster `uid`,
+/// `POST /v1/spectroclusters/{uid}/validate/repave`.
+pub fn cluster_validate_repave_route(uid: &str) -> String {
+    format!("{}/validate/repave", cluster_route(uid))
+}
+
+/// The same question for the clusters of the cluster template `uid`,
+/// `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`.
+pub fn template_validate_repave_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/clusterTemplates/{uid}/validate/repave")
+}
+
+/// The answer of a `validate/repave` route when the body repaves no node.
+pub fn no_repave() -> Value {
+    json!({"isRepaveRequired": false, "reasons": []})
 }
 
 /// The pack listing of the pack `name`, as strata asks for its first page.
@@ -475,6 +514,22 @@ impl<'a> PackFixture<'a> {
         }
         v
     }
+}
+
+/// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the
+/// address that its console forwards to, and the value `replicas` beside it.
+pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {
+    format!(
+        "charts:\n  {pack}:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \
+         {address}\n    replicas: {replicas}\n"
+    )
+}
+
+/// The field of [`console_pack_values`] that holds the console address, as a path of keys with
+/// dots. The tests pin this text of Palette on purpose, because the type of strata that holds it
+/// is private.
+pub fn console_address_field(pack: &str) -> String {
+    format!("charts.{pack}.appConfig.clusterInfo.consoleBaseAddress")
 }
 
 /// A manifest of a pack, as `packs/manifests` lists it.

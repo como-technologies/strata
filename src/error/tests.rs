@@ -762,10 +762,7 @@ fn a_401_or_another_403_still_names_the_key() {
 #[test]
 fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
     let permission = "the role of the key does not give the permission 'filter.list'";
-    let filters_denied = palette::error_body(
-        Denial::Route.as_str(),
-        &palette::access_denied_message("filter.list", "tenant"),
-    );
+    let filters_denied = palette::filters_denied();
     // the first request of the run: nothing proved the key yet
     let first = api_message(403, &filters_denied);
     assert!(first.contains(permission), "{first}");

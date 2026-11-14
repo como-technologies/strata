@@ -261,10 +261,7 @@ mod tests {
 
     #[test]
     fn the_proof_of_a_key_belongs_to_the_key_so_a_second_client_with_another_key_names_the_key() {
-        let denied = routes::error_body(
-            crate::api::codes::Denial::Route.as_str(),
-            &routes::access_denied_message("filter.list", "tenant"),
-        );
+        let denied = routes::filters_denied();
         let path = routes::TAG_FILTER_LISTING;
         // the first client: an answer with a 2xx status proves its key, so its denial is the role
         let (url, _) = serve_each(&[
@@ -273,13 +270,14 @@ mod tests {
             ("403 Forbidden", denied.as_bytes()),
             ("403 Forbidden", denied.as_bytes()),
         ]);
-        let first = HttpApi::new(Config::new(url.as_str(), "first-key"));
-        first.get_json("/v1/dashboard/projects/metadata").unwrap();
+        let first_key = "first-key";
+        let first = HttpApi::new(Config::new(url.as_str(), first_key));
+        first.get_json(routes::PROJECT_LISTING).unwrap();
         let text = first.get_json(path).unwrap_err().to_string();
         assert!(text.contains("does not give the permission"), "{text}");
         assert!(!text.contains("the key can be wrong"), "{text}");
         // a new client of the same key, such as the client of a project after its lookup
-        let again = HttpApi::new(Config::new(url.as_str(), "first-key"));
+        let again = HttpApi::new(Config::new(url.as_str(), first_key));
         let text = again.get_json(path).unwrap_err().to_string();
         assert!(!text.contains("the key can be wrong"), "{text}");
         // the second client on the same thread and at the same address, with another key: no
@@ -360,7 +358,7 @@ mod tests {
         );
         let url = serve_once("401 Unauthorized", &body);
         let api = HttpApi::new(Config::new(url, key.as_str()));
-        let err = api.get_json("/v1/dashboard/projects/metadata").unwrap_err();
+        let err = api.get_json(routes::PROJECT_LISTING).unwrap_err();
         match &err {
             Error::Api { status, body, .. } => {
                 assert_eq!(*status, 401);
