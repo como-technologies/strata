@@ -145,8 +145,8 @@ pub(super) const FIELDS_ACCOUNT: &str = "64fd000000000000000000a2";
 pub(super) const FIELDS_GROUP: &str = "64fd000000000000000000b1";
 pub(super) const FIELDS_APP_PROFILE: &str = "64fd000000000000000000c1";
 pub(super) const FIELDS_PROFILE: &str = "64fd000000000000000000d1";
-// the chapter fields: the container registry of the app tier, two OCI registries, two pack
-// registries, a pack version that Spectro Cloud marks disabled, and two audit entries
+// the chapter fields: the container registry of the app tier, two OCI registries, and two pack
+// registries. Then a pack version that Spectro Cloud marks disabled, and two audit entries
 pub(super) const FIELDS_CONTAINER_REGISTRY: &str = "64fd000000000000000000e1";
 pub(super) const FIELDS_OCI_PACKS: &str = "64fd000000000000000000e2";
 pub(super) const FIELDS_OCI_CHARTS: &str = "64fd000000000000000000e3";

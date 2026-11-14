@@ -7194,7 +7194,7 @@ fn the_pages_and_the_template_of_a_real_pipeline_keep_to_the_style_rules() {
 
 // ---- the style of the comments and the book (#879) ----------------------------------------------
 
-/// The sentences of the book that the area of the style named over the limit of 25 words: the
+/// The area of the style named two sentences of the book over the limit of 25 words. They are the
 /// next patch of `upstream-issues.md` (the verify of #881), and the row of `api.sh` (#822).
 #[test]
 fn the_sentences_that_the_area_of_the_style_named_keep_to_25_words() {

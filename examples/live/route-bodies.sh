@@ -41,8 +41,8 @@
 # refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run shows it
 # yet. cidr-overlap.json stays, as aws-clean.json does. The script skips the case when Palette
 # lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. It also skips the case
-# when a pool of the clean body has no zone, or when no VPC with a CIDR has a subnet in each zone
-# of the pools.
+# when no VPC with a CIDR has a subnet in each zone of the pools. A pool of the clean body with no
+# zone names no subnet, so the script skips the case for it too.
 #
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
