@@ -105,9 +105,10 @@ each message of the report. The mark names the variable, such as
 markdown, the JSON, and the HTML. The values of the entity before a change get
 a mark too. To see a value, give `--world` and read `entity.json`.
 
-The message of an error holds the start of the body of the answer. Strata
-writes the marks into the body before it cuts the body. So the cut leaves no
-part of a value.
+The message of an error holds the start of the body of the answer. This is
+so for a check of Palette, and for an exec check that reads Palette before its
+command. Strata writes the marks into the body before it cuts the body. So the
+cut leaves no part of a value.
 
 The mask matches whole values only. A text is part of a longer word when a
 letter or a digit touches it. A `-`, `_`, `.`, `/`, `:`, or `@` beside it counts

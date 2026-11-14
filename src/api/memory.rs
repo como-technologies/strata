@@ -1,6 +1,6 @@
 //! [`PaletteApi`] over canned responses, for tests.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use serde_json::Value;
@@ -25,6 +25,9 @@ pub struct MemoryApi {
     calls: RefCell<HashMap<String, u32>>,
     posted: RefCell<Vec<(String, Value)>>,
     project_uid: Option<String>,
+    /// True after a canned answer to this client: see [`Error::Api`]. A canned API has no key, so
+    /// the proof is of the client.
+    proved: Cell<bool>,
 }
 
 /// A failure that goes away after `remaining` calls.
@@ -128,12 +131,14 @@ impl MemoryApi {
         canned: &HashMap<String, T>,
     ) -> Result<T> {
         *self.calls.borrow_mut().entry(key.to_string()).or_insert(0) += 1;
+        let key_proved = self.proved.get();
         let error = |status: u16, body: String, retry_after: Option<u64>| Error::Api {
             method,
             path: path.to_string(),
             status,
             body,
             retry_after,
+            key_proved,
         };
         if let Some(t) = self.transient.borrow_mut().get_mut(key)
             && t.remaining > 0
@@ -148,7 +153,7 @@ impl MemoryApi {
             .get(key)
             .cloned()
             .ok_or_else(|| error(404, r#"{"code":"ResourceNotFound"}"#.to_string(), None))?;
-        super::prove_key();
+        self.proved.set(true);
         Ok(answer)
     }
 }

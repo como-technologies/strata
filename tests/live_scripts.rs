@@ -5151,6 +5151,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         &[
             "vmo-cluster",
             "vmo-runs",
+            "vmo-clear",
             "vmo-summary",
             "vmo-mark-body",
             "vmo-before",
@@ -5250,7 +5251,8 @@ fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address
 }
 
 /// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
-/// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
+/// Palette saves no record for a cluster that a cluster template governs. A cluster whose document
+/// holds a mask over the console address does not show the fact of #741. A body for a cluster
 /// with no `virtual-machine-orchestrator` holds no mark, so the question shows nothing. A console
 /// that reaches no host before the question shows nothing after it.
 #[test]
@@ -5264,9 +5266,16 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         r#""name":"virtual-machine-orchestrator""#,
         r#""name":"spectro-vm-dashboard""#,
     );
+    // a mask over the console address in the document of the cluster
+    let masked = VMO_CLUSTER.replace(
+        r#"consoleBaseAddress: \"\""#,
+        "consoleBaseAddress: '********'",
+    );
+    assert_ne!(masked, VMO_CLUSTER);
     for (cluster, forward, fails, reads) in [
         (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
         (dashboard.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (masked.as_str(), FAKE_CONSOLE_FORWARD, "vmo-clear", 0),
         (
             VMO_CLUSTER,
             "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",

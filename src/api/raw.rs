@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::mask::console::{mask_console_cluster, mask_console_profile};
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
 use crate::json::{arr, flag, opt_text, str_at, take_items, value_or_null};
@@ -300,18 +301,19 @@ impl RawProfile {
 
     /// Write the three files and `scope.json` under `dir`, and make `dir` if it is not there. For
     /// a profile that has a draft, also write its manifests, and with `--macros`, the values of
-    /// the macros.
+    /// the macros. Strata masks the console address of each pack of virtual machines.
     /// `fetched_at` is the time that the responses were read, in RFC 3339.
     ///
     /// # Errors
     ///
     /// [`Error::Io`] when strata cannot write a file, and [`Error::Serialize`] when it cannot write
-    /// a document.
+    /// a document or the masked values of a pack.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
+        let masked = mask_console_profile(self)?;
         let mut files = vec![
-            (PROFILE_FILE, &self.profile),
-            (MANIFESTS_FILE, &self.manifests),
+            (PROFILE_FILE, &masked.profile),
+            (MANIFESTS_FILE, &masked.manifests),
             (VARIABLES_FILE, &self.variables),
             (SCOPE_FILE, &scope),
         ];
@@ -461,18 +463,21 @@ impl RawCluster {
     /// Write the three files, each other document that strata read, and `scope.json` under
     /// `dir`, and make `dir` if it is not there. Strata masks the values of each pack in the saved
     /// notifications and in the saved repave. It also masks each password in the values of a
-    /// cluster group. `fetched_at` is the time of the read, in RFC 3339.
+    /// cluster group, and the console address of each pack of virtual machines. `fetched_at` is
+    /// the time of the read, in RFC 3339.
     ///
     /// # Errors
     ///
     /// [`Error::Io`] when strata cannot write a file, and [`Error::Serialize`] when it cannot
-    /// write a document or the masked values of a cluster group.
+    /// write a document, the masked values of a cluster group, or the masked values of a pack.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
-        let cluster = masked_group(&self.cluster)?;
+        let mut cluster = masked_group(&self.cluster)?;
+        let mut manifests = self.manifests.clone();
+        mask_console_cluster(&mut cluster, &mut manifests)?;
         let mut files: Vec<(&str, &Value)> = vec![
             (Self::MARKER, &cluster),
-            (MANIFESTS_FILE, &self.manifests),
+            (MANIFESTS_FILE, &manifests),
             (VARIABLES_FILE, &self.variables),
             (SCOPE_FILE, &scope),
         ];

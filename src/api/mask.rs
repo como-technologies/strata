@@ -4,7 +4,8 @@
 //! serves the published packs of a profile. It serves the draft packs with no mask. Strata writes
 //! the same mask over the draft, so that a record and a saved answer hold no clear secret. Strata
 //! also writes the mask over each password in the values of a cluster group that a record or a
-//! saved answer keeps. The body of an error of an answer holds no copy of the API key: see
+//! saved answer keeps, and over the console address of a pack of virtual machines: see
+//! [`console`]. The body of an error of an answer holds no copy of the API key: see
 //! [`mask_secret`].
 
 use std::borrow::Cow;
@@ -19,19 +20,29 @@ use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
 use crate::model::pack_type::PackType;
 
+pub(crate) mod console;
+
 /// The text that Palette writes over a secret.
 pub(crate) const MASKED: &str = "********";
 
-/// `text` with [`MASKED`] in place of each whole copy of `secret`, such as the API key in the body
-/// of an answer.
+/// The length of a long secret, in characters. A shorter secret can be a part of a word.
+const LONG_SECRET: usize = 16;
+
+/// `text` with [`MASKED`] in place of each copy of `secret`, such as the API key in the body of an
+/// answer.
 ///
-/// A copy is whole when no letter or digit touches it on either side. So a short key such as `k`
-/// masks `'k'`, and not the `k` of `Pack`. Each whole copy gets the mask, also when `text` holds
-/// more than one. An empty `secret` changes nothing.
+/// A secret of [`LONG_SECRET`] characters or more is no part of a word. So each copy gets the
+/// mask, also when a letter or a digit touches it, as after the escape `\n` or the URL code
+/// `%3D`. A shorter secret gets the mask over each whole copy only: no letter or digit touches it
+/// on either side. So a short key such as `k` masks `'k'`, and not the `k` of `Pack`. An empty
+/// `secret` changes nothing.
 pub(crate) fn mask_secret(text: &str, secret: &str) -> String {
     let Some(first) = secret.chars().next() else {
         return text.to_string();
     };
+    if secret.chars().count() >= LONG_SECRET {
+        return text.replace(secret, MASKED);
+    }
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     // the last character of `text` before `rest`
@@ -138,11 +149,32 @@ pub(super) fn mask_draft_packs(
 /// variable, `{{.spectro.var.NAME}}`. Strata does the same. Values that are not YAML stay as they
 /// are, as in Palette.
 ///
+/// Strata writes the mask as [`put_values`] writes a value.
+pub(super) fn mask_values(values: &str, fields: &[String]) -> Result<String> {
+    put_values(
+        values,
+        fields,
+        MASKED,
+        holds_secret,
+        "the masked values of a pack",
+    )
+}
+
+/// `values` with the text `value` at each field of `fields` whose value `takes` accepts. A field
+/// is a path of keys with dots, such as `charts.app.adminPassword`. Values that are not YAML stay
+/// as they are, and so do values with no such field.
+///
 /// Strata changes only the line of each field, so the rest of the text stays. When it cannot
 /// change one line alone, for example for a block scalar, it writes the values again from the
 /// parsed YAML, with no comments. When that write fails, the result is an error, and never values
-/// with no text.
-pub(super) fn mask_values(values: &str, fields: &[String]) -> Result<String> {
+/// with no text. `what` names the values in the error.
+fn put_values(
+    values: &str,
+    fields: &[String],
+    value: &str,
+    takes: impl Fn(&Yaml) -> bool,
+    what: &str,
+) -> Result<String> {
     let Ok(mut doc) = serde_yaml::from_str::<Yaml>(values) else {
         return Ok(values.to_string());
     };
@@ -154,20 +186,31 @@ pub(super) fn mask_values(values: &str, fields: &[String]) -> Result<String> {
         let Some(slot) = lookup_mut(&mut doc, &path) else {
             continue;
         };
-        if !holds_secret(&*slot) {
+        if !takes(&*slot) {
             continue;
         }
-        *slot = Yaml::String(MASKED.to_string());
+        *slot = Yaml::String(value.to_string());
         changed = true;
         text = text
-            .and_then(|t| edit_line(&t, &path))
+            .and_then(|t| edit_line(&t, &path, value))
             .filter(|t| serde_yaml::from_str::<Yaml>(t).is_ok_and(|v| v == doc));
     }
     match (changed, text) {
         (false, _) => Ok(values.to_string()),
         (true, Some(t)) => Ok(t),
-        (true, None) => to_yaml(&doc, "the masked values of a pack"),
+        (true, None) => to_yaml(&doc, what),
     }
+}
+
+/// The text of the scalar at `field` of `values`, or `None` when the values are not YAML or hold
+/// no scalar there. `field` is a path of keys with dots, as for [`put_values`].
+fn field_text(values: &str, field: &str) -> Option<String> {
+    let doc = serde_yaml::from_str::<Yaml>(values).ok()?;
+    let path: Vec<&str> = field.split('.').collect();
+    path.iter()
+        .try_fold(&doc, |node, key| node.as_mapping()?.get(*key))?
+        .scalar_text()
+        .map(Cow::into_owned)
 }
 
 /// `value` as YAML text. `what` names the value in the error.
@@ -374,9 +417,9 @@ fn holds_variable(text: &str) -> bool {
     })
 }
 
-/// `text` with the value of the key at `path` changed to `'********'` on its line, or `None` when
-/// that key is not on a line of its own in block style.
-fn edit_line(text: &str, path: &[&str]) -> Option<String> {
+/// `text` with the value of the key at `path` changed to `value` in single quotes on its line, or
+/// `None` when that key is not on a line of its own in block style.
+fn edit_line(text: &str, path: &[&str], value: &str) -> Option<String> {
     let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
     let mut level = 0;
     // the indent of the key that holds the current level, and of the keys of that level
@@ -411,7 +454,8 @@ fn edit_line(text: &str, path: &[&str]) -> Option<String> {
         }
         let end = if line.ends_with('\r') { "\r" } else { "" };
         let raw_key = &body[..body.len() - rest.len() - 1];
-        lines[i] = format!("{}{raw_key}: '{MASKED}'{end}", &line[..indent]);
+        let quoted = value.replace('\'', "''");
+        lines[i] = format!("{}{raw_key}: '{quoted}'{end}", &line[..indent]);
         return Some(lines.join("\n"));
     }
     None

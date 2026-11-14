@@ -160,8 +160,9 @@ Palette denied:
 | `ResourceAccessDenied` | `no role of the key in the project gives the access of the request` |
 | `NoRolesAssociated` | `the user of the key has no role` |
 
-A `403` that is a denial names the key too, unless an earlier answer of the
-same run proved the key. A lookup of `PALETTE_PROJECT` is such an answer. See
+A `403` that is a denial names the key too, unless an earlier answer to the
+same key proved the key. A lookup of `PALETTE_PROJECT` is such an answer. A
+client with another key starts with no proof, also in the same process. See
 [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 
 `POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with

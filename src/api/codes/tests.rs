@@ -95,6 +95,7 @@ fn a_code_of_a_refusal_at_a_5xx_is_a_refusal_code_and_the_class_of_its_error_is_
         status,
         body: palette::error_body(code, "refused"),
         retry_after: None,
+        key_proved: false,
     };
     let mut listed: Vec<&str> = REFUSAL_CODES.to_vec();
     listed.extend(Denial::ALL.iter().map(|d| d.as_str()));
@@ -277,6 +278,7 @@ fn a_retry_does_not_send_again_the_refusal_of_the_cluster_validate_route() {
             status: 500,
             body: palette::error_body(code, "refused"),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
     }

@@ -12,4 +12,4 @@ consumers  0 -> 0 clusters
   [cni  ] cni-cilium-oss             1.20.1             unchanged
   [csi  ] csi-aws-ebs                1.65.0             unchanged
   [addon] cert-manager               1.21.1             unchanged
-      masked: registryPassword: Palette serves ******** in place of the secret
+      masked: registryPassword: the record holds ******** in place of the secret

@@ -451,6 +451,24 @@ facts:
       - src/api/mask.rs
       - src/api/palette/profiles.rs
 
+  - id: profile-console-address
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+        - spec.draft.packs[].values
+        - spec.packs[].spec.values
+        - spec.clusterProfileTemplates[].packs[].values
+    stand_in: []
+    live:
+      - repave.sh:vmo-clear
+    pages:
+      - internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines
+      - commands/compare/repave.md#the-console-address-of-a-pack-of-virtual-machines
+    code:
+      - src/api/mask/console.rs
+      - src/ops/repave.rs
+
   # The export of a version.
   - id: profile-export-file
     kind: behavior

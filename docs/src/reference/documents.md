@@ -556,7 +556,7 @@ of the secret does not show, because the two sides hold the mask: see
     is a pack uid that Palette mints. This is the case for a manifest pack, and
     for a pack from a registry that Palette does not sync.
   - `masked[]`, only when it is not empty: `key` and `paths` of each pack with
-    a value that Palette masks, on either side. It does not change `status`.
+    a masked value, on either side. It does not change `status`.
   - `macrosChanged`, only when it is not empty: when both records hold the
     digests of their macro values, each macro whose value differs. It does not
     change `status`.

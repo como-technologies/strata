@@ -2,7 +2,7 @@
 //! the answer tell the reader to do.
 
 use crate::api::codes::{Denial, PROJECT_SCOPE_CODE};
-use crate::api::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit, key_proved};
+use crate::api::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit};
 use crate::config::{ENV_FILE, KEY_VARS};
 use crate::model::validation::PaletteRefusal;
 
@@ -12,11 +12,12 @@ use crate::model::validation::PaletteRefusal;
 ///   named a project. The key is right.
 /// - A 429 of the download of a profile version: the limit of Palette.
 /// - A [`Denial`]: what Palette denied, such as the permission that the role of the key does not
-///   give. A 403 adds the hint of the key only when no answer of the run proved the key.
+///   give. A 403 adds the hint of the key only when `key_proved` is false: no earlier answer to
+///   the client proved the key.
 /// - Another 401 or 403: the hint of the key, which is almost always the cause.
 ///
 /// Empty for each other status.
-pub(super) fn status_hint(status: u16, path: &str, body: &str) -> String {
+pub(super) fn status_hint(status: u16, path: &str, body: &str, key_proved: bool) -> String {
     let refusal = PaletteRefusal::from_error_body(body);
     if status == 403
         && refusal
@@ -34,7 +35,7 @@ pub(super) fn status_hint(status: u16, path: &str, body: &str) -> String {
     let denial = refusal.and_then(|r| Some((Denial::from_text(&r.code)?, r.message)));
     let key = match (status, &denial) {
         (401, _) => true,
-        (403, Some(_)) => !key_proved(),
+        (403, Some(_)) => !key_proved,
         (403, None) => true,
         _ => false,
     };

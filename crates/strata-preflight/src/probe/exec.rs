@@ -134,13 +134,8 @@ fn read_first(
             ),
         )));
     }
-    read_palette(rule, read, world, backend, jq).map_err(|failed| {
-        let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
-        if let Some(call) = failed.call {
-            out.ran = Ran::Request(call);
-        }
-        Box::new(out)
-    })
+    read_palette(rule, read, world, backend, jq)
+        .map_err(|failed| Box::new(failed.outcome(world, started)))
 }
 
 /// Each argument of the command of `rule`, with its `{{ jq }}` templates filled from `world`.

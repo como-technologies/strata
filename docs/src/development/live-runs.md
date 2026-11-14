@@ -891,6 +891,7 @@ console forwards to the mark until Palette starts the forward service again.
 | `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands` |
 | `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
 | `vmo-cluster`, `vmo-runs` | 0 | #717: the cluster runs `virtual-machine-orchestrator`, the values of the pack hold `consoleBaseAddress`, and no cluster template governs the cluster. No result yet: no live window ran stage 9. |
+| `vmo-clear` | 0 | #741: no line `consoleBaseAddress` of a pack of virtual machines in the document of the cluster holds `********`. Palette writes no mask over the console address, so strata writes the mask in each record. No result yet: no live window ran stage 9. |
 | `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet: no live window ran stage 9. |
 | `vmo-mark-body`, `vmo-before` | 0 | #717: the body holds the mark `https://strata-live-check.invalid` in `consoleBaseAddress`. Before the question, the console address forwards to a host that answers: no 404, no 502, and an answer in 30 seconds. No result yet: no live window ran stage 9. |
 | `vmo-ask`, `vmo-ask-ok` | 0 | #717: `validate/repave` with the mark answers HTTP 200. No result yet: no live window ran stage 9. |
