@@ -7701,10 +7701,17 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     failed(&steps, &["arch-behind-json"]);
 }
 
-/// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries read their
-/// standard input and do nothing else.
-/// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
+/// A run of `registry-kinds.sh` against the stand-ins: see [`registry_kinds_stage`].
 fn registry_kinds(packs: &str) -> (Stage, String) {
+    let stage = registry_kinds_stage(packs);
+    let (_, steps) = stage.run("registry-kinds.sh", &[]);
+    (stage, steps)
+}
+
+/// The stage of `registry-kinds.sh` against the stand-ins, before its run. The tools of the
+/// registries read their standard input and do nothing else.
+/// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
+fn registry_kinds_stage(packs: &str) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "aws_profile": "p", "project_uid": "p-1", "cluster_uid": "",
         "kinds_host": "kinds.example", "kinds_user": "barney",
@@ -7730,8 +7737,80 @@ fn registry_kinds(packs: &str) -> (Stage, String) {
     );
     stage.route("/v1/registries/pack", r#"{"uid":"reg-packs"}"#);
     stage.strata("packs strata-live-zarf *", 0, packs);
+    stage
+}
+
+/// The create of a pack registry: the uid `reg-slash` for a name with a `/`, and `reg-packs` for
+/// each other name.
+const SLASH_REGISTRY_CREATE: &str = r#"#!/usr/bin/env bash
+if jq -e '.metadata.name | contains("/")' "$FAKE_ROUTES/sent/POST_v1_registries_pack" > /dev/null; then
+  echo '{"uid":"reg-slash"}'
+else
+  echo '{"uid":"reg-packs"}'
+fi
+"#;
+
+/// A run of `registry-kinds.sh` in which the second registry of stage 1, `strata-live/packs`, gets
+/// the uid `reg-slash`. The listing names it. For the ref of the pack with no registry, strata
+/// gives `several` on standard error. For the ref with the uid, it gives a record of the pack.
+fn registry_kinds_slash(several: &str) -> (Stage, String) {
+    let mut stage = registry_kinds_stage("");
+    executable(
+        &stage.path("routes/v1_registries_pack.sh"),
+        SLASH_REGISTRY_CREATE,
+    );
+    stage.route(
+        "/v1/registries/metadata",
+        r#"{"items":[{"name":"strata-live-packs","uid":"reg-packs"},
+            {"name":"strata-live/packs","uid":"reg-slash"}]}"#,
+    );
+    stage.route("/v1/registries/pack/reg-slash", "{}");
+    stage.strata_err("snapshot pack:strata-live-pack@1.0.0 *", 2, several);
+    stage.strata(
+        "snapshot pack:reg-slash/strata-live-pack@1.0.0 *",
+        0,
+        r#"{"packs":[{"registryName":"strata-live/packs","registryUid":"reg-slash"}]}"#,
+    );
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
+}
+
+#[test]
+fn registry_kinds_sh_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_removes_it() {
+    let (stage, steps) = registry_kinds_slash(
+        r#"{"error":{"kind":"pack-in-several-registries",
+            "registries":["reg-slash","strata-live-oci","strata-live-packs"]}}"#,
+    );
+    passed(
+        &steps,
+        &[
+            "slash-registry",
+            "slash-listing",
+            "slash-listed",
+            "slash-several",
+            "slash-several-uid",
+            "slash-record",
+            "slash-named",
+            "slash-delete",
+        ],
+    );
+    let calls = lines_of(&stage.path("curl.log"));
+    let deletes = |uid: &str| {
+        let line = format!("DELETE /v1/registries/pack/{uid}");
+        calls.iter().filter(|l| **l == line).count()
+    };
+    assert_eq!(
+        deletes("reg-slash"),
+        1,
+        "it goes at the end of stage 1 only: {calls:?}"
+    );
+
+    // an error that gives the name with the `/` fails the check
+    let (_, steps) = registry_kinds_slash(
+        r#"{"error":{"kind":"pack-in-several-registries",
+            "registries":["strata-live-oci","strata-live-packs","strata-live/packs"]}}"#,
+    );
+    failed(&steps, &["slash-several-uid"]);
 }
 
 #[test]

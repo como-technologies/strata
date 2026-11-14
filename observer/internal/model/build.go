@@ -107,7 +107,8 @@ func (c Clock) health() Health {
 // view holds what the rows need from the two cycles, so that a row does not search for it.
 type view struct {
 	causes *causes
-	// registries maps the uid of a registry to its name.
+	// registries maps the uid of a registry to its name: the name that a record gives, else the name in a
+	// pin of behind. A pack row and a row of a newer version read it, so the page joins the two rows.
 	registries map[string]string
 	// newest maps a pack of a profile to the newest version that a pin names. carried maps a pack of a
 	// profile to the newer version of the profile that carries a newer version of the pack.
@@ -128,10 +129,13 @@ type view struct {
 func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, carried: map[string]Carried{}, newerProfiles: map[string]bool{},
 		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
+	if in.Content != nil {
+		v.nameRegistries(in.Content.Records)
+	}
 	if in.Versions != nil {
 		v.readNewerVersions(in.Versions, utc(in.Now))
 		for _, pin := range in.Versions.Pins {
-			if pin.Registry != "" {
+			if pin.Registry != "" && v.registries[pin.RegistryUID] == "" {
 				v.registries[pin.RegistryUID] = pin.Registry
 			}
 			if !pin.Behind || len(pin.Newer) == 0 {
@@ -184,6 +188,18 @@ func (v *view) readNewerVersions(vs *Versions, now time.Time) {
 		n.Unread = vs.ProfileUnread[subject]
 		for _, by := range p.PinnedBy {
 			v.newerVersions[by.Subject] = n
+		}
+	}
+}
+
+// nameRegistries keeps the name of each registry that a record names. A record of strata 0.33.0 and
+// before names none, so a pin of behind names its registry then.
+func (v *view) nameRegistries(records []Record) {
+	for _, r := range records {
+		for _, p := range r.Doc.Packs {
+			if p.RegistryName != "" && v.registries[p.RegistryUID] == "" {
+				v.registries[p.RegistryUID] = p.RegistryName
+			}
 		}
 	}
 }
