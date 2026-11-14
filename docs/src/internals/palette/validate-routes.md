@@ -286,9 +286,17 @@ code of Palette, not from a live run:
 - A profile that the cluster does not run is the published profile, with the
   sent values over it.
 - The target holds no profile that the body does not name.
+- Palette reads no `replaceWithProfile` and no `variables[]` of the body.
 
 Then Palette compares the cluster with the target, and gives a reason for each
 pack that repaves the cluster.
+
+So the body of a swap names each profile of the cluster by its uid, with the
+new uid in place of the old one. A body that names the old uid alone, with the
+`packValues` of the new version, asks about the old version with other values.
+Palette then takes a pack with a new tag from the old version. See
+[The body of a swap](./profiles.md#the-body-of-a-swap) for the answers to each
+body.
 
 ### What the route saves
 
@@ -508,8 +516,10 @@ version at a time.
 ### A value of each required variable
 
 - The update gives each variable of the new profile version a value: the value
-  of the body, or the default value of the variable. A dropdown variable can
-  also take its default option.
+  of the body, or the default value of the variable. A dropdown variable with
+  no default value takes the label of its default option, the option with
+  `default: true`. Palette reads no option of a variable of another input
+  type. The code of Palette shows it; no live run shows it yet.
 - Palette refuses a required variable with no value, and changes nothing. The
   answer is HTTP 500 and `InvalidVariable`. The message ends with
   `can't be empty for required variable '<name>'`.

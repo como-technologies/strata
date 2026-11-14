@@ -1253,6 +1253,10 @@ fn the_key_of_palette_is_in_no_argument_of_curl() {
             "v1_spectroclusters_c-1_validate_repave",
             r#"{"isRepaveRequired":false,"reasons":[]}"#,
         ),
+        (
+            "v1_spectroclusters_c-1",
+            r#"{"spec":{"clusterProfileTemplates":[{"uid":"prof-1"}]}}"#,
+        ),
     ] {
         std::fs::write(routes.join(route), body).unwrap();
     }
@@ -1274,8 +1278,9 @@ fn the_key_of_palette_is_in_no_argument_of_curl() {
         );
     }
     let arguments = std::fs::read_to_string(routes.join("sent/curl.args")).unwrap();
-    // Each call runs curl once. The repave reads a profile and asks Palette, so it runs curl twice.
-    let curls = calls.len() + 1;
+    // Each call runs curl once. The repave reads a profile and the cluster, and asks Palette, so
+    // it runs curl three times.
+    let curls = calls.len() + 2;
     assert_eq!(
         arguments.lines().count(),
         curls,
@@ -2319,16 +2324,30 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
             {"name":"kubernetes","tag":"1.36.2","type":"spectro","layer":"k8s","values":"postKubeadmCommands:\n  - chmod\n"}]}}}"#,
     )
     .unwrap();
+    // the cluster runs prof-1 between two add-on profiles
+    std::fs::write(
+        routes.join("v1_spectroclusters_c-1"),
+        r#"{"metadata":{"uid":"c-1"},"spec":{"clusterProfileTemplates":[
+            {"uid":"addon-1","type":"add-on"},{"uid":"prof-1","type":"cluster"},{"uid":"addon-2","type":"add-on"}]}}"#,
+    )
+    .unwrap();
     let validate = routes.join("v1_spectroclusters_c-1_validate_repave");
     std::fs::write(&validate, r#"{"isRepaveRequired":false,"reasons":[]}"#).unwrap();
     let sent = || read_json(&routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"));
+    let repave = |env: &[(&str, &str)]| {
+        run_live(
+            "tenant.sh",
+            &["repave", "c-1", "prof-1", "prof-2"],
+            root.path(),
+            env,
+        )
+    };
+    let pack_values = serde_json::json!([
+        {"name": "ubuntu-aws", "tag": "LTS__24.04", "type": "spectro", "values": "os: values\n", "manifests": []},
+        {"name": "kubernetes", "tag": "1.36.2", "type": "spectro", "values": "postKubeadmCommands:\n  - chmod\n", "manifests": []}
+    ]);
 
-    let o = run_live(
-        "tenant.sh",
-        &["repave", "c-1", "prof-1", "prof-2"],
-        root.path(),
-        &[],
-    );
+    let o = repave(&[]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(
         text(&o.stdout),
@@ -2336,12 +2355,43 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
     );
     assert_eq!(
         sent(),
-        serde_json::json!({"profiles": [{"uid": "prof-1", "replaceWithProfile": "prof-2", "variables": [],
-        "packValues": [
-            {"name": "ubuntu-aws", "tag": "LTS__24.04", "type": "spectro", "values": "os: values\n", "manifests": []},
-            {"name": "kubernetes", "tag": "1.36.2", "type": "spectro", "values": "postKubeadmCommands:\n  - chmod\n", "manifests": []}
-        ]}]}),
-        "the target version's packs replace the current version on the cluster"
+        serde_json::json!({"profiles": [
+            {"uid": "addon-1"},
+            {"uid": "prof-2", "variables": [], "packValues": pack_values},
+            {"uid": "addon-2"}
+        ]}),
+        "the body names each profile of the cluster, with the target and its packs in place of the current version"
+    );
+
+    // the body of the earlier script, for the live check that compares the two bodies
+    let o = repave(&[("REPAVE_FORM", "replace")]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        sent(),
+        serde_json::json!({"profiles": [{"uid": "prof-1", "replaceWithProfile": "prof-2",
+            "variables": [], "packValues": pack_values}]}),
+        "the earlier body names the current version alone, with replaceWithProfile"
+    );
+    let o = repave(&[("REPAVE_FORM", "both")]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("REPAVE_FORM is swap or replace, not both"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // a current version that the cluster does not run is no swap
+    let o = run_live(
+        "tenant.sh",
+        &["repave", "c-1", "prof-9", "prof-2"],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("cluster c-1 runs no profile prof-9"),
+        "{}",
+        text(&o.stderr)
     );
 
     // the control: a change to the values that Palette repaves for
@@ -2371,7 +2421,7 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         "cluster c-1, profile prof-1 -> prof-2 with kubernetes values edited: repave\n  PackValuesUpdated: Pack 'kubernetes' values are updated (kubeadmconfig.postKubeadmCommands)\n"
     );
     assert_eq!(
-        sent()["profiles"][0]["packValues"][1]["values"],
+        sent()["profiles"][1]["packValues"][1]["values"],
         "postKubeadmCommands:\n  - echo strata\n  - chmod\n"
     );
 
@@ -2421,6 +2471,11 @@ fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
         std::fs::write(
             routes.join("v1_clusterprofiles_prof-2"),
             r#"{"metadata":{"uid":"prof-2"},"spec":{"published":{"packs":[]}}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            routes.join("v1_spectroclusters_c-1"),
+            r#"{"spec":{"clusterProfileTemplates":[{"uid":"prof-1"}]}}"#,
         )
         .unwrap();
         std::fs::write(routes.join("v1_spectroclusters_c-1_validate_repave"), "").unwrap();
@@ -4811,7 +4866,8 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     let mut stage = Stage::new(outputs);
     stage.route(
         &cluster_route("c-a"),
-        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
+            "spec":{"clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.route(
         &profile_route("n-1"),
@@ -4853,11 +4909,17 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "var-undone",
         ],
     );
-    for seen in ["var-strata", "var-strata-answer", "var-none", "var-default"] {
+    for seen in [
+        "var-strata",
+        "var-strata-answer",
+        "var-none",
+        "var-default",
+        "var-swap",
+    ] {
         assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
-    let variables: Vec<_> = stage
-        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+    let sent = stage.sent("POST", "/v1/spectroclusters/c-a/validate/repave");
+    let variables: Vec<_> = sent
         .iter()
         .map(|b| b["profiles"][0]["variables"].clone())
         .collect();
@@ -4867,9 +4929,30 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             serde_json::json!([]),
             serde_json::json!([{"name": "strata_mode", "value": "600"}]),
             serde_json::json!([{"name": "strata_mode", "value": "644"}]),
+            serde_json::json!([]),
         ],
-        "no variables, the default, and the control"
+        "no variables, the default, the control, and the swap"
     );
+    // the three questions of #132 send the earlier body, and the last one the body of a swap
+    let uids: Vec<Vec<&str>> = sent
+        .iter()
+        .map(|b| {
+            b["profiles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["uid"].as_str().unwrap())
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        uids,
+        [vec!["r-1"], vec!["r-1"], vec!["r-1"], vec!["n-1", "ad-1"]]
+    );
+    for body in &sent[..3] {
+        assert_eq!(body["profiles"][0]["replaceWithProfile"], "n-1");
+    }
+    assert_eq!(sent[3]["profiles"][1], serde_json::json!({"uid": "ad-1"}));
     let applies: Vec<String> = stage
         .tofu_calls()
         .lines()
@@ -4891,6 +4974,81 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "",
         ],
         "the variable before its use, and its use away before the variable"
+    );
+}
+
+/// Stage 2 of `tag-only.sh` asks the repave route about each move to a version with another tag of
+/// the OS pack. It sends the body of a swap, and then the earlier body of `tenant.sh` (#864).
+#[test]
+fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_a_pack_tag() {
+    let mut outputs = baseline_outputs();
+    outputs["tagged_profile_uids"] = serde_json::json!({"1.0.2": "x-2", "1.0.3": "f-3"});
+    let stage = Stage::new(outputs);
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(
+        stage.path("out/ids.env"),
+        "PALETTE_PROJECT_UID=p-1\nC=c-a\nCN=fred\nN=strata-live-profile\nP=r-1\n",
+    )
+    .unwrap();
+    stage.route(
+        &cluster_route("c-a"),
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
+            "spec":{"clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
+    );
+    for (uid, tag) in [
+        ("r-1", "24.04"),
+        ("x-2", "LTS__24.04"),
+        ("f-3", "LTS__24.x"),
+    ] {
+        stage.route(
+            &profile_route(uid),
+            &format!(
+                r#"{{"metadata":{{"uid":"{uid}"}},"spec":{{"published":{{"packs":[
+                    {{"name":"ubuntu-aws","tag":"{tag}","type":"spectro","layer":"os","values":"os: 1\n"}},
+                    {{"name":"kubernetes","tag":"1.35.6","type":"spectro","layer":"k8s",
+                        "values":"postKubeadmCommands:\n"}}]}}}}}}"#
+            ),
+        );
+    }
+    stage.route(
+        "/v1/spectroclusters/c-a/validate/repave",
+        r#"{"isRepaveRequired":false,"reasons":[]}"#,
+    );
+
+    let (_, steps) = stage.run("tag-only.sh", &["2"]);
+    passed(&steps, &["palette-repave-exact", "palette-repave-floating"]);
+    for seen in [
+        "palette-repave-exact-replace",
+        "palette-repave-floating-replace",
+        "palette-repave-back-replace",
+    ] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
+    }
+    // each move goes as a swap, and then as the earlier body. The control is a swap of 1.0.0 with
+    // itself. In stage 4, the cluster of the stand-in still runs 1.0.0, so the swap of the move
+    // back stops. The last question is the earlier body of the move back
+    let bodies: Vec<serde_json::Value> = stage
+        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+        .iter()
+        .map(|b| {
+            let profiles = b["profiles"].as_array().unwrap();
+            let uids: Vec<_> = profiles.iter().map(|p| p["uid"].clone()).collect();
+            serde_json::json!({"uids": uids, "replaces": profiles[0]["replaceWithProfile"]})
+        })
+        .collect();
+    let swap = |first: &str| serde_json::json!({"uids": [first, "ad-1"], "replaces": null});
+    let replace =
+        |current: &str, target: &str| serde_json::json!({"uids": [current], "replaces": target});
+    assert_eq!(
+        bodies,
+        [
+            swap("x-2"),
+            replace("r-1", "x-2"),
+            swap("f-3"),
+            replace("r-1", "f-3"),
+            swap("r-1"),
+            replace("x-2", "r-1"),
+        ]
     );
 }
 
@@ -5273,7 +5431,8 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     stage.route(
         &cluster_route("c-t"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
-            "spec":{"clusterTemplate":{"uid":"t-1","projectUid":"p-1"}}}"#,
+            "spec":{"clusterTemplate":{"uid":"t-1","projectUid":"p-1"},
+                "clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.published("n-1", KUBERNETES_PACK, "{}");
     stage.route(
@@ -5338,10 +5497,10 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     assert_eq!(
         (
             asked[0]["profiles"][0]["uid"].as_str(),
-            asked[0]["profiles"][0]["replaceWithProfile"].as_str()
+            &asked[0]["profiles"][1]
         ),
-        (Some("r-1"), Some("n-1")),
-        "the move from the release version to the next one"
+        (Some("n-1"), &serde_json::json!({"uid": "ad-1"})),
+        "the move from the release version to the next one, with the add-on profile of the cluster"
     );
     let edits: Vec<String> = stage
         .sent("PUT", &profile_route("n-1"))

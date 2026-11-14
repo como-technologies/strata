@@ -19,6 +19,7 @@ pub mod cloud;
 pub mod cluster_state;
 pub mod cluster_template;
 pub mod conjunction;
+pub(crate) mod input_type;
 pub mod layer;
 pub mod oci_provider;
 pub mod pack_state;

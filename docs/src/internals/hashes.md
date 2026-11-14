@@ -36,7 +36,7 @@ The hash keeps a fixed set of fields of each variable, and drops the rest:
 - the input type
 - the label, the value, and the description of each option
 
-It keeps no id. Strata sorts the variables by name before it hashes them, so the
+It keeps no id, and no `default` mark of an option. Strata sorts the variables by name before it hashes them, so the
 order in which Palette lists them does not reach the hash either.
 
 A sensitive variable arrives masked. Palette serves asterisks in place of the
@@ -106,6 +106,7 @@ manifest, so such a value shows its change too.
 | --- | --- |
 | The pack schema and the presets | Palette does not store them on a profile. They belong to the pack version in the registry. A preset that a profile applies goes into the values, which `authored` covers. See [What Palette does](./palette/packs.md#pack-schema-and-presets). |
 | The values that a cluster gives its variables | They are the input of a run, not the release. Some are secrets. |
+| The `default` mark of an option of a variable | A record of strata 0.33 and before does not hold it, so a hash of it would move the root of such a record. A record keeps the mark as `options[].default`, and `behind` and `compare --validate` read it: see [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |
 | The consumers, the fetch time, and the project | They describe a moment, not the release. |
 | The uid of a manifest, and the digest Palette reports for it | Palette mints the uid for each copy. `authored` covers the name and the content hash of each manifest, sorted by name. |
 | The annotations of a pack reference | A record keeps `imageId` alone outside the root, in `annotations`, and names the provider type of an OCI registry as `registryProviderType`. `compare`, `verify`, and `same-release` name a new `imageId`: see [A new machine image](../reference/impact.md#a-new-machine-image). |

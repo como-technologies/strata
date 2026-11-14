@@ -120,11 +120,13 @@ a tag on a published version through the API. The source for
 | `compare-exact-json`, `compare-exact-json-says` | 1, 0 | #19: the same as JSON: `sameContent`, the OS pack `tagRenamed`, max impact none |
 | `compare-floating`, `compare-floating-says` | 1, 0 | #19: the floating tag is the same content too |
 | `same-release-tags` | 0 | #19: the three versions are one release |
-| `palette-repave-exact`, `palette-repave-floating` | 0 | Palette repaves nothing for a move between them |
+| `palette-repave-exact`, `palette-repave-floating` | 0 | #864: `tenant.sh repave` sends the body of a swap: each profile of cluster A, with 1.0.2 or 1.0.3 in place of 1.0.0. The code of Palette shows no repave. No result yet: no live window ran the body of a swap. |
+| `palette-repave-exact-replace`, `palette-repave-floating-replace` | ? | #864: the earlier body of `tenant.sh repave`: 1.0.0 alone, with `replaceWithProfile` and the `packValues` of 1.0.2 or 1.0.3. Palette repaves nothing for a move between them with this body. |
 | `palette-repave-control` | 1 | the control, one more kubeadm command, does repave |
 | `a2`, `a2-runs-exact`, `instances2` | 0 | after the move, the selection is `IDENTICAL` to the target |
 | `repaved-to-exact` | 1 | #19: the move kept the cluster's instances |
-| `palette-repave-back` | 0 | Palette repaves nothing for the move back |
+| `palette-repave-back` | 0 | #864: the body of a swap for the move back: each profile of cluster A, with 1.0.0 in place of 1.0.2. The code of Palette shows no repave. No result yet: no live window ran the body of a swap. |
+| `palette-repave-back-replace` | ? | #864: the earlier body: 1.0.2 alone, with `replaceWithProfile` and the `packValues` of 1.0.0. Palette repaves nothing for the move back with this body. |
 | `a3`, `a3-runs-release`, `instances3` | 0 | after the move back, the selection is `IDENTICAL` to the first version |
 | `repaved-back` | 1 | #19: the move back kept the instances |
 | `retag` | 0 | #19: rename a published version's OS pack tag through the API, keeping its pack uid |
@@ -887,8 +889,9 @@ console forwards to the mark until Palette starts the forward service again.
 | `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml` |
 | `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600` |
 | `var-strata`, `var-strata-answer` | ? | #132: `compare --repave` of cluster A with 1.0.1 sends the uid of 1.0.1 alone, with no `packValues` and no variables. Palette says no repave: `required` false (recorded 1, 1) |
-| `var-none`, `var-default` | ? | #132: `tenant.sh repave` sends the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
-| `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands` |
+| `var-none`, `var-default` | ? | #132: `tenant.sh repave` with `REPAVE_FORM=replace` sends the earlier body: the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
+| `var-control`, `var-control-says` | 1, 0 | #132: the same earlier body with `strata_mode` `644`: Palette says repave for `kubeadmconfig.postKubeadmCommands` |
+| `var-swap` | ? | #864: `tenant.sh repave` sends the body of a swap. It has the uid of 1.0.1 and its `packValues` in place of 1.0.0, and the uid of the add-on profile. The code of Palette shows the target of `var-strata`. No result yet: no live window ran the body of a swap. |
 | `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
 | `vmo-cluster`, `vmo-runs` | 0 | #717: the cluster runs `virtual-machine-orchestrator`, the values of the pack hold `consoleBaseAddress`, and no cluster template governs the cluster. No result yet: no live window ran stage 9. |
 | `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet: no live window ran stage 9. |

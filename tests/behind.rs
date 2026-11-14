@@ -687,6 +687,58 @@ fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_a
 }
 
 #[test]
+fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_one_with_a_default_option()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    let api = serve_packs_with(
+        api,
+        (HELD, "1.3.1"),
+        BARNEY,
+        &packs_held(),
+        json!({"variables": []}),
+    );
+    // 1.4.0 adds two required dropdown variables with no default value. Palette gives the mark
+    // `default` on each option, and only zone has an option with the mark
+    let dropdown = |name: &str, default: bool| {
+        let mut v = common::variable(name, name, "", false);
+        v["inputType"] = json!("dropdown");
+        v["options"] = json!([
+            {"label": "a", "value": "1", "description": "", "default": false},
+            {"label": "b", "value": "2", "description": "", "default": default},
+        ]);
+        v
+    };
+    let variables = json!({"variables": [dropdown("size", false), dropdown("zone", true)]});
+    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest(), variables);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    let required = bump.update_checks.required_variables.as_ref();
+    assert_eq!(required.map(|r| r.names.clone()), Some(vec!["size".into()]));
+
+    // a record of 1.4.0 keeps the mark of the default option, and no mark of another option
+    let newest = record_of(&api, NEWEST, dir.path(), "newest.json");
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(newest).unwrap()).unwrap();
+    let marks = |name: &str| -> Vec<Value> {
+        let v = doc["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap();
+        v["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["default"].clone())
+            .collect()
+    };
+    assert_eq!(marks("zone"), [Value::Null, json!(true)]);
+    assert_eq!(marks("size"), [Value::Null, Value::Null]);
+}
+
+#[test]
 fn a_move_that_strata_cannot_compare_makes_the_profile_version_not_checked() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_move();
