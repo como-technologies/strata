@@ -129,7 +129,7 @@ if stage 3 "the publish"; then
     jq -e --arg name "$NAME" '[.profiles[] | select(.name == $name and .version == "1.0.0")]
       | length == 1 and (.[0].pinnedBy | length) == 2 and any(.[0].newer[]; .version == "1.0.1")' behind-profile.out
   # the next version keeps the version of each pack. So for each pin of the release that is behind,
-  # behind says that no newer version of the release carries a newer version of the pack
+  # no newer version of the release carries a newer version of the pack. behind says so
   check behind-carrier 0 "#709: no newer version of $NAME@1.0.0 carries a newer version of a pin of the release that is behind" -- \
     jq -e --arg name "$NAME" '[.pins[] | select(.behind and any(.pinnedBy[]; .subject == "\($name)@1.0.0"))]
       | all(.[]; [.carriers[]? | select(.profile == $name and .version == "1.0.0")]

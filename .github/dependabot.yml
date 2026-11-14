@@ -5,11 +5,13 @@
 # Each pull request goes to the milestone Backlog (number 1), so no wave counts it. riff does not
 # take it: it gets no riff/verify, so a maintainer merges it when its checks pass.
 #
-# Not read here: crates/strata-knurl (it needs knurl, a private repository), examples/live/terraform
-# (the live example pins the Spectro Cloud provider, and a new one needs a live run; the contract
-# run watches its releases), deploy/session (the image of the riff sessions follows riff), and
-# examples/library and examples/library-preflight (each depends on the root package by its path, so
-# Dependabot edits the manifests of the root there, and each update opens a second pull request).
+# Not read here: crates/strata-knurl, examples/live/terraform, deploy/session, examples/library, and
+# examples/library-preflight. The crate crates/strata-knurl needs knurl, a private repository. The
+# live example pins the Spectro Cloud provider in examples/live/terraform: a new one needs a live
+# run, and the contract run watches its releases. The image of the riff sessions in deploy/session
+# follows riff. examples/library and examples/library-preflight each depend on the root package by
+# its path. So Dependabot edits the manifests of the root there, and each update opens a second
+# pull request.
 version: 2
 updates:
   - package-ecosystem: cargo

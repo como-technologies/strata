@@ -1,4 +1,4 @@
-//! The world of `cluster:UID`, end to end over the memory API: the variable values of the cluster
+//! The world of `cluster:UID`, end to end over the memory API. The variable values of the cluster
 //! are in the entity, and the validate route of Palette gets them. The reports hide each value that
 //! Palette quotes in a refusal.
 
@@ -233,17 +233,18 @@ fn a_500_that_the_cluster_validate_route_does_not_refuse_is_an_error_of_palette_
     assert_eq!(check.verdict, Verdict::Error, "{:?}", check.messages);
 }
 
-/// The variables of the cluster `c1` for the tests of the mask, as pairs of a name and a value: a
-/// pod CIDR, a service CIDR that is not a CIDR, and a label that is not an option of its dropdown.
+/// The variables of the cluster `c1` for the tests of the mask, as pairs of a name and a value.
+/// They are a pod CIDR, a service CIDR that is not a CIDR, and a label that is not an option of
+/// its dropdown.
 const QUOTED: [(&str, &str); 3] = [
     ("pod_cidr", "10.244.0.0/16"),
     ("service_cidr", "10.96.0.0/33"),
     ("tier_label", "platinum"),
 ];
 
-/// Three refusals of Palette that quote the value of a variable: the code, the variable, and the
-/// message as the message template of Palette writes it. Palette puts the value of a variable in
-/// place of a `{{.spectro.var.NAME}}` reference before it checks.
+/// Three refusals of Palette that quote the value of a variable. Each has the code, the variable,
+/// and the message as the message template of Palette writes it. Palette puts the value of a
+/// variable in place of a `{{.spectro.var.NAME}}` reference before it checks.
 const REFUSALS: [(&str, &str, &str); 3] = [
     (
         "K8SCidrOverlap",
@@ -262,8 +263,8 @@ const REFUSALS: [(&str, &str, &str); 3] = [
     ),
 ];
 
-/// What `palette-validate` says of each refusal of `REFUSALS`, in the same order: the code and the
-/// message of Palette, with a mark in place of each value.
+/// What `palette-validate` says of each refusal of `REFUSALS`, in the same order. It says the code
+/// and the message of Palette, with a mark in place of each value.
 const SAID: [&str; 3] = [
     "Palette refused the entity: K8SCidrOverlap: Kubernetes podCIDR '[value of pod_cidr]' is overlapping with vpc 'vpc-0a1b' cidr block '10.244.0.0/14'",
     "Palette refused the entity: CidrParseError: CIDR '[value of service_cidr] parse error; caused by: invalid CIDR address: [value of service_cidr]",
@@ -344,7 +345,7 @@ fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_
 /// The refusal of a machine pool with no subnet, for AWS with a VPC, as Palette writes it.
 const NO_SUBNET: &str = "Parameter 'Subnets' is required";
 
-/// The route refuses a body for AWS with a VPC and a pool with no subnet with HTTP 500 and
+/// The route refuses a body for AWS with a VPC and a pool with no subnet. It gives HTTP 500 and
 /// `RequiredParam`, as a live run shows.
 ///
 /// `palette-validate` reads it as the answer of the route, as it reads HTTP 400. The verdict is
@@ -407,9 +408,9 @@ fn the_three_reports_write_a_mark_in_place_of_each_value_that_a_refusal_of_palet
     }
 }
 
-/// Each short value here is a part of a longer word in the messages of the three refusals: of a
-/// CIDR, of the route, or of the address `/33`. `true` is a value of the JSON of `report.json`.
-/// So the variables change no text of the three reports (#614).
+/// Each short value here is a part of a longer word in the messages of the three refusals. The
+/// longer word is in a CIDR, in the route, or in the address `/33`. `true` is a value of the JSON
+/// of `report.json`. So the variables change no text of the three reports (#614).
 #[test]
 fn a_short_or_common_value_of_a_variable_masks_no_other_text_of_the_three_reports() {
     let short = [

@@ -343,10 +343,10 @@ try_apply() {
 }
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
-# flag-on version bump replaces the profile resource, and the provider deletes the replaced object with
-# the skip_destroy its state holds, not the new value (provider 0.30.1): without this, the bump asks
-# Palette to delete the old version, which Palette refuses while a cluster runs it
-# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
+# flag-on version bump replaces the profile resource. The provider deletes the replaced object with
+# the skip_destroy that its state holds, not the new value (provider 0.30.1). Without this, the bump
+# asks Palette to delete the old version. Palette refuses the delete while a cluster runs that
+# version (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
 hold_versions() { tf_apply "$flag"; }
 # apply_baseline: the default variables with the flag off, which is the baseline's configuration;
 # skip_destroy goes back to false on every profile. A profile resource this removes stays in
@@ -526,7 +526,7 @@ pf_stop() {
 }
 # pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The log is
 # port-forward.log. The wait ends at the line "Forwarding from" in the log, or at the end of the process.
-# Its limit is 30 seconds, not 30 looks: the stand-in sleep of the tests returns at once, so 30 looks take
+# Its limit is 30 seconds, not 30 looks. The stand-in sleep of the tests returns at once, so 30 looks take
 # less than a second there. When the function fails, it says why on standard error.
 pf_start() {
   local end why
@@ -573,9 +573,9 @@ pods_read() {
 
 # The image of the observer. It is on a public package of GitHub, so a node pulls it with no pull
 # Secret. A run never pushes it to another registry, so the pod runs the image that CI built.
-# observer_image [TAG]: set $image from OBSERVER_IMAGE (default: the image with the tag TAG, or with the
-# tag of the version in Cargo.toml), and $image_name and $image_pin for a kustomization. It stops the
-# script for an image with neither a tag nor a digest.
+# observer_image [TAG]: set $image from OBSERVER_IMAGE, and $image_name and $image_pin for a
+# kustomization. The default of $image is the image with the tag TAG, or with the tag of the version
+# in Cargo.toml. It stops the script for an image with neither a tag nor a digest.
 observer_image() {
   local version
   version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)

@@ -333,7 +333,7 @@ publish() {
   echo "published the draft of $uid"
 }
 
-# copy_body UID NAME DIR: DIR/body, the create of the profile NAME with the version, the packs,
+# copy_body UID NAME DIR: DIR/body, the create of the profile NAME. It has the version, the packs,
 # the values, and the manifests of the published version UID. Each manifest goes with no uid, so
 # the new profile gets its own manifests.
 copy_body() {

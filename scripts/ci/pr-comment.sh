@@ -6,10 +6,12 @@
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
 # file is snapshotted once, so both renderings read files and Palette is asked once. A cluster ref
-# beside another ref is read one more time, for the profiles that `compare` holds. The comment starts
-# with the marker <!-- strata -->; a later run finds the comment by that marker and updates it, so
-# a pull request carries one strata comment that follows each push. The label (default repave) is
-# added when summary.maxImpact is at or above the threshold (default repave) and removed otherwise.
+# beside another ref is read one more time, for the profiles that `compare` holds.
+#
+# The comment starts with the marker <!-- strata -->. A later run finds the comment by that marker
+# and updates it, so a pull request carries one strata comment that follows each push. The label
+# (default repave) is added when summary.maxImpact is at or above the threshold (default repave)
+# and removed otherwise.
 # --dry-run prints the comment, says what it would do with the label, and calls no host.
 #
 # --repave asks Palette if the change repaves the cluster, as `strata compare --repave` does, and

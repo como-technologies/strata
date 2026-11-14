@@ -416,7 +416,7 @@ live-loop: build
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
 
-# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and the nodes pull it from its public package with no pull Secret. Needs live-up (billable until live-down), kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
+# The digest that each pod runs (#646). The observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and the nodes pull it from its public package with no pull Secret. Needs live-up (billable until live-down), kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
 [group('live checks')]
 live-observer-images: build
     examples/live/observer-images.sh
@@ -525,7 +525,7 @@ live-projects: build
 live-release: build
     examples/live/release.sh
 
-# The public repository (#65): with no login, the book opens, the install command of the README installs a release, and the registry gives the image and the chart of the observer. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
+# The public repository (#65): with no login, the book opens and the install command of the README installs a release. The registry gives the image and the chart of the observer with no login too. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
 [group('live checks')]
 live-public: build
     examples/live/public.sh

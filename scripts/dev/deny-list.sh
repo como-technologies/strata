@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Scan the text and the path of each tracked file of the repository, and the target of each
-# tracked symlink, for each entry of the deny list, and fail on a hit. The variable STEP14_DENY
-# holds the list, with one entry on each line.
+# Scan for each entry of the deny list, and fail on a hit. The scan reads the text and the path of
+# each tracked file of the repository, and the target of each tracked symlink. The variable
+# STEP14_DENY holds the list, with one entry on each line.
 # The job `deny list` of the ci workflow gives it the value of the secret of the same name. The
 # recipe `just deny-list` runs this script. "The deny list" in docs/src/development/build-test.md
 # says why the list is a secret.
 #
 # An entry is a fixed string, and the case does not matter. For each hit in the text of a file, the
-# script prints the path and the line number, or the path alone in a binary file. For the paths
-# that hold an entry, it prints only their number, and it prints no such path. A symlink whose
-# target holds an entry is such a path, and the script prints no such target. It never prints an
-# entry or the text of a line. When the list has no entry, it gives a notice that it did not scan,
-# and exits with 0.
+# script prints the path and the line number. In a binary file, it prints the path alone.
+#
+# For the paths that hold an entry, the script prints only their number, and it prints no such
+# path. A symlink whose target holds an entry is such a path, and the script prints no such target.
+# It never prints an entry or the text of a line. When the list has no entry, it gives a notice that
+# it did not scan, and exits with 0.
 set -euo pipefail
 # A trace prints the value of each variable that a line expands, so it can print the list.
 set +x

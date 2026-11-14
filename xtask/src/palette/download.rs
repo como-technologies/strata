@@ -18,7 +18,7 @@
 //! manifest pack. It holds none of a pack of an OCI registry of Helm charts or of Zarf packages.
 //! The list of the packs names such a pack with an empty `filePath`, and a manifest pack only by
 //! its manifests. A pack of an OCI registry of packs has an archive, also when the registry is
-//! private, and its top folder has the name and the version of the pack.
+//! private. Its top folder has the name and the version of the pack.
 //!
 //! A request that accepts JSON alone gets `{"Reader":{}}`, as for the export: see `super::reader`.
 //! Each other request gets the file.
@@ -149,7 +149,7 @@ impl Built {
                 .find(|item| item["metadata"]["uid"] == pin["packUid"])
                 .and_then(|item| item["spec"]["values"].as_str());
             let files: Vec<(&str, &str)> = values.map(|v| ("values.yaml", v)).into_iter().collect();
-            // Palette does not check the answer of the host of a chart, so an error answer goes
+            // Palette does not check the answer of the host of a chart. So an error answer goes
             // in the download as the file of the chart
             if kind == PackType::Helm && pin["registryUid"] == BITNAMI {
                 return CHART_HOST_REFUSAL.as_bytes().to_vec();
