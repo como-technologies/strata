@@ -138,6 +138,7 @@ mod tests {
             status: 403,
             body: format!("{}\n", error_body(Denial::Route.as_str(), &message)),
             retry_after: None,
+            key_proved: false,
         };
         let note = unread_note(&refused.reason());
         assert_eq!(

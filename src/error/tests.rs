@@ -937,6 +937,7 @@ fn the_words_of_a_reason_give_the_status_and_the_code_and_the_message_of_palette
         status: 403,
         body: format!("{denied}\n"),
         retry_after: None,
+        key_proved: false,
     };
     // the record keeps the body as Palette sent it, and the text gives its words
     assert_eq!(api.reason(), format!("HTTP 403: {denied}"));
