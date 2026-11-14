@@ -926,3 +926,47 @@ fn the_reason_of_an_answer_of_palette_is_its_status_and_its_body_with_no_blank_a
     };
     assert_eq!(transport.reason(), "GET /v1/audits: connection reset");
 }
+
+#[test]
+fn the_words_of_a_reason_give_the_status_and_the_code_and_the_message_of_palette_and_no_json() {
+    let message = palette::access_denied_message("audit.list", palette::EACH_SCOPE);
+    let denied = palette::error_body(Denial::Route.as_str(), &message);
+    let api = Error::Api {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        status: 403,
+        body: format!("{denied}\n"),
+        retry_after: None,
+    };
+    // the record keeps the body as Palette sent it, and the text gives its words
+    assert_eq!(api.reason(), format!("HTTP 403: {denied}"));
+    assert_eq!(
+        reason_words(&api.reason()),
+        format!("HTTP 403: AccessDenied: {message}")
+    );
+    for (reason, words) in [
+        // a body with a code and no message gives the code
+        (
+            r#"HTTP 500: {"code":"InternalError"}"#,
+            "HTTP 500: InternalError",
+        ),
+        // a body with no code, such as the page of a proxy, gives its text
+        (
+            "HTTP 502: <html>502 Bad Gateway</html>",
+            "HTTP 502: <html>502 Bad Gateway</html>",
+        ),
+        ("HTTP 403: forbidden", "HTTP 403: forbidden"),
+        // the message of a request that did not complete stays as it is
+        (
+            "GET /v1/audits: connection reset",
+            "GET /v1/audits: connection reset",
+        ),
+        // a text with no status after `HTTP` is no reason of an answer
+        (
+            r#"HTTP x: {"code":"InternalError"}"#,
+            r#"HTTP x: {"code":"InternalError"}"#,
+        ),
+    ] {
+        assert_eq!(reason_words(reason), words, "{reason}");
+    }
+}

@@ -5,6 +5,7 @@ use super::verify::edited_in_place_note;
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
+use crate::error::reason_words;
 use crate::model::repave::PaletteRepaveReason;
 use crate::reference::name_version;
 use crate::snapshot::{PendingUpdate, Source, Tier};
@@ -35,6 +36,7 @@ fn cross_kind_note(d: &Diff) -> Option<String> {
 }
 
 /// One note under the heading of a diff.
+#[derive(PartialEq)]
 pub(crate) enum DiffNote {
     /// A fact that a reader must weigh: yellow on the terminal.
     Warn(String),
@@ -44,8 +46,24 @@ pub(crate) enum DiffNote {
     Palette(Vec<String>),
 }
 
-/// The notes under the heading of a diff, in the order that the reports print them.
+/// The notes under the heading of a diff, in the order that the reports print them, each one
+/// time.
+///
+/// Two records of one cluster can give the same note on each side, such as the note of a pack at
+/// another version than its profile. The report prints the first one.
 pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
+    let mut once: Vec<DiffNote> = Vec::new();
+    for note in all_notes(d) {
+        if !once.contains(&note) {
+            once.push(note);
+        }
+    }
+    once
+}
+
+/// Each note under the heading of a diff, in the order that the reports print them: see
+/// [`diff_notes`].
+fn all_notes(d: &Diff) -> Vec<DiffNote> {
     let mut notes: Vec<DiffNote> = Vec::new();
     notes.extend(edited_in_place_note(d).map(DiffNote::Warn));
     notes.extend(draft_note(d).map(DiffNote::Warn));
@@ -411,9 +429,9 @@ pub(crate) fn pending_profile_names(updates: &[PendingUpdate]) -> String {
 
 /// One note for each cluster side that Palette says holds a repave for approval: `a repave of
 /// cluster fred waits for approval, since <time>: PackValuesUpdated kubernetes
-/// (kubeadmconfig.postKubeadmCommands)`. Two sides that say the same get one note.
+/// (kubeadmconfig.postKubeadmCommands)`.
 fn repave_pending_notes(d: &Diff) -> Vec<String> {
-    let mut notes: Vec<String> = [&d.a, &d.b]
+    [&d.a, &d.b]
         .into_iter()
         .filter_map(|side| side.cluster.as_ref())
         .filter(|c| c.repave_pending == Some(true))
@@ -428,38 +446,41 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
                     note.push_str(&format!(": {}", reasons.join("; ")));
                 }
             } else if let Some(e) = c.pending_repave_error() {
-                note.push_str(&format!(" (strata could not read its reasons: {e})"));
+                note.push_str(&format!(
+                    " (strata could not read its reasons: {})",
+                    reason_words(e)
+                ));
             }
             note.push_str(". Palette refuses an update of its profiles until a person approves it");
             note
         })
-        .collect();
-    notes.dedup();
-    notes
+        .collect()
 }
 
 /// One note for each field of a cluster tier that strata could not read on a side, in text order.
-/// Two sides that say the same get one note.
 ///
 /// For example, for a key whose role does not give `cluster.get`:
-/// `strata could not read policy.rbacs of cluster fred (HTTP 500: {"code":"OperationForbidden",...}), so it does not compare it`.
+/// `strata could not read policy.rbacs of cluster fred (HTTP 500: OperationForbidden: Operation 'cluster.get' is forbidden. ...), so it does not compare it`.
+/// The record keeps the body of the answer in `errors`, and the note gives its words.
 fn unread_notes(d: &Diff) -> Vec<String> {
-    let notes: std::collections::BTreeSet<String> = [&d.a, &d.b]
+    let mut notes: Vec<String> = [&d.a, &d.b]
         .into_iter()
         .filter_map(|side| side.cluster.as_ref())
         .flat_map(|c| {
             c.tiers.iter().flat_map(move |(tier, t)| {
                 t.errors.iter().map(move |(field, e)| {
                     format!(
-                        "strata could not read {} of cluster {} ({e}), so it does not compare it",
+                        "strata could not read {} of cluster {} ({}), so it does not compare it",
                         tier_path(tier, field),
-                        c.name
+                        c.name,
+                        reason_words(e)
                     )
                 })
             })
         })
         .collect();
-    notes.into_iter().collect()
+    notes.sort();
+    notes
 }
 
 /// One note for each tier of a side that a later release wrote, when the other side does not

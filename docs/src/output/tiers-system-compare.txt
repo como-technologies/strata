@@ -2,7 +2,6 @@ $ strata compare runs/payments-fred.json runs/payments-wilma.json
 aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)
 root       088136c929bd -> 088136c929bd   IDENTICAL
 note       cluster payments runs kubernetes 1.36.1, and its profile declares 1.36.2
-note       cluster payments runs kubernetes 1.36.1, and its profile declares 1.36.2
 
   variables unchanged
   cluster tiers unchanged

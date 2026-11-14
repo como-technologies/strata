@@ -340,6 +340,25 @@ facts:
       - src/diff/verify.rs
       - src/ops/verify.rs
 
+  # The audit log refuses a key whose role does not give audit.list
+  - id: audit-log-access-denied
+    kind: behavior
+    reads:
+      codes: [AccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/audits
+    live:
+      - who.sh:noaudit-who-says
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - commands/verify.md#when-strata-cannot-read-the-log
+    code:
+      - src/ops/verify/who.rs
+      - src/error/mod.rs
+
   - id: project-listing
     kind: request
     request: GET /v1/dashboard/projects/metadata

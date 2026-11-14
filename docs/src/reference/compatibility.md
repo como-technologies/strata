@@ -1176,7 +1176,7 @@ field, a value, an input, or an option is in the sections above.
   `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
   and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
   does not count a record with the new status. See
-  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  [A version that the cluster no longer runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs).
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
@@ -1403,6 +1403,16 @@ field, a value, an input, or an option is in the sections above.
   body with no code keeps its text. A script that matches the JSON in the message must read the
   new key `body` of the error document. It holds the body as Palette sent it. A line `not read`
   of `list` gives the same words. See [Errors](./errors.md).
+- **A text of a read that failed gives the words of Palette.** It reads
+  `HTTP 403: AccessDenied: <message>`, as the error `api` does. Before, it gave the JSON of the
+  body. A script that reads the text must read the new words, or read `--json`. See
+  [When strata cannot read the log](../commands/verify.md#when-strata-cannot-read-the-log).
+  - The line `who: not read` of `verify --who`, and the note `the audit log is unavailable`.
+  - The note `the sync status of registry <uid> is unavailable` of `verify` and `behind`.
+  - The notes of `compare` and `verify` for a part of a cluster or the reasons of a repave that
+    strata could not read.
+  - The documents do not change. `verify.whoError`, `errors` of a cluster record and of its
+    tiers, and `registrySyncError` keep `HTTP <status>: <body>`, with the body as Palette sent it.
 - **A ref with no version that names a profile gives the error `usage`.** Before, it was `api`.
   Strata reads such a ref as a uid, Palette answers HTTP 404, and strata then reads the listing
   of the scope. The message lists each version of the name and names `<name>@latest`. A name
@@ -1416,11 +1426,19 @@ field, a value, an input, or an option is in the sections above.
   - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
     policy tier at the binding. The exit does not change. Record the cluster again.
   - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
+- **`compare` and `verify` print each note one time.** Before, two records of one cluster gave
+  some notes two times, one for each side. These notes are `cluster <c> runs <pack> <version>,
+  and its profile declares <version>` and `cluster <c> is behind`. A script that counts the
+  `note` lines of the text reads one line for each such note now. The JSON does not change:
+  `runningBehind` keeps one row for each side. See [Notes in the report](../commands/compare.md#notes-in-the-report).
 
 ### For a user of the CI drop-ins
 
 - **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
   names the code and the message of Palette. Before, it quoted the JSON of the body.
+- **The line `who: not read` in an issue of `verify-report.sh --who` gives the words of
+  Palette.** It names the status, the code, and the message. Before, it quoted the JSON of the
+  body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
@@ -1730,7 +1748,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer gives the status `newer` to a profile with a newer version.** Before, such
   a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
-  [Run it once](../automation/observer.md#run-it-once).
+  [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **`behind` names the move to the newest profile version.** A new line
   `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
   `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
@@ -1744,7 +1762,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the move to the newest version of a profile.** `newerVersion` holds the
   new field `move`, or `unread` when the compare failed. The detail route takes the side
   `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
-  See [Run it once](../automation/observer.md#run-it-once).
+  See [The move to the newest version of a profile](../development/observer.md#the-move-to-the-newest-version-of-a-profile).
 - **`behind` names the newer profile version that carries a newer pack.** A new line under each
   pin that is behind names it. The line is `<name>@<version> carries <pack>@<version>`, or it says
   that no newer version of the profile carries one. `pins[].carriers[]` of `--json` holds the
@@ -1758,7 +1776,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the carrier of a pack that is behind.** A pack row of `/v1/profiles` holds
   the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
   of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
-  badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
+  badge "Changed". See [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **The tiles of the page of the newer versions say "newer", and not "behind".** The tile
   "Packs behind" is now "Packs with a newer version". The tile "Versions behind" is now
   "Versions newer than the pins". The numbers and the lines under them stay the same. A check

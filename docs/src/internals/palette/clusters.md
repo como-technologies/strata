@@ -309,7 +309,7 @@ request has a result for Project Viewer only.
 Cluster Viewer alone gives every answer except the audit log. The audit log answers
 HTTP 403 with the code `AccessDenied`, and the message names `audit.list`. Then
 `verify --who` keeps its verdict and cannot name the writer: see
-[Who changed it](../../commands/verify.md#who-changed-it).
+[When strata cannot read the log](../../commands/verify.md#when-strata-cannot-read-the-log).
 
 The live run used these two roles only. The column of the built-in roles comes from
 the code of Palette. A custom role at project scope needs `cluster.get`,
