@@ -170,6 +170,20 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
+    /// The first page of the cluster search with no condition, `POST
+    /// /v1/dashboard/spectroclusters/search`: at most one page of clusters. At tenant scope,
+    /// Palette refuses the search to a key whose role does not give `project.list` in the tenant.
+    /// So the answer shows if the project listing of the tenant holds each project.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request. For such a key, Palette answers HTTP 403 with the code
+    /// `AccessDenied`.
+    pub(crate) fn cluster_search_page(&self) -> Result<Value> {
+        self.api
+            .post_json(&with_limit(CLUSTER_SEARCH), &search_all())
+    }
+
     /// The virtual clusters that a search filter selects: [`Palette::cluster_search`] with the
     /// condition `environment eq nested` added to `filter` as one more group. The search omits
     /// each virtual cluster unless a condition asks for that environment, the cloud type of

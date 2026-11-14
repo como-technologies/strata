@@ -46,7 +46,8 @@ pub struct UnreadProject {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectsRead {
     /// The projects of the tenant listing that strata searched for the clusters, the virtual
-    /// clusters, and the edge hosts, or could not search.
+    /// clusters, and the edge hosts, or could not search. For an app profile, strata listed their
+    /// app deployments.
     pub read: usize,
     /// The projects of `read` where a search failed. A consumer in one of them can be missing.
     /// When the cluster search at tenant scope failed with an error that is not a denial, strata
@@ -55,7 +56,8 @@ pub struct ProjectsRead {
     pub unread: Vec<UnreadProject>,
     /// Why Palette refused the cluster search at tenant scope, when it did. Palette lists every
     /// project of the tenant only to a key whose role gives `project.list` in the tenant, and that
-    /// search needs the same permission. So a project outside the listing is not checked.
+    /// search needs the same permission. So a project outside the listing is not checked. For an
+    /// app profile, strata sends one page of the search only for this answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub tenant_error: Option<Value>,
@@ -113,33 +115,21 @@ where
     let mut projects = ProjectsRead::default();
     let mut found = Found::default();
     let Candidates { clusters, resolved } = search_or_listing(wide, name, progress);
-    let stopped = match clusters {
+    let stopped = match tenant_search(clusters, &mut projects) {
         Ok(clusters) => {
             found.clusters.extend(clusters);
-            None
-        }
-        Err(e) if e.denial().is_some() => {
-            projects.tenant_error = Some(e.to_json());
             None
         }
         Err(e) => Some(e),
     };
     if let Some(listed) = tenant_listing(scopes, listings, &mut projects) {
-        projects.read = listed.len();
-        match &stopped {
-            // the second reading stops at the failed search, before it searches a project
-            Some(e) => projects.unread = listed.iter().map(|p| unread_project(p, e)).collect(),
-            None => {
-                progress.note("searching each project of the tenant");
-                for project in listed {
-                    let searched = client_for(clients, home, &project.uid, connect)
-                        .and_then(|p| found.search(p, name, progress));
-                    if let Err(e) = searched {
-                        projects.unread.push(unread_project(project, &e));
-                    }
-                }
-            }
+        if stopped.is_none() {
+            progress.note("searching each project of the tenant");
         }
+        search_listed(listed, stopped.as_ref(), &mut projects, |project| {
+            client_for(clients, home, &project.uid, connect)
+                .and_then(|p| found.search(p, name, progress))
+        });
     }
     EachProject {
         candidates: Candidates {
@@ -148,6 +138,43 @@ where
         },
         hosts: found.hosts,
         projects,
+    }
+}
+
+/// The answer `searched` of the cluster search at tenant scope, for the projects of `read`.
+///
+/// Palette refuses that search with a denial, such as `AccessDenied`, to a key whose role does not
+/// give `project.list` in the tenant. The denial goes in [`ProjectsRead::tenant_error`], and the
+/// answer is then empty: strata still searches each project that the key can list. Each other
+/// error stays the answer, and it stops the search of each project.
+pub(super) fn tenant_search<T: Default>(searched: Result<T>, read: &mut ProjectsRead) -> Result<T> {
+    match searched {
+        Err(e) if e.denial().is_some() => {
+            read.tenant_error = Some(e.to_json());
+            Ok(T::default())
+        }
+        searched => searched,
+    }
+}
+
+/// Search each project of `listed`, the projects of the tenant listing, with `search`.
+///
+/// A project whose search fails goes in [`ProjectsRead::unread`] of `read`. When `stopped` holds
+/// the error of the cluster search at tenant scope, strata searches no project. Then each project
+/// of `listed` is in `unread` with that error.
+pub(super) fn search_listed(
+    listed: &[ListedProject],
+    stopped: Option<&Error>,
+    read: &mut ProjectsRead,
+    mut search: impl FnMut(&ListedProject) -> Result<()>,
+) {
+    read.read = listed.len();
+    for project in listed {
+        let failed = match stopped {
+            Some(e) => Some(unread_project(project, e)),
+            None => search(project).err().map(|e| unread_project(project, &e)),
+        };
+        read.unread.extend(failed);
     }
 }
 

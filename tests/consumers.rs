@@ -106,6 +106,36 @@ fn staging_denied() -> MemoryApi {
     denying("p3", "staging", &post(CLUSTER_SEARCH))
 }
 
+/// The tenant `api` for a key with no `project.list` in the tenant. Palette refuses the search at
+/// tenant scope, and lists only the projects of the roles of the key: `dev`.
+fn no_project_list(api: MemoryApi) -> MemoryApi {
+    api.with(PROJECT_LISTING, project_listing(&PROJECTS[..1]))
+        .failing(
+            post(CLUSTER_SEARCH),
+            403,
+            error_body(
+                Denial::Route.as_str(),
+                &access_denied_message("project.list", "tenant"),
+            ),
+        )
+}
+
+/// The lines `scope:` and `NOT CHECKED:` of a profile of the tenant for the key of
+/// [`no_project_list`].
+const DEV_LISTED: &str = "  scope: tenant profile, usable in every project; 1 of 1 project \
+     searched\n  NOT CHECKED: each project that this key cannot list\n";
+
+/// The tenant `api`, whose cluster search at tenant scope fails with HTTP 500 and no code of a
+/// denial.
+fn search_failing(api: MemoryApi) -> MemoryApi {
+    api.failing(post(CLUSTER_SEARCH), 500, "boom")
+}
+
+/// The lines `scope:` and `NOT CHECKED:` of a profile of the tenant when the search of
+/// [`search_failing`] stops the search of each project.
+const SEARCH_FAILED: &str = "  scope: tenant profile, usable in every project; 0 of 3 projects \
+     searched\n  NOT CHECKED: dev, prod, and staging (the cluster search failed)\n";
+
 /// The answer of `consumers` for `base@2.0.0`, by uid: see [`consumers_of_ref`].
 fn consumers_of(
     tenant: &MemoryApi,
@@ -267,18 +297,7 @@ fn a_cluster_that_only_the_search_of_its_project_names_joins_the_answer_and_is_r
 
 #[test]
 fn a_key_that_cannot_search_the_tenant_leaves_each_project_that_it_cannot_list_not_checked() {
-    // without project.list in the tenant, Palette refuses the search at tenant scope, and lists
-    // only the projects of the roles of the key
-    let api = tenant(base("tenant"))
-        .with(PROJECT_LISTING, project_listing(&PROJECTS[..1]))
-        .failing(
-            post(CLUSTER_SEARCH),
-            403,
-            error_body(
-                Denial::Route.as_str(),
-                &access_denied_message("project.list", "tenant"),
-            ),
-        );
+    let api = no_project_list(tenant(base("tenant")));
     let projects = [project("p1"), project("p2"), project("p3")];
     let r = consumers_of(&api, &projects, false, &RefCell::default());
 
@@ -289,20 +308,14 @@ fn a_key_that_cannot_search_the_tenant_leaves_each_project_that_it_cannot_list_n
     assert!(r.clusters_read.error.is_none(), "dev was searched");
     assert_eq!(r.exit_code(), 2);
     let text = common::terminal().render_consumers(&r).unwrap();
-    assert!(
-        text.ends_with(
-            "  scope: tenant profile, usable in every project; 1 of 1 project searched\n  \
-             NOT CHECKED: each project that this key cannot list\n"
-        ),
-        "{text}"
-    );
+    assert!(text.ends_with(DEV_LISTED), "{text}");
     assert_eq!(json_of(&r)["projectsRead"]["tenantError"]["status"], 403);
 }
 
 #[test]
 fn a_cluster_search_of_the_tenant_that_fails_names_each_project_of_the_listing_not_checked() {
-    // HTTP 500 with no code of a denial: the second reading stops, and searches no project
-    let api = tenant(base("tenant")).failing(post(CLUSTER_SEARCH), 500, "boom");
+    // the second reading stops, and searches no project
+    let api = search_failing(tenant(base("tenant")));
     let projects = [project("p1"), project("p2"), project("p3")];
     let scopes = RefCell::default();
     let r = consumers_of(&api, &projects, false, &scopes);
@@ -324,13 +337,7 @@ fn a_cluster_search_of_the_tenant_that_fails_names_each_project_of_the_listing_n
         "no project was searched: {scopes:?}"
     );
     let text = common::terminal().render_consumers(&r).unwrap();
-    assert!(
-        text.ends_with(
-            "  scope: tenant profile, usable in every project; 0 of 3 projects searched\n  \
-             NOT CHECKED: dev, prod, and staging (the cluster search failed)\n"
-        ),
-        "{text}"
-    );
+    assert!(text.ends_with(SEARCH_FAILED), "{text}");
     let json = json_of(&r);
     assert_eq!(json["projectsRead"]["unread"][2]["name"], "staging");
     assert_eq!(json["projectsRead"]["unread"][2]["error"]["status"], 500);
@@ -602,17 +609,29 @@ fn shop(scope: &str) -> Value {
     doc
 }
 
-/// The answer of `consumers appprofile:ap1` for the app profile `doc`: see [`consumers_of_ref`].
+/// The answer of `consumers appprofile:ap1` for the app profile `doc`, in the tenant of
+/// [`tenant`]: see [`app_consumers_in`].
 fn app_consumers_of(
     doc: Value,
     projects: &[MemoryApi; 3],
     list_only: bool,
     scopes: &RefCell<Vec<String>>,
 ) -> ConsumersReport {
-    let api = tenant(base("tenant")).with(app_profile_route("ap1"), doc);
+    app_consumers_in(tenant(base("tenant")), doc, projects, list_only, scopes)
+}
+
+/// The answer of `consumers appprofile:ap1` for the app profile `doc`, with `api` at tenant scope:
+/// see [`consumers_of_ref`].
+fn app_consumers_in(
+    api: MemoryApi,
+    doc: Value,
+    projects: &[MemoryApi; 3],
+    list_only: bool,
+    scopes: &RefCell<Vec<String>>,
+) -> ConsumersReport {
     consumers_of_ref(
         &Ref::parse("appprofile:ap1"),
-        &api,
+        &api.with(app_profile_route("ap1"), doc),
         projects,
         list_only,
         scopes,
@@ -743,6 +762,53 @@ fn an_app_profile_of_the_tenant_lists_the_app_deployments_of_each_project_of_the
     );
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(text.ends_with(STAGING_UNREAD), "{text}");
+}
+
+#[test]
+fn an_app_profile_of_the_tenant_with_a_key_that_cannot_list_each_project_is_not_checked() {
+    // the app deployment listing goes to each project, and only the search at tenant scope
+    // shows the key
+    let api = no_project_list(tenant(base("tenant")));
+    let projects = no_deployments();
+    let r = app_consumers_in(api, shop("tenant"), &projects, false, &RefCell::default());
+
+    let read = r.projects_read.as_ref().unwrap();
+    assert_eq!(read.read, 1);
+    assert!(read.unread.is_empty());
+    assert!(read.tenant_error.is_some());
+    assert_eq!(
+        r.exit_code(),
+        2,
+        "an app deployment in a project outside the listing can be missing"
+    );
+    assert_eq!(projects[0].calls(&post(APP_DEPLOYMENT_LISTING)), 1);
+    assert_eq!(
+        row_of(&r, Reading::AppDeployments),
+        "no other app deployment on this version"
+    );
+    let text = common::terminal().render_consumers(&r).unwrap();
+    assert!(text.ends_with(DEV_LISTED), "{text}");
+    assert_eq!(json_of(&r)["projectsRead"]["tenantError"]["status"], 403);
+}
+
+#[test]
+fn an_app_profile_of_the_tenant_whose_search_at_tenant_scope_fails_lists_no_project() {
+    let api = search_failing(tenant(base("tenant")));
+    let projects = no_deployments();
+    let r = app_consumers_in(api, shop("tenant"), &projects, false, &RefCell::default());
+
+    assert_eq!(r.exit_code(), 2);
+    for p in &projects {
+        assert_eq!(p.calls(&post(APP_DEPLOYMENT_LISTING)), 0);
+    }
+    let row = row_of(&r, Reading::AppDeployments);
+    assert!(
+        row.starts_with("not done (") && row.contains("HTTP 500"),
+        "{row}"
+    );
+    let text = common::terminal().render_consumers(&r).unwrap();
+    assert!(text.ends_with(SEARCH_FAILED), "{text}");
+    assert_eq!(json_of(&r)["clustersRead"]["error"]["status"], 500);
 }
 
 #[test]

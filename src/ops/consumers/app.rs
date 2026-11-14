@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::reach::{tenant_listing, unread_project};
+use super::reach::{search_listed, tenant_listing, tenant_search};
 use super::{
     APP_NO_EDGE_HOSTS, APP_NO_SECOND_READING, ClustersRead, Consumer, ConsumerKind,
     ConsumersOptions, ConsumersReport, EdgeHostsRead, ProjectsRead, Readings, Scopes,
@@ -139,6 +139,11 @@ where
 /// profile of the tenant or of the system. Each one that runs the version `uid` and is not in
 /// `list` joins it, marked `unlisted`. A project that refuses the listing is in
 /// [`ProjectsRead::unread`]. `--list-only` asks for none of it.
+///
+/// For an app profile of the tenant or of the system, strata also sends one page of the cluster
+/// search at tenant scope, as [`tenant_search`] reads it for a profile of the tenant. A denial
+/// shows a key that cannot list each project. Each other error of the search stops the listings,
+/// and it is the error of [`ClustersRead`].
 #[allow(clippy::too_many_arguments)]
 fn app_readings<A, F>(
     list: &mut Vec<Consumer>,
@@ -173,27 +178,37 @@ where
     }
     let mut projects = ProjectsRead::default();
     let project = text(doc, "/metadata/annotations/projectUid");
-    let listed = match ProfileScope::of_document(doc) {
-        Some(ProfileScope::Project) if !project.is_empty() => vec![ListedProject {
-            name: String::new(),
-            uid: project,
-        }],
-        Some(scope) if scope.is_shared() => tenant_listing(scopes, listings, &mut projects)
-            .map(<[ListedProject]>::to_vec)
-            .unwrap_or_default(),
+    let (listed, stopped) = match ProfileScope::of_document(doc) {
+        Some(ProfileScope::Project) if !project.is_empty() => {
+            let own = ListedProject {
+                name: String::new(),
+                uid: project,
+            };
+            (vec![own], None)
+        }
+        Some(scope) if scope.is_shared() => {
+            match tenant_listing(scopes, listings, &mut projects).map(<[ListedProject]>::to_vec) {
+                // strata lists the app deployments in each project, so only the search at tenant
+                // scope shows a key that cannot list each project
+                Some(listed) => {
+                    let searched = scopes.wide.cluster_search_page();
+                    (listed, tenant_search(searched, &mut projects).err())
+                }
+                None => (Vec::new(), None),
+            }
+        }
         _ => return readings(APP_NO_SECOND_READING, None),
     };
     progress.note("listing the app deployments of each project that can use the version");
-    projects.read = listed.len();
-    for project in &listed {
-        match client_for(clients, scopes.home, &project.uid, connect)
-            .and_then(Palette::app_deployments)
-        {
-            Ok(deployments) => join_running(list, uid, &project.uid, &deployments),
-            Err(e) => projects.unread.push(unread_project(project, &e)),
-        }
-    }
-    readings("", Some(projects))
+    search_listed(&listed, stopped.as_ref(), &mut projects, |project| {
+        let deployments = client_for(clients, scopes.home, &project.uid, connect)
+            .and_then(Palette::app_deployments)?;
+        join_running(list, uid, &project.uid, &deployments);
+        Ok(())
+    });
+    let mut read = readings("", Some(projects));
+    read.clusters.error = stopped.map(|e| e.to_json());
+    read
 }
 
 /// Add to `list` each app deployment of `deployments`, the listing of the project `project`, that

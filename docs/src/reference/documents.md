@@ -619,7 +619,9 @@ of the secret does not show, because the two sides hold the mask: see
     the listing names and the consumer list does not.
   - `unread`: the clusters of those that strata could not read.
   - `error`: why strata could not read the search or the cluster listing. Then
-    `read` is `0`.
+    `read` is `0`. For an app profile of the tenant or of the system, it is the
+    error of the page of the search at tenant scope, and strata listed no
+    project.
   - `groups`, only when not zero: the cluster groups that pin the version,
     whose virtual clusters strata read.
   - `members`, only when not zero: the virtual clusters of those groups that
@@ -645,7 +647,7 @@ of the secret does not show, because the two sides hold the mask: see
   there with `--list-only`. See
   [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
   - `read`: the projects of the listing, each one that strata searched or
-    could not search.
+    could not search. For an app profile, strata listed their app deployments.
   - `unread`, only when not empty: each project whose search failed, with
     `uid`, `name`, `denied`, and `error`. `denied` is `true` when Palette
     answered with a denial, such as `ResourceAccessDenied`. When the cluster
@@ -654,7 +656,8 @@ of the secret does not show, because the two sides hold the mask: see
     error.
   - `tenantError`: why Palette refused the cluster search at tenant scope. Then
     the listing holds only the projects of the roles of the key, so a project
-    outside it is not checked.
+    outside it is not checked. For an app profile, strata sends one page of the
+    search for this answer only.
   - `error`: why strata could not read the project listing of the tenant. Then
     strata searched no project one by one. For a library caller whose
     `connect` gives no client of the tenant, it is the error of `connect`.

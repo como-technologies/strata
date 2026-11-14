@@ -71,7 +71,7 @@ same with its own document. See
 | Request | Gives |
 | --- | --- |
 | `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. `list` searches when it names `tags`, and the second reading of `consumers` when it names `clusterProfiles`. `list clusters`, `cluster:<name>`, and the second reading of `consumers` ask the search for the virtual clusters when it names `environment`. |
-| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the body selects, every page, in the scope of the request: each with its labels, project, cloud, and profiles. The search gives a virtual cluster only when a condition asks for the environment `nested`, with its cluster group and its host cluster in `status.virtual`. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, send it at tenant scope, and again with that condition added. `list clusters` and `cluster:<name>` send it with that one condition, in their scope. The second reading of `consumers` sends `clusterProfiles eq <profile name>`, a name and not a uid, in the scope of the profile. It sends it again with that condition when the search takes `environment`, and in each project for a [profile of the tenant](../internals/palette/clusters.md#the-reach-of-a-search). |
+| `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the body selects, every page, in the scope of the request: each with its labels, project, cloud, and profiles. The search gives a virtual cluster only when a condition asks for the environment `nested`, with its cluster group and its host cluster in `status.virtual`. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, send it at tenant scope, and again with that condition added. `list clusters` and `cluster:<name>` send it with that one condition, in their scope. The second reading of `consumers` sends `clusterProfiles eq <profile name>`, a name and not a uid, in the scope of the profile. It sends it again with that condition when the search takes `environment`, and in each project for a [profile of the tenant](../internals/palette/clusters.md#the-reach-of-a-search). For an app profile of the tenant or of the system, `consumers` sends one page with no condition at tenant scope. Palette refuses it to a key with no `project.list` in the tenant, so the answer shows if the project listing holds each project. |
 | `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. A request that names a project gets HTTP 403. |
 | `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. A request that names a project gets HTTP 403. |
 
@@ -92,7 +92,7 @@ filter into a condition of the search. The property is `tags`, with the values
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. `verify` sends no such request. For the second reading of `consumers`, the virtual clusters of each group that pins the version. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |
 | `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. `metadata.annotations` gives the scope, and the project of an app profile of a project. |
-| `POST /v1/dashboard/appDeployments?limit=50` | Every app deployment of the project, every page, with the app profile version that each one runs. `consumers` sends it in the project of an app profile of a project, and keeps each app deployment of the version. The body has no filter: the filter takes no profile. |
+| `POST /v1/dashboard/appDeployments?limit=50` | Every app deployment of the project, every page, with the app profile version that each one runs. `consumers` sends it in each project that can use an app profile version, and keeps each app deployment of the version: the project of an app profile of a project, or each project of the tenant listing for an app profile of the tenant or of the system. The body has no filter: the filter takes no profile. |
 | `GET /v1/appDeployments/{uid}` | One app deployment, for `consumers` of an app profile: its state, and the version its copy names. |
 | `GET /v1/appProfiles/{uid}/tiers` | Each tier in full: its type, version, source tier, registry, values, properties, and manifests. |
 | `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}` | The content of one manifest of a tier. |
@@ -131,8 +131,10 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
   Then it searches the edge hosts. For a profile of the tenant or of the
   system, it also searches each project of the tenant listing.
 - For an app profile, `consumers` reads `GET /v1/appDeployments/{uid}` for each
-  app deployment that the app profile lists, in its own project, and nothing
-  more.
+  app deployment that the app profile lists, in its own project. Then it lists
+  the app deployments of each project that can use the version. For an app
+  profile of the tenant or of the system, it also sends one page of the cluster
+  search at tenant scope. `--list-only` stops both.
 - `verify` on a cluster record reads each profile that the cluster runs.
 
 A command reads the project listing of a scope one time. A record, a resolve

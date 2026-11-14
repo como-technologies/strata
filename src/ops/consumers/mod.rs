@@ -230,7 +230,8 @@ pub struct ClustersRead {
     /// consumer.
     pub unread: usize,
     /// Why the search or the listing could not be read, when it could not. Then `read` is 0, and
-    /// the consumer list of the profile stands alone.
+    /// the consumer list of the profile stands alone. For an app profile of the tenant or of the
+    /// system, it is the error of the page of the search at tenant scope: strata listed no project.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,

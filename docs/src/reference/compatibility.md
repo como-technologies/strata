@@ -1476,7 +1476,8 @@ field, a value, an input, or an option is in the sections above.
   - Strata lists the app deployments of the project of an app profile of a
     project. For an app profile of the tenant or of the system, it lists them in
     each project of the tenant listing. That is one more request for each 50 app
-    deployments of a project, and one for the project listing.
+    deployments of a project, one for the project listing, and one for the
+    page of the cluster search.
   - An app deployment that runs the version and that the consumer list does not
     name joins the answer with `unlisted`, and the exit is `1`. The row
     `app deployments` counts them. Before, it said `not searched (an app profile:
@@ -1484,6 +1485,13 @@ field, a value, an input, or an option is in the sections above.
   - When Palette refuses a listing, the line `NOT CHECKED` names the project,
     and `projectsRead` names it. With no consumer, the exit is `2`. Before,
     such a run exited `0`.
+  - For an app profile of the tenant or of the system, strata also sends one
+    page of the cluster search at tenant scope. When Palette refuses it, the
+    line `NOT CHECKED` gives `each project that this key cannot list`, and
+    `projectsRead.tenantError` gives the refusal. When the search fails in
+    another way, strata lists no project, and `clustersRead.error` gives the
+    error. With no consumer, the exit is `2` in both cases. Before, such a run
+    exited `0`.
 - **`consumers` of a profile of a project also searches the edge hosts of its
   project.** That is one more request for each 50 edge hosts. When that search
   fails, the row `edge hosts` says `not read`, and with no consumer the exit is

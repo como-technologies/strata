@@ -181,7 +181,11 @@ manifests. The content of a manifest comes from
 So `consumers` lists the app deployments of each project that can use the
 version, and keeps each one that runs the version. For an app profile of the
 tenant or of the system, these are the projects of the tenant listing. A
-project that refuses the listing is not checked. The checks `consumers-project`
+project that refuses the listing is not checked. The tenant listing holds each
+project only for a key whose role gives `project.list` in the tenant. So strata
+also sends one page of the cluster search at tenant scope, and Palette refuses
+it to another key: see
+[The reach of a search](clusters.md#the-reach-of-a-search). The checks `consumers-project`
 and `consumers-scope` of [app-profile.sh](../../development/live-runs.md#app-profilesh)
 list the app deployments of the project of the run.
 
