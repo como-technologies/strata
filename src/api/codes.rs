@@ -143,6 +143,19 @@ pub const CLUSTER_CREATE_FORBIDDEN_CODES: [&str; 3] = [
     "ClusterFipsNotSupported",
 ];
 
+/// The codes of the refusals of a create by the cluster validate route when the tenant is at a
+/// limit, with HTTP 403.
+///
+/// A trial tenant over its usage is `FreemiumLimitExceeded`, and over its active clusters
+/// `FreemiumActiveClusterLimitExceeded`. A tenant of the AWS Marketplace over its usage is
+/// `MarketplaceUsageLimitExceeded`. The response type is `Forbidden`, and the key is right. The
+/// code of Palette shows it; no live run shows it yet.
+pub const CLUSTER_CREATE_LIMIT_CODES: [&str; 3] = [
+    "FreemiumLimitExceeded",
+    "FreemiumActiveClusterLimitExceeded",
+    "MarketplaceUsageLimitExceeded",
+];
+
 /// The code of the refusal of a request that names a project on a route of the tenant scope.
 ///
 /// Palette answers HTTP 403, and the message says that the operation is not allowed in the project
@@ -482,9 +495,10 @@ impl ValidateRoute {
     /// A code of a check of the route comes with HTTP 500. These refusals set another type:
     ///
     /// - The cluster packs route gives [`PACK_FORBIDDEN_CODE`] with HTTP 403.
-    /// - The cluster validate route gives [`PACK_FORBIDDEN_CODE`] and the codes of
-    ///   [`CLUSTER_CREATE_FORBIDDEN_CODES`] with HTTP 403. Another 403 of the route, such as the
-    ///   refusal of the role of the key, is no refusal of the request.
+    /// - The cluster validate route gives [`PACK_FORBIDDEN_CODE`], the codes of
+    ///   [`CLUSTER_CREATE_FORBIDDEN_CODES`], and the codes of [`CLUSTER_CREATE_LIMIT_CODES`] with
+    ///   HTTP 403. Another 403 of the route, such as the refusal of the role of the key, is no
+    ///   refusal of the request.
     /// - The name route and the import validate route give [`PROFILE_EXISTS_CODE`] with HTTP 409.
     /// - The import validate route gives [`PACK_MACRO_UNDEFINED_CODE`] with HTTP 404.
     /// - The API schema checks the body of the profile routes first. It refuses a list with two
@@ -494,7 +508,9 @@ impl ValidateRoute {
             (_, 500) => self.refusal_codes().any(|c| c == code),
             (ValidateRoute::ClusterPacks, 403) => code == PACK_FORBIDDEN_CODE,
             (ValidateRoute::ClusterCreate, 403) => {
-                code == PACK_FORBIDDEN_CODE || CLUSTER_CREATE_FORBIDDEN_CODES.contains(&code)
+                code == PACK_FORBIDDEN_CODE
+                    || CLUSTER_CREATE_FORBIDDEN_CODES.contains(&code)
+                    || CLUSTER_CREATE_LIMIT_CODES.contains(&code)
             }
             (ValidateRoute::ProfileName | ValidateRoute::ProfileImport, 409) => {
                 code == PROFILE_EXISTS_CODE

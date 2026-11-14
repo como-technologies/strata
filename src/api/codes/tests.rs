@@ -53,6 +53,7 @@ fn each_code_of_palette_is_in_one_table() {
         &PROFILE_IMPORT_MATCH_CODES[..],
         &other_status[..],
         &CLUSTER_CREATE_FORBIDDEN_CODES[..],
+        &CLUSTER_CREATE_LIMIT_CODES[..],
     ]);
     let mut codes: Vec<&str> = tables.flat_map(|table| table.iter().copied()).collect();
     let count = codes.len();
@@ -307,10 +308,13 @@ fn the_refusals_that_set_another_type_belong_to_their_routes() {
     assert!(ValidateRoute::ClusterPacks.refuses(403, PACK_FORBIDDEN_CODE));
     assert!(!ValidateRoute::ClusterPacks.refuses(403, "Forbidden"));
     assert!(!ValidateRoute::ProfilePacks.refuses(403, PACK_FORBIDDEN_CODE));
-    // the cluster validate route refuses four faults of the body with HTTP 403, and the denial of
-    // the role of the key is no refusal of the body
+    // the cluster validate route refuses four faults of the body and three limits of the tenant
+    // with HTTP 403. The denial of the role of the key is no refusal of the request
     assert!(ValidateRoute::ClusterCreate.refuses(403, PACK_FORBIDDEN_CODE));
-    for code in CLUSTER_CREATE_FORBIDDEN_CODES {
+    for code in CLUSTER_CREATE_FORBIDDEN_CODES
+        .iter()
+        .chain(&CLUSTER_CREATE_LIMIT_CODES)
+    {
         assert!(ValidateRoute::ClusterCreate.refuses(403, code), "{code}");
         assert!(!ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
         assert!(!ValidateRoute::ClusterPacks.refuses(403, code), "{code}");

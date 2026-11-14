@@ -133,11 +133,14 @@ facts:
     reads:
       codes:
         - FreemiumActiveClusterLimitExceeded
+        - FreemiumLimitExceeded
+        - MarketplaceUsageLimitExceeded
     stand_in: []
     live: []
-    unchecked: No live run shows it. The limit holds for a trial tenant alone.
+    unchecked: No live run shows it. The limits hold for a trial tenant and a tenant of the AWS Marketplace alone.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
     rules:
       - palette-validate
 

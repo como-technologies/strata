@@ -30,9 +30,10 @@ The checks, in order:
    of 3". For AWS with a `vpcId`, each pool names a subnet: see below.
 2. The name: valid, and not in use. The cluster limit of the tenant: a trial
    tenant has a limit on its active clusters, and the route refuses a create
-   over it with `FreemiumActiveClusterLimitExceeded`. The limit holds for a
-   trial tenant alone. `GET /v1/tenants/{tenantUid}/freemiumUsage` gives the
-   usage. `palette-validate` reports the refusal.
+   over it with HTTP `403` and `FreemiumActiveClusterLimitExceeded`. The limit
+   holds for a trial tenant alone. `GET /v1/tenants/{tenantUid}/freemiumUsage`
+   gives the usage. `palette-validate` reads the refusal as the answer of the
+   route, with the verdict `failed`, and not as a refusal of the key.
 3. The cloud: for AWS, the zones of each worker pool inside the zones of the
    control plane, and with dynamic placement one zone or more for each worker
    pool. For EKS, when encryption is on, that the KMS key is in the list of
@@ -88,10 +89,12 @@ The code of Palette shows it; no live run shows it yet.
 - `CidrParseError`: for AWS with a VPC, a pod CIDR or a service CIDR that is not
   a CIDR.
 
-The route refuses more faults of the body with HTTP `500`, before or after the
-checks above. The faults are in the machine pools, the profiles, the packs, the
-variables, the instance types, and the labels and the SSH keys of the cloud. The
-route refuses four faults with HTTP `403`, such as two system profiles.
+The route refuses more faults of the body with HTTP `500`. The faults are in the
+machine pools, the profiles, the packs, the variables, the instance types, and
+the labels and the SSH keys of the cloud. The route refuses four faults of the
+body with HTTP `403`, such as two system profiles. It also refuses a create in a
+tenant at its usage limit with HTTP `403`.
+
 [Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again)
 lists each code. The code of Palette shows them; no live run shows them yet.
 `palette-validate` reads each one as the answer of the route, with the verdict
@@ -127,11 +130,10 @@ machines.
 
 ### The permission of the route
 
-The route checks the format of the body first. A body with no required field,
-such as `spec.cloudConfig`, gets HTTP `422` and a number as the code, before the
-check of the role. Then the route checks the fields of step 1 of the checks
-above. Then it checks the role of the key, before it checks the profiles and the
-rest of the content of the body. The code of Palette shows the order; no live
+The route checks the role of the key after the format of the body, and before
+the content of the profiles of the body. A body with no required field, such as
+`spec.cloudConfig`, gets HTTP `422` and a number as the code, also for a key
+whose role does not give the permission. The code of Palette shows it; no live
 run shows it yet.
 
 The route needs `cluster.create` in the project or in the tenant, also for a

@@ -303,7 +303,8 @@ does not send its refusal again, and `palette-validate` reports it. See
 | `K8SCidrOverlap` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that overlaps the CIDR of the VPC. |
 | `CidrParseError` | For AWS with a VPC, a pod CIDR or a service CIDR of the Kubernetes pack that is not a CIDR. |
 
-The route refuses four more faults of the body with HTTP `403`, and not `500`.
+The route refuses four more faults of the body with HTTP `403`, and not `500`. It
+also refuses a create in a tenant at three of its limits with HTTP `403`.
 `palette-validate` reads each one as the answer of the route too:
 
 | Code | Palette refuses |
@@ -312,6 +313,9 @@ The route refuses four more faults of the body with HTTP `403`, and not `500`.
 | `ClusterOperationNotAllowedInvalidPackState` | A pack in the state `deleted`. |
 | `PackValuesOverrideForbidden` | A pack that an integration pack names as a read-only dependency, with values other than its defaults. |
 | `ClusterFipsNotSupported` | When Palette runs in FIPS mode, a cloud that does not support FIPS. |
+| `FreemiumLimitExceeded` | A create in a trial tenant over its usage. |
+| `FreemiumActiveClusterLimitExceeded` | A create in a trial tenant over its limit of active clusters. |
+| `MarketplaceUsageLimitExceeded` | A create in a tenant of the AWS Marketplace over its usage. |
 
 Each other `403` of the route, such as `AccessDenied` for the role of the key,
 is an error of the check. A refusal of the body with HTTP `400`, `404`, or `409`

@@ -1394,8 +1394,9 @@ field, a value, an input, or an option is in the sections above.
 - `api::codes::ValidateRoute::ClusterCreate.refusal_codes()` gives 29 more codes, and
   `is_refusal_code` is true for each of them. `Error::class` gives `Terminal` to a 5xx with one of
   them, from each route. `ValidateRoute::refuses_answer` and `ValidateRoute::refuses_request` are
-  true for the cluster validate route with HTTP 403 and a code of the new const
-  `api::codes::CLUSTER_CREATE_FORBIDDEN_CODES`, or `PACK_FORBIDDEN_CODE`.
+  true for the cluster validate route with HTTP 403 and a code of the new consts
+  `api::codes::CLUSTER_CREATE_FORBIDDEN_CODES` and `api::codes::CLUSTER_CREATE_LIMIT_CODES`, or
+  `PACK_FORBIDDEN_CODE`.
 - `snapshot::VariableOption` has the new field `default: bool`. A struct literal must set it, and
   a pattern with no `..` must name it. `RequiredVariables` of `UpdateChecks` counts a required
   dropdown variable with no default value and no default option.
