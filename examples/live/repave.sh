@@ -23,7 +23,8 @@
 #      default 600, through OpenTofu, and a kubeadm command of its Kubernetes pack reads it in
 #      place of its 600. Palette is asked if 1.0.1 repaves cluster A: by strata, which sends no
 #      variables, and by tenant.sh, with no variables, with the value 600, and with the value 644
-#      as the control (#132). Then 1.0.1 back. Cluster A takes no update
+#      as the control (#132). These three use the earlier body of tenant.sh, and one more question
+#      uses the body of a swap (#864). Then 1.0.1 back. Cluster A takes no update
 #   9  validate/repave saves the address of the console of the VM Orchestrator pack (#717). It
 #      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator
 #      and no cluster template. It reads the console address of the pack before and after each
@@ -161,14 +162,18 @@ if stage 8 "a profile variable in a repave key of a version that cluster A does 
     "$strata" compare "cluster:$C/$release" "$N" --repave --json
   check var-strata-answer ? "#132: Palette says repave (0), or no repave (1), to the request of strata" -- \
     jq -e '.paletteRepave.required' var-strata.out
+  # the three questions of #132 keep the earlier body of tenant.sh: 1.0.0 alone, with
+  # replaceWithProfile 1.0.1, so that each answer stays the answer to the body that it names
   check var-none ? "#132: tenant.sh with no variables: no repave (0), or repave (1)" -- \
-    "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-default ? "#132: tenant.sh with strata_mode 600, the default: no repave (0), or repave (1)" -- \
-    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "600"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace REPAVE_VARIABLES='[{"name": "strata_mode", "value": "600"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-control 1 "#132: tenant.sh with strata_mode 644: the command changes, so Palette says repave" -- \
-    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "644"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace REPAVE_VARIABLES='[{"name": "strata_mode", "value": "644"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-control-says 0 "#132: and it names the Kubernetes pack and the kubeadm key" -- \
     grep -q 'kubeadmconfig.postKubeadmCommands' var-control.out
+  check var-swap ? "#864: tenant.sh with the body of a swap: each profile of cluster A, with 1.0.1 in place of 1.0.0" -- \
+    "$live/tenant.sh" repave "$C" "$R" "$N"
   apply -var next_variable=true
   apply
   check var-undone 0 "1.0.1 is as before the stage: its record from before verifies" -- "$strata" verify next-before.json

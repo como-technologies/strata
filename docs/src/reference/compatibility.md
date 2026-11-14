@@ -444,6 +444,11 @@ checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay,
 `--since` reads a report of 0.33.0 and before. See
 [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
 
+After 0.33.0, an option of a variable of `strata-snapshot/1` can have the new field `default`,
+only when it is `true`. The mark is outside the root, so no root changes, and the id stays. A
+record of 0.33.0 and before has no mark, and strata reads each option of it as an option with no
+mark. [Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
+
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
@@ -1342,6 +1347,26 @@ field, a value, an input, or an option is in the sections above.
   `strata schema diff` and `strata schema verify-summary` give new words for `renumbered`. The
   options, the fields, and their meaning stay the same. A script that matches the whole text of a
   help or of a description must match the new text.
+- **`palette-validate` reads each refusal of the body of the cluster validate route as
+  `FAILED`.** It reads more codes, such as `ControlPlanePoolRequired`. Before, the rule was
+  `ERROR` for such a refusal with HTTP 500 or 403, with exit `2`. Now it is `FAILED` with the
+  message of Palette, with exit `1`. Strata does not send such a 500 again, on any route. A
+  script that reads `ERROR` for these faults must read `FAILED`. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **`behind` and `compare --validate` name a required dropdown variable with no default
+  option.** Before, strata named no required variable that has options. Now it names a
+  required dropdown variable with no option with the mark `default`, when its default value is
+  not the label of an option. It also names a required variable of another input type with a
+  default option and no default value. Palette refuses each one. The line and
+  `requiredVariables` keep their form. See
+  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+- **A record keeps the `default` mark of an option of a variable.** The default option has
+  `variables[].options[].default: true`, and another option has no field. The root does not
+  cover the mark, so each root and each `variablesHash` stay. A record of strata 0.33 and before
+  holds no mark. With such a record on the profile side, `compare --validate` names each
+  required dropdown variable with no default value. Record the version again to read its marks.
+- **`snapshot --from-candidate --validate` sends the mark `default` of each option to
+  Palette.** Before, it dropped the mark from the body. See [The documents](./documents.md).
 - **The error of `compare --repave` and `--validate` for two records names the commands to use.**
   It says that both sides are records. It names `strata compare cluster:<name> <record> --repave`,
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
@@ -1477,6 +1502,16 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `api::codes::ValidateRoute::ClusterCreate.refusal_codes()` gives 29 more codes, and
+  `is_refusal_code` is true for each of them. `Error::class` gives `Terminal` to a 5xx with one of
+  them, from each route. `ValidateRoute::refuses_answer` and `ValidateRoute::refuses_request` are
+  true for the cluster validate route with HTTP 403 and a code of the new consts
+  `api::codes::CLUSTER_CREATE_FORBIDDEN_CODES` and `api::codes::CLUSTER_CREATE_LIMIT_CODES`, or
+  `PACK_FORBIDDEN_CODE`.
+- `snapshot::VariableOption` has the new field `default: bool`. A struct literal must set it, and
+  a pattern with no `..` must name it. `RequiredVariables` of `UpdateChecks` counts a required
+  dropdown variable with no default option, when its default value is not the label of an
+  option.
 - The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
   `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
   body.
