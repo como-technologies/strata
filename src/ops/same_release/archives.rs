@@ -18,9 +18,9 @@ pub(super) enum ArchiveCheck {
     Same,
     /// The path of each file that differs between the two archives.
     Changed(Vec<String>),
-    /// The file of the pack in the download of a side is not a tar archive that gzip compresses:
-    /// each such side, with its reason. Strata cannot show that the files of the two builds are
-    /// the same.
+    /// The file of the pack in the download of a side is not a tar archive that gzip compresses,
+    /// or the download does not hold it: each such side, with its reason. Strata cannot show that
+    /// the files of the two builds are the same.
     NotReadable(Vec<ArchiveNotReadable>),
     /// Strata did not compare the archives. A side is no published version of a cluster profile,
     /// or its download holds no archive of the pack at the version of the record.

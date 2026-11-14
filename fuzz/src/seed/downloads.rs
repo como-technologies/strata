@@ -5,15 +5,15 @@ use strata::model::pack_type::PackType;
 
 use crate::archive::{
     CHART_HOST_REFUSAL, DownloadPack, chart_archive, chart_file, pack_archive, profile_download,
-    tgz,
+    profile_download_without, tgz,
 };
 use crate::support::UID;
 
 /// Downloads of a profile version, as Palette writes them. The packs are a pack with its archive
 /// and a manifest, a pack of a private registry, and a manifest pack. Another seed holds the chart
 /// of a Helm registry. One more holds the error answer of the host of a chart in place of the
-/// chart. The other seeds are a download with no list, an archive of a pack that is no gzip, and
-/// an answer that is JSON.
+/// chart. One more holds no file of the chart that its list names. The other seeds are a download
+/// with no list, an archive of a pack that is no gzip, and an answer that is JSON.
 pub(super) fn files() -> Vec<Vec<u8>> {
     let none = |name, kind, private| DownloadPack {
         name,
@@ -84,6 +84,7 @@ pub(super) fn files() -> Vec<Vec<u8>> {
         profile_download(UID, "aws-stack", &labeled),
         profile_download(UID, "aws-stack", &charted),
         refused_chart(),
+        profile_download_without(UID, "aws-stack", &charted, &["nginx"]),
         profile_download(UID, "aws-stack", &not_gzip),
         tgz(&[(format!("{UID}/spc.json"), b"{}".to_vec())]),
         br#"{"Reader":{}}"#.to_vec(),

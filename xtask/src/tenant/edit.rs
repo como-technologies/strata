@@ -1,6 +1,7 @@
 //! The edits that a person makes to a published profile, as the chapters write them.
 
 use serde_json::{Value, json};
+use strata::api::MASKED;
 
 use super::macros::user_macro;
 use super::registries::{
@@ -248,7 +249,7 @@ impl Edit {
             }
             Edit::Masked { pack, key } => {
                 for p in packs_named(doc, pack) {
-                    append_value_line(p, &format!("{key}: '********'"));
+                    append_value_line(p, &format!("{key}: '{MASKED}'"));
                 }
             }
             Edit::Macro { pack, name } => {

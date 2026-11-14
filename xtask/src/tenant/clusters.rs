@@ -2,6 +2,7 @@
 //! makes.
 
 use serde_json::{Map, Value, json};
+use strata::api::MASKED;
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
 use strata::model::scope::ProfileScope;
@@ -223,7 +224,8 @@ impl Tenant {
     }
 
     /// Write the variables of the profiles of the cluster. `values` gives a value to each variable
-    /// that it names; each other variable keeps its default.
+    /// that it names; each other variable keeps its default. The route serves the value of a
+    /// sensitive variable as Palette does: see [`served_value`].
     fn write_cluster_variables(
         &self,
         project: &str,
@@ -247,10 +249,11 @@ impl Tenant {
                     .map(|v| {
                         let mut row = v.clone();
                         let name = row["name"].as_str().unwrap_or_default().to_string();
-                        row["value"] = chosen
+                        let value = chosen
                             .get(&name)
                             .cloned()
                             .unwrap_or_else(|| row["defaultValue"].clone());
+                        row["value"] = served_value(&row, value);
                         row
                     })
                     .collect();
@@ -327,7 +330,8 @@ impl Tenant {
         self.write(project, &path, &doc);
     }
 
-    /// Give a cluster variable a new value, as a person who changes it in Palette does.
+    /// Give a cluster variable a new value, as a person who changes it in Palette does. The route
+    /// serves the value as Palette does: see [`served_value`].
     pub fn set_value(&self, project: &str, uid: &str, variable: &str, value: &str) {
         let path = cluster_variables_route(uid);
         let mut doc = self.read(project, &path);
@@ -336,13 +340,28 @@ impl Tenant {
                 if let Some(rows) = profile["variables"].as_array_mut() {
                     for row in rows {
                         if row["name"] == variable {
-                            row["value"] = json!(value);
+                            row["value"] = served_value(row, json!(value));
                         }
                     }
                 }
             }
         }
         self.write(project, &path, &doc);
+    }
+}
+
+/// The value that `GET /v1/spectroclusters/{uid}/variables` serves for the variable `row` when
+/// the cluster gives it `value`.
+///
+/// Palette serves [`MASKED`] in place of the value of a sensitive variable that is not empty.
+/// The code of Palette shows it; no live run shows it yet. The route serves each other value as
+/// it is.
+fn served_value(row: &Value, value: Value) -> Value {
+    let sensitive = row["isSensitive"] == true;
+    if sensitive && value.as_str().is_some_and(|v| !v.is_empty()) {
+        json!(MASKED)
+    } else {
+        value
     }
 }
 
@@ -432,4 +451,133 @@ fn fnv_hex(text: &str) -> String {
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
     format!("{h:016x}")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use strata::api::{RawCluster, ReadErrors};
+    use strata::snapshot::Snapshot;
+
+    use super::*;
+
+    /// The profile and the cluster of the tests.
+    const PROFILE: &str = "64ea00000000000000000b01";
+    const CLUSTER: &str = "64f1000000000000000000b1";
+
+    /// The clear value that the cluster gives each variable. No answer holds it for a sensitive
+    /// variable.
+    const CLEAR: &str = "example-only-not-a-secret";
+
+    /// A tenant with the profile [`PROFILE`] in the project `dev`, with a sensitive variable
+    /// `db_password`, a sensitive variable `api_token`, and the variable `owner`. The cluster
+    /// [`CLUSTER`] runs it, and gives `db_password` and `owner` a value.
+    fn tenant_with_sensitive_variables(dir: &Path) -> Tenant {
+        let tenant = Tenant::new(dir, Path::new("/nowhere"));
+        let metadata = json!({"uid": PROFILE, "name": "aws-stack",
+            "annotations": {"scope": ProfileScope::Project.as_str()}});
+        let published = json!({"cloudType": "aws", "type": "cluster", "packs": []});
+        tenant.put(
+            "dev",
+            &profile_route(PROFILE),
+            &json!({"metadata": metadata, "spec": {"version": "1.0.0", "published": published},
+                "status": {"isPublished": true}}),
+        );
+        tenant.put(
+            "dev",
+            &manifests_route(PROFILE),
+            &json!({"metadata": metadata, "spec": {"packs": []}}),
+        );
+        let variable = |name: &str, sensitive: bool| {
+            json!({"name": name, "defaultValue": "", "format": "string", "inputType": "text",
+                "required": false, "hidden": false, "immutable": false,
+                "isSensitive": sensitive, "options": []})
+        };
+        tenant.put(
+            "dev",
+            &variables_route(PROFILE),
+            &json!({"variables": [variable("db_password", true), variable("api_token", true),
+                variable("owner", false)]}),
+        );
+        let values = [("db_password", CLEAR), ("owner", "team-payments")];
+        tenant.cluster("dev", CLUSTER, "payments", &[PROFILE], &values);
+        tenant
+    }
+
+    /// The value that the cluster variables route serves for the variable `name`.
+    fn served(tenant: &Tenant, name: &str) -> Value {
+        let answer = tenant.read("dev", &cluster_variables_route(CLUSTER));
+        strata::api::profile_variables(&answer, PROFILE)
+            .find(|v| v["name"] == name)
+            .map(|v| v["value"].clone())
+            .unwrap_or_else(|| panic!("no variable {name}: {answer}"))
+    }
+
+    /// The first criterion of #857: the route serves [`MASKED`] in place of the value of a
+    /// sensitive variable that is not empty, after the create and after a change of the value.
+    /// An empty value, and the value of a variable that nobody marked sensitive, stay.
+    #[test]
+    fn the_cluster_variables_route_serves_the_mask_for_the_value_of_a_sensitive_variable() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = tenant_with_sensitive_variables(dir.path());
+        assert_eq!(served(&tenant, "db_password"), MASKED);
+        assert_eq!(served(&tenant, "api_token"), "");
+        assert_eq!(served(&tenant, "owner"), "team-payments");
+
+        tenant.set_value("dev", CLUSTER, "db_password", "another-clear-value");
+        tenant.set_value("dev", CLUSTER, "api_token", CLEAR);
+        tenant.set_value("dev", CLUSTER, "owner", "team-platform");
+        assert_eq!(served(&tenant, "db_password"), MASKED);
+        assert_eq!(served(&tenant, "api_token"), MASKED);
+        assert_eq!(served(&tenant, "owner"), "team-platform");
+        let answer = tenant.read("dev", &cluster_variables_route(CLUSTER));
+        assert!(!answer.to_string().contains(CLEAR), "{answer}");
+    }
+
+    /// The second criterion of #857: the record of such a cluster holds no value of a sensitive
+    /// variable, and names no variable as a value in clear.
+    #[test]
+    fn a_record_of_a_cluster_with_a_sensitive_variable_holds_no_value_of_it_and_no_note() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = tenant_with_sensitive_variables(dir.path());
+        let read = |route: &str| tenant.read("dev", route);
+        let raw = RawCluster {
+            cluster: read(&cluster_route(CLUSTER)),
+            manifests: read(&format!(
+                "{}/profiles/packs/manifests",
+                cluster_route(CLUSTER)
+            )),
+            variables: read(&cluster_variables_route(CLUSTER)),
+            variables_unavailable: false,
+            project_uid: Some("dev".to_string()),
+            fetched_at: None,
+            notifications: None,
+            repave: None,
+            resolved_values: None,
+            cloud_config: None,
+            rbacs: None,
+            namespaces: None,
+            errors: ReadErrors::default(),
+        };
+        let record = Snapshot::from_cluster(&raw, None, "cluster:payments", "2026-09-17T09:30:00Z")
+            .expect("the record builds");
+        let variables = &record.source.cluster.as_ref().expect("a cluster").variables;
+        let value_of = |name: &str| {
+            let v = variables
+                .iter()
+                .find(|v| v.name == name)
+                .expect("a variable");
+            (v.value.clone(), v.sensitive)
+        };
+        assert_eq!(value_of("db_password"), (None, true));
+        assert_eq!(value_of("api_token"), (None, true));
+        assert_eq!(
+            value_of("owner"),
+            (Some("team-payments".to_string()), false)
+        );
+        assert_eq!(record.secret_like_variables(), []);
+        let text = serde_json::to_string(&record).expect("a record is JSON");
+        assert!(!text.contains(CLEAR) && !text.contains(MASKED), "{text}");
+    }
 }

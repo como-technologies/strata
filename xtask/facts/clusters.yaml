@@ -91,6 +91,22 @@ facts:
       - src/snapshot/cluster.rs
     rules: []
 
+  - id: cluster-variables-masked
+    kind: behavior
+    reads:
+      fields:
+        - "[].variables[].isSensitive"
+        - "[].variables[].value"
+    stand_in:
+      - v1/spectroclusters/{uid}/variables
+    live: []
+    unchecked: The code of Palette shows it. No run gives a cluster a sensitive variable.
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+    rules: []
+
   - id: cluster-rbacs
     kind: request
     request: GET /v1/spectroclusters/{uid}/config/rbacs

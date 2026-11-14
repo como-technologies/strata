@@ -314,6 +314,8 @@ answer of Palette in a record of `snapshot --validate`: one line for each error,
 of an accept. The command line prints the sentence last, after the record: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `api::MASKED` is public: the text `********` that Palette writes over a secret.
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -1305,6 +1307,12 @@ field, a value, an input, or an option is in the sections above.
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
   clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
   message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **`same-release --allow renumber` gives a reason for a missing pack file.**
+  Before, strata refused the download with the error `not-archive`, and the command exited `2`.
+  Now strata reads the other packs of the download. A renumber of the pack of that file gets
+  the fact `archive: not readable`, with the reason `the download does not hold <path>` in
+  `archivesNotReadable`. Its pair fails, and the command exits `1`. See
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
 
 ### For a user of the CI drop-ins
 
@@ -1387,6 +1395,9 @@ field, a value, an input, or an option is in the sections above.
   `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
   `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
+- `api::Palette::profile_download` gives a download, and no `Error::NotArchive`, when the list
+  of the download names a file that the download does not hold. The pack of that file has
+  `api::PackFile::NotReadable`, with the reason `the download does not hold <path>`.
 
 ### For a user of the library of strata-preflight
 

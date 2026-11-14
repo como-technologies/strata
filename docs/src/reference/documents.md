@@ -539,11 +539,13 @@ of the secret does not show, because the two sides hold the mask: see
     whose two archives differ in another file, with `key` and `files[]`. The
     pair is then `different`, and `reasons[]` names the files too.
   - `archivesNotReadable[]`, only when it is not empty: each pack of
-    `renumbers[]` whose file in the download of a side is no archive. The list
-    names the pack once for each such side, with `key`, the `version` of that
-    side, and `reason`.
+    `renumbers[]` whose file in the download of a side is no archive, or is
+    missing. The list names the pack once for each such side, with `key`, the
+    `version` of that side, and `reason`.
     `reason` gives the size of the file, and the start of its text when it is
-    text. Else it gives the error of the read. The pair is then `different`, and
+    text. Else it gives the error of the read. For a file that the list of the
+    download names and the download does not hold, it is
+    `the download does not hold <path>`. The pair is then `different`, and
     `reasons[]` names the pack too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
     `renumbers[]` whose archive can differ, and whose archives strata did not

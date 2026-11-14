@@ -168,6 +168,17 @@ fn packs_metadata(packs: &[DownloadPack]) -> Value {
 /// `spc.json` holds the profile, as Palette writes it with the value of each macro: here only its
 /// name and its uid.
 pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8> {
+    profile_download_without(uid, name, packs, &[])
+}
+
+/// The download of [`profile_download`], with no file for each pack that `not_held` names. The
+/// list still names the file of each such pack.
+pub fn profile_download_without(
+    uid: &str,
+    name: &str,
+    packs: &[DownloadPack],
+    not_held: &[&str],
+) -> Vec<u8> {
     let list = format!("profiles/{uid}/packs-metadata.json");
     let metadata = json!({"hubbleInfo": {"apiEndpoint": "api.example.com"},
         "resource": {"uid": uid, "name": name, "kind": "clusterprofile"},
@@ -186,7 +197,9 @@ pub fn profile_download(uid: &str, name: &str, packs: &[DownloadPack]) -> Vec<u8
         ),
     ];
     for pack in packs {
-        if let Some(archive) = &pack.archive {
+        if let Some(archive) = &pack.archive
+            && !not_held.contains(&pack.name)
+        {
             files.push((
                 format!("{uid}/profiles/{uid}/{}", archive_path(pack)),
                 archive.clone(),

@@ -19,8 +19,8 @@ use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
 use crate::model::pack_type::PackType;
 
-/// The text that Palette writes over a secret.
-pub(crate) const MASKED: &str = "********";
+/// The text that Palette writes over a secret, such as the value of a sensitive variable.
+pub const MASKED: &str = "********";
 
 /// `text` with [`MASKED`] in place of each whole copy of `secret`, such as the API key in the body
 /// of an answer.

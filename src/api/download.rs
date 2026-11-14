@@ -7,8 +7,8 @@
 //! the list.
 //! The archive of a pack is a tar archive that gzip compresses, with one top folder. An empty
 //! `filePath` means that the download holds no archive of the pack. The file of a pack can also be
-//! another file, such as an error answer of the host of a Helm chart: see [`PackFile::NotReadable`].
-//! Strata keeps each other pack of such a download.
+//! another file, such as an error answer of the host of a Helm chart, or no file at all: see
+//! [`PackFile::NotReadable`]. Strata keeps each other pack of such a download.
 //!
 //! Palette resolves the macros in the other files of the download, so they can hold the value of
 //! a macro. Strata reads the two lists and the archives of the packs, and no other file. It keeps
@@ -46,10 +46,13 @@ const VERSION_FIELD: &str = "version";
 /// The ends of the name of an archive in a download: a pack archive and a Helm chart.
 const ARCHIVE_ENDS: [&str; 2] = [".tar.gz", ".tgz"];
 
+/// The bytes of one MiB.
+const MIB: u64 = 1024 * 1024;
+
 /// The most bytes that strata reads from the files of one download, after the gzip, with the files
 /// of each pack archive in it. A larger download is an error, so a small file cannot fill the
 /// memory.
-const UNPACKED_LIMIT: u64 = 1024 * 1024 * 1024;
+const UNPACKED_LIMIT: u64 = 1024 * MIB;
 
 /// The most characters of a file or of an error that the reason of [`PackFile::NotReadable`]
 /// shows.
@@ -80,12 +83,14 @@ pub enum PackFile {
     NoArchive,
     /// The archive of the pack.
     Archive(PackArchive),
-    /// The file of the pack is not a tar archive that gzip compresses: the reason.
+    /// The file of the pack is not a tar archive that gzip compresses, or the download does not
+    /// hold it: the reason.
     ///
     /// The reason gives the size of the file. When the file is text, it gives the start of the
     /// text on one line, such as `263 bytes of text: <?xml ...`. Else it gives the error of the
     /// read. Palette puts the answer of the host of a Helm chart in the download in place of the
-    /// chart, also an error answer, and the route answers HTTP 200.
+    /// chart, also an error answer, and the route answers HTTP 200. When the list names a file
+    /// that the download does not hold, the reason is `the download does not hold <path>`.
     NotReadable(String),
 }
 
@@ -160,13 +165,25 @@ impl PackArchive {
     }
 }
 
-/// The bytes that strata can still read from the files of one download: see [`UNPACKED_LIMIT`].
-struct Budget(u64);
+/// The bytes that strata can still read from the files of one download, and the limit of the
+/// read: see [`UNPACKED_LIMIT`].
+struct Budget {
+    left: u64,
+    limit: u64,
+}
 
 impl Budget {
-    /// Take `size` bytes, or fail when fewer are left.
+    /// The budget of a read of `limit` bytes at most.
+    fn new(limit: u64) -> Self {
+        Budget { left: limit, limit }
+    }
+
+    /// Take `size` bytes, or fail with the limit of the read when fewer are left.
     fn take(&mut self, size: u64) -> std::result::Result<(), Fault> {
-        self.0 = self.0.checked_sub(size).ok_or(Fault::Limit)?;
+        self.left = self
+            .left
+            .checked_sub(size)
+            .ok_or(Fault::Limit(self.limit))?;
         Ok(())
     }
 }
@@ -174,9 +191,9 @@ impl Budget {
 /// Why strata cannot read a tar archive that gzip compresses.
 #[derive(Debug, PartialEq, Eq)]
 enum Fault {
-    /// The files of the download hold more bytes than [`UNPACKED_LIMIT`]. Strata refuses the whole
-    /// download, also for the file of one pack.
-    Limit,
+    /// The files of the download hold more bytes than the limit of the read, such as
+    /// [`UNPACKED_LIMIT`]. Strata refuses the whole download, also for the file of one pack.
+    Limit(u64),
     /// The bytes are not a tar archive that gzip compresses: the error of the read.
     Format(String),
 }
@@ -184,11 +201,11 @@ enum Fault {
 impl std::fmt::Display for Fault {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Fault::Limit => write!(
-                f,
-                "the files hold more than {} MiB",
-                UNPACKED_LIMIT / 1024 / 1024
-            ),
+            // a limit of whole MiB, as UNPACKED_LIMIT is, reads in MiB
+            Fault::Limit(limit) if limit % MIB == 0 => {
+                write!(f, "the files hold more than {} MiB", limit / MIB)
+            }
+            Fault::Limit(limit) => write!(f, "the files hold more than {}", byte_count(*limit)),
             Fault::Format(error) => f.write_str(error),
         }
     }
@@ -199,10 +216,10 @@ impl std::fmt::Display for Fault {
 ///
 /// The steps: unpack the lists and the archives, and no other file. Find the one `metadata.json`
 /// at the top. Read the list of the packs that it names. Then read each archive that the list
-/// names, from the folder of the list. A file of a pack that is not an archive gets its reason,
-/// and the other packs stay.
+/// names, from the folder of the list. A file of a pack that is not an archive, or that the
+/// download does not hold, gets its reason, and the other packs stay.
 fn read_download(file: &[u8], limit: u64) -> std::result::Result<ProfileDownload, String> {
-    let mut budget = Budget(limit);
+    let mut budget = Budget::new(limit);
     let files = unpack(file, &mut budget, |path| {
         file_name(path) == METADATA
             || file_name(path) == PACKS_METADATA
@@ -243,15 +260,14 @@ fn read_download(file: &[u8], limit: u64) -> std::result::Result<ProfileDownload
         }
         let file = match str_at(entry, "/filePath") {
             "" => PackFile::NoArchive,
-            path => {
-                let at = format!("{folder}/{path}");
-                let Some(bytes) = files.get(&at) else {
-                    return Err(format!(
-                        "{list} names {path}, which the download does not hold"
-                    ));
-                };
-                pack_file(bytes, &mut budget).map_err(|fault| format!("{path}: {fault}"))?
-            }
+            path => match files.get(&format!("{folder}/{path}")) {
+                Some(bytes) => {
+                    pack_file(bytes, &mut budget).map_err(|fault| format!("{path}: {fault}"))?
+                }
+                None => {
+                    PackFile::NotReadable(format!("the download does not hold {}", one_line(path)))
+                }
+            },
         };
         let version = str_at(entry, "/version").to_string();
         packs.insert(name.clone(), DownloadedPack { version, file });
@@ -265,7 +281,7 @@ fn pack_file(bytes: &[u8], budget: &mut Budget) -> std::result::Result<PackFile,
     match pack_archive(bytes, budget) {
         Ok(archive) => Ok(PackFile::Archive(archive)),
         Err(Fault::Format(error)) => Ok(PackFile::NotReadable(not_readable(bytes, &error))),
-        Err(Fault::Limit) => Err(Fault::Limit),
+        Err(Fault::Limit(limit)) => Err(Fault::Limit(limit)),
     }
 }
 
@@ -275,7 +291,7 @@ fn pack_file(bytes: &[u8], budget: &mut Budget) -> std::result::Result<PackFile,
 /// The file is text when it is UTF-8 with no control character other than white space. An example
 /// is `263 bytes of text: <?xml version="1.0" ...`. See [`one_line`] for the form of the text.
 fn not_readable(bytes: &[u8], error: &str) -> String {
-    let size = format!("{} {}", bytes.len(), plural(bytes.len(), "byte", "bytes"));
+    let size = byte_count(bytes.len() as u64);
     // a file that is no UTF-8 is no text, and the reason gives the error of the read
     let text = std::str::from_utf8(bytes)
         .ok()
@@ -286,6 +302,13 @@ fn not_readable(bytes: &[u8], error: &str) -> String {
         Some(line) => format!("{size} of text: {line}"),
         None => format!("{size}: {}", one_line(error)),
     }
+}
+
+/// `bytes` as a count, such as `1 byte` or `263 bytes`.
+fn byte_count(bytes: u64) -> String {
+    // only a count of one is singular, so a count above the range of `usize` reads as many
+    let n = usize::try_from(bytes).unwrap_or(usize::MAX);
+    format!("{bytes} {}", plural(n, "byte", "bytes"))
 }
 
 /// The start of `text` on one line, as a reason shows it.

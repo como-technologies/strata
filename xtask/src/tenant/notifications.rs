@@ -6,6 +6,10 @@ use serde_json::{Map, Value, json};
 use super::Tenant;
 use super::profiles::template_of;
 use super::routes::{cluster_route, notifications_route, profile_route};
+use super::times::minutes_after;
+
+/// The time of the first notification of a cluster. Each later one takes the next minute.
+const FIRST_NOTIFICATION: &str = "2026-09-18T14:02:12.107Z";
 
 impl Tenant {
     /// Tell each cluster that runs profile `uid` whether an update waits for it, as Palette does
@@ -46,7 +50,7 @@ impl Tenant {
                 json!({
                     "metadata": {
                         "uid": format!("64fc{:020x}", items.len() + 1),
-                        "creationTimestamp": format!("2026-09-18T14:{:02}:12.107Z", 2 + items.len()),
+                        "creationTimestamp": minutes_after(FIRST_NOTIFICATION, items.len()),
                         "name": format!("spectrocluster '{cluster}' notification"),
                     },
                     "type": "NotificationPackUpdate",
