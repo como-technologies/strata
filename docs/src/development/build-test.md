@@ -80,6 +80,7 @@ newer versions. `observer-1` is the tenant before the edit, with no finding.
 `images`, `images-split`, `images-off`, and `images-unread` show the read of the pods.
 Its sets `asks` and `text-too-large` show the answers of Palette and the cap of the text.
 Its sets `alerts` and `alerts-unset` show the Alerts screen with rules and with no alert.
+Its set `moved-drift` shows a finding on a version that the cluster no longer runs.
 [Try each state](./observer-api.md#try-each-state) lists every set.
 
 `scripts/observer-lib.sh` holds the functions that start and stop the stand-in.
@@ -156,13 +157,14 @@ table gives the files.
 | `xtask/src/checks.rs`, `xtask/src/files.rs`, `xtask/src/size.rs` | `checks.rs` holds the rules that the pages must keep, and `files.rs` holds the scans of a directory. `size.rs` holds the tests of the size limits of [Write the code](./code.md#the-size-of-a-module), for `xtask`, `src/`, and the other packages. |
 | `xtask/facts/`, `xtask/src/facts/`, `xtask/src/contract/` | `facts/` holds the list of the facts of Palette and of the clouds, and `src/facts/` holds the check of it: see [The facts of Palette](./facts.md). `src/contract/` holds the contract run. It compares the facts with a real tenant, and it sends the read-only calls of the clouds. See [The weekly contract run](./facts.md#the-weekly-contract-run). |
 | `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `routes.rs` makes sure that the routes of the tests are the routes that strata builds. `cargo test verify::` runs the tests of `verify.rs`. |
-| `tests/common/palette.rs`, `tests/common/answer.rs` | `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables. It also builds the entry of a pack in the pack listing. The generator of `benches/`, the package `fuzz/`, the tests of `strata-preflight`, and a unit test of `src/api/http.rs` include that file too. So the routes and the documents have one source. `common/answer.rs` holds the check of an answer and the check of a ref. `tests/fuzz.rs` and `fuzz/` use it, so one rule decides what an answer is. |
+| `tests/common/palette.rs`, `tests/common/answer.rs` | `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables with their masks. It also builds the entry of a pack in the pack listing, and the body and the message of a denial. The generator of `benches/`, the package `fuzz/`, the tests of `strata-preflight`, a unit test of `src/api/http.rs`, and the stand-in of `xtask/` include that file too. So the routes, the documents, the masks, and the denials have one source. `common/answer.rs` holds the check of an answer and the check of a ref. `tests/fuzz.rs` and `fuzz/` use it, so one rule decides what an answer is. |
 | `tests/common/download.rs` | It writes the download of a profile version, as Palette writes it. The download holds the list of the packs and the archive of each pack. The tests, the unit tests of `src/api/download.rs`, the seeds of `fuzz/`, and the stand-in in `xtask/` include it, so the layout has one writer. |
 | `tests/common/closed_set.rs`, `tests/common/walk.rs`, `tests/common/process.rs`, `tests/common/toml.rs` | `common/closed_set.rs` holds the checks of a closed set, and `common/walk.rs` holds the walk of a directory. `crates/strata-preflight/tests/` includes both. `common/process.rs` holds the lock for the processes of the tests: see [Write the code](./code.md#tests). The tests of `strata-preflight` and of `xtask` include it too. `common/toml.rs` holds the readers of a TOML file: the lines of a table, and the entries `key = "value"`. `xtask` and the tests of `strata-report-endpoint` include it. |
 | `tests/common/git.rs` | `common/git.rs` gives each git command of a test no setting of the machine and one author. The runner of the book in `xtask` includes it too, so a chapter of the book starts git with the same settings. |
 | `tests/common/route.rs` | `common/route.rs` matches a route of Palette with a pattern, such as `v1/clusterprofiles/{uid}`. `xtask` and the tests of `strata-preflight` include it, so each package matches a route in one way. |
 | `tests/common/variants.rs`, `tests/common/table.rs` | `common/variants.rs` holds the macro `one_of_each!`. It makes the list of one value of each variant of an enum. The build fails on a variant that the list does not hold. The tests of `src/error/`, of the edits of the stand-in in `xtask`, and of `Check` in `strata-preflight` include it. `common/table.rs` reads a markdown table: the cells of a row, the rows of a table, and the first cell of each row. The tests of the root package, the tests of `src/error/`, and the check of the facts in `xtask` use it. |
-| `tests/common/code_span.rs` | `common/code_span.rs` reads the code spans of a markdown text, and the text outside them. The tests of the root package and the check of the facts in `xtask` use it. So each package reads a code span in one way. |
+| `tests/common/code_span.rs`, `tests/common/code_block.rs` | `common/code_span.rs` reads the code spans of a markdown text, and the text outside them. The tests of the root package and the check of the facts in `xtask` use it. `common/code_block.rs` reads the fenced code blocks of a markdown text, and the lines outside them. The tests of the root package use it. Both read a fence as GitHub reads it, and the unit tests of `src/text.rs` and of the report of `strata-preflight` include both. So each package reads a code span and a code block in one way. |
+| `tests/common/answer_tags.rs` | `common/answer_tags.rs` holds four texts of an answer: with tags of HTML, with the marks of markdown, with mentions of GitHub, and with bare addresses. It holds the checks that a markdown output shows each such tag, mark, and mention as text, and each such address as it is. The unit tests of `src/text.rs` and of the report of `strata-preflight` include it too. So the tests have one text of each kind, and one list of the tags that strata writes. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `crates/strata-knurl/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `observer/` | `strata-observer` is a Go program in its own module: see [The checks of the observer](./observer.md) and [The server of the observer](./observer-api.md). `main.go` holds the command line, and `main_test.go` holds its tests. `internal/docs`, `internal/runner`, `internal/baseline`, `internal/model`, `internal/check`, `internal/kube`, `internal/api`, `internal/web`, and `internal/testkit` are its packages. `scripts/observer-contract.sh` gives them the documents of the binary, and `scripts/observer-playground.sh` runs the observer against the stand-in. `just observer-build` writes the static binary at `target/observer/strata-observer`. `just lint` and `just test` check the module. |
@@ -798,6 +800,57 @@ Replace each hit with a made-up name, in the text, the path, or the target of a
 symlink. See
 [The rule of the names](./real-pipelines.md#the-rule-of-the-names). The push of
 the branch made the name public, so also tell the lead.
+
+### CodeQL
+
+`.github/workflows/codeql.yml` runs CodeQL on each push to `main`, on each pull
+request, and once a week. It analyzes the Rust code, the Go code and the
+JavaScript of the observer, and the workflows, with the default queries of
+CodeQL. The category of each analysis is `/language:<language>`, as the default
+setup of GitHub gave it, so each alert keeps its history. GitHub refuses the
+results of a workflow while the default setup is on, so the repository has the
+default setup off.
+
+The rule `rust/cleartext-logging` finds a sensitive value that goes to a log,
+such as a `println!`, an `eprintln!`, or the message of an `assert!`. It knows a
+sensitive value by the name of its variable, its field, or its function. To the
+rule, a name with `uid`, `account`, a user name, a user id, or a session id is
+account information. Strata prints the uid and the name of each object of
+Palette by design. So the rule gave 197 alerts, and most of them named a uid
+(#843).
+
+`.github/codeql/rust.yml` gives the analysis of Rust a copy of the rule, in
+`.github/codeql/rust/CleartextLogging.ql`. The copy has the same id and one more
+tag, `strata`. The config drops each query with that id, and then keeps each
+query with the tag. A later filter wins, so the copy stays. The copy has two
+changes:
+
+- A name that the rule reads only as account information is no source. A
+  secret, a password, an API key, a certificate, and a private value stay
+  sources. So the rule still gives an alert when the API key goes to a log.
+- The copy does not observe the diff of a pull request. The rule of CodeQL
+  does, and in a pull request it then gives only the alerts in the lines of the
+  diff. The crate of the test is in no diff.
+
+What the copy omits: an alert for a value whose name the rule reads only
+as account information. A session id or a session key is in that set too, and
+strata has no such value. A maintainer reads each alert that stays. An alert of
+the code that masks a secret, or of a test, gets the reason "false positive" or
+"used in tests".
+
+The job `the test of the rule rust/cleartext-logging` runs the copy on the crate
+that `scripts/dev/codeql-rule.sh crate` writes. Its lines send a uid, the name of
+an account, a field `uid`, the result of `name_or_uid`, and the API key to
+`println!`. Then `codeql-rule.sh check` reads the results. It passes only when
+they hold one rule with the id and the tag `strata`, and one alert, on the line
+of the API key. The results stay in the job, so the alert of the crate is no
+alert of the repository.
+
+When a release of CodeQL changes the rule, copy the new rule, and keep the two
+changes. The pack depends on `codeql/rust-all` at any version, so the copy
+builds with the library of the CodeQL that the action runs. When a change of
+that library stops the build of the copy, the analysis of Rust and the test
+fail.
 
 ### Dependency updates
 

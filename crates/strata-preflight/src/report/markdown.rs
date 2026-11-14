@@ -1,6 +1,6 @@
 //! The markdown form of a report: a pull request comment.
 
-use strata::text::{markdown_cell, plural};
+use strata::text::{code_block, code_span, markdown_cell, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, FAILED_REQUESTS, FailedRequest, Report, SectionScore, pct};
@@ -14,15 +14,17 @@ pub fn markdown(r: &Report) -> String {
     let probes = count_of(s.probe_failed as usize, "probe");
     let warnings = count_of(s.warned as usize, "warning");
     let checks = plural(s.applies() as usize, "check", "checks");
+    // the cloud type and the name come from the entity, and a watch adds the state of the cluster
+    // to the source
     out.push_str(&format!(
-        "## strata-preflight: {} cluster `{}`\n\n",
-        r.subject.cloud,
-        r.subject.name_or_dash()
+        "## strata-preflight: {} cluster {}\n\n",
+        markdown_cell(&r.subject.cloud),
+        code_span(r.subject.name_or_dash())
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed, {warnings}; {} did not run, {} not checked; readiness {}: {} of {} {checks} passed.\n\n",
+        "**{}** — source {}, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed, {warnings}; {} did not run, {} not checked; readiness {}: {} of {} {checks} passed.\n\n",
         s.verdict,
-        r.subject.source,
+        code_span(&r.subject.source),
         r.subject.release_text(),
         r.options.tiers_text(),
         s.ran, s.passed, s.failed, s.not_run, s.not_checked, r.options.readiness_text(&format!("**{}**", pct(s.readiness))), s.passed, s.applies()
@@ -36,7 +38,10 @@ pub fn markdown(r: &Report) -> String {
     out.push_str(&failed_request_section(&r.failed_requests()));
     out.push_str(&reproduce_section(&r.checks));
     if s.not_run > 0 {
-        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
+        out.push_str(&format!(
+            "\n{}\n",
+            markdown_cell(&not_run_text(&s.not_run_reasons))
+        ));
     }
     out.push_str(&format!("\n{}\n", written_text(&r.options)));
     out.push_str(&scorecard_table(&r.sections));
@@ -78,14 +83,17 @@ fn failed_request_section(failed: &[FailedRequest<'_>]) -> String {
     let mut out = format!("\n### {FAILED_REQUESTS}\n\n");
     for f in failed {
         out.push_str(&format!(
-            "`{}` {}.\n\n```text\n{}\n```\n\n",
-            f.request,
-            f.stopped_text(),
-            f.messages.join("\n")
+            "{} {}.\n\n",
+            code_span(&f.request),
+            markdown_cell(&f.stopped_text())
         ));
+        // the messages quote the body of the answer
+        out.push_str(&code_block("text", &f.messages.join("\n")));
+        out.push('\n');
         let reproduce = f.reproduce();
         if !reproduce.is_empty() {
-            out.push_str(&format!("```bash\n{}\n```\n\n", reproduce.join("\n")));
+            out.push_str(&code_block("bash", &reproduce.join("\n")));
+            out.push('\n');
         }
     }
     out
@@ -106,10 +114,8 @@ fn reproduce_section(checks: &[CheckResult]) -> String {
     for c in shown {
         out.push_str(&format!("**`{}`** — {}\n\n", c.id, c.title));
         if !c.shown_reproduce().is_empty() {
-            out.push_str(&format!(
-                "```bash\n{}\n```\n\n",
-                c.shown_reproduce().join("\n")
-            ));
+            out.push_str(&code_block("bash", &c.shown_reproduce().join("\n")));
+            out.push('\n');
         }
         if let Some(fix) = c.shown_fix() {
             out.push_str(&format!("Fix: {}\n\n", fix.line()));

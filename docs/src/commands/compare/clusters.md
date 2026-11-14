@@ -73,6 +73,10 @@ profiles give no `ADDED` and no `REMOVED` line:
 {{#include ../../output/cluster-move-asks.txt}}
 ```
 
+The `note` line names a required variable that the move adds. Palette checks it
+only at the update: see
+[What the route does not check](./validate.md#what-the-route-does-not-check).
+
 The version of an add-on that the cluster does not run replaces no profile,
 because the move adds it. Then the cluster side holds each profile of the
 cluster. A `cluster:<cluster>/<profile>` ref keeps its own selection, and two
@@ -91,7 +95,9 @@ cluster now, and verifies the record:
 {{#include ../../output/cluster-all-profiles-lines.txt}}
 ```
 
-The verdict of `verify` gives the count too. `strata list clusters --detail`
+The verdict of `verify` gives the count too, and so does
+[a row of `verify --summary`](../verify.md#check-many-records).
+`strata list clusters --detail`
 names each profile and its version. `--json` gives them in
 `a.cluster.profiles` and `b.cluster.profiles`.
 

@@ -7,11 +7,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
-    OPERATION_FORBIDDEN_CODE, PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
+    Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
+    PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
+use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
+use strata::model::update::MinorSkip;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -1067,6 +1069,55 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
     );
 }
 
+/// The criterion of #890: `summary_table` of lib.sh writes each value of a row as a cell of
+/// markdown. So a `|`, a tag, a mark of markdown, or a mention in a value shows as text. The row
+/// keeps its five cells. The same holds for a SEEN line that a script writes itself, whose words
+/// take the place of the exit codes.
+#[test]
+fn lib_sh_writes_each_value_of_a_row_of_the_summary_as_a_cell_of_markdown() {
+    let dir = tempfile::tempdir().unwrap();
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            r#"script=demo; . '{lib}'
+check odd-words 1 "$WHAT" -- false
+printf '%-4s  %-32s %s\n' SEEN floating 'the *registry* lists no tag | for <version>' >> steps.log
+summary_table"#,
+            lib = live_script("lib.sh").display()
+        ))
+        .current_dir(dir.path())
+        .env("STRATA_BIN", "/no/such/strata")
+        .env(
+            "WHAT",
+            format!("{} | {}", common::ANSWER_MARKS, common::ANSWER_MENTIONS),
+        )
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let table = text(&o.stdout);
+    let what = format!(
+        "{} \\| {}",
+        strata::text::markdown_cell(common::ANSWER_MARKS),
+        strata::text::markdown_cell(common::ANSWER_MENTIONS)
+    );
+    assert_eq!(
+        common::table_rows(&table, "| result |"),
+        [
+            ["PASS", "`odd-words`", "1", "1", what.as_str()],
+            [
+                "SEEN",
+                "`floating`",
+                "\\*registry\\*",
+                "no tag \\| for &lt;version&gt;",
+                ""
+            ],
+        ],
+        "{table}"
+    );
+    common::assert_answer_marks_as_text(&table);
+    common::assert_answer_mentions_as_text(&table);
+}
+
 #[test]
 fn lib_sh_stops_the_send_of_the_report_whatever_the_machine_says() {
     let dir = tempfile::tempdir().unwrap();
@@ -1129,6 +1180,81 @@ fn lib_sh_gives_git_the_author_of_the_script_and_no_setting_of_the_machine() {
             "{machine:?}"
         );
     }
+}
+
+/// lib.sh stops on a strata-preflight that is older than its sources, as it stops on such a
+/// strata. `strata preflight` runs the strata-preflight beside strata, so an older one tests old
+/// rules (#822).
+#[test]
+fn live_scripts_refuse_a_strata_preflight_binary_older_than_the_sources() {
+    let root = tempfile::tempdir().unwrap();
+    let live = root.path().join("examples/live");
+    let release = root.path().join("target/release");
+    let rules = root.path().join("crates/strata-preflight/rules");
+    for d in [&live, &release, &rules, &root.path().join("src")] {
+        std::fs::create_dir_all(d).unwrap();
+    }
+    copy_scripts(
+        root.path(),
+        &["examples/live/lib.sh", "examples/live/common.sh"],
+    );
+    executable(
+        &live.join("probe.sh"),
+        "script=probe\n. \"$(dirname \"$0\")/lib.sh\"\necho ran\n",
+    );
+    let now = std::time::SystemTime::now();
+    let built_at = |binary: &Path, seconds: i64| {
+        let at = if seconds < 0 {
+            now - std::time::Duration::from_secs(seconds.unsigned_abs())
+        } else {
+            now + std::time::Duration::from_secs(seconds.unsigned_abs())
+        };
+        std::fs::File::options()
+            .write(true)
+            .open(binary)
+            .unwrap()
+            .set_modified(at)
+            .unwrap();
+    };
+    let strata = release.join("strata");
+    let preflight = release.join("strata-preflight");
+    executable(&strata, "#!/bin/sh\n");
+    executable(&preflight, "#!/bin/sh\n");
+    let rule = rules.join("compute.yaml");
+    std::fs::write(&rule, "# changed after the build of strata-preflight\n").unwrap();
+    // strata is newer than each source, and strata-preflight is older than a rule
+    built_at(&strata, 5);
+    built_at(&preflight, -600);
+    let probe = |strata_bin: Option<&Path>| {
+        let mut c = Command::new("bash");
+        c.arg(live.join("probe.sh")).env_remove("STRATA_BIN");
+        if let Some(bin) = strata_bin {
+            c.env("STRATA_BIN", bin);
+        }
+        c.output_locked().unwrap()
+    };
+
+    let o = probe(None);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
+    assert_eq!(
+        text(&o.stderr),
+        format!(
+            "probe: {} is older than {}; run just build\n",
+            preflight.display(),
+            rule.display()
+        )
+    );
+
+    // rebuilt: the binary is newer than each source
+    built_at(&preflight, 5);
+    let o = probe(None);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), "ran\n");
+
+    // the strata-preflight beside a strata of STRATA_BIN is the caller's to keep current
+    built_at(&preflight, -600);
+    let o = probe(Some(&strata));
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
 }
 
 #[test]
@@ -1249,7 +1375,11 @@ fn the_key_of_palette_is_in_no_argument_of_curl() {
         ),
         (
             "v1_spectroclusters_c-1_validate_repave",
-            r#"{"isRepaveRequired":false,"reasons":[]}"#,
+            no_repave().to_string().as_str(),
+        ),
+        (
+            "v1_spectroclusters_c-1",
+            r#"{"spec":{"clusterProfileTemplates":[{"uid":"prof-1"}]}}"#,
         ),
     ] {
         std::fs::write(routes.join(route), body).unwrap();
@@ -1272,8 +1402,9 @@ fn the_key_of_palette_is_in_no_argument_of_curl() {
         );
     }
     let arguments = std::fs::read_to_string(routes.join("sent/curl.args")).unwrap();
-    // Each call runs curl once. The repave reads a profile and asks Palette, so it runs curl twice.
-    let curls = calls.len() + 1;
+    // Each call runs curl once. The repave reads a profile and the cluster, and asks Palette, so
+    // it runs curl three times.
+    let curls = calls.len() + 2;
     assert_eq!(
         arguments.lines().count(),
         curls,
@@ -1370,11 +1501,23 @@ fn only_palette_curl_sh_names_the_api_key_header_in_the_scripts() {
     assert_eq!(named, ["examples/live/palette-curl.sh"]);
 }
 
-/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
-/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
-#[test]
-fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+/// True when the script line `line` builds the path of one registry of Palette: a folder of a
+/// kind of registry, then a `$`. A quote can close the text before the `$`, as in
+/// `"/v1/registries/oci/"$uid`.
+fn builds_a_registry_path(line: &str) -> bool {
+    ["oci", "helm", "pack"].iter().any(|kind| {
+        let route = format!("/v1/registries/{kind}/");
+        line.match_indices(&route).any(|(at, _)| {
+            line[at + route.len()..]
+                .trim_start_matches(['"', '\''])
+                .starts_with('$')
+        })
+    })
+}
+
+/// The scripts of the tree `root` that build the path of one registry of Palette, by their path
+/// from `root`.
+fn registry_path_builders(root: &Path) -> Vec<String> {
     let mut built = Vec::new();
     for dir in ["examples", "scripts", "deploy", "crates"] {
         for path in walk(&root.join(dir)) {
@@ -1382,18 +1525,52 @@ fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
                 continue;
             }
             let code = std::fs::read_to_string(&path).unwrap();
-            if code_lines(&code).any(|l| {
-                ["oci", "helm", "pack"].iter().any(|kind| {
-                    let route = format!("/v1/registries/{kind}/");
-                    l.match_indices(&route)
-                        .any(|(at, _)| l[at + route.len()..].starts_with('$'))
-                })
-            }) {
+            if code_lines(&code).any(builds_a_registry_path) {
                 built.push(path.strip_prefix(root).unwrap().display().to_string());
             }
         }
     }
-    assert_eq!(built, ["examples/live/palette-curl.sh"]);
+    built
+}
+
+/// Only `registry_base` of `palette-curl.sh` builds the path of one registry of Palette. A script
+/// that writes `/v1/registries/oci/$uid/...` by hand makes a second copy of the route (#732).
+#[test]
+fn only_palette_curl_sh_builds_the_path_of_a_registry_in_the_scripts() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    assert_eq!(
+        registry_path_builders(root),
+        ["examples/live/palette-curl.sh"]
+    );
+}
+
+/// The check of the registry paths finds a path with a `$` after the folder of the kind, also
+/// after a quote that closes the text. A route with no uid, and a comment, build no path (#822).
+#[test]
+fn the_check_of_the_registry_paths_finds_a_quoted_path_outside_palette_curl_sh() {
+    for (line, builds) in [
+        (r#"palette_curl "/v1/registries/oci/$uid""#, true),
+        (r#"palette_curl "/v1/registries/oci/"$uid"#, true),
+        (r#"palette_curl '/v1/registries/helm/'"$uid""#, true),
+        (r#"palette_curl "/v1/registries/pack/${uid}/sync""#, true),
+        (r#"palette_curl "/v1/registries/oci/summary""#, false),
+        (r#"palette_curl "/v1/registries/oci/" "$uid""#, false),
+    ] {
+        assert_eq!(builds_a_registry_path(line), builds, "{line}");
+    }
+
+    let tree = tempfile::tempdir().unwrap();
+    let live = tree.path().join("examples/live");
+    std::fs::create_dir_all(&live).unwrap();
+    std::fs::write(
+        live.join("tenant.sh"),
+        "# \"/v1/registries/oci/\"$uid in a comment\nuid=r-1\npalette_curl \"/v1/registries/oci/\"$uid\n",
+    )
+    .unwrap();
+    assert_eq!(
+        registry_path_builders(tree.path()),
+        ["examples/live/tenant.sh"]
+    );
 }
 
 #[test]
@@ -1443,7 +1620,7 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     std::fs::write(routes.join("v1_x_found"), r#"{"items":[]}"#).unwrap();
     std::fs::write(
         routes.join("v1_x_refused"),
-        r#"{"code":"ResourceAccessDenied","message":"access denied"}"#,
+        error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     )
     .unwrap();
     std::fs::write(routes.join("v1_x_refused.status"), "500").unwrap();
@@ -1457,7 +1634,10 @@ fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0()
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(
         text(&o.stdout),
-        "HTTP 500\n{\"code\":\"ResourceAccessDenied\",\"message\":\"access denied\"}"
+        format!(
+            "HTTP 500\n{}",
+            error_body(Denial::Project.as_str(), &project_denied_message("p-1"))
+        )
     );
     assert_eq!(text(&o.stderr), "");
 
@@ -1818,11 +1998,16 @@ fn stuck_cluster_routes(routes: &Path, kubeconfig: bool) {
 }
 
 fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
+    run_live_at(&live_script(script), args, root, extra)
+}
+
+/// [`run_live`] for the script at `path`, such as a script of [`Stage::copy_live`].
+fn run_live_at(path: &Path, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
     let bin = fake_bin(root, &[("curl", FAKE_API_CURL), ("kubectl", FAKE_KUBECTL)]);
     let tmp = root.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     let mut c = Command::new("bash");
-    c.arg(live_script(script))
+    c.arg(path)
         .args(args)
         .env("PATH", path_with(&bin))
         .env("HOME", root)
@@ -2317,16 +2502,30 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
             {"name":"kubernetes","tag":"1.36.2","type":"spectro","layer":"k8s","values":"postKubeadmCommands:\n  - chmod\n"}]}}}"#,
     )
     .unwrap();
+    // the cluster runs prof-1 between two add-on profiles
+    std::fs::write(
+        routes.join("v1_spectroclusters_c-1"),
+        r#"{"metadata":{"uid":"c-1"},"spec":{"clusterProfileTemplates":[
+            {"uid":"addon-1","type":"add-on"},{"uid":"prof-1","type":"cluster"},{"uid":"addon-2","type":"add-on"}]}}"#,
+    )
+    .unwrap();
     let validate = routes.join("v1_spectroclusters_c-1_validate_repave");
-    std::fs::write(&validate, r#"{"isRepaveRequired":false,"reasons":[]}"#).unwrap();
+    std::fs::write(&validate, no_repave().to_string()).unwrap();
     let sent = || read_json(&routes.join("sent/POST_v1_spectroclusters_c-1_validate_repave"));
+    let repave = |env: &[(&str, &str)]| {
+        run_live(
+            "tenant.sh",
+            &["repave", "c-1", "prof-1", "prof-2"],
+            root.path(),
+            env,
+        )
+    };
+    let pack_values = serde_json::json!([
+        {"name": "ubuntu-aws", "tag": "LTS__24.04", "type": "spectro", "values": "os: values\n", "manifests": []},
+        {"name": "kubernetes", "tag": "1.36.2", "type": "spectro", "values": "postKubeadmCommands:\n  - chmod\n", "manifests": []}
+    ]);
 
-    let o = run_live(
-        "tenant.sh",
-        &["repave", "c-1", "prof-1", "prof-2"],
-        root.path(),
-        &[],
-    );
+    let o = repave(&[]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert_eq!(
         text(&o.stdout),
@@ -2334,12 +2533,43 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
     );
     assert_eq!(
         sent(),
-        serde_json::json!({"profiles": [{"uid": "prof-1", "replaceWithProfile": "prof-2", "variables": [],
-        "packValues": [
-            {"name": "ubuntu-aws", "tag": "LTS__24.04", "type": "spectro", "values": "os: values\n", "manifests": []},
-            {"name": "kubernetes", "tag": "1.36.2", "type": "spectro", "values": "postKubeadmCommands:\n  - chmod\n", "manifests": []}
-        ]}]}),
-        "the target version's packs replace the current version on the cluster"
+        serde_json::json!({"profiles": [
+            {"uid": "addon-1"},
+            {"uid": "prof-2", "variables": [], "packValues": pack_values},
+            {"uid": "addon-2"}
+        ]}),
+        "the body names each profile of the cluster, with the target and its packs in place of the current version"
+    );
+
+    // the body of the earlier script, for the live check that compares the two bodies
+    let o = repave(&[("REPAVE_FORM", "replace")]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        sent(),
+        serde_json::json!({"profiles": [{"uid": "prof-1", "replaceWithProfile": "prof-2",
+            "variables": [], "packValues": pack_values}]}),
+        "the earlier body names the current version alone, with replaceWithProfile"
+    );
+    let o = repave(&[("REPAVE_FORM", "both")]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("REPAVE_FORM is swap or replace, not both"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // a current version that the cluster does not run is no swap
+    let o = run_live(
+        "tenant.sh",
+        &["repave", "c-1", "prof-9", "prof-2"],
+        root.path(),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("cluster c-1 runs no profile prof-9"),
+        "{}",
+        text(&o.stderr)
     );
 
     // the control: a change to the values that Palette repaves for
@@ -2369,7 +2599,7 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         "cluster c-1, profile prof-1 -> prof-2 with kubernetes values edited: repave\n  PackValuesUpdated: Pack 'kubernetes' values are updated (kubeadmconfig.postKubeadmCommands)\n"
     );
     assert_eq!(
-        sent()["profiles"][0]["packValues"][1]["values"],
+        sent()["profiles"][1]["packValues"][1]["values"],
         "postKubeadmCommands:\n  - echo strata\n  - chmod\n"
     );
 
@@ -2419,6 +2649,11 @@ fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
         std::fs::write(
             routes.join("v1_clusterprofiles_prof-2"),
             r#"{"metadata":{"uid":"prof-2"},"spec":{"published":{"packs":[]}}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            routes.join("v1_spectroclusters_c-1"),
+            r#"{"spec":{"clusterProfileTemplates":[{"uid":"prof-1"}]}}"#,
         )
         .unwrap();
         std::fs::write(routes.join("v1_spectroclusters_c-1_validate_repave"), "").unwrap();
@@ -2593,6 +2828,135 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
             .contains("b not-made"),
         "steps.log names it"
     );
+}
+
+/// The criterion of #872: the summary of preflight-plan.sh puts the ledger entry in a fenced
+/// block. The fence is longer than each run of backticks in the entry, as `text::code_block` writes
+/// it. So a note with three backticks does not end the block.
+#[test]
+fn preflight_plan_keeps_a_ledger_entry_with_three_backticks_in_its_block() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script.find("\nsummary() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let summary = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let strata = dir.path().join("strata");
+    executable(&strata, "#!/usr/bin/env bash\necho strata 0.0.0\n");
+    // `record` keeps the line breaks of a note, so a note can hold a line of three backticks
+    let entry = "  - run: r1\n    results:\n      - {rule: a, result: missed, note: \"it said:\n```\n<b>x</b>\"}\n";
+    for (case, written) in [("an entry", Some(entry)), ("no entry", None)] {
+        let run = dir.path().join(case.replace(' ', "-"));
+        std::fs::create_dir(&run).unwrap();
+        if let Some(entry) = written {
+            std::fs::write(run.join("ledger-entry.yaml"), entry).unwrap();
+        }
+        let o = Command::new("bash")
+            .arg("-c")
+            .arg(format!(
+                "script=plan; . '{lib}'\nrun_id=r1; engine=aws; R=p1; release=\n{summary}\nsummary",
+                lib = live_script("lib.sh").display()
+            ))
+            .current_dir(&run)
+            .env("STRATA_BIN", &strata)
+            .output_locked()
+            .unwrap();
+        assert!(o.status.success(), "{case}: {}", text(&o.stderr));
+        let md = std::fs::read_to_string(run.join("summary.md")).unwrap();
+        assert_eq!(
+            common::code_blocks(&md, "yaml"),
+            [written.unwrap_or("").trim_end_matches('\n')],
+            "{case}: {md}"
+        );
+        let fence = if written.is_some() { "````" } else { "```" };
+        assert!(
+            md.ends_with(&format!(
+                "\n{fence}yaml\n{}{fence}\n",
+                written.unwrap_or("")
+            )),
+            "{case}: {md}"
+        );
+    }
+}
+
+/// The criterion of #890: the digest table of verify.sh writes each text of a pack as a cell of
+/// markdown. It writes the start of each digest in a code span of strata. So a name with a `|`, a
+/// mark of markdown, or a mention shows as text, and each row keeps its seven cells.
+#[test]
+fn verify_writes_the_name_of_a_pack_with_a_mark_of_markdown_as_text_in_the_digest_table() {
+    let script = std::fs::read_to_string(live_script("verify.sh")).unwrap();
+    let start = script.find("\ndigest_table() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let digest_table = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    let helm = format!("{} | x", common::ANSWER_MARKS);
+    let pack = |name: &str, kind: &str, reference: &str, listed: &str, source: &str| {
+        serde_json::json!({"packs": [{
+            "name": name, "type": kind, "refDigest": reference, "registryDigest": listed,
+            "hash": {"upstreamSource": source}
+        }]})
+        .to_string()
+    };
+    let digest = format!("sha256:{}", "a".repeat(64));
+    let files = [
+        (
+            "release.json",
+            pack(&helm, "helm", &digest, &digest, "packRef.digest"),
+        ),
+        (
+            "registries.json",
+            pack(
+                common::ANSWER_MENTIONS,
+                "oci",
+                "",
+                &"b".repeat(64),
+                "packSummary.digest",
+            ),
+        ),
+        ("registry-digest-helm.out", format!("{digest}\n")),
+        ("registry-digest-oci.out", format!("{}\n", "c".repeat(64))),
+    ];
+    for (file, body) in files {
+        std::fs::write(dir.path().join(file), body).unwrap();
+    }
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            "script=verify; . '{lib}'\n{digest_table}\ndigest_table",
+            lib = live_script("lib.sh").display()
+        ))
+        .current_dir(dir.path())
+        .env("STRATA_BIN", "/no/such/strata")
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let table = text(&o.stdout);
+    let start = |s: &str, n: usize| strata::text::code_cell(&s[..n]);
+    assert_eq!(
+        common::table_rows(&table, "| pack |"),
+        [
+            [
+                strata::text::markdown_cell(&helm),
+                "helm".into(),
+                start(&digest, 19),
+                start(&digest, 19),
+                start(&digest, 19),
+                "packRef.digest".into(),
+                "equal".into()
+            ],
+            [
+                strata::text::markdown_cell(common::ANSWER_MENTIONS),
+                "oci".into(),
+                "-".into(),
+                start(&"b".repeat(64), 12),
+                start(&"c".repeat(64), 12),
+                "packSummary.digest".into(),
+                "no ref digest".into()
+            ],
+        ],
+        "{table}"
+    );
+    common::assert_answer_marks_as_text(&table);
+    common::assert_answer_mentions_as_text(&table);
 }
 
 /// Run `offering_edit` of preflight-plan.sh for `engine`, with the `account_kind` that `create_body`
@@ -3220,6 +3584,8 @@ struct Stage {
     answers: usize,
     /// More variables of the environment of the script.
     env: Vec<(String, String)>,
+    /// The copy of `examples/live` that the scripts run from, after [`Stage::copy_live`].
+    live: Option<PathBuf>,
 }
 
 impl Stage {
@@ -3243,7 +3609,27 @@ impl Stage {
             root,
             answers: 0,
             env: Vec::new(),
+            live: None,
         }
+    }
+
+    /// Copy the scripts of `examples/live` and the bodies of `preflight/` into the stage, and run
+    /// the scripts from the copy. Gives the directory of the copy, so that a test can change a file
+    /// that a script reads.
+    fn copy_live(&mut self) -> PathBuf {
+        let from = live_script("");
+        let to = self.path("live");
+        let top = std::fs::read_dir(&from)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.is_file());
+        for path in top.chain(walk(&from.join("preflight"))) {
+            let copy = to.join(path.strip_prefix(&from).unwrap());
+            std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
+            executable(&copy, &std::fs::read_to_string(&path).unwrap());
+        }
+        self.live = Some(to.clone());
+        to
     }
 
     /// The name of the route file of `path`: the path without its first `/`, with `_` for each other.
@@ -3392,7 +3778,11 @@ fi
             .append(true)
             .open(root.join("out/steps.log"))
             .unwrap();
-        let o = run_live(script, args, root, &env);
+        let path = match &self.live {
+            Some(live) => live.join(script),
+            None => live_script(script),
+        };
+        let o = run_live_at(&path, args, root, &env);
         let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
         // the harness shows the standard output of a test that fails, so its log holds the output
         // of each step that failed
@@ -3713,20 +4103,33 @@ fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
     failed(&steps, &["rbac-add"]);
 }
 
-/// A `strata` for tiers.sh stage 6. It writes a record that says which key it read with: the
-/// record names the key and does not hold it.
-const FAKE_STRATA_LIMITED: &str = r#"#!/usr/bin/env bash
-if [ "$*" = "snapshot cluster:c-a -o limited-record.json" ]; then
-  with=first; [ "${PALETTE_API_KEY:-}" = limited-k ] && with=second
-  echo "{\"readWith\":\"$with\",\"source\":{\"cluster\":{\"tiers\":{\"policy\":{\"errors\":{\"rbacs\":\"HTTP 500\"}}}}}}" > limited-record.json
-fi
-exit 0
-"#;
+/// A `strata` for the stages of tiers.sh that read cluster A with another key, given to
+/// [`Stage::wrap_strata`]. `snapshot cluster:c-a -o FILE` writes `record`, a JSON object, to FILE.
+///
+/// The record gets the field `readWith`: `second` for the key `key`, and `first` for another key.
+/// So the record names the key and does not hold it. Any other call goes to the answers of the
+/// stage.
+fn fake_strata_keyed(key: &str, record: &str) -> String {
+    format!(
+        r#"#!/usr/bin/env bash
+case "$*" in
+  "snapshot cluster:c-a -o "*)
+    with=first; [ "${{PALETTE_API_KEY:-}}" = {key} ] && with=second
+    jq -c --arg with "$with" '{{readWith: $with}} + .' <<< '{record}' > "${{@: -1}}"
+    exit 0 ;;
+esac
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#
+    )
+}
 
 #[test]
 fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_refusal() {
     let mut stage = baseline_stage();
-    stage.command("fake-strata", FAKE_STRATA_LIMITED);
+    stage.wrap_strata(&fake_strata_keyed(
+        "limited-k",
+        r#"{"source":{"cluster":{"tiers":{"policy":{"errors":{"rbacs":"HTTP 500"}}}}}}"#,
+    ));
     let rbacs = &cluster_rbacs_route("c-a");
     stage.route(rbacs, r#"{"items":[]}"#);
     // an active user with no role in the project: Palette answers HTTP 500, and not 403
@@ -3734,7 +4137,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
         rbacs,
         "limited-k",
         500,
-        r#"{"code":"ResourceAccessDenied","message":"Project 'p-1' access denied"}"#,
+        &error_body(Denial::Project.as_str(), &project_denied_message("p-1")),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
 
@@ -3756,7 +4159,7 @@ fn tiers_sh_stage_6_reads_the_role_bindings_with_a_second_key_and_records_the_re
     }
     assert_eq!(
         std::fs::read_to_string(stage.path("out/limited-code.out")).unwrap(),
-        "ResourceAccessDenied\n",
+        format!("{}\n", Denial::Project.as_str()),
         "the check records the error code of the body"
     );
     assert!(
@@ -3803,7 +4206,10 @@ fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_
         rbacs,
         "limited-k",
         403,
-        r#"{"code":"AccessDenied","message":"cluster.get operation is not permitted"}"#,
+        &error_body(
+            Denial::Route.as_str(),
+            &access_denied_message("cluster.get", "project"),
+        ),
     );
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
     let (o, steps) = stage.run("tiers.sh", &["6"]);
@@ -3844,19 +4250,60 @@ fn narrow_routes() -> [(&'static str, String); 3] {
     ]
 }
 
+/// A `strata` for tiers.sh stage 8. `strata list` with the third key and its progress notes prints
+/// `list.out`, writes `list.err` to standard error, and exits with `list.code`. With another key, or
+/// with no notes, it prints nothing. Any other call goes to the answers of the stage.
+const FAKE_STRATA_NARROW: &str = r#"#!/usr/bin/env bash
+if [ "$*" = list ]; then
+  { [ "${PALETTE_API_KEY:-}" = narrow-k ] && [ -z "${STRATA_QUIET+set}" ]; } || exit 0
+  cat "$FAKE_STRATA/list.out"
+  cat "$FAKE_STRATA/list.err" >&2
+  exit "$(cat "$FAKE_STRATA/list.code")"
+fi
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+/// What `strata list` of tiers.sh stage 8 prints and exits with: `stdout`, `stderr`, and `code`.
+fn narrow_list(stage: &Stage, stdout: &str, stderr: &str, code: i32) {
+    std::fs::write(stage.path("strata/list.out"), stdout).unwrap();
+    std::fs::write(stage.path("strata/list.err"), stderr).unwrap();
+    std::fs::write(stage.path("strata/list.code"), code.to_string()).unwrap();
+}
+
+/// The listing of the project with the third key: the release profile, and the clusters as not
+/// read. The answer of the clusters is the one that the code of Palette shows.
+fn narrow_listing() -> String {
+    format!(
+        "project p-1\n\n1 profile\n  strata-live-profile@1.0.0  r-1  aws\n\n\
+         clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+         no role of the key in the project gives the access of the request)\n",
+        clusters_denied()
+    )
+}
+
 /// A stage of tiers.sh stage 8. Each route of [`narrow_routes`] answers the third key with
-/// `status` and the code `code`, with a message that names `cluster.get`.
+/// `status` and the code `code`, with a message that names `cluster.get`. `strata list` with the
+/// third key prints [`narrow_listing`] and exits 2.
 fn narrow_stage(status: u16, code: &str) -> Stage {
     let mut stage = baseline_stage();
+    stage.wrap_strata(FAKE_STRATA_NARROW);
+    narrow_list(&stage, &narrow_listing(), "", 2);
     stage.route(&cluster_rbacs_route("c-a"), r#"{"items":[]}"#);
-    let refusal =
-        format!(r#"{{"code":"{code}","message":"Operation 'cluster.get' is forbidden"}}"#);
+    let refusal = error_body(code, &operation_forbidden_message("cluster.get"));
     for (_, route) in narrow_routes() {
         stage.route_as(&route, "narrow-k", status, &refusal);
     }
     stage.env("STRATA_LIVE_NARROW_KEY", "narrow-k");
     stage
 }
+
+/// The checks of `strata list` of tiers.sh stage 8.
+const NARROW_LIST_CHECKS: [&str; 4] = [
+    "narrow-list",
+    "narrow-list-profiles",
+    "narrow-list-says",
+    "narrow-list-once",
+];
 
 #[test]
 fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_records_each_refusal() {
@@ -3866,6 +4313,8 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
     assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(&steps, &["narrow-control"]);
+    // strata lists the profiles that the role reads, and names the clusters, with no retry
+    passed(&steps, &NARROW_LIST_CHECKS);
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     for (name, route) in narrow_routes() {
         passed(
@@ -3909,12 +4358,91 @@ fn tiers_sh_stage_8_reads_three_routes_with_a_key_without_cluster_get_and_record
 #[test]
 fn tiers_sh_stage_8_fails_each_judged_check_when_palette_answers_403_with_access_denied() {
     // the answer that the stand-in gave before #665
-    let (o, steps) = narrow_stage(403, "AccessDenied").run("tiers.sh", &["8"]);
+    let (o, steps) = narrow_stage(403, Denial::Route.as_str()).run("tiers.sh", &["8"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     for (name, _) in narrow_routes() {
         passed(&steps, &[&format!("narrow-{name}")]);
         failed(&steps, &[&format!("narrow-{name}-says")]);
     }
+}
+
+#[test]
+fn tiers_sh_stage_8_fails_the_checks_of_list_when_strata_retries_and_prints_no_profile() {
+    // the strata of before #620: it sends the read again, and one refused kind loses each kind
+    let stage = narrow_stage(500, OPERATION_FORBIDDEN_CODE);
+    let error = format!(
+        "strata: GET {CLUSTER_LISTING} failed with HTTP 500: {{\"code\":\"{}\"}}; retry 1 of 3 in 1s\n",
+        Denial::Project.as_str()
+    );
+    narrow_list(&stage, "", &error, 2);
+    let (o, steps) = stage.run("tiers.sh", &["8"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["narrow-list"]);
+    failed(
+        &steps,
+        &[
+            "narrow-list-profiles",
+            "narrow-list-says",
+            "narrow-list-once",
+        ],
+    );
+}
+
+/// The key that tiers.sh stage 9 makes: no tenant has it.
+fn unknown_key() -> String {
+    format!("strata-unknown-key-{}", "0".repeat(381))
+}
+
+/// A stage of tiers.sh stage 9. The project listing gives an error status for each key. strata
+/// prints `stderr` and exits 2 for `list projects`, as text and as JSON.
+fn unknown_key_stage(stderr: &str) -> Stage {
+    let mut stage = baseline_stage();
+    let body = error_body(
+        "ResourceNotFound",
+        &format!("API Key '{}' is not found", unknown_key()),
+    );
+    // a file of the stand-in has no room for the key in its name, so each key gets the answer
+    let route = Stage::route_key(PROJECT_LISTING);
+    std::fs::write(stage.path(&format!("routes/{route}")), body).unwrap();
+    std::fs::write(stage.path(&format!("routes/{route}.keyed.status")), "401").unwrap();
+    stage.strata_err("list projects", 2, stderr);
+    stage.strata_err("list projects --json", 2, stderr);
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_9_reads_with_a_key_that_no_tenant_has_and_finds_no_copy_of_it_in_strata() {
+    let masked = format!(
+        "strata: GET {PROJECT_LISTING} failed with HTTP 401: {{\"code\":\"ResourceNotFound\",\
+         \"message\":\"API Key '********' is not found\"}}\n"
+    );
+    let stage = unknown_key_stage(&masked);
+    let (o, steps) = stage.run("tiers.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &["unknown-key-read", "unknown-key-list", "unknown-key-masked"],
+    );
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        !calls.contains("PUT") && !calls.contains("POST") && !calls.contains("PATCH"),
+        "the stage writes nothing: {calls}"
+    );
+    for stage_name in ["== stage 6", "== stage 7", "== stage 8"] {
+        assert!(!steps.contains(stage_name), "stage 9 runs alone: {steps}");
+    }
+}
+
+#[test]
+fn tiers_sh_stage_9_fails_the_check_of_the_mask_when_strata_prints_the_key() {
+    let printed = format!(
+        "strata: GET {PROJECT_LISTING} failed with HTTP 401: {}\n",
+        unknown_key()
+    );
+    let (o, steps) = unknown_key_stage(&printed).run("tiers.sh", &["9"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["unknown-key-read", "unknown-key-list"]);
+    failed(&steps, &["unknown-key-masked"]);
 }
 
 #[test]
@@ -3933,6 +4461,168 @@ fn tiers_sh_stage_8_says_could_not_check_and_exits_2_without_the_third_key() {
     for (_, route) in narrow_routes() {
         assert!(!calls.contains(&route), "no request: {calls}");
     }
+}
+
+/// A stage of tiers.sh stage 10. The role bindings of cluster A answer `first` to the key of the
+/// example, and `second` to the second key. Each record names a binding of the system, and compare
+/// of the two records names the policy tier as the same.
+fn second_key_stage(first: &serde_json::Value, second: &serde_json::Value) -> Stage {
+    let record = r#"{"source":{"cluster":{"tiers":{"policy":{"systemRbacs":[{"type":"x"}]}}}}}"#;
+    keyed_stage(first, second, record, true)
+}
+
+/// The stage of [`second_key_stage`], where the fake `strata` writes `record` with each key.
+/// `compare` of the two records gives the policy tier as the same when `same` is true.
+fn keyed_stage(
+    first: &serde_json::Value,
+    second: &serde_json::Value,
+    record: &str,
+    same: bool,
+) -> Stage {
+    let mut stage = baseline_stage();
+    stage.wrap_strata(&fake_strata_keyed("second-k", record));
+    let rbacs = &cluster_rbacs_route("c-a");
+    stage.route(rbacs, &first.to_string());
+    stage.route_as(rbacs, "second-k", 200, &second.to_string());
+    let compare = serde_json::json!({"clusterTiers": [{"tier": "policy", "same": same}]});
+    stage.strata(
+        "compare first-key.json second-key.json --json",
+        0,
+        &compare.to_string(),
+    );
+    stage.env("STRATA_LIVE_SECOND_KEY", "second-k");
+    stage
+}
+
+/// The checks of tiers.sh stage 10 that judge the answers of Palette to the two keys.
+const SECOND_KEY_CHECKS: [&str; 4] = [
+    "second-system",
+    "second-own-subject",
+    "second-system-differs",
+    "second-others-same",
+];
+
+#[test]
+fn tiers_sh_stage_10_reads_a_role_binding_of_the_system_with_the_keys_of_two_users() {
+    // the answer that the code of Palette shows: each user reads only its own subject
+    let fred = rbacs_answer(system_rbacs(), "fred@example.com");
+    let wilma = rbacs_answer(system_rbacs(), "wilma@example.com");
+    let stage = second_key_stage(&fred, &wilma);
+    let (o, steps) = stage.run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "second-first",
+            "second-read",
+            "second-status",
+            "second-record-first",
+            "second-record-second",
+            "second-policy-same",
+            "second-system-recorded",
+        ],
+    );
+    passed(&steps, &SECOND_KEY_CHECKS);
+    for seen in [
+        "second-system-first",
+        "second-system-second",
+        "second-compare",
+        "second-policy",
+    ] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
+    }
+    let out = |name: &str| std::fs::read_to_string(stage.path(&format!("out/{name}"))).unwrap();
+    assert_eq!(
+        out("second-system-first.out"),
+        "[{\"role\":\"cluster-admin\",\"subjects\":[\"fred@example.com\"]}]\n"
+    );
+    assert_eq!(
+        out("second-system-second.out"),
+        "[{\"role\":\"view\",\"subjects\":[\"wilma@example.com\"]}]\n"
+    );
+    assert_eq!(out("second-policy.out"), "same\n");
+    assert!(out("first-key.json").contains(r#""readWith":"first""#));
+    assert!(
+        out("second-key.json").contains(r#""readWith":"second""#),
+        "strata reads the second record with the second key"
+    );
+
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    let rbacs = cluster_rbacs_route("c-a");
+    assert_eq!(
+        calls
+            .lines()
+            .filter(|l| l.ends_with(rbacs.as_str()))
+            .count(),
+        2,
+        "one read with each key: {calls}"
+    );
+    assert!(
+        !calls.contains("PUT") && !calls.contains("POST") && !calls.contains("PATCH"),
+        "the stage writes nothing: {calls}"
+    );
+    for stage_name in ["== stage 6", "== stage 8", "== stage 9"] {
+        assert!(!steps.contains(stage_name), "stage 10 runs alone: {steps}");
+    }
+    let printed = format!("{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        !printed.contains("second-k"),
+        "the key is not printed: {printed}"
+    );
+    for (name, content) in files_under(&stage.path("out")) {
+        assert!(!content.contains("second-k"), "{name} holds the key");
+    }
+}
+
+#[test]
+fn tiers_sh_stage_10_fails_the_checks_of_the_system_binding_when_both_keys_read_each_subject() {
+    // an answer with each subject of the binding of the system, the same to both keys
+    let all = system_rbacs();
+    let (o, steps) = second_key_stage(&all, &all).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &["second-system", "second-others-same"]);
+    failed(&steps, &["second-own-subject", "second-system-differs"]);
+
+    // a cluster with no binding of the system
+    let mut none = system_rbacs();
+    none["items"].as_array_mut().unwrap().remove(0);
+    let (o, steps) = second_key_stage(&none, &none).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["second-system", "second-system-differs"]);
+}
+
+#[test]
+fn tiers_sh_stage_10_fails_the_checks_of_the_records_when_the_policy_tier_holds_the_bindings_of_the_system()
+ {
+    // a strata that keeps the bindings of the system in the fields, as 0.33.0 does. The policy
+    // tier differs between the keys, and no record names them in systemRbacs
+    let fred = rbacs_answer(system_rbacs(), "fred@example.com");
+    let wilma = rbacs_answer(system_rbacs(), "wilma@example.com");
+    let record = r#"{"source":{"cluster":{"tiers":{"policy":{"fields":{"rbacs":[]}}}}}}"#;
+    let (o, steps) = keyed_stage(&fred, &wilma, record, false).run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    passed(&steps, &SECOND_KEY_CHECKS);
+    failed(&steps, &["second-policy-same", "second-system-recorded"]);
+}
+
+#[test]
+fn tiers_sh_stage_10_says_could_not_check_and_exits_2_without_the_second_key() {
+    let stage = baseline_stage();
+    let (o, steps) = stage.run("tiers.sh", &["10"]);
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("could not check")
+            && text(&o.stderr).contains("STRATA_LIVE_SECOND_KEY"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("second-"), "no check ran: {steps}");
+    let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
+    assert!(
+        !calls.contains(&cluster_rbacs_route("c-a")),
+        "no request: {calls}"
+    );
 }
 
 /// A `strata` for tiers.sh stage 7. strata-preflight writes the create body of cluster A into the
@@ -4106,6 +4796,33 @@ fn tiers_sh_stage_7_fails_the_checks_of_the_override_when_palette_drops_it() {
     failed(&steps, &["pool-in-cloud-config"]);
     // the record is a canned answer here, so only the check of the cloud config sees the drop
     passed(&steps, &["pool-set", "pool-undone"]);
+}
+
+/// Issue #892. Stage 1 asks `consumers` of the app profile, which lists the app deployments of its
+/// project. The checks fail when strata could not list them.
+#[test]
+fn app_profile_sh_stage_1_checks_that_consumers_lists_the_app_deployments_of_the_project() {
+    for (code, unread) in [
+        (0, ""),
+        (2, r#","unread":[{"uid":"p-1","name":"lab","denied":true}]"#),
+    ] {
+        let mut stage = Stage::new(serde_json::json!({"project_uid": "p-1"}));
+        stage.strata(
+            "consumers appprofile:strata-live-app@1.0.0 --json",
+            code,
+            &format!(
+                r#"{{"profile":{{"uid":"ap-1","type":"app","scope":"project","projectUid":"p-1",
+                    "projectName":"lab"}},"count":0,"projectsRead":{{"read":1{unread}}}}}"#
+            ),
+        );
+        let (_, steps) = stage.run("app-profile.sh", &["1"]);
+        let checks = ["consumers-project", "consumers-scope"];
+        if code == 0 {
+            passed(&steps, &checks);
+        } else {
+            failed(&steps, &checks);
+        }
+    }
 }
 
 #[test]
@@ -4842,15 +5559,17 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     let mut stage = Stage::new(outputs);
     stage.route(
         &cluster_route("c-a"),
-        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
+            "spec":{"clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.route(
         &profile_route("n-1"),
         r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
             "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
     );
+    let validate = cluster_validate_repave_route("c-a");
     stage.route(
-        "/v1/spectroclusters/c-a/validate/repave",
+        &validate,
         r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
             "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
     );
@@ -4884,11 +5603,17 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "var-undone",
         ],
     );
-    for seen in ["var-strata", "var-strata-answer", "var-none", "var-default"] {
+    for seen in [
+        "var-strata",
+        "var-strata-answer",
+        "var-none",
+        "var-default",
+        "var-swap",
+    ] {
         assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
-    let variables: Vec<_> = stage
-        .sent("POST", "/v1/spectroclusters/c-a/validate/repave")
+    let sent = stage.sent("POST", &validate);
+    let variables: Vec<_> = sent
         .iter()
         .map(|b| b["profiles"][0]["variables"].clone())
         .collect();
@@ -4898,9 +5623,30 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             serde_json::json!([]),
             serde_json::json!([{"name": "strata_mode", "value": "600"}]),
             serde_json::json!([{"name": "strata_mode", "value": "644"}]),
+            serde_json::json!([]),
         ],
-        "no variables, the default, and the control"
+        "no variables, the default, the control, and the swap"
     );
+    // the three questions of #132 send the earlier body, and the last one the body of a swap
+    let uids: Vec<Vec<&str>> = sent
+        .iter()
+        .map(|b| {
+            b["profiles"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| p["uid"].as_str().unwrap())
+                .collect()
+        })
+        .collect();
+    assert_eq!(
+        uids,
+        [vec!["r-1"], vec!["r-1"], vec!["r-1"], vec!["n-1", "ad-1"]]
+    );
+    for body in &sent[..3] {
+        assert_eq!(body["profiles"][0]["replaceWithProfile"], "n-1");
+    }
+    assert_eq!(sent[3]["profiles"][1], serde_json::json!({"uid": "ad-1"}));
     let applies: Vec<String> = stage
         .tofu_calls()
         .lines()
@@ -4922,6 +5668,79 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
             "",
         ],
         "the variable before its use, and its use away before the variable"
+    );
+}
+
+/// Stage 2 of `tag-only.sh` asks the repave route about each move to a version with another tag of
+/// the OS pack. It sends the body of a swap, and then the earlier body of `tenant.sh` (#864).
+#[test]
+fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_a_pack_tag() {
+    let mut outputs = baseline_outputs();
+    outputs["tagged_profile_uids"] = serde_json::json!({"1.0.2": "x-2", "1.0.3": "f-3"});
+    let stage = Stage::new(outputs);
+    std::fs::create_dir_all(stage.path("out")).unwrap();
+    std::fs::write(
+        stage.path("out/ids.env"),
+        "PALETTE_PROJECT_UID=p-1\nC=c-a\nCN=fred\nN=strata-live-profile\nP=r-1\n",
+    )
+    .unwrap();
+    stage.route(
+        &cluster_route("c-a"),
+        r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
+            "spec":{"clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
+    );
+    for (uid, tag) in [
+        ("r-1", "24.04"),
+        ("x-2", "LTS__24.04"),
+        ("f-3", "LTS__24.x"),
+    ] {
+        stage.route(
+            &profile_route(uid),
+            &format!(
+                r#"{{"metadata":{{"uid":"{uid}"}},"spec":{{"published":{{"packs":[
+                    {{"name":"ubuntu-aws","tag":"{tag}","type":"spectro","layer":"os","values":"os: 1\n"}},
+                    {{"name":"kubernetes","tag":"1.35.6","type":"spectro","layer":"k8s",
+                        "values":"postKubeadmCommands:\n"}}]}}}}}}"#
+            ),
+        );
+    }
+    let validate = cluster_validate_repave_route("c-a");
+    stage.route(&validate, &no_repave().to_string());
+
+    let (_, steps) = stage.run("tag-only.sh", &["2"]);
+    passed(&steps, &["palette-repave-exact", "palette-repave-floating"]);
+    for seen in [
+        "palette-repave-exact-replace",
+        "palette-repave-floating-replace",
+        "palette-repave-back-replace",
+    ] {
+        assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
+    }
+    // each move goes as a swap, and then as the earlier body. The control is a swap of 1.0.0 with
+    // itself. In stage 4, the cluster of the stand-in still runs 1.0.0, so the swap of the move
+    // back stops. The last question is the earlier body of the move back
+    let bodies: Vec<serde_json::Value> = stage
+        .sent("POST", &validate)
+        .iter()
+        .map(|b| {
+            let profiles = b["profiles"].as_array().unwrap();
+            let uids: Vec<_> = profiles.iter().map(|p| p["uid"].clone()).collect();
+            serde_json::json!({"uids": uids, "replaces": profiles[0]["replaceWithProfile"]})
+        })
+        .collect();
+    let swap = |first: &str| serde_json::json!({"uids": [first, "ad-1"], "replaces": null});
+    let replace =
+        |current: &str, target: &str| serde_json::json!({"uids": [current], "replaces": target});
+    assert_eq!(
+        bodies,
+        [
+            swap("x-2"),
+            replace("r-1", "x-2"),
+            swap("f-3"),
+            replace("r-1", "f-3"),
+            swap("r-1"),
+            replace("x-2", "r-1"),
+        ]
     );
 }
 
@@ -4968,8 +5787,8 @@ fn vmo_stage(cluster: &str) -> Stage {
         r#"{"status":{"addOnServices":[{"name":"vm-dashboard","endpoint":"https://console.example/v1/tenantApps/f-1"}]}}"#,
     );
     stage.route(
-        "/v1/spectroclusters/v-1/validate/repave",
-        r#"{"isRepaveRequired":false,"reasons":[]}"#,
+        &cluster_validate_repave_route("v-1"),
+        &no_repave().to_string(),
     );
     executable(
         &stage.path("routes/v1_tenantApps_f-1_.sh"),
@@ -5006,6 +5825,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
         &[
             "vmo-cluster",
             "vmo-runs",
+            "vmo-clear",
             "vmo-summary",
             "vmo-mark-body",
             "vmo-before",
@@ -5017,7 +5837,7 @@ fn repave_sh_stage_9_reads_the_console_address_before_and_after_a_question_with_
             "vmo-back",
         ],
     );
-    let sent = stage.sent("POST", "/v1/spectroclusters/v-1/validate/repave");
+    let sent = stage.sent("POST", &cluster_validate_repave_route("v-1"));
     assert_eq!(
         sent[0],
         serde_json::json!({"profiles": [
@@ -5105,7 +5925,8 @@ fn repave_sh_stage_9_reads_the_console_again_while_the_forward_keeps_the_address
 }
 
 /// Stage 9 of `repave.sh` asks Palette nothing when a check before the first question fails.
-/// Palette saves no record for a cluster that a cluster template governs. A body for a cluster
+/// Palette saves no record for a cluster that a cluster template governs. A cluster whose document
+/// holds a mask over the console address does not show the fact of #741. A body for a cluster
 /// with no `virtual-machine-orchestrator` holds no mark, so the question shows nothing. A console
 /// that reaches no host before the question shows nothing after it.
 #[test]
@@ -5119,9 +5940,13 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         r#""name":"virtual-machine-orchestrator""#,
         r#""name":"spectro-vm-dashboard""#,
     );
+    // a mask over the console address in the document of the cluster
+    let masked = VMO_CLUSTER.replace(r#"consoleBaseAddress: \"\""#, &console_address_line(MASKED));
+    assert_ne!(masked, VMO_CLUSTER);
     for (cluster, forward, fails, reads) in [
         (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
         (dashboard.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
+        (masked.as_str(), FAKE_CONSOLE_FORWARD, "vmo-clear", 0),
         (
             VMO_CLUSTER,
             "#!/usr/bin/env bash\necho 404 > \"$FAKE_ROUTES/v1_tenantApps_f-1_.status\"\necho '{\"message\":\"foreq not found for hash\"}'\n",
@@ -5143,7 +5968,7 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         );
         assert!(
             stage
-                .sent("POST", "/v1/spectroclusters/v-1/validate/repave")
+                .sent("POST", &cluster_validate_repave_route("v-1"))
                 .is_empty(),
             "{fails}: no question"
         );
@@ -5304,13 +6129,12 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     stage.route(
         &cluster_route("c-t"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
-            "spec":{"clusterTemplate":{"uid":"t-1","projectUid":"p-1"}}}"#,
+            "spec":{"clusterTemplate":{"uid":"t-1","projectUid":"p-1"},
+                "clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.published("n-1", KUBERNETES_PACK, "{}");
-    stage.route(
-        "/v1/spectroclusters/c-t/validate/repave",
-        r#"{"isRepaveRequired":false,"reasons":[]}"#,
-    );
+    let validate = cluster_validate_repave_route("c-t");
+    stage.route(&validate, &no_repave().to_string());
     stage.strata(
         "compare cluster:c-t/strata-live-profile n-1 --repave",
         1,
@@ -5363,16 +6187,15 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
         "the cluster goes before the next stage, and the template stays: {applies:?}"
     );
 
-    let route = "/v1/spectroclusters/c-t/validate/repave";
-    let asked = stage.sent("POST", route);
+    let asked = stage.sent("POST", &validate);
     assert_eq!(asked.len(), 1, "the route of the cluster, once: {asked:?}");
     assert_eq!(
         (
             asked[0]["profiles"][0]["uid"].as_str(),
-            asked[0]["profiles"][0]["replaceWithProfile"].as_str()
+            &asked[0]["profiles"][1]
         ),
-        (Some("r-1"), Some("n-1")),
-        "the move from the release version to the next one"
+        (Some("n-1"), &serde_json::json!({"uid": "ad-1"})),
+        "the move from the release version to the next one, with the add-on profile of the cluster"
     );
     let edits: Vec<String> = stage
         .sent("PUT", &profile_route("n-1"))
@@ -5393,6 +6216,260 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     assert!(
         calls.contains("compare cluster:c-t/strata-live-profile n-1 --repave\n"),
         "strata asks about the move from the cluster: {calls}"
+    );
+}
+
+/// How the stand-in of a cluster stores the order of its profiles after a `PUT` or a `PATCH` of
+/// `/v1/spectroclusters/{uid}/profiles`.
+#[derive(Clone, Copy)]
+enum StoredOrder {
+    /// As the code of Palette does: the profiles that the cluster has keep their order, and each
+    /// new uid goes to the end. A `PUT` drops each profile that its body does not name, and a
+    /// `PATCH` drops the profile that `replaceWithProfile` names.
+    AsPalette,
+    /// The order of the body: a `PUT` stores the order of its body. A `PATCH` puts the new uid in
+    /// the place of the profile that it replaces.
+    AsTheBody,
+}
+
+/// The stand-in of the cluster `uid`, named `name`, with the profiles `first` in that order. It
+/// answers the document, the summary, and each `PUT` and `PATCH` of the profiles, with `order`. A
+/// uid that starts with `r-` is a profile of the type `cluster`, and each other uid an add-on.
+fn ordered_cluster(stage: &Stage, uid: &str, name: &str, first: &[&str], order: StoredOrder) {
+    let routes = stage.path("routes");
+    std::fs::write(
+        routes.join(format!("{uid}.uids")),
+        serde_json::json!(first).to_string(),
+    )
+    .unwrap();
+    let templates =
+        r#"map({uid: ., name: ., type: (if startswith("r-") then "cluster" else "add-on" end)})"#;
+    let route = |path: &str| routes.join(format!("{}.sh", Stage::route_key(path)));
+    executable(
+        &route(&cluster_route(uid)),
+        &format!(
+            r#"#!/usr/bin/env bash
+jq -c '{{metadata: {{uid: "{uid}", name: "{name}"}}, spec: {{clusterProfileTemplates: {templates}}},
+  status: {{state: "Running"}}}}' "$FAKE_ROUTES/{uid}.uids"
+"#
+        ),
+    );
+    executable(
+        &route(&cluster_summary_route(uid)),
+        &format!(
+            r#"#!/usr/bin/env bash
+jq -c '{templates} as $t
+  | {{spec: ({{clusterProfileTemplates: $t}} + if $t == [] then {{}} else {{clusterProfileTemplate: $t[0]}} end)}}' \
+  "$FAKE_ROUTES/{uid}.uids"
+"#
+        ),
+    );
+    let stored = match order {
+        StoredOrder::AsPalette => {
+            r#"($old | map(select(. as $u | ($gone | index($u)) == null))
+         | if $method == "PUT" then map(select(. as $u | ($in | index($u)) != null)) else . end)
+       + ($in - $old)"#
+        }
+        StoredOrder::AsTheBody => {
+            r#"if $method == "PUT" then $in
+       else ($old | map(. as $u | ([$body.profiles[] | select(.replaceWithProfile == $u) | .uid][0] // $u)))
+         + [$body.profiles[] | select((.replaceWithProfile // "") == "") | .uid | select(. as $n | ($old | index($n)) == null)]
+       end"#
+        }
+    };
+    let profiles = cluster_profiles_route(uid);
+    let key = Stage::route_key(&profiles);
+    // the stand-in of curl logs the method of the request before it runs the route
+    executable(
+        &route(&profiles),
+        &format!(
+            r#"#!/usr/bin/env bash
+method=$(tail -n 1 "$FAKE_LOG" | cut -d' ' -f1)
+state="$FAKE_ROUTES/{uid}.uids"
+jq -c --arg method "$method" --slurpfile old "$state" '
+  . as $body | $old[0] as $old | [.profiles[].uid] as $in | [.profiles[] | .replaceWithProfile // empty] as $gone
+  | {stored}' "$FAKE_ROUTES/sent/${{method}}_{key}" > "$state.next" && mv "$state.next" "$state"
+echo '{{}}'
+"#
+        ),
+    );
+}
+
+/// A stage of `order.sh` 4: cluster A and cluster B run the release version `r-1` and the add-on
+/// version `ad-1`. The apply gives cluster B `c-b` and the release version 1.0.2 `r-2`, and the
+/// profile of the add is `x-1`.
+fn order_append_stage(order: StoredOrder) -> Stage {
+    let mut outputs = baseline_outputs();
+    outputs["cluster_b_uid"] = serde_json::json!("c-b");
+    outputs["registries_profile_uid"] = serde_json::json!("rg-1");
+    outputs["os_pack_name"] = serde_json::json!("ubuntu-aws");
+    outputs["tagged_profile_uids"] = serde_json::json!({"1.0.2": "r-2"});
+    let stage = Stage::new(outputs);
+    ordered_cluster(&stage, "c-a", "fred", &["r-1", "ad-1"], order);
+    ordered_cluster(
+        &stage,
+        "c-b",
+        "barney",
+        &["r-1", "ad-1"],
+        StoredOrder::AsPalette,
+    );
+    for uid in ["r-1", "r-2", "ad-1", "x-1"] {
+        let (kind, pack) = if uid.starts_with("r-") {
+            ("cluster", "ubuntu-aws")
+        } else {
+            ("add-on", "strata-live-order")
+        };
+        stage.route(
+            &profile_route(uid),
+            &format!(
+                r#"{{"metadata":{{"uid":"{uid}","name":"{uid}"}},"spec":{{"published":{{"type":"{kind}",
+                    "packs":[{{"name":"{pack}","tag":"24.04","type":"spectro","values":""}}]}}}}}}"#
+            ),
+        );
+        stage.route(&manifests_route(uid), "{}");
+    }
+    stage.route(&cluster_manifests_route("c-a"), "{}");
+    stage.route("/v1/clusterprofiles", r#"{"uid":"x-1"}"#);
+    stage.route("/v1/clusterprofiles/x-1/publish", "{}");
+    stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
+    stage
+}
+
+/// #844: stage 4 of `order.sh` adds a profile to cluster A with a `PUT` that gives it first. Then
+/// it sends the `PATCH` of an upgrade of the release version. Against a Palette that keeps the
+/// stored order, each judged check passes. The stage returns cluster A to its baseline profiles.
+#[test]
+fn order_sh_stage_4_adds_a_profile_and_a_new_release_version_and_reads_each_cluster_after_each_step()
+ {
+    let stage = order_append_stage(StoredOrder::AsPalette);
+    let (o, steps) = stage.run("order.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "append-release",
+            "append-profile",
+            "append-add",
+            "added-last",
+            "append-upgrade",
+            "upgraded-last",
+            "summary-first",
+            "summary-addon",
+            "control-kept",
+            "append-back",
+            "append-detach",
+            "append-delete",
+            "append-baseline",
+        ],
+    );
+    for step in ["before", "added", "upgraded"] {
+        for read in ["order-a", "summary-a", "order-b", "summary-b"] {
+            passed(&steps, &[format!("{read}-{step}").as_str()]);
+        }
+    }
+    // the add gives the new profile first in the body, and Palette puts it last
+    let puts = stage.sent("PUT", &cluster_profiles_route("c-a"));
+    let uids = |body: &serde_json::Value| -> Vec<String> {
+        body["profiles"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| p["uid"].as_str().unwrap().to_string())
+            .collect()
+    };
+    assert_eq!(uids(&puts[0]), ["x-1", "r-1", "ad-1"]);
+    assert_eq!(uids(&puts[1]), ["ad-1", "r-1"], "the detach of the profile");
+    // the upgrade and its undo name one profile, and the profile that it replaces
+    let patches = stage.sent("PATCH", &cluster_profiles_route("c-a"));
+    let replaces: Vec<(Vec<String>, &str)> = patches
+        .iter()
+        .map(|p| {
+            (
+                uids(p),
+                p["profiles"][0]["replaceWithProfile"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        replaces,
+        [
+            (vec!["r-2".to_string()], "r-1"),
+            (vec!["r-1".to_string()], "r-2")
+        ]
+    );
+    let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
+    assert_eq!(
+        said("summary-a-upgraded"),
+        "{\"spec\":{\"clusterProfileTemplates\":[\
+         {\"uid\":\"ad-1\",\"name\":\"ad-1\",\"type\":\"add-on\"},\
+         {\"uid\":\"x-1\",\"name\":\"x-1\",\"type\":\"add-on\"},\
+         {\"uid\":\"r-2\",\"name\":\"r-2\",\"type\":\"cluster\"}],\
+         \"clusterProfileTemplate\":{\"uid\":\"ad-1\",\"name\":\"ad-1\",\"type\":\"add-on\"}}}\n"
+    );
+    // the apply makes cluster B and 1.0.2 with the content of 1.0.0, and the last one removes both
+    let applies: Vec<String> = stage
+        .tofu_calls()
+        .lines()
+        .filter(|l| l.contains("apply"))
+        .map(str::to_string)
+        .collect();
+    assert!(
+        applies
+            .iter()
+            .any(|l| l
+                .contains(r#"-var second_cluster=true -var tag_only_versions={"1.0.2"="24.04"}"#)),
+        "{applies:?}"
+    );
+    let last = applies.last().unwrap();
+    assert!(
+        !last.contains("second_cluster") && !last.contains("tag_only_versions"),
+        "{applies:?}"
+    );
+    let stored = std::fs::read_to_string(stage.path("routes/c-a.uids")).unwrap();
+    assert_eq!(
+        stored.trim(),
+        r#"["ad-1","r-1"]"#,
+        "cluster A has its baseline profiles again, with the release profile last"
+    );
+}
+
+/// #844: against a Palette that stores the order of the body, the two checks of the stored order
+/// fail. The checks of the summary and of the control read no order of a body, so they pass.
+#[test]
+fn order_sh_stage_4_fails_the_checks_of_the_stored_order_when_palette_keeps_the_order_of_the_body()
+{
+    let stage = order_append_stage(StoredOrder::AsTheBody);
+    let (o, steps) = stage.run("order.sh", &["4"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}\n{}", text(&o.stderr));
+    failed(&steps, &["added-last", "upgraded-last"]);
+    passed(
+        &steps,
+        &["summary-first", "control-kept", "append-baseline"],
+    );
+}
+
+/// With no argument, `order.sh` runs stages 1 to 3, and stage 4 builds no cluster B. It refuses a
+/// stage other than 1 and 4.
+#[test]
+fn order_sh_runs_stage_4_only_when_its_number_is_given_and_refuses_another_stage() {
+    let stage = order_append_stage(StoredOrder::AsPalette);
+    let (_, steps) = stage.run("order.sh", &[]);
+    for heading in ["== stage 1: ", "== stage 2: ", "== stage 3: "] {
+        assert!(steps.contains(heading), "{heading}:\n{steps}");
+    }
+    assert!(!steps.contains("== stage 4"), "{steps}");
+    assert!(
+        !stage.tofu_calls().contains("second_cluster"),
+        "{}",
+        stage.tofu_calls()
+    );
+    let (o, _) = stage.run("order.sh", &["2"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("examples/live/order.sh [4]"),
+        "{}",
+        text(&o.stdout)
     );
 }
 
@@ -6019,8 +7096,8 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         "/v1/cloudconfigs/aws/cc-1",
         r#"{"spec":{"machinePoolConfig":[]}}"#,
     );
-    stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
-    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(&cluster_manifests_route("c-a"), "{}");
+    stage.route(&cluster_profiles_route("c-a"), "{}");
     stage.route(
         &profile_route("r-1"),
         r#"{"metadata":{"uid":"r-1"},"spec":{"published":{"packs":[{"name":"ubuntu-aws","tag":"24.04","type":"oci"}]}}}"#,
@@ -6093,7 +7170,7 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
         .collect();
     assert_eq!(applies, ["move", "back"], "{}", stage.tofu_calls());
     assert_eq!(
-        stage.sent("PUT", "/v1/spectroclusters/c-a/profiles").len(),
+        stage.sent("PUT", &cluster_profiles_route("c-a")).len(),
         2,
         "cluster A takes the move, then the release back"
     );
@@ -6340,9 +7417,24 @@ fn scope_stage(tenant_scope: &str) -> Stage {
     stage
 }
 
+/// The answers of `consumers` in `scope.sh`: for the tenant version `t-1`, its exit `code` and
+/// `tenant`, and for the release `release`.
+fn scope_consumers(stage: &mut Stage, code: i32, tenant: &str, release: &str) {
+    stage.strata("consumers t-1 --json", code, tenant);
+    stage.strata("consumers r-1 --json", 0, release);
+}
+
 #[test]
 fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_it() {
-    let stage = scope_stage("tenant");
+    let mut stage = scope_stage("tenant");
+    // consumers searched both projects of the tenant for the tenant version, and the release names
+    // its project
+    scope_consumers(
+        &mut stage,
+        0,
+        r#"{"profile":{"uid":"t-1","scope":"tenant"},"count":0,"projectsRead":{"read":2}}"#,
+        r#"{"profile":{"uid":"r-1","scope":"project","projectUid":"p-1","projectName":"lab"},"count":0}"#,
+    );
     let (o, steps) = stage.run("scope.sh", &[]);
     passed(
         &steps,
@@ -6362,6 +7454,10 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
             "by-uid",
             "tenant-list",
             "tenant-list-no-mark",
+            "tenant-consumers",
+            "tenant-consumers-projects",
+            "release-consumers",
+            "release-consumers-edge-hosts",
             "tenant-delete",
         ],
     );
@@ -6414,6 +7510,34 @@ fn scope_sh_fails_the_versions_check_when_the_tenant_version_lists_the_project_v
     let (o, steps) = stage.run("scope.sh", &[]);
     failed(&steps, &["versions-tenant"]);
     passed(&steps, &["versions-project", "annotation-tenant"]);
+    assert_ne!(o.status.code(), Some(0));
+}
+
+/// Issues #621 and #892. The check of the projects fails when strata could not read a project of
+/// the tenant. The checks of the release fail when strata searched each project for it. They also
+/// fail when strata could not search the edge hosts of the project of the release.
+#[test]
+fn scope_sh_fails_the_consumers_checks_when_a_project_is_not_read() {
+    let mut stage = scope_stage("tenant");
+    scope_consumers(
+        &mut stage,
+        2,
+        r#"{"profile":{"uid":"t-1","scope":"tenant"},"count":0,
+            "projectsRead":{"read":2,"unread":[{"uid":"p-2","name":"prod","denied":true}]}}"#,
+        r#"{"profile":{"uid":"r-1","scope":"project","projectUid":"p-1"},"count":0,
+            "projectsRead":{"read":2},"edgeHostsRead":{"read":0,"error":{"kind":"api"}}}"#,
+    );
+    let (o, steps) = stage.run("scope.sh", &[]);
+    failed(
+        &steps,
+        &[
+            "tenant-consumers",
+            "tenant-consumers-projects",
+            "release-consumers",
+            "release-consumers-edge-hosts",
+        ],
+    );
+    passed(&steps, &["by-uid", "tenant-delete"]);
     assert_ne!(o.status.code(), Some(0));
 }
 
@@ -6642,10 +7766,17 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     failed(&steps, &["arch-behind-json"]);
 }
 
-/// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries read their
-/// standard input and do nothing else.
-/// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
+/// A run of `registry-kinds.sh` against the stand-ins: see [`registry_kinds_stage`].
 fn registry_kinds(packs: &str) -> (Stage, String) {
+    let stage = registry_kinds_stage(packs);
+    let (_, steps) = stage.run("registry-kinds.sh", &[]);
+    (stage, steps)
+}
+
+/// The stage of `registry-kinds.sh` against the stand-ins, before its run. The tools of the
+/// registries read their standard input and do nothing else.
+/// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
+fn registry_kinds_stage(packs: &str) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "aws_profile": "p", "project_uid": "p-1", "cluster_uid": "",
         "kinds_host": "kinds.example", "kinds_user": "barney",
@@ -6671,8 +7802,80 @@ fn registry_kinds(packs: &str) -> (Stage, String) {
     );
     stage.route("/v1/registries/pack", r#"{"uid":"reg-packs"}"#);
     stage.strata("packs strata-live-zarf *", 0, packs);
+    stage
+}
+
+/// The create of a pack registry: the uid `reg-slash` for a name with a `/`, and `reg-packs` for
+/// each other name.
+const SLASH_REGISTRY_CREATE: &str = r#"#!/usr/bin/env bash
+if jq -e '.metadata.name | contains("/")' "$FAKE_ROUTES/sent/POST_v1_registries_pack" > /dev/null; then
+  echo '{"uid":"reg-slash"}'
+else
+  echo '{"uid":"reg-packs"}'
+fi
+"#;
+
+/// A run of `registry-kinds.sh` in which the second registry of stage 1, `strata-live/packs`, gets
+/// the uid `reg-slash`. The listing names it. For the ref of the pack with no registry, strata
+/// gives `several` on standard error. For the ref with the uid, it gives a record of the pack.
+fn registry_kinds_slash(several: &str) -> (Stage, String) {
+    let mut stage = registry_kinds_stage("");
+    executable(
+        &stage.path("routes/v1_registries_pack.sh"),
+        SLASH_REGISTRY_CREATE,
+    );
+    stage.route(
+        "/v1/registries/metadata",
+        r#"{"items":[{"name":"strata-live-packs","uid":"reg-packs"},
+            {"name":"strata-live/packs","uid":"reg-slash"}]}"#,
+    );
+    stage.route("/v1/registries/pack/reg-slash", "{}");
+    stage.strata_err("snapshot pack:strata-live-pack@1.0.0 *", 2, several);
+    stage.strata(
+        "snapshot pack:reg-slash/strata-live-pack@1.0.0 *",
+        0,
+        r#"{"packs":[{"registryName":"strata-live/packs","registryUid":"reg-slash"}]}"#,
+    );
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
+}
+
+#[test]
+fn registry_kinds_sh_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_removes_it() {
+    let (stage, steps) = registry_kinds_slash(
+        r#"{"error":{"kind":"pack-in-several-registries",
+            "registries":["reg-slash","strata-live-oci","strata-live-packs"]}}"#,
+    );
+    passed(
+        &steps,
+        &[
+            "slash-registry",
+            "slash-listing",
+            "slash-listed",
+            "slash-several",
+            "slash-several-uid",
+            "slash-record",
+            "slash-named",
+            "slash-delete",
+        ],
+    );
+    let calls = lines_of(&stage.path("curl.log"));
+    let deletes = |uid: &str| {
+        let line = format!("DELETE /v1/registries/pack/{uid}");
+        calls.iter().filter(|l| **l == line).count()
+    };
+    assert_eq!(
+        deletes("reg-slash"),
+        1,
+        "it goes at the end of stage 1 only: {calls:?}"
+    );
+
+    // an error that gives the name with the `/` fails the check
+    let (_, steps) = registry_kinds_slash(
+        r#"{"error":{"kind":"pack-in-several-registries",
+            "registries":["strata-live-oci","strata-live-packs","strata-live/packs"]}}"#,
+    );
+    failed(&steps, &["slash-several-uid"]);
 }
 
 #[test]
@@ -6815,6 +8018,46 @@ fn validate_packs_sh_stage_5_asks_the_two_routes_for_each_rule_that_they_answer(
     assert_eq!(manifests[0]["name"], manifests[1]["name"]);
 }
 
+/// The last line of `snapshot --validate` when Palette accepts the record of `reference`, as strata
+/// writes it. `candidate` is true for a record of a candidate file.
+fn accepted_line(reference: &str, candidate: bool) -> String {
+    let dir = tempfile::tempdir().unwrap();
+    make_fixtures(dir.path());
+    let mut snap = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    snap.source.reference = reference.to_string();
+    if candidate {
+        snap.source.template = strata::snapshot::Template::Candidate.into();
+    }
+    snap.source.palette_validation =
+        Some(serde_json::from_value(serde_json::json!({"accepts": true})).unwrap());
+    let sentence = strata::render::acceptance_sentence(&snap).unwrap();
+    format!("{}: {sentence}\n", strata::TOOL_NAME)
+}
+
+#[test]
+fn validate_packs_sh_stage_1_says_that_palette_accepts_the_candidate_in_the_line_of_strata() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    let line = accepted_line("strata-validate-barney.yaml", true);
+    stage.strata_err(
+        "snapshot --from-candidate strata-validate-barney.yaml --validate *",
+        0,
+        &format!("strata: wrote barney.json (root 088136c929bd)\n{line}"),
+    );
+
+    let (_, steps) = stage.run("validate-packs.sh", &["1"]);
+    passed(&steps, &["validate-accepts", "validate-accepts-says"]);
+
+    // the line of 0.33.0 is no answer now
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.strata_err(
+        "snapshot --from-candidate strata-validate-barney.yaml --validate *",
+        0,
+        "palette    accepts\n",
+    );
+    let (_, steps) = stage.run("validate-packs.sh", &["1"]);
+    failed(&steps, &["validate-accepts-says"]);
+}
+
 #[test]
 fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_of_profile() {
     let mut stage = Stage::new(serde_json::json!({}));
@@ -6822,7 +8065,7 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     stage.strata_err(
         "snapshot strata-live-profile@1.0.0 --validate *",
         0,
-        "palette    accepts\n",
+        &accepted_line("strata-live-profile@1.0.0", false),
     );
     stage.strata_err(
         "snapshot --from-candidate exists.yaml --validate *",
@@ -6851,13 +8094,17 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
 }
 
 /// The report of `strata behind --json` for a record that pins kubernetes 1.35.3. The newest
-/// version is `newest`. The answer of Palette for the bump is `validation`.
+/// version is `newest`. The answer of Palette for the bump is `validation`. The bump holds
+/// `updateChecks.skippedMinor` when the move skips a minor version, as strata gives it.
 fn kubernetes_bump_report(newest: &str, validation: &serde_json::Value) -> String {
+    let mut bump = serde_json::json!({"to": newest, "paletteValidation": validation});
+    if let Some(skip) = MinorSkip::of("k8s", "kubernetes", "1.35.3", newest) {
+        bump["updateChecks"] = serde_json::json!({"skippedMinor": skip});
+    }
     serde_json::json!({"pins": [
         {"name": "cni", "version": "1.0.0", "behind": false},
         {"name": "kubernetes", "version": "1.35.3", "behind": true,
-         "newer": [{"version": newest}],
-         "bump": {"to": newest, "paletteValidation": validation}}]})
+         "newer": [{"version": newest}], "bump": bump}]})
     .to_string()
 }
 
@@ -6926,7 +8173,8 @@ fn bump_stage_with(
         "behind bump-profile.json",
         1,
         &format!(
-            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n"
+            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n      {}\n",
+            MinorSkip::of("k8s", "kubernetes", "1.35.3", "1.37.0").unwrap().line()
         ),
     );
     arrange(&stage);
@@ -6954,6 +8202,7 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
             "bump-refused",
             "bump-clusters",
             "bump-text-says",
+            "bump-text-skip",
             "bump-no-impact-says",
             "bump-cluster-record",
             "bump-cluster-same",
@@ -7125,6 +8374,220 @@ fn validate_packs_sh_stage_6_needs_a_profile_and_runs_only_when_its_number_is_gi
     assert!(!steps.contains("bump-"), "{steps}");
 }
 
+/// One move of stage 7 of validate-packs.sh. It has the variable of the version, the version, and
+/// its uid. It also has the uid of the version of its profile that `fred` runs, and the id of the
+/// checks.
+struct Move<'a> {
+    variable: &'a str,
+    reference: &'a str,
+    uid: &'a str,
+    from: &'a str,
+    id: &'a str,
+}
+
+/// The move to a version of the release profile with Kubernetes two minor versions above fred.
+const SKIP_MOVE: Move = Move {
+    variable: "SKIP",
+    reference: "strata-live-release@1.1.0",
+    uid: "p-skip",
+    from: "p-infra",
+    id: "skip",
+};
+
+/// The move to a version of the add-on profile with a required variable with no default value.
+const VARIABLES_MOVE: Move = Move {
+    variable: "VARIABLES",
+    reference: "strata-live-addons@1.1.0",
+    uid: "p-vars",
+    from: "p-addon",
+    id: "variables",
+};
+
+/// A stage 7 run of validate-packs.sh on the cluster `fred`, for the move `m`. `compare --validate
+/// --json` gives `compared`, and Palette answers the update with the HTTP `status` and `answer`.
+/// Gives the stage and steps.log.
+fn move_stage(
+    m: &Move,
+    compared: &serde_json::Value,
+    status: u16,
+    answer: &str,
+) -> (Stage, String) {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("CLUSTER", "fred");
+    stage.env(m.variable, m.reference);
+    stage.strata(
+        "snapshot cluster:fred -o move-cluster.json",
+        0,
+        &serde_json::json!({"source": {"cluster": {"uid": FRED_UID, "profiles": [
+            {"name": "strata-live-release", "version": "1.0.0", "uid": "p-infra"},
+            {"name": "strata-live-addons", "version": "1.0.0", "uid": "p-addon"}]}}})
+        .to_string(),
+    );
+    stage.strata(
+        &format!("snapshot {} -o {}.json", m.reference, m.id),
+        0,
+        &serde_json::json!({"source": {"uid": m.uid}}).to_string(),
+    );
+    stage.strata(
+        &format!("compare cluster:fred {} --validate --json", m.reference),
+        1,
+        &compared.to_string(),
+    );
+    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}/profiles/packs/manifests"),
+        r#"{"profiles":[]}"#,
+    );
+    for uid in ["p-infra", "p-addon", m.uid] {
+        let published = serde_json::json!({"metadata": {"uid": uid}, "spec": {"published": {
+            "packs": [{"name": format!("pack-{uid}"), "tag": "1.0.0", "type": "spectro",
+                       "values": "a: 1"}]}}});
+        stage.route(
+            &format!("/v1/clusterprofiles/{uid}"),
+            &published.to_string(),
+        );
+        stage.route(
+            &format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+            r#"{"spec":{"packs":[]}}"#,
+        );
+    }
+    let update = cluster_profiles_route(FRED_UID);
+    stage.route(&update, answer);
+    std::fs::write(
+        stage
+            .path("routes")
+            .join(format!("{}.status", Stage::route_key(&update))),
+        status.to_string(),
+    )
+    .unwrap();
+    let (o, steps) = stage.run("validate-packs.sh", &["7"]);
+    assert!(steps.contains("== a move "), "{steps}{}", text(&o.stderr));
+    (stage, steps)
+}
+
+/// The comparison of the move to [`SKIP_MOVE`]: the route accepts, and strata says that the move
+/// from Kubernetes 1.35.8 to 1.37.0 skips a minor version.
+fn skip_compared() -> serde_json::Value {
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.35.8", "1.37.0").unwrap();
+    serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
+        "updateChecks": {"skippedMinor": skip}})
+}
+
+/// The refusal of the update that moves Kubernetes from 1.35.8 to 1.37.0.
+fn skip_refused() -> String {
+    error_body(
+        K8S_UPGRADE_NOT_SUPPORTED_CODE,
+        "Kubernetes upgrade from 1.35.8 to 1.37.0 is not supported",
+    )
+}
+
+#[test]
+fn validate_packs_sh_stage_7_asks_the_route_about_a_skip_of_a_minor_version_and_sends_the_update() {
+    let (stage, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 400, &skip_refused());
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "move-cluster-record",
+            "skip-record",
+            "skip-asked",
+            "skip-says",
+            "skip-update",
+            "skip-refused",
+        ],
+    );
+    assert!(!steps.contains("variables-"), "{steps}");
+    replaced_with(&stage, &SKIP_MOVE);
+}
+
+/// The update of stage 7 names the version of the move `m`, and the version of its profile that
+/// fred runs. The Spectro Cloud provider sends a new version in this form. The entry gives no
+/// variable.
+fn replaced_with(stage: &Stage, m: &Move) {
+    let sent = stage.sent("PATCH", &cluster_profiles_route(FRED_UID));
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    let entries = sent[0]["profiles"].as_array().unwrap();
+    assert_eq!(entries.len(), 1, "{sent:?}");
+    assert_eq!(entries[0]["uid"], m.uid);
+    assert_eq!(entries[0]["replaceWithProfile"], m.from);
+    assert_eq!(entries[0]["variables"], serde_json::json!([]));
+}
+
+#[test]
+fn validate_packs_sh_stage_7_fails_when_palette_accepts_the_update_or_strata_finds_no_skip() {
+    // Palette takes the update: the cluster moves, and the check fails
+    let (_, steps) = move_stage(&SKIP_MOVE, &skip_compared(), 200, "{}");
+    passed(&steps, &["skip-says", "skip-update"]);
+    failed(&steps, &["skip-refused"]);
+
+    // strata says nothing about the move, and Palette refuses it
+    let compared =
+        serde_json::json!({"paletteValidation": {"clusterUid": FRED_UID, "accepts": true}});
+    let (_, steps) = move_stage(&SKIP_MOVE, &compared, 400, &skip_refused());
+    failed(&steps, &["skip-says", "skip-refused"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_7_sends_the_update_of_a_move_that_adds_a_required_variable() {
+    let compared = serde_json::json!({
+        "paletteValidation": {"clusterUid": FRED_UID, "accepts": true},
+        "updateChecks": {"requiredVariables": {"code": INVALID_VARIABLE_CODE, "names": ["owner"]}}});
+    let refused = error_body(
+        INVALID_VARIABLE_CODE,
+        "spectrocluster variable is invalid due to default value can't be empty for required variable 'owner'",
+    );
+    let (stage, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &refused);
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "variables-record",
+            "variables-asked",
+            "variables-accepts",
+            "variables-says",
+            "variables-update",
+            "variables-refused",
+        ],
+    );
+    assert!(!steps.contains("skip-"), "{steps}");
+    replaced_with(&stage, &VARIABLES_MOVE);
+
+    // the refusal names another variable: the check fails
+    let other = refused.replace("'owner'", "'region'");
+    let (_, steps) = move_stage(&VARIABLES_MOVE, &compared, 500, &other);
+    failed(&steps, &["variables-refused"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_7_needs_a_cluster_and_a_version_and_runs_only_when_its_number_is_given()
+{
+    for env in [
+        &[][..],
+        &[("CLUSTER", "fred")][..],
+        &[("SKIP", "a@1.0.0")][..],
+    ] {
+        let mut stage = Stage::new(serde_json::json!({}));
+        for (k, v) in env {
+            stage.env(k, v);
+        }
+        let (o, steps) = stage.run("validate-packs.sh", &["7"]);
+        assert!(
+            steps.contains("stage 7 skipped: give CLUSTER"),
+            "{env:?}: {steps}{}",
+            text(&o.stderr)
+        );
+        assert!(!steps.contains("move-"), "{steps}");
+    }
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("CLUSTER", "fred");
+    stage.env("SKIP", "a@1.0.0");
+    let (_, steps) = stage.run("validate-packs.sh", &["5"]);
+    assert!(
+        !steps.contains("move-") && !steps.contains("skip-"),
+        "{steps}"
+    );
+}
+
 // ---- validate-route.sh -----------------------------------------------------------------------------
 
 /// The report of `strata preflight --rule palette-validate --json`, with the one check.
@@ -7178,10 +8641,21 @@ const CIDR_CASE: &str = "cidr-overlap";
 /// writes it.
 const CIDR_OVERLAP_MESSAGE: &str = "Kubernetes podCIDR '172.31.0.0/16' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
 
+/// The case of validate-route.sh whose pod CIDR comes from the variable `pod_cidr` of a profile
+/// that route-bodies.sh makes (#829).
+const CIDR_VARIABLE_CASE: &str = "cidr-variable";
+
+/// The name of the profile of `CIDR_VARIABLE_CASE`.
+const CIDR_VARIABLE_PROFILE: &str = "strata-route-cidr-variable";
+
+/// What `palette-validate` says of the body of `CIDR_VARIABLE_CASE`: the code and the message of
+/// Palette. The mark of `pod_cidr` is in place of its value `172.31.0.0/17`.
+const CIDR_VARIABLE_SAID: &str = "K8SCidrOverlap: Kubernetes podCIDR '[value of pod_cidr]' is overlapping with vpc 'default' cidr block '172.31.0.0/16'";
+
 /// The answer of the validate route to the body of `CIDR_CASE`, with HTTP 500. The code of Palette
 /// shows it; no live run shows it yet. Strata reads it as a refusal.
 fn cidr_overlap_answer() -> String {
-    serde_json::json!({"code": "K8SCidrOverlap", "message": CIDR_OVERLAP_MESSAGE}).to_string()
+    error_body("K8SCidrOverlap", CIDR_OVERLAP_MESSAGE)
 }
 
 /// The case of `AWS_CASES` that the route takes.
@@ -7192,20 +8666,26 @@ fn aws_case_taken() -> &'static AwsCase {
         .expect("one case of AWS_CASES has no refusal")
 }
 
-/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, and for
-/// `CIDR_CASE`. The route refuses a case with its refusal. It takes a case with no refusal, and a
-/// case in `takes`.
+/// Answer the validate route for the clean AWS body, for each case of `AWS_CASES`, for
+/// `CIDR_CASE`, and for `CIDR_VARIABLE_CASE`. The route refuses a case with its refusal. It takes a
+/// case with no refusal, and a case in `takes`. The three reports of `CIDR_VARIABLE_CASE` hold the
+/// message with the mark.
 fn answer_aws_cases(stage: &mut Stage, takes: &[&str]) {
     stage.strata(
         "preflight */aws-clean.json --cloud aws *",
         0,
         &route_report("passed", &[]),
     );
+    let reports = stage.path(&format!("strata/out/{CIDR_VARIABLE_CASE}"));
+    std::fs::create_dir_all(&reports).unwrap();
+    for file in ["report.md", "report.json", "report.html"] {
+        std::fs::write(reports.join(file), CIDR_VARIABLE_SAID).unwrap();
+    }
     let cidr = format!("K8SCidrOverlap: {CIDR_OVERLAP_MESSAGE}");
-    let cases = AWS_CASES
-        .iter()
-        .map(|case| (case.id, case.refusal))
-        .chain([(CIDR_CASE, Some(cidr.as_str()))]);
+    let cases = AWS_CASES.iter().map(|case| (case.id, case.refusal)).chain([
+        (CIDR_CASE, Some(cidr.as_str())),
+        (CIDR_VARIABLE_CASE, Some(CIDR_VARIABLE_SAID)),
+    ]);
     for (id, refusal) in cases {
         let (code, report) = match refusal {
             Some(message) if !takes.contains(&id) => (1, route_report("failed", &[message])),
@@ -7478,6 +8958,61 @@ fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
 }
 
 #[test]
+fn validate_route_sh_checks_that_the_three_reports_of_cidr_variable_hold_the_mark_and_not_the_value()
+ {
+    let body = serde_json::json!({"spec": {"profiles": [{"uid": format!("uid-{CIDR_VARIABLE_PROFILE}"),
+        "packValues": [], "variables": [{"name": "pod_cidr", "value": "172.31.0.0/17"}]}]}});
+    let run = |reports: &[(&str, String)]| {
+        let mut stage = Stage::new(serde_json::json!({}));
+        std::fs::create_dir_all(stage.path("bodies")).unwrap();
+        std::fs::write(stage.path("bodies/aws-clean.json"), "{}").unwrap();
+        std::fs::write(
+            stage.path(&format!("bodies/{CIDR_VARIABLE_CASE}.json")),
+            body.to_string(),
+        )
+        .unwrap();
+        stage.wrap_strata(FAKE_STRATA_ROUTE);
+        answer_aws_cases(&mut stage, &[]);
+        let dir = stage.path(&format!("strata/out/{CIDR_VARIABLE_CASE}"));
+        for (file, text) in reports {
+            std::fs::write(dir.join(file), text).unwrap();
+        }
+        let bodies = stage.path("bodies");
+        let (_, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+        let marks = format!("{CIDR_VARIABLE_CASE}-marks");
+        let out = std::fs::read_to_string(stage.path(&format!("out/{marks}.out"))).unwrap();
+        (steps, marks, out)
+    };
+
+    // the three reports hold the mark of pod_cidr
+    let (steps, marks, _) = run(&[]);
+    passed(&steps, &[CIDR_VARIABLE_CASE, "cidr-variable-says", &marks]);
+    assert!(
+        has_verdict(&steps, "SEEN", "cidr-variable-reports"),
+        "{steps}"
+    );
+
+    // a report that holds the mark and the value, and a report with no mark
+    let value = format!("{CIDR_VARIABLE_SAID}\npod CIDR 172.31.0.0/17");
+    for (file, text, says) in [
+        (
+            "report.html",
+            value.as_str(),
+            "report.html holds the value of pod_cidr",
+        ),
+        (
+            "report.json",
+            "no message",
+            "report.json holds no mark of pod_cidr",
+        ),
+    ] {
+        let (steps, marks, out) = run(&[(file, text.to_string())]);
+        failed(&steps, &[&marks]);
+        assert_eq!(out.trim(), says, "{steps}");
+    }
+}
+
+#[test]
 fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     let mut stage = Stage::new(serde_json::json!({}));
     std::fs::create_dir_all(stage.path("bodies")).unwrap();
@@ -7616,8 +9151,9 @@ fn route_packs(without_aws: bool) -> String {
 
 /// A `strata` for route-bodies.sh. `preflight BODY` keeps a copy of BODY in strata/seen/, and logs
 /// `VALIDATE <file>` to the log of the stand-in curl. Palette answers 404 for a profile of BODY
-/// that the log shows a DELETE for. Strata then exits 2 with no report. A call it does not answer
-/// goes to the answers of the stage.
+/// that the log shows a DELETE for. Strata then exits 2 with no report. With `--out DIR`, it copies
+/// the files of strata/out/CASE into DIR, for the body CASE.json. A call it does not answer goes to
+/// the answers of the stage.
 const FAKE_STRATA_ROUTE: &str = r#"#!/usr/bin/env bash
 if [ "$1" = preflight ]; then
   mkdir -p "$FAKE_STRATA/seen"
@@ -7629,6 +9165,11 @@ if [ "$1" = preflight ]; then
       exit 2
     fi
   done
+  # --out DIR writes the reports of the case from $FAKE_STRATA/out/<case>, when that is there
+  out=""; prev=""
+  for a in "$@"; do [ "$prev" = --out ] && out=$a; prev=$a; done
+  reports="$FAKE_STRATA/out/$(basename "$2" .json)"
+  if [ -n "$out" ] && [ -d "$reports" ]; then mkdir -p "$out" && cp "$reports"/* "$out"/; fi
 fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
@@ -7706,14 +9247,26 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
         &stage.path("routes/v1_clusterprofiles.sh"),
         "#!/usr/bin/env bash\njq -c '{uid: (\"uid-\" + .metadata.name)}' \"$FAKE_ROUTES/sent/POST_v1_clusterprofiles\"\n",
     );
-    for case in &AWS_CASES {
-        let name = case.profile;
+    // the copy of the release profile for the case of the variable reads its manifests
+    stage.route(&manifests_route("r-1"), r#"{"spec":{"packs":[]}}"#);
+    let profiles = AWS_CASES.iter().map(|case| case.profile);
+    for name in profiles.chain([CIDR_VARIABLE_PROFILE]) {
         stage.route(&format!("/v1/clusterprofiles/uid-{name}/publish"), "{}");
         stage.route(&format!("/v1/clusterprofiles/uid-{name}"), "{}");
     }
     stage.wrap_strata(FAKE_STRATA_ROUTE);
     answer_aws_cases(&mut stage, takes);
     stage
+}
+
+/// The uids of the profiles that route-bodies.sh makes, in order. The profile of each case of
+/// `AWS_CASES` comes first, and then the copy of the release profile for `CIDR_VARIABLE_CASE`.
+fn made_profiles() -> Vec<String> {
+    let names = AWS_CASES.iter().map(|case| case.profile);
+    names
+        .chain([CIDR_VARIABLE_PROFILE])
+        .map(|name| format!("uid-{name}"))
+        .collect()
 }
 
 /// The profiles that the script deleted, in order, as the uids.
@@ -7744,6 +9297,9 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     }
     for check in ["body", "status", "code"] {
         ids.push(format!("{CIDR_CASE}-{check}"));
+    }
+    for check in ["body", "deleted"] {
+        ids.push(format!("{CIDR_VARIABLE_CASE}-{check}"));
     }
     passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
 
@@ -7816,9 +9372,47 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         assert_eq!(body, clean, "{case}: nothing else changes");
     }
 
-    // each profile is an add-on profile with the pack of its case, of the cloud type of its case
-    let made: Vec<(String, String, String, String, String, String)> = stage
-        .sent("POST", "/v1/clusterprofiles")
+    // the body of cidr-variable is the body of cidr-overlap with the copy of the release profile.
+    // The copy reads the pod CIDR from pod_cidr, and the body gives it the first half of the CIDR
+    // of the VPC (#829)
+    let mut variable = read_json(&stage.path(&format!("strata/seen/{CIDR_VARIABLE_CASE}.json")));
+    assert_eq!(
+        variable["spec"]["profiles"],
+        serde_json::json!([{"uid": format!("uid-{CIDR_VARIABLE_PROFILE}"), "packValues": [],
+            "variables": [{"name": "pod_cidr", "value": "172.31.0.0/17"}]}])
+    );
+    variable["spec"]["profiles"] = cidr["spec"]["profiles"].clone();
+    let mut overlap = read_json(&cidr_file);
+    overlap["spec"]["profiles"] = cidr["spec"]["profiles"].clone();
+    assert_eq!(variable, overlap, "nothing else changes");
+    let mut posted = stage.sent("POST", "/v1/clusterprofiles");
+    let copy = posted
+        .pop()
+        .expect("the copy is the last profile that the script makes");
+    assert_eq!(copy["metadata"]["name"], CIDR_VARIABLE_PROFILE);
+    assert_eq!(
+        copy["spec"]["variables"],
+        serde_json::json!([{"name": "pod_cidr", "displayName": "pod_cidr", "format": "string",
+            "required": false, "defaultValue": ""}])
+    );
+    let values: Vec<&str> = copy["spec"]["template"]["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["values"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        values,
+        [
+            "pack:\n  podCIDR: \"not of the Kubernetes pack\"\n",
+            "pack:\n  podCIDR: \"{{.spectro.var.pod_cidr}}\"\n  serviceClusterIpRange: \"10.96.0.0/12\"\n",
+        ],
+        "only the Kubernetes pack reads the variable"
+    );
+
+    // each other profile is an add-on profile with the pack of its case, of the cloud type of its
+    // case
+    let made: Vec<(String, String, String, String, String, String)> = posted
         .iter()
         .map(|p| {
             let template = &p["spec"]["template"];
@@ -7883,8 +9477,8 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
         .collect();
     assert_eq!(
         sent.len(),
-        6,
-        "aws-clean, the four cases, and cidr-overlap: {log:?}"
+        8,
+        "aws-clean, the four cases, cidr-overlap, and cidr-variable with its reports: {log:?}"
     );
     assert!(
         sent.iter().all(|&i| last_create < i && i < first_delete),
@@ -7892,21 +9486,29 @@ fn route_bodies_sh_runs_validate_route_on_the_bodies_while_the_profiles_live_and
     );
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     let mut answered = vec!["aws-clean".to_string()];
-    for case in AWS_CASES.iter().map(|case| case.id).chain([CIDR_CASE]) {
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    for case in cases.chain([CIDR_CASE, CIDR_VARIABLE_CASE]) {
         answered.push(case.to_string());
         answered.push(format!("{case}-says"));
     }
+    answered.push(format!("{CIDR_VARIABLE_CASE}-marks"));
     passed(
         &route_steps,
         &answered.iter().map(String::as_str).collect::<Vec<_>>(),
     );
+    assert!(
+        has_verdict(
+            &route_steps,
+            "SEEN",
+            &format!("{CIDR_VARIABLE_CASE}-reports")
+        ),
+        "{route_steps}"
+    );
 
     // the script deletes each profile that it made, and the body of each case, and nothing else
-    assert_eq!(
-        deleted_profiles(&stage),
-        AWS_CASES.map(|case| format!("uid-{}", case.profile))
-    );
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    assert_eq!(deleted_profiles(&stage), made_profiles());
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    for case in cases.chain([CIDR_VARIABLE_CASE]) {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
     for body in ["aws-clean.json", "cidr-overlap.json"] {
@@ -8004,6 +9606,46 @@ fn route_bodies_sh_skips_cidr_overlap_with_no_vpc_that_has_a_cidr_and_a_subnet_i
     }
 }
 
+/// The script skips `cidr-overlap` when a pool of the clean body has no zone. Each pool names the
+/// subnet of each of its zones, so such a pool names no subnet. The route refuses a pool with no
+/// subnet for a body with a VPC (#824). The template of the body gives a zone to each pool today,
+/// so the test removes one (#822).
+#[test]
+fn route_bodies_sh_skips_cidr_overlap_when_a_pool_of_the_clean_body_has_no_zone() {
+    let mut stage = route_bodies_stage(&route_packs(true), &[]);
+    let template = stage.copy_live().join("preflight/aws.json");
+    let mut body = read_json(&template);
+    let pool = body["spec"]["machinepoolconfig"][1]["cloudConfig"]
+        .as_object_mut()
+        .unwrap();
+    assert!(pool.remove("azs").is_some(), "{pool:?}");
+    std::fs::write(&template, body.to_string()).unwrap();
+    let bodies = stage.path("bodies");
+    std::fs::create_dir_all(&bodies).unwrap();
+    std::fs::write(bodies.join("cidr-overlap.json"), "{}").unwrap();
+
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.lines().any(|l| l
+            == "skipped cidr-overlap: a pool of aws-clean.json has no zone, so it names no subnet, and the route refuses such a pool (#824)"),
+        "{steps}"
+    );
+    assert!(!steps.contains("cidr-overlap-body"), "{steps}");
+    assert!(!bodies.join("cidr-overlap.json").exists());
+    assert!(stage.sent("POST", AWS_VALIDATE_ROUTE).is_empty());
+    // the script asks for no VPC
+    assert!(
+        !stage
+            .path(&format!(
+                "routes/sent/GET_{}.request",
+                Stage::route_key(LAB_VPCS_ROUTE)
+            ))
+            .exists()
+    );
+    passed(&steps, &["aws-clean-body", "validate-route"]);
+}
+
 #[test]
 fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault() {
     let stage = route_bodies_stage(&route_packs(true), &["profile-cloud-mismatch"]);
@@ -8015,18 +9657,15 @@ fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault()
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     failed(&route_steps, &["profile-cloud-mismatch"]);
     // the failure does not leave a profile or a body
-    assert_eq!(
-        deleted_profiles(&stage),
-        AWS_CASES.map(|case| format!("uid-{}", case.profile))
-    );
+    assert_eq!(deleted_profiles(&stage), made_profiles());
+    let cases = AWS_CASES.iter().map(|case| case.id);
+    let cases: Vec<&str> = cases.chain([CIDR_VARIABLE_CASE]).collect();
+    let deleted: Vec<String> = cases.iter().map(|case| format!("{case}-deleted")).collect();
     passed(
         &steps,
-        &AWS_CASES
-            .map(|case| format!("{}-deleted", case.id))
-            .each_ref()
-            .map(String::as_str),
+        &deleted.iter().map(String::as_str).collect::<Vec<_>>(),
     );
-    for AwsCase { id: case, .. } in &AWS_CASES {
+    for case in cases {
         assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
     }
 }
@@ -8161,7 +9800,8 @@ esac
         deleted_profiles(&stage),
         [
             "uid-strata-route-cloud-mismatch",
-            "uid-strata-route-cloud-support"
+            "uid-strata-route-cloud-support",
+            "uid-strata-route-cidr-variable"
         ]
     );
 }
@@ -8194,7 +9834,8 @@ fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_withou
         assert!(!bodies.join(format!("{case}.json")).exists(), "{name}");
     }
     assert!(!stage.path("strata/seen/pack-cloud-support.json").exists());
-    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 3);
+    // three cases, and the copy of the release profile for the case of the variable
+    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 4);
 
     // a pack that the lab names takes the place of the search
     let mut stage = route_bodies_stage(&route_packs(false), &[]);
@@ -8205,7 +9846,13 @@ fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_withou
         &steps,
         &["pack-cloud-support-body", "pack-cloud-support-deleted"],
     );
-    let last = stage.sent("POST", "/v1/clusterprofiles").pop().unwrap();
+    // the copy for the case of the variable comes last, after the profile of pack-cloud-support
+    let mut posted = stage.sent("POST", "/v1/clusterprofiles");
+    assert_eq!(
+        posted.pop().unwrap()["metadata"]["name"],
+        CIDR_VARIABLE_PROFILE
+    );
+    let last = posted.pop().unwrap();
     assert_eq!(last["metadata"]["name"], "strata-route-cloud-support");
     assert_eq!(last["spec"]["template"]["packs"][0]["name"], "all-clouds");
     assert_eq!(last["spec"]["template"]["packs"][0]["tag"], "4.0.0");
@@ -8371,8 +10018,10 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     assert!(!quick.contains("palette"), "{quick}");
 }
 
+/// The checks of the nightly job run the script of CI, so `nightly-names` reads the words of its
+/// note. When the note changes and the check does not, this test fails.
 #[test]
-fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issue() {
+fn loop_sh_stage_7_names_the_issue_of_the_edited_record_and_puts_the_writer_of_the_edit_in_it() {
     let mut stage = lab_stage();
     stage.strata(
         "verify --summary --quiet --format json *",
@@ -8393,7 +10042,15 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
     // the stage edits the add-on through the API, and this test does not serve that route, so the
     // first step fails. The checks of the nightly job do not need that step
     let (_, steps) = stage.run("loop.sh", &["7"]);
-    passed(&steps, &["nightly-who", "nightly-who-says"]);
+    passed(
+        &steps,
+        &[
+            "nightly-drift",
+            "nightly-names",
+            "nightly-who",
+            "nightly-who-says",
+        ],
+    );
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
     assert!(
         calls
@@ -8740,7 +10397,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     assert!(comment.contains("**Palette:** no repave"), "{comment}");
     let note = std::fs::read_to_string(stage.path("out/ask-repave-comment.err")).unwrap();
     assert!(
-        note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
+        note.contains("max impact: repave; label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{note}"
     );
     // the comment records the cluster side by the ref that strata names for it
@@ -9129,11 +10786,8 @@ fn image_digest_stage(list_images: &str) -> Stage {
         "/v1/spectroclusters/c-a/assets/kubeconfig",
         "apiVersion: v1 # fake-kubeconfig\n",
     );
-    stage.route(
-        "/v1/spectroclusters/c-a/profiles/packs/manifests",
-        r#"{"profiles":[]}"#,
-    );
-    stage.route("/v1/spectroclusters/c-a/profiles", "{}");
+    stage.route(&cluster_manifests_route("c-a"), r#"{"profiles":[]}"#);
+    stage.route(&cluster_profiles_route("c-a"), "{}");
     let manifests = r#"{"spec":{"packs":[{"spec":{"name":"strata-live-config","manifests":[
         {"name":"strata-live-config","uid":"m-1","content":"edited: \"no\"\n"}]}}]}}"#;
     stage.published("ad-1", ADDON_PACK, manifests);
@@ -13060,10 +14714,16 @@ fn observer_role_stage() -> Stage {
 #[test]
 fn observer_role_sh_stage_3_records_what_the_validate_route_of_the_create_answers_the_role() {
     let stage = observer_role_stage();
-    let denied = "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system\"}";
+    let denied = format!(
+        "POST /v1/spectroclusters/aws/validate failed with HTTP 403: {}",
+        error_body(
+            Denial::Route.as_str(),
+            &access_denied_message("cluster.create", EACH_SCOPE),
+        )
+    );
     std::fs::write(
         stage.path("strata/preflight-role.json"),
-        observer_role_preflight("error", Some(denied)),
+        observer_role_preflight("error", Some(&denied)),
     )
     .unwrap();
     let (o, steps) = stage.run("observer-role.sh", &["3"]);
@@ -13108,7 +14768,7 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         "/v1/audits",
         "role-k",
         403,
-        r#"{"code":"AccessDenied","message":"no audit.list"}"#,
+        &error_body(Denial::Route.as_str(), "no audit.list"),
     );
     let (o, steps) = stage.run("observer-role.sh", &[]);
     assert_eq!(o.status.code(), Some(0), "{steps}\n{}", text(&o.stderr));
@@ -13123,7 +14783,10 @@ fn observer_role_sh_records_the_answer_of_each_request_to_the_key_of_the_role() 
         );
     }
     let said = |id: &str| std::fs::read_to_string(stage.path(&format!("out/{id}.out"))).unwrap();
-    assert_eq!(said("role-audits").trim(), "HTTP 403 AccessDenied");
+    assert_eq!(
+        said("role-audits").trim(),
+        format!("HTTP 403 {}", Denial::Route.as_str())
+    );
     assert_eq!(said("role-cluster").trim(), "HTTP 200");
     let line = step_line(&steps, "role-audits");
     assert!(
@@ -13223,12 +14886,16 @@ fn observer_role_sh_sends_the_validate_request_with_the_body_of_the_record_with_
 #[test]
 fn observer_role_sh_records_the_refusal_of_the_validate_request_to_the_role_and_judges_none_of_it()
 {
-    for (status, code) in [(403, "AccessDenied"), (500, "InternalError"), (422, "")] {
+    for (status, code) in [
+        (403, Denial::Route.as_str()),
+        (500, "InternalError"),
+        (422, ""),
+    ] {
         let stage = observer_role_stage();
         let body = if code.is_empty() {
             "{}".to_string()
         } else {
-            format!(r#"{{"code":"{code}","message":"no validate"}}"#)
+            error_body(code, "no validate")
         };
         stage.route_as(OBSERVER_ROLE_VALIDATE, "role-k", status, &body);
         let (o, steps) = stage.run("observer-role.sh", &[]);
@@ -13288,7 +14955,7 @@ case "$*" in
   "verify noaudit.json --who")
     if [ -n "$refused" ]; then
       echo 'DRIFT: published version strata-live-addon@1.0.0 differs'
-      echo 'who: not read: HTTP 403: {"code":"AccessDenied"}'
+      echo 'who: not read: HTTP 403: AccessDenied: audit.list operation is not permitted'
       exit 1
     fi ;;
   "verify noaudit.json --who --json")

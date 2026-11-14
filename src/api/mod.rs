@@ -33,6 +33,7 @@ pub use audit::AuditKind;
 pub use connect::{connect_from_env, connect_with, project_uid_named};
 pub use download::{DownloadedPack, PackArchive, PackFile, ProfileDownload};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
+pub use mask::MASKED;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     CLUSTER_TEMPLATE, DOWNLOAD_INTERVAL_SECONDS, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS,
@@ -40,16 +41,19 @@ pub(crate) use palette::{
     is_download_limit, named_entries, profile_versions, search_condition, search_filter,
     search_group,
 };
-// the unit tests build the route of a download with the one function that builds it
-#[cfg(test)]
-pub(crate) use palette::download_path;
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
     cluster_summary_path, subject_path,
 };
+// the unit tests build the route of a download with the one function that builds it
+#[cfg(test)]
+pub(crate) use palette::download_path;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};
 pub(crate) use raw::{recorded_packs, recorded_template, save_registries, saved_registries};
 pub use retry::{Retry, RetryPolicy};
+// the routes and the answers of Palette that the unit tests serve: see `http.rs`
+#[cfg(test)]
+pub(crate) use http::routes;
 
 /// The method of a request that strata sends to Palette.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

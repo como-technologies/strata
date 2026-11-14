@@ -404,6 +404,40 @@ fn line_gives_the_first_numbers_and_zero_for_a_number_that_the_version_omits() {
 }
 
 #[test]
+fn a_move_is_more_than_one_minor_version_above_as_palette_reads_the_two_versions() {
+    for (from, to, above) in [
+        ("1.34.9", "1.36.2", true),
+        ("1.31.14", "1.37.0", true),
+        ("v1.34.9", "1.36.0-rc.1", true),
+        ("1.36.2", "2.0.0", true),
+        // Palette reads the first three numbers of a text that does not parse
+        ("chart-1.34.9", "1.36.2.1", true),
+        ("1.34", "1.36", true),
+        ("1.34.9", "1.35.6", false),
+        ("1.34.9", "1.34.10", false),
+        ("1.36.2", "1.34.9", false),
+        ("2.0.0", "1.36.2", false),
+        // Palette reads no version in these, so it makes no check
+        ("1.34.develop", "1.36.2", false),
+        ("1.34.9", "LTS__1.x", false),
+        ("", "1.36.2", false),
+    ] {
+        assert_eq!(minor_above(from, to, 1), above, "{from} -> {to}");
+    }
+    assert!(!minor_above("1.34.9", "1.36.2", 2));
+    assert!(minor_above("1.34.9", "1.35.0", 0));
+}
+
+#[test]
+fn the_line_above_a_version_takes_its_major_number_and_a_higher_minor_number() {
+    assert_eq!(minor_line_above("1.34.9", 1).as_deref(), Some("1.35"));
+    assert_eq!(minor_line_above("v1.31", 1).as_deref(), Some("1.32"));
+    assert_eq!(minor_line_above("chart-1.31.2", 2).as_deref(), Some("1.33"));
+    assert_eq!(minor_line_above("1.34.develop", 1), None);
+    assert_eq!(minor_line_above("LTS__24.x", 1), None);
+}
+
+#[test]
 fn two_versions_with_one_line_compare_equal() {
     let (a, b) = (line("4", 2).unwrap(), line("4.0.7", 2).unwrap());
     assert_eq!(compare(&a, &b), Ordering::Equal);

@@ -67,8 +67,10 @@ Palette release keeps its text:
 ```
 
 Strata reads the registry listing of Palette in the scope of the listing, as
-the pack rows do. When the listing answers an error, also HTTP 404, `list`
-exits `2` with that error.
+the pack rows do. When the listing answers an error, also HTTP 404, the exit
+is `2`. With no other kind, `list` fails with that error. With another kind,
+`errors` holds it: see
+[A kind that the key cannot read](#a-kind-that-the-key-cannot-read).
 
 ## The packs of a registry
 
@@ -283,15 +285,18 @@ Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`:
 
 The pack ref of a profile names its registry by the uid alone. So strata reads
 the names from the registry listing of Palette, with one more request for the
-command. A registry that the key cannot see shows its uid. A `pack:` ref takes
-the uid too: see [Refs](../reference/refs.md). A pack with no registry, such as
+command. A registry that the key cannot see shows its uid. A registry whose
+name holds a `/` shows its uid too, because a `pack:` ref cannot take that
+name. A `pack:` ref takes the text of the row: see
+[Refs](../reference/refs.md). A pack with no registry, such as
 a manifest pack, ends at its version. The JSON gives `registryUid` and
 `registry` on each pack. With `--format markdown`, the pack ends with `in`
 and the registry.
 
 When the registry listing answers HTTP 404 or 405, strata reads it as no
 listing, and each pack row shows the uid. Each other error, such as HTTP 403,
-stops `list` with exit `2` and that error.
+is an error of the profiles, and the exit is `2`: see
+[A kind that the key cannot read](#a-kind-that-the-key-cannot-read).
 
 ## A version that nobody published
 
@@ -403,6 +408,33 @@ and no row has the mark:
 {{#include ../output/scope-tenant.txt}}
 ```
 
+## A kind that the key cannot read
+
+A role can give some reads of a project and not others. Here the role of the
+key in `dev` gives the profiles and not the clusters. Palette answers the
+cluster listing with HTTP 500 and the code `ResourceAccessDenied`. Strata
+prints what it read, and one line for each kind that it could not read:
+
+```text
+{{#include ../output/list-denied.txt}}
+```
+
+The exit is `2`. `--json` gives the error of each such kind in `errors`, under
+the name of the kind. With `--format markdown`, the line follows the tables.
+When strata reads no kind of the command, the command fails with the error of
+the first kind. Here no role of the user gives the saved tag filters:
+
+```text
+{{#include ../output/list-denied-filters.txt}}
+```
+
+The message names what Palette denied, here the permission `filter.list`. The
+lookup of `dev` got an answer first, so the key is right, and the message does
+not name the key. Strata sends no denial again: see
+[Refusals that strata does not send again](../reference/errors.md#refusals-that-strata-does-not-send-again).
+[The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs)
+gives the permissions of each read.
+
 ## What to expect
 
 Name the kinds to list: `strata list profiles`, or `strata list clusters
@@ -424,7 +456,9 @@ virtual clusters of the scope, from the search of Palette. That is one request
 for the schema of the search, and one for the search. `strata list registries`
 reads the registry listing in the scope of the listing.
 
-Exit `0`, or `2` when strata cannot read a listing or refuses a kind. `--json` writes
+Exit `0`, or `2` when strata cannot read a kind or refuses a kind: see
+[A kind that the key cannot read](#a-kind-that-the-key-cannot-read) and
+[The packs of a registry](#the-packs-of-a-registry). `--json` writes
 [`strata-list/1`](../reference/documents.md#strata-list1).
 
 ## Options

@@ -616,6 +616,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateTextTooLarge, []string{"Needs attention", "2 causes · 26 of 29 packs in full", "6 profiles · 2 this week", "Newer versions"}},
 		{devdata.StateAlerts, []string{"Needs attention", "Alerts"}},
 		{devdata.StateAlertsUnset, []string{"Needs attention", "Not set"}},
+		{devdata.StateMovedDrift, []string{"Needs attention", "Published version changed after its record", "3 of 3 packs in full", "1 profile · 1 this week"}},
 	}
 	if len(cases) != len(devdata.States) {
 		t.Fatalf("the table has %d sets, and devdata lists %d", len(cases), len(devdata.States))
@@ -1076,7 +1077,7 @@ func screenScripts(t *testing.T) []string {
 }
 
 // readScripts gives the text of the scripts of the screens, in the order of index.html. A test that reads the script of the
-// page as text reads all of them, so a count over the page stays a count over the page.
+// page as text reads all of them. So a count over the page stays a count over the page.
 func readScripts(t *testing.T) string {
 	t.Helper()
 	var texts []string

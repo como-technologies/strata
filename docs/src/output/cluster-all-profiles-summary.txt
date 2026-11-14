@@ -1,0 +1,9 @@
+$ strata verify runs/payments-all.json --summary
+OK     runs/payments-all.json  4 profiles on cluster payments  is unchanged since 2026-09-17T09:30:00Z
+1 record: 1 unchanged, 0 drifted, no errors
+$ strata verify runs/payments-all.json --summary --json | jq '.records[0] | {subject, name, version}'
+{
+  "subject": "4 profiles on cluster payments",
+  "name": "aws-stack+observability+payments-apps+platform-addons",
+  "version": "1.1.0+1.0.0+1.0.0+1.0.0"
+}

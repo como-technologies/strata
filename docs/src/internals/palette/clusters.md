@@ -59,6 +59,16 @@ itself. A cluster on AWS gives these fields:
   code of Palette shows it; no live run shows it yet. Stage 8 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads the three routes
   with such a key.
+- An item of the bindings route with `spec.isSystem` true is a role binding of
+  the system. In such an item, each binding holds only the subject that is the
+  user of the key. The answer drops a binding with no such subject, and keeps
+  the item. This is true for each key, also the key of a tenant admin. So the
+  keys of two users can get different bindings for one cluster. The code of
+  Palette shows it; no live run shows it yet. Stage 10 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads the bindings of one
+  cluster with the keys of two users. Strata keeps each such binding out of
+  the hash of the policy tier: see
+  [A role binding of the system](../../commands/snapshot/cluster.md#a-role-binding-of-the-system).
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.
@@ -163,9 +173,30 @@ A copy has the variables of its profile too. `GET
 /v1/spectroclusters/<uid>/variables` is an array with one entry for each applied
 profile that declares a variable: the profile uid, and each variable with the
 fields that the profile endpoint serves, plus `value`, the value the cluster
-gives it. So the copy of a profile with a variable has the variables hash of the
-profile, and its root equals the root of the profile. The value that a cluster
-gives is in the record, under `source.cluster.variables`, and not in the root.
+gives it. The value that a cluster gives is in the record, under
+`source.cluster.variables`, and not in the root.
+
+The two endpoints mask one field in two ways. For a sensitive variable that is
+not a dropdown, the cluster endpoint gives `defaultValue: "********"`, also when
+the profile has no default value. For no default value, the profile endpoint
+gives `defaultValue: ""`: see
+[The variables route](./profiles.md#the-variables-route). Both endpoints give
+`********` for the value of each option of a sensitive dropdown variable. The
+code of Palette shows it; no live run shows it yet.
+
+For a sensitive variable that is not a dropdown, the variables hash reads
+`********` as an empty default value. See
+[The node hash and the root](../hashes.md#the-node-hash-and-the-root). So the
+copy of a profile with a variable has the variables hash of the profile, and its
+root equals the root of the profile. The record of the copy holds the default
+value as the cluster endpoint gives it.
+
+The endpoint gives `********` in place of the value of a sensitive variable,
+when the value is not empty and the variable is not a dropdown. The value of a
+sensitive dropdown variable is the label of an option, and the endpoint gives
+it as it is. The code of Palette shows it; no live run shows it yet. A record
+holds no value of a sensitive variable: see
+[What a cluster record holds](../../commands/snapshot/cluster.md#what-a-cluster-record-holds).
 
 A change of that value is a change to the cluster, and not to the copy. The
 Spectro Cloud provider sends it as `variables` of the profile on the cluster
@@ -299,12 +330,19 @@ request has a result for Project Viewer only.
 Cluster Viewer alone gives every answer except the audit log. The audit log answers
 HTTP 403 with the code `AccessDenied`, and the message names `audit.list`. Then
 `verify --who` keeps its verdict and cannot name the writer: see
-[Who changed it](../../commands/verify.md#who-changed-it).
+[When strata cannot read the log](../../commands/verify.md#when-strata-cannot-read-the-log).
 
 The live run used these two roles only. The column of the built-in roles comes from
 the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
+
+Strata writes `********` over each copy of the key of the run in the body of an
+error, before it prints or keeps the error. It also masks a copy that a letter
+or a digit touches, as after the escape `\n` or the URL code `%3D`. A key of
+fewer than 16 characters can be a part of a word, so strata masks only its
+whole copies. So the terminal, `--json`, a record, and the log of a job hold
+no copy of the key.
 
 The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
 sends more requests. The validate route of a create needs a permission that a viewer role
@@ -320,10 +358,27 @@ A request without its permission gets one of these answers:
 
 | Code | HTTP status | When |
 | --- | --- | --- |
-| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, and the validate route of a create. |
+| `AccessDenied` | 403 | The route as a whole is refused: the audit log, the lists of registries, the saved tag filters, and the validate route of a create. |
 | `OperationForbidden` | 500 | One object is refused: a profile, a cluster, or a registry. |
 | `NoRolesAssociated` | 500 | The user has no role at all. |
-| `ResourceAccessDenied` | 500 | The user has no role in the project of the request. |
+| `ResourceAccessDenied` | 500 | No role of the user in the project of the request gives the access: the user has no role there, or a role without the permission of a listing. |
+
+The profile listing and the cluster listing check the role in the project of
+the request: `clusterProfile.list` and `cluster.list`. When no role there gives
+the permission, each listing answers HTTP 500 with `ResourceAccessDenied`, and
+not 403. The message names the project by its name, or by its uid when the key
+has no role in the project, as in `Project 'dev' access denied`.
+
+The saved tag filters need `filter.list` in the tenant. Without it, Palette
+answers HTTP 403 with `AccessDenied`, and the
+message names `filter.list`. The code of Palette shows these answers; no live
+run shows them yet. Stage 8 of [tiers.sh](../../development/live-runs.md#tierssh)
+runs `strata list` with a role in the project that does not give `cluster.list`.
+
+Strata sends no denial again, and its message names what Palette denied: see
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+`strata list` keeps each kind that it read: see
+[A kind that the key cannot read](../../commands/list.md#a-kind-that-the-key-cannot-read).
 
 ## The order of the profiles of a cluster
 
@@ -343,11 +398,24 @@ A `PUT` of a cluster's profiles in the other order, with the uids it has,
 changes nothing: the document keeps the stored order. The audit log gets an
 update of the cluster.
 
-An added profile goes to the end of the list. A new uid of the infrastructure
-profile, such as a new version of it, moves that profile to the end too. So an
-add-on profile can reach position 0, and the rule `position-zero` of
-`strata preflight` warns about it. The code of Palette shows it; no live run
-shows it yet.
+A `PUT` and a `PATCH` of the profiles of a cluster keep the order of the
+profiles that the cluster has. Each new uid goes to the end, also when the
+body gives it first. A `PUT` drops each profile that its body does not name. A
+`PATCH` keeps them, and drops the profile that the field `replaceWithProfile`
+of an entry names. Provider 0.30.1 sends a new version of a profile in that
+form.
+
+So an added profile goes to the end of the list. A new version of the
+infrastructure profile has a new uid, so it goes to the end too. After that
+upgrade, an add-on profile is at position 0 on each cluster that has one. The
+cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`, gives the profile
+at position 0 as `spec.clusterProfileTemplate`, so it then names that add-on
+profile. The rule `position-zero` of `strata preflight` warns about it.
+
+A cluster with no change keeps its stored order. The code of Palette shows it;
+no live run shows it yet. Stage 4 of
+[order.sh](../../development/live-runs.md#ordersh) is the live check, with a
+second cluster as the control.
 
 The order that strata gives a cluster record does not depend on the stored
 order. So a change of the stored order changes no root of a record.
@@ -476,6 +544,34 @@ keeps the clusters that run the version. The checks `search-profile-runs`,
 `search-nested-misses-member`, `member-consumer-group`, and
 `group-virtual-clusters` of `cluster-group.sh` show it on a live tenant: see
 [cluster-group.sh](../../development/live-runs.md#cluster-groupsh).
+
+## The reach of a search
+
+The code of Palette shows these facts; no live run shows the refusal yet:
+
+- The cluster search and the edge host search at tenant scope need `project.list`
+  in the tenant. Without it, Palette answers HTTP 403 with `AccessDenied`.
+- With it, each search gives the projects where a role of the key gives the
+  listing. The cluster search needs `cluster.list`, and the edge host search
+  needs `edgehost.list`. It omits each other project, with no error. A role of the tenant, such
+  as Tenant Viewer, gives the listing in each project.
+- The search of one project, with its `ProjectUid`, answers HTTP 500 with the
+  code `ResourceAccessDenied` when no role of the key there gives the listing.
+  The message names the project by its name, as in `Project 'staging' access
+  denied`.
+- At tenant scope, the project listing holds each project of the tenant only for
+  a key whose role gives `project.list` in the tenant. For another key, it holds
+  the projects of its roles.
+- A profile of a project is for the clusters of its project. Each project of
+  the tenant can use a profile of the tenant. The profile document names the
+  project of a profile of a project in `metadata.annotations.projectUid`.
+
+So [`strata consumers`](../../commands/consumers.md#a-profile-of-the-tenant)
+searches each project of the tenant listing for a profile of the tenant or of
+the system. It names each project whose search Palette refuses. The checks
+`tenant-consumers` and `tenant-consumers-projects` of
+[scope.sh](../../development/live-runs.md#scopesh) search each project with a
+key that reads each one.
 
 ## A deleted cluster
 

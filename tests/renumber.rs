@@ -1,5 +1,5 @@
 //! A release under new version numbers: `same-release --allow renumber` passes a pair whose packs
-//! differ only by their versions, and `compare` gives such a pack the impact `none` with
+//! differ only by their versions. `compare` gives such a pack the impact `none` with
 //! `renumber only` when its version keeps its numbers.
 
 use std::path::Path;
@@ -36,7 +36,8 @@ fn values_file(p: &Pack) -> Option<Vec<(&'static str, String)>> {
 }
 
 /// The files of the build of the pack `p`. The CSI pack is a chart of a Helm registry: its
-/// `Chart.yaml` names the version of the app `app`, and the files `more` follow its values.
+/// `Chart.yaml` names the version of the app `app`. The files `more` follow the values of the CSI
+/// pack.
 fn chart_build(
     p: &Pack,
     app: &str,
@@ -81,7 +82,7 @@ fn pack_entries<'a>(
 
 /// The record of a copy of the fixture `a`, as the profile version `version` with the uid `uid`.
 ///
-/// Each pack of `builds` is a build of the same content under another version: its version, its
+/// Each pack of `builds` is a build of the same content under another version. Its version, its
 /// tag, its pack uid, and its digest change, and its values stay. `edit` then changes the profile
 /// document and the packs/manifests document, as a person or a pipeline does.
 fn release(
@@ -578,8 +579,8 @@ fn an_os_pack_with_new_numbers_and_the_same_values_keeps_its_repave_and_same_rel
     assert_eq!(p.archives_compared, ["os/ubuntu-aws"]);
 }
 
-/// The criterion of #751: a pair whose archives differ only in `version` of `pack.json` passes, and
-/// a pair whose archives differ in another file fails and names the file.
+/// The criterion of #751: a pair whose archives differ only in `version` of `pack.json` passes. A
+/// pair whose archives differ in another file fails and names the file.
 #[test]
 fn allow_renumber_fails_a_pair_whose_archives_differ_in_another_file_and_names_the_file() {
     let dir = fixtures();
@@ -728,47 +729,59 @@ fn allow_renumber_passes_a_helm_chart_whose_archives_differ_only_in_the_version_
     }
 }
 
-/// The criterion of #828: the download of a side holds the error answer of the host of a chart in
-/// place of the chart. The renumber of the chart names the version and the reason, and does not
-/// pass. The other renumber keeps the compare of its archives.
-#[test]
-fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_renumber() {
-    let dir = fixtures();
+/// The two records of a release whose Helm chart `csi-aws-ebs` moves from 1.28.0-rc.1 to 1.28.0,
+/// beside `kubernetes`.
+fn chart_records(dir: &Path) -> Vec<(String, Snapshot)> {
     let helm = |profile: &mut Value, _: &mut Value| {
         for p in pack_refs(profile, "csi-aws-ebs") {
             p["type"] = json!(PackType::Helm);
         }
     };
     let builds = |k8s, csi| [("kubernetes", k8s), ("csi-aws-ebs", csi)];
-    let records = pair(
+    pair(
         release(
-            dir.path(),
+            dir,
             UID_OLD,
             "1.4.0-rc.1",
             &builds("1.29.4-rc.1", "1.28.0-rc.1"),
             &helm,
         ),
-        release(
-            dir.path(),
-            UID_NEW,
-            "1.4.0",
-            &builds("1.29.4", "1.28.0"),
-            &helm,
-        ),
-    );
-    // the host of the chart refuses the file of the final version
+        release(dir, UID_NEW, "1.4.0", &builds("1.29.4", "1.28.0"), &helm),
+    )
+}
+
+/// The chain of `--allow renumber` of `records`, when the host of the chart refuses the file of
+/// each version of `refused`. The download holds the answer of the host in place of that chart.
+fn chart_host_refuses(records: &[(String, Snapshot)], refused: &[&str]) -> Chain {
     let same = |p: &Pack| chart_build(p, "1.28.0", &[]);
-    let refused = |p: &Pack| match (p.name.as_str(), p.version.as_str()) {
-        ("csi-aws-ebs", "1.28.0") => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
-        _ => common::build_archive(p, &same),
+    let file = |p: &Pack| {
+        if p.name == "csi-aws-ebs" && refused.contains(&p.version.as_str()) {
+            Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec())
+        } else {
+            common::build_archive(p, &same)
+        }
     };
-    let api = common::serve_pack_files(MemoryApi::new(), &records, &refused);
-    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let api = common::serve_pack_files(MemoryApi::new(), records, &file);
+    common::same_release_served(records, renumber_allowed(), &api, "t1")
+}
+
+/// The reason of a chart whose host refuses its file: the start of the answer of the host.
+const REFUSAL_REASON: &str = "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
+    <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…";
+
+/// The criterion of #828: the download of a side holds the error answer of the host of a chart in
+/// place of the chart. The renumber of the chart names the version and the reason, and does not
+/// pass. The other renumber keeps the compare of its archives.
+#[test]
+fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_renumber() {
+    let dir = fixtures();
+    let records = chart_records(dir.path());
+    // the host of the chart refuses the file of the final version
+    let c = chart_host_refuses(&records, &["1.28.0"]);
     let p = &c.pairs[0];
     assert_eq!(p.status, PairStatus::Different);
     assert_eq!(c.exit_code(), 1);
-    let reason = "263 bytes of text: <?xml version=\"1.0\" encoding=\"UTF-8\"?> \
-        <Error><Code>AccessDenied</Code><Message>Access Denied</Message><RequestId>4V6Q3…";
+    let reason = REFUSAL_REASON;
     assert_eq!(
         p.archives_not_readable,
         [ArchiveNotReadable {
@@ -799,12 +812,7 @@ fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_r
         json!([{"key": "csi/csi-aws-ebs", "version": "1.28.0", "reason": reason}])
     );
     // each side whose file is no archive has its own reason
-    let both = |p: &Pack| match p.name.as_str() {
-        "csi-aws-ebs" => Some(common::CHART_HOST_REFUSAL.as_bytes().to_vec()),
-        _ => common::build_archive(p, &same),
-    };
-    let api = common::serve_pack_files(MemoryApi::new(), &records, &both);
-    let c = common::same_release_served(&records, renumber_allowed(), &api, "t1");
+    let c = chart_host_refuses(&records, &["1.28.0-rc.1", "1.28.0"]);
     let versions: Vec<&str> = c.pairs[0]
         .archives_not_readable
         .iter()
@@ -814,10 +822,35 @@ fn allow_renumber_names_a_chart_whose_file_is_no_archive_and_does_not_pass_its_r
     assert_eq!(c.pairs[0].reasons.len(), 2);
 }
 
-/// Palette serves no archive of a pack of a private registry, and of a pack of an OCI registry of
-/// Helm charts or of Zarf packages. The list of the download names such a pack with no file. Such
-/// a renumber keeps `archive: not compared`, and the pair passes. A manifest pack has no archive:
-/// its content is its manifests, which the records hold.
+/// The criterion of #832: the reason quotes the answer of the host of the chart, which is XML. The
+/// markdown of a job summary or of a pull request comment shows each tag of it as text.
+#[test]
+fn the_markdown_of_a_reason_shows_the_answer_of_a_chart_host_as_text_with_no_tag_of_html() {
+    let dir = fixtures();
+    let c = chart_host_refuses(&chart_records(dir.path()), &["1.28.0"]);
+    let markdown = common::markdown().render_chain(&c).unwrap();
+    let row = markdown
+        .lines()
+        .find(|l| l.starts_with("| DIFFERENT |"))
+        .unwrap_or_else(|| panic!("a row of the pair in\n{markdown}"));
+    assert!(
+        row.ends_with(&format!(
+            "<br>pack csi/csi-aws-ebs 1.28.0 archive: not readable: {} |",
+            strata::text::html_text(REFUSAL_REASON)
+        )),
+        "{row}"
+    );
+    assert!(
+        row.contains("&lt;Error&gt;&lt;Code&gt;AccessDenied&lt;/Code&gt;"),
+        "{row}"
+    );
+    common::assert_only_strata_tags(&markdown);
+}
+
+/// Palette serves no archive of a pack of a private registry. It also serves no archive of a pack
+/// of an OCI registry of Helm charts or of Zarf packages. The list of the download names such a
+/// pack with no file. Such a renumber keeps `archive: not compared`, and the pair passes. A
+/// manifest pack has no archive: its content is its manifests, which the records hold.
 #[test]
 fn a_renumber_whose_download_holds_no_archive_keeps_archive_not_compared_in_each_case_of_palette() {
     let dir = fixtures();
@@ -1011,7 +1044,7 @@ fn the_json_of_same_release_holds_each_renumber_and_the_archives_that_it_does_no
     let markdown = common::markdown().render_chain(&c).unwrap();
     assert!(
         markdown.contains(
-            "| RENUMBER | `old.json` | `new.json` | 1 pack renumbered, same configuration<br>csi-aws-ebs  1.28.0-rc.1 -> 1.28.0 (pre-release to final; archive: not compared) |"
+            "| RENUMBER | `old.json` | `new.json` | 1 pack renumbered, same configuration<br>csi-aws-ebs  1.28.0-rc.1 -&gt; 1.28.0 (pre-release to final; archive: not compared) |"
         ),
         "{markdown}"
     );

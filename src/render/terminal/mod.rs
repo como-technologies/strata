@@ -2,11 +2,11 @@
 
 use super::changes::{OpLine, artifacts_summary, moved_word, tier_op_lines, variable_lines};
 use super::consumers::{
-    NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
-    consumers_sentence, edge_hosts_line, second_reading_line,
+    NOT_LISTED, consumer_count, consumer_counts, consumer_project, consumer_runs,
+    consumers_heading, consumers_sentence, not_checked_line, scope_line, searched_rows,
 };
 use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_registry,
+    applied_ref, cluster_count, list_count, list_scope, listed_registry, no_version_sentence,
     pack_version, profile_marks, project_label, registry_count, registry_heading,
     registry_kind_cell, side_projects, version_note, virtual_line, virtual_note,
 };
@@ -19,10 +19,8 @@ use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_projects, pair_word, record_word,
     renumber_lines,
 };
-use super::verify::{
-    counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
-};
-use super::{Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
+use super::verify::{counts_line, record_detail, verdict_parts, who_entry, who_heading};
+use super::{Reading, Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
@@ -170,7 +168,7 @@ impl Renderer for TerminalRenderer {
     fn verdict(&self, d: &Diff) -> Option<String> {
         let v = d.verify.as_ref()?;
         let p = &self.paint;
-        let parts = verdict_parts(v, d.same, &d.a, str::to_string);
+        let parts = verdict_parts(v, d.same, &d.a);
         let word = paint_status(p, RecordStatus::from(v.status), parts.word());
         let mut line = format!("{word}: {}", parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
@@ -196,7 +194,7 @@ impl Renderer for TerminalRenderer {
             out.push_str(&format!(
                 "{word}  {}  {}  {}\n",
                 r.path,
-                p.bold(&record_label(&r.name, &r.version)),
+                p.bold(dash(&r.subject)),
                 record_detail(r)
             ));
         }
@@ -259,7 +257,7 @@ impl Renderer for TerminalRenderer {
                 "  {}  {}  project {}",
                 p.bold(&format!("{:<width$}", dash(&c.name))),
                 p.dim(&c.uid),
-                project_label(&c.project_uid, &c.project_name),
+                consumer_project(c),
             ));
             // a cluster template has no state
             if !state.is_empty() {
@@ -280,11 +278,22 @@ impl Renderer for TerminalRenderer {
             }
             out.push('\n');
         }
-        out.push_str(&format!(
-            "  {}\n",
-            p.dim(&second_reading_line(&r.clusters_read, str::to_string))
-        ));
-        out.push_str(&format!("  {}\n", p.dim(&edge_hosts_line(r))));
+        out.push_str(&format!("  {}\n", p.dim("searched:")));
+        // one width for each report, so the rows of two reports line up
+        let width = Reading::ALL.iter().map(|w| w.as_str().len()).max();
+        let width = width.unwrap_or(0);
+        for (what, found) in searched_rows(r) {
+            out.push_str(&format!(
+                "    {}\n",
+                p.dim(&format!("{:<width$}  {found}", what.as_str()))
+            ));
+        }
+        if let Some(scope) = scope_line(r) {
+            out.push_str(&format!("  {}\n", p.dim(&scope)));
+        }
+        if let Some(unread) = not_checked_line(r) {
+            out.push_str(&format!("  {}\n", p.byellow(&unread)));
+        }
         Ok(out)
     }
 
@@ -418,6 +427,9 @@ impl Renderer for TerminalRenderer {
         if let Some(registries) = &l.registries {
             list_registries(&mut out, p, registries);
         }
+        for line in super::list::unread_lines(l) {
+            out.push_str(&format!("\n{}\n", p.red(&line)));
+        }
         Ok(out)
     }
 }
@@ -466,7 +478,7 @@ fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedPro
             .map(|pk| {
                 let mut row = vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)];
                 // a pack with no registry ends at its version, with no space after it
-                row.extend(pack_registry(pk).map(str::to_string));
+                row.extend(listed_registry(pk).map(str::to_string));
                 row
             })
             .collect();
@@ -685,6 +697,7 @@ mod tests {
             query_filter: None,
             filters: None,
             registries: None,
+            errors: std::collections::BTreeMap::new(),
         };
         let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
             .into_iter()

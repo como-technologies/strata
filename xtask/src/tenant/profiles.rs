@@ -12,7 +12,12 @@ use super::routes::{
     PROFILES, REGISTRY_LISTING, audit_log_file, empty_audit_log, export_file, manifest_route,
     manifests_route, profile_route, variables_route,
 };
+use super::times::minutes_after;
 use super::{TENANT, Tenant};
+
+/// The time of the first entry of the audit log of a resource. Each later entry takes the next
+/// minute.
+const FIRST_AUDIT_ENTRY: &str = "2026-09-18T14:02:11.482Z";
 
 impl Tenant {
     /// Publish a copy of the example profile `example`, such as `aws-stack@1.1.1`, in `project`
@@ -45,6 +50,11 @@ impl Tenant {
         let mut doc: Value = serde_json::from_str(&text).expect("an example profile is JSON");
         doc["metadata"]["uid"] = json!(uid);
         doc["metadata"]["annotations"]["scope"] = json!(scope.as_str());
+        // Palette names the project of a profile of a project in its annotations, and no project
+        // for each other scope
+        if scope == ProfileScope::Project {
+            doc["metadata"]["annotations"]["projectUid"] = json!(project);
+        }
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
@@ -173,7 +183,7 @@ impl Tenant {
             &profile_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str(), "projectUid": project}},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
                     "packs": [{"name": pack, "layer": "addon", "type": "manifest",
                         "tag": "1.0.0", "version": "1.0.0", "packUid": pack_uid,
@@ -340,7 +350,7 @@ impl Tenant {
         let items = log["items"].as_array_mut().expect("an audit log has items");
         let n = items.len();
         let name = doc["metadata"]["name"].as_str().unwrap_or_default();
-        let at = format!("2026-09-18T14:{:02}:11.482Z", 2 + n);
+        let at = minutes_after(FIRST_AUDIT_ENTRY, n);
         items.insert(
             0,
             json!({

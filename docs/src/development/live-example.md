@@ -22,7 +22,7 @@ show.
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, the repave answer for a cluster in the template (#276), and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
-| `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
+| `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. Stage 4: the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control (#844). It returns the example to its baseline. |
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. Stage 3 reads with a key that cannot read the audit log (#664), and needs `STRATA_LIVE_NO_AUDIT_KEY`. |
 | `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `scope.sh` | A profile of the tenant with the name and the version of the release profile: what the listing, the search, and the document of Palette say, and what `list` and `snapshot` do with the ref that two scopes answer (#113). It needs the profiles, and no cluster. |
@@ -38,7 +38,7 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
-| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key, and runs only as `tiers.sh 6` (#276). Stage 7 sets an override on a machine pool of cluster A, and runs only as `tiers.sh 7` (#515). Stage 8 reads three routes of cluster A with a third key, and runs only as `tiers.sh 8` (#665). |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key (#276), and stage 7 sets an override on a machine pool of cluster A (#515). Stage 8 reads three routes of cluster A with a third key (#665), and runs `strata list` with it (#620). Stage 9 reads with a key that no tenant has (#620), and stages 6 to 9 each run only as `tiers.sh <N>`. |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78); a change of the CPU limit of the group (#110). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78); two app profiles whose tiers differ in the install order (#112). It needs no cluster. |
@@ -117,7 +117,7 @@ its end.
 | `common.sh` | The functions `die` and `usage`. `lib.sh`, `contract.sh`, `contract-profiles.sh`, `api.sh`, `tenant.sh`, and `tofu-install.sh` source it. So do `timer.sh` and `deploy.sh` of `deploy/`. It runs nothing and checks nothing, so a script that does not run strata can source it alone. |
 | `palette-curl.sh` | The function `palette_curl`, which runs `curl` with the header `ApiKey` from `KEY`. The header goes to `curl` as a config on standard input (`--config -`). So the key reaches no argument, and `/proc/<pid>/cmdline` does not show it. It also holds `registry_base`, which gives the path of a registry for each kind of registry. `api.sh`, `tenant.sh`, and `examples/fetch-examples.sh` source it. A test makes sure that no other script names the header or builds the path of a registry. |
 | `github.sh` | What the scripts read about GitHub. `remote_repo` gives the project of the `origin` remote of a checkout. The jq function `first_line` gives the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
-| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image, the overlay, the key, the ConfigMap, and the checks of the pull Secret and of a pod that cannot connect. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
+| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, and the edits of the lab. It also holds the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. For the observer, it holds kubectl in cluster A or in the kubeconfig that `KUBE_FILE` names, the waits, the port-forward, and the page. It also holds the image, the overlay, the key, the ConfigMap, and the checks of the pull Secret and of a pod that cannot connect. It stops on a binary of strata or of strata-preflight that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. Each lookup reads. But at the repave check, Palette can save the address that the console of a pack of virtual machines forwards to: see [What the route saves](../internals/palette/validate-routes.md#what-the-route-saves). |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
@@ -128,7 +128,7 @@ its end.
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
 | `observer-up.sh` | The observer on a test cluster, with one command (#681): `up`, `open`, and `down`. It is no check, and the recipes `observer-up`, `observer-open`, and `observer-down` run it. See [A test cluster](#a-test-cluster). |
 | `count-requests/` | A small Go program that sits between `strata` and Palette. It runs a command, sends each request on, and writes one line for each request to a file, with the method and the path. `observer.sh` uses it to count the requests of a cycle of the observer, and the POST of a click. `just lint` and `just test` check it. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, an app profile, an add-on profile with one manifest layer (`api.sh manifest-profile`), and an OCI registry of the tenant with the auth type `noAuth` and its delete (`api.sh oci-registry-create`, `api.sh registry-delete`). `api.sh post` sends a search that Palette takes as a `POST`, or a question to a validate route. `api.sh export` reads the export of a profile version. `api.sh packs-where` reads the pack listing one page at a time, and prints the first pack that a `jq` condition accepts. `api.sh get-status` prints the status of an answer and its body, and exits `0` for a refusal. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, and the delete of profile versions or a cluster. It also makes a probe profile that it deletes at once, an edge host with no device, and an app profile. `manifest-profile` makes an add-on profile with one manifest layer, `oci-registry-create` makes a tenant OCI registry with the auth type `noAuth`, and `registry-delete` deletes it. `post` sends a search that Palette takes as a `POST`, or a question to a validate route. `export` reads the export of a profile version, and `get-status` prints the status of an answer and its body, and exits `0` for a refusal. `packs-where` reads the pack listing one page at a time, and prints the first pack that a `jq` condition accepts. |
 | `packs.sh` | The pack ref test (#55). |
 | `pack-states.sh` | The pack state test (#68). |
 | `validate-packs.sh` | The profile validate test (#152). |
@@ -145,7 +145,7 @@ its end.
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
 | `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
-| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
+| `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. Stage 4 (#844): an add and an upgrade on cluster A, with cluster B as the control. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
 | `draft.sh` | The draft test (#155): a draft of the add-on version, `<uid>@draft`, and the publish. |
 | `pending.sh` | The pending update test (#70, #78): when Palette says that an update waits for cluster A, what a record, the listing, and `compare` say, and what `cluster:<uid>@pending` holds; `consumers --list-only`. |
@@ -195,8 +195,8 @@ Its stage 9 moves the console address of `VMO_CLUSTER` to a mark, and back.
 `registry-move-nodes.sh` checks the baseline, and puts the release version back, unless a repave waits for approval.
 `registry.sh` leaves the pushed versions in its own registry.
 `template.sh` ends with the example removed, `cluster.sh` ends with the cluster
-gone, and `order.sh` leaves two versions edited: run `just live-down` after
-each.
+gone, and stages 1 to 3 of `order.sh` leave two versions edited: run
+`just live-down` after each.
 
 | Script | Changes | Holds |
 | --- | --- | --- |
@@ -220,7 +220,7 @@ each.
 | `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B. Stage 5: a role binding of cluster A, through the API, and back. Stage 6: nothing; it only reads. Stage 7: both overrides of the worker pool of cluster A, through the API, and back | the profiles, cluster A, the baseline |
 | `template.sh` | a template over the release and add-on versions; a cluster in the template, then removed; version 1.0.1, in place and put back; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
-| `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
+| `order.sh` | the pack order of two published versions, and the profile order of cluster A. Stage 4: cluster B, the release version 1.0.2, and an add-on profile, then the profiles of cluster A; it removes each | the packs, the values, the manifests; stages 1 to 3 leave the versions edited, and stage 4 returns the example to its baseline |
 | `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
 | `draft.sh` | the manifest of the add-on version, in a draft and then published; it puts the edit back | the profiles, the clusters |
 | `pending.sh` | a manifest of the add-on version, a value and a kubeadm command of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
@@ -292,6 +292,7 @@ back to false with the default variables (`apply_baseline`).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
 - For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
 - For `tiers.sh 8` only: a third key in `STRATA_LIVE_NARROW_KEY`. Its user has a role in the project that does not give `cluster.get`, such as Cluster Profile Viewer. The script never prints it.
+- For `tiers.sh 10` only: the key of a second user in `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project that gives `cluster.get`, such as Project Viewer. Cluster A must have a role binding of the system. The script never prints the key.
 - For `projects.sh` only: the name of a second project of the tenant in `STRATA_LIVE_SECOND_PROJECT`. The script makes one profile there, and deletes it at its end.
 - For `observer-role.sh` only: the key of a user with the role under test in `OBSERVER_ROLE_KEY`, and the name of the role in `OBSERVER_ROLE`. The script never prints the key.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
@@ -578,10 +579,13 @@ just live-registry-kinds                                                       #
 just live-tiers                                                                # #76, needs just live-up; builds and removes cluster B
 just live-tiers-limited                                                        # #276, needs just live-up and STRATA_LIVE_LIMITED_KEY; reads only
 just live-tiers-pool                                                           # #515, needs just live-up; sets an override on a pool of cluster A, and puts the pool back
-just live-tiers-narrow                                                         # #665, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
+just live-tiers-narrow                                                         # #665, #620, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
+just live-tiers-unknown-key                                                    # #620, needs just live-up; reads only, with a key that no tenant has
+just live-tiers-second-key                                                     # #838, needs just live-up and STRATA_LIVE_SECOND_KEY; reads only
 just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
+just live-order-append                                                         # #844, needs just live-up; builds and removes cluster B, and returns the example to its baseline
 just live-pack-states                                                          # #68, needs no cluster
 just live-knurl                                                                # #66, read-only; the instance checks need just live-up
 just live-who                                                                  # #69, stage 2 needs just live-up
@@ -660,7 +664,7 @@ reads the answer too.
 
 The install of the observer has eight steps. That is right for a team, and it is
 too much for a test. `observer-up.sh` puts the observer on a test cluster with one
-command. A team uses the steps of [Install](../automation/observer.md#install), and
+command. A team uses the steps of [Install with kubectl](../automation/observer.md#install-with-kubectl), and
 not this script. The script needs no profile of the live example. It works on any
 cluster that Palette lists in your project.
 
@@ -726,7 +730,10 @@ the kubeconfig in `~/.kube/`.
 `verify.sh` continues after a failed check, so one run shows each result. In
 `runs/<UTC time>/`:
 
-- `summary.md` has the table of results and the digest table.
+- `summary.md` has the table of results and the digest table. Each text in a
+  cell, such as the name of a pack, shows a `|`, a tag, and a mark of markdown as
+  text, as [the markdown comment](../reference/formats.md#the-markdown-comment)
+  does.
 - `<check>.out` and `<check>.err` hold the output of each command. A failed
   comparison names the layer and the value in its `.out`.
 - `raw/cluster`, `raw/addon`, `raw/release`, `raw/next`, and `raw/registries`
@@ -742,7 +749,7 @@ in Palette, which exists from the start of the creation.
 | `live-up` fails with "A minimum allocation of '4.1' CPU cores is required across all worker nodes" | The workers have 4 cores or fewer in total. The default of two `t3.xlarge` workers has more. |
 | `snapshot-candidate` fails with `pack-not-found` that names a tag | A strata build from before the tag fix. The tag of the profile is the version. |
 | A flag-on bump fails with `DeletionResourceInUseError: Unable to delete the resource as fred spectrocluster(s) in-use` | The state held `skip_destroy = false`, and the provider deletes a replaced version with the value in its state (provider 0.29.7 and 0.30.1). Each script now runs `hold_versions` right after it checks the baseline. |
-| A script stops with `target/release/strata is older than <file>; run just build` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, a run can use a binary that lacks an option the script needs, and fail every check that uses it. Run `just build`, then run the script again. |
+| A script stops with `target/release/strata is older than <file>; run just build`, or the same line for `strata-preflight` | The sources changed after the last release build. A script that you run directly does not build first. Without this check, a run can use a binary that lacks an option the script needs, and fail every check that uses it. Run `just build`, then run the script again. |
 | `consumer-is-the-cluster` fails with state `unknown` | The key cannot read the cluster in its project. `consumers-release.out` prints the error next to the cluster. |
 | `only-the-edited-value` fails with two changed values | Somebody edited 1.0.1 in place and did not undo it. `baseline.sh` names it. |
 | A script stops with "not at its baseline" | An earlier run did not finish, or a person changed the example. `baseline-before.txt` names each difference. `just live-down && just live-up` builds it again. |

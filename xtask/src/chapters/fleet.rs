@@ -1,14 +1,17 @@
-//! The chapters of the fleet, the registries, and the retire of a version.
+//! The chapters of the fleet, the registries, and the retire of a version. `retire.rs` holds the
+//! chapters of the retire.
 
 use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
-    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118,
-    AWS_STANDARD, DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
+    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118, A1120,
+    DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
 use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::{Edit, UpgradeRefusal};
 use serde_json::json;
+
+mod retire;
 
 /// Run the chapters of the fleet, the registries, and the retire of a version.
 pub(super) fn run(r: &mut Runner) {
@@ -20,7 +23,8 @@ pub(super) fn run(r: &mut Runner) {
     packs(r);
     palette_latest(r);
     behind_pre_release(r);
-    retire(r);
+    retire::retire(r);
+    retire::retire_tenant(r);
 }
 
 /// The chapter `behind`: the pins that are behind the registry, and a version that arrives between
@@ -94,10 +98,11 @@ fn behind(r: &mut Runner) {
         "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run",
     );
     behind_refused(r);
+    behind_skip(r);
 }
 
-/// The steps of the chapter `behind` that show the line `next patch` and the option
-/// `--behind-only` (#622).
+/// The steps of the chapter `behind` that show the line `next patch`, its field in the JSON, and
+/// the option `--behind-only` (#622, #854).
 fn behind_rows(r: &mut Runner) {
     // the command of the line `next patch` gives what the move to the patch does
     r.step(
@@ -105,6 +110,12 @@ fn behind_rows(r: &mut Runner) {
         1,
         false,
         "strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.35.6'",
+    );
+    r.step(
+        "behind-next-patch-json",
+        1,
+        false,
+        "strata behind releases/1.0.0/dev.json --no-impact --json | jq -c '.pins[] | select(.nextPatch) | {name, version, newest: .newer[0].version, nextPatch}'",
     );
     // the rows that are behind, or that strata could not check, under the heading of all the pins
     r.step(
@@ -168,6 +179,54 @@ fn behind_refused(r: &mut Runner) {
         1,
         false,
         "strata behind refused/payments.json",
+    );
+}
+
+/// The part of the chapter `behind` where a move of Kubernetes skips a minor version (#623).
+fn behind_skip(r: &mut Runner) {
+    // aws-stack@1.1.20 pins kubernetes 1.34.9, two minor versions below 1.36.2, and the cluster
+    // search runs it. The route of the version and the route of the cluster accept the packs of
+    // the move. The update of the cluster refuses it with K8sUpgradeNotSupported
+    r.profile(
+        DEV,
+        A1120,
+        "1.1.20",
+        "aws-stack@1.1.1",
+        &[Edit::Upgrade {
+            pack: "kubernetes",
+            version: "1.34.9",
+        }],
+    );
+    r.tenant(|t| {
+        t.cluster(DEV, SEARCH, "search", &[A1120], &[]);
+        t.profile_upgrade_answer(DEV, A1120, None);
+        t.packs_answer(DEV, SEARCH, None);
+    });
+    r.serve_here(); // state 4: search runs kubernetes 1.34.9, and Palette accepts the packs of each move
+    r.quiet("strata snapshot aws-stack@1.1.20 -o skip/dev.json");
+    r.step(
+        "behind-skip",
+        1,
+        false,
+        "strata behind skip/dev.json --pin k8s/kubernetes",
+    );
+    r.step(
+        "behind-skip-json",
+        1,
+        false,
+        "strata behind skip/dev.json --pin k8s/kubernetes --json | jq -c '.pins[] | select(.behind) | .bump.updateChecks'",
+    );
+    // compare --validate of a move of the cluster to aws-stack@1.1.1, which pins kubernetes 1.36.2
+    r.step(
+        "validate-skip",
+        1,
+        false,
+        "strata compare cluster:search aws-stack@1.1.1 --validate",
+    );
+    r.excerpt(
+        "validate-skip-lines",
+        "validate-skip",
+        r"^(aws-stack|root |palette|note|[ ~] \[k8s)",
     );
 }
 
@@ -696,44 +755,5 @@ fn behind_pre_release(r: &mut Runner) {
         "behind-pre-release-lines",
         "behind-pre-release-shown",
         r"^(\$|\d+ pins|~ \[csi)",
-    );
-}
-
-/// The chapter `retire`: the consumers of a version that a team retires.
-fn retire(r: &mut Runner) {
-    r.chapter("retire", DEV_ENV);
-    r.tenant(|t| t.projects(&[("dev", DEV)]));
-    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
-    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
-    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A110], &[]));
-    r.step(
-        "retire-in-use",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.0",
-    );
-    r.step(
-        "consumers-list-only",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.0 --list-only",
-    );
-    r.step("retire-free", 0, false, "strata consumers aws-stack@1.0.0");
-    r.step(
-        "retire-gate",
-        0,
-        false,
-        r#"strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0""#,
-    );
-    r.step("retire-json", 1, false, r#"strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'"#);
-    // no cluster runs 1.1.1, and a cluster template links it: Palette refuses the delete
-    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| t.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]));
-    r.step(
-        "retire-template",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.1",
     );
 }

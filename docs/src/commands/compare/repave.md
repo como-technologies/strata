@@ -82,6 +82,17 @@ console forwards to, until the agent reads the cluster again. See
 The comment of a pull request asks the same question. See
 [Ask Palette if the change repaves](../../automation/pr-comments.md#ask-palette-if-the-change-repaves).
 
+### The console address of a pack of virtual machines
+
+A record holds `********` in place of the console address of such a pack: see
+[The console address of a pack of virtual machines](../../internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines).
+Palette saves the value of the body as the address, also when the value is the
+mask. So the question sends the values of the pack with the address that the
+cluster holds in place of the mask. When the record holds the values of the
+cluster, the question sends those values. When the cluster does not run the
+pack, the question sends an empty address. Palette then makes the address from
+the `serviceType` of the pack, as for a pack with no address.
+
 ## Ask about the update that waits
 
 When an update waits for a cluster, give `cluster:<cluster>@pending` as the
@@ -157,6 +168,21 @@ strata reads the file, and that read is no request:
 ```text
 {{#include ../../output/repave-usage.txt}}
 {{#include ../../output/edited-repave-usage.txt}}
+```
+
+Two records with no cluster get an error that names the commands to use.
+`--validate` gives the same error, with its own option:
+
+```text
+{{#include ../../output/repave-records-usage.txt}}
+```
+
+A record can be the profile side, so give the cluster in place of one record.
+Palette then answers for that cluster. Plain `compare` of the two records needs
+no cluster, and prints the impact from the table:
+
+```text
+{{#include ../../output/repave-records-forward.txt}}
 ```
 
 A cluster and an update that waits, `cluster:<a>` and `cluster:<b>@pending`,

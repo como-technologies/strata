@@ -39,7 +39,7 @@ observer-contract *args: build stand-in
 observer-playground chapter="observer-2": build observer-build
     scripts/observer-playground.sh {{chapter}}
 
-# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset
+# Serve the dashboard of the observer from test data: ok, quiet, first-load, no-records, stale, lost, first-seen, stale-unchecked, lost-unchecked, read-error, images, images-split, images-off, images-unread, asks, text-too-large, alerts, alerts-unset, moved-drift
 [group('observer')]
 observer-dev state="ok":
     go -C observer run ./internal/web/devserver -state {{state}}
@@ -416,7 +416,7 @@ live-loop: build
 live-observer-kind: build observer-image
     examples/live/observer-kind.sh
 
-# The digest that each pod runs (#646): the observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and the nodes pull it from its public package with no pull Secret. Needs live-up (billable until live-down), kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
+# The digest that each pod runs (#646). The observer reads the pods of cluster A, and a throwaway tag on ttl.sh moves from one image to another. The tag holds copies of public images only. The image of the observer is OBSERVER_IMAGE, and the nodes pull it from its public package with no pull Secret. Needs live-up (billable until live-down), kubectl, and crane. Makes two namespaces, a role, and images on ttl.sh, and edits the values of the add-on in place; the undo removes or restores each.
 [group('live checks')]
 live-observer-images: build
     examples/live/observer-images.sh
@@ -495,6 +495,11 @@ live-cluster: build
 live-order: build
     examples/live/order.sh
 
+# The append test (#844): the stored order of the profiles of cluster A after an add and after a new version of its infrastructure profile, with cluster B as the control. Needs live-up; builds and removes cluster B, and returns the example to its baseline.
+[group('live checks')]
+live-order-append: build
+    examples/live/order.sh 4
+
 # The audit log test: who made an edit through the API, and an update a cluster accepted (#69). Needs live-profiles; the cluster stage needs live-up; the stage of the key with no audit permission needs STRATA_LIVE_NO_AUDIT_KEY (#664). Undoes each edit.
 [group('live checks')]
 live-who: build
@@ -520,7 +525,7 @@ live-projects: build
 live-release: build
     examples/live/release.sh
 
-# The public repository (#65): with no login, the book opens, the install command of the README installs a release, and the registry gives the image and the chart of the observer. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
+# The public repository (#65): with no login, the book opens and the install command of the README installs a release. The registry gives the image and the chart of the observer with no login too. Needs gh for the setting of the advisory form; reads no tenant and writes nothing.
 [group('live checks')]
 live-public: build
     examples/live/public.sh
@@ -659,10 +664,20 @@ live-tiers-limited: build
 live-tiers-pool: build
     examples/live/tiers.sh 7
 
-# The narrow key test (#665): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
+# The narrow key test (#665, #620): what Palette answers on three routes of cluster A to a key whose role does not give cluster.get, and what strata list prints with that key. Needs live-up and STRATA_LIVE_NARROW_KEY; reads only.
 [group('live checks')]
 live-tiers-narrow: build
     examples/live/tiers.sh 8
+
+# The unknown key test (#620): the error of strata with a key that no tenant has holds no copy of it. Needs live-up; reads only.
+[group('live checks')]
+live-tiers-unknown-key: build
+    examples/live/tiers.sh 9
+
+# The second user test (#838): what Palette answers to the keys of two users for a role binding of the system of cluster A, and compare of a record with each key. Needs live-up and STRATA_LIVE_SECOND_KEY; reads only.
+[group('live checks')]
+live-tiers-second-key: build
+    examples/live/tiers.sh 10
 
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 [group('live')]

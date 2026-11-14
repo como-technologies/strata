@@ -123,6 +123,8 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 		pack    Status
 	}{
 		{"drift beats newer", drift, pins(newer), StatusDrift, StatusDrift},
+		{"drift beats not on this cluster", notOnCluster(drift), pins(newer), StatusDrift, StatusDrift},
+		{"not on this cluster beats newer and not checked", notOnCluster(unverified), pins(newer), StatusNotOnThisCluster, StatusNotChecked},
 		{"newer beats not checked", unverified, pins(newer), StatusNewer, StatusNewer},
 		{"not checked", unverified, nil, StatusNotChecked, StatusNotChecked},
 		{"ok", ok, nil, StatusOK, StatusOK},
@@ -314,6 +316,34 @@ func TestTheRegistryIsTheUidWhenNoPinNamesIt(t *testing.T) {
 	}
 }
 
+func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.65.0")
+	csi.RegistryUID, csi.RegistryName = "reg2", "Palette Registry"
+	// behind pins another pack of another registry, so no pin names reg2
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", "aws-stack@1.1.0")}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if got := s.Profiles[0].Packs[0].Registry; got != "Palette Registry" {
+		t.Errorf("registry %q", got)
+	}
+}
+
+// The page joins a pack row and its row of a newer version by the name of the registry. So the two
+// rows give the name of the record, also when the pin of behind names no registry.
+func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.63.1")
+	csi.RegistryName = "Palette Registry"
+	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", "aws-stack@1.1.0")
+	behind.Registry = ""
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{behind}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if len(s.Newer) != 1 {
+		t.Fatalf("newer %+v", s.Newer)
+	}
+	if pack, row := s.Profiles[0].Packs[0].Registry, s.Newer[0].Registry; pack != "Palette Registry" || row != pack {
+		t.Errorf("the pack row names %q, and the newer row %q", pack, row)
+	}
+}
+
 func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
 		docs.Diff{Packs: []docs.Pack{{Key: "csi/csi-aws-ebs", Masked: []string{"a.b", "a.c"}}}})
@@ -481,8 +511,9 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 }
 
 // Issue #708. The row of a profile with a newer published version holds the move from the record to
-// that version: the impact level, the flags of its packs, each pack whose version changes, each pack
-// that the move adds or removes, and each pack whose values change. It holds no value.
+// that version. The move holds the impact level and the flags of its packs. It names each pack whose
+// version changes, each pack that it adds or removes, and each pack whose values change. The row
+// holds no value.
 func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *testing.T) {
 	c := content(t, rec("barney-addons", "1.3.1", docs.VerifyUnchanged, pk("addon", "fred-compositions", "0.1.0"), pk("addon", "wilma-values", "1.0.0"), pk("addon", "dino-logs", "2.0.0")))
 	side := func(version string) *docs.PackSide { return &docs.PackSide{Version: version} }
@@ -530,9 +561,9 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	}
 }
 
-// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709), as `behind`
-// names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed read says that
-// the carrier was not read. A profile that the pin does not name has no carrier on its row.
+// The pack row and the newer row name the newer profile version that carries a newer version of the pack (#709). They name it
+// as `behind` names it for each profile version that holds the pin. A profile version with no carrier says so, and a failed
+// read says that the carrier was not read. A profile that the pin does not name has no carrier on its row.
 func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	fred := pin("fred-compositions", "addon", "0.1.0", "0.2.0", "barney-addons@1.3.1", "barney-addons@1.3.0", "other@1.0.0")
 	fred.Carriers = []docs.PinCarrier{
@@ -567,5 +598,88 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	carriers := []Carried{*want["barney-addons@1.3.1"], *want["barney-addons@1.3.0"], *want["other@1.0.0"]}
 	if !slices.Equal(rows[0].Carriers, carriers) {
 		t.Errorf("the newer row carries %+v, want %+v", rows[0].Carriers, carriers)
+	}
+}
+
+// Issue #834. The cluster ran fred-crossplane@1.3.1, and then moved to 2.0.0. The record of 1.3.1 stays,
+// so the versions cycle still names a newer version of its packs and of the profile. The row of 1.3.1
+// has the status not-on-this-cluster and no newer version. No count of the page and no newer row
+// holds it. A pin that the two versions share stays for 2.0.0. The answers of the cycle stay as they are.
+func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t *testing.T) {
+	ubuntu := pk("os", "ubuntu", "22.04")
+	old := notOnCluster(rec("fred-crossplane", "1.3.1", docs.VerifyUnchanged, pk("addon", "crossplane", "1.17.0"), ubuntu))
+	moved := rec("fred-crossplane", "2.0.0", docs.VerifyUnchanged, pk("addon", "crossplane", "2.0.2"), ubuntu)
+	crossplane := pin("crossplane", "addon", "1.17.0", "2.0.2", "fred-crossplane@1.3.1")
+	crossplane.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1", Carrier: &docs.Carrier{Version: "2.0.0", PackVersion: "2.0.2"}}}
+	shared := pin("ubuntu", "os", "22.04", "24.04", "fred-crossplane@1.3.1", "fred-crossplane@2.0.0")
+	shared.Carriers = []docs.PinCarrier{{Profile: "fred-crossplane", Version: "1.3.1"}, {Profile: "fred-crossplane", Version: "2.0.0"}}
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{}, Pins: []docs.Pin{crossplane, shared},
+		Profiles: []docs.ProfilePin{profilePin("fred-crossplane", "1.3.1", "2.0.0", at(-2*time.Hour)), profilePin("fred-crossplane", "2.0.0", "", "")}}
+	s := build(ptr(content(t, old, moved)), v)
+	oldRow, newRow := s.Profiles[0], s.Profiles[1]
+	if oldRow.Version != "1.3.1" || oldRow.Status != StatusNotOnThisCluster || oldRow.NewerVersion != nil || oldRow.ClusterCopy.Status != CopyNotOnThisCluster {
+		t.Errorf("1.3.1: status %q, newer version %+v, copy %+v", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
+	}
+	for _, p := range oldRow.Packs {
+		if p.Newer != "" || p.Carried != nil || p.Status != StatusOK {
+			t.Errorf("1.3.1: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+		}
+	}
+	if newRow.Status != StatusNewer || newRow.Packs[1].Newer != "24.04" || newRow.Packs[1].Carried == nil {
+		t.Errorf("2.0.0: status %q, packs %+v", newRow.Status, newRow.Packs)
+	}
+	want := Counts{Newer: 1, NewerProfiles: 1, Packs: 2, PacksInFull: 2, Profiles: 1}
+	if s.Counts != want {
+		t.Errorf("counts %+v, want %+v", s.Counts, want)
+	}
+	carriers := []Carried{{Profile: "fred-crossplane@2.0.0"}}
+	if len(s.Newer) != 1 || s.Newer[0].Name != "ubuntu" || !slices.Equal(s.Newer[0].Profiles, []string{"fred-crossplane@2.0.0"}) || !slices.Equal(s.Newer[0].Carriers, carriers) {
+		t.Errorf("newer rows %+v", s.Newer)
+	}
+	for _, e := range s.Events {
+		if strings.Contains(e.Object, "fred-crossplane@1.3.1") {
+			t.Errorf("an event names 1.3.1: %+v", e)
+		}
+	}
+	if len(v.Pins) != 2 || len(v.Pins[1].PinnedBy) != 2 || len(v.Pins[1].Carriers) != 2 || len(v.Profiles) != 2 {
+		t.Errorf("the answers of the cycle changed: %+v", v)
+	}
+	// before the first good content cycle, the observer does not know what the cluster runs
+	if rows := build(nil, v).Newer; len(rows) != 2 || !slices.Equal(rows[1].Profiles, []string{"fred-crossplane@1.3.1", "fred-crossplane@2.0.0"}) {
+		t.Errorf("newer rows with no content cycle %+v", rows)
+	}
+}
+
+// Issue #834. A finding wins: an edit of a version that the cluster does not run stays a drift, as aws-stack@1.0.0 on ledger of the
+// book. The record still has no newer version, and no pack of it has one: Palette lists csi-aws-ebs 1.66.0 and dns 1.2.0, and the
+// summary names neither for 1.0.0. The record counts as a profile and as a drift. Its packs, its pins, and its profile version count
+// nowhere, and no event of a newer version names it.
+func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
+	old := notOnCluster(drifted(rec("aws-stack", "1.0.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("addon", "dns", "1.0.0")), &docs.Verify{}, "csi/csi-aws-ebs"))
+	runs := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.66.0"))
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{},
+		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.0.0"), pin("dns", "addon", "1.0.0", "1.2.0", "aws-stack@1.0.0")},
+		Profiles: []docs.ProfilePin{profilePin("aws-stack", "1.0.0", "1.1.0", at(-2*time.Hour)), profilePin("aws-stack", "1.1.0", "", "")}}
+	s := build(ptr(content(t, old, runs)), v)
+	row := s.Profiles[0]
+	if row.Version != "1.0.0" || row.Status != StatusDrift || row.NewerVersion != nil || row.ClusterCopy.Status != CopyNotOnThisCluster {
+		t.Errorf("1.0.0: status %q, newer version %+v, copy %+v", row.Status, row.NewerVersion, row.ClusterCopy)
+	}
+	for _, p := range row.Packs {
+		if p.Newer != "" || p.Carried != nil || p.Status == StatusNewer {
+			t.Errorf("1.0.0: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+		}
+	}
+	want := Counts{Findings: 1, Drift: 1, Packs: 1, PacksInFull: 1, Profiles: 2}
+	if s.Counts != want {
+		t.Errorf("counts %+v, want %+v", s.Counts, want)
+	}
+	if len(s.Newer) != 0 {
+		t.Errorf("newer rows %+v", s.Newer)
+	}
+	for _, e := range s.Events {
+		if e.Type == EventNewer {
+			t.Errorf("an event of a newer version: %+v", e)
+		}
 	}
 }

@@ -4,15 +4,17 @@
 //! for the cluster. `compare --validate` sends the same body for a profile version that the
 //! cluster does not run: see the `validate` module.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use serde_json::{Value, json};
 
+use crate::api::mask::console::console_values;
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
 use crate::diff::{ImpactLevel, PaletteRepave, Side};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_str};
+use crate::json::{arr, opt_str, str_at};
 use crate::model::cluster_template::ClusterTemplateRef;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
@@ -90,6 +92,22 @@ impl Question {
             ),
         }
     }
+
+    /// The refusal for two record files that hold no cluster.
+    ///
+    /// A record can be the profile side, so the message gives the command with a cluster in place
+    /// of one record. Plain `compare` of the two records prints the impact.
+    fn needs_a_cluster_for_records(self) -> Error {
+        let option = self.option();
+        Error::Usage {
+            message: format!(
+                "{option} needs one side that is a cluster, and both sides are records with no \
+                 cluster. Palette answers only for a cluster, so give the cluster in place of one \
+                 record: strata compare cluster:<name> <record> {option}. Plain compare of the \
+                 two records prints the impact"
+            ),
+        }
+    }
 }
 
 /// What `compare` asks Palette about its cluster side, beyond the comparison of the two sides.
@@ -117,8 +135,10 @@ impl PaletteQuestions {
     ///
     /// A ref shows what its side is: `cluster:<c>` is a cluster, and `aws-stack@1.1.1` is a
     /// profile version. A ref to a record file shows it after strata reads the file, which makes
-    /// no request. [`palette_repave`] and [`palette_validation`](super::palette_validation) keep
-    /// the same rules for the records they get. A fault that only the reads show comes from them.
+    /// no request. For two records with no cluster, the error names the command with a cluster in
+    /// place of one record. [`palette_repave`] and
+    /// [`palette_validation`](super::palette_validation) keep the same rules for the records they
+    /// get. A fault that only the reads show comes from them.
     ///
     /// # Errors
     ///
@@ -144,9 +164,17 @@ impl PaletteQuestions {
             Role::of_ref(a, record_a.as_ref()),
             Role::of_ref(b, record_b.as_ref()),
         );
-        asked
-            .into_iter()
-            .try_for_each(|question| plan(&role_a, &role_b, question).map(drop))
+        // the plan refuses such a pair too; this error names the commands to use for two records
+        let records_with_no_cluster = record_a.is_some()
+            && record_b.is_some()
+            && role_a.holder().is_none()
+            && role_b.holder().is_none();
+        asked.into_iter().try_for_each(|question| {
+            if records_with_no_cluster {
+                return Err(question.needs_a_cluster_for_records());
+            }
+            plan(&role_a, &role_b, question).map(drop)
+        })
     }
 }
 
@@ -313,6 +341,17 @@ pub(super) fn cluster_and_target<'a>(
     )
 }
 
+/// The record of the cluster side and the record of the profile side, as
+/// [`cluster_and_target`] chooses them.
+pub(super) fn cluster_record_and_target<'a>(
+    a: &'a Snapshot,
+    b: &'a Snapshot,
+    question: Question,
+) -> Result<(&'a Snapshot, &'a Snapshot)> {
+    let side = move_plan(&Role::of_record(a), &Role::of_record(b), question)?;
+    Ok(pick(side, a, b))
+}
+
 /// The cluster source and the profile side of two records, when `side` holds the cluster.
 fn moved<'a>(
     side: Side,
@@ -387,6 +426,25 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     ))
 }
 
+/// `snap` with the values that a question to Palette sends for each pack of virtual machines: the
+/// console address that the cluster `doc` holds, in place of the mask of strata. See
+/// [`console_values`]. Only the values text of such a pack changes, because a body reads no other
+/// field of it. A record with no such mask gives `snap` as it is.
+pub(super) fn with_console_of<'a>(snap: &'a Snapshot, doc: &Value) -> Result<Cow<'a, Snapshot>> {
+    let mut out: Option<Snapshot> = None;
+    for (i, p) in snap.packs.iter().enumerate() {
+        let held = arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .flat_map(|t| arr(t, "/packs"))
+            .find(|pk| str_at(pk, "/name") == p.name)
+            .and_then(|pk| opt_str(pk, "/values"));
+        if let Some(values) = console_values(&p.name, &p.values, held)? {
+            out.get_or_insert_with(|| snap.clone()).packs[i].values = values;
+        }
+    }
+    Ok(out.map_or(Cow::Borrowed(snap), Cow::Owned))
+}
+
 /// The pack values of one profile in the body of [`pending_body`], or `None` when the update
 /// changes no pack of the profile.
 ///
@@ -415,7 +473,8 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 /// One side must be a cluster. The other is a profile version with a uid, or the record of the
 /// update that waits for that cluster, `cluster:<c>@pending`, in either order. It reads the
 /// cluster document for the profiles it runs now, and sends one POST. The POST changes no setting,
-/// and it can save the address of the console of a pack: see [`Palette::validate_repave`].
+/// and it can save the address of the console of a pack: see [`Palette::validate_repave`]. So the
+/// body holds the console address of the cluster in place of the mask of strata.
 /// `a` and `b` are the two sides of the comparison. `level` is the most severe level of the impact
 /// table, for `agrees`.
 ///
@@ -450,7 +509,7 @@ pub fn palette_repave<A: PaletteApi>(
             let (pending, _) = pick(side, a, b);
             let source = cluster_of(pending, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &source.uid)?;
-            let body = pending_body(&doc, pending, source)?;
+            let body = pending_body(&doc, &*with_console_of(pending, &doc)?, source)?;
             let asked = format!(
                 "the update that waits for the cluster {}: the update changes a profile that the \
                  cluster runs",
@@ -461,7 +520,10 @@ pub fn palette_repave<A: PaletteApi>(
         Plan::Move(side) => {
             let (cluster, target) = moved(side, a, b, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
-            let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
+            let body = validate_body(
+                &AppliedProfile::of_cluster(&doc),
+                &*with_console_of(target, &doc)?,
+            );
             let asked = format!(
                 "{}: the cluster {} runs it",
                 name_version(&target.source.name, &target.source.version),

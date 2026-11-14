@@ -1306,3 +1306,57 @@ facts:
     code:
       - src/snapshot/pack.rs
       - src/diff/verify.rs
+
+  # ---- The names of a registry and a pack --------------------------------------------------------
+
+  - id: registry-name-takes-a-slash
+    kind: behavior
+    reads:
+      fields:
+        - items[].name
+      codes:
+        - ShouldNotBeEmpty
+        - ResourceNameAlreadyExists
+    stand_in: []
+    live:
+      - registry-kinds.sh:slash-registry
+      - registry-kinds.sh:slash-listed
+      - registry-kinds.sh:slash-several-uid
+      - registry-kinds.sh:slash-named
+    pages:
+      - internals/palette/packs.md#the-names-of-a-registry-and-a-pack
+      - reference/refs.md#rules
+    code:
+      - src/reference/mod.rs
+      - src/render/behind.rs
+      - src/candidate/pack.rs
+
+  - id: pack-name-takes-a-slash
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.name
+    stand_in: []
+    live: []
+    unchecked: No script makes a pack with a / in its name. The code of Palette shows it.
+    pages:
+      - internals/palette/packs.md#the-names-of-a-registry-and-a-pack
+      - reference/refs.md#rules
+    code:
+      - src/reference/mod.rs
+
+  - id: registry-listing-of-the-project
+    kind: behavior
+    reads:
+      fields:
+        - items[].uid
+        - items[].name
+    stand_in: []
+    live: []
+    unchecked: No script makes a registry of one project, so no run sees two listings. The code of Palette shows it.
+    pages:
+      - internals/palette/packs.md#the-names-of-a-registry-and-a-pack
+      - commands/snapshot/set.md
+    code:
+      - src/ops/fleet.rs
+      - src/api/registry.rs

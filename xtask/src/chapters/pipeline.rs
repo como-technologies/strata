@@ -1,5 +1,5 @@
-//! The chapters of a pipeline: the sample pipeline and its versions, of How it works, and a release
-//! under new version numbers, of the use cases.
+//! The chapters of a pipeline. How it works has the sample pipeline and its versions, and the use
+//! cases have a release under new version numbers.
 
 use super::DEV_ENV;
 use super::edits::{RC_PINS, REBUILT_PIN, RETAIN};
@@ -66,8 +66,8 @@ fn sample_pipeline(r: &mut Runner) {
     the_final_numbers(r);
 }
 
-/// The part of the chapter `sample-pipeline` that a merge request and a merge reach: the comment
-/// of the candidate, and the pre-release that the merge publishes.
+/// The part of the chapter `sample-pipeline` that a merge request and a merge reach. It holds the
+/// comment of the candidate, and the pre-release that the merge publishes.
 fn the_merge(r: &mut Runner) {
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     // the progress of the script names a temporary file, so the page keeps standard output alone
@@ -138,8 +138,8 @@ fn the_final_numbers(r: &mut Runner) {
     the_sweep(r);
 }
 
-/// The part of the chapter `sample-pipeline` that checks a final version against its pre-release:
-/// `same-release`, with and without `--allow renumber`, and the move of a CI cluster.
+/// The part of the chapter `sample-pipeline` that checks a final version against its pre-release.
+/// It holds `same-release`, with and without `--allow renumber`, and the move of a CI cluster.
 fn the_check_of_the_final(r: &mut Runner) {
     r.step(
         "pipeline-final-same",
@@ -173,8 +173,8 @@ fn the_check_of_the_final(r: &mut Runner) {
     );
 }
 
-/// The part of the chapter `sample-pipeline` after the final versions: the pins that the final
-/// commit moves, the sweep, the record of a final version, and the order of the versions.
+/// The part of the chapter `sample-pipeline` after the final versions. It holds the pins that the
+/// final commit moves, the sweep, the record of a final version, and the order of the versions.
 fn the_sweep(r: &mut Runner) {
     // the page teaches the pin of the pre-release, and not the pins that are current
     r.excerpt(
@@ -310,5 +310,12 @@ fn renumber_chart(r: &mut Runner) {
         1,
         false,
         "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --json | jq -c '.pairs[0].archivesNotReadable[]'",
+    );
+    // the markdown shows each tag of the answer of the host as text (#832)
+    r.step(
+        "renumber-not-readable-markdown",
+        1,
+        false,
+        "strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --format markdown",
     );
 }

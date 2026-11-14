@@ -4,6 +4,7 @@ use crate::diff::unified::{manifest_text, sides, values_text};
 use crate::diff::{Diff, Op, Status};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
+use crate::text::code_block;
 
 fn colorize(text: &str, p: &Paint) -> String {
     if !p.is_on() {
@@ -28,7 +29,8 @@ fn colorize(text: &str, p: &Paint) -> String {
 }
 
 /// Unified diffs for every changed pack: raw values when they changed, and each changed manifest.
-/// In markdown mode each diff is wrapped in a `diff` code block; otherwise it is colored by `p`.
+/// In markdown mode each diff is in a `diff` code block, with a fence that no line of the diff
+/// ends. Otherwise `p` colors it.
 pub(crate) fn full_diffs(
     sa: &Snapshot,
     sb: &Snapshot,
@@ -39,7 +41,8 @@ pub(crate) fn full_diffs(
     let mut o = String::new();
     let mut emit = |text: String| {
         if markdown {
-            o.push_str(&format!("```diff\n{text}```\n\n"));
+            o.push_str(&code_block("diff", &text));
+            o.push('\n');
         } else {
             o.push('\n');
             o.push_str(&colorize(&text, p));

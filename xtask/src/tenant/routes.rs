@@ -12,6 +12,9 @@ pub const PROJECT_LISTING: &str = "v1/dashboard/projects/metadata";
 ///
 /// The server keeps the items of the scope that the body names.
 pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
+/// The app deployment listing of a project, `POST /v1/dashboard/appDeployments`. The items of a
+/// page are in `appDeployments`.
+pub(super) const APP_DEPLOYMENT_LISTING: &str = "v1/dashboard/appDeployments";
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search`.
 ///
 /// The server keeps the clusters that the body selects.
@@ -38,6 +41,8 @@ pub(super) const APP_PROFILES: &str = "v1/appProfiles";
 pub(crate) const REGISTRY_LISTING: &str = "v1/registries/metadata";
 /// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
 pub(crate) const CLUSTER_LISTING: &str = "v1/dashboard/spectroclusters/meta";
+/// The saved tag filters of the tenant, `GET /v1/filters/metadata?filterType=tag`, as a file.
+pub(crate) const TAG_FILTER_LISTING: &str = "v1/filters/metadata@filterType=tag";
 
 /// The last sync of each registry of the kind `kind`, `GET /v1/registries/{kind}/summary`.
 pub(crate) fn registry_summary_route(kind: &str) -> String {
@@ -87,11 +92,19 @@ pub fn cluster_validate_route(cloud: &str) -> String {
 /// The cloud type of the validate route of a create, `v1/spectroclusters/{cloudType}/validate`.
 /// `None` for any other path.
 pub fn validated_cloud(path: &str) -> Option<&str> {
-    let cloud = path
-        .strip_prefix(CLUSTERS)?
+    segment_between(path, CLUSTERS, "validate")
+}
+
+/// The one segment of `path` between `parent` and `last`, as the uid of
+/// `v1/spectroclusters/{uid}/config/rbacs`. `None` for a path of another form, and for a segment
+/// that is empty or holds a `/`.
+fn segment_between<'a>(path: &'a str, parent: &str, last: &str) -> Option<&'a str> {
+    let segment = path
+        .strip_prefix(parent)?
         .strip_prefix('/')?
-        .strip_suffix("/validate")?;
-    (!cloud.is_empty() && !cloud.contains('/')).then_some(cloud)
+        .strip_suffix(last)?
+        .strip_suffix('/')?;
+    (!segment.is_empty() && !segment.contains('/')).then_some(segment)
 }
 
 /// The variables of the cluster `uid`, `GET /v1/spectroclusters/{uid}/variables`.
@@ -99,9 +112,25 @@ pub(super) fn cluster_variables_route(uid: &str) -> String {
     format!("{}/variables", cluster_route(uid))
 }
 
-/// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`.
+/// The pack manifests of each profile of the cluster `uid`,
+/// `GET /v1/spectroclusters/{uid}/profiles/packs/manifests`.
+pub(super) fn cluster_manifests_route(uid: &str) -> String {
+    format!("{}/profiles/packs/manifests", cluster_route(uid))
+}
+
+/// The last part of the route of the role bindings of a cluster.
+const RBACS: &str = "config/rbacs";
+
+/// The role bindings of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/rbacs`. The
+/// server reads the route with [`is_rbacs_route`].
 pub fn rbacs_route(uid: &str) -> String {
-    format!("{}/config/rbacs", cluster_route(uid))
+    format!("{}/{RBACS}", cluster_route(uid))
+}
+
+/// True when `path` is the route of the role bindings of a cluster,
+/// `v1/spectroclusters/{uid}/config/rbacs`.
+pub fn is_rbacs_route(path: &str) -> bool {
+    segment_between(path, CLUSTERS, RBACS).is_some()
 }
 
 /// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
@@ -172,9 +201,14 @@ pub(crate) fn download_route(uid: &str) -> String {
 /// The profile route of the download route `path`, `v1/clusterprofiles/{uid}/spc/download`:
 /// `v1/clusterprofiles/{uid}`. `None` for any other path.
 pub fn downloaded_profile(path: &str) -> Option<&str> {
-    let profile = path.strip_suffix(DOWNLOAD)?.strip_suffix('/')?;
-    let uid = profile.strip_prefix(PROFILES)?.strip_prefix('/')?;
-    (!uid.is_empty() && !uid.contains('/')).then_some(profile)
+    profile_under(path, DOWNLOAD)
+}
+
+/// The profile route of `path`, the route `v1/clusterprofiles/{uid}/{last}` of one profile:
+/// `v1/clusterprofiles/{uid}`. `None` for any other path.
+fn profile_under<'a>(path: &'a str, last: &str) -> Option<&'a str> {
+    segment_between(path, PROFILES, last)?;
+    path.strip_suffix(last)?.strip_suffix('/')
 }
 
 /// The file of the export of the profile version `uid` as JSON,
@@ -186,9 +220,7 @@ pub(super) fn export_file(uid: &str) -> String {
 /// The profile route of the export route `path`, `v1/clusterprofiles/{uid}/export`:
 /// `v1/clusterprofiles/{uid}`. `None` for any other path.
 pub fn exported_profile(path: &str) -> Option<&str> {
-    let profile = path.strip_suffix(EXPORT)?.strip_suffix('/')?;
-    let uid = profile.strip_prefix(PROFILES)?.strip_prefix('/')?;
-    (!uid.is_empty() && !uid.contains('/')).then_some(profile)
+    profile_under(path, EXPORT)
 }
 
 /// The versions of the pack `name` in each registry, as the server names the file of
@@ -247,6 +279,21 @@ mod tests {
             "v1/clusterprofiles/aws/validate",
         ] {
             assert_eq!(validated_cloud(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn the_route_of_the_role_bindings_names_one_cluster() {
+        assert!(is_rbacs_route(&rbacs_route("c1")));
+        for other in [
+            "v1/spectroclusters/config/rbacs",
+            "v1/spectroclusters//config/rbacs",
+            "v1/spectroclusters/a/b/config/rbacs",
+            "v1/spectroclusters/c1/config/rbacs/r1",
+            "v1/spectroclusters/c1/config/namespaces",
+            "v1/clustergroups/c1/config/rbacs",
+        ] {
+            assert!(!is_rbacs_route(other), "{other}");
         }
     }
 

@@ -67,6 +67,16 @@ fn names(snap: &Snapshot) -> Vec<(&str, &str)> {
         .collect()
 }
 
+/// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`.
+fn csi_row(registry: &str) -> String {
+    format!("    csi    csi-aws-ebs          1.28.0  {registry}\n")
+}
+
+/// The markdown line of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`.
+fn csi_line(registry: &str) -> String {
+    format!("csi/csi-aws-ebs 1.28.0 in {registry}")
+}
+
 #[test]
 fn a_record_names_the_registry_that_the_profile_takes_each_pack_from_and_the_root_stays() {
     let dir = tempfile::tempdir().unwrap();
@@ -139,15 +149,50 @@ fn a_registry_that_the_key_cannot_see_has_no_name_and_the_pack_row_gives_its_uid
     };
     let l = listing(&api, &options).unwrap();
     let text = common::terminal().render_list(&l).unwrap();
+    assert!(text.contains(&csi_row("Public Repo")), "{text}");
     assert!(
-        text.contains("    csi    csi-aws-ebs          1.28.0  Public Repo\n"),
-        "{text}"
-    );
-    assert!(
-        text.contains(&format!(
-            "    csi    csi-aws-ebs          1.28.0  {PROD_REGISTRY}\n"
-        )),
+        text.contains(&csi_row(PROD_REGISTRY)),
         "the uid works in pack:<registry>/<name>@<version>: {text}"
+    );
+}
+
+#[test]
+fn a_pack_row_of_list_gives_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
+    let dir = tempfile::tempdir().unwrap();
+    // Palette takes a `/` in the name of a registry
+    let slashed = "team/prod";
+    let mut registries = two_registries();
+    registries["items"][1]["name"] = json!(slashed);
+    let api = serve_two_copies(dir.path(), Some(registries));
+    let options = ListOptions {
+        pack: Some("csi-aws-ebs".into()),
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &options).unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
+    assert!(text.contains(&csi_row(PROD_REGISTRY)), "{text}");
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(md.contains(&csi_line(PROD_REGISTRY)), "{md}");
+    for out in [&text, &md] {
+        assert!(!out.contains(slashed), "{out}");
+    }
+    // the JSON keeps the name beside the uid
+    let json: Value = serde_json::to_value(&l).unwrap();
+    let pack = &json["profiles"][0]["packs"][3];
+    assert_eq!(
+        (&pack["registryUid"], &pack["registry"]),
+        (&json!(PROD_REGISTRY), &json!(slashed))
+    );
+    // the text of the row parses as the registry of a pack ref
+    assert_eq!(
+        Ref::parse_with(&format!("pack:{PROD_REGISTRY}/csi-aws-ebs@1.28.0"), |_| {
+            false
+        }),
+        Ref::Pack {
+            registry: Some(PROD_REGISTRY.into()),
+            name: "csi-aws-ebs".into(),
+            version: "1.28.0".into(),
+        }
     );
 }
 
@@ -196,15 +241,12 @@ fn a_pack_row_of_list_names_the_registry_that_each_profile_version_takes_the_pac
     );
 
     let text = common::terminal().render_list(&l).unwrap();
-    for line in [
-        "    csi    csi-aws-ebs          1.28.0  Prod Repo\n",
-        "    csi    csi-aws-ebs          1.28.0  Public Repo\n",
-    ] {
-        assert!(text.contains(line), "{line:?} in {text}");
-    }
     let md = common::markdown().render_list(&l).unwrap();
-    assert!(md.contains("csi/csi-aws-ebs 1.28.0 in Prod Repo"), "{md}");
-    assert!(md.contains("csi/csi-aws-ebs 1.28.0 in Public Repo"), "{md}");
+    for registry in ["Prod Repo", "Public Repo"] {
+        let line = csi_row(registry);
+        assert!(text.contains(&line), "{line:?} in {text}");
+        assert!(md.contains(&csi_line(registry)), "{md}");
+    }
     let json: Value = serde_json::to_value(&l).unwrap();
     let pack = &json["profiles"][0]["packs"][3];
     assert_eq!(
@@ -354,7 +396,8 @@ fn list_registries_names_each_registry_that_the_key_can_see_with_its_uid_and_kin
 }
 
 /// The pack rows and the registries read one registry listing. The list of the registries is the
-/// answer, so a Palette with no listing is its error, where the pack rows show the uid alone.
+/// answer, so a Palette with no listing is its error, where the pack rows show the uid alone. With
+/// another kind, the error goes to `errors`, and the other kind stays.
 #[test]
 fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of_the_registries() {
     let dir = tempfile::tempdir().unwrap();
@@ -382,7 +425,16 @@ fn list_reads_the_registry_listing_one_time_and_a_missing_listing_is_an_error_of
         (pack.registry.as_str(), pack.registry_uid.as_str()),
         ("", PROD_REGISTRY)
     );
-    let err = listing(&api, &both).unwrap_err();
+    let l = listing(&api, &both).unwrap();
+    assert!(l.registries.is_none());
+    assert_eq!(l.profiles.as_ref().unwrap().len(), 2);
+    assert_eq!(l.errors[&Open::Known(ListKind::Registries)]["status"], 404);
+    assert_eq!(l.exit_code(), 2);
+    let alone = ListOptions {
+        kinds: vec![ListKind::Registries],
+        ..ListOptions::default()
+    };
+    let err = listing(&api, &alone).unwrap_err();
     assert!(
         matches!(err, strata::Error::Api { status: 404, .. }),
         "{err}"

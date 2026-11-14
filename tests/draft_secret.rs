@@ -2,8 +2,6 @@
 //! it, and the answers that `--raw-dir` saves, hold `********` in place of each value whose
 //! schema format is `password`, as Palette masks a published pack.
 
-use std::path::Path;
-
 use serde_json::{Value, json};
 
 use strata::api::{MemoryApi, Palette};
@@ -13,9 +11,10 @@ use strata::term::progress::Progress;
 
 use crate::common;
 use common::{
-    DRAFT_PROFILE_UID, DRAFT_RULES, PUBLISHED_RULES, RULES_UID, manifest_content, manifest_entity,
-    manifest_route, manifests_answer, no_manifests, no_template, no_variables, pack_route,
-    profile_document, profile_route, serve_profile, snapshot_of, template,
+    DRAFT_PROFILE_UID, DRAFT_RULES, PUBLISHED_RULES, RULES_UID, assert_no_saved_file_holds,
+    manifest_content, manifest_entity, manifest_route, manifests_answer, no_manifests, no_template,
+    no_variables, pack_route, profile_document, profile_route, serve_profile, snapshot_of,
+    template,
 };
 
 const PACK: &str = "64f0000000000000000000e1";
@@ -44,15 +43,6 @@ fn profile_doc(published: Value, draft: Option<Value>) -> Value {
 fn grafana_manifests(uid: &str) -> Value {
     manifests_answer(vec![json!({"metadata": {"name": "grafana", "uid": uid},
         "spec": {"name": "grafana", "version": "1.0.0", "values": VALUES}})])
-}
-
-/// Make sure that no file in `dir`, which `save_dir` wrote, holds SECRET.
-fn assert_no_saved_file_holds_secret(dir: &Path) {
-    for file in std::fs::read_dir(dir).unwrap() {
-        let path = file.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains(SECRET), "{}: {text}", path.display());
-    }
 }
 
 /// The answer of `GET /v1/packs/{uid}`: the schema marks `adminPassword` as a password.
@@ -101,7 +91,7 @@ fn the_saved_answers_of_a_draft_hold_no_clear_secret() {
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     raw.save_dir(dir.path(), "t0").unwrap();
-    assert_no_saved_file_holds_secret(dir.path());
+    assert_no_saved_file_holds(dir.path(), &[SECRET]);
     assert!(raw.manifests.to_string().contains("'********'"));
 }
 
@@ -272,7 +262,7 @@ fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_o
     );
     let dir = tempfile::tempdir().unwrap();
     raw.save_dir(dir.path(), "t0").unwrap();
-    assert_no_saved_file_holds_secret(dir.path());
+    assert_no_saved_file_holds(dir.path(), &[SECRET]);
 
     let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     assert_eq!(draft.source.template, Template::Draft);

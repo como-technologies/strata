@@ -25,6 +25,16 @@ mod checks;
 #[path = "../../tests/common/code_span.rs"]
 #[allow(dead_code)]
 mod code_span;
+// The routes and the answers of Palette that the tests of strata serve. The stand-in builds the body
+// of each error and the message of a denial with them, so the tests and the book read one text. It
+// also gives the role bindings of a cluster to the user of a key with them. It serves the variables
+// of a cluster with the masks of Palette from them, as the cluster fixtures of the tests do. Its
+// tests serve the variables of a profile with the masks too. The tests of the contract also build
+// the body of an error with it. They and the tests of the facts use its route of the saved tag
+// filters. xtask uses no other item of it.
+#[path = "../../tests/common/palette.rs"]
+#[allow(dead_code)]
+mod common_palette;
 mod contract;
 mod facts;
 mod files;

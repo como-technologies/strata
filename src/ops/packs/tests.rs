@@ -2,7 +2,7 @@
 //! tag requests.
 
 use super::*;
-use crate::api::MemoryApi;
+use crate::api::{MemoryApi, REGISTRY_METADATA};
 use crate::model::cloud::CLOUD_ALL;
 
 fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
@@ -39,7 +39,7 @@ fn read_with(
         .collect();
     let api = MemoryApi::new()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_METADATA,
             serde_json::json!({"items": [
                 {"name": "strata-live-registry", "uid": "reg-own", "kind": "oci"},
             ]}),
@@ -364,7 +364,7 @@ fn the_marks_agree_for_two_pre_releases_and_differ_for_a_release_below_a_pre_rel
 
 #[test]
 fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
-    // Palette reads a version with four numbers as its first three, so it reads `1.30.0.1` and
+    // Palette reads a version with four numbers as its first three. So it reads `1.30.0.1` and
     // `1.30.0` as one version, and it marks one of them. Strata puts `1.30.0.1` above `1.30.0`
     let options = PackOptions {
         latest: true,
@@ -552,7 +552,7 @@ fn tag(uid: &str, version: &str, tag: &str) -> Value {
 fn nginx_api(versions: Vec<Value>, plain: &[Value], retired: &[Value]) -> MemoryApi {
     let mut api = MemoryApi::new()
         .with(
-            "/v1/registries/metadata",
+            REGISTRY_METADATA,
             serde_json::json!({"items": [
                 {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
             ]}),

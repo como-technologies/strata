@@ -1,0 +1,70 @@
+//! The parts of the message of [`Error::Api`](super::Error::Api) that the answer gives: the words
+//! of Palette, and what the status and the body tell the reader to do.
+
+use crate::api::codes::{Denial, PROJECT_SCOPE_CODE};
+use crate::api::{DOWNLOAD_INTERVAL_SECONDS, is_download_limit};
+use crate::config::{ENV_FILE, KEY_VARS};
+use crate::model::validation::PaletteRefusal;
+use crate::text::cut;
+
+/// The most characters of the words of an answer that the message of
+/// [`Error::Api`](super::Error::Api) shows. The field `body` keeps the whole body.
+const WORDS_IN_MESSAGE: usize = 300;
+
+/// The words of Palette in `body`, the body of an answer that is an error: `<code>: <message>`.
+///
+/// A body with a code and no message gives the code alone. A body with no code, such as the page
+/// of a proxy, gives its text. The words are cut to [`WORDS_IN_MESSAGE`] characters.
+pub(super) fn answer_words(body: &str) -> String {
+    let words = match PaletteRefusal::from_error_body(body) {
+        Some(refusal) if refusal.message.trim().is_empty() => refusal.code,
+        Some(refusal) => refusal.line(),
+        None => body.trim().to_string(),
+    };
+    cut(&words, WORDS_IN_MESSAGE)
+}
+
+/// The hint of an answer with `status` and `body` to a request of `path`.
+///
+/// - A 403 with the code [`PROJECT_SCOPE_CODE`]: the route is of the tenant scope, and the request
+///   named a project. The key is right.
+/// - A 429 of the download of a profile version: the limit of Palette.
+/// - A [`Denial`]: what Palette denied, such as the permission that the role of the key does not
+///   give. A 403 adds the hint of the key only when `key_proved` is false: no earlier answer to
+///   the client proved the key.
+/// - Another 401 or 403: the hint of the key, which is almost always the cause.
+///
+/// Empty for each other status.
+pub(super) fn status_hint(status: u16, path: &str, body: &str, key_proved: bool) -> String {
+    let refusal = PaletteRefusal::from_error_body(body);
+    if status == 403
+        && refusal
+            .as_ref()
+            .is_some_and(|r| r.code == PROJECT_SCOPE_CODE)
+    {
+        return "; the route is of the tenant scope, and the request named a project: ask it with no project"
+            .to_string();
+    }
+    if is_download_limit(status, path) {
+        return format!(
+            "; Palette takes one download of a profile version in {DOWNLOAD_INTERVAL_SECONDS} seconds: run the command again later"
+        );
+    }
+    let denial = refusal.and_then(|r| Some((Denial::from_text(&r.code)?, r.message)));
+    let key = match (status, &denial) {
+        (401, _) => true,
+        (403, Some(_)) => !key_proved,
+        (403, None) => true,
+        _ => false,
+    };
+    let mut hint = denial
+        .map(|(denial, message)| format!("; {}", denial.sentence(&message)))
+        .unwrap_or_default();
+    if key {
+        hint.push_str(&format!(
+            "; check {}, {}, or ~/{ENV_FILE}: the key can be wrong, expired, or for another tenant",
+            KEY_VARS[0], KEY_VARS[1],
+        ));
+    }
+    hint
+}

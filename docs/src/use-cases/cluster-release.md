@@ -93,7 +93,10 @@ and `--validate` ask Palette about the same move. The add-on profiles give no
 ```
 
 Exit `1`, because the roots differ. The two `palette` lines are the answers of
-Palette. To compare each profile of the cluster, compare two records of the
+Palette. The `note` line under them is a check of strata: the move adds the
+required variable `platform_owner`, which has no default value. Palette checks
+it only at the update. Give it a value in the update, or Palette refuses the
+update. To compare each profile of the cluster, compare two records of the
 cluster. See
 [Compare a profile version with a cluster](../commands/compare/clusters.md#compare-a-profile-version-with-a-cluster).
 

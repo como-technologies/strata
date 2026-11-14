@@ -16,6 +16,7 @@ use super::sources::{
     API_PAGE, RULES_HEADING, Sources, api_requests, book_rows, calls_of, query_names, rule_queries,
     rule_requests, rule_rows, section_headings, section_rows, shape,
 };
+use crate::common_palette::TAG_FILTER_LISTING;
 use crate::route::route_matches;
 
 /// A request fact that is right in the world of [`world`].
@@ -983,7 +984,7 @@ fn the_query_of_a_request_is_part_of_its_path_and_not_of_its_shape() {
         shape("GET /v1/clouds/aws/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}")
     );
     assert_eq!(
-        shape("GET /v1/filters/metadata?filterType=tag"),
+        shape(&format!("GET {TAG_FILTER_LISTING}")),
         "GET /v1/filters/metadata"
     );
 }

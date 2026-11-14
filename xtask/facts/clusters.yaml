@@ -91,6 +91,27 @@ facts:
       - src/snapshot/cluster.rs
     rules: []
 
+  - id: cluster-variables-masked
+    kind: behavior
+    reads:
+      fields:
+        - "[].variables[].defaultValue"
+        - "[].variables[].inputType"
+        - "[].variables[].isSensitive"
+        - "[].variables[].options[].value"
+        - "[].variables[].value"
+    stand_in:
+      - v1/spectroclusters/{uid}/variables
+    live: []
+    unchecked: The code of Palette shows it. No run gives a cluster a sensitive variable.
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+      - internals/hashes.md#the-node-hash-and-the-root
+    code:
+      - src/snapshot/cluster.rs
+      - src/snapshot/variable.rs
+    rules: []
+
   - id: cluster-rbacs
     kind: request
     request: GET /v1/spectroclusters/{uid}/config/rbacs
@@ -392,6 +413,7 @@ facts:
       - src/ops/list.rs
       - src/ops/fleet.rs
       - src/ops/consumers/reads.rs
+      - src/ops/consumers/reach.rs
     rules: []
 
   - id: tag-filter-listing
@@ -504,12 +526,14 @@ facts:
     live:
       - edge-host.sh:host-by-name
       - edge-host.sh:consumers-host
+      - scope.sh:release-consumers-edge-hosts
     pages:
       - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
       - internals/palette/other-objects.md#edge-hosts
     code:
       - src/api/palette/listings.rs
       - src/ops/consumers/reads.rs
+      - src/ops/consumers/reach.rs
     rules: []
 
   - id: cluster-group-document
@@ -591,12 +615,15 @@ facts:
         - status.inUseApps[].uid
         - status.inUseApps[].name
         - status.inUseApps[].projectUid
+        - metadata.annotations.scope
+        - metadata.annotations.projectUid
     stand_in:
       - v1/appProfiles/{uid}
     live:
       - app-profile.sh:record
       - app-profile.sh:edit-same-version
       - app-profile.sh:edit-last-modified
+      - app-profile.sh:consumers-scope
     pages:
       - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
       - internals/palette/other-objects.md#app-profiles
@@ -626,6 +653,30 @@ facts:
       - internals/palette/other-objects.md#app-profiles
     code:
       - src/api/palette/profiles.rs
+      - src/ops/consumers/app.rs
+    rules: []
+
+  - id: app-deployment-listing
+    kind: request
+    request: POST /v1/dashboard/appDeployments
+    reads:
+      codes: [ResourceAccessDenied]
+      fields:
+        - appDeployments[].metadata.uid
+        - appDeployments[].metadata.name
+        - appDeployments[].spec.profile.metadata.uid
+        - appDeployments[].spec.profile.metadata.version
+        - appDeployments[].status.state
+        - listmeta.continue
+    stand_in:
+      - v1/dashboard/appDeployments
+    live:
+      - app-profile.sh:consumers-project
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/listings.rs
       - src/ops/consumers/app.rs
     rules: []
 
@@ -1135,7 +1186,8 @@ facts:
     kind: behavior
     reads:
       codes: [AccessDenied, OperationForbidden, NoRolesAssociated, ResourceAccessDenied]
-    stand_in: []
+    stand_in:
+      - v1/filters/metadata
     live:
       - observer-role.sh:control-<name>
       - observer-role.sh:role-<name>
@@ -1144,8 +1196,31 @@ facts:
       - observer-role.sh:command-role-behind
     pages:
       - internals/palette/clusters.md#the-role-that-a-key-needs
+      - reference/errors.md#refusals-that-strata-does-not-send-again
     code:
       - examples/live/observer-role.sh
+      - src/api/codes.rs
+      - src/error/hint.rs
+
+  - id: listing-access-denied
+    kind: behavior
+    reads:
+      codes: [ResourceAccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/dashboard/spectroclusters/meta
+    unchecked: The code of Palette shows HTTP 500 with the code ResourceAccessDenied on the cluster listing and on the profile listing, for a key whose roles in the project do not give cluster.list or clusterProfile.list. The message names the project by its name. The checks narrow-list, narrow-list-profiles, narrow-list-says, and narrow-list-once of tiers.sh stage 8 have no result yet.
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - commands/list.md#a-kind-that-the-key-cannot-read
+      - internals/palette/limits.md#what-no-run-covers
+      - development/live-runs.md#tierssh
+    code:
+      - src/ops/list.rs
+      - src/api/codes.rs
+      - src/error/hint.rs
 
   # ---- clusters.md: The order of the profiles of a cluster
 
@@ -1173,7 +1248,7 @@ facts:
         - spec.clusterProfileTemplates[].uid
     stand_in: []
     live: []
-    unchecked: The code of Palette shows it. No script adds a profile, or a new version of the infrastructure profile, to a cluster and reads the order.
+    unchecked: The code of Palette shows it. The checks added-last, upgraded-last, summary-first, summary-addon, and control-kept of order.sh stage 4 have no result yet.
     pages:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     rules:
@@ -1278,6 +1353,24 @@ facts:
       - src/ops/consumers/mod.rs
     rules:
       - consumers-empty-on-error
+
+  - id: search-reach-of-the-key
+    kind: behavior
+    reads:
+      codes: [AccessDenied, ResourceAccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/dashboard/spectroclusters/search
+    unchecked: The code of Palette shows that the cluster search and the edge host search at tenant scope need project.list in the tenant. Without it, they answer HTTP 403 with the code AccessDenied. With it, they give only the projects where a role of the key gives the listing. In a project where no role gives it, the search of that project answers HTTP 500 with the code ResourceAccessDenied, and the message names the project by its name. The project listing at tenant scope holds each project of the tenant only for a key whose role gives project.list in the tenant. The checks tenant-consumers and tenant-consumers-projects of scope.sh search each project with a key that reads each one, and release-consumers-edge-hosts searches the edge hosts of the project of the release. They have no result yet.
+    pages:
+      - internals/palette/clusters.md#the-reach-of-a-search
+      - commands/consumers.md#a-profile-of-the-tenant
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/ops/consumers/reach.rs
+      - src/ops/consumers/app.rs
 
   - id: virtual-omitted-listing
     kind: behavior
@@ -1941,7 +2034,7 @@ facts:
         - status.inUseApps[].projectUid
         - status.inUseApps[].kind
     live: []
-    unchecked: No run makes an app deployment. The page gives the rule that lists the deployments.
+    unchecked: No run makes an app deployment, and the lab has one key. The page gives the rule for an app profile of a project and the roles of the key, from the code of Palette.
     pages:
       - internals/palette/other-objects.md#app-profiles
     code:

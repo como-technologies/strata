@@ -28,6 +28,13 @@ first line, and the label `strata-behind`:
 - **Closed**, with a comment, on the first run where each pin of the pack is
   current.
 
+For a pin that is behind a newer minor version, the newer column ends with
+`; next patch <version>`. A pin with no newer patch of its own minor version
+does not have this text. The patch is the newest patch of the minor version of
+the pin. A team can take it before the move to the newest version. The script
+reads it from `nextPatch` of `strata behind`: see
+[The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+
 A pack that strata could not check keeps its issue as it is. An issue of a pack
 that no record pins is left alone.
 
@@ -47,17 +54,32 @@ lines that `strata behind` shows under the bump:
 - `palette accepts`.
 - `palette refuses`, with the code and the clusters. Each error has one line.
 - `palette gave no answer`, with the reason.
+- For a pin of the `k8s` layer, the line of strata that says that the move skips
+  a minor version, with the next step.
 
 See
-[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+and [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
+
+The issue shows each text of an answer as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. Such
+a text is a message of Palette, the error of a pin, the name of a registry, or
+the subject of a record. A tag of HTML or a mark of markdown in it shows as
+text, and a `@name` in it notifies nobody. A bare address in it keeps its
+link. The name of the pack, each pinned version, a floating tag, and the path
+of a record are in code spans. The fence of each span is longer than each run of
+backticks in its value.
+The marker writes each `&`, `<`, and `>` of the pack name as an entity, so a
+`-->` cannot end the comment.
 
 ## Two runs name what arrived
 
 The second line of each issue keeps the pins of its pack as JSON, in a comment
 that the host does not show. The next run gives them to `strata behind --since`,
 so the issue names each version that arrived since its last update, with no
-storage outside the code host. `--save FILE` keeps the report of the whole run,
-for a job that stores it.
+storage outside the code host. The JSON writes each `<`, `>`, and `&` as an
+escape of JSON, such as `\u003c`. So a text of an answer cannot end the comment.
+`--save FILE` keeps the report of the whole run, for a job that stores it.
 
 ## Run it
 

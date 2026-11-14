@@ -17,7 +17,7 @@ use serde_json::Value;
 use super::{OCI_SUMMARY_TEMPLATE, PACKS, Palette, PaletteApi, REGISTRY_METADATA};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
-use crate::error::{Error, Result, served};
+use crate::error::{Error, Result, reason_words, served};
 use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_state::PackState;
@@ -29,24 +29,46 @@ use crate::term::progress::Progress;
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
 
+/// The entries of a registry listing, or `None` when Palette has no such listing: it answers
+/// HTTP 404 or 405.
+pub(crate) type RegistryListing = Option<Vec<Value>>;
+
 /// The registry listings of one command, each read one time, when a check first needs it.
 pub(crate) struct Registries<'a, A: PaletteApi> {
     palette: &'a Palette<A>,
-    /// The entries of `GET /v1/registries/metadata`, after the first read.
-    metadata: Option<Vec<Value>>,
-    /// The entries of the summary listing of each kind, after the first read. `None` for a kind
-    /// whose listing Palette does not have.
-    summaries: BTreeMap<RegistryKind, Option<Vec<Value>>>,
+    /// The answer of `GET /v1/registries/metadata`, after the first read.
+    metadata: Option<RegistryListing>,
+    /// The answer of the summary listing of each kind, after the first read.
+    summaries: BTreeMap<RegistryKind, RegistryListing>,
 }
 
 impl<'a, A: PaletteApi> Registries<'a, A> {
     /// Listings that no check has read yet. `palette` reads each one.
     pub(crate) fn new(palette: &'a Palette<A>) -> Self {
+        Self::with_metadata(palette, None)
+    }
+
+    /// [`Registries::new`], with `metadata`, the answer of `GET /v1/registries/metadata` that
+    /// another client of the same project read. [`Registries::into_metadata`] gives it back.
+    ///
+    /// Palette lists the registries that the project of the request can see. So a command that
+    /// reads several records of one project reads the listing one time, also when Palette has no
+    /// such listing.
+    pub(crate) fn with_metadata(
+        palette: &'a Palette<A>,
+        metadata: Option<RegistryListing>,
+    ) -> Self {
         Registries {
             palette,
-            metadata: None,
+            metadata,
             summaries: BTreeMap::new(),
         }
+    }
+
+    /// The answer of `GET /v1/registries/metadata`, when a check read it, for the next client of
+    /// the same project.
+    pub(crate) fn into_metadata(self) -> Option<RegistryListing> {
+        self.metadata
     }
 
     /// The client that reads the listings.
@@ -59,13 +81,15 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ///
     /// # Errors
     ///
-    /// Each error of the request.
+    /// Each error of the request. When [`Registries::listed`] kept an answer of HTTP 404 or 405,
+    /// this check reads the listing again, so that it gives the error of Palette.
     pub(crate) fn metadata(&mut self) -> Result<&[Value]> {
         match &mut self.metadata {
-            Some(entries) => Ok(entries.as_slice()),
-            none => Ok(none
-                .insert(take_items(self.palette.registry_metadata()?))
-                .as_slice()),
+            Some(Some(entries)) => Ok(entries.as_slice()),
+            listing => {
+                let entries = take_items(self.palette.registry_metadata()?);
+                Ok(listing.get_or_insert(None).insert(entries).as_slice())
+            }
         }
     }
 
@@ -136,14 +160,19 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     /// answers HTTP 404 or 405.
     ///
     /// A record and a pack row of `list` read the name of the registry of each pack here. The
-    /// pack ref of a profile gives the uid of its registry, and no name.
+    /// pack ref of a profile gives the uid of its registry, and no name. The answer of HTTP 404 or
+    /// 405 stays too, so the records of a set of one project read the listing one time.
     ///
     /// # Errors
     ///
     /// Each other error of the request, also a 401, a 403, or a 429. A record holds the names, so
     /// a key that cannot read the listing must not change the record with no error.
     pub(crate) fn listed(&mut self) -> Result<Option<&[Value]>> {
-        served(self.metadata())
+        let listing = match &mut self.metadata {
+            Some(listing) => listing,
+            none => none.insert(served(self.palette.registry_metadata())?.map(take_items)),
+        };
+        Ok(listing.as_deref())
     }
 
     /// The name of the registry `uid`, or `None` when the key cannot see the registry.
@@ -282,11 +311,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ) -> Result<RegistrySyncNote> {
         match self.sync(uid, pack_type) {
             Ok(sync) => Ok(RegistrySyncNote { sync, error: None }),
-            Err(e @ (Error::Api { .. } | Error::Transport { .. })) => {
+            Err(e) if e.is_failed_read() => {
                 let reason = e.reason();
-                progress.note(&format!(
-                    "note: the sync status of registry {uid} is unavailable ({reason})"
-                ));
+                progress.note(&unread_sync_note(uid, &reason));
                 Ok(RegistrySyncNote {
                     sync: None,
                     error: Some(reason),
@@ -295,6 +322,15 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
             Err(e) => Err(e),
         }
     }
+}
+
+/// The note for a sync of the registry `uid` that strata could not read. It gives the words of
+/// `reason`, the reason that the answer keeps: see [`reason_words`].
+fn unread_sync_note(uid: &str, reason: &str) -> String {
+    format!(
+        "note: the sync status of registry {uid} is unavailable ({})",
+        reason_words(reason)
+    )
 }
 
 /// The entry of the registry `uid` in `entries`, the items of a registry listing.
@@ -396,10 +432,8 @@ pub(crate) fn registry_layer(summary: &Value, tags: &[Value]) -> Option<String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::MemoryApi;
+    use crate::api::{MemoryApi, REGISTRY_METADATA};
     use serde_json::json;
-
-    const METADATA: &str = "/v1/registries/metadata";
 
     /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
     fn summary(uid: &str, sync: Value) -> Value {
@@ -411,7 +445,7 @@ mod tests {
     fn tenant() -> MemoryApi {
         MemoryApi::new()
             .with(
-                METADATA,
+                REGISTRY_METADATA,
                 json!({"items": [
                     {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
                     {"name": "charts-auth", "uid": "reg-auth", "kind": "helm", "isPrivate": true},
@@ -468,7 +502,7 @@ mod tests {
             registries.unsynced_names(&names).unwrap(),
             vec!["charts-auth", "zarf"]
         );
-        assert_eq!(api.calls(METADATA), 1, "one read of the metadata");
+        assert_eq!(api.calls(REGISTRY_METADATA), 1, "one read of the metadata");
         assert_eq!(
             api.calls(OCI_SUMMARY_TEMPLATE),
             1,
@@ -477,10 +511,58 @@ mod tests {
     }
 
     #[test]
+    fn a_client_of_the_same_project_takes_the_listing_that_another_client_read() {
+        let api = tenant();
+        let (first, next) = (Palette::new(&api), Palette::new(&api));
+        let mut registries = Registries::new(&first);
+        assert_eq!(registries.names().unwrap().len(), 3);
+        let mut registries = Registries::with_metadata(&next, registries.into_metadata());
+        assert_eq!(
+            registries.name_of("reg-auth").unwrap().as_deref(),
+            Some("charts-auth")
+        );
+        assert_eq!(
+            api.calls(REGISTRY_METADATA),
+            1,
+            "one read for the two clients"
+        );
+        assert!(
+            Registries::new(&next).into_metadata().is_none(),
+            "no check read it"
+        );
+    }
+
+    #[test]
+    fn a_listing_that_palette_does_not_have_is_kept_and_a_check_of_its_entries_gets_the_error() {
+        for status in [404, 405] {
+            let api = MemoryApi::new().failing(REGISTRY_METADATA, status, "{}");
+            let (first, next) = (Palette::new(&api), Palette::new(&api));
+            let mut registries = Registries::new(&first);
+            assert!(registries.listed().unwrap().is_none());
+            assert!(registries.listed().unwrap().is_none());
+            let mut registries = Registries::with_metadata(&next, registries.into_metadata());
+            assert!(registries.listed().unwrap().is_none());
+            assert_eq!(
+                api.calls(REGISTRY_METADATA),
+                1,
+                "HTTP {status}: one read for the two clients"
+            );
+            // a check that needs the entries reads again, and gets the answer of Palette
+            let err = registries.metadata().unwrap_err();
+            assert!(
+                matches!(err, Error::Api { status: s, .. } if s == status),
+                "{err}"
+            );
+            assert!(registries.listed().unwrap().is_none(), "the answer stays");
+            assert_eq!(api.calls(REGISTRY_METADATA), 2, "HTTP {status}");
+        }
+    }
+
+    #[test]
     fn a_name_that_two_registries_have_is_ambiguous_and_the_uid_names_one() {
         // a registry of the system and a registry of the tenant
         let api = MemoryApi::new().with(
-            METADATA,
+            REGISTRY_METADATA,
             json!({"items": [
                 {"name": "Public Repo", "uid": "reg-system", "kind": "pack"},
                 {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
@@ -503,7 +585,7 @@ mod tests {
     #[test]
     fn a_summary_that_palette_does_not_serve_has_no_entry_and_each_other_error_is_an_error() {
         let api = MemoryApi::new()
-            .with(METADATA, json!({"items": []}))
+            .with(REGISTRY_METADATA, json!({"items": []}))
             .failing("/v1/registries/pack/summary", 500, "{}")
             .failing("/v1/registries/helm/summary", 405, "{}");
         let palette = Palette::new(&api);
@@ -649,5 +731,29 @@ mod tests {
             Some(Open::Unknown("quarantined".to_string()))
         );
         assert_eq!(retired_state(&later), None);
+    }
+
+    #[test]
+    fn a_sync_that_palette_refuses_keeps_the_reason_and_its_note_gives_the_words_of_palette() {
+        let body = crate::api::routes::error_body("InternalError", "the sync status is not ready");
+        // Palette ends a body with a newline
+        let api = MemoryApi::new().failing("/v1/registries/pack/summary", 500, format!("{body}\n"));
+        let palette = Palette::new(api);
+        let note = Registries::new(&palette)
+            .sync_note("reg-pack", Some(PackType::Spectro), &Progress::silent())
+            .unwrap();
+        let reason = note.error.unwrap();
+        assert_eq!(
+            reason,
+            format!("HTTP 500: {body}"),
+            "the document keeps the body"
+        );
+        let line = unread_sync_note("reg-pack", &reason);
+        assert_eq!(
+            line,
+            "note: the sync status of registry reg-pack is unavailable (HTTP 500: InternalError: \
+             the sync status is not ready)"
+        );
+        assert!(!line.contains('{'), "no JSON of the body: {line}");
     }
 }

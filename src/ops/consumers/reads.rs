@@ -5,6 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use serde_json::Value;
+
 use super::{ClustersRead, Consumer, ConsumerKind, EdgeHostsRead};
 use crate::api::{
     Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
@@ -29,18 +31,67 @@ fn wide_else_home<A: PaletteApi, T>(
     read(wide).or_else(|_| read(home))
 }
 
-/// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and
-/// through `home` when `wide` cannot read it. A Palette without the search has no edge hosts.
-pub(super) fn edge_hosts_bound<A: PaletteApi>(
-    list: &mut Vec<Consumer>,
-    uid: &str,
+/// The edge hosts that the scope of the key can list: the search through `wide`, and through
+/// `home` when `wide` cannot read it. A Palette without the search has no edge hosts.
+///
+/// # Errors
+///
+/// The error of the search through `home`, when neither scope can read it.
+pub(super) fn edge_host_search<A: PaletteApi>(
     wide: &Palette<A>,
     home: &Palette<A>,
     progress: &Progress,
-) -> EdgeHostsRead {
+) -> Result<Vec<Value>> {
     progress.note("reading each edge host for the profiles bound to it");
-    let hosts = match served(wide_else_home(wide, home, Palette::edge_hosts)) {
-        Ok(hosts) => hosts.unwrap_or_default(),
+    Ok(served(wide_else_home(wide, home, Palette::edge_hosts))?.unwrap_or_default())
+}
+
+/// Every edge host that the scope of `palette` lists, from its edge host search. A Palette
+/// without the search has no edge hosts.
+///
+/// # Errors
+///
+/// The error of the search.
+pub(super) fn listed_hosts<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<Value>> {
+    Ok(served(palette.edge_hosts())?.unwrap_or_default())
+}
+
+/// The edge hosts of `project`, the project of a profile of a project. No edge host when
+/// `project` is empty.
+///
+/// The search at tenant scope omits each project where no role of the key gives `edgehost.list`,
+/// with no error. The search of that project refuses the key with a denial, such as
+/// `ResourceAccessDenied`. So strata also searches the project of the profile, and a refusal
+/// there is a failed reading.
+///
+/// # Errors
+///
+/// The error of the client of the project, or of its search.
+pub(super) fn project_edge_hosts<A, F>(
+    project: &str,
+    home: &Palette<A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+) -> Result<Vec<Value>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    if project.is_empty() {
+        return Ok(Vec::new());
+    }
+    listed_hosts(client_for(clients, home, project, connect)?)
+}
+
+/// Add each edge host of `hosts` that the profile `uid` is bound to. `hosts` is the answer of the
+/// edge host search, or its error.
+pub(super) fn edge_hosts_bound(
+    list: &mut Vec<Consumer>,
+    uid: &str,
+    hosts: Result<Vec<Value>>,
+) -> EdgeHostsRead {
+    let hosts = match hosts {
+        Ok(hosts) => hosts,
         Err(e) => {
             return EdgeHostsRead {
                 error: Some(e.to_json()),
@@ -111,11 +162,8 @@ fn searched_consumers<A: PaletteApi>(
 /// Palette computes that list when it is asked, and gives an empty list on an error too. So the
 /// list cannot show a cluster that it omits. The steps:
 ///
-/// 1. Ask the cluster search for the clusters that run a version of the profile `name`. The search
-///    goes to the scope of the profile. This is its project `project`, where each cluster that can
-///    run it is, or `wide` for a tenant profile. It goes to `home` when that scope cannot answer.
-///    When the search takes no profile, read the cluster listing instead, through `wide` and then
-///    `home`.
+/// 1. `candidates` holds the clusters that can run a version of the profile, and how strata found
+///    them: see [`candidate_clusters`] and [`search_each_project`](super::reach::search_each_project).
 /// 2. Add the virtual clusters of each cluster group that pins the version.
 /// 3. Read the document of each cluster that the consumer list did not name.
 /// 4. A cluster that applies `uid` joins `list`, marked `unlisted`, with what its document and the
@@ -127,8 +175,7 @@ fn searched_consumers<A: PaletteApi>(
 pub(super) fn second_reading<A, F>(
     list: &mut Vec<Consumer>,
     uid: &str,
-    name: &str,
-    project: &str,
+    candidates: Candidates,
     wide: &Palette<A>,
     home: &Palette<A>,
     clients: &mut HashMap<Option<String>, Palette<A>>,
@@ -139,10 +186,9 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let (candidates, resolved) =
-        candidate_clusters(name, project, wide, home, clients, connect, progress);
-    let candidates = match candidates {
-        Ok(candidates) => candidates,
+    let Candidates { clusters, resolved } = candidates;
+    let clusters = match clusters {
+        Ok(clusters) => clusters,
         Err(e) => {
             return ClustersRead {
                 resolved: Some(resolved),
@@ -158,7 +204,7 @@ where
     // the virtual clusters of each cluster group that pins the version (#184)
     progress.note("reading the virtual clusters of the cluster groups that pin the version");
     let members = group_members(wide, home, uid, &mut clusters_read);
-    let tagged = candidates
+    let tagged = clusters
         .into_iter()
         .map(|c| (c, false))
         .chain(members.into_iter().map(|c| (c, true)));
@@ -174,11 +220,24 @@ where
     clusters_read
 }
 
-/// The clusters that can run a version of the profile `name`, and how strata found them. The
-/// cluster search names them. The cluster listing does when the search takes no profile.
+/// The clusters that can run a version of a profile, for the second reading, and how strata found
+/// them.
+pub(super) struct Candidates {
+    /// The clusters, or the error of the search or of the listing.
+    pub(super) clusters: Result<Vec<ListedCluster>>,
+    /// The search, or the listing when the search of Palette takes no profile.
+    pub(super) resolved: Resolved,
+}
+
+/// The clusters that can run a version of the profile `name`, in the scope of the profile, and
+/// how strata found them. The cluster search names them. The cluster listing does when the search
+/// takes no profile.
 ///
-/// `project`, `wide`, and `home` are the scopes of [`second_reading`].
-fn candidate_clusters<A, F>(
+/// The search goes to `project`, the project of the profile, where each cluster that can run it
+/// is. It goes to `wide` for a profile of the tenant. It goes to `home`, the scope of the key, when
+/// that scope cannot answer. A denial of the search of `project` is the answer: the search of
+/// `home` at tenant scope omits that project. The listing is read through `wide` and then `home`.
+pub(super) fn candidate_clusters<A, F>(
     name: &str,
     project: &str,
     wide: &Palette<A>,
@@ -186,7 +245,7 @@ fn candidate_clusters<A, F>(
     clients: &mut HashMap<Option<String>, Palette<A>>,
     connect: &mut F,
     progress: &Progress,
-) -> (Result<Vec<ListedCluster>>, Resolved)
+) -> Candidates
 where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
@@ -198,19 +257,58 @@ where
         } else {
             client_for(clients, home, project, connect)
         };
-        match own {
-            Ok(own) => wide_else_home(own, home, |p| searched_consumers(p, name)),
+        match own.map(|own| searched_consumers(own, name)) {
+            // the search at tenant scope omits the project that denies its search, with no error
+            Ok(Err(e)) if !project.is_empty() && e.denial().is_some() => Err(e),
+            Ok(searched) => searched.or_else(|_| searched_consumers(home, name)),
             Err(_) => searched_consumers(home, name),
         }
     };
+    let listing = || wide_else_home(wide, home, Palette::cluster_listing);
+    candidates_of(searched, listing, progress)
+}
+
+/// The clusters of the scope of `palette` that can run a version of the profile `name`, and how
+/// strata found them: see [`candidates_of`]. A search of one project for
+/// [`search_each_project`](super::reach::search_each_project).
+pub(super) fn search_or_listing<A: PaletteApi>(
+    palette: &Palette<A>,
+    name: &str,
+    progress: &Progress,
+) -> Candidates {
+    candidates_of(
+        searched_consumers(palette, name),
+        || palette.cluster_listing(),
+        progress,
+    )
+}
+
+/// The clusters that `searched`, the answer of the search, names, and how strata found them.
+///
+/// When the search takes no profile, the clusters are each cluster of `listing`, the answer of
+/// the cluster listing. This is the one place that picks the search or the listing for the
+/// second reading.
+fn candidates_of(
+    searched: Result<Option<Vec<ListedCluster>>>,
+    listing: impl FnOnce() -> Result<Value>,
+    progress: &Progress,
+) -> Candidates {
     match searched {
-        Ok(Some(found)) => (Ok(found), Resolved::Search),
+        Ok(Some(found)) => Candidates {
+            clusters: Ok(found),
+            resolved: Resolved::Search,
+        },
         Ok(None) => {
             progress.note("reading each cluster for the profiles it applies");
-            let listing = wide_else_home(wide, home, Palette::cluster_listing);
-            (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
+            Candidates {
+                clusters: listing().map(|l| list_clusters(items(&l))),
+                resolved: Resolved::Listing,
+            }
         }
-        Err(e) => (Err(e), Resolved::Search),
+        Err(e) => Candidates {
+            clusters: Err(e),
+            resolved: Resolved::Search,
+        },
     }
 }
 
@@ -250,6 +348,9 @@ fn join_applying<A, F>(
         };
         read.read += 1;
         if let Some(copy) = AppliedProfile::applied(&doc, uid) {
+            if of_group {
+                read.members_found += 1;
+            }
             let mut c = Consumer {
                 state: listed.state,
                 unlisted: true,

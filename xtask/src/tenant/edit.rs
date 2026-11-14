@@ -1,6 +1,7 @@
 //! The edits that a person makes to a published profile, as the chapters write them.
 
 use serde_json::{Value, json};
+use strata::api::MASKED;
 
 use super::macros::user_macro;
 use super::registries::{
@@ -48,7 +49,7 @@ pub enum Edit {
     /// a repave for the OS and Kubernetes layers.
     ///
     /// The tag and the version change. The `packUid` and the digest become those of the other
-    /// version in the pack listing, as Palette takes them from the record of that version: see
+    /// version in the pack listing. Palette takes them from the record of that version: see
     /// [`listed_version`].
     Upgrade {
         /// The pack that moves.
@@ -151,9 +152,9 @@ impl Edit {
     /// The part of an edit that lands in the answer of `packs/manifests`: the name of the answer,
     /// and the build of its pack summaries. `listing` gives the pack listing that an upgrade reads.
     ///
-    /// Palette gives the summary of a pack from the record of the version that the profile pins:
-    /// its uid, its version, its registry, and its digest. The answer has the metadata of the
-    /// profile, so it takes the name of the profile.
+    /// Palette gives the summary of a pack from the record of the version that the profile pins.
+    /// That record gives its uid, its version, its registry, and its digest. The answer has the
+    /// metadata of the profile, so it takes the name of the profile.
     fn apply_manifests(&self, manifests: &mut Value, listing: Listing) {
         match self {
             Edit::Name(name) => manifests["metadata"]["name"] = json!(name),
@@ -248,7 +249,7 @@ impl Edit {
             }
             Edit::Masked { pack, key } => {
                 for p in packs_named(doc, pack) {
-                    append_value_line(p, &format!("{key}: '********'"));
+                    append_value_line(p, &format!("{key}: '{MASKED}'"));
                 }
             }
             Edit::Macro { pack, name } => {
@@ -322,16 +323,13 @@ fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
 
 #[cfg(test)]
 mod tests {
-    use strata::api::{MemoryApi, Palette};
     use strata::diff::ChangeFlag;
-    use strata::ops::{self, SnapshotOptions};
-    use strata::reference::Ref;
+    use strata::ops;
     use strata::snapshot::Snapshot;
-    use strata::term::progress::Progress;
 
-    use super::super::Tenant;
     use super::super::registries::PUBLIC_REPO;
-    use super::super::routes::{manifests_route, profile_route, variables_route};
+    use super::super::routes::{manifests_route, profile_route};
+    use super::super::{Tenant, profile_record};
     use super::*;
     use crate::variants::one_of_each;
 
@@ -486,25 +484,10 @@ mod tests {
         (doc, manifests)
     }
 
-    /// The record that `strata snapshot` writes of the profile `doc`, with the pack summaries
-    /// `manifests`.
+    /// The record that `strata snapshot` writes of the profile `doc`, which has no variable, with
+    /// the pack summaries `manifests`.
     fn record(doc: &Value, manifests: &Value) -> Snapshot {
-        let uid = doc["metadata"]["uid"].as_str().expect("a uid");
-        let api = MemoryApi::new()
-            .with(format!("/{}", profile_route(uid)), doc.clone())
-            .with(format!("/{}", manifests_route(uid)), manifests.clone())
-            .with(
-                format!("/{}", variables_route(uid)),
-                json!({"variables": []}),
-            );
-        ops::snapshot_for(
-            &Ref::Uid(uid.to_string()),
-            &SnapshotOptions::default(),
-            || Ok(Palette::new(api)),
-            "2026-09-17T09:30:00Z",
-            &Progress::silent(),
-        )
-        .expect("the record builds")
+        profile_record(doc, manifests, &json!({"variables": []}))
     }
 
     #[test]
@@ -549,8 +532,9 @@ mod tests {
         }
     }
 
-    /// The pin and the pack summary of `csi-aws-ebs` after an edit in place with `edits`, on the
-    /// profile of [`csi_profile`] at 1.65.0 in the project `dev`. Also the pack listing of the pack.
+    /// The pin and the pack summary of `csi-aws-ebs` after an edit in place with `edits`. The
+    /// edit is on the profile of [`csi_profile`] at 1.65.0 in the project `dev`. Also the pack
+    /// listing of the pack.
     fn csi_after_edit_in_place(edits: &[Edit]) -> (Value, Value, Value) {
         let dir = tempfile::tempdir().unwrap();
         let tenant = Tenant::new(dir.path(), &crate::repository());

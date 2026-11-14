@@ -23,6 +23,7 @@ use crate::candidate::pack::pack_snapshot_in;
 use crate::diff::Diff;
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at};
+use crate::model::update::MinorSkip;
 use crate::model::validation::{PaletteRefusal, ProfileValidation};
 use crate::ops::consumer_list::consumer_names;
 use crate::ops::scope_of;
@@ -288,6 +289,10 @@ pub(super) fn read_bump<A: PaletteApi>(
             let asked = questions.ask(holding, pin, &target);
             bump.palette_validation = asked.validation;
             bump.palette_validation_error = asked.error;
+            // the validate route does not check the minor step of Kubernetes, and the update does
+            bump.update_checks.skipped_minor =
+                MinorSkip::of(&pin.layer, &pin.name, &pin.version, &to)
+                    .map(|skip| skip.with_next_step(pin.newer.iter().map(|n| n.version.as_str())));
             pin.bump = Some(bump);
         }
         Err(e) => pin.error = Some(e.to_json()),

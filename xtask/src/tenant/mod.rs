@@ -20,6 +20,7 @@
 //! - `registries.rs`: the pack registries, and the versions of a pack.
 //! - `notifications.rs`: the notifications of a cluster, and the updates that wait for it.
 //! - `answers.rs`: the answers of the routes that check a change.
+//! - `times.rs`: the times of the documents that a chapter makes one after the other.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -39,12 +40,14 @@ mod notifications;
 mod profiles;
 mod registries;
 mod routes;
+mod times;
 
 pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;
 pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,
-    downloaded_profile, empty_audit_log, exported_profile, rbacs_route, validated_cloud,
+    downloaded_profile, empty_audit_log, exported_profile, is_rbacs_route, rbacs_route,
+    validated_cloud,
 };
 // the routes and the sync answers that the chapter `fields` writes: each document there has the
 // route and the answer of its kind
@@ -52,13 +55,17 @@ pub(crate) use registries::{BITNAMI, RegistrySync, registry_sync};
 #[cfg(test)]
 pub(crate) use routes::download_route;
 pub(crate) use routes::{
-    CLUSTER_LISTING, REGISTRY_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
-    group_route, manifests_route, pack_listing, profile_route, registry_summary_route,
-    variables_route,
+    CLUSTER_LISTING, REGISTRY_LISTING, TAG_FILTER_LISTING, app_profile_route,
+    app_tier_manifest_route, app_tiers_route, group_route, manifests_route, pack_listing,
+    profile_route, registry_summary_route, variables_route,
 };
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
 pub const TENANT: &str = "tenant";
+
+/// The file at the root of the tenant that names the user of each key. It maps each key to the
+/// email of its user. No request reads it, so it is outside the directory of each scope.
+pub const KEY_USERS: &str = "key-users.json";
 
 /// The tenant directory, and the repository that holds the example pack data.
 pub struct Tenant {
@@ -151,6 +158,47 @@ impl Tenant {
         self.write(TENANT, PROJECT_LISTING, &json!({"items": items}));
         self.listings();
     }
+
+    /// The user of each key, as `key=email` pairs, in the file [`KEY_USERS`]. The stand-in answers
+    /// a role binding of the system to that user.
+    pub fn key_users(&self, pairs: &[(&str, &str)]) {
+        let users: serde_json::Map<String, Value> = pairs
+            .iter()
+            .map(|(key, email)| (key.to_string(), Value::from(*email)))
+            .collect();
+        let file = self.root.join(KEY_USERS);
+        std::fs::write(&file, Value::Object(users).to_string())
+            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+    }
+}
+
+/// The time of each record that a test of the tenant builds.
+#[cfg(test)]
+const RECORD_TIME: &str = "2026-09-17T09:30:00Z";
+
+/// The record that `strata snapshot` writes of the profile `doc`, with the pack summaries
+/// `manifests` and the answer `variables` of its variables route. The tests of the edits and of
+/// the clusters read it.
+#[cfg(test)]
+fn profile_record(doc: &Value, manifests: &Value, variables: &Value) -> strata::snapshot::Snapshot {
+    use strata::api::{MemoryApi, Palette};
+    use strata::ops::{self, SnapshotOptions};
+    use strata::reference::Ref;
+    use strata::term::progress::Progress;
+
+    let uid = doc["metadata"]["uid"].as_str().expect("a uid");
+    let api = MemoryApi::new()
+        .with(format!("/{}", profile_route(uid)), doc.clone())
+        .with(format!("/{}", manifests_route(uid)), manifests.clone())
+        .with(format!("/{}", variables_route(uid)), variables.clone());
+    ops::snapshot_for(
+        &Ref::Uid(uid.to_string()),
+        &SnapshotOptions::default(),
+        || Ok(Palette::new(api)),
+        RECORD_TIME,
+        &Progress::silent(),
+    )
+    .expect("the record builds")
 }
 
 #[cfg(test)]

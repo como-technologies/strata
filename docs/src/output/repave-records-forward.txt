@@ -1,0 +1,6 @@
+$ strata compare cluster:payments 1.1.6.json --repave | grep -E '^(aws-stack|palette)'
+aws-stack@1.1.1 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stack@1.1.6 (uid 64e0000000000000000000f9)
+palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)
+$ strata compare 1.1.1.json 1.1.6.json | grep -E '^(aws-stack|      impact)'
+aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.1.6 (uid 64e0000000000000000000f9)
+      impact: node/control plane config change, may repave

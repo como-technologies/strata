@@ -16,7 +16,7 @@ use common::{
     toml_table, toml_value, version_of, walk, without_code,
 };
 use strata::TOOL_NAME;
-use strata::api::codes::ValidateRoute;
+use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
 
 fn docs() -> PathBuf {
@@ -319,6 +319,17 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
             "{route:?}: the table in errors.md and ValidateRoute::refusal_codes differ"
         );
     }
+}
+
+/// `behind` and `compare --validate` name two refusals of the update before it: the codes of
+/// `codes.rs`. The table of `errors.md` lists the same codes.
+#[test]
+fn the_book_lists_each_refusal_of_the_update_that_strata_names_first() {
+    let errors = read(&docs().join("reference/errors.md"));
+    let book = codes_after(&errors, "## Refusals of the update that strata names first");
+    let mut kept = [INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE];
+    kept.sort_unstable();
+    assert_eq!(book, kept);
 }
 
 /// The fields that release 0.18.0 added to a record, with no new schema id. A reader of an older
@@ -756,19 +767,26 @@ fn sentences(block: &str) -> Vec<String> {
     out
 }
 
-/// The words of a sentence: each run of characters between spaces that holds a letter or a
-/// digit. The target of a link is not a word.
-fn words(sentence: &str) -> usize {
-    let mut text = String::new();
-    let mut rest = sentence;
+/// `text` without the target of each link: `[words](target)` keeps `[words]`. A target is a path
+/// or an address, and no word of the prose.
+fn without_link_targets(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
     while let Some(at) = rest.find("](") {
-        text.push_str(&rest[..=at]);
+        out.push_str(&rest[..=at]);
         rest = rest[at + 2..]
             .find(')')
             .map_or("", |end| &rest[at + 2 + end + 1..]);
     }
-    text.push_str(rest);
-    text.split_whitespace()
+    out.push_str(rest);
+    out
+}
+
+/// The words of a sentence: each run of characters between spaces that holds a letter or a
+/// digit. The target of a link is not a word.
+fn words(sentence: &str) -> usize {
+    without_link_targets(sentence)
+        .split_whitespace()
         .filter(|w| w.chars().any(char::is_alphanumeric))
         .count()
 }
@@ -2659,15 +2677,82 @@ const OBSERVER_PAGES: [&str; 3] = [
     "reference/observer-api.md",
 ];
 
+/// The words and the phrases that the review of the observer pages named (#699). They add to the
+/// lists of [`wording_faults`]: "verify" in prose, phrasal verbs, and figures of speech. They also
+/// hold the passive and perfect forms that the second read found. Each one has a plain form, such
+/// as "make sure" for "verify", "is the one check" for "is the gate", and "immediately" for "at
+/// once".
+const OBSERVER_REFUSED: [&str; 45] = [
+    "verify",
+    "verifies",
+    "verified",
+    "go back",
+    "goes back",
+    "come back",
+    "comes back",
+    "fill in",
+    "fills in",
+    "starts again",
+    "turn it on",
+    "turn them on",
+    "moves on",
+    "slips off",
+    "passes through",
+    "stopgap",
+    "is the gate",
+    "one message too many",
+    "have some fun",
+    "on its way",
+    "on purpose",
+    "made-up",
+    "throwaway",
+    "cannot be read",
+    "cannot be written",
+    "cannot be used",
+    "is not set",
+    "is not allowed",
+    "is not kept",
+    "is not served",
+    "is not cached",
+    "is stored",
+    "are named",
+    "is published",
+    "separated by",
+    "sorted by",
+    "at once",
+    "all day",
+    "again and again",
+    "dead observer",
+    "built-in",
+    "wins over",
+    "takes the place",
+    "plays no part",
+    "has ended",
+];
+
+/// The six pages of the observer that keep to "The style rules" (#699). They are the pages of
+/// [`observer_book_pages`], and the page of the image and the manifests.
+fn observer_style_pages() -> impl Iterator<Item = &'static str> {
+    observer_book_pages().chain(["development/observer-deploy.md"])
+}
+
 /// The pages of the observer keep to the limits of "The style rules" like the pages of the report.
+/// The prose of the six pages also has no word or phrase of `OBSERVER_REFUSED`. A code span and the
+/// target of a link are no prose, so `strata verify` and `../commands/verify.md` stay.
 #[test]
 fn the_pages_of_the_observer_keep_to_the_style_rules() {
     let mut faults = Vec::new();
-    for page in OBSERVER_PAGES {
+    for page in observer_style_pages() {
         let text = read(&docs().join(page));
         for block in blocks_of(&text) {
             faults.extend(block_faults(page, &block));
             faults.extend(wording_faults(page, &block));
+            let prose = without_link_targets(&without_code(&block)).to_lowercase();
+            for phrase in OBSERVER_REFUSED {
+                if has_phrase(&prose, phrase) {
+                    faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
+                }
+            }
         }
     }
     assert_no_faults(&faults);
@@ -2748,31 +2833,26 @@ fn the_read_of_a_table_row_keeps_the_mark_of_a_column_in_its_cell() {
     assert_eq!(cells("| a | |"), ["a", ""]);
 }
 
-/// A code span is the text between a pair of backticks. The two reads of a text give its code
-/// spans and the text outside them, from one rule. A backtick with no pair starts a code span that
-/// continues to the end of the text.
+/// A code span is the text between two runs of backticks of one length, as GitHub reads it. The two
+/// reads of a text give its code spans and the text outside them, from one rule. A run of
+/// backticks that no run of the same length closes is text.
 #[test]
 fn the_read_of_a_text_gives_its_code_spans_and_the_text_outside_them() {
-    let text = "Use `strata diff` with `--full`, and read `the rest";
-    assert_eq!(code_spans(text), ["strata diff", "--full", "the rest"]);
-    assert_eq!(without_code(text), "Use   with  , and read ");
+    let text = "Use `strata diff` with ``a`b`` and `` `--full` ``, and read `the rest";
+    assert_eq!(code_spans(text), ["strata diff", "a`b", "`--full`"]);
+    assert_eq!(without_code(text), "Use   with   and  , and read `the rest");
     assert!(code_spans("no span").is_empty());
     assert_eq!(without_code("no span"), "no span");
 }
 
 /// The cells of a table that start with the target of a link, such as `(./page.md)`. The text of the
-/// link is lost, and the page shows the raw target. Code fences are skipped.
+/// link is lost, and the page shows the raw target. A row in a fenced code block is no row of a
+/// table, so the read skips each block as GitHub reads it.
 fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
-    let mut fenced = false;
-    let mut found = Vec::new();
-    for line in text.lines() {
-        if line.trim_start().starts_with("```") {
-            fenced = !fenced;
-        }
-        if fenced || !line.starts_with('|') {
-            continue;
-        }
-        found.extend(
+    common::outside_code_blocks(text)
+        .lines()
+        .filter(|line| line.starts_with('|'))
+        .flat_map(|line| {
             cells(line)
                 .into_iter()
                 .filter(|cell| {
@@ -2780,10 +2860,10 @@ fn link_targets_alone_in_a_cell(text: &str) -> Vec<String> {
                         .iter()
                         .any(|start| cell.starts_with(start))
                 })
-                .map(str::to_string),
-        );
-    }
-    found
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 /// The row "A service in one cluster" of `boundary.md` lost the text of its link, and no check saw
@@ -2800,6 +2880,9 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
     assert!(link_targets_alone_in_a_cell(fixed).is_empty());
     let fenced = "```text\n| (./a.md) | b |\n```\n";
     assert!(link_targets_alone_in_a_cell(fenced).is_empty());
+    // a line of three backticks does not end a block of four, so the row stays in the block
+    let nested = "````markdown\n```\n| (./a.md) | b |\n```\n````\n";
+    assert!(link_targets_alone_in_a_cell(nested).is_empty());
 
     let mut faults = Vec::new();
     for file in walk(&docs()) {
@@ -2824,9 +2907,9 @@ fn no_cell_of_a_table_in_the_book_starts_with_the_target_of_a_link() {
 
 /// The lead ran `image-digest.sh`, `observer-kind.sh`, `observer.sh`, `observer-images.sh`,
 /// `observer-role.sh`, and stage 3 of `who.sh` in the live windows of Wave 15. Their sections state
-/// the results. The observer page states the request counts of cluster A and the answer of each
-/// role. `limits.md` no longer says that no run covers a layer taken off, a digest in the image
-/// list, or a role.
+/// the results. The page of the checks states the request counts of cluster A, and the service
+/// page states the answer of each role. `limits.md` no longer says that no run covers a layer taken
+/// off, a digest in the image list, or a role.
 #[test]
 fn the_results_of_the_wave_15_live_window_are_in_the_book() {
     let runs = read(&docs().join("development/live-runs.md"));
@@ -2867,31 +2950,41 @@ fn the_results_of_the_wave_15_live_window_are_in_the_book() {
         "| `behind`, the first command of a versions cycle | 13 | 13 |",
         "| The moves of the first versions cycle after a start | 28 | 28 |",
     ];
-    let page = read(&docs().join("automation/observer.md"));
     for row in rows {
         assert!(part.contains(row), "live-runs.md lacks {row:?}");
     }
-    let page = one_line(&page);
-    for needle in [
-        "| A content cycle | 12 | 13 |",
-        "| `strata behind`, the first command of a versions cycle | 13 | 13 |",
-        "| The moves of the first versions cycle after a start | 28 | 28 |",
-        "on a cluster with two profiles and five packs. The counts grow with the number of profiles and packs.",
-        "A pod on a cluster that Palette built reaches the API",
-        "## Install with a profile in Palette",
-        "Palette replaces no node when it applies the layer.",
-        "With that role, the verdict and the finding stay, and `who` is empty.",
-        "**A live run used both roles.**",
-        "The audit log then answers HTTP 403 with the code `AccessDenied`.",
-        "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
-    ] {
-        assert!(page.contains(needle), "observer.md lacks {needle:?}");
-    }
-    for old in [
-        "No live run has used this role yet",
-        "No run shows yet which way a mirror works",
-    ] {
-        assert!(!page.contains(old), "observer.md still says {old:?}");
+    // The service page keeps what a team gives the observer. The counts and the read of the pods
+    // are on the page of the checks (#699).
+    let pages = [
+        ("automation/observer.md", [
+            "A pod on a cluster that Palette built reaches the API",
+            "## Install with a profile in Palette",
+            "Palette replaces no node when it applies the layer.",
+            "With that role, the verdict and the finding stay, and `who` is empty.",
+            "**A live run used both roles.**",
+            "The audit log then answers HTTP 403 with the code `AccessDenied`.",
+        ]
+        .as_slice()),
+        ("development/observer.md", [
+            "| A content cycle | 12 | 13 |",
+            "| `strata behind`, the first command of a versions cycle | 13 | 13 |",
+            "| The moves of the first versions cycle after a start | 28 | 28 |",
+            "on a cluster with two profiles and five packs. The counts grow with the number of profiles and packs.",
+            "A mirror at the level of the node keeps the name of the pack in `spec.image` and in `imageID`, so the match by text works.",
+        ]
+        .as_slice()),
+    ];
+    for (page, needles) in pages {
+        let text = one_line(&read(&docs().join(page)));
+        for needle in needles {
+            assert!(text.contains(needle), "{page} lacks {needle:?}");
+        }
+        for old in [
+            "No live run has used this role yet",
+            "No run shows yet which way a mirror works",
+        ] {
+            assert!(!text.contains(old), "{page} still says {old:?}");
+        }
     }
     let role = section(&runs, "## observer-role.sh", Some("\n## "));
     assert!(
@@ -3117,7 +3210,7 @@ fn the_pages_of_the_observer_no_longer_hold_the_statements_that_nothing_backs() 
     }
     for new in [
         "Palette deletes the Deployment. No run shows what happens to the namespace.",
-        "Delete the namespace with `kubectl delete namespace strata-observer`, so that the key goes.",
+        "Delete the namespace with `kubectl delete namespace strata-observer`, so that the cluster no longer holds the key.",
         "the copy that Palette holds for the cluster",
         "the next content cycle clears the finding",
         "`<name>_<version>.json.gz` file for each profile version",
@@ -7181,4 +7274,41 @@ fn the_pages_and_the_template_of_a_real_pipeline_keep_to_the_style_rules() {
         faults.extend(wording_faults(REAL_PIPELINE_TEMPLATE, text));
     }
     assert_no_faults(&faults);
+}
+
+// ---- the style of the comments and the book (#879) ----------------------------------------------
+
+/// The area of the style named two sentences of the book over the limit of 25 words. They are the
+/// next patch of `upstream-issues.md` (the verify of #881), and the row of `api.sh` (#822).
+#[test]
+fn the_sentences_that_the_area_of_the_style_named_keep_to_25_words() {
+    for (page, anchor) in [
+        (
+            "automation/upstream-issues.md",
+            "The patch is the newest patch of the minor version",
+        ),
+        ("development/live-example.md", "| `api.sh` |"),
+    ] {
+        let block = block(&read(&docs().join(page)), anchor);
+        assert_no_faults(&word_faults(page, &block_sentences(&block), MOST_WORDS));
+    }
+}
+
+/// The help of `verify-report.sh` said "what would happen" for `--dry-run`. The help of each
+/// report script now names the change to each issue, with no refused word (#881).
+#[test]
+fn the_help_of_each_report_script_names_the_change_to_each_issue_for_a_dry_run() {
+    for file in [
+        "scripts/ci/verify-report.sh",
+        "scripts/ci/upstream-report.sh",
+    ] {
+        let help = comment(file, "--dry-run prints");
+        assert!(
+            one_line(&help).contains(
+                "--dry-run prints each issue body and the change to each issue, and calls no host."
+            ),
+            "{file}: {help}"
+        );
+        assert_no_faults(&wording_faults(file, &help));
+    }
 }

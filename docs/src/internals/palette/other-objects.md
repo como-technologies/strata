@@ -71,6 +71,11 @@ same.
   them with no profiles.
 - `status.inUseClusters` of a profile names clusters and never an edge host. So
   `consumers` searches the edge hosts.
+- The edge host search gives the edge hosts of the projects where a role of the
+  key gives `edgehost.list`: see
+  [The reach of a search](clusters.md#the-reach-of-a-search). So the row
+  `edge hosts` of `consumers` says `none found` when the search names no edge
+  host that the key can list.
 
 ## Cluster groups
 
@@ -139,23 +144,50 @@ manifests. The content of a manifest comes from
   Palette does not give the field when the tier names no registry.
 - A tier has no digest of its chart or its operator, so a record of an app
   profile cannot show a push again under one version.
+- `metadata.annotations.scope` of `GET /v1/appProfiles/<uid>` gives the scope
+  of the app profile, as for a cluster profile. An app profile of a project
+  names its project in `metadata.annotations.projectUid`. Only the app
+  deployments of its project can use it. Each project of the tenant can use an
+  app profile of the tenant. The code of Palette gives these rules.
 - `status.inUseApps` of `GET /v1/appProfiles/<uid>` names the app deployments
   that use the app profile version, each with `uid`, `name`, `projectUid`, and
   `kind`. Palette computes the list when it is asked: each app deployment that
-  is not deleted and whose `spec.profile.metadata.uid` is the version, in the
-  projects the key can read. The code of Palette gives this rule.
+  is not deleted and whose `spec.profile.metadata.uid` is the version. The code
+  of Palette gives these rules, and no live run shows them yet:
+  - For an app profile of a project, the list names them only when a role of
+    the key gives `cluster.get` in that project. A role of the tenant, such as
+    Tenant Viewer, gives it.
+  - For a key with no such role, the list is empty, with no error. A role that
+    gives only the app deployments, such as App Deployment Viewer, gives an
+    empty list.
 - `GET /v1/appDeployments/<uid>` gives one app deployment: the version its copy
   names in `spec.profile.metadata.version`, and its state in `status.state`:
   `Pending`, `Deploying`, `Deployed`, or `Updating`.
 - Palette refuses the delete of an app profile while an app deployment uses it.
   The code of Palette gives this rule. The check reads the
   deployments of all projects, and not only those the key can read. So a
-  deployment that the key cannot read is not in `status.inUseApps`, and it
-  still stops the delete. `consumers` reads the list:
+  deployment that is not in `status.inUseApps` still stops the delete.
+  `consumers` reads the list:
   [consumers](../../commands/consumers.md#app-profiles).
-- The dashboard route of the app deployments, `POST /v1/dashboard/appDeployments`,
-  filters by name, cluster, and tag, and not by profile. So `consumers` does no
-  second reading for an app profile.
+- The listing of the app deployments, `POST /v1/dashboard/appDeployments`,
+  gives each app deployment of the scope in `appDeployments`, every page. Each
+  one names the app profile version that it runs in `spec.profile.metadata`:
+  `uid`, `name`, and `version`. Its filter takes the name and the cluster, and
+  not the profile. In a project where no role of the key gives
+  `appDeployment.list`, Palette answers HTTP 500 with the code
+  `ResourceAccessDenied`. The code of Palette shows the refusal. No live run
+  shows it yet.
+
+So `consumers` lists the app deployments of each project that can use the
+version, and keeps each one that runs the version. For an app profile of the
+tenant or of the system, these are the projects of the tenant listing. A
+project that refuses the listing is not checked. The tenant listing holds each
+project only for a key whose role gives `project.list` in the tenant. So strata
+also sends one page of the cluster search at tenant scope, and Palette refuses
+it to another key: see
+[The reach of a search](clusters.md#the-reach-of-a-search). The checks `consumers-project`
+and `consumers-scope` of [app-profile.sh](../../development/live-runs.md#app-profilesh)
+list the app deployments of the project of the run.
 
 A live run shows each rule on this page, except a rule that comes from the
 code of Palette. See

@@ -23,11 +23,13 @@
 #      default 600, through OpenTofu, and a kubeadm command of its Kubernetes pack reads it in
 #      place of its 600. Palette is asked if 1.0.1 repaves cluster A: by strata, which sends no
 #      variables, and by tenant.sh, with no variables, with the value 600, and with the value 644
-#      as the control (#132). Then 1.0.1 back. Cluster A takes no update
+#      as the control (#132). These three use the earlier body of tenant.sh, and one more question
+#      uses the body of a swap (#864). Then 1.0.1 back. Cluster A takes no update
 #   9  validate/repave saves the address of the console of the VM Orchestrator pack (#717). It
 #      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator
-#      and no cluster template. It reads the console address of the pack before and after each
-#      question. A body with a mark in consoleBaseAddress moves the console to the mark, which
+#      and no cluster template. Palette writes no mask over the console address in the document
+#      of the cluster (#741). The stage reads the console address of the pack before and after
+#      each question. A body with a mark in consoleBaseAddress moves the console to the mark, which
 #      answers 502. A body with the values of the cluster moves it back. The stage stops before
 #      the first question when a check before it fails. The forward of Palette keeps the address
 #      that it read, usually for at most 15 minutes. So the stage waits VMO_WAIT seconds (default
@@ -161,14 +163,18 @@ if stage 8 "a profile variable in a repave key of a version that cluster A does 
     "$strata" compare "cluster:$C/$release" "$N" --repave --json
   check var-strata-answer ? "#132: Palette says repave (0), or no repave (1), to the request of strata" -- \
     jq -e '.paletteRepave.required' var-strata.out
+  # the three questions of #132 keep the earlier body of tenant.sh: 1.0.0 alone, with
+  # replaceWithProfile 1.0.1, so that each answer stays the answer to the body that it names
   check var-none ? "#132: tenant.sh with no variables: no repave (0), or repave (1)" -- \
-    "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-default ? "#132: tenant.sh with strata_mode 600, the default: no repave (0), or repave (1)" -- \
-    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "600"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace REPAVE_VARIABLES='[{"name": "strata_mode", "value": "600"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-control 1 "#132: tenant.sh with strata_mode 644: the command changes, so Palette says repave" -- \
-    env REPAVE_VARIABLES='[{"name": "strata_mode", "value": "644"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
+    env REPAVE_FORM=replace REPAVE_VARIABLES='[{"name": "strata_mode", "value": "644"}]' "$live/tenant.sh" repave "$C" "$R" "$N"
   check var-control-says 0 "#132: and it names the Kubernetes pack and the kubeadm key" -- \
     grep -q 'kubeadmconfig.postKubeadmCommands' var-control.out
+  check var-swap ? "#864: tenant.sh with the body of a swap: each profile of cluster A, with 1.0.1 in place of 1.0.0" -- \
+    "$live/tenant.sh" repave "$C" "$R" "$N"
   apply -var next_variable=true
   apply
   check var-undone 0 "1.0.1 is as before the stage: its record from before verifies" -- "$strata" verify next-before.json
@@ -237,6 +243,11 @@ vmo_stage() {
   # Palette answers the route of a cluster that a cluster template governs with no reasons, and saves nothing
   check vmo-runs 0 "#717: the cluster runs $vmo_pack, its values hold consoleBaseAddress, and no cluster template governs it" -- \
     jq -e --arg p "$vmo_pack" '(.spec.clusterTemplate.uid // "") == "" and any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
+  # Palette writes ******** over a value whose schema format is password, and this value has none
+  check vmo-clear 0 "#741: Palette writes no mask over the console address of a pack of virtual machines" -- \
+    jq -e --argjson vm "$vm_packs" '[.spec.clusterProfileTemplates[].packs[] | select(.name | IN($vm[]))
+      | (.values // "") | splits("\n") | select(test("consoleBaseAddress:"))]
+      | length > 0 and all(contains("********") | not)' vmo-cluster.out
   vmo_stopped "$before" && return
   check vmo-summary 0 "#717: the summary of the cluster gives the console address of the service vm-dashboard" -- \
     "$live/api.sh" get "/v1/dashboard/spectroclusters/$V"
@@ -253,11 +264,11 @@ vmo_stage() {
   sleep "$wait"
   check vmo-ask 0 "#717: validate/repave with the mark in the values of $vmo_pack" -- \
     "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-mark.json
-  check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- grep -qx 'HTTP 200' vmo-ask.out
+  check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- answered 200 vmo-ask.out
   console_check vmo-saved mark "#717: the console address forwards to the mark: Palette saved it at the question, and the forward answers 502"
   check vmo-own 0 "#717: validate/repave with the values of the cluster: Palette saves the address of the cluster again" -- \
     "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-own.json
-  check vmo-own-ok 0 "#717: Palette answers the second question with 200" -- grep -qx 'HTTP 200' vmo-own.out
+  check vmo-own-ok 0 "#717: Palette answers the second question with 200" -- answered 200 vmo-own.out
   console_check vmo-back host "#717: the console address forwards to a host that answers again"
 }
 

@@ -34,6 +34,11 @@
 //! `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see the module
 //! `reader`. Any other `Accept`, or none, gets the file.
 //!
+//! The route of the role bindings of a cluster, `GET /v1/spectroclusters/{uid}/config/rbacs`, reads
+//! the `ApiKey` header. Its file holds each binding with all its subjects. A binding of the system
+//! gets only the subject that is the user of the key, as Palette answers it: see the module
+//! `rbacs`.
+//!
 //! The route `POST /strata-report` is no route of Palette. It is a stand-in for the endpoint of the
 //! report, so that a page can show the send of strata: see `REPORT_ENDPOINT`.
 //!
@@ -46,15 +51,17 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 
-use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::PROJECT_SCOPE_CODE;
+use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
 
+use crate::common_palette::error_body;
 use crate::tenant::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, profile_route,
     validated_cloud,
 };
 
 mod download;
+mod rbacs;
 mod reader;
 mod report;
 use reader::{accepts_json, file_reader};
@@ -147,11 +154,10 @@ fn project_refusal(request: &Request) -> Option<Vec<u8>> {
             .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
     });
     on_tenant_route.then(|| {
-        serde_json::json!({
-            "code": PROJECT_SCOPE_CODE,
-            "message": "Operation is not allowed in project scope and ProjectUid should be empty",
-        })
-        .to_string()
+        error_body(
+            PROJECT_SCOPE_CODE,
+            "Operation is not allowed in project scope and ProjectUid should be empty",
+        )
         .into_bytes()
     })
 }
@@ -181,7 +187,7 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
         }
         (Some(path), _) if path.is_file() => match fs::read(path)? {
             body if body.is_empty() => (204, body),
-            body => (200, body),
+            body => (200, rbacs::answered(root, request, body)?),
         },
         (Some(path), Some(status)) => (status, fs::read(refused(&path, status))?),
         // Palette answers an empty log for an object with no entry, and not 404
@@ -190,11 +196,10 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
         }
         _ => (
             404,
-            serde_json::json!({
-                "code": "ResourceNotFound",
-                "message": format!("no file for {}", request.target),
-            })
-            .to_string()
+            error_body(
+                "ResourceNotFound",
+                &format!("no file for {}", request.target),
+            )
             .into_bytes(),
         ),
     })
@@ -237,11 +242,7 @@ fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
         "Cluster profiles '{}' are not supported with '{cloud}' environment",
         names.join(", ")
     );
-    Some(
-        serde_json::json!({"code": "ClusterProfilesNotSupported", "message": message})
-            .to_string()
-            .into_bytes(),
-    )
+    Some(error_body("ClusterProfilesNotSupported", &message).into_bytes())
 }
 
 /// True when `target` asks for the route `path` with a query, as a search or a log does.
@@ -279,6 +280,8 @@ fn refusal_of(path: &Path) -> Option<u16> {
 struct Request {
     target: String,
     project: Option<String>,
+    /// The `ApiKey` header, when the request has one.
+    key: Option<String>,
     /// The `Accept` header, when the request has one.
     accept: Option<String>,
     body: Vec<u8>,
@@ -370,8 +373,8 @@ fn profiles_searched(file: &[u8], body: &[u8]) -> Vec<u8> {
 }
 
 /// The request line, the headers this server reads, and the body: a search is a POST, and its
-/// body selects the clusters. The headers are `ProjectUid`, `Accept`, and `Content-Length`. Every
-/// other header is skipped.
+/// body selects the clusters. The headers are `ProjectUid`, `ApiKey`, `Accept`, and
+/// `Content-Length`. Every other header is skipped.
 fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
@@ -384,6 +387,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut request = Request {
         target: target.to_string(),
         project: None,
+        key: None,
         accept: None,
         body: Vec::new(),
     };
@@ -396,6 +400,8 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
         if let Some((name, value)) = header.split_once(':') {
             if name.eq_ignore_ascii_case(PROJECT_UID_HEADER) {
                 request.project = Some(value.trim().to_string());
+            } else if name.eq_ignore_ascii_case(API_KEY_HEADER) {
+                request.key = Some(value.trim().to_string());
             } else if name.eq_ignore_ascii_case("Accept") {
                 request.accept = Some(value.trim().to_string());
             } else if name.eq_ignore_ascii_case("Content-Length") {
@@ -659,6 +665,7 @@ mod tests {
             let request = Request {
                 target: target.to_string(),
                 project: Some("p1".to_string()),
+                key: None,
                 accept: None,
                 body: serde_json::json!({"spec": {"profiles": profiles}})
                     .to_string()

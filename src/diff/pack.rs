@@ -184,11 +184,12 @@ pub struct PackDiff {
     /// rename. `AUTHORED` and `UPSTREAM` still count.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tag_renamed: bool,
-    /// True when the version alone changed, and it keeps its numbers: a renumber, see
-    /// [`Renumber`](super::Renumber), from a pre-release to its final version, to another pre-release, or to other
-    /// build data. The impact is then `none` with `renumber only`, and `IDENTITY` and `UPSTREAM`
-    /// still count. A move to other numbers, such as `20.04` to `24.04`, keeps the impact of its
-    /// layer. `compare` reads no archive, and the values do not always name the content.
+    /// True when the version alone changed, and it keeps its numbers. The change is a renumber,
+    /// see [`Renumber`](super::Renumber), from a pre-release to its final version, to another
+    /// pre-release, or to other build data. The impact is then `none` with `renumber only`, and
+    /// `IDENTITY` and `UPSTREAM` still count. A move to other numbers, such as `20.04` to `24.04`,
+    /// keeps the impact of its layer. `compare` reads no archive, and the values do not always name
+    /// the content.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub renumbered: bool,
     /// Which way the version of the pack moves from side A to side B. Absent when a side has no
@@ -205,7 +206,7 @@ pub struct PackDiff {
     /// not show. A manifest pack has no archive, so it is never true for one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upstream_unknown: bool,
-    /// The path of each value that Palette masks on either side, sorted: see [`Pack::masked_paths`].
+    /// The path of each masked value on either side, sorted: see [`Pack::masked_paths`].
     /// The root covers the mask and not the secret, so an equal root does not show an equal
     /// secret.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -273,18 +274,18 @@ impl PackDiff {
     }
 }
 
-/// One pack with a value that Palette masks: see [`Pack::masked_paths`].
+/// One pack with a masked value: see [`Pack::masked_paths`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MaskedPack {
     /// `<layer>/<name>` of the pack.
     pub key: String,
-    /// The path of each value that Palette masks, on either side, sorted.
+    /// The path of each masked value, on either side, sorted.
     pub paths: Vec<String>,
 }
 
 impl Diff {
-    /// Each pack with a value that Palette masks on either side, in pack order.
+    /// Each pack with a masked value on either side, in pack order.
     pub(crate) fn masked_packs(&self) -> Vec<MaskedPack> {
         self.packs
             .iter()

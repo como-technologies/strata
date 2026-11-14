@@ -1,7 +1,8 @@
 # strata compare
 
 Compare two refs: profile versions, snapshot files, clusters, or pack versions
-from a registry. `strata A B` is the same as `strata compare A B`.
+from a registry. The two sides can be of different kinds, such as a cluster and
+a profile version. `strata A B` is the same as `strata compare A B`.
 
 Two pack refs answer what changed between two versions of a pack:
 [What changed between two pack versions](../use-cases/pack-versions.md).
@@ -62,9 +63,13 @@ A `note` line follows `root` in these cases:
 | `pack <key> has a masked value at <path>: an equal root does not show an equal secret` | A pack whose values hold `********` on either side. A line `masked: <path>` under the pack says it too. `packs[].masked` in the JSON gives each path. | [A secret changes in a pack value](../use-cases/masked-value.md) |
 | `the impact table says <level>, and Palette says <repave or no repave> for this cluster: the table does not describe its upgrade engine` | `--repave`, and the level and Palette's answer disagree. | [Ask Palette if the change repaves](compare/repave.md) |
 | `cluster <c> is behind: Palette says an update of <profile> waits for it, since <time>` | A cluster side whose record says that an update waits. The copy is not the profile. | [Whether an update waits](snapshot/cluster.md#whether-an-update-waits) |
-| `a repave of cluster <c> waits for approval, since <time>: <code> <pack> (<keys>). Palette refuses an update of its profiles until a person approves it` | A cluster side whose record says that a repave waits. Two sides that say the same give one note. | [Whether a repave waits](snapshot/cluster.md#whether-a-repave-waits) |
+| `a repave of cluster <c> waits for approval, since <time>: <code> <pack> (<keys>). Palette refuses an update of its profiles until a person approves it` | A cluster side whose record says that a repave waits. | [Whether a repave waits](snapshot/cluster.md#whether-a-repave-waits) |
 | `cluster <c> runs <pack> <version>, and its profile declares <version>` | A cluster side whose `running` tier holds another version of a pack than its profile. | [Two clusters on one release differ](../use-cases/cluster-tiers.md) |
 | `uid <uid> is <name>@<a> on one side and <name>@<b> on the other` | One uid under two versions. Strata prints one note for each such uid, also under `IDENTICAL`. `verify` omits it when its verdict already names the overwrite. | [A version bump overwrites a version](../use-cases/overwritten.md) |
+
+The report prints each note one time. Two records of one cluster can give the
+same note on each side, such as the note of a pack at another version than its
+profile. `verify` also prints each note one time.
 
 When a pack build has a new tag name and a manifest pack has a new uid, one note
 names both. When either side is a cluster, the edit note adds `or changed on a

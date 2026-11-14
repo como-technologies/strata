@@ -25,7 +25,7 @@ use self::carriers::read_carriers;
 pub use self::carriers::{Carrier, PinCarrier};
 pub use self::change::{Bump, BumpPack};
 use self::documents::ProfileDocuments;
-use self::newer::newer_versions;
+use self::newer::{newer_versions, next_patch};
 use self::profiles::{Held, ProfileKey, check_profile, collect};
 pub use self::profiles::{NewerProfile, ProfilePin};
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
@@ -167,14 +167,22 @@ pub struct Pin {
     pub newer: Vec<Newer>,
     /// True when `newer` is not empty.
     pub behind: bool,
+    /// For a pin that is behind a newer minor version: the newest version in `newer` of the minor
+    /// version of the pin. A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives `1.36.4`. A
+    /// team can take that patch before the move to the newest version. Absent when the pin is
+    /// current, when its version does not parse, and when the newest version is of its minor
+    /// version. Also absent when `newer` has no version of its minor version.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_patch: Option<String>,
     /// For a pin that is behind: what a move to the newest version does, from `compare` of the
     /// two pack versions, and whether Palette accepts it. Absent with `--no-impact`, or when strata
     /// could not compare them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bump: Option<Bump>,
-    /// For a pin that is behind: each profile version that a record of the pin holds, that has a
-    /// newer version, and whose template holds the pack. Each one names the newest of its newer
-    /// versions that pins a newer version of the pack. Absent when there is none, and with `--pin`.
+    /// For a pin that is behind: each profile version that a record of the pin holds, and that has
+    /// a newer version. A version is in the list only when its template holds the pack. Each one
+    /// names the newest of its newer versions that pins a newer version of the pack. Absent when
+    /// there is none, and with `--pin`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub carriers: Vec<PinCarrier>,
     /// With `--since`: the newer versions that the previous report did not know. Absent when the
@@ -303,6 +311,7 @@ impl Pin {
             pinned_by: Vec::new(),
             newer: Vec::new(),
             behind: false,
+            next_patch: None,
             bump: None,
             carriers: Vec::new(),
             arrived: None,
@@ -511,7 +520,7 @@ fn read_records(records: &[PathBuf], only: Option<&str>) -> Result<Records> {
 /// A cache of the registry listings borrows its client. So strata groups the pins and the profile
 /// versions by scope: each scope connects one time, and keeps its cache for all its pins. Each
 /// scope keeps its connection and its documents to the end, because the carriers of a pin read the
-/// profile versions of each scope: see [`read_carriers`].
+/// profile versions of each scope. See [`read_carriers`].
 fn check_scopes<A, F>(
     check: &Check<'_>,
     pins: BTreeMap<PinKey, Pinned>,
@@ -718,6 +727,7 @@ fn read_pin<A: PaletteApi>(
     }
     pin.newer = newer_versions(pin, offered, pinned, pre_release);
     pin.behind = !pin.newer.is_empty();
+    pin.next_patch = next_patch(&pin.version, &pin.newer);
     // a pin that is current is current against the copy of the registry in Palette. When
     // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
     // says so. A pin that is behind needs no note: a newer version in the copy is a newer

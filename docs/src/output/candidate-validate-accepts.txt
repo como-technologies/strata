@@ -1,7 +1,7 @@
 $ strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json
 strata: looking up project dev
 strata: resolving aws-stack@1.2.0 against the registry
-palette    accepts
 strata: wrote validated.json (root 088136c929bd)
+strata: Palette accepts the name, the version, and the packs of 'aws-stack.yaml'
 $ jq -c .source.paletteValidation validated.json
 {"accepts":true}

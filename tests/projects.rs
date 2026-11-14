@@ -1,14 +1,18 @@
 //! The project of each command that reads Palette, and of each side of `compare` and
-//! `same-release`: a tenant with one project for each environment (#486).
+//! `same-release`: a tenant with one project for each environment (#486). The uid of a project
+//! name belongs to the address and the key of each client (#875).
 
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
+use strata::api::project_uid_named;
+use strata::config::Config;
+use strata::term::progress::Progress;
 
 use crate::common::{
     PROJECT_LISTING, Stand, UID_A, UID_B, against_closed_port, command_names, manifests_route,
-    no_manifests, no_variables, profile_document, profile_route, project_listing, strata_command,
-    template, variables_route,
+    no_manifests, no_variables, profile_document, profile_route, project_listing, serve_tenants,
+    strata_command, template, variables_route,
 };
 
 /// The uids of the projects `dev` and `prod` of the stand-in.
@@ -145,6 +149,38 @@ fn each_command_that_reads_palette_finds_the_uid_of_project_name_and_reads_that_
     }
 }
 
+/// The name of the one project of [`lab_tenant`].
+const LAB_PROJECT: &str = "lab";
+
+/// The routes of a tenant with one project, [`LAB_PROJECT`], whose uid is `uid`.
+fn lab_tenant(uid: &str) -> BTreeMap<String, Value> {
+    BTreeMap::from([(
+        PROJECT_LISTING.to_string(),
+        project_listing(&[(LAB_PROJECT, uid)]),
+    )])
+}
+
+#[test]
+fn a_project_name_gives_the_uid_in_the_tenant_of_the_address_and_the_key_of_each_client() {
+    // one address with two tenants: each key reads the projects of its own tenant
+    let (first, second) = ("first-key", "second-key");
+    let (first_uid, second_uid, other_uid) = ("p-first", "p-second", "p-other");
+    let shared = serve_tenants(BTreeMap::from([
+        (first.to_string(), lab_tenant(first_uid)),
+        (second.to_string(), lab_tenant(second_uid)),
+    ]));
+    // another address, where the first key has a tenant too
+    let other = serve_tenants(BTreeMap::from([(first.to_string(), lab_tenant(other_uid))]));
+    let uid = |address: &str, key: &str| {
+        project_uid_named(&Config::new(address, key), LAB_PROJECT, Progress::silent())
+            .unwrap_or_else(|e| panic!("{key} at {address}: {e}"))
+    };
+    assert_eq!(uid(&shared, first), first_uid);
+    assert_eq!(uid(&shared, second), second_uid, "another key");
+    assert_eq!(uid(&other, first), other_uid, "another address");
+    assert_eq!(uid(&shared, first), first_uid, "the first client again");
+}
+
 /// The project of each request for the routes of the profile `uid`.
 fn projects_of(asked: &[(String, Option<String>)], uid: &str) -> Vec<Option<String>> {
     asked
@@ -236,7 +272,12 @@ fn same_release_reads_each_side_in_its_own_project_and_names_each_project() {
         ]
         .concat(),
     );
-    assert!(r.out.contains("<br>project p-dev -> p-prod |"), "{}", r.out);
+    // the markdown writes each `>` as an entity, and GitHub shows `->`
+    assert!(
+        r.out.contains("<br>project p-dev -&gt; p-prod |"),
+        "{}",
+        r.out
+    );
 }
 
 #[test]

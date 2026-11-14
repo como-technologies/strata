@@ -206,7 +206,7 @@ fn verify_names_the_pack_with_a_masked_value_beside_its_line() {
         .unwrap();
     assert_eq!(
         lines[at + 1],
-        "      masked: charts.grafana.adminPassword: Palette serves ******** in place of the \
+        "      masked: charts.grafana.adminPassword: the record holds ******** in place of the \
          secret",
         "{text}"
     );

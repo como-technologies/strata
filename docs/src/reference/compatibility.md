@@ -309,6 +309,24 @@ After 0.33.0, `snapshot::SecretLikeVariable`, `snapshot::Snapshot::secret_like_v
 clear and whose name reads as a secret. `ops::SetRecord` has a new field for them: see
 [Release 0.34.0](#release-0340-changes-that-need-action).
 
+After 0.33.0, `render::refusal_lines` and `render::acceptance_sentence` are new. They give the
+answer of Palette in a record of `snapshot --validate`: one line for each error, or the sentence
+of an accept. The command line prints the sentence last, after the record: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` are new.
+`ops::ProjectsRead` names the projects that `consumers` searched one by one, and
+`render::Reading` names each row of the block `searched:` of `consumers`. Three structs of
+`consumers` have new fields: see [Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `api::Palette::app_deployments` is new. `consumers` of an app profile lists the app
+deployments of each project that can use the version with it: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `api::MASKED` is public: the text `********` that Palette writes over a secret.
+`model::input_type::InputType` is public: the input type of a profile variable, as Palette gives
+it in `inputType`.
+
 After 0.29.0, the JSON renderer reads the argument `full` of `render::Renderer::render`. With
 `true`, it adds the field `unified` to the values and to the manifest changes of each changed pack.
 It ignored `full` before. `ops::behind` gives `Error::Usage` for a `pin` that no record pins from a
@@ -395,11 +413,22 @@ record of 0.33.0 and before has no `registryName`, and strata reads it as before
 record again to name the registries: see
 [The registry of each pack](../commands/snapshot/profile-version.md#the-registry-of-each-pack).
 
+After 0.33.0, each row of `strata-verify-summary/1` has the new field `subject`.
+It names the record in the words of the heading of `compare`, such as
+`4 profiles on cluster payments`. The row keeps `name` and `version`, and the id
+stays. See [Check many records](../commands/verify.md#check-many-records).
+
 One value changes after 0.33.0 with no new id. In `strata-preflight/1`, `sections[].failed`
 counts the counted failures alone, as `summary.failed` does. Before, it counted each failure but
 a note. A new id breaks each reader of the document, and the sum of `failed`, `probeFailed`, and
 `warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
 action.
+
+One value changes after 0.33.0 with no new id. In `strata-snapshot/1`, the policy tier of a
+cluster names each role binding of the system in the new field `systemRbacs`, and not in `rbacs`.
+So the `hash` of the tier changes for a cluster with such a binding. The tier is not part of the root, so no root changes. A new id breaks each reader of
+the record, and the change touches only a cluster with such a binding.
+[Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
 
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
@@ -415,6 +444,33 @@ After 0.33.0, each entry of `records[]` of `strata-set/1` has the new field
 clear whose name reads as a secret. The id stays, and a reader that ignores
 unknown fields reads it. The exit does not change: see
 [What a cluster record holds](../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
+After 0.33.0, a pin of `strata-behind/1` can have the new field `nextPatch`: the newest patch of
+the minor version of the pin. Only a pin that is behind a newer minor version can have it. A pin
+with no newer patch of its own minor version does not have it. The id stays, and `--since` reads
+a report of 0.33.0 and before. See
+[The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
+
+After 0.33.0, a bump of `strata-behind/1` can have the new field `updateChecks`, and so can a
+comparison of `strata-diff/1` with `compare --validate`. The field holds the rules that Palette
+checks only at the update: `requiredVariables` and `skippedMinor`. The ids stay, and
+`--since` reads a report of 0.33.0 and before. See
+[The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
+After 0.33.0, an option of a variable of `strata-snapshot/1` can have the new field `default`,
+only when it is `true`. The mark is outside the root, so no root changes, and the id stays. A
+record of 0.33.0 and before has no mark, and strata reads each option of it as an option with no
+mark. [Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
+
+After 0.33.0, `strata-consumers/1` has the new fields `profile.scope`, `profile.projectUid`,
+`profile.projectName`, `clustersRead.membersFound`, and `projectsRead`. The id stays, and a reader
+that ignores unknown fields reads it. A profile of the tenant can exit `2` now: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `strata-consumers/1` of an app profile has `profile.scope` and `projectsRead`. An app
+deployment that the consumer list does not name has `unlisted`. The id stays. An app profile can
+exit `2` now: see
+[Release 0.34.0](#release-0340-changes-that-need-action).
 
 After 0.33.0, `strata-list/1` has the new field `registries[]`, with `strata list
 registries`. Each entry has `name`, `uid`, and `kind`. The id stays, and a reader that ignores
@@ -1099,16 +1155,49 @@ section lists each change that can break a script, a program that reads a
 document, a CI pipeline, or code that uses a library. A change that only adds a
 field, a value, an input, or an option is in the sections above.
 
+### First: a record can hold the console address of a pack of virtual machines in clear
+
+- **Record each such profile, draft, cluster, and candidate again.** The packs
+  `virtual-machine-orchestrator`, `spectro-vm-dashboard`, and
+  `vm-migration-assistant` hold the address of their console in
+  `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`. Palette serves it in
+  clear. Strata writes `********` over it now. See
+  [The console address of a pack of virtual machines](../internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines).
+  - The root of a record moves when the record has such a pack, and the console
+    address of the pack holds a value. This is so for a record of a profile, of
+    a draft, of a cluster, and of a candidate. An empty value and a value that holds a variable get no mask,
+    so their roots stay.
+  - `verify` of an older such record reports `DRIFT` on the values of the pack.
+    Record it again. The observer reports the same drift until its records are
+    new.
+  - A directory that `--raw-dir` saves holds the mask too. An older directory
+    holds the address in clear.
+- **Search each repository for an older record.** This command finds the
+  files:
+  `git grep -l consoleBaseAddress $(git rev-list --all) -- '*.json'`. Read the
+  value in each file. A record in Git keeps the address in its history.
+
 ### For a user of the command line or of a document
 
+- **The line `masked:` of `compare` and `verify` changes.**
+  It reads `masked: <path>: the record holds ******** in place of the secret`. Before, it
+  said `Palette serves ********`. Strata writes the mask over the console address of a pack
+  of virtual machines, and Palette does not. A script that matches the line must match the
+  new text.
+- **An exec check masks a failed read before the cut.** Each value of a variable gets its
+  mark, as in a check of Palette. Before, the cut came first, and a part of a value could stay in the message.
+  See [The values in a message](../commands/preflight/report.md#the-values-in-a-message).
+
 - **A pack row of `list --packs` and `list --pack` ends with its registry.** The name of the
-  registry follows the version. When the key cannot see the registry, the row gives its uid. A
-  script that reads the text of a row must read one more column, or read `--json`. With
+  registry follows the version. When the key cannot see the registry, or when its name holds a
+  `/`, the row gives its uid. A `pack:` ref takes that text. A script that reads the text of a
+  row must read one more column, or read `--json`. With
   `--format markdown`, the pack ends with `in` and the registry. See
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
-  and `same-release` send it for each side that Palette answers. A key needs the permission
+  and `same-release` send it for each side that Palette answers, and `snapshot` of a set for
+  each project of the set. A key needs the permission
   `packRegistry.list` for it, which each built-in role with `clusterProfile.get` holds. A key
   without it gets HTTP 403, and the command exits `2` with the error `api`. Before, these
   commands did not read the listing. See
@@ -1116,6 +1205,63 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **`pack-in-several-registries` names a registry with a `/` by its uid.** Before, it gave
+  the name, and a ref with that name named another registry. A script that looks for such a
+  name in `registries` must look for the uid. See [Refs](refs.md#rules).
+- **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
+  it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
+  `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
+  and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
+  does not count a record with the new status. See
+  [A version that the cluster no longer runs](../development/observer.md#a-version-that-the-cluster-no-longer-runs).
+  - A program that reads `status` of `/v1/profiles` must know the new value.
+  - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
+    `counts.profiles`.
+- **The rows of the observer name the registry of the record.** Before, `registry` held the
+  name in a pin of `behind`, or the uid. This holds for a pack of `/v1/profiles` and a row of
+  `/v1/newer`. A record of strata 0.33.0 and before names no registry, so its rows keep the
+  earlier value. A program that reads the uid there must read `registryUid` of the row of
+  `/v1/newer`, or `packs[].registryUid` of the record. See
+  [The summary](../development/observer.md#the-summary).
+- **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
+  `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
+  request comment shows a tag in a message of Palette as text. The reason of
+  `archivesNotReadable` also shows the answer of the host of a chart as text. Before, GitHub read
+  such a tag as HTML, and kept a link in it.
+  - A script that reads the markdown as text reads `-&gt;` in place of `->`.
+  - A value in a code span, such as a pack name or a uid, shows as before. A backtick in such a
+    value does not end the span now.
+  - A fenced block, such as a diff of `--full`, has a fence longer than each run of three
+    or more backticks in its text. So a line of three backticks in the values of a pack does not
+    end the block.
+  - `strata-preflight` writes its markdown in the same way. Its terminal form, its HTML form,
+    and the JSON documents of both tools do not change.
+- **The markdown form writes a `\` before each mark of markdown in a text.** The marks are `*`,
+  `_`, `[`, `]`, `~`, a backtick, and a `\`. GitHub shows the same characters. So a link, an
+  emphasis, or a code span in a message of Palette shows as text. Before, GitHub read them as
+  markdown. Two backticks opened a code span, and the span showed an entity such as `&lt;`.
+  See [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `\*` in place of `*`. A run of `_` with a
+    letter or a digit on each side does not change, as in `aws_stack`.
+  - The verdict of a gone record writes the uid as plain text, as the terminal does. The rows
+    of `searched:` of `consumers` write `--list-only` as plain text. The markdown escapes each
+    of these lines as one text.
+  - `strata-preflight` writes its markdown in the same way. A message of a rule shows its
+    backticks as text, as the terminal form does.
+- **The markdown form writes a zero width space after each `@` of a mention in a text.** It
+  writes the entity `&#8203;`, so `@name` reads `@&#8203;name`. GitHub shows the same text, and
+  the mention notifies nobody. Before, a `@name` in a message of Palette notified the person or
+  the team in an issue or a pull request comment. See
+  [The markdown comment](./formats.md#the-markdown-comment).
+  - A script that reads the markdown as text reads `@&#8203;name` in place of `@name`. A `@`
+    after a letter or a digit of ASCII does not change, as in `kubernetes@1.30.1` or an address
+    of mail.
+  - `strata-preflight` writes its markdown in the same way.
+- **A bare address that GitHub surely links keeps its form.** It gets no entity, no `\`, and no
+  zero width space, as in 0.33.0. So the link that GitHub makes of it goes to the target of the
+  text. A `*` or a `_` that GitHub cuts from the end of the link reads `&ast;` or `&lowbar;`.
+  [The markdown comment](./formats.md#the-markdown-comment) gives the forms of such an address.
+  - `strata-preflight` writes its markdown in the same way.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1131,8 +1277,38 @@ field, a value, an input, or an option is in the sections above.
   So does `pinnedBy[].subject` of `strata-behind/1`. The record keeps the joined
   `source.name` and `source.version`. See
   [A side with many profiles](../commands/compare/clusters.md#a-side-with-many-profiles).
+- **A row of `verify --summary` names the record as the heading of `compare`
+  does.** Before, it gave `name@version` alone. A record of a cluster now reads
+  `aws-stack@1.1.1 on cluster payments`, and a record of an edge host names the
+  host. A record of two or more profiles reads `4 profiles on cluster payments`,
+  where the row joined the names and the versions. The markdown table gives the
+  same words. A script that reads the text of a row must match the new words, or
+  read `subject` of `--json`. See
+  [Check many records](../commands/verify.md#check-many-records).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+- **`list` keeps each kind that it read.** When strata cannot read one kind, such
+  as the clusters, `list` prints the other kinds. The line
+  `<kind>: not read (<error>)` follows them, and the exit is `2`. `--json` gives
+  the error of the kind under `errors` of `strata-list/1`. Before, `list` printed
+  nothing and gave the error alone. When strata reads no kind, the command fails
+  with the error of the first kind, as before. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
+- **The message of `api` names what Palette denied.** A denial, such as
+  `AccessDenied`, adds the permission or the project to the end of the message. A
+  `403` that is a denial names the key only when no earlier answer to the same
+  key proved the key. The message has no blank between the body and its end, and the
+  kind and the fields stay. A script that matches the whole message must match
+  the new text. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **Strata sends no 5xx with `ResourceAccessDenied` or `NoRolesAssociated`
+  again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
+  waited between the requests. Each request got the same denial.
+- **The error of an answer holds no copy of the API key.** Strata masks each
+  copy of the key in the body with `********`. It also masks a copy that a
+  letter or a digit touches. For a key of fewer than 16 characters, it masks each whole copy
+  only. It does so before it prints or keeps the error. See
+  [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
   [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
   - Only a counted check can fail a run: a preflight check of severity `fail`, or a probe with
@@ -1182,6 +1358,8 @@ field, a value, an input, or an option is in the sections above.
   sends it gets the same error. Before, each check asked again.
 - **`position-zero` says when each effect applies, and what a person can do.** It gives up to six
   messages. They name the fault, each effect, and the way forward. Before, it gave one message.
+  The message of the way forward also says that a new version of the infrastructure profile goes
+  to the end of the stored order.
 - **The first line of `behind` counts each pin one time.** The counts after the colon add up to
   the pins. They are `behind`, `current`, and `not checked`, and a count in parentheses gives the
   pins with a floating tag. An example is
@@ -1203,7 +1381,8 @@ field, a value, an input, or an option is in the sections above.
 - **A pin that is behind a newer minor version can have the line `next patch`.** It names the
   newest patch of its minor version. It also gives the command `strata compare` of the two pack
   versions. The markdown adds the line to the cell of the status. A script that reads the lines
-  under a pin must skip it. The JSON does not change.
+  under a pin must skip it. The JSON gives the patch in the new field `nextPatch`: see
+  [The documents](#the-documents).
 - **`<name>@latest` and `appprofile:<name>@latest` write the version that they take.** Five
   commands write a note on standard error, such as `strata: @latest is barney@1.0.0`. They are
   `snapshot`, `compare`, `same-release`, `candidate`, and `consumers`, also with
@@ -1216,6 +1395,179 @@ field, a value, an input, or an option is in the sections above.
   `recording pack` ends with `; it skips 1.22.0-rc.1, a pre-release by SemVer`. A script that
   matches the whole note must match the new text. Standard output and the exit code of both
   changes stay. See [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
+- **`behind` and `compare --validate` name two rules of the update that no validate route
+  checks.** A line can follow the answer of Palette. A script that reads these lines must skip
+  it, or read `updateChecks` of the JSON. The exit does not change. See
+  [The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+  - A pin of the `k8s` layer can have a line under its bump, such as
+    `kubernetes 1.34.9 -> 1.36.2 skips a minor version`. The line names
+    `K8sUpgradeNotSupported` and the next step.
+  - A profile version can have that line under its bump. It can also have a line that
+    starts with `the move adds the required variable`. That line names `InvalidVariable`.
+  - `compare --validate` prints each line as a `note` line under the `palette` lines. The
+    markdown gives each one as a `**Note:**`.
+  - The markdown of `behind` adds each line to the cell of the bump.
+- **`snapshot --validate` gives the answer of Palette last, in a sentence.** Before, an accept
+  was the line `palette    accepts`, before the record. On a terminal, the record on standard
+  output hid it. Now the last line comes after the record, such as
+  `strata: Palette accepts the packs of 'aws-stack@1.1.1' as an update of itself`. A refusal
+  does not change. A script that reads `palette    accepts` must read the new line, or
+  `source.paletteValidation.accepts` of the record. See
+  [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
+- **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
+  said "in the same forms as the first". The refs and the exit codes stay the same.
+- **The help of two options and three descriptions of the schemas have shorter sentences.** Each
+  sentence has 25 words or fewer. The options are `--repave` of `compare` and `--no-impact` of
+  `behind`. `strata schema behind` gives new words for `carriers` and the definition `Bump`.
+  `strata schema diff` and `strata schema verify-summary` give new words for `renumbered`. The
+  options, the fields, and their meaning stay the same. A script that matches the whole text of a
+  help or of a description must match the new text.
+- **`palette-validate` reads each refusal of the body of the cluster validate route as
+  `FAILED`.** It reads more codes, such as `ControlPlanePoolRequired`. Before, the rule was
+  `ERROR` for such a refusal with HTTP 500 or 403, with exit `2`. Now it is `FAILED` with the
+  message of Palette, with exit `1`. Strata does not send such a 500 again, on any route. A
+  script that reads `ERROR` for these faults must read `FAILED`. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **`behind` and `compare --validate` name a required dropdown variable with no default
+  option.** Before, strata named no required variable that has options. Now it names a
+  required dropdown variable with no option with the mark `default`, when its default value is
+  not the label of an option. It also names a required variable of another input type with a
+  default option and no default value. Palette refuses each one. The line and
+  `requiredVariables` keep their form. See
+  [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+- **A record keeps the `default` mark of an option of a variable.** The default option has
+  `variables[].options[].default: true`, and another option has no field. The root does not
+  cover the mark, so each root and each `variablesHash` stay. A record of strata 0.33 and before
+  holds no mark. With such a record on the profile side, `compare --validate` names each
+  required dropdown variable with no default value. Record the version again to read its marks.
+- **`snapshot --from-candidate --validate` sends the mark `default` of each option to
+  Palette.** Before, it dropped the mark from the body. See [The documents](./documents.md).
+- **The error of `compare --repave` and `--validate` for two records names the commands to use.**
+  It says that both sides are records. It names `strata compare cluster:<name> <record> --repave`,
+  or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
+  clusters keep the error of before. The kind stays `usage`, and a script that matches the whole
+  message must match the new text. See [Usage errors](../commands/compare/repave.md#usage-errors).
+- **The message of the error `api` gives the code and the message of Palette.** It read the
+  JSON of the body. Now it reads `failed with HTTP 404: ResourceNotFound: <message>`, and a
+  body with no code keeps its text. A script that matches the JSON in the message must read the
+  new key `body` of the error document. It holds the body as Palette sent it. A line `not read`
+  of `list` gives the same words. See [Errors](./errors.md).
+- **A text of a read that failed gives the words of Palette.** It reads
+  `HTTP 403: AccessDenied: <message>`, as the error `api` does. Before, it gave the JSON of the
+  body. A script that reads the text must read the new words, or read `--json`. See
+  [When strata cannot read the log](../commands/verify.md#when-strata-cannot-read-the-log).
+  - The line `who: not read` of `verify --who`, and the note `the audit log is unavailable`.
+  - The note `the sync status of registry <uid> is unavailable` of `verify` and `behind`.
+  - The notes of `compare` and `verify` for a part of a cluster or the reasons of a repave that
+    strata could not read.
+  - The documents do not change. `verify.whoError`, `errors` of a cluster record and of its
+    tiers, and `registrySyncError` keep `HTTP <status>: <body>`, with the body as Palette sent it.
+- **A ref with no version that names a profile gives the error `usage`.** Before, it was `api`.
+  Strata reads such a ref as a uid, Palette answers HTTP 404, and strata then reads the listing
+  of the scope. The message lists each version of the name and names `<name>@latest`. A name
+  that no profile has keeps the error `api`. `snapshot`, `compare`, `same-release`, `candidate`,
+  and `consumers` give it. See [A name with no version](./refs.md#a-name-with-no-version).
+- **A role binding of the system leaves the hash of the policy tier.** Its subjects depend on the
+  user of the key. So before, the keys of two users gave two hashes of the tier for one cluster. Now `rbacs` of `fields` does not
+  hold the binding, and the new field `systemRbacs` of the tier names it. `compare` and `verify`
+  do not compare it. See
+  [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
+  - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
+    policy tier at the binding. The exit does not change. Record the cluster again.
+  - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
+- **`compare` and `verify` print each note one time.** Before, two records of one cluster gave
+  some notes two times, one for each side. These notes are `cluster <c> runs <pack> <version>,
+  and its profile declares <version>` and `cluster <c> is behind`. A script that counts the
+  `note` lines of the text reads one line for each such note now. The JSON does not change:
+  `runningBehind` keeps one row for each side. See [Notes in the report](../commands/compare.md#notes-in-the-report).
+- **`consumers` says what it searched, and where its answer stops.** See
+  [What strata searched](../commands/consumers.md#what-strata-searched).
+  - The lines `second reading: ...` and `edge hosts: ... read` are gone. The
+    block `searched:` gives one row for each reading: `consumer list`,
+    `cluster search` or `cluster listing`, `cluster groups`, and `edge hosts`.
+    An app profile has the rows `consumer list`, `app deployments`, and
+    `edge hosts`. Each row gives counts and no name of a cluster. A search that
+    names other clusters says how many run this version and how many run other
+    versions.
+  - The row of the edge hosts reads `none found` in place of
+    `edge hosts: 0 read`. It reads `1 of 3 bound to the version` in place of
+    `edge hosts: 3 read`.
+  - The line `scope:` follows the block, for a cluster profile whose document
+    gives the scope. Then the line `NOT CHECKED:` names each project that strata
+    could not search.
+  - A consumer row names its project by its name alone, such as `project dev`.
+    Before, it gave `project dev (uid ...)`. The row gives the uid when strata
+    cannot read the project listing. The markdown cell changes in the same way.
+    Strata reads the project listing of the tenant first, so a consumer in
+    another project has its name too. `projectUid` of the JSON stays.
+  - For a profile of the tenant or of the system, strata also searches each
+    project of the tenant listing. That is one more request for the project
+    listing, and two or three for each project. See
+    [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
+  - The exit is `2` when strata finds no consumer and could not search a project
+    that can use the version. Before, such a run exited `0`. A gate before a
+    delete then does not run the delete. Give the gate a key that reads each
+    project of the tenant.
+  - The markdown has a table of the rows in place of the two sentences, a
+    sentence for the scope, and `NOT CHECKED` in bold. A script that reads the
+    text must read the new rows, or read `--json`.
+- **`consumers` of an app profile gives its scope, and lists the app deployments of
+  each project that can use the version.** See [App profiles](../commands/consumers.md#app-profiles).
+  - The line `scope:` and `profile.scope` are there for an app profile too, with
+    `profile.projectUid` and `profile.projectName` for an app profile of a project.
+  - Strata lists the app deployments of the project of an app profile of a
+    project. For an app profile of the tenant or of the system, it lists them in
+    each project of the tenant listing. That is one more request for each 50 app
+    deployments of a project, one for the project listing, and one for the
+    cluster search.
+  - An app deployment that runs the version and that the consumer list does not
+    name joins the answer with `unlisted`, and the exit is `1`. The row
+    `app deployments` counts them. Before, it said `not searched (an app profile:
+    the app deployment listing filters no profile)`.
+  - When Palette refuses a listing, the line `NOT CHECKED` names the project,
+    and `projectsRead` names it. With no consumer, the exit is `2`. Before,
+    such a run exited `0`.
+  - For an app profile of the tenant or of the system, strata also sends one
+    page of the cluster search at tenant scope. When Palette refuses it, the
+    line `NOT CHECKED` gives `each project that this key cannot list`, and
+    `projectsRead.tenantError` gives the refusal. When the search fails in
+    another way, strata lists no project, and `clustersRead.error` gives the
+    error. With no consumer, the exit is `2` in both cases. Before, such a run
+    exited `0`.
+- **`consumers` of a profile of a project also searches the edge hosts of its
+  project.** That is one more request for each 50 edge hosts. When that search
+  fails, the row `edge hosts` says `not read`, and with no consumer the exit is
+  `2`. Before, such a run exited `0`.
+- **`consumers` of a profile of a project stops when its project denies the
+  search.** Before, it sent the search in the scope of the key. That search
+  omits the project. The row `cluster search` now says `not done`, and with no
+  consumer the exit is `2`. Before, such a run exited `0`.
+- **A failed search at tenant scope names each project.** This is for a profile
+  of the tenant, and an error that is not a denial. The line ends with
+  `(the cluster search failed)`, and `projectsRead.unread` names each project.
+  The line `scope:` gives `0 of 3 projects searched`, where it gave
+  `0 of 0 projects searched`. The exit stays `2`.
+- **The line `scope:` gives no count of the projects when strata could not read
+  the project listing.** Before, it gave `0 of 0 projects searched`.
+- **`same-release --allow renumber` gives a reason for a missing pack file.**
+  Before, strata refused the download with the error `not-archive`, and the command exited `2`.
+  Now strata reads the other packs of the download. A renumber of the pack of that file gets
+  the fact `archive: not readable`, with the reason `the download does not hold <path>` in
+  `archivesNotReadable`. Its pair fails, and the command exits `1`. See
+  [The archives of the two builds](../commands/same-release.md#the-archives-of-the-two-builds).
+- **The root of two kinds of record moves.** The variables hash reads `********` as an empty
+  default value now. This is for a sensitive variable that is not a dropdown. So
+  `variablesHash`, `root`, and `contentDigest` move for the records below. Each other record
+  keeps its root. See [Cluster copies](../internals/palette/clusters.md#cluster-copies).
+  - A record of a cluster, of a profile on a cluster, or of `@pending`, when a profile of the
+    cluster has such a variable. Palette gives `********` as its default value on a cluster,
+    also when the profile has none. The new root is the root of the record of the profile.
+    Before, `compare` of the two showed a change of the variables, and `same-release` failed.
+  - A record of a profile, an edge host, a cluster group, or a candidate, when such a variable
+    has the default value `********`. Palette gives the mask for a default value that is not
+    empty.
+  - `verify` of an older record of each kind reports `DRIFT`: the variables changed, and no
+    field of a variable changed. Take the record again with 0.34.0.
 - **`list --detail` replaces `--packs` and `--applied`.** `--detail` reads each profile
   version for its packs and each cluster for the profiles that it applies. `--packs` still
   reads the versions alone, and `--applied` the clusters alone. Each one also writes a note on
@@ -1231,10 +1583,69 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **A note of `--dry-run` of `verify-report.sh` and `upstream-report.sh` has new words.** It
+  says what a run with no `--dry-run` does. A note said "would close the open issue", and now
+  says "a run with no --dry-run closes the open issue". Its "if any" is now "if one is open".
+  "would open or update" is now "a run with no --dry-run opens or updates". A script that reads
+  the notes on standard error must read the new words.
+- **A note of `--dry-run` of `pr-comment.sh` has new words.** It says what a run with no
+  `--dry-run` does. "would add label" is now "a run with no --dry-run adds label". "would remove
+  label ... if present" is now "a run with no --dry-run removes label ..., if the pull request has
+  it". "would post the preflight comment, or update" is now "a run with no --dry-run posts the
+  preflight comment, or updates". A script that reads the notes on standard error must read the
+  new words.
+- **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
+  names the code and the message of Palette. Before, it quoted the JSON of the body.
+- **The line `who: not read` in an issue of `verify-report.sh --who` gives the words of
+  Palette.** It names the status, the code, and the message. Before, it quoted the JSON of the
+  body.
+- **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
+  version.** The bump column gives this line of `behind`. A script that reads the cell must
+  read the new line.
+- **The issue of `upstream-report.sh` names the next patch of a pin.** The newer column ends
+  with `; next patch <version>`. Only a pin that is behind a newer minor version has it. The
+  version comes from `nextPatch` of `strata behind`. A script that reads the cell must read the
+  new text. See [Upstream issues](../automation/upstream-issues.md).
+- **`verify-report.sh` and `upstream-report.sh` write a quoted text as the markdown form does.**
+  An issue shows a tag of HTML in it as text.
+  - The state line of an issue of `upstream-report.sh` writes each `<`, `>`, and `&` of its
+    JSON as an escape of JSON, such as `\u003c`. So a `-->` in a message cannot end the comment.
+    A reader of JSON reads the same pins, and the next run reads the state line of an older
+    issue too.
+  - The output of strata in an issue of `verify-report.sh` has a fence that no line of the output
+    ends.
+  - Each code span of a name, a version, a tag, or a path has a fence longer than each run of
+    backticks in it.
+  - The marker on the first line of an issue writes each `&`, `<`, and `>` of the path or of the
+    pack name as an entity. A marker with none of these characters does not change, so the next
+    run finds an older issue.
+- **`verify-report.sh` and `upstream-report.sh` write a `\` before each mark of markdown in a
+  quoted text.** They do it as the markdown form does. So an issue shows a link, an emphasis, or
+  a code span in a message of Palette as text.
+- **`verify-report.sh` and `upstream-report.sh` write a zero width space after each `@` of a
+  mention in a quoted text.** They do it as the markdown form does. So a `@name` in a message of
+  Palette notifies nobody.
+- **`verify-report.sh` and `upstream-report.sh` keep a bare address that GitHub surely links as it
+  is.** They do it as the markdown form does. So the link of the address in an issue goes to its
+  target.
+- **`observer-propose.sh` counts the backticks in each code span of its body.** Each span has a
+  fence longer than each run of backticks in its value. The body names the cluster and the path
+  of each record in such a span. A name and a path with no backtick do not change.
 - **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
   `in-place` adds no label for such a pair.
+- **`verify-report.sh` names a record as the heading of `compare` does.** It
+  reads `subject`. The title of the issue of a drift reads
+  `strata verify: 4 profiles on cluster payments drifted`. The comment of its
+  close uses the same words. Before, they gave `name@version`, and joined the
+  names and the versions of many profiles. The next run gives the new title to
+  the open issue of a record that still drifts. See
+  [Drift issues](../automation/drift-issues.md).
+- **`pr-comment.sh --repave` prints the new error of strata for two records.** It records each
+  ref that is not a file. So for two profile versions, the line of strata on standard error says
+  that both sides are records, and names the commands to use. The table still decides the
+  label. See [Ask Palette if the change repaves](../automation/pr-comments.md#ask-palette-if-the-change-repaves).
 
 ### For a user of the library of strata
 
@@ -1246,11 +1657,97 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::Listing` has the new field `errors`. A struct literal must set it, and a
+  pattern with no `..` must name it. `ops::list` gives a listing with the error
+  of a kind that it could not read, in place of the error, when it read another
+  kind. `ops::ListKind` is a closed set of `closed_set::ClosedSet` with serde,
+  and `Listing::exit_code` is new.
+- `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
+  accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
+  one of them.
+- `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
+- `text::code_block` is new. It writes a fenced code block with a fence that no line of the text
+  ends.
+- `text::markdown_cell` also writes each `&`, `<`, and `>` as an entity. A caller that puts the
+  cell in a code span calls `text::code_cell` in its place, because a code span shows an entity as
+  it is.
+- `text::code_cell` writes no entity. It escapes a `|` and a line break, as before.
+- `text::markdown_cell` also writes a `\` before each mark of markdown, such as a backtick. A
+  caller that puts a code span of its own in the text must write the span outside the cell. The
+  cell shows the backticks of the span as text.
+- `text::markdown_cell` also writes the entity `&#8203;` after each `@` that can start a mention
+  of GitHub. A caller that compares the cell with a text must read `@&#8203;name` in place of
+  `@name`.
+- `text::markdown_cell` keeps a bare address that GitHub surely links as it is, with no entity,
+  no `\`, and no zero width space in it.
+- `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
+  pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
   the report of 0.33.0. The JSON renderer does not read it.
 - `ops::PinnedBy` has the new field `owner: Option<String>`. A struct literal must set it.
+- `ops::Pin` has the new field `next_patch: Option<String>`, the patch of `nextPatch`. A struct
+  literal must set it, and a pattern with no `..` must name it.
 - `ops::SetRecord` has the new field `secret_like_variables`. A struct literal must set it, and
   a pattern with no `..` must name it.
+- `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
+  struct literal must set it. `ops::update_checks` is new: the checks of `compare --validate`.
+  The module `model::update` is new, with `UpdateChecks`, `RequiredVariables`, and
+  `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
+  `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
+  `INVALID_VARIABLE_CODE`.
+- `error::Error::Api` has the new field `key_proved: bool`. A struct literal must set it, and a
+  pattern with no `..` must name it. The message reads it: a `403` that is a denial names the
+  key only when it is false. Before, the message read a flag of the thread. So a client with a
+  second key on the same thread got no hint about that key. `api::HttpApi` sets it for each
+  key and address of Palette in the process, and `api::MemoryApi` for each client.
+- `api::project_uid_named` keeps the uid that it finds with the name, the address, and the key
+  of the `Config`. Before, it kept the uid with the name alone. So a program with two tenants or
+  two keys, and one project name, got the uid of the first tenant.
+- `snapshot::Snapshot::from_raw`, `Snapshot::from_raw_draft`, and `Snapshot::from_cluster` write
+  `********` over the console address of a pack of virtual machines. They give
+  `Error::Serialize` when strata cannot write the masked values. `api::RawProfile::save_dir`
+  and `api::RawCluster::save_dir` write the same mask.
+- `api::codes::ValidateRoute::ClusterCreate.refusal_codes()` gives 29 more codes, and
+  `is_refusal_code` is true for each of them. `Error::class` gives `Terminal` to a 5xx with one of
+  them, from each route. `ValidateRoute::refuses_answer` and `ValidateRoute::refuses_request` are
+  true for the cluster validate route with HTTP 403 and a code of the new consts
+  `api::codes::CLUSTER_CREATE_FORBIDDEN_CODES` and `api::codes::CLUSTER_CREATE_LIMIT_CODES`, or
+  `PACK_FORBIDDEN_CODE`.
+- `snapshot::VariableOption` has the new field `default: bool`. A struct literal must set it, and
+  a pattern with no `..` must name it. `RequiredVariables` of `UpdateChecks` counts a required
+  dropdown variable with no default option, when its default value is not the label of an
+  option.
+- The `Display` of `Error::Api` gives the code and the message of the body, and not its JSON.
+  `Error::to_json` writes the body as `body`. The field `body` of the variant stays the whole
+  body.
+- `ops::snapshot_for`, `ops::snapshot_object`, `ops::snapshot_for_candidate`, and
+  `ops::consumers_with` give `Error::Usage` for a profile name in a ref with no version. Such a
+  ref is `Ref::Uid`, or `Ref::Draft` with no version. Before, they gave the `Error::Api` of the
+  404.
+- `snapshot::ClusterTier` has the new field `system_rbacs`, the role bindings of the system of
+  the policy tier. A struct literal must set it, and a pattern with no `..` must name it.
+  `snapshot::cluster_tiers` keeps these bindings out of `fields` and out of `hash`.
+- `ops::ConsumedProfile` has the new fields `scope`, `project_uid`, and `project_name`.
+  `ops::ConsumersReport` has the new field `projects_read`, and `ops::ClustersRead` has the new
+  field `members_found`. A struct literal must set them, and a pattern with no `..` must name
+  them. `ConsumersReport::incomplete` is also `true` when `projects_read` names a project that
+  strata could not search, so `ConsumersReport::exit_code` gives `2` for it.
+- `ops::consumers` and `ops::consumers_with` search each project of the tenant listing for a
+  profile of the tenant or of the system. They call `connect` with the uid of each project.
+- `connect` can give no client of the tenant. Then for a profile of the tenant or of the system,
+  `ops::consumers_with` puts the error of `connect` in `ProjectsRead::error`. So
+  `ConsumersReport::exit_code` gives `2` with no consumer. Before, the project listing of the
+  scope of the profile read as the listing of the tenant.
+- `ops::consumers_with` reads the scope of an app profile into `ConsumedProfile::scope`,
+  `project_uid`, and `project_name`. It lists the app deployments of each project that can use
+  the version, and `ConsumersReport::projects_read` names the projects. `ConsumersOptions::list_only`
+  stops the listing.
+- `ops::APP_NO_SECOND_READING` has a new text: it is the reason for an app profile whose document
+  names no scope.
+- `api::Palette::app_deployments` is new: the app deployment listing of the scope.
+- `api::Palette::profile_download` gives a download, and no `Error::NotArchive`, when the list
+  of the download names a file that the download does not hold. The pack of that file has
+  `api::PackFile::NotReadable`, with the reason `the download does not hold <path>`.
 - `ops::ListKind` has the new variants `Registries` and `Packs`. A `match` with no wildcard arm
   must name them. `ops::list` refuses `Packs` with `Error::Usage`, before it connects.
 - `ops::Listing` has the new field `registries`, of the new type `ops::ListedRegistry`. A
@@ -1267,6 +1764,8 @@ field, a value, an input, or an option is in the sections above.
   `Summary::not_counted` is true when the verdict is `NOT COUNTED`.
 - `probe::LiveBackend` keeps a 401 and a 403 for the run, and gives the same error to each check
   that sends the request.
+- `probe::run_check` writes the marks into the body of a failed read of an exec check before the
+  cut. It does the same for a check of Palette.
 
 ## Release 0.33.0: changes that need action
 
@@ -1435,7 +1934,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer gives the status `newer` to a profile with a newer version.** Before, such
   a profile was `ok`. Only a pack with a newer version gave the status. Its row holds the new
   field `newerVersion`, and `counts` of `/v1/cluster` holds `newerProfileVersions`. See
-  [Run it once](../automation/observer.md#run-it-once).
+  [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **`behind` names the move to the newest profile version.** A new line
   `bump to <version>: <level> <flags>` follows the time of the create. It comes under the line
   `[profile]` of a version that is behind. `profiles[].bump` of `--json` holds the same, with
@@ -1449,7 +1948,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the move to the newest version of a profile.** `newerVersion` holds the
   new field `move`, or `unread` when the compare failed. The detail route takes the side
   `newest`. The versions cycle runs one more `compare` for each profile version that is behind.
-  See [Run it once](../automation/observer.md#run-it-once).
+  See [The move to the newest version of a profile](../development/observer.md#the-move-to-the-newest-version-of-a-profile).
 - **`behind` names the newer profile version that carries a newer pack.** A new line under each
   pin that is behind names it. The line is `<name>@<version> carries <pack>@<version>`, or it says
   that no newer version of the profile carries one. `pins[].carriers[]` of `--json` holds the
@@ -1463,7 +1962,7 @@ field, a value, an input, or an option is in the sections above.
 - **The observer shows the carrier of a pack that is behind.** A pack row of `/v1/profiles` holds
   the new field `carried`. A row of `/v1/newer` holds the new field `carriers`. The Compare badge
   of the sides `newer` and `newest` of a pack page is the neutral badge "Newer", and not the red
-  badge "Changed". See [Run it once](../automation/observer.md#run-it-once).
+  badge "Changed". See [The newer versions of a profile](../development/observer.md#the-newer-versions-of-a-profile).
 - **The tiles of the page of the newer versions say "newer", and not "behind".** The tile
   "Packs behind" is now "Packs with a newer version". The tile "Versions behind" is now
   "Versions newer than the pins". The numbers and the lines under them stay the same. A check

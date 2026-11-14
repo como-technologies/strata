@@ -1,5 +1,6 @@
 # Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the usage and the
-# stages, the checks and their summary, the edits of the lab, the OpenTofu applies, and the baseline.
+# stages, the checks and their summary, the markdown of a text, the edits of the lab, the OpenTofu
+# applies, and the baseline.
 # Set `script` to the script's name, `flag` to the immutable-clusterprofiles setting the script runs
 # with, and `from` to the first stage of the run, then source it.
 #
@@ -48,11 +49,24 @@ if : | command jq -e . > /dev/null 2>&1; then
   export -f jq
 fi
 
-# The default binary must be built from these sources: a run with an older one tests old code.
-# `just build`, and each live recipe, builds it. A binary set with STRATA_BIN is the caller's.
-if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then
-  stale=$(find "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock" -type f -newer "$strata" -print -quit 2>/dev/null)
-  [ -z "$stale" ] || die "$strata is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+# refuse_stale BINARY SOURCE...: stop the script when BINARY exists and a file of SOURCE is newer.
+refuse_stale() {
+  local binary=$1 stale
+  shift
+  [ -e "$binary" ] || return 0
+  stale=$(find "$@" -type f -newer "$binary" -print -quit 2>/dev/null)
+  [ -z "$stale" ] || die "$binary is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+}
+
+# The default binaries must be built from these sources: a run with an older one tests old code.
+# `just build`, and each live recipe, builds both. `strata preflight` runs the strata-preflight
+# beside strata, and it holds the code of strata too. A binary set with STRATA_BIN is the
+# caller's, and so is the strata-preflight beside it.
+if [ -z "${STRATA_BIN:-}" ]; then
+  refuse_stale "$strata" "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock"
+  refuse_stale "$(dirname "$strata")/strata-preflight" "$live/../../src" "$live/../../Cargo.toml" \
+    "$live/../../Cargo.lock" "$live/../../crates/strata-preflight/src" \
+    "$live/../../crates/strata-preflight/rules" "$live/../../crates/strata-preflight/Cargo.toml"
 fi
 
 # ---- OpenTofu outputs ----------------------------------------------------------------------------
@@ -194,14 +208,37 @@ check() {
   printf '%-4s  %-32s expected %s, got %s\n' "$verdict" "$id" "$want" "$got" | tee -a steps.log
 }
 
-# summary_table: the checks in steps.log as a markdown table, with what each shows
+# answered STATUS FILE...: the first line of each FILE, the output of api.sh get-status or
+# post-status, is HTTP STATUS
+answered() {
+  local status=$1 f
+  shift
+  for f in "$@"; do [ "$(head -n 1 "$f")" = "HTTP $status" ] || return 1; done
+}
+# body_of FILE: the body of the answer that FILE holds after its status line
+body_of() { sed 1d "$1"; }
+# answer_is STATUS FILE FILTER [OPTION...]: FILE holds HTTP STATUS, and the jq FILTER is true of
+# its body. Each OPTION goes to jq, such as --slurpfile d FILE.
+answer_is() {
+  local status=$1 file=$2 filter=$3
+  shift 3
+  answered "$status" "$file" && body_of "$file" | jq -e "$@" "$filter" > /dev/null
+}
+# refused STATUS CODE FILE: FILE holds HTTP STATUS and an answer with the code CODE
+refused() { answer_is "$1" "$3" '.code == $c' --arg c "$2"; }
+
+# summary_table: the checks in steps.log as a markdown table, with what each shows. The id is a
+# `code` of markdown_jq, and each other value is a `cell`. A SEEN line that a script writes itself
+# puts its own words in the place of the exit codes. So a `|` or a mark of markdown in a value
+# shows as text.
 summary_table() {
   echo "| result | check | expected exit | got | what it shows |"
   echo "|---|---|---|---|---|"
   [ -f steps.log ] || return 0
   command grep -E '^(PASS|FAIL|SEEN) ' steps.log | while read -r verdict id _ want _ got; do
     what=$(awk -F '\t' -v id="$id" '$1 == id { w = $2 } END { print w }' checks.tsv 2>/dev/null)
-    echo "| $verdict | \`$id\` | ${want%,} | $got | $what |"
+    jq -rn --arg v "$verdict" --arg id "$id" --arg want "${want%,}" --arg got "$got" --arg what "$what" \
+      "$markdown_jq"' "| \($v) | \($id | code) | \($want | cell) | \($got | cell) | \($what | cell) |"'
   done
 }
 
@@ -223,6 +260,51 @@ write_summary() {
     summary_table
   } > summary.md
 }
+
+# ---- markdown ----------------------------------------------------------------------------------------
+
+# The jq functions that write a text into markdown, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
+# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
+# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
+# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
+# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
+# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
+# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
+# the fence of `text::code_block`, so that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
+  def quoted: marks | html | mentions;
+  def link_end: . as $t | ([scan("[(]")] | length) as $open
+    | def cut($end; $close): $t[$end - 1:$end] as $c
+        | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
+          elif $c == ";" and ($t[:$end] | test("&[A-Za-z]+;$")) then null
+          elif ($c | test("^[?!.,:*_~\\x27\";]$")) then cut($end - 1; $close)
+          else $end end;
+      cut(length; [scan("[)]")] | length);
+  def address($first): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
+    | (if test("^[!-~]*$") and (test("<") | not) then $rest | link_end else null end) as $e
+    | if $e == null
+        or ($rest[:$e] | test("^(https?://|www[.])[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+([/?#:]|$)") | not)
+        or (($rest | startswith("www.")) and (if $s == 0 then $first else (startswith("(") | not) end))
+      then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
+  def word($first): address($first) as $a
+    | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
+  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
 
 # ---- OpenTofu ----------------------------------------------------------------------------------------
 #
@@ -280,10 +362,10 @@ try_apply() {
 }
 # hold_versions: at the baseline, store skip_destroy for the script's flag on every profile in the
 # state, changing nothing else. Every script that applies runs it right after require_baseline. A
-# flag-on version bump replaces the profile resource, and the provider deletes the replaced object with
-# the skip_destroy its state holds, not the new value (provider 0.30.1): without this, the bump asks
-# Palette to delete the old version, which Palette refuses while a cluster runs it
-# (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
+# flag-on version bump replaces the profile resource. The provider deletes the replaced object with
+# the skip_destroy that its state holds, not the new value (provider 0.30.1). Without this, the bump
+# asks Palette to delete the old version. Palette refuses the delete while a cluster runs that
+# version (DeletionResourceInUseError, drift-report.sh on, run 20260917T132642Z).
 hold_versions() { tf_apply "$flag"; }
 # apply_baseline: the default variables with the flag off, which is the baseline's configuration;
 # skip_destroy goes back to false on every profile. A profile resource this removes stays in
@@ -463,7 +545,7 @@ pf_stop() {
 }
 # pf_start [USER]: open kubectl port-forward deploy/strata-observer, as USER when it is given. The log is
 # port-forward.log. The wait ends at the line "Forwarding from" in the log, or at the end of the process.
-# Its limit is 30 seconds, not 30 looks: the stand-in sleep of the tests returns at once, so 30 looks take
+# Its limit is 30 seconds, not 30 looks. The stand-in sleep of the tests returns at once, so 30 looks take
 # less than a second there. When the function fails, it says why on standard error.
 pf_start() {
   local end why
@@ -510,9 +592,9 @@ pods_read() {
 
 # The image of the observer. It is on a public package of GitHub, so a node pulls it with no pull
 # Secret. A run never pushes it to another registry, so the pod runs the image that CI built.
-# observer_image [TAG]: set $image from OBSERVER_IMAGE (default: the image with the tag TAG, or with the
-# tag of the version in Cargo.toml), and $image_name and $image_pin for a kustomization. It stops the
-# script for an image with neither a tag nor a digest.
+# observer_image [TAG]: set $image from OBSERVER_IMAGE, and $image_name and $image_pin for a
+# kustomization. The default of $image is the image with the tag TAG, or with the tag of the version
+# in Cargo.toml. It stops the script for an image with neither a tag nor a digest.
 observer_image() {
   local version
   version=$(grep -m1 '^version' "$live/../../Cargo.toml" | cut -d'"' -f2)

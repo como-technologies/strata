@@ -14,6 +14,7 @@ use crate::closed_set::legend::legend;
 use crate::json::flag;
 use crate::model::cluster_template::ClusterTemplateRef;
 pub use crate::model::repave::PaletteRepaveReason;
+use crate::model::update::UpdateChecks;
 pub use crate::model::validation::{PaletteRefusal, PaletteValidation};
 use crate::snapshot::{Snapshot, Source, Tool};
 use crate::timestamp::Rfc3339;
@@ -143,6 +144,11 @@ pub struct Diff {
     /// packs of the change on the cluster side.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<PaletteValidation>,
+    /// With `compare --validate`: what strata checks about the move from the cluster side to the
+    /// profile side, beside the answer of Palette. These are the rules that Palette checks only at
+    /// the update. Absent when strata finds nothing, and without the option.
+    #[serde(default, skip_serializing_if = "UpdateChecks::is_empty")]
+    pub update_checks: UpdateChecks,
 }
 
 impl Diff {
@@ -463,6 +469,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         image_ids_changed: image_ids_changed(a, b),
         palette_repave: None,
         palette_validation: None,
+        update_checks: UpdateChecks::default(),
         upstream_unknown: packs
             .iter()
             .filter(|p| p.upstream_unknown)

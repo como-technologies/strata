@@ -2,20 +2,25 @@
 //! that a record holds. The document of a version gives the published versions of its profile in
 //! `spec.versions[]`, in no order, and strata orders them. With the impact, `behind` also compares
 //! each profile version that is behind with the newest version (#708). For a pin that is behind,
-//! it names the newer profile version that carries a newer version of the pack (#709). On a cluster
-//! with many profiles, each row names the profile that holds its pack, the counts of the heading
-//! add up, `--behind-only` omits the rows that are current, and a pin names the newest patch of
-//! its own minor version (#622).
+//! it names the newer profile version that carries a newer version of the pack (#709).
+//!
+//! On a cluster with many profiles, each row names the profile that holds its pack, and the counts
+//! of the heading add up (#622). `--behind-only` omits the rows that are current, and a pin names
+//! the newest patch of its own minor version (#622). The move of a profile version names the
+//! required variables that it adds, and a move of Kubernetes that skips a minor version (#623).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
+use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE};
 use strata::closed_set::ClosedSet;
 use strata::diff::{ChangeFlag, Status};
+use strata::model::input_type::InputType;
 use strata::model::scope::ProfileScope;
 use strata::ops;
+use strata::reference::Ref;
 use strata::render::RowState;
 use strata::snapshot::{AppliedProfile, ClusterSource, ClusterTier, Snapshot, Tier};
 
@@ -460,10 +465,21 @@ fn serve_packs(
     versions: &[(&str, &str)],
     packs: &[PackFixture],
 ) -> MemoryApi {
+    serve_packs_with(api, (uid, version), versions, packs, no_variables())
+}
+
+/// [`serve_packs`], where the answer of the variables of the version is `variables`.
+fn serve_packs_with(
+    api: MemoryApi,
+    (uid, version): (&str, &str),
+    versions: &[(&str, &str)],
+    packs: &[PackFixture],
+    variables: Value,
+) -> MemoryApi {
     let mut doc = version_document(uid, "barney-addons", version, versions);
     doc["spec"]["published"]["packs"] = packs.iter().map(|p| p.pack_ref(&[])).collect();
     let manifests = packs.iter().map(|p| p.pack_manifests(Vec::new())).collect();
-    serve_profile(api, uid, doc, manifests_answer(manifests), no_variables())
+    serve_profile(api, uid, doc, manifests_answer(manifests), variables)
 }
 
 /// [`serve_versions`] of [`BARNEY`], where 1.3.1 holds [`packs_held`] and 1.4.0 holds
@@ -580,6 +596,153 @@ fn a_profile_version_with_no_newer_version_and_a_run_with_no_impact_show_no_move
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(!text.contains("bump to"), "{text}");
     assert_eq!((manifests(HELD), manifests(NEWEST)), before);
+}
+
+/// The pack of the `k8s` layer of `barney-addons` at `version`, from no registry, so that the
+/// record has no pin of it.
+fn kubernetes_at(version: &str) -> PackFixture<'_> {
+    PackFixture::new("kubernetes", "k8s", version, "k8s", "", "", "k: 1\n")
+}
+
+#[test]
+fn the_move_to_the_newest_profile_version_names_the_required_variables_that_it_adds_and_a_skip() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    // 1.3.1 runs Kubernetes 1.34.9 and has the variable region. 1.4.0 moves Kubernetes to 1.36.2,
+    // and adds three variables: owner needs a value, tier has a default value, and note is not
+    // required
+    let held = [packs_held()[0], kubernetes_at("1.34.9")];
+    let newest = [packs_newest()[0], kubernetes_at("1.36.2")];
+    let region = common::variable("region", "Region", "", false);
+    let api = serve_packs_with(
+        api,
+        (HELD, "1.3.1"),
+        BARNEY,
+        &held,
+        json!({"variables": [region]}),
+    );
+    let mut note = common::variable("note", "Note", "", false);
+    note["required"] = json!(false);
+    let variables = json!({"variables": [
+        region,
+        common::variable("owner", "Owner", "", false),
+        common::variable("tier", "Tier", "gold", false),
+        note,
+    ]});
+    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &newest, variables);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    assert_eq!(
+        bump.update_checks
+            .required_variables
+            .as_ref()
+            .unwrap()
+            .names,
+        ["owner"]
+    );
+    let skip = bump.update_checks.skipped_minor.as_ref().unwrap();
+    assert_eq!(
+        (
+            skip.from.as_str(),
+            skip.to.as_str(),
+            skip.next_step.as_deref()
+        ),
+        ("1.34.9", "1.36.2", None),
+        "strata reads no registry for the move of a profile version"
+    );
+    assert!(
+        api.posted().is_empty(),
+        "strata asks Palette nothing about the move of a profile"
+    );
+
+    // the two lines come under the bump line, the variables first
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let variables_line = format!(
+        "the move adds the required variable owner with no default value: give it a value at the \
+         update, or Palette refuses the update with {INVALID_VARIABLE_CODE}"
+    );
+    let skip_line = format!(
+        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
+         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to a version of 1.35 first"
+    );
+    assert!(
+        text.contains(&format!(
+            "{} IDENTITY UPSTREAM\n      {variables_line}\n      {skip_line}\n",
+            bump.impact
+        )),
+        "{text}"
+    );
+    // the markdown writes the `->` of the skip as `-&gt;`
+    let markdown = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        markdown.contains(&format!(
+            "<br>{variables_line}<br>{} |",
+            strata::text::html_text(&skip_line)
+        )),
+        "{markdown}"
+    );
+    let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        doc["profiles"][0]["bump"]["updateChecks"]["requiredVariables"]["names"],
+        json!(["owner"])
+    );
+    assert_eq!(
+        doc["profiles"][0]["bump"]["updateChecks"]["skippedMinor"]["nextMinor"],
+        "1.35"
+    );
+}
+
+#[test]
+fn the_move_names_a_required_dropdown_variable_with_no_default_option_and_not_one_with_a_default_option()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_versions(MemoryApi::new(), "barney-addons", BARNEY);
+    let api = serve_packs_with(
+        api,
+        (HELD, "1.3.1"),
+        BARNEY,
+        &packs_held(),
+        json!({"variables": []}),
+    );
+    // 1.4.0 adds two required dropdown variables with no default value. Palette gives the mark
+    // `default` on each option, and only zone has an option with the mark
+    let dropdown = |name: &str, default: bool| {
+        let mut v = common::variable(name, name, "", false);
+        v["inputType"] = json!(InputType::Dropdown.as_str());
+        v["options"] = json!([
+            {"label": "a", "value": "1", "description": "", "default": false},
+            {"label": "b", "value": "2", "description": "", "default": default},
+        ]);
+        v
+    };
+    let variables = json!({"variables": [dropdown("size", false), dropdown("zone", true)]});
+    let api = serve_packs_with(api, (NEWEST, "1.4.0"), BARNEY, &packs_newest(), variables);
+    let record = record_of(&api, HELD, dir.path(), "barney.json");
+    let r = behind_of(&api, &[record], &WITH_IMPACT);
+    let bump = r.profiles[0].bump.as_ref().expect("1.3.1 is behind 1.4.0");
+    let required = bump.update_checks.required_variables.as_ref();
+    assert_eq!(required.map(|r| r.names.clone()), Some(vec!["size".into()]));
+
+    // a record of 1.4.0 keeps the mark of the default option, and no mark of another option
+    let newest = record_of(&api, NEWEST, dir.path(), "newest.json");
+    let doc: Value = serde_json::from_str(&std::fs::read_to_string(newest).unwrap()).unwrap();
+    let marks = |name: &str| -> Vec<Value> {
+        let v = doc["variables"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|v| v["name"] == name)
+            .unwrap();
+        v["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["default"].clone())
+            .collect()
+    };
+    assert_eq!(marks("zone"), [Value::Null, json!(true)]);
+    assert_eq!(marks("size"), [Value::Null, Value::Null]);
 }
 
 #[test]
@@ -891,6 +1054,7 @@ fn two_profile_cluster(record: &Path, running: bool, dir: &Path) -> PathBuf {
             hash: String::new(),
             fields,
             errors: BTreeMap::new(),
+            system_rbacs: Vec::new(),
         };
         let cluster = snap.source.cluster.as_mut().unwrap();
         cluster.tiers.insert(Tier::Running.into(), tier);
@@ -1153,18 +1317,20 @@ fn behind_only_omits_the_rows_that_are_current_and_keeps_the_heading_and_the_jso
     );
 }
 
+/// The line `next patch` comes from `nextPatch` of the pin. A unit test of `ops::behind` gives the
+/// rule of the patch.
 #[test]
-fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_command() {
+fn a_pin_with_a_next_patch_names_the_patch_and_the_command_under_its_line() {
+    let mut patched = pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]);
+    patched["nextPatch"] = json!("1.36.4");
     let mut no_name = pin_doc("cert-manager", "1.21.1", &["1.22.0", "1.21.3"]);
     no_name["registry"] = json!("");
+    no_name["nextPatch"] = json!("1.21.3");
     let pins = vec![
-        pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]),
-        // the newest version is of the minor version of the pin: the bump names it
+        patched,
+        // a pin with no next patch has no line
         pin_doc("kubernetes", "1.36.3", &["1.36.4"]),
-        // no newer version of the minor version of the pin
         pin_doc("csi-aws-ebs", "1.63.1", &["1.65.0", "1.64.0"]),
-        // a version that does not parse has no minor version
-        pin_doc("ubuntu-aws", "LTS__20.4.x", &["24.04"]),
         no_name,
     ];
     let r = report_of(pins, Vec::new());
@@ -1202,7 +1368,52 @@ fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_
         ),
         "{markdown}"
     );
-    // the line is a hint of the report: the JSON holds the newer versions, and no other field
+    // the JSON gives the patch, and not the line: a script makes its own text
     let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(doc["pins"][0]["nextPatch"], "1.36.4");
     assert!(!doc.to_string().contains("next patch"), "{doc}");
+}
+
+#[test]
+fn the_next_patch_of_a_registry_with_a_slash_in_its_name_gives_refs_that_parse_to_that_registry() {
+    // Palette takes a `/` in the name of a registry and in the name of a pack
+    let mut slash_registry = pin_doc("nginx", "1.27.0", &["1.28.0", "1.27.4"]);
+    slash_registry["registry"] = json!("team/charts");
+    slash_registry["nextPatch"] = json!("1.27.4");
+    let mut slash_pack = pin_doc("team/nginx", "1.27.0", &["1.27.4"]);
+    slash_pack["registry"] = json!("quarry-charts");
+    slash_pack["nextPatch"] = json!("1.27.4");
+    let r = report_of(vec![slash_registry, slash_pack], Vec::new());
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    let lines: Vec<&str> = text
+        .lines()
+        .filter_map(|l| {
+            l.trim_start()
+                .strip_prefix("next patch 1.27.4: strata compare ")
+        })
+        .collect();
+    assert_eq!(
+        lines,
+        [
+            format!("pack:{PUBLIC_REGISTRY}/nginx@1.27.0 pack:{PUBLIC_REGISTRY}/nginx@1.27.4"),
+            "pack:quarry-charts/team/nginx@1.27.0 pack:quarry-charts/team/nginx@1.27.4".to_string(),
+        ],
+        "{text}"
+    );
+    let no_files = |_: &Path| false;
+    for (line, registry, name) in [
+        (lines[0], PUBLIC_REGISTRY, "nginx"),
+        (lines[1], "quarry-charts", "team/nginx"),
+    ] {
+        let refs: Vec<Ref> = line
+            .split(' ')
+            .map(|word| Ref::parse_with(word, no_files))
+            .collect();
+        let pack = |version: &str| Ref::Pack {
+            registry: Some(registry.to_string()),
+            name: name.to_string(),
+            version: version.to_string(),
+        };
+        assert_eq!(refs, [pack("1.27.0"), pack("1.27.4")], "{line}");
+    }
 }

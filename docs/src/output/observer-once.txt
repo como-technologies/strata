@@ -10,7 +10,7 @@ $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records 
     "notChecked": 0,
     "packs": 6,
     "packsInFull": 6,
-    "profiles": 3
+    "profiles": 2
   },
   "findings": [
     {

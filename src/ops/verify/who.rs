@@ -2,7 +2,7 @@
 
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::diff::{AuditEntry, AuditResource, Diff};
-use crate::error::Result;
+use crate::error::{Result, reason_words};
 use crate::snapshot::{Snapshot, SubjectKind};
 use crate::term::progress::Progress;
 
@@ -25,12 +25,19 @@ pub(super) fn add_who<A: PaletteApi>(
         Ok(entries) => v.who = Some(entries),
         Err(e) => {
             let reason = e.reason();
-            progress.note(&format!(
-                "note: the audit log is unavailable ({reason}); the verdict names no writer"
-            ));
+            progress.note(&unread_note(&reason));
             v.who_error = Some(reason);
         }
     }
+}
+
+/// The note for an audit log that strata could not read. It gives the words of `reason`, the
+/// reason of `verify.whoError`: see [`reason_words`].
+fn unread_note(reason: &str) -> String {
+    format!(
+        "note: the audit log is unavailable ({}); the verdict names no writer",
+        reason_words(reason)
+    )
 }
 
 /// The writes to the object of `recorded` since the record was taken, oldest first. It reads the
@@ -111,4 +118,47 @@ fn writes<A: PaletteApi>(
         .collect();
     entries.reverse(); // Palette lists the newest first
     Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::Method;
+    use crate::api::codes::Denial;
+    use crate::api::routes::{EACH_SCOPE, access_denied_message, error_body};
+    use crate::error::Error;
+
+    #[test]
+    fn the_note_of_an_audit_log_that_palette_refuses_gives_the_status_the_code_and_the_message() {
+        let message = access_denied_message("audit.list", EACH_SCOPE);
+        // Palette ends a body with a newline
+        let refused = Error::Api {
+            method: Method::Get,
+            path: "/v1/audits".into(),
+            status: 403,
+            body: format!("{}\n", error_body(Denial::Route.as_str(), &message)),
+            retry_after: None,
+            key_proved: false,
+        };
+        let note = unread_note(&refused.reason());
+        assert_eq!(
+            note,
+            format!(
+                "note: the audit log is unavailable (HTTP 403: AccessDenied: {message}); the \
+                 verdict names no writer"
+            )
+        );
+        assert!(!note.contains('{'), "no JSON of the body: {note}");
+        // a request that did not complete gives its message
+        let dropped = Error::Transport {
+            method: Method::Get,
+            path: "/v1/audits".into(),
+            message: "connection reset".into(),
+        };
+        assert_eq!(
+            unread_note(&dropped.reason()),
+            "note: the audit log is unavailable (GET /v1/audits: connection reset); the verdict \
+             names no writer"
+        );
+    }
 }

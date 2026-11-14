@@ -6,6 +6,7 @@ use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::{Edit, variables_route};
 use serde_json::json;
+use strata::model::input_type::InputType;
 
 /// Run the chapters of the drift of a version, and of the clusters that run one.
 pub(super) fn run(r: &mut Runner) {
@@ -78,6 +79,32 @@ fn edited_in_place(r: &mut Runner) {
     edited_in_place_cluster(r);
     edited_in_place_clusters(r);
     edited_in_place_stale(r);
+    edited_in_place_who_denied(r);
+}
+
+/// The part of the chapter `edited-in-place` for a key that cannot read the audit log.
+fn edited_in_place_who_denied(r: &mut Runner) {
+    // the key loses audit.list: the verdict stays, and the note and the line give the words of
+    // the refusal of Palette, not the JSON of its body (#887)
+    r.tenant(|t| t.deny_audit_log(DEV, A111));
+    r.step(
+        "edited-verify-who-denied-full",
+        1,
+        true,
+        "strata verify releases/1.1.1/dev.json --who",
+    );
+    r.excerpt(
+        "edited-verify-who-denied",
+        "edited-verify-who-denied-full",
+        r"^(strata: note: the audit log|DRIFT|who:)",
+    );
+    // the document keeps the body as Palette sent it
+    r.step(
+        "edited-verify-who-denied-json",
+        1,
+        false,
+        "strata verify releases/1.1.1/dev.json --who --json | jq '.verify.whoError'",
+    );
 }
 
 /// The part of the chapter `edited-in-place` for the cluster that runs the version, and the update
@@ -499,6 +526,20 @@ fn cluster_release_many_profiles(r: &mut Runner) {
         "cluster-all-profiles",
         r"^([$] |strata: wrote|[0-9]+ profiles on|root |OK:)",
     );
+    // the row of the summary gives the words of the heading, and the document keeps the joined
+    // name and version beside them (#851)
+    r.step(
+        "cluster-all-profiles-summary",
+        0,
+        false,
+        "strata verify runs/payments-all.json --summary",
+    );
+    r.step(
+        "cluster-all-profiles-summary",
+        0,
+        false,
+        "strata verify runs/payments-all.json --summary --json | jq '.records[0] | {subject, name, version}'",
+    );
 }
 
 /// The chapter `cluster-values`: the variables that two clusters of one release hold.
@@ -574,8 +615,8 @@ fn cluster_secret(r: &mut Runner) {
     r.profile(DEV, A1119, "1.1.19", "aws-stack@1.1.1", &[]);
     let variable = |name: &str, display: &str| {
         json!({"name": name, "displayName": display, "defaultValue": "", "format": "string",
-            "inputType": "text", "required": true, "hidden": false, "immutable": false,
-            "isSensitive": false, "options": []})
+            "inputType": InputType::Text.as_str(), "required": true, "hidden": false,
+            "immutable": false, "isSensitive": false, "options": []})
     };
     let variables = [
         variable("client_secret", "Client secret"),

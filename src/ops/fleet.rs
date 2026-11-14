@@ -9,6 +9,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::RegistryListing;
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, ErrorDocument, Result};
@@ -497,12 +498,21 @@ where
         source,
     })?;
     let names = file_names(&selection.clusters);
+    // the registry listing of each project, read by the first record of the project that needs it
+    let mut listings: BTreeMap<Option<String>, Option<RegistryListing>> = BTreeMap::new();
     let records: Vec<SetRecord> = selection
         .clusters
         .into_iter()
         .zip(names)
         .map(|(cluster, name)| {
-            record_cluster(cluster, dir.join(name), &mut connect, fetched_at, progress)
+            record_cluster(
+                cluster,
+                dir.join(name),
+                &mut connect,
+                &mut listings,
+                fetched_at,
+                progress,
+            )
         })
         .collect();
     let removed = if prune {
@@ -521,10 +531,15 @@ where
 
 /// Read `cluster` in its own project and write its record to `path`. A cluster that strata could
 /// not record gets the error in its entry, and the set goes on.
+///
+/// `listings` holds the registry listing of each project that a record read. Palette lists the
+/// registries that the project of the request can see, so a record takes the listing of its own
+/// project only.
 fn record_cluster<A, F>(
     cluster: ListedCluster,
     path: PathBuf,
     connect: &mut F,
+    listings: &mut BTreeMap<Option<String>, Option<RegistryListing>>,
     fetched_at: &str,
     progress: &Progress,
 ) -> SetRecord
@@ -538,10 +553,11 @@ where
         pending: false,
     };
     let scope = scope_of(&cluster.project_uid);
-    let snap = super::snapshot_for(
+    let snap = super::snapshot_in(
         &reference,
         &super::SnapshotOptions::default(),
         || connect(scope),
+        listings.entry(scope.map(str::to_string)).or_default(),
         fetched_at,
         progress,
     )

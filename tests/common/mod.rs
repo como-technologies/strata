@@ -26,7 +26,9 @@
 //!   cluster-merged-reversed  the same, with the two templates listed the other way round
 //!
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
-//! variable always gets `SECRET_VALUE`. No document must contain it.
+//! variable always gets `SECRET_VALUE`. No document must contain it. The variables of a cluster
+//! give `********` as the default value of a sensitive variable that is not a dropdown, as Palette
+//! does.
 
 use std::fs;
 use std::path::Path;
@@ -38,7 +40,9 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 use strata::model::pack_type::PackType;
 
 mod answer;
+mod answer_tags;
 pub mod closed_set;
+mod code_block;
 mod code_span;
 mod download;
 mod git;
@@ -50,7 +54,9 @@ mod toml;
 mod walk;
 
 pub use answer::*;
+pub use answer_tags::*;
 pub use closed_set::schema_values;
+pub use code_block::*;
 pub use code_span::*;
 pub use download::*;
 pub use git::isolate_git;
@@ -215,7 +221,8 @@ pub fn text_matches_schema(schema: &Value, value: &str) -> bool {
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it. The cluster has applied templates, per-profile pack manifests, and per-profile variables
 /// with values. A variable gets its value from `values` by name, else its default. A sensitive
-/// variable gets `SECRET_VALUE`.
+/// variable gets `SECRET_VALUE`. The other fields of a variable are as the route of Palette serves
+/// them: see [`cluster_route_variable`].
 fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &str)]) {
     let out = root.join(dir);
     fs::create_dir_all(&out).unwrap();
@@ -231,9 +238,9 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
             .unwrap()
             .iter()
             .map(|v| {
-                let mut v = v.clone();
+                let mut row = cluster_route_variable(v);
                 let name = v["name"].as_str().unwrap_or("");
-                v["value"] = if v["isSensitive"] == json!(true) {
+                row["value"] = if v["isSensitive"] == json!(true) {
                     json!(SECRET_VALUE)
                 } else {
                     match values.iter().find(|(n, _)| *n == name) {
@@ -241,7 +248,7 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
                         None => v["defaultValue"].clone(),
                     }
                 };
-                v
+                row
             })
             .collect();
         variables.push(json!({"profileUid": prof["metadata"]["uid"], "variables": with_values}));
@@ -858,31 +865,6 @@ pub fn page_section(path: &str, heading: &str) -> String {
     page[from..from + 1 + to].to_string()
 }
 
-/// The fenced blocks of the language `lang` in `text`, in order. A block loses the indent of its
-/// opening fence, so the block of a list item reads as it does in a terminal.
-pub fn code_blocks(text: &str, lang: &str) -> Vec<String> {
-    let opening = format!("```{lang}");
-    let mut blocks = Vec::new();
-    let mut open: Option<(usize, Vec<&str>)> = None;
-    for line in text.lines() {
-        let body = line.trim_start();
-        let indent = line.len() - body.len();
-        match open.take() {
-            None => {
-                if body == opening {
-                    open = Some((indent, Vec::new()));
-                }
-            }
-            Some((_, lines)) if body == "```" => blocks.push(lines.join("\n")),
-            Some((strip, mut lines)) => {
-                lines.push(line.get(strip..).unwrap_or(""));
-                open = Some((strip, lines));
-            }
-        }
-    }
-    blocks
-}
-
 /// The first block of `lang` in `text` that holds `needle`.
 pub fn block_with(text: &str, lang: &str, needle: &str) -> String {
     code_blocks(text, lang)
@@ -1121,6 +1103,87 @@ pub fn serve_fixture(
     )
 }
 
+/// An API that serves the cluster fixture `dir` under `CLUSTER_UID`.
+pub fn serve_cluster(
+    api: strata::api::MemoryApi,
+    raw_root: &Path,
+    dir: &str,
+) -> strata::api::MemoryApi {
+    let d = raw_root.join(dir);
+    // the profile documents of the profiles the cluster runs, as they are published: verify of a
+    // cluster record reads them for their current version
+    let mut api = api;
+    for template in read_json(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"]
+        .as_array()
+        .unwrap()
+    {
+        let uid = template["uid"].as_str().unwrap();
+        for fixture in ["a", "b", "addons"] {
+            let profile = read_json(&raw_root.join(fixture).join("profile.json"));
+            if profile["metadata"]["uid"] == uid {
+                api = api.with(profile_route(uid), profile);
+                break;
+            }
+        }
+    }
+    api.with(
+        cluster_route(CLUSTER_UID),
+        read_json(&d.join("cluster.json")),
+    )
+    .with(
+        cluster_manifests_route(CLUSTER_UID),
+        read_json(&d.join("manifests.json")),
+    )
+    .with(
+        cluster_variables_route(CLUSTER_UID),
+        read_json(&d.join("variables.json")),
+    )
+}
+
+/// An API that serves the cluster `lab-cluster` on four profiles, under `CLUSTER_UID`.
+///
+/// The profiles are the fixtures `b` and `addons`, and two more add-on profiles, `lab-logging` and
+/// `lab-quota`, each with a pack of its own. The fixtures are under `root`, and the cluster is the
+/// fixture `cluster-four`.
+pub fn serve_four_profiles(root: &Path) -> strata::api::MemoryApi {
+    let mut api = strata::api::MemoryApi::new();
+    for (fixture, uid, name, pack) in [
+        (
+            "logging",
+            "64f0000000000000000000d7",
+            "lab-logging",
+            "log-shipper",
+        ),
+        (
+            "quota",
+            "64f0000000000000000000d8",
+            "lab-quota",
+            "payments-quota",
+        ),
+    ] {
+        let d = root.join(fixture);
+        let pack_uid = format!("pk-{pack}");
+        rewrite(
+            &root.join("addons"),
+            &d,
+            &[
+                (UID_ADDONS, uid),
+                ("lab-addons", name),
+                ("nginx-ingress", pack),
+                ("pk-ngx-4100", &pack_uid),
+            ],
+        );
+        api = api.with(profile_route(uid), read_json(&d.join("profile.json")));
+    }
+    write_cluster(
+        root,
+        "cluster-four",
+        &["b", "addons", "logging", "quota"],
+        &[],
+    );
+    serve_cluster(api, root, "cluster-four")
+}
+
 /// The digest that Palette gives a manifest content, as the tests make one: none for no content.
 pub fn manifest_digest(content: &str) -> String {
     if content.is_empty() {
@@ -1147,6 +1210,21 @@ pub fn manifest_content<'a>(snap: &'a strata::snapshot::Snapshot, name: &str) ->
         .flat_map(|p| &p.manifests)
         .find(|m| m.name == name)
         .map(|m| m.content.as_str())
+}
+
+/// Make sure that no file in `dir`, which a `save_dir` wrote, holds a text of `secrets`.
+pub fn assert_no_saved_file_holds(dir: &Path, secrets: &[&str]) {
+    for file in fs::read_dir(dir).unwrap() {
+        let path = file.unwrap().path();
+        let text = fs::read_to_string(&path).unwrap();
+        for secret in secrets {
+            assert!(
+                !text.contains(secret),
+                "{} holds {secret}: {text}",
+                path.display()
+            );
+        }
+    }
 }
 
 // ---- the refs and the listings -----------------------------------------------------------------

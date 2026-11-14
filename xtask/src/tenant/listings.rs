@@ -12,8 +12,13 @@ use super::routes::{
     CLUSTER_LISTING, CLUSTER_SEARCH_PATH, CLUSTERS, GROUPS, PROFILE_SEARCH_PATH, PROFILES,
     PROJECT_LISTING, cluster_route, paged, profile_route, virtual_clusters_file,
 };
+use super::times::minutes_after;
 use super::{TENANT, Tenant};
 use crate::files::files_with_ext;
+
+/// The time of the first create of a profile document in a scope. Each later create takes the
+/// next minute.
+const FIRST_PROFILE_CREATE: &str = "2026-09-15T08:00:00.000Z";
 
 /// What the cluster search needs of the virtual clusters.
 struct VirtualMembers {
@@ -101,7 +106,7 @@ impl Tenant {
             doc["spec"]["versions"] = json!(versions);
             if !doc["metadata"]["creationTimestamp"].is_string() {
                 doc["metadata"]["creationTimestamp"] =
-                    json!(format!("2026-09-15T08:{created:02}:00.000Z"));
+                    json!(minutes_after(FIRST_PROFILE_CREATE, created));
                 created += 1;
             }
             let uid = doc["metadata"]["uid"].as_str().unwrap_or_default();
@@ -478,5 +483,40 @@ mod tests {
         let before = created("u2");
         tenant.listings();
         assert_eq!(created("u2"), before);
+    }
+
+    /// The criterion of #814: more than 60 profile documents of one scope each get a valid
+    /// `metadata.creationTimestamp`, in the order of their creates. A create after a rebuild gets
+    /// a later time.
+    #[test]
+    fn more_than_60_profile_documents_each_get_a_valid_time_of_create_in_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), Path::new("/nowhere"));
+        let uid = |n: usize| format!("u{n:03}");
+        let put = |n: usize| {
+            let version = format!("1.0.{n}");
+            put_version(
+                &tenant,
+                "dev",
+                (&uid(n), "aws-stack", &version),
+                ProfileScope::Project,
+            );
+        };
+        (0..70).for_each(put);
+        tenant.listings();
+        put(70);
+        tenant.listings();
+
+        let times: Vec<_> = (0..=70)
+            .map(|n| {
+                let doc = tenant.read("dev", &profile_route(&uid(n)));
+                let at = doc["metadata"]["creationTimestamp"].as_str().unwrap_or("");
+                chrono::DateTime::parse_from_rfc3339(at)
+                    .unwrap_or_else(|e| panic!("{}: {at:?} is no time: {e}", uid(n)))
+            })
+            .collect();
+        for (n, pair) in times.windows(2).enumerate() {
+            assert!(pair[0] < pair[1], "{} is not before {}", uid(n), uid(n + 1));
+        }
     }
 }

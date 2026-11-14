@@ -1,5 +1,5 @@
 $ strata snapshot --from-candidate aws-stack.yaml --validate -o candidate.json
 strata: looking up project dev
 strata: resolving aws-stack@1.1.0 against the registry
-palette    accepts
 strata: wrote candidate.json (root 8a8a64d3f95d)
+strata: Palette accepts the name, the version, and the packs of 'aws-stack.yaml'

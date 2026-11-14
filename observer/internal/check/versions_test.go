@@ -13,6 +13,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 const registryUID = "5eecc89d0b150045ae661cef"
@@ -193,10 +194,11 @@ func TestAnOlderRegistryCopyIsACauseForEachRegistry(t *testing.T) {
 }
 
 // Issue #708. The versions cycle compares the record of each profile version that is behind with the
-// newest version of its profile, by the uid of that version. The row holds the move, and the newest
-// side of the detail tier gives a pack of the diff with its values. A compare that fails names the
-// newer version with no move, and the other versions keep theirs. Each cycle compares again, because
-// a published version can change in place, and the state holds no move of a profile.
+// newest version of its profile. The compare names that version by its uid. The row holds the move,
+// and the newest side of the detail tier gives a pack of the diff with its values. A compare that
+// fails names the newer version with no move, and the other versions keep theirs. Each cycle
+// compares again, because a published version can change in place, and the state holds no move of a
+// profile.
 func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *testing.T) {
 	r, w := withBehind(t)
 	r.record("barney-addons", "1.3.1", "addon/fred-compositions")
@@ -214,6 +216,8 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 		Values: docs.Values{Changed: true, Diff: []docs.Leaf{{Op: "changed", Path: "compositions", Old: sentinel, New: "x"}}}}
 	w.profileMoves = map[string]docs.Diff{"barney-addons@1.3.1 u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
 	w.profileMoveErrs = map[string]error{"barney-base@1.5.0 u-160": failure(docs.KindAPI)}
+	// the cluster runs the three versions: a version that it does not run gets no newer version
+	w.cluster = testkit.Cluster("payments", "barney-addons@1.3.1", "barney-base@1.5.0", "wilma-gateway@3.1.2")
 	o := r.observer(w)
 	ctx := context.Background()
 	// the rows of the profiles come from a content cycle

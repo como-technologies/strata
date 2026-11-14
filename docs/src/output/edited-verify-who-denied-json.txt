@@ -1,0 +1,2 @@
+$ strata verify releases/1.1.1/dev.json --who --json | jq '.verify.whoError'
+"HTTP 403: {\"code\":\"AccessDenied\",\"message\":\"audit.list operation is not permitted, required permissions 'audit.list' in the scope(s) project or tenant or system\"}"

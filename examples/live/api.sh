@@ -27,6 +27,12 @@
 #       request has the header ProjectUid PROJECT_UID. The source is a published version of the
 #       project of PALETTE_PROJECT_UID. Print the uid of the new profile. Delete it with
 #       PALETTE_PROJECT_UID=PROJECT_UID api.sh delete.
+#   api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO
+#       Create and publish the profile NAME, a copy of a published version, with one more
+#       variable VARIABLE. The variable is of the format string, is not required, and has no
+#       default value. In the one pack values that hold the text FROM, the copy has TO in its
+#       place. TO can read the variable, as in podCIDR: "{{.spectro.var.VARIABLE}}". Print the uid
+#       of the new profile. Exit 2 when no pack values, or more than one, hold FROM.
 #   api.sh delete-tenant PROFILE_UID
 #       Delete a profile of the tenant: DELETE with no ProjectUid header. A missing one is not an
 #       error.
@@ -63,10 +69,21 @@
 #       cluster's profiles, with the content of each profile and the one change, and without
 #       resolveNotification. The profile keeps what it holds. Exit 2 unless exactly one value or
 #       manifest holds FROM.
-#   api.sh attach CLUSTER_UID PROFILE_UID
-#       The same PUT with PROFILE_UID added, which puts that profile on the cluster.
+#   api.sh attach CLUSTER_UID PROFILE_UID [--first]
+#       The same PUT with PROFILE_UID added, which puts that profile on the cluster. The body
+#       gives PROFILE_UID after the profiles of the cluster, or before them with --first.
 #   api.sh detach CLUSTER_UID PROFILE_UID
 #       The same PUT without PROFILE_UID, which takes that profile off the cluster.
+#   api.sh replace CLUSTER_UID OLD_UID NEW_UID
+#       PATCH the profiles of a cluster with one entry: NEW_UID, with replaceWithProfile OLD_UID,
+#       and resolveNotification=true. The entry has each pack's values and manifests of NEW_UID.
+#       The Spectro Cloud provider sends a new version of a profile in this form. Palette takes
+#       OLD_UID off the cluster and puts NEW_UID on it.
+#   api.sh replace-status CLUSTER_UID OLD_UID NEW_UID
+#       The request of replace, with the status of the answer. The entry gives no variable. It
+#       prints the HTTP status as `HTTP <code>` on the first line and the answer after it, and
+#       exits 0 for each status. A refusal of Palette changes nothing. When Palette accepts, the
+#       cluster moves to NEW_UID: give a cluster of the lab only.
 #   api.sh delete PROFILE_UID
 #       Delete a profile version; a missing one is not an error.
 #   api.sh delete-named NAME...
@@ -322,7 +339,7 @@ publish() {
   echo "published the draft of $uid"
 }
 
-# copy_body UID NAME DIR: DIR/body, the create of the profile NAME with the version, the packs,
+# copy_body UID NAME DIR: DIR/body, the create of the profile NAME. It has the version, the packs,
 # the values, and the manifests of the published version UID. Each manifest goes with no uid, so
 # the new profile gets its own manifests.
 copy_body() {
@@ -347,6 +364,19 @@ copy_into() {
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   copy_body "$uid" "$name" "$tmp"
   PROJECT=$scope create_published "$tmp/body" || exit 2
+}
+
+variable_copy() {
+  local uid=${1:-} name=${2:-} variable=${3:-} from=${4:-} to=${5:-} tmp hits
+  [ -n "$to" ] || die "usage: api.sh variable-copy PROFILE_UID NAME VARIABLE FROM TO"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  copy_body "$uid" "$name" "$tmp"
+  hits=$(jq --arg f "$from" '[.spec.template.packs[] | select(.values | contains($f))] | length' "$tmp/body")
+  [ "$hits" = 1 ] || die "$hits pack values of $uid contain the text to replace; want exactly 1"
+  jq --arg f "$from" --arg t "$to" --arg v "$variable" '
+    .spec.variables = [{name: $v, displayName: $v, format: "string", required: false, defaultValue: ""}]
+    | .spec.template.packs[].values |= (split($f) | join($t))' "$tmp/body" > "$tmp/variable-body"
+  create_published "$tmp/variable-body" || exit 2
 }
 
 # create_tenant_copy UID NAME: copy_into with no ProjectUid header. Palette lists a profile of the
@@ -466,12 +496,17 @@ override() {
 }
 
 attach() {
-  local cluster=${1:-} profile=${2:-} tmp
-  [ -n "$profile" ] || die "usage: api.sh attach CLUSTER_UID PROFILE_UID"
+  local cluster=${1:-} profile=${2:-} first=${3:-} tmp
+  [ -n "$profile" ] && { [ -z "$first" ] || [ "$first" = --first ]; } \
+    || die "usage: api.sh attach CLUSTER_UID PROFILE_UID [--first]"
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   profiles_body "$cluster" "$tmp" "" "$profile"
+  if [ -n "$first" ]; then
+    jq --arg p "$profile" '.profiles |= ([.[] | select(.uid == $p)] + [.[] | select(.uid != $p)])' \
+      "$tmp/body" > "$tmp/first" && mv "$tmp/first" "$tmp/body"
+  fi
   call PUT "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/body" > /dev/null || exit 2
-  echo "attached profile $profile to cluster $cluster"
+  echo "attached profile $profile to cluster $cluster: $(jq -r '[.profiles[].uid] | join(", ")' "$tmp/body")"
 }
 
 detach() {
@@ -481,6 +516,33 @@ detach() {
   profiles_body "$cluster" "$tmp" "$profile"
   call PUT "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/body" > /dev/null || exit 2
   echo "detached profile $profile from cluster $cluster"
+}
+
+# replace_patch CLUSTER_UID OLD_UID NEW_UID DIR: DIR/patch, the body of replace
+replace_patch() {
+  local cluster=$1 old=$2 new=$3 dir=$4
+  profiles_body "$cluster" "$dir" "$old" "$new"
+  jq --arg old "$old" --arg new "$new" \
+    '{profiles: [.profiles[] | select(.uid == $new) | . + {replaceWithProfile: $old}]}' "$dir/body" > "$dir/patch"
+}
+
+replace() {
+  local cluster=${1:-} old=${2:-} new=${3:-} tmp
+  [ -n "$old" ] && [ -n "$new" ] || die "usage: api.sh replace CLUSTER_UID OLD_UID NEW_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  replace_patch "$cluster" "$old" "$new" "$tmp"
+  call PATCH "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/patch" > /dev/null || exit 2
+  echo "replaced profile $old with $new on cluster $cluster"
+}
+
+# replace-status CLUSTER_UID OLD_UID NEW_UID: the request of replace, and print `HTTP <code>`, then
+# the answer, for each status
+replace_status() {
+  local cluster=${1:-} old=${2:-} new=${3:-} tmp
+  [ -n "$new" ] && [ $# -eq 3 ] || die "usage: api.sh replace-status CLUSTER_UID OLD_UID NEW_UID"
+  tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
+  replace_patch "$cluster" "$old" "$new" "$tmp"
+  SHOW_STATUS=1 call PATCH "/v1/spectroclusters/$cluster/profiles?resolveNotification=true" "$tmp/patch" || return 2
 }
 
 delete() {
@@ -928,6 +990,7 @@ case "${1:-}" in
   create-unpublished) shift; create_unpublished "$@" ;;
   create-tenant-copy) shift; create_tenant_copy "$@" ;;
   create-copy) shift; create_copy "$@" ;;
+  variable-copy) shift; variable_copy "$@" ;;
   delete-tenant) shift; delete_tenant "$@" ;;
   reorder) shift; reorder "$@" ;;
   reorder-cluster) shift; reorder_cluster "$@" ;;
@@ -937,6 +1000,8 @@ case "${1:-}" in
   apply) shift; apply "$@" ;;
   attach) shift; attach "$@" ;;
   detach) shift; detach "$@" ;;
+  replace) shift; replace "$@" ;;
+  replace-status) shift; replace_status "$@" ;;
   override) shift; override "$@" ;;
   delete) shift; delete "$@" ;;
   delete-named) shift; delete_named "$@" ;;

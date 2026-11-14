@@ -132,6 +132,13 @@ profile, or pack version.
         error. `fields` then does not hold the field, so the hash does not
         cover it. `errors` is not part of the hash either. A record of strata
         0.19 holds `null` for the field.
+      - `systemRbacs`, only in `policy` of a cluster: each role binding of the
+        system that the key reads, in the form of `rbacs`. Palette gives such a
+        binding only with the subject that is the user of the key. So `fields`
+        does not hold it, the hash does not cover it, and `compare` and `verify`
+        do not compare it. A record of strata 0.33.0 and before holds such a
+        binding in `rbacs` of `fields`. See
+        [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
       - The schema lists the keys of `fields` for each of these four tiers. It
         also takes the name of a tier of a later release, with any `fields`.
     - The `fields` of `policy` are in
@@ -172,6 +179,18 @@ profile, or pack version.
   empty text for the rest. A variable with no `name` has an empty `name`. The
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
+  - `defaultValue` is as Palette gives it. A copy on a cluster holds
+    `********` for each sensitive variable that is not a dropdown, also when the
+    profile has no default value. `variablesHash` reads that `********` as an
+    empty default value: see
+    [The node hash and the root](../internals/hashes.md#the-node-hash-and-the-root).
+  - `options[].default`, only when it is `true`: the option is the default of
+    the variable. Palette accepts an update that gives no value to a required
+    dropdown variable with such an option. A record of strata 0.33 and before
+    does not have the field.
+    It is outside the root, so the root of such a record stays. `behind` and
+    `compare --validate` read it: see
+    [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
 - `packs[]`: one entry for each pack, in the order the profile holds them. The
   diff document sorts its packs by layer and then by name; the snapshot does
   not.
@@ -362,6 +381,20 @@ A comparison of two sides, `a` and `b`.
   the whole request has no `pack`. Strata sorts the errors and keeps one copy of
   each. Strata does not read a document that says `accepts` is `false` and
   gives no error, or that says `true` and gives an error.
+- `updateChecks`, only with `compare --validate`: what strata checks about the
+  move beside the answer of Palette. Palette checks these rules only at the
+  update, and no validate route checks them. Absent when strata finds nothing.
+  See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+  - `requiredVariables`: the required variables with no default value that the
+    profile side adds. A dropdown variable counts only when no option has the
+    mark `default`, and its default value is not the label of an option. It
+    has `code`, the code of the refusal of Palette,
+    `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
+    an update that gives such a variable no value.
+  - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
+    minor version. It has `code`, the code of the refusal of Palette,
+    `K8sUpgradeNotSupported`. It also has `pack`, `from`, `to`, and `nextMinor`,
+    the minor version that Palette allows next, such as `1.35`.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
@@ -472,9 +505,14 @@ of the secret does not show, because the two sides hold the mask: see
   the exit status in words. `unverified`, only when it is not `0`: the records
   whose content is the same and that hold a pack with no upstream digest.
 - `records[]`: one entry for each file, in the order given. An entry has
-  `path`, `status`, `name`, `version`, `uid`, `projectUid`, `recordedAt`,
-  `rootRecorded`, and `rootLive`. `rootLive` is there when strata read the live
-  profile. `recordedAt` is empty when strata could not read the file.
+  `path`, `status`, `name`, `version`, `subject`, `uid`, `projectUid`,
+  `recordedAt`, `rootRecorded`, and `rootLive`. `rootLive` is there when strata
+  read the live profile. `recordedAt` and `subject` are empty when strata could
+  not read the file.
+  - `subject` names the record in the words of the heading of `compare`, such
+    as `aws-stack@1.1.1 on cluster payments`. A record of two or more profiles
+    joins their names in `name` and their versions in `version`. Its `subject`
+    gives their count, such as `4 profiles on cluster payments`.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
     unverified record adds the `diff`, which names the packs. With `--full`, the
     `diff` of each such record holds `unified`: see
@@ -522,11 +560,13 @@ of the secret does not show, because the two sides hold the mask: see
     whose two archives differ in another file, with `key` and `files[]`. The
     pair is then `different`, and `reasons[]` names the files too.
   - `archivesNotReadable[]`, only when it is not empty: each pack of
-    `renumbers[]` whose file in the download of a side is no archive. The list
-    names the pack once for each such side, with `key`, the `version` of that
-    side, and `reason`.
+    `renumbers[]` whose file in the download of a side is no archive, or is
+    missing. The list names the pack once for each such side, with `key`, the
+    `version` of that side, and `reason`.
     `reason` gives the size of the file, and the start of its text when it is
-    text. Else it gives the error of the read. The pair is then `different`, and
+    text. Else it gives the error of the read. For a file that the list of the
+    download names and the download does not hold, it is
+    `the download does not hold <path>`. The pair is then `different`, and
     `reasons[]` names the pack too.
   - `archivesNotCompared`, only when it is not empty: the key of each pack of
     `renumbers[]` whose archive can differ, and whose archives strata did not
@@ -539,7 +579,7 @@ of the secret does not show, because the two sides hold the mask: see
     is a pack uid that Palette mints. This is the case for a manifest pack, and
     for a pack from a registry that Palette does not sync.
   - `masked[]`, only when it is not empty: `key` and `paths` of each pack with
-    a value that Palette masks, on either side. It does not change `status`.
+    a masked value, on either side. It does not change `status`.
   - `macrosChanged`, only when it is not empty: when both records hold the
     digests of their macro values, each macro whose value differs. It does not
     change `status`.
@@ -551,19 +591,27 @@ of the secret does not show, because the two sides hold the mask: see
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
   `app`. The schema gives `type` the six profile types: `cluster`, `infra`,
   `add-on`, `system`, `app`, and `pack`.
+  - `scope`, when the document of the profile or of the app profile gives it:
+    `project`, `tenant`, or `system`.
+  - `projectUid` and `projectName`, only for a profile of a project: the one
+    project whose clusters or app deployments can use it. `projectName` is there
+    when strata could read the project listing.
 - `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
   it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
-  failed: `error`, `groupsError`, or an `unread` that is not `0` in
-  `clustersRead`, or `error` in `edgeHostsRead`.
+  failed. A failed reading is `error`, `groupsError`, or an `unread` that is not
+  `0` in `clustersRead`, or `error` in `edgeHostsRead`. It is also a project that
+  `projectsRead` did not check.
 - `overwritten`: the number of consumers whose copy names another version.
 - `consumers[]`: `kind`, `uid`, `name`, `projectUid`, `state`, `version`, and
   `error` when strata cannot read the cluster or the app deployment. `kind` is
   `cluster`, `edgehost`, `template`, or `app` for an app deployment.
-  `projectName` joins them when strata could read the project listing. The
-  names and the projects come from `status.inUseClusters` of the profile, from
-  `status.inUseClusterTemplates` for a cluster template, and from
+  `projectName` joins them when strata could read the project listing. Strata
+  reads the listing of the tenant first, so a consumer in another project has a
+  name too. The names and the projects come from `status.inUseClusters` of the
+  profile, from `status.inUseClusterTemplates` for a cluster template, and from
   `status.inUseApps` of an app profile. `unlisted`, only when true: the
-  profile did not list the cluster, and the second reading found it.
+  profile did not list the consumer, and the second reading or an app
+  deployment listing found it.
   - `state`: `status.state` of the cluster, as Palette gives it in
     `v1ClusterState`, or `unknown` when strata cannot read the cluster. A
     cluster template has an empty `state` and an empty `version`.
@@ -576,21 +624,48 @@ of the secret does not show, because the two sides hold the mask: see
     the listing names and the consumer list does not.
   - `unread`: the clusters of those that strata could not read.
   - `error`: why strata could not read the search or the cluster listing. Then
-    `read` is `0`.
+    `read` is `0`. For an app profile of the tenant or of the system, it is the
+    error of the page of the search at tenant scope. Then strata listed no
+    project.
   - `groups`, only when not zero: the cluster groups that pin the version,
     whose virtual clusters strata read.
   - `members`, only when not zero: the virtual clusters of those groups that
     strata read, which also count in `read` or `unread`.
   - `membersUnread`, only when not zero: the virtual clusters of `members` that
     strata could not read, which also count in `unread`.
+  - `membersFound`, only when not zero: the virtual clusters of `members` that
+    run the version. Each one is in `consumers[]` with `unlisted`.
   - `groupsError`: why strata could not read the cluster groups, or one of
     them.
   - `skipped`, only when true: `--list-only` asked for no second reading, or
     the profile is an app profile.
-  - `reason`, only for an app profile: why strata did no second reading.
-- `edgeHostsRead`: `read`, the edge hosts listed, and `error`, why strata could
-  not list them. Then no edge host counts. `skipped` and `reason`, only for an
-  app profile: strata reads no edge host, and why.
+  - `reason`, only for an app profile: why strata listed no app deployment
+    beside the consumer list. It is empty with `--list-only`, and when strata
+    listed them: the listings are in `projectsRead`.
+- `edgeHostsRead`: `read`, the edge hosts that the searches listed, each one
+  time, and `error`, why strata could not list them. Then no edge host counts.
+  `skipped` and `reason`, only for an app profile: strata reads no edge host,
+  and why.
+- `projectsRead`: the projects of the tenant listing that strata searched one by
+  one. It is there for a profile of the tenant or of the system. For an app
+  profile, it names each project whose app deployments strata listed. It is not
+  there with `--list-only`. See
+  [A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
+  - `read`: the projects of the listing, each one that strata searched or
+    could not search. For an app profile, strata listed their app deployments.
+  - `unread`, only when not empty: each project whose search failed, with
+    `uid`, `name`, `denied`, and `error`. `denied` is `true` when Palette
+    answered with a denial, such as `ResourceAccessDenied`. When the cluster
+    search at tenant scope failed with an error that is not a denial, strata
+    searched no project. Then each project of the listing is here, with that
+    error.
+  - `tenantError`: why Palette refused the cluster search at tenant scope. Then
+    the listing holds only the projects of the roles of the key, so a project
+    outside it is not checked. For an app profile, strata sends one page of the
+    search for this answer only.
+  - `error`: why strata could not read the project listing of the tenant. Then
+    strata searched no project one by one. For a library caller whose
+    `connect` gives no client of the tenant, it is the error of `connect`.
 
 ## strata-list/1
 
@@ -660,6 +735,11 @@ of the secret does not show, because the two sides hold the mask: see
     or the text of a kind of a later Palette release. It is absent when the
     registry listing names no kind. A document of strata 0.33 and before has no
     `registries[]`.
+- `errors`: each kind that strata could not read, by its name: `profiles`,
+  `clusters`, `projects`, `filters`, or `registries`. The value is the error,
+  with the fields of an [error](./errors.md). The kind is then absent, and the
+  exit is `2`. The field is absent when strata read each kind. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
 
 ## strata-packs/1
 
@@ -734,6 +814,12 @@ of the secret does not show, because the two sides hold the mask: see
     - `drops[]`, the architectures of the pinned version that it does not
       support.
   - `behind`: `true` when `newer` is not empty.
+  - `nextPatch`, for a pin that is behind a newer minor version: the newest
+    version in `newer` of the minor version of the pin. It is absent when the
+    newest version is of the minor version of the pin, and when the version of
+    the pin does not parse. It is also absent when `newer` has no version of the
+    minor version of the pin. See
+    [The pins that are behind](../commands/behind.md#the-pins-that-are-behind).
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`. `flags[]` holds
     `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS` for each change.
@@ -753,6 +839,13 @@ of the secret does not show, because the two sides hold the mask: see
     - `paletteValidationError`: the message, when a request to Palette failed or
       strata did not ask a record of another project. An example is
       `1 record of project prod was not asked`. The pin stays behind.
+    - `updateChecks`: what strata checks about the move beside the answer of
+      Palette, with the fields of `updateChecks` of
+      [strata-diff/1](#strata-diff1). For a pin of the `k8s` layer, it holds
+      `skippedMinor` when the move skips a minor version. `skippedMinor` then
+      also has `nextStep`: the newest version of `nextMinor` in the registry.
+      Absent when strata finds nothing. See
+      [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
   - `carriers[]`, for a pin that is behind: one entry for each profile version that
     holds the pin and has a newer version. A version holds the pin when a record of
     the pin holds the version, and its template holds the pack. Absent when there is
@@ -808,6 +901,9 @@ of the secret does not show, because the two sides hold the mask: see
       empty. `from` is absent for a pack that the move adds, and `to` for a pack
       that it removes.
       `valuesChanged` is there, only when true, for a pack whose values change.
+    - `updateChecks`: the required variables that the newest version adds, and
+      the skip of a minor version of Kubernetes, as for a pin. `skippedMinor`
+      has no `nextStep`. Absent when strata finds nothing.
     - A bump of a profile version has no `paletteValidation`: strata does not
       ask Palette about the move of a profile.
   - `gone`, only when true: Palette no longer holds the version.

@@ -48,13 +48,15 @@ const (
 // precedence: the first status that holds wins.
 type Status string
 
-// The statuses of a profile and of a pack. A pack is never no-record.
+// The statuses of a profile and of a pack. A pack is never no-record or not-on-this-cluster. A
+// record of a profile version that the cluster does not run takes the word of its cluster copy.
 const (
-	StatusDrift      Status = "drift"
-	StatusNewer      Status = "newer"
-	StatusNotChecked Status = "not-checked"
-	StatusOK         Status = "ok"
-	StatusNoRecord   Status = "no-record"
+	StatusDrift            Status = "drift"
+	StatusNotOnThisCluster Status = Status(CopyNotOnThisCluster)
+	StatusNewer            Status = "newer"
+	StatusNotChecked       Status = "not-checked"
+	StatusOK               Status = "ok"
+	StatusNoRecord         Status = "no-record"
 )
 
 // CopyStatus is the answer of the compare of a record and the cluster side.
@@ -84,9 +86,9 @@ const (
 // Side is the comparison that a detail diff of a pack comes from.
 type Side string
 
-// The sides of a pack diff. The published side is the record against the published version, the
-// cluster side is the record against the cluster, and the newer side is the pinned version against
-// the newest version. The newest side is the record against the newest published version of its
+// The sides of a pack diff. The published side is the record against the published version. The
+// cluster side is the record against the cluster. The newer side is the pinned version against the
+// newest version. The newest side is the record against the newest published version of its
 // profile.
 const (
 	SidePublished Side = "published"

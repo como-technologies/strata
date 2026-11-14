@@ -1,6 +1,5 @@
-//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, the
-//! numbers of a text where it holds them, and the natural order of any other text, below each
-//! version.
+//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, and the
+//! numbers of a text where it holds them. Any other text has its natural order, below each version.
 
 use std::cmp::Ordering;
 use std::ops::Range;
@@ -97,6 +96,32 @@ pub fn line(v: &str, count: usize) -> Option<String> {
         .map(|i| semver.numbers.get(i).copied().unwrap_or(0).to_string())
         .collect();
     Some(numbers.join("."))
+}
+
+/// True when `to` is more than `limit` minor versions above `from`, or has a higher major number.
+///
+/// Palette reads each of the two as a version that parses, or as the first three numbers of a
+/// text: see [`compare`]. It reads no version in one or two numbers with a tail, such as
+/// `1.2.develop`. When it reads no version in one of the two, it makes no check, so the answer is
+/// false. A move down is never above. So `1.36.2` is more than one minor version above `1.34.9`,
+/// and `1.35.6` is not.
+pub(crate) fn minor_above(from: &str, to: &str, limit: u64) -> bool {
+    match (Version::palette(from), Version::palette(to)) {
+        (Some(from), Some(to)) => {
+            let [major, minor, _] = to.numbers;
+            major > from.numbers[0]
+                || (major == from.numbers[0] && minor > from.numbers[1].saturating_add(limit))
+        }
+        _ => false,
+    }
+}
+
+/// The release line `steps` minor versions above `from`, as `<major>.<minor>`: `1.35` for
+/// `1.34.9` and one step. Palette reads `from` as [`minor_above`] says. None when it reads no
+/// version in `from`.
+pub(crate) fn minor_line_above(from: &str, steps: u64) -> Option<String> {
+    let [major, minor, _] = Version::palette(from)?.numbers;
+    Some(format!("{major}.{}", minor.saturating_add(steps)))
 }
 
 /// True when `v` is a pre-release, such as `1.0.1-rc.1`, `1.2.develop`, or `chart-1.2.3`.
@@ -240,9 +265,13 @@ impl<'a> Version<'a> {
     /// The version that strata reads in `v`: the version that `v` parses as, the first three
     /// numbers of `v`, or the numbers at its start. None when `v` holds no version.
     fn read(v: &'a str) -> Option<Self> {
-        Self::parse(v)
-            .or_else(|| Self::three_numbers_of(v))
-            .or_else(|| Self::short(v))
+        Self::palette(v).or_else(|| Self::short(v))
+    }
+
+    /// The version that Palette reads in `v`: the version that `v` parses as, or the first three
+    /// numbers of `v`. None when Palette reads no version in `v`.
+    fn palette(v: &'a str) -> Option<Self> {
+        Self::parse(v).or_else(|| Self::three_numbers_of(v))
     }
 
     /// The first three numbers of `v` and the form around them, as Palette reads a version that
@@ -267,7 +296,7 @@ impl<'a> Version<'a> {
             None => number_and_text(tail).is_some(),
         });
         // text right after the third number: the crate reads that number and the text as one part,
-        // as in `3rc1b`, so it reads two numbers and a tail after a dot
+        // as in `3rc1b`. So it reads two numbers and a tail after a dot
         let joined = tail.is_none() && !rest.is_empty();
         let third = v[..found.end].rfind('.').map_or(found.start, |dot| dot + 1);
         Some(Version {
@@ -466,10 +495,10 @@ fn part(a: &str, b: &str) -> Ordering {
     }
 }
 
-/// A part of a tail as the crate `versions` reads the last part of a version: a number, the
-/// letters right after it, and a number after the letters. The letters and the second number can
-/// be empty. So `4` gives `4`, `4rc` gives `4` and `rc`, and `4rc1` gives `4`, `rc`, and `1`. None
-/// for each other part, such as `develop` or `4a1b`.
+/// A part of a tail as the crate `versions` reads the last part of a version. It gives a number,
+/// the letters right after it, and a number after the letters. The letters and the second number
+/// can be empty. So `4` gives `4`, `4rc` gives `4` and `rc`, and `4rc1` gives `4`, `rc`, and `1`.
+/// None for each other part, such as `develop` or `4a1b`.
 fn number_and_text(part: &str) -> Option<(&str, &str, &str)> {
     let end = |s: &str, f: fn(&char) -> bool| s.chars().take_while(f).count();
     let (number, rest) = part.split_at(end(part, char::is_ascii_digit));

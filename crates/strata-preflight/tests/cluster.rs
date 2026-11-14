@@ -1,8 +1,12 @@
-//! The world of `cluster:UID`, end to end over the memory API: the variable values of the cluster
+//! The world of `cluster:UID`, end to end over the memory API. The variable values of the cluster
 //! are in the entity, and the validate route of Palette gets them. The reports hide each value that
 //! Palette quotes in a refusal.
 
 use serde_json::json;
+use strata::api::codes::{
+    CLUSTER_CREATE_FORBIDDEN_CODES, CLUSTER_CREATE_LIMIT_CODES, Denial, INVALID_VARIABLE_CODE,
+    PACK_FORBIDDEN_CODE, ValidateRoute,
+};
 use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -232,17 +236,18 @@ fn a_500_that_the_cluster_validate_route_does_not_refuse_is_an_error_of_palette_
     assert_eq!(check.verdict, Verdict::Error, "{:?}", check.messages);
 }
 
-/// The variables of the cluster `c1` for the tests of the mask, as pairs of a name and a value: a
-/// pod CIDR, a service CIDR that is not a CIDR, and a label that is not an option of its dropdown.
+/// The variables of the cluster `c1` for the tests of the mask, as pairs of a name and a value.
+/// They are a pod CIDR, a service CIDR that is not a CIDR, and a label that is not an option of
+/// its dropdown.
 const QUOTED: [(&str, &str); 3] = [
     ("pod_cidr", "10.244.0.0/16"),
     ("service_cidr", "10.96.0.0/33"),
     ("tier_label", "platinum"),
 ];
 
-/// Three refusals of Palette that quote the value of a variable: the code, the variable, and the
-/// message as the message template of Palette writes it. Palette puts the value of a variable in
-/// place of a `{{.spectro.var.NAME}}` reference before it checks.
+/// Three refusals of Palette that quote the value of a variable. Each has the code, the variable,
+/// and the message as the message template of Palette writes it. Palette puts the value of a
+/// variable in place of a `{{.spectro.var.NAME}}` reference before it checks.
 const REFUSALS: [(&str, &str, &str); 3] = [
     (
         "K8SCidrOverlap",
@@ -261,8 +266,8 @@ const REFUSALS: [(&str, &str, &str); 3] = [
     ),
 ];
 
-/// What `palette-validate` says of each refusal of `REFUSALS`, in the same order: the code and the
-/// message of Palette, with a mark in place of each value.
+/// What `palette-validate` says of each refusal of `REFUSALS`, in the same order. It says the code
+/// and the message of Palette, with a mark in place of each value.
 const SAID: [&str; 3] = [
     "Palette refused the entity: K8SCidrOverlap: Kubernetes podCIDR '[value of pod_cidr]' is overlapping with vpc 'vpc-0a1b' cidr block '10.244.0.0/14'",
     "Palette refused the entity: CidrParseError: CIDR '[value of service_cidr] parse error; caused by: invalid CIDR address: [value of service_cidr]",
@@ -288,7 +293,7 @@ fn refusing(variables: &[(&str, &str)], status: u16, code: &str, message: &str) 
         .failing(
             "POST /v1/spectroclusters/aws/validate",
             status,
-            json!({"code": code, "message": message}).to_string(),
+            routes::error_body(code, message),
         )
 }
 
@@ -313,12 +318,13 @@ fn reports(mut report: Report) -> [(&'static str, String); 3] {
 #[test]
 fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400()
  {
-    let required = format!("Palette refused the entity: InvalidVariable: {REQUIRED_VARIABLE}");
+    let required =
+        format!("Palette refused the entity: {INVALID_VARIABLE_CODE}: {REQUIRED_VARIABLE}");
     let cases = REFUSALS
         .iter()
         .zip(SAID)
         .map(|((code, _, message), said)| (*code, *message, said))
-        .chain([("InvalidVariable", REQUIRED_VARIABLE, required.as_str())]);
+        .chain([(INVALID_VARIABLE_CODE, REQUIRED_VARIABLE, required.as_str())]);
     for (code, message, said) in cases {
         for status in [500, 400] {
             let api = refusing(&QUOTED, status, code, message);
@@ -339,31 +345,62 @@ fn a_refusal_of_a_variable_or_a_cidr_fails_palette_validate_with_the_message_of_
     }
 }
 
-/// The refusal of a machine pool with no subnet, for AWS with a VPC, as Palette writes it.
-const NO_SUBNET: &str = "Parameter 'Subnets' is required";
+/// The message of the refusal in the test of each code of the cluster validate route.
+const REFUSED: &str = "the body is refused";
 
-/// The route refuses a body for AWS with a VPC and a pool with no subnet with HTTP 500 and
-/// `RequiredParam`, as a live run shows.
-///
-/// `palette-validate` reads it as the answer of the route, as it reads HTTP 400. The verdict is
-/// `failed`, with the message of Palette. Strata sends the body one time (#824).
+/// The cluster validate route refuses the body with HTTP 500 and a code of its checks: see
+/// [`ValidateRoute::ClusterCreate`]. `palette-validate` reads each such refusal as the answer of
+/// the route, as it reads HTTP 400. The verdict is `failed`, with the message of Palette, and
+/// strata sends the body one time (#829). The test reads the codes from `refusal_codes`, so a new
+/// code of the route needs no new case.
 #[test]
-fn a_pool_with_no_subnet_fails_palette_validate_with_the_message_of_palette_at_http_500_and_400() {
-    let said = format!("Palette refused the entity: RequiredParam: {NO_SUBNET}");
-    for status in [500, 400] {
-        let api = refusing(&[], status, "RequiredParam", NO_SUBNET);
+fn each_refusal_code_of_the_cluster_validate_route_fails_palette_validate_at_http_500_and_400() {
+    let codes: Vec<&str> = ValidateRoute::ClusterCreate.refusal_codes().collect();
+    assert!(!codes.is_empty());
+    for code in codes {
+        let said = format!("Palette refused the entity: {code}: {REFUSED}");
+        for status in [500, 400] {
+            let api = refusing(&[], status, code, REFUSED);
+            let check = palette_validate(&api);
+            assert_eq!(
+                check.verdict,
+                Verdict::Failed,
+                "{code} {status}: {:?}",
+                check.messages
+            );
+            assert_eq!(check.messages, [said.as_str()], "{code} {status}");
+            assert_eq!(
+                api.calls("POST /v1/spectroclusters/aws/validate"),
+                1,
+                "{code} {status}"
+            );
+        }
+    }
+}
+
+/// The cluster validate route refuses four faults of the body, and a tenant at three limits, with
+/// HTTP 403 and not with 500. `palette-validate` reads each one as the answer of the route, and not
+/// as a refusal of the key. The verdict is `failed`, with the message of Palette (#829).
+#[test]
+fn each_refusal_of_the_route_with_http_403_fails_palette_validate_with_the_message_of_palette() {
+    let codes = CLUSTER_CREATE_FORBIDDEN_CODES
+        .iter()
+        .chain(&CLUSTER_CREATE_LIMIT_CODES)
+        .copied()
+        .chain([PACK_FORBIDDEN_CODE]);
+    for code in codes {
+        let api = refusing(&[], 403, code, REFUSED);
         let check = palette_validate(&api);
         assert_eq!(
             check.verdict,
             Verdict::Failed,
-            "{status}: {:?}",
+            "{code}: {:?}",
             check.messages
         );
-        assert_eq!(check.messages, [said.as_str()], "{status}");
         assert_eq!(
-            api.calls("POST /v1/spectroclusters/aws/validate"),
-            1,
-            "{status}"
+            check.messages,
+            [format!("Palette refused the entity: {code}: {REFUSED}")],
+            "{code}"
         );
     }
 }
@@ -387,7 +424,13 @@ fn the_three_reports_write_a_mark_in_place_of_each_value_that_a_refusal_of_palet
             for (file, text) in reports(report) {
                 let at = format!("{code}, HTTP {status}, {file}");
                 assert!(text.contains(code), "{at}");
-                assert!(text.contains(&format!("[value of {name}]")), "{at}");
+                // the markdown puts a `\` before each `[` and `]`, and GitHub shows the same text
+                let mark = format!("[value of {name}]");
+                let mark = match file {
+                    "report.md" => strata::text::markdown_cell(&mark),
+                    _ => mark,
+                };
+                assert!(text.contains(&mark), "{at}");
                 for (_, value) in QUOTED {
                     assert!(!text.contains(value), "{at}: {value}");
                 }
@@ -399,9 +442,9 @@ fn the_three_reports_write_a_mark_in_place_of_each_value_that_a_refusal_of_palet
     }
 }
 
-/// Each short value here is a part of a longer word in the messages of the three refusals: of a
-/// CIDR, of the route, or of the address `/33`. `true` is a value of the JSON of `report.json`.
-/// So the variables change no text of the three reports (#614).
+/// Each short value here is a part of a longer word in the messages of the three refusals. The
+/// longer word is in a CIDR, in the route, or in the address `/33`. `true` is a value of the JSON
+/// of `report.json`. So the variables change no text of the three reports (#614).
 #[test]
 fn a_short_or_common_value_of_a_variable_masks_no_other_text_of_the_three_reports() {
     let short = [
@@ -497,9 +540,14 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
 }
 
 /// What the validate route of the create answers to a key with no `cluster.create`: HTTP 403 with
-/// the code `AccessDenied`. The code of Palette shows it, and a field test met it. Palette can put
-/// the scopes in another order in each answer.
-const NO_CLUSTER_CREATE: &str = r#"{"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system"}"#;
+/// the code of [`Denial::Route`]. The code of Palette shows it, and a field test met it. Palette can
+/// put the scopes in another order in each answer.
+fn no_cluster_create() -> String {
+    routes::error_body(
+        Denial::Route.as_str(),
+        &routes::access_denied_message("cluster.create", routes::EACH_SCOPE),
+    )
+}
 
 /// The rules of the cluster `c1` that send the validate route of the create.
 const VALIDATE_RULES: [&str; 3] = ["palette-validate", "worker-cpu-floor", "pack-dependency"];
@@ -511,7 +559,7 @@ fn one_denial_of_the_validate_route_is_one_request_and_each_form_shows_it_once_w
     let api = api().failing(
         "POST /v1/spectroclusters/aws/validate",
         403,
-        NO_CLUSTER_CREATE,
+        no_cluster_create(),
     );
     let report = run_report(&api, &VALIDATE_RULES);
     let posted = api
@@ -542,7 +590,7 @@ fn one_denial_of_the_validate_route_is_one_request_and_each_form_shows_it_once_w
         .filter(|(form, _)| *form != "report.json")
     {
         assert_eq!(
-            out.matches("AccessDenied").count(),
+            out.matches(Denial::Route.as_str()).count(),
             1,
             "{form}: the denial shows once\n{out}"
         );

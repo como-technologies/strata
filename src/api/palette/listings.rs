@@ -6,16 +6,17 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{
-    AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH,
-    CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE, PACKS, PROFILE_LISTING,
-    PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, SEARCH_ENVIRONMENT, SEARCH_STRING,
-    SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value, route,
-    search_all, sorted_names, uids_named, with_limit, with_nested,
+    APP_DEPLOYMENT_ITEMS, APP_DEPLOYMENT_LISTING, AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING,
+    CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE,
+    PACKS, PROFILE_LISTING, PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA,
+    SEARCH_ENVIRONMENT, SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS,
+    named_entries, query_value, route, search_all, sorted_names, uids_named, with_limit,
+    with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result, served};
-use crate::json::{arr, items, opt_text, str_at, text};
+use crate::json::{arr, items, opt_text, str_at, take_array, text};
 use crate::model::registry_kind::RegistryKind;
 use crate::reference::one_named;
 
@@ -137,6 +138,23 @@ impl<A: PaletteApi> Palette<A> {
         self.searched(&with_limit(EDGE_HOST_SEARCH), &search_all())
     }
 
+    /// Every app deployment of the scope, `POST /v1/dashboard/appDeployments`, every page. Each
+    /// item names the app profile version that it runs in `spec.profile.metadata`: `uid`,
+    /// `name`, and `version`. The filter of the listing takes no profile.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. In a project where no role of the key gives
+    /// the listing, Palette answers HTTP 500 with the code `ResourceAccessDenied`.
+    pub fn app_deployments(&self) -> Result<Vec<Value>> {
+        let body = search_all();
+        self.each_continue_page(
+            &with_limit(APP_DEPLOYMENT_LISTING),
+            |page| take_array(page, APP_DEPLOYMENT_ITEMS),
+            |path| self.api.post_json(path, &body),
+        )
+    }
+
     /// The clusters that a search filter selects, `POST /v1/dashboard/spectroclusters/search`,
     /// every page. `filter` is the `filter` of the body: groups of conditions on the properties
     /// that `cluster_search_schema` names. At tenant scope it holds the clusters of each project
@@ -152,6 +170,20 @@ impl<A: PaletteApi> Palette<A> {
             &with_limit(CLUSTER_SEARCH),
             &serde_json::json!({"filter": filter, "sort": [{"field": "clusterName", "order": "asc"}]}),
         )
+    }
+
+    /// The first page of the cluster search with no condition, `POST
+    /// /v1/dashboard/spectroclusters/search`: at most one page of clusters. At tenant scope,
+    /// Palette refuses the search to a key whose role does not give `project.list` in the tenant.
+    /// So the answer shows if the project listing of the tenant holds each project.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request. For such a key, Palette answers HTTP 403 with the code
+    /// `AccessDenied`.
+    pub(crate) fn cluster_search_page(&self) -> Result<Value> {
+        self.api
+            .post_json(&with_limit(CLUSTER_SEARCH), &search_all())
     }
 
     /// The virtual clusters that a search filter selects: [`Palette::cluster_search`] with the

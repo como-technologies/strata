@@ -30,9 +30,10 @@ The checks, in order:
    of 3". For AWS with a `vpcId`, each pool names a subnet: see below.
 2. The name: valid, and not in use. The cluster limit of the tenant: a trial
    tenant has a limit on its active clusters, and the route refuses a create
-   over it with `FreemiumActiveClusterLimitExceeded`. The limit holds for a
-   trial tenant alone. `GET /v1/tenants/{tenantUid}/freemiumUsage` gives the
-   usage. `palette-validate` reports the refusal.
+   over it with HTTP `403` and `FreemiumActiveClusterLimitExceeded`. The limit
+   holds for a trial tenant alone. `GET /v1/tenants/{tenantUid}/freemiumUsage`
+   gives the usage. `palette-validate` reads the refusal as the answer of the
+   route, with the verdict `failed`, and not as a refusal of the key.
 3. The cloud: for AWS, the zones of each worker pool inside the zones of the
    control plane, and with dynamic placement one zone or more for each worker
    pool. For EKS, when encryption is on, that the KMS key is in the list of
@@ -88,6 +89,17 @@ The code of Palette shows it; no live run shows it yet.
 - `CidrParseError`: for AWS with a VPC, a pod CIDR or a service CIDR that is not
   a CIDR.
 
+The route refuses more faults of the body with HTTP `500`. The faults are in the
+machine pools, the profiles, the packs, the variables, the instance types, and
+the labels and the SSH keys of the cloud. The route refuses four faults of the
+body with HTTP `403`, such as two system profiles. It also refuses a create in a
+tenant at its usage limit with HTTP `403`.
+
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again)
+lists each code. The code of Palette shows them; no live run shows them yet.
+`palette-validate` reads each one as the answer of the route, with the verdict
+`failed` and the message of Palette.
+
 The check `cidr-overlap-status` of
 [`route-bodies.sh`](../../development/live-runs.md#route-bodiessh) asks the
 route about a pod CIDR that overlaps. Its body names a subnet for each pool, so
@@ -118,10 +130,16 @@ machines.
 
 ### The permission of the route
 
-The route checks the role of the key before it reads the body. It needs
-`cluster.create` in the project or in the tenant, also for a body that creates
-nothing. So a key with a viewer role cannot ask the route. A key whose role does
-not give `cluster.create` gets HTTP `403` and the code `AccessDenied`:
+The route checks the role of the key after the format of the body, and before
+the content of the profiles of the body. A body with no required field, such as
+`spec.cloudConfig`, gets HTTP `422` and a number as the code, also for a key
+whose role does not give the permission. The code of Palette shows it; no live
+run shows it yet.
+
+The route needs `cluster.create` in the project or in the tenant, also for a
+body that creates nothing. So a key with a viewer role cannot ask the route. A
+key whose role does not give `cluster.create` gets HTTP `403` and the code
+`AccessDenied`:
 
 ```text
 cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system
@@ -169,6 +187,11 @@ Some refusals quote a value after Palette puts it in place:
 When the text comes from a variable, the refusal holds the value of the
 variable. So the report of `strata preflight` writes a mark in place of each
 value: see [The values in a message](../../commands/preflight/report.md#the-values-in-a-message).
+The case `cidr-variable` of
+[`validate-route.sh`](../../development/live-runs.md#validate-routesh) sends a
+body whose pod CIDR comes from the variable `pod_cidr` of a profile. Its checks
+make sure that the three reports hold the mark of the variable, and not its
+value. No live run shows it yet.
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 
@@ -216,6 +239,8 @@ puts the error of a pack under each profile of the body that holds a pack of
 that name. It gives the profiles in no fixed order. With no error, the answer
 has no profile. `machinePools` stays empty: the route checks no machine. The
 route does not say whether the change repaves: `validate/repave` answers that.
+The route checks no variable and no minor version of Kubernetes: see
+[What the update checks](#what-the-update-checks).
 
 Some checks refuse the whole request: the YAML check of step 1, steps 3, 4,
 and 5, and the check of a disabled pack in step 6. Such a refusal is HTTP `500`
@@ -284,9 +309,18 @@ code of Palette, not from a live run:
 - A profile that the cluster does not run is the published profile, with the
   sent values over it.
 - The target holds no profile that the body does not name.
+- The route gives the same answer with and without `replaceWithProfile` and
+  `variables[]` in the body.
 
 Then Palette compares the cluster with the target, and gives a reason for each
 pack that repaves the cluster.
+
+So the body of a swap names each profile of the cluster by its uid, with the
+new uid in place of the old one. A body that names the old uid alone, with the
+`packValues` of the new version, asks about the old version with other values.
+Palette then takes a pack with a new tag from the old version. See
+[The body of a swap](./profiles.md#the-body-of-a-swap) for the answers to each
+body.
 
 ### What the route saves
 
@@ -460,9 +494,69 @@ for the body. A pin of `kubernetes` 1.35.3, with 1.37.0 in the registry, is a
 move of two minor versions. Palette refuses it on each cluster that runs 1.35.
 The pin and the registry decide whether a live example has such a pair.
 
+The limit is a dependency of the pack, and not a rule of the route. So the route
+accepts a move of two minor versions of a pack with no such dependency. The
+update refuses each such move: see
+[What the update checks](#what-the-update-checks).
+
 Stage 6 of `validate-packs.sh` asks the route for a move of Kubernetes by two
 minor versions, on a cluster that runs the profile. It needs a profile version
 that pins an older Kubernetes than the example does.
+
+## What the update checks
+
+The update of the profiles of a cluster checks two rules that no validate route
+checks. The update is a `PUT` or a `PATCH` of
+`/v1/spectroclusters/{uid}/profiles`. The code of Palette shows each rule; no
+live run shows it yet. Stage 7 of `validate-packs.sh` is the live check: see
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
+### The minor version of Kubernetes
+
+- One update moves the pack of the `k8s` layer one minor version at most. A
+  move to a higher major version is refused too. The rule holds for each pack of
+  that layer, such as `kubernetes` and `kubernetes-eks`, on each cloud.
+- Palette refuses a move that skips with HTTP 400 and `K8sUpgradeNotSupported`:
+  `Kubernetes upgrade from <current> to <new> is not supported`.
+- Palette reads each version as a semantic version, or as the first three
+  numbers of the text. When it reads no version, as in `1.29.x`, it makes no
+  check.
+- The current version depends on the request:
+  - The update of the profiles of a cluster, and the apply of an update
+    notification: the version that the cluster runs.
+  - A `PUT` of a profile version that a cluster runs: the lowest version that a
+    cluster of the version runs.
+  - The publish of a draft of a version that a cluster runs: the published
+    version.
+  - The update of the profiles of a cluster template, and the attach of a
+    cluster to a template: the version that each cluster runs.
+- `validate/packs` of a cluster or of a profile version does not check the
+  rule, and neither does `validate/repave`. A pack can also declare a limit of
+  its own: see [The upgrade dependency](#the-upgrade-dependency).
+
+The public documentation states the same rule: update Kubernetes one minor
+version at a time.
+
+### A value of each required variable
+
+- The update gives each variable of the new profile version a value: the value
+  of the body, or a default of the variable.
+- Palette refuses a required variable with no value, and changes nothing. The
+  answer is HTTP 500 and `InvalidVariable`. The message ends with
+  `can't be empty for required variable '<name>'`.
+- Palette accepts a required variable with no value when it has a default
+  value. A dropdown variable is different: Palette accepts its default value
+  only when the value is the label of one of its options. When it is not,
+  Palette accepts the variable only with a default option, the option with
+  `default: true`. A default value that is the value of an option, and not its
+  label, does not count. Palette refuses a required variable of another input
+  type with no default value, also with a default option.
+- The code of Palette shows each rule of a default; no live run shows it yet.
+- No validate route checks a variable. The body of the profile routes has no
+  field for one.
+
+`behind` and `compare --validate` check the two rules before the update: see
+[The gaps that strata fills](./profiles.md#the-checks-of-an-update).
 
 ## GET /v1/clusterprofiles/validate/name
 
@@ -705,6 +799,9 @@ the zones that do not offer an instance type: see
 a policy or to test a permission. `strata preflight` runs the tool of the cloud for some of
 these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
+
+Two rules of the update of a cluster are in no route either: see
+[What the update checks](#what-the-update-checks).
 
 ## Where these answers come from
 

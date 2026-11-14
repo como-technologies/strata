@@ -1,2 +1,2 @@
 $ scripts/ci/pr-comment.sh releases/1.0.0/dev.json candidate.json --dry-run > comment.md
-pr-comment: max impact: repave; would add label repave
+pr-comment: max impact: repave; a run with no --dry-run adds label repave

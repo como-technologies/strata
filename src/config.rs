@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::TOOL_NAME;
+use crate::content::canon::sha256_hex;
 use crate::error::{Error, Result};
 
 /// The default Palette API base URL.
@@ -105,12 +106,20 @@ impl Config {
         self
     }
 
+    /// The digest of the address and the key. It names one key at one address of Palette.
+    ///
+    /// It holds no part of the key, so a set or a cache of the process can keep it. A client with
+    /// another key, or at another address, has another digest.
+    pub(crate) fn key_digest(&self) -> String {
+        sha256_hex(&format!("{}\n{}", self.base_url, self.api_key))
+    }
+
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
     /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
     ///
     /// Strata reads the file only when `HOME` is an absolute path. An empty or a relative `HOME`
-    /// names a folder from the working folder, not the home of the user, so strata then reads the
+    /// names a folder from the working folder, not the home of the user. So strata then reads the
     /// environment alone.
     ///
     /// # Errors

@@ -1,13 +1,15 @@
-//! The lines of `consumers`: the heading, the counts, the second reading, and the edge hosts.
+//! The lines of `consumers`: the heading, the counts, and what strata searched.
 
 use serde_json::Value;
 
 use super::{count_of, entry_error};
+use crate::closed_set::impl_texts;
 use crate::diff::Diff;
-use crate::ops::{ClustersRead, Consumer, ConsumersReport};
+use crate::model::profile_type::ProfileType;
+use crate::ops::{ClustersRead, Consumer, ConsumerKind, ConsumersReport, Resolved, UnreadProject};
 use crate::reference::name_version;
 use crate::snapshot::Source;
-use crate::text::dash;
+use crate::text::{and_list, dash, name_or_uid, plural};
 
 /// What a row says about a consumer that the second reading found, and that the consumer list of
 /// the profile does not name.
@@ -30,6 +32,12 @@ pub(crate) fn consumer_runs(
             code(&r.profile.uid)
         )
     })
+}
+
+/// The project of a consumer, as a row names it: its name, or its uid with no project listing.
+/// `-` when the consumer names no project.
+pub(crate) fn consumer_project(c: &Consumer) -> &str {
+    dash(name_or_uid(&c.project_name, &c.project_uid))
 }
 
 /// `1 consumer`, `2 consumers`, or `no consumers`.
@@ -91,76 +99,225 @@ fn error_message(e: &Value) -> &str {
     entry_error(Some(e)).unwrap_or("an error")
 }
 
-/// What the second reading read, after `second reading: `: `3 of 3 clusters read` from the
-/// listing, or, from the cluster search, `the cluster search names 2 other clusters with the
-/// profile, 2 read`. The search takes the name of the profile, so it names each cluster that runs
-/// a version of it; strata keeps the clusters that run this version. Only the clusters that the
-/// consumer list did not name are read.
-fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
-    let counts = second_reading_main(read);
-    // the virtual clusters of the cluster groups that pin the version (#184)
-    match (read.groups, &read.groups_error) {
-        (0, None) => counts,
-        (0, Some(e)) => format!("{counts}; cluster groups not read ({})", error_message(e)),
-        (g, _) => format!(
-            "{counts}; {g} cluster {} the version, {} other virtual {}, {} read",
-            crate::text::plural(g, "group pins", "groups pin"),
-            read.members,
-            crate::text::plural(read.members, "cluster", "clusters"),
-            read.members.saturating_sub(read.members_unread)
-        ),
-    }
+/// A reading of `consumers`, as a row of the block `searched:` names it.
+///
+/// Each row names the kind of consumer that the reading gives. The consumer list gives the
+/// clusters and the cluster templates. The search and the listing give clusters, the cluster
+/// groups give virtual clusters, and the edge host search gives edge hosts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reading {
+    /// The consumer list that Palette computes for the version: `status.inUseClusters` and
+    /// `status.inUseClusterTemplates`, or `status.inUseApps` of an app profile.
+    ConsumerList,
+    /// The cluster search by the name of the profile.
+    ClusterSearch,
+    /// Each cluster of the cluster listing, when the search of Palette takes no profile.
+    ClusterListing,
+    /// The cluster groups that pin the version, and their virtual clusters.
+    ClusterGroups,
+    /// The search of the edge hosts.
+    EdgeHosts,
+    /// For an app profile: a search of the app deployments beside the consumer list.
+    AppDeployments,
 }
 
-fn second_reading_main(read: &crate::ops::ClustersRead) -> String {
+impl_texts!(pub Reading {
+    ConsumerList => "consumer list",
+    ClusterSearch => "cluster search",
+    ClusterListing => "cluster listing",
+    ClusterGroups => "cluster groups",
+    EdgeHosts => "edge hosts",
+    AppDeployments => "app deployments",
+});
+
+/// The rows of the block `searched:` of `consumers`: each reading, and what it found.
+///
+/// A row gives counts, and never the name of a consumer, so no row reads as a consumer. The
+/// lines above the block name each consumer. A row holds no code span and no other mark of
+/// markdown of strata, so the markdown escapes each row as one quoted text.
+pub(crate) fn searched_rows(r: &ConsumersReport) -> Vec<(Reading, String)> {
+    let listed = |kind: ConsumerKind| {
+        let n = r
+            .consumers
+            .iter()
+            .filter(|c| c.kind == kind && !c.unlisted)
+            .count();
+        count_of(n, kind.noun())
+    };
+    if r.profile.kind == Some(ProfileType::App) {
+        return vec![
+            (Reading::ConsumerList, listed(ConsumerKind::App)),
+            (Reading::AppDeployments, apps_found(r)),
+            (Reading::EdgeHosts, edge_hosts_found(r)),
+        ];
+    }
+    let found = r
+        .consumers
+        .iter()
+        .filter(|c| c.kind == ConsumerKind::Cluster && c.unlisted)
+        .count();
+    vec![
+        (
+            Reading::ConsumerList,
+            format!(
+                "{}, {}",
+                listed(ConsumerKind::Cluster),
+                listed(ConsumerKind::Template)
+            ),
+        ),
+        clusters_found(&r.clusters_read, found),
+        (Reading::ClusterGroups, groups_found(&r.clusters_read)),
+        (Reading::EdgeHosts, edge_hosts_found(r)),
+    ]
+}
+
+/// The row of the search or of the listing: the other clusters that it names, and how many of
+/// them run the version.
+///
+/// `found` counts the consumers that the consumer list does not name. The search, the listing,
+/// or a cluster group gave them. The search takes the name of the profile, so each cluster that
+/// it names runs a version of that name. The listing names each cluster of the scope.
+fn clusters_found(read: &ClustersRead, found: usize) -> (Reading, String) {
+    let reading = cluster_reading(read);
+    if read.skipped {
+        return (reading, NOT_DONE_LIST_ONLY.to_string());
+    }
+    if let Some(e) = &read.error {
+        return (reading, format!("not done ({})", error_message(e)));
+    }
     // the virtual clusters of the groups are counted apart, read and not read
-    let n = (read.read + read.unread).saturating_sub(read.members);
-    let read_n = read
-        .read
-        .saturating_sub(read.members.saturating_sub(read.members_unread));
-    match read.resolved {
-        Some(crate::ops::Resolved::Search) if n == 0 => {
-            "the cluster search names no other cluster with the profile".to_string()
-        }
-        Some(crate::ops::Resolved::Search) => format!(
-            "the cluster search names {} other {} with the profile, {} read",
-            n,
-            crate::text::plural(n, "cluster", "clusters"),
-            read_n
+    let named = (read.read + read.unread).saturating_sub(read.members);
+    let unread = read.unread.saturating_sub(read.members_unread);
+    let on_this = found.saturating_sub(read.members_found);
+    let other = named.saturating_sub(unread).saturating_sub(on_this);
+    let not_read = not_read(unread);
+    let clusters = plural(named, "cluster", "clusters");
+    let text = match reading {
+        Reading::ClusterSearch if named == 0 => "no other cluster with the profile".to_string(),
+        _ if named == 0 => "no other cluster".to_string(),
+        Reading::ClusterSearch => format!(
+            "{named} other {clusters} with the profile: {on_this} on this version, \
+             {other} on other versions{not_read}"
         ),
-        _ => format!("{read_n} of {n} clusters read"),
+        _ => format!("{named} other {clusters}: {on_this} on this version{not_read}"),
+    };
+    (reading, text)
+}
+
+/// What a row of a reading says when `--list-only` asked for none of it.
+const NOT_DONE_LIST_ONLY: &str = "not done (--list-only)";
+
+/// The row of the app deployments of an app profile: the app deployments of the listings of the
+/// projects that run the version and that the consumer list does not name. Or why strata listed
+/// none. The line `NOT CHECKED` names each project whose listing failed.
+fn apps_found(r: &ConsumersReport) -> String {
+    let Some(projects) = &r.projects_read else {
+        return match r.clusters_read.reason.as_str() {
+            "" => NOT_DONE_LIST_ONLY.to_string(),
+            reason => format!("not searched ({reason})"),
+        };
+    };
+    let failed = match (&projects.error, projects.unread.first()) {
+        (Some(e), _) => Some(e),
+        (None, Some(p)) if projects.unread.len() == projects.read => Some(&p.error),
+        _ => None,
+    };
+    if let Some(e) = failed {
+        return format!("not done ({})", error_message(e));
+    }
+    let found = r
+        .consumers
+        .iter()
+        .filter(|c| c.kind == ConsumerKind::App && c.unlisted)
+        .count();
+    match found {
+        0 => "no other app deployment on this version".to_string(),
+        n => format!(
+            "{n} other {} on this version",
+            plural(n, "app deployment", "app deployments")
+        ),
     }
 }
 
-/// `edge hosts: 3 read`, or why they could not be read.
-pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
+/// The reading that named the clusters beside the consumer list: the search, or the listing when
+/// the search of Palette takes no profile.
+fn cluster_reading(read: &ClustersRead) -> Reading {
+    match read.resolved {
+        Some(Resolved::Listing) => Reading::ClusterListing,
+        _ => Reading::ClusterSearch,
+    }
+}
+
+/// `the cluster search failed`: why strata did not do a reading after the search or the listing.
+/// The second reading stops at a failed search, before it lists the groups or searches a project.
+fn search_failed(read: &ClustersRead) -> String {
+    format!("the {} failed", cluster_reading(read).as_str())
+}
+
+/// `, 2 not read`, or nothing when strata read each one.
+fn not_read(n: usize) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!(", {n} not read")
+    }
+}
+
+/// The row of the cluster groups: the groups that pin the version, and their virtual clusters
+/// (#184). The cluster search does not name a virtual cluster that runs the version through its
+/// group.
+fn groups_found(read: &ClustersRead) -> String {
+    if read.skipped {
+        return "not read (--list-only)".to_string();
+    }
+    if read.error.is_some() {
+        return format!("not read ({})", search_failed(read));
+    }
+    let failed = read
+        .groups_error
+        .as_ref()
+        .map(|e| format!("not read ({})", error_message(e)));
+    match (read.groups, failed) {
+        (0, None) => "none pins the version".to_string(),
+        (0, Some(failed)) => failed,
+        (g, failed) => {
+            let pins = format!("{g} {} the version", plural(g, "pins", "pin"));
+            let members = match read.members {
+                0 => format!("{pins}: no other virtual cluster"),
+                m => format!(
+                    "{pins}: {m} other virtual {}: {} on this version{}",
+                    plural(m, "cluster", "clusters"),
+                    read.members_found,
+                    not_read(read.members_unread)
+                ),
+            };
+            match failed {
+                Some(failed) => format!("{members}; a group {failed}"),
+                None => members,
+            }
+        }
+    }
+}
+
+/// The row of the edge hosts: how many the search names, and how many of them the version binds.
+/// Or why strata could not read them.
+fn edge_hosts_found(r: &ConsumersReport) -> String {
     let read = &r.edge_hosts_read;
     if read.skipped {
-        return format!("edge hosts: not read ({})", read.reason);
+        return format!("not read ({})", read.reason);
     }
-    match entry_error(read.error.as_ref()) {
-        Some(msg) => format!("edge hosts: not read ({msg})"),
-        None => format!("edge hosts: {} read", read.read),
+    if let Some(msg) = entry_error(read.error.as_ref()) {
+        return format!("not read ({msg})");
     }
-}
-
-/// `second reading: 3 of 3 clusters read`, or why strata did not do the second reading.
-///
-/// `--list-only` asked for none, an app profile has none, or the search or the listing failed.
-/// `code` puts the flag in the form of the report.
-pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String) -> String {
-    // The consumer list of a profile is empty on an error too, so the second reading says how
-    // far it got.
-    let what = if read.skipped && !read.reason.is_empty() {
-        format!("not done ({})", read.reason)
-    } else if read.skipped {
-        format!("not done ({})", code("--list-only"))
-    } else if let Some(e) = &read.error {
-        format!("not done ({})", error_message(e))
-    } else {
-        second_reading_counts(read)
-    };
-    format!("second reading: {what}")
+    let bound = r
+        .consumers
+        .iter()
+        .filter(|c| c.kind == ConsumerKind::EdgeHost)
+        .count();
+    match read.read {
+        0 => "none found".to_string(),
+        n => format!("{bound} of {n} bound to the version"),
+    }
 }
 
 /// `lab-profile@1.3.0 (uid <uid>): 2 consumers`, or `...: no consumers`. When no consumer was
@@ -177,4 +334,80 @@ pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
         name_version(&r.profile.name, &r.profile.version),
         dash(&r.profile.uid)
     )
+}
+
+/// `scope: project profile, so only project dev can use it`. A profile of the tenant or of the
+/// system gives `scope: tenant profile, usable in every project; 3 of 3 projects searched`.
+///
+/// The count is there when strata read the project listing of the tenant, to search each project
+/// of it. None when the profile document names no scope.
+pub(crate) fn scope_line(r: &ConsumersReport) -> Option<String> {
+    let scope = r.profile.scope?;
+    if !scope.is_shared() {
+        let project = match name_or_uid(&r.profile.project_name, &r.profile.project_uid) {
+            "" => "its own project".to_string(),
+            project => format!("project {project}"),
+        };
+        return Some(format!(
+            "scope: {scope} profile, so only {project} can use it"
+        ));
+    }
+    let line = format!("scope: {scope} profile, usable in every project");
+    Some(match &r.projects_read {
+        Some(p) if p.error.is_none() => format!(
+            "{line}; {} of {} {} searched",
+            p.read.saturating_sub(p.unread.len()),
+            p.read,
+            plural(p.read, "project", "projects")
+        ),
+        _ => line,
+    })
+}
+
+/// `NOT CHECKED: qa and staging (this key cannot read them)`. It names each project that can use
+/// the version and that strata could not search. None when strata searched each project that it
+/// knows of, or searched no project one by one.
+///
+/// A project that Palette refused with a denial is one that the key cannot read. A project whose
+/// search failed in another way gives the message of the error. When the search at tenant scope
+/// failed, strata searched no project, and the line names each project of the listing. A key that
+/// cannot search at tenant scope gets only the projects of its roles in the listing. So the line
+/// then also names each project outside the listing.
+pub(crate) fn not_checked_line(r: &ConsumersReport) -> Option<String> {
+    let read = r.projects_read.as_ref()?;
+    let (denied, failed): (Vec<&UnreadProject>, Vec<&UnreadProject>) =
+        read.unread.iter().partition(|p| p.denied);
+    let names = |projects: &[&UnreadProject]| -> Vec<String> {
+        projects
+            .iter()
+            .map(|p| name_or_uid(&p.name, &p.uid).to_string())
+            .collect()
+    };
+    let mut parts = Vec::new();
+    if !denied.is_empty() {
+        parts.push(format!(
+            "{} (this key cannot read {})",
+            and_list(&names(&denied)),
+            plural(denied.len(), "it", "them")
+        ));
+    }
+    if r.clusters_read.error.is_some() && !failed.is_empty() {
+        parts.push(format!(
+            "{} ({})",
+            and_list(&names(&failed)),
+            search_failed(&r.clusters_read)
+        ));
+    } else {
+        for p in failed {
+            let name = name_or_uid(&p.name, &p.uid);
+            parts.push(format!("{name} ({})", error_message(&p.error)));
+        }
+    }
+    if read.tenant_error.is_some() {
+        parts.push("each project that this key cannot list".to_string());
+    }
+    if let Some(e) = &read.error {
+        parts.push(format!("each project of the tenant ({})", error_message(e)));
+    }
+    (!parts.is_empty()).then(|| format!("NOT CHECKED: {}", parts.join("; ")))
 }

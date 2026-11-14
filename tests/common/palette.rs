@@ -3,7 +3,9 @@
 //! The crate names each route in a const of its own that is not public. So this file names the
 //! route again, in one place. `tests/common/mod.rs` re-exports it for the tests. The libraries
 //! of `benches/` and `fuzz/`, the tests of `strata-preflight`, and the unit tests of
-//! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists.
+//! `src/api/http.rs` include it with `#[path]`. So no second list of the routes exists. The
+//! stand-in of `xtask/` builds the body of each error and the message of a denial with it, as the
+//! tests do.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
@@ -31,6 +33,69 @@ pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
 /// The app profile listing, `GET /v1/dashboard/appProfiles/metadata`.
 pub const APP_PROFILE_LISTING: &str = "/v1/dashboard/appProfiles/metadata";
 
+/// The listing of the saved tag filters of the tenant, `GET /v1/filters/metadata?filterType=tag`.
+pub const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
+
+/// The body of an error that Palette answers: its `code` and its `message`, as JSON text.
+pub fn error_body(code: &str, message: &str) -> String {
+    json!({"code": code, "message": message}).to_string()
+}
+
+/// The message of the refusal of a route as a whole, with HTTP 403 and the code `AccessDenied`. The
+/// role does not give `permission` in `scope`, such as `filter.list` in `tenant`. Palette names the
+/// permission two times: as the operation, and as the permission that the route needs.
+pub fn access_denied_message(permission: &str, scope: &str) -> String {
+    format!(
+        "{permission} operation is not permitted, required permissions '{permission}' in the scope(s) {scope}"
+    )
+}
+
+/// The `scope` of [`access_denied_message`] for a permission that a role can give in each scope,
+/// such as `cluster.create` and `audit.list`.
+pub const EACH_SCOPE: &str = "project or tenant or system";
+
+/// The message of the refusal of one object, with HTTP 500 and the code `OperationForbidden`. The
+/// role does not give `permission`, such as `cluster.get`. The message names the permission two
+/// times.
+pub fn operation_forbidden_message(permission: &str) -> String {
+    format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
+}
+
+/// The message of the refusal of a request in the project `project`, with HTTP 500 and the code
+/// `ResourceAccessDenied`. No role of the user in the project gives the access. Palette names the
+/// project by its name or by its uid.
+pub fn project_denied_message(project: &str) -> String {
+    format!("Project '{project}' access denied")
+}
+
+/// The message of the refusal of a request by the user `user`, with HTTP 500 and the code
+/// `NoRolesAssociated`. The user has no role at all. Palette names the user by its user name.
+pub fn no_roles_message(user: &str) -> String {
+    format!("No roles associated to user '{user}'")
+}
+
+/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
+/// give `cluster.list`. It is HTTP 500, not 403, with the code of [`Denial::Project`].
+///
+/// [`Denial::Project`]: strata::api::codes::Denial::Project
+pub fn clusters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Project.as_str(),
+        &project_denied_message("lab"),
+    )
+}
+
+/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
+/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
+///
+/// [`Denial::Route`]: strata::api::codes::Denial::Route
+pub fn filters_denied() -> String {
+    error_body(
+        strata::api::codes::Denial::Route.as_str(),
+        &access_denied_message("filter.list", "tenant"),
+    )
+}
+
 /// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
 pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
 
@@ -39,6 +104,9 @@ pub const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/sc
 
 /// The edge host search, `POST /v1/dashboard/edgehosts/search?limit=50`.
 pub const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
+
+/// The app deployment listing, `POST /v1/dashboard/appDeployments?limit=50`.
+pub const APP_DEPLOYMENT_LISTING: &str = "/v1/dashboard/appDeployments?limit=50";
 
 /// The key of a POST to `route` in the in-memory Palette, for one answer to each body.
 pub fn post(route: &str) -> String {
@@ -114,8 +182,8 @@ pub fn download_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/spc/download")
 }
 
-/// The body of the HTTP 429 that Palette gives to a download of a profile version in the 10
-/// seconds after another download of that version.
+/// The body of the HTTP 429 that Palette gives to a download of a profile version. Palette gives
+/// the 429 in the 10 seconds after another download of that version.
 pub const DOWNLOAD_LIMIT_REFUSAL: &str = r#"{"code":"TooManyRequests","message":"Too Many Requests, only 1 request in 10 seconds is allowed"}"#;
 
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
@@ -138,6 +206,11 @@ pub fn edge_host_route(uid: &str) -> String {
     format!("/v1/edgehosts/{uid}")
 }
 
+/// The profiles of the cluster `uid`, which a `PUT` or a `PATCH` changes.
+pub fn cluster_profiles_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/{uid}/profiles")
+}
+
 /// The pack manifests of each profile of the cluster `uid`.
 pub fn cluster_manifests_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}/profiles/packs/manifests")
@@ -153,6 +226,56 @@ pub fn cluster_rbacs_route(uid: &str) -> String {
     format!("{}/config/rbacs", cluster_route(uid))
 }
 
+/// The role bindings of a cluster with all their subjects, before [`rbacs_answer`].
+///
+/// A binding of the system gives fred `cluster-admin`, and wilma and barney `view`. A binding that
+/// is not of the system gives the group platform `view`.
+pub fn system_rbacs() -> Value {
+    let binding = |role: &str, kind: &str, names: &[&str]| {
+        let subjects: Vec<Value> = names
+            .iter()
+            .map(|name| json!({"type": kind, "name": name, "namespace": ""}))
+            .collect();
+        json!({"type": "ClusterRoleBinding", "namespace": "",
+            "role": {"kind": "ClusterRole", "name": role}, "subjects": subjects})
+    };
+    json!({"items": [
+        {"spec": {"isSystem": true, "bindings": [
+            binding("cluster-admin", "User", &["fred@example.com"]),
+            binding("view", "User", &["wilma@example.com", "barney@example.com"])]}},
+        {"spec": {"isSystem": false, "bindings": [binding("view", "Group", &["platform"])]}}]})
+}
+
+/// The answer of [`cluster_rbacs_route`] to the key of the user `user`, from `stored`, the role
+/// bindings of the cluster with all their subjects.
+///
+/// `user` is the email of the user. In a binding of the system, an item with `spec.isSystem` true,
+/// Palette answers only the subject that is the user of the key. It drops a binding with no such
+/// subject. Each other item stays as it is. The code of Palette shows it; no live run shows it yet.
+pub fn rbacs_answer(mut stored: Value, user: &str) -> Value {
+    let items = stored.pointer_mut("/items").and_then(Value::as_array_mut);
+    for item in items.into_iter().flatten() {
+        if item.pointer("/spec/isSystem") != Some(&Value::Bool(true)) {
+            continue;
+        }
+        let Some(bindings) = item
+            .pointer_mut("/spec/bindings")
+            .and_then(Value::as_array_mut)
+        else {
+            continue;
+        };
+        bindings.retain_mut(|binding| {
+            let Some(subjects) = binding.get_mut("subjects").and_then(Value::as_array_mut) else {
+                return false;
+            };
+            subjects.retain(|s| s.get("name").and_then(Value::as_str) == Some(user));
+            subjects.truncate(1);
+            !subjects.is_empty()
+        });
+    }
+    stored
+}
+
 /// The namespaces of the cluster `uid`, `GET /v1/spectroclusters/{uid}/config/namespaces`.
 pub fn cluster_namespaces_route(uid: &str) -> String {
     format!("{}/config/namespaces", cluster_route(uid))
@@ -161,6 +284,23 @@ pub fn cluster_namespaces_route(uid: &str) -> String {
 /// The last repave of the cluster `uid`, `GET /v1/spectroclusters/{uid}/repave/status`.
 pub fn cluster_repave_route(uid: &str) -> String {
     format!("{}/repave/status", cluster_route(uid))
+}
+
+/// The question whether the profiles of a body repave the cluster `uid`,
+/// `POST /v1/spectroclusters/{uid}/validate/repave`.
+pub fn cluster_validate_repave_route(uid: &str) -> String {
+    format!("{}/validate/repave", cluster_route(uid))
+}
+
+/// The same question for the clusters of the cluster template `uid`,
+/// `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`.
+pub fn template_validate_repave_route(uid: &str) -> String {
+    format!("/v1/spectroclusters/clusterTemplates/{uid}/validate/repave")
+}
+
+/// The answer of a `validate/repave` route when the body repaves no node.
+pub fn no_repave() -> Value {
+    json!({"isRepaveRequired": false, "reasons": []})
 }
 
 /// The pack listing of the pack `name`, as strata asks for its first page.
@@ -379,6 +519,27 @@ impl<'a> PackFixture<'a> {
     }
 }
 
+/// The values of the pack of virtual machines `pack`, with `address` as the YAML text of the
+/// address that its console forwards to, and the value `replicas` beside it.
+pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {
+    format!(
+        "charts:\n  {pack}:\n    appConfig:\n      clusterInfo:\n        consoleBaseAddress: \
+         {address}\n    replicas: {replicas}\n"
+    )
+}
+
+/// The line of the console address in values that strata wrote, with `address` in quotes.
+pub fn console_address_line(address: &str) -> String {
+    format!("consoleBaseAddress: '{address}'")
+}
+
+/// The field of [`console_pack_values`] that holds the console address, as a path of keys with
+/// dots. The tests pin this text of Palette on purpose, because the type of strata that holds it
+/// is private.
+pub fn console_address_field(pack: &str) -> String {
+    format!("charts.{pack}.appConfig.clusterInfo.consoleBaseAddress")
+}
+
 /// A manifest of a pack, as `packs/manifests` lists it.
 pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
     json!({"name": name, "uid": uid, "digest": digest, "content": content})
@@ -389,9 +550,65 @@ pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
 pub fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
     json!({
         "name": name, "displayName": display, "defaultValue": default, "format": "string",
-        "inputType": "text", "required": true, "hidden": false, "immutable": false,
+        "inputType": strata::model::input_type::InputType::Text.as_str(),
+        "required": true, "hidden": false, "immutable": false,
         "isSensitive": sensitive, "options": [],
     })
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and the UI asks for its value with
+/// its options.
+fn is_sensitive_dropdown(variable: &Value) -> bool {
+    use strata::model::input_type::InputType;
+    variable["isSensitive"] == true
+        && variable["inputType"]
+            .as_str()
+            .and_then(InputType::from_text)
+            == Some(InputType::Dropdown)
+}
+
+/// True when `variable`, a variable of a profile, is sensitive and is not a dropdown. Palette
+/// masks its default value and the value that a cluster gives it.
+pub fn is_masked_variable(variable: &Value) -> bool {
+    variable["isSensitive"] == true && !is_sensitive_dropdown(variable)
+}
+
+/// The variable `stored` of a profile, as `GET /v1/clusterprofiles/{uid}/variables` serves it.
+///
+/// Palette writes `********` over the value of each option of a sensitive dropdown variable. It
+/// also writes the mask over a default value that is not empty of a variable of
+/// [`is_masked_variable`]. The code of Palette shows it; no live run shows it yet.
+pub fn profile_route_variable(stored: &Value) -> Value {
+    let mut served = stored.clone();
+    if is_masked_variable(stored)
+        && stored["defaultValue"]
+            .as_str()
+            .is_some_and(|d| !d.is_empty())
+    {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    if is_sensitive_dropdown(stored)
+        && let Some(options) = served["options"].as_array_mut()
+    {
+        for option in options {
+            option["value"] = json!(strata::api::MASKED);
+        }
+    }
+    served
+}
+
+/// The variable `stored` of a profile, as `GET /v1/spectroclusters/{uid}/variables` serves its
+/// fields beside the value of the cluster.
+///
+/// The route masks the fields that [`profile_route_variable`] masks. It also writes `********`
+/// over an empty default value of a variable of [`is_masked_variable`]. The code of Palette shows
+/// it; no live run shows it yet.
+pub fn cluster_route_variable(stored: &Value) -> Value {
+    let mut served = profile_route_variable(stored);
+    if is_masked_variable(stored) {
+        served["defaultValue"] = json!(strata::api::MASKED);
+    }
+    served
 }
 
 /// Serve the three documents of the profile version `uid`: its document, its pack manifests,

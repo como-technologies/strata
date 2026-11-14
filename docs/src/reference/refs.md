@@ -130,6 +130,12 @@ A ref names the thing that a command reads.
   under one version, so the ref must name one. `strata list --pack <name>`
   names the registry that each profile version takes the pack from, and a
   record names it in `packs[].registryName`.
+  - Give the uid of a registry whose name holds a `/`. The ref ends the
+    registry at the first `/`, because the name of a pack can hold one too.
+    Palette takes a `/` in both names: see
+    [The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack).
+  - `behind`, a pack row of `list`, and the error `pack-in-several-registries`
+    give such a registry by its uid.
 - **`<cluster>`.** A uid, or the name of one cluster in the scope. A name that
   two clusters have is the error `cluster-name-ambiguous`, which lists their
   uids. A name that no cluster has is `cluster-not-found`, which lists the
@@ -185,6 +191,21 @@ Strata asks Palette nothing:
 ```text
 {{#include ../output/refs-missing-file.txt}}
 ```
+
+## A name with no version
+
+A ref with no version is a uid, also with `@draft`. When Palette has no profile
+with that uid, it answers HTTP `404`. Strata then reads the listing of the
+scope. When a profile has that name, the error is `usage`. Its message lists
+each version of the name as a ref, and names `<name>@latest`:
+
+```text
+{{#include ../output/refs-name-no-version.txt}}
+```
+
+A ref with `@draft` gets each ref with `@draft`, such as
+`aws-stack@1.1.1@draft`. When no profile has the name either, the error stays
+`api`, with the code `ResourceNotFound` of Palette.
 
 ## Which commands take which refs
 

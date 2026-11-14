@@ -14,7 +14,9 @@ mod table;
 mod variants;
 
 use super::*;
-use crate::api::codes::OPERATION_FORBIDDEN_CODE;
+use crate::api::codes::{OPERATION_FORBIDDEN_CODE, PROJECT_SCOPE_CODE};
+use crate::api::routes as palette;
+use crate::config::KEY_VARS;
 use table::first_cells;
 use variants::one_of_each;
 
@@ -39,6 +41,7 @@ fn each_kind_of_error() -> Vec<Error> {
             status: 503,
             body: "busy".into(),
             retry_after: Some(2),
+            key_proved: false,
         },
         Error::InvalidSetting {
             variable: "STRATA_RETRIES",
@@ -320,14 +323,11 @@ fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
         status,
         body: body.into(),
         retry_after: None,
+        key_proved: false,
     };
     // a refusal by design stays while the inputs stay
     assert_eq!(
-        api(
-            500,
-            &format!(r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"m"}}"#)
-        )
-        .class(),
+        api(500, &palette::error_body(OPERATION_FORBIDDEN_CODE, "m")).class(),
         FailureClass::Terminal
     );
     // another 5xx can go away
@@ -518,6 +518,7 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     };
     assert_eq!(by_kind("api")["status"], 503);
     assert_eq!(by_kind("api")["path"], "/v1/x");
+    assert_eq!(by_kind("api")["body"], "busy");
     assert_eq!(by_kind("missing-credential")["variable"], "PALETTE_API_KEY");
     assert_eq!(
         by_kind("missing-credential")["alternate"],
@@ -697,26 +698,35 @@ fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_
     );
 }
 
-/// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters.
+/// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters. No
+/// answer proved the key.
 fn api_message(status: u16, body: &str) -> String {
+    api_message_with(status, body, false)
+}
+
+/// [`api_message`], for a client where `key_proved` says whether an earlier answer proved the key.
+fn api_message_with(status: u16, body: &str, key_proved: bool) -> String {
     Error::Api {
         method: Method::Get,
-        path: "/v1/filters/metadata?filterType=tag".into(),
+        path: palette::TAG_FILTER_LISTING.into(),
         status,
         body: body.into(),
         retry_after: None,
+        key_proved,
     }
     .to_string()
 }
 
 #[test]
 fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_not_the_key() {
-    let body = format!(
-        r#"{{"code":"{PROJECT_SCOPE_CODE}","message":"Operation is not allowed in project scope and ProjectUid should be empty"}}"#
-    );
+    let message = "Operation is not allowed in project scope and ProjectUid should be empty";
+    let body = palette::error_body(PROJECT_SCOPE_CODE, message);
     let text = api_message(403, &body);
     assert!(
-        text.starts_with("GET /v1/filters/metadata?filterType=tag failed with HTTP 403: {"),
+        text.starts_with(&format!(
+            "GET {} failed with HTTP 403: {PROJECT_SCOPE_CODE}: {message}; ",
+            palette::TAG_FILTER_LISTING
+        )),
         "{text}"
     );
     assert!(text.contains("the route is of the tenant scope"), "{text}");
@@ -730,8 +740,10 @@ fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_n
 #[test]
 fn a_401_or_another_403_still_names_the_key() {
     let tenant_scope = format!(r#"{{"code":"{PROJECT_SCOPE_CODE}"}}"#);
+    let project_denied = format!(r#"{{"code":"{}"}}"#, Denial::Project.as_str());
     for (status, body) in [
-        (403, r#"{"code":"ResourceAccessDenied"}"#),
+        // a denial names the key too while no answer of the run proved it
+        (403, project_denied.as_str()),
         (403, "forbidden"),
         (401, r#"{"code":"MissingAuthHeader"}"#),
         // the code of the tenant scope is a refusal of a 403 alone
@@ -748,6 +760,98 @@ fn a_401_or_another_403_still_names_the_key() {
 }
 
 #[test]
+fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
+    let permission = "the role of the key does not give the permission 'filter.list'";
+    let filters_denied = palette::filters_denied();
+    // the first request of the run: nothing proved the key yet
+    let first = api_message(403, &filters_denied);
+    assert!(first.contains(permission), "{first}");
+    assert!(first.contains("the key can be wrong"), "{first}");
+    // an answer with a 2xx status to the client, such as the lookup of the project, proves the key
+    let after = api_message_with(403, &filters_denied, true);
+    assert!(after.ends_with(&format!("; {permission}")), "{after}");
+    for key in KEY_VARS {
+        assert!(!after.contains(key), "{after}");
+    }
+    // a 401 is the key itself, and a 403 that is no denial names no permission
+    for (status, body) in [(401, r#"{"code":"ExpiredApiKey"}"#), (403, "forbidden")] {
+        let text = api_message_with(status, body, true);
+        assert!(text.contains("the key can be wrong"), "{status}: {text}");
+        assert!(!text.contains("does not give"), "{status}: {text}");
+    }
+}
+
+#[test]
+fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
+    for (message, denial, sentence) in [
+        (
+            palette::operation_forbidden_message("cluster.get"),
+            Denial::Object,
+            "the role of the key does not give the permission 'cluster.get'",
+        ),
+        (
+            palette::project_denied_message("lab"),
+            Denial::Project,
+            "no role of the key in the project gives the access of the request",
+        ),
+        (
+            palette::no_roles_message("barney"),
+            Denial::NoRole,
+            "the user of the key has no role",
+        ),
+    ] {
+        // Palette ends a body with a newline, and the message holds no blank before the hint
+        let error = Error::Api {
+            method: Method::Get,
+            path: "/v1/x".into(),
+            status: 500,
+            body: format!("{}\n", palette::error_body(denial.as_str(), &message)),
+            retry_after: None,
+            key_proved: false,
+        };
+        let text = error.to_string();
+        let words = format!("{}: {message}", denial.as_str());
+        assert!(
+            text.ends_with(&format!("HTTP 500: {words}; {sentence}")),
+            "{text}"
+        );
+        assert!(!text.contains("the key can be wrong"), "{text}");
+        // a retry gets the same answer, so strata does not send the request again
+        assert_eq!(error.class(), FailureClass::Terminal, "{text}");
+        assert_eq!(error.denial(), Some(denial));
+    }
+}
+
+#[test]
+fn the_denial_of_an_error_is_the_code_of_the_body_of_an_answer_of_palette() {
+    let api = |body: &str| Error::Api {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        status: 403,
+        body: body.into(),
+        retry_after: None,
+        key_proved: false,
+    };
+    for denial in Denial::ALL {
+        let body = palette::error_body(denial.as_str(), "m");
+        assert_eq!(api(&body).denial(), Some(*denial));
+    }
+    for body in [
+        r#"{"code":"InternalError"}"#,
+        "forbidden",
+        r#"{"message":"m"}"#,
+    ] {
+        assert_eq!(api(body).denial(), None, "{body}");
+    }
+    let transport = Error::Transport {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        message: "connection reset".into(),
+    };
+    assert_eq!(transport.denial(), None);
+}
+
+#[test]
 fn the_message_of_another_status_has_no_hint() {
     let text = api_message(404, r#"{"code":"ResourceNotFound"}"#);
     assert!(!text.contains("check "), "{text}");
@@ -755,19 +859,112 @@ fn the_message_of_another_status_has_no_hint() {
 }
 
 #[test]
+fn the_message_of_an_answer_gives_the_words_of_palette_and_the_document_keeps_the_body() {
+    let not_found = palette::error_body(
+        "ResourceNotFound",
+        "Profile 'barney' is not found in the project dev",
+    );
+    let long = "x".repeat(400);
+    let cut_words = format!("BadRequest: {}…", "x".repeat(287));
+    for (body, words) in [
+        // the code and the message of Palette, and not the JSON of the body
+        (
+            not_found.as_str(),
+            "ResourceNotFound: Profile 'barney' is not found in the project dev",
+        ),
+        // the API schema gives a number as the code
+        (
+            r#"{"code":610,"message":"packs in body should be unique"}"#,
+            "610: packs in body should be unique",
+        ),
+        // a body with no code, such as the page of a proxy, gives its text
+        (
+            "<html>502 Bad Gateway</html>",
+            "<html>502 Bad Gateway</html>",
+        ),
+        (r#"{"message":"no code"}"#, r#"{"message":"no code"}"#),
+        (&palette::error_body("BadRequest", &long), &cut_words),
+    ] {
+        let error = Error::Api {
+            method: Method::Get,
+            path: "/v1/clusterprofiles/barney".into(),
+            status: 404,
+            body: format!("{body}\n"),
+            retry_after: None,
+            key_proved: false,
+        };
+        assert_eq!(
+            error.to_string(),
+            format!("GET /v1/clusterprofiles/barney failed with HTTP 404: {words}"),
+        );
+        // `--json` gives the whole body, as Palette sent it
+        let document = error.to_json();
+        assert_eq!(document["body"], body, "{document}");
+        assert_eq!(document["message"], error.to_string());
+    }
+}
+
+#[test]
 fn the_reason_of_an_answer_of_palette_is_its_status_and_its_body_with_no_blank_at_the_ends() {
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = Error::Api {
         method: Method::Get,
         path: "/v1/audits".into(),
         status: 403,
-        body: "{\"code\":\"AccessDenied\"}\n".into(),
+        body: format!("{denied}\n"),
         retry_after: None,
+        key_proved: false,
     };
-    assert_eq!(api.reason(), r#"HTTP 403: {"code":"AccessDenied"}"#);
+    assert_eq!(api.reason(), format!("HTTP 403: {denied}"));
     let transport = Error::Transport {
         method: Method::Get,
         path: "/v1/audits".into(),
         message: "connection reset".into(),
     };
     assert_eq!(transport.reason(), "GET /v1/audits: connection reset");
+}
+
+#[test]
+fn the_words_of_a_reason_give_the_status_and_the_code_and_the_message_of_palette_and_no_json() {
+    let message = palette::access_denied_message("audit.list", palette::EACH_SCOPE);
+    let denied = palette::error_body(Denial::Route.as_str(), &message);
+    let api = Error::Api {
+        method: Method::Get,
+        path: "/v1/audits".into(),
+        status: 403,
+        body: format!("{denied}\n"),
+        retry_after: None,
+        key_proved: false,
+    };
+    // the record keeps the body as Palette sent it, and the text gives its words
+    assert_eq!(api.reason(), format!("HTTP 403: {denied}"));
+    assert_eq!(
+        reason_words(&api.reason()),
+        format!("HTTP 403: AccessDenied: {message}")
+    );
+    for (reason, words) in [
+        // a body with a code and no message gives the code
+        (
+            r#"HTTP 500: {"code":"InternalError"}"#,
+            "HTTP 500: InternalError",
+        ),
+        // a body with no code, such as the page of a proxy, gives its text
+        (
+            "HTTP 502: <html>502 Bad Gateway</html>",
+            "HTTP 502: <html>502 Bad Gateway</html>",
+        ),
+        ("HTTP 403: forbidden", "HTTP 403: forbidden"),
+        // the message of a request that did not complete stays as it is
+        (
+            "GET /v1/audits: connection reset",
+            "GET /v1/audits: connection reset",
+        ),
+        // a text with no status after `HTTP` is no reason of an answer
+        (
+            r#"HTTP x: {"code":"InternalError"}"#,
+            r#"HTTP x: {"code":"InternalError"}"#,
+        ),
+    ] {
+        assert_eq!(reason_words(reason), words, "{reason}");
+    }
 }

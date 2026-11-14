@@ -8,7 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::api::codes::{Denial, UPGRADE_NOT_SUPPORTED_CODE};
+use strata::model::update::MinorSkip;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
@@ -1484,10 +1485,12 @@ fn pr_comment_dry_run_prints_the_comment_and_calls_no_host() {
         text(&o.stdout)
     );
     assert!(
-        text(&o.stderr).contains("would add label repave"),
+        text(&o.stderr).contains("a run with no --dry-run adds label repave"),
         "{}",
         text(&o.stderr)
     );
+    // the note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
     assert!(h.calls().is_empty(), "{:?}", h.calls());
 }
 
@@ -1712,7 +1715,7 @@ fn pr_comment_repave_sends_the_question_for_a_cluster_and_a_version_and_the_labe
         "the table is read: {said}"
     );
     assert!(
-        said.contains("label repave: Palette says no repave; would remove label repave if present"),
+        said.contains("label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{said}"
     );
 
@@ -1732,7 +1735,9 @@ fn pr_comment_repave_sends_the_question_for_a_cluster_and_a_version_and_the_labe
     let said = text(&o.stderr);
     assert!(said.contains("max impact: none;"), "{said}");
     assert!(
-        said.contains("label repave: Palette says repave; would add label repave"),
+        said.contains(
+            "label repave: Palette says repave; a run with no --dry-run adds label repave"
+        ),
         "{said}"
     );
 }
@@ -1797,7 +1802,7 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert!(
         text(&o.stderr).contains(
-            "label repave: Palette says no repave, and the table decides below may-repave; would add label repave"
+            "label repave: Palette says no repave, and the table decides below may-repave; a run with no --dry-run adds label repave"
         ),
         "{}",
         text(&o.stderr)
@@ -1818,7 +1823,7 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
     );
     assert!(
         text(&o.stderr)
-            .contains("label repave: Palette says no repave; would remove label repave if present"),
+            .contains("label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it"),
         "{}",
         text(&o.stderr)
     );
@@ -1834,10 +1839,13 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         source["cluster"] = serde_json::json!({"uid": "c-2", "name": "billing", "profiles": []});
     });
     let pairs = [
-        // two profile versions: no cluster
+        // two records of profile versions: no cluster, and the commands to use
         (
             [h.a.clone(), h.b.clone()],
-            "strata: --repave needs one side that is a cluster and one that is a profile version\n",
+            "strata: --repave needs one side that is a cluster, and both sides are records with \
+             no cluster. Palette answers only for a cluster, so give the cluster in place of one \
+             record: strata compare cluster:<name> <record> --repave. Plain compare of the two \
+             records prints the impact\n",
         ),
         // a candidate is not in Palette
         (
@@ -1865,7 +1873,9 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
             "{said}"
         );
         assert!(
-            said.contains("label repave: the table decides; would add label repave"),
+            said.contains(
+                "label repave: the table decides; a run with no --dry-run adds label repave"
+            ),
             "{said}"
         );
         assert!(!text(&o.stdout).contains("Palette:"), "{}", text(&o.stdout));
@@ -1932,7 +1942,7 @@ fn pr_comment_without_repave_asks_palette_nothing_and_adds_no_clause_to_the_note
     assert!(
         text(&o.stderr)
             .trim_end()
-            .ends_with("max impact: repave; would add label repave"),
+            .ends_with("max impact: repave; a run with no --dry-run adds label repave"),
         "{}",
         text(&o.stderr)
     );
@@ -2162,6 +2172,15 @@ fn pr_comment_preflight_dry_run_prints_the_comment_and_calls_no_host() {
         "{}",
         text(&o.stdout)
     );
+    // the note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(
+        text(&o.stderr).contains(
+            "a run with no --dry-run posts the preflight comment, or updates the one that carries <!-- strata-preflight -->"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
     assert!(h.calls().is_empty(), "{:?}", h.calls());
 }
 
@@ -3743,13 +3762,19 @@ impl Report {
     }
 
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
-    /// per record.
+    /// per record. Each record is of a profile version, so its subject is `name@version`.
     fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
         let records: Vec<serde_json::Value> = records
             .iter()
             .map(|(path, status, name, version)| {
+                let subject = if name.is_empty() {
+                    String::new()
+                } else {
+                    format!("{name}@{version}")
+                };
                 let mut r = serde_json::json!({"path": path, "status": status, "name": name,
-                    "version": version, "uid": UID_A, "recordedAt": "2026-09-16T01:56:23Z"});
+                    "version": version, "subject": subject, "uid": UID_A,
+                    "recordedAt": "2026-09-16T01:56:23Z"});
                 if *status == "error" {
                     r["error"] = serde_json::json!({"kind": "api", "message": "GET /v1/clusterprofiles/64f0 failed with HTTP 404"});
                 }
@@ -4008,6 +4033,72 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
     assert_eq!(d.log("gh.log").len(), 1);
 }
 
+/// The title of an issue and the comment of its close name a record of four profiles by their
+/// count (#851). These are the words of the heading of `compare`. The script reads `subject` of
+/// the summary that strata writes, and not the joined names and versions.
+#[test]
+fn verify_report_names_a_record_of_four_profiles_by_their_count_in_the_title_and_the_close() {
+    let raw = tempfile::tempdir().unwrap();
+    make_fixtures(raw.path());
+    let api = serve_four_profiles(raw.path());
+    let record = snapshot_of_ref(&api, &cluster_ref(CLUSTER_UID, None, false), "t0").unwrap();
+    let heading = "4 profiles on cluster lab-cluster";
+    assert_eq!(record.source.title(), heading);
+    let d = Report::verify();
+    // the summary that strata writes for the record, and the path of the record in it
+    let summary = |s: strata::ops::VerifySummary| -> String {
+        d.put("summary.json", &serde_json::to_string(&s).unwrap());
+        d.put("summary.exit", &s.exit_code().to_string());
+        s.records[0].path.clone()
+    };
+
+    // the cluster runs two of the four profiles now, so the record drifts
+    let moved = serve_cluster(strata::api::MemoryApi::new(), raw.path(), "cluster-merged");
+    let path = summary(verify_summary(&record, &moved));
+    d.record(
+        "record",
+        1,
+        &format!("## {heading}\n\n**Result:** CHANGED\n"),
+        "",
+    );
+    d.put("issues.json", "[]");
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls.iter().any(|c| c.starts_with(&format!(
+            "issue create --repo o/r --title strata verify: {heading} drifted ({path})"
+        ))),
+        "{calls:#?}"
+    );
+
+    // the cluster runs the four profiles again, so the record verifies and its issue closes
+    let path = summary(verify_summary(&record, &api));
+    d.put(
+        "issues.json",
+        &serde_json::json!([{"number": 7, "title": "t",
+            "body": format!("<!-- strata-verify: {path} -->\nold")}])
+        .to_string(),
+    );
+    let o = d.run(&["runs/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = d.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r --comment"),
+        "{calls:#?}"
+    );
+    let comment = d.handed("comment", 2);
+    assert!(
+        comment.contains(&format!(
+            "`{path}` verifies again: {heading} is unchanged since t0"
+        )),
+        "{comment}"
+    );
+    for out in [calls.join("\n"), comment] {
+        assert!(!out.contains("lab-profile+lab-addons"), "{out}");
+    }
+}
+
 #[test]
 fn verify_report_opens_updates_and_closes_gitlab_issues_the_same_way() {
     let d = Report::verify();
@@ -4231,13 +4322,135 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
     assert!(out.contains("**Result:** CHANGED"), "{out}");
     let err = text(&o.stderr);
     assert!(
-        err.contains("would close the open issue for releases/a.json, if any"),
+        err.contains(
+            "a run with no --dry-run closes the open issue for releases/a.json, if one is open"
+        ),
         "{err}"
     );
     assert!(
-        err.contains("would open or update the issue for releases/b.json"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json"),
         "{err}"
     );
+    // each note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!err.contains("would"), "{err}");
+}
+
+/// The criterion of #832: the issue of a record that strata could not check shows the error as
+/// text. The error can quote an answer with tags of HTML. A line of three backticks in the output
+/// of strata does not end the block of the output.
+#[test]
+fn verify_report_shows_each_tag_of_an_answer_in_the_error_of_a_record_as_text() {
+    let d = Report::verify();
+    d.summary(2, &[("releases/c.json", "error", "lab-profile", "1.0.0")]);
+    let message = format!("GET /v1/x failed with HTTP 403: {}", common::ANSWER_TAGS);
+    let mut summary = read_json(&d.dir.path().join("summary.json"));
+    summary["records"][0]["error"]["message"] = serde_json::json!(message);
+    d.put("summary.json", &summary.to_string());
+    d.record(
+        "c",
+        2,
+        "",
+        &format!("strata: {message}\n```\n{}\n", common::ANSWER_TAGS),
+    );
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    let body = out
+        .strip_prefix("<!-- strata-verify: releases/c.json -->\n")
+        .unwrap_or_else(|| panic!("the marker starts the body:\n{out}"));
+    assert!(
+        body.contains(&format!(
+            ": api: GET /v1/x failed with HTTP 403: {}\n",
+            strata::text::html_text(common::ANSWER_TAGS)
+        )),
+        "{body}"
+    );
+    assert!(body.contains("\n````\nstrata: GET /v1/x"), "{body}");
+    common::assert_only_strata_tags(&common::outside_code_blocks(body));
+}
+
+/// A name, a version, or a tag of an answer with tags of HTML and a backtick. A code span that
+/// counts no backtick ends at the backtick, and the tags after it are HTML.
+fn with_tags(value: &str) -> String {
+    format!("{value}`{}", common::ANSWER_TAGS)
+}
+
+/// Make sure that GitHub shows each tag of an answer as text in `markdown`, a body or a comment of
+/// a report script. The marker and the state at the start of a body are each one whole comment of
+/// HTML, with no tag. A code span or a code block shows a tag as text.
+fn assert_issue_shows_tags_as_text(markdown: &str) {
+    let mut rest = markdown;
+    while let Some(comment) = rest.strip_prefix("<!-- ") {
+        let (line, next) = comment.split_once('\n').unwrap_or((comment, ""));
+        assert!(
+            line.ends_with(" -->") && !line.contains('<') && line.matches("-->").count() == 1,
+            "one whole comment with no tag: <!-- {line}"
+        );
+        rest = next;
+    }
+    common::assert_only_strata_tags(&common::without_code(&common::outside_code_blocks(rest)));
+}
+
+/// The criterion of #832: each body and each comment of verify-report.sh shows each text of a
+/// record as text. The name and the version hold tags of HTML and a backtick. The path holds a
+/// tag, a backtick, and the end of a comment of HTML.
+#[test]
+fn verify_report_shows_the_tags_and_the_backtick_of_a_record_as_text_in_each_issue_and_comment() {
+    use strata::text::{code_span, html_text, markdown_cell};
+    let d = Report::verify();
+    let key = |k: &str| format!("{k}` --> <b>");
+    let path = |k: &str| format!("releases/{}.json", key(k));
+    let (name, version) = (with_tags("lab-profile"), with_tags("1.2.0"));
+    let paths = [path("a"), path("b"), path("c"), path("e")];
+    let records: Vec<(&str, &str, &str, &str)> = paths
+        .iter()
+        .zip(["unchanged", "drifted", "unverified", "error"])
+        .map(|(p, status)| (p.as_str(), status, name.as_str(), version.as_str()))
+        .collect();
+    d.summary(2, &records);
+    d.record(&key("b"), 1, "## a report\n\n**Result:** CHANGED\n", "");
+    d.record(&key("c"), 1, "## a report\n\n**Result:** UNVERIFIED\n", "");
+    d.record(&key("e"), 2, "", "strata: failed\n");
+    let marker = |p: &str| format!("<!-- strata-verify: {} -->", html_text(p));
+    let issue = serde_json::json!([{"number": 7, "title": "t", "body": format!("{}\nold", marker(&paths[0]))}]);
+    d.put("issues.json", &issue.to_string());
+    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+
+    // the marker of the escaped path finds the issue, and the comment closes it
+    let calls = d.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 7 --repo o/r"),
+        "{calls:#?}"
+    );
+    let comment = d.handed("comment", 2);
+    assert!(
+        comment.starts_with(&format!(
+            "{} verifies again: {} is unchanged since 2026-09-16T01:56:23Z (checked ",
+            code_span(&paths[0]),
+            markdown_cell(&format!("{name}@{version}"))
+        )),
+        "{comment}"
+    );
+    assert_issue_shows_tags_as_text(&comment);
+
+    // the issues of the other records: the calls after `label list` and `label create`
+    for (call, p, said) in [
+        (5, &paths[1], "reports drift"),
+        (6, &paths[2], "cannot verify the record"),
+        (7, &paths[3], "could not check the record"),
+    ] {
+        let body = d.handed("body", call);
+        assert!(
+            body.starts_with(&format!(
+                "{}\n{} {said}, checked ",
+                marker(p),
+                code_span(&format!("strata verify {p}"))
+            )),
+            "{body}"
+        );
+        assert_issue_shows_tags_as_text(&body);
+    }
 }
 
 #[test]
@@ -4263,7 +4476,7 @@ fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_dig
     assert!(out.contains("**UNVERIFIED**: pack addon/x"), "{out}");
     let err = text(&o.stderr);
     assert!(
-        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 cannot be verified (releases/b.json)"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json: strata verify: lab-profile@1.3.0 cannot be verified (releases/b.json)"),
         "{err}"
     );
     assert!(
@@ -4351,13 +4564,13 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let dir = tempfile::tempdir().unwrap();
     make_fixtures(dir.path());
     let recorded = strata::ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(strata::api::MemoryApi::new(), dir.path(), "b", UID_A).failing(
         format!(
             "/v1/audits?resourceKind=clusterprofile&resourceUid={UID_A}&startTime=t0&limit=100"
         ),
         403,
-        denied,
+        denied.as_str(),
     );
     let options = strata::ops::VerifyOptions {
         who: true,
@@ -4382,11 +4595,14 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let (out, err) = (text(&o.stdout), text(&o.stderr));
     assert!(out.contains("**DRIFT**"), "{out}");
     assert!(
-        out.contains(&format!("who: not read: HTTP 403: {denied}")),
+        out.contains(&format!(
+            "who: not read: HTTP 403: {}",
+            Denial::Route.as_str()
+        )),
         "{out}"
     );
     assert!(
-        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 drifted"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json: strata verify: lab-profile@1.3.0 drifted"),
         "{err}"
     );
     assert!(!out.contains("could not check"), "{out}");
@@ -4750,14 +4966,43 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             refuses(vec![upgrade(&["fred"])]),
             Some("1 record of project prod was not asked"),
         ),
+        // a message with tags of HTML shows each tag as text, as in the markdown of `behind`
+        (
+            refuses(vec![error(
+                "csi-aws-ebs",
+                "PackValidationFailed",
+                common::ANSWER_TAGS,
+                &[],
+            )]),
+            Some(common::ANSWER_TAGS),
+        ),
     ];
-    for (validation, failed) in cases {
+    // the skip of a minor version of Kubernetes comes under the answer of Palette. It names the
+    // next step, or only the next minor version (#623)
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.34.9", "1.36.2").unwrap();
+    let next = MinorSkip {
+        next_step: Some("1.35.6".to_string()),
+        ..skip.clone()
+    };
+    let checks = [skip, next];
+    let cases = cases
+        .into_iter()
+        .map(|(validation, failed)| (validation, failed, None))
+        .chain(
+            checks
+                .into_iter()
+                .map(|skip| (Some(serde_json::json!({"accepts": true})), None, Some(skip))),
+        );
+    for (validation, failed, skip) in cases {
         let mut report = read_json(&u.dir.path().join("report.json"));
         if let Some(validation) = validation {
             report["pins"][0]["bump"]["paletteValidation"] = validation;
         }
         if let Some(failed) = failed {
             report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!(failed);
+        }
+        if let Some(skip) = skip {
+            report["pins"][0]["bump"]["updateChecks"] = serde_json::json!({"skippedMinor": skip});
         }
         u.put("report.json", &report.to_string());
 
@@ -4781,6 +5026,10 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
 
     // the cell, word for word
     let mut report = read_json(&u.dir.path().join("report.json"));
+    report["pins"][0]["bump"]
+        .as_object_mut()
+        .unwrap()
+        .remove("updateChecks");
     report["pins"][0]["bump"]["paletteValidation"] =
         refuses(vec![upgrade(&["betty", "fred", "wilma"])]).unwrap();
     report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!("m");
@@ -4810,6 +5059,144 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
     );
 }
 
+/// The criterion of #832: the issue of a pack that is behind shows each text of an answer as text.
+/// These are the name of the registry, the error of a pin that strata could not check, and a
+/// refusal of Palette. The state line holds the same texts, and a `-->` in a text does not end its
+/// comment. So the next run reads the same pins.
+#[test]
+fn upstream_report_shows_each_tag_of_an_answer_as_text_and_keeps_the_state_line_whole() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0"], None);
+    let answer = format!("{} -->", common::ANSWER_TAGS);
+    let mut report = read_json(&u.dir.path().join("report.json"));
+    let mut failed = report["pins"][0].clone();
+    failed["version"] = serde_json::json!("1.62.0");
+    failed["behind"] = serde_json::json!(false);
+    failed["newer"] = serde_json::json!([]);
+    failed.as_object_mut().unwrap().remove("bump");
+    failed["error"] = serde_json::json!({"kind": "api",
+        "message": format!("GET /v1/x failed with HTTP 403: {answer}")});
+    report["pins"][0]["bump"]["paletteValidation"] = serde_json::json!({"accepts": false,
+        "errors": [{"pack": "csi-aws-ebs", "code": "PackValidationFailed", "message": answer,
+                    "clusters": []}]});
+    report["pins"].as_array_mut().unwrap().push(failed);
+    for pin in report["pins"].as_array_mut().unwrap() {
+        if pin["name"] == "csi-aws-ebs" {
+            pin["registry"] = serde_json::json!(common::ANSWER_TAGS);
+        }
+    }
+    u.put("report.json", &report.to_string());
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let body = text(&o.stdout);
+    let lines: Vec<&str> = body.lines().collect();
+    let state = lines[1]
+        .strip_prefix("<!-- strata-behind-state: ")
+        .and_then(|l| l.strip_suffix(" -->"))
+        .unwrap_or_else(|| panic!("the second line holds the state:\n{body}"));
+    assert!(!state.contains(['<', '>', '&']), "{state}");
+    let state: serde_json::Value = serde_json::from_str(state).unwrap();
+    assert_eq!(
+        state["pins"][0]["bump"]["paletteValidation"]["errors"][0]["message"],
+        answer.as_str()
+    );
+    let shown = lines[2..].join("\n");
+    common::assert_answer_tags_as_text(&shown);
+    let html = strata::text::html_text;
+    for line in [
+        format!("behind in {}, checked", html(common::ANSWER_TAGS)),
+        format!(
+            "<br>palette refuses: PackValidationFailed csi-aws-ebs: {} |",
+            html(&answer)
+        ),
+        format!(
+            "| not checked: GET /v1/x failed with HTTP 403: {} |",
+            html(&answer)
+        ),
+    ] {
+        assert!(shown.contains(&line), "{line}\n{shown}");
+    }
+
+    // the next run gives the same pins to `strata behind --since`
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let previous = read_json(&u.dir.path().join("since-used.json"));
+    assert_eq!(previous["pins"], state["pins"]);
+}
+
+/// The criterion of #832: the body and the close comment of upstream-report.sh show each text of
+/// an answer as text. The name of the pack, its version, and its floating tag hold tags of HTML
+/// and a backtick. The path that pins it holds a backtick.
+#[test]
+fn upstream_report_shows_the_tags_and_the_backtick_of_a_pack_as_text_in_its_issue_and_comment() {
+    use strata::text::{code_cell, code_span, html_text};
+    let u = Report::upstream();
+    let (name, version, tag) = (
+        with_tags("csi-aws-ebs"),
+        with_tags("1.63.1"),
+        with_tags("latest"),
+    );
+    let path = "releases/a`b.json";
+    let tagged = |newer: &[&str]| {
+        u.report(if newer.is_empty() { 0 } else { 1 }, newer, None);
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        let pin = &mut report["pins"][0];
+        pin["name"] = serde_json::json!(name);
+        pin["version"] = serde_json::json!(version);
+        pin["floating"] = serde_json::json!(true);
+        pin["tag"] = serde_json::json!(tag);
+        pin["registry"] = serde_json::json!(common::ANSWER_TAGS);
+        pin["pinnedBy"][0] = serde_json::json!({"path": path, "subject": common::ANSWER_TAGS});
+        u.put("report.json", &report.to_string());
+    };
+
+    tagged(&["1.65.0"]);
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let body = text(&o.stdout);
+    let marker = format!("<!-- strata-behind: {} reg-public -->\n", html_text(&name));
+    assert!(body.starts_with(&marker), "{body}");
+    let registry = html_text(common::ANSWER_TAGS);
+    for line in [
+        format!(
+            "`strata behind` finds {} behind in {registry}, checked ",
+            code_span(&name)
+        ),
+        format!(
+            "| {} (floating tag {}) | 1.65.0 |",
+            code_cell(&version),
+            code_cell(&tag)
+        ),
+        format!("| - | {} ({registry}) |", code_cell(path)),
+    ] {
+        assert!(body.contains(&line), "{line}\n{body}");
+    }
+    assert_issue_shows_tags_as_text(&body);
+
+    // the next run finds the issue by its marker, and the comment closes it
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    tagged(&[]);
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = u.log("gh.log");
+    assert!(
+        calls[1].starts_with("issue close 41 --repo o/r"),
+        "{calls:#?}"
+    );
+    let comment = u.handed("comment", 2);
+    assert!(
+        comment.starts_with(&format!(
+            "Each pin of {} in {registry} is at the newest version",
+            code_span(&name)
+        )),
+        "{comment}"
+    );
+    assert_issue_shows_tags_as_text(&comment);
+}
+
 #[test]
 fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
     let u = Report::upstream();
@@ -4822,13 +5209,60 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
         ["behind --quiet --format json --no-impact releases/*.json"]
     );
     assert!(text(&o.stdout).starts_with("<!-- strata-behind: csi-aws-ebs reg-public -->"));
-    assert!(
-        text(&o.stderr).contains("would open or update the issue for csi-aws-ebs in Public Repo")
-    );
+    assert!(text(&o.stderr).contains(
+        "a run with no --dry-run opens or updates the issue for csi-aws-ebs in Public Repo"
+    ));
     assert!(
         text(&o.stderr)
-            .contains("would close the open issue for kubernetes in Public Repo, if any")
+            .contains("a run with no --dry-run closes the open issue for kubernetes in Public Repo, if one is open")
     );
+    // each note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
+}
+
+/// The criterion of #854: the issue of a pin that is behind a newer minor version names the next
+/// patch, from `nextPatch` of `strata behind`. The script splits no version. The patch is a text of
+/// an answer, so each tag of HTML in it shows as text.
+#[test]
+fn upstream_report_names_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0", "1.63.4"], None);
+    let issue_with = |patch: &str| {
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        report["pins"][0]["nextPatch"] = serde_json::json!(patch);
+        u.put("report.json", &report.to_string());
+        let o = u.run(&["releases/*.json", "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+        text(&o.stdout)
+    };
+    let body = issue_with("1.63.4");
+    assert!(
+        body.contains(
+            "| `1.63.1` | 1.65.0, 1.63.4; next patch 1.63.4 | 1.65.0: cluster-wide IDENTITY \
+             AUTHORED | - |"
+        ),
+        "{body}"
+    );
+    // the state line keeps the field, so the next run gives it to `--since`
+    assert!(
+        body.lines()
+            .nth(1)
+            .unwrap()
+            .contains("\"nextPatch\":\"1.63.4\""),
+        "{body}"
+    );
+
+    let body = issue_with(common::ANSWER_TAGS);
+    let cell = strata::text::markdown_cell(&format!(
+        "1.65.0, 1.63.4; next patch {}",
+        common::ANSWER_TAGS
+    ));
+    assert!(
+        body.contains(&format!("| `1.63.1` | {cell} |")),
+        "{cell}\n{body}"
+    );
+    let shown: Vec<&str> = body.lines().skip(2).collect();
+    common::assert_answer_tags_as_text(&shown.join("\n"));
 }
 
 /// A dry run calls no host, so it needs no token. The three scripts that have a host agree on
@@ -4918,6 +5352,97 @@ fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_o
         assert_eq!(v, u, "the layers differ at line {} of the layer", i + 1);
     }
     assert_eq!(verify.len(), upstream.len(), "one layer is longer");
+}
+
+/// The lines of the jq functions of markdown in the script `path`: from their comment to `md`.
+fn markdown_layer(path: &str) -> Vec<String> {
+    repo_file(path)
+        .lines()
+        .skip_while(|l| !l.starts_with("# The jq functions that write a text into markdown"))
+        .scan(false, |done, l| {
+            let line = (!*done).then(|| l.to_string());
+            *done = *done || l.starts_with("md() {");
+            line
+        })
+        .collect()
+}
+
+/// The jq functions of markdown of `observer-propose.sh` and of `lib.sh` of the live example are
+/// those of the two report scripts, line for line. Each script stands alone, so the copy is on
+/// purpose, and a change to one copy must reach the others.
+#[test]
+fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts() {
+    let layer = markdown_layer("scripts/ci/verify-report.sh");
+    assert!(
+        layer.len() > 10 && layer.last().is_some_and(|l| l.starts_with("md() {")),
+        "the functions are not found: {layer:#?}"
+    );
+    for path in [
+        "scripts/ci/upstream-report.sh",
+        "scripts/ci/observer-propose.sh",
+        "examples/live/lib.sh",
+    ] {
+        assert_eq!(
+            markdown_layer(path),
+            layer,
+            "the functions differ in {path}"
+        );
+    }
+}
+
+/// The criteria of #872 and #890: the jq functions of the scripts write each text as the helpers of
+/// `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text, also two
+/// backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies nobody.
+/// It keeps each bare address that GitHub surely links as it is.
+#[test]
+fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
+    use strata::text::{code_cell, code_span, html_text, markdown_cell};
+    let script = repo_file("scripts/ci/verify-report.sh");
+    let program = script
+        .split_once("markdown_jq='")
+        .and_then(|(_, rest)| rest.split_once("'\n"))
+        .map(|(program, _)| program)
+        .expect("the script holds markdown_jq");
+    let helpers = [
+        ("html", html_text as fn(&str) -> String),
+        ("cell", markdown_cell),
+        ("span", code_span),
+        ("code", code_cell),
+    ];
+    for t in [
+        common::ANSWER_TAGS,
+        common::ANSWER_MARKS,
+        "``a`` ~~gone~~ ![i](x) a\\*b\\|c",
+        common::ANSWER_MENTIONS,
+        "(@a) @@b é@c _@d *@e\n@f|@g &@a <@b a@-b @",
+        common::ANSWER_ADDRESSES,
+        "www.a.example/@b x (www.a.example/@b) \"www.a.example/@b\" 'https://a.example/@b'",
+        "https://a.example/x_(y)) https://a.example/x_*~.\" http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
+        "https://-a.example/@b https://a_b.example/@b https://localhost/@b xhttps://a.example/@b",
+        "https://a.example/é@b https://a.example/<b> https://a.example/a&amp; https:// www. a|https://a.example/b|c",
+        " \thttps://a.example/@b\n www.a.example/@c\r\x0c@d  www.a.example/\x0b@e",
+        "aws_stack LTS__24.x é_ü __init__ a_ _b a_-b",
+        "first\nsecond | `x` &amp;",
+        "",
+    ] {
+        for (function, helper) in helpers {
+            let o = Command::new("jq")
+                .args([
+                    "-njr",
+                    "--arg",
+                    "t",
+                    t,
+                    &format!("{program} $t | {function}"),
+                ])
+                .output_locked()
+                .unwrap();
+            assert!(o.status.success(), "{}", text(&o.stderr));
+            assert_eq!(text(&o.stdout), helper(t), "{function} of {t:?}");
+        }
+    }
+    common::assert_answer_marks_as_text(&markdown_cell(common::ANSWER_MARKS));
+    common::assert_answer_mentions_as_text(&markdown_cell(common::ANSWER_MENTIONS));
+    common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
@@ -6062,7 +6587,7 @@ fn observer_records_sh_accepts_the_folder_of_records_that_the_install_steps_name
         let file = format!("releases/{name}_{version}.json");
         job.file(&file, &profile_doc(name, version));
     }
-    let steps = page_section("docs/src/automation/observer.md", "## Install");
+    let steps = page_section("docs/src/automation/observer.md", "## Install with kubectl");
     let command = block_with(&steps, "bash", "observer-records.sh");
     let envs = [("GIT_SHA", "abc123")];
     let o = job.run_shell(&command, &envs);
@@ -6651,6 +7176,41 @@ fn observer_propose_opens_one_pull_request_with_the_first_seen_records_and_leave
         "no second request and no edit: {calls:#?}"
     );
     assert_eq!(p.commits_of(branch), 3, "the commit of the reviewer stays");
+}
+
+/// The criterion of #872: the body writes the name of the cluster and the path of each record
+/// with the code span of strata. The span counts the backticks. So a backtick in a name or a path
+/// does not end the span, and GitHub shows each one whole.
+#[test]
+fn observer_propose_writes_a_name_and_a_path_with_a_backtick_in_a_code_span_of_strata() {
+    let p = Propose::new();
+    p.secrets_of(&["--first-seen", "c-`1"]);
+    let dir = "releases/ob`server";
+    let o = p.run(&["--dir", dir], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let body = p.body();
+    let files: Vec<String> = RECORD_FILES
+        .iter()
+        .map(|f| f.replace("releases/observer", dir))
+        .collect();
+    assert!(
+        body.contains(&format!(
+            "the cluster {} recorded",
+            strata::text::code_span("c-`1")
+        )),
+        "{body}"
+    );
+    for file in &files {
+        assert!(
+            body.contains(&format!("- {}\n", strata::text::code_span(file))),
+            "{body}"
+        );
+    }
+    assert_eq!(
+        common::code_spans(&body),
+        ["c-`1", files[0].as_str(), files[1].as_str()],
+        "{body}"
+    );
 }
 
 /// Approved records need no review, and records that the base holds need no request.

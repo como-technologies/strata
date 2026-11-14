@@ -157,6 +157,21 @@ fn pack_forms() {
 }
 
 #[test]
+fn a_pack_ref_names_a_registry_by_its_uid_when_the_name_is_empty_or_holds_a_slash() {
+    assert_eq!(registry_in_ref("Public Repo", "r1"), "Public Repo");
+    assert_eq!(registry_in_ref("", "r1"), "r1");
+    assert_eq!(registry_in_ref("team/charts", "r1"), "r1");
+    let read = Ref::parse_with(
+        &format!("pack:{}/nginx@1", registry_in_ref("team/charts", "r1")),
+        |_| false,
+    );
+    assert!(
+        matches!(&read, Ref::Pack { registry: Some(r), name, .. } if r == "r1" && name == "nginx"),
+        "{read:?}"
+    );
+}
+
+#[test]
 fn a_pack_ref_prints_as_the_pack_ref_that_it_is() {
     let no_files = |_: &Path| false;
     // an empty registry is none, and a name with a `/` after none prints as a registry

@@ -18,6 +18,7 @@ const newWindow = 7 * 24 * time.Hour
 // a variable and no old or new value, because it reads none: see the types of docs.
 func Build(in Input) Summary {
 	now := utc(in.Now)
+	in.Versions = forThisCluster(in.Versions, in.Content)
 	s := Summary{
 		Page:     PageOf(in.FilesKnown, in.Files, in.ContentClock, now),
 		Content:  ContentClock{CheckedAt: utcPtr(in.ContentClock.Last), Health: in.ContentClock.health()},
@@ -54,6 +55,51 @@ func Build(in Input) Summary {
 	return s
 }
 
+// forThisCluster gives the answers of the versions cycle for the profile versions that the cluster runs.
+// The cycle asks about each record, also about a version that the cluster no longer runs, such as a
+// first-seen record after a move to the next version. A newer version of that version is no news for
+// this cluster. So the answers name no such record, and a pin or a profile version that only such
+// records hold leaves. Before the first good content cycle, the observer does not know what the
+// cluster runs, and it keeps each answer. The answers of the cycle stay as they are.
+func forThisCluster(vs *Versions, c *Content) *Versions {
+	if vs == nil || c == nil {
+		return vs
+	}
+	away := map[string]bool{}
+	for _, r := range c.Records {
+		if !r.Cluster.Runs {
+			away[r.subject()] = true
+		}
+	}
+	if len(away) == 0 {
+		return vs
+	}
+	out := *vs
+	out.Pins, out.Profiles = nil, nil
+	for _, pin := range vs.Pins {
+		var held bool
+		if pin.PinnedBy, held = heldHere(pin.PinnedBy, away); !held {
+			continue
+		}
+		pin.Carriers = slices.DeleteFunc(slices.Clone(pin.Carriers), func(k docs.PinCarrier) bool { return away[Subject(k.Profile, k.Version)] })
+		out.Pins = append(out.Pins, pin)
+	}
+	for _, p := range vs.Profiles {
+		var held bool
+		if p.PinnedBy, held = heldHere(p.PinnedBy, away); held {
+			out.Profiles = append(out.Profiles, p)
+		}
+	}
+	return &out
+}
+
+// heldHere drops the records that the cluster does not run from the records that hold an answer, in a
+// new list. The second result is false when it drops each of them.
+func heldHere(by []docs.PinnedBy, away map[string]bool) ([]docs.PinnedBy, bool) {
+	held := slices.DeleteFunc(slices.Clone(by), func(b docs.PinnedBy) bool { return away[b.Subject] })
+	return held, len(held) > 0 || len(by) == 0
+}
+
 func (c Clock) health() Health {
 	return Health{Every: ShortDuration(c.Every), FailedRuns: c.FailedRuns, LastError: c.LastError, Running: c.Running}
 }
@@ -61,10 +107,11 @@ func (c Clock) health() Health {
 // view holds what the rows need from the two cycles, so that a row does not search for it.
 type view struct {
 	causes *causes
-	// registries maps the uid of a registry to its name.
+	// registries maps the uid of a registry to its name: the name that a record gives, else the name in a
+	// pin of behind. A pack row and a row of a newer version read it, so the page joins the two rows.
 	registries map[string]string
-	// newest maps a pack of a profile to the newest version that a pin names, and carried to the newer
-	// version of the profile that carries a newer version of the pack.
+	// newest maps a pack of a profile to the newest version that a pin names. carried maps a pack of a
+	// profile to the newer version of the profile that carries a newer version of the pack.
 	newest  map[string]string
 	carried map[string]Carried
 	// newerProfiles holds the profiles that a pin that is behind names.
@@ -82,10 +129,13 @@ type view struct {
 func newView(in Input, c *causes) *view {
 	v := &view{causes: c, registries: map[string]string{}, newest: map[string]string{}, carried: map[string]Carried{}, newerProfiles: map[string]bool{},
 		newerVersions: map[string]NewerVersion{}, findingProfiles: map[string]bool{}, findingPacks: map[string]bool{}, packlessProfiles: map[string]bool{}}
+	if in.Content != nil {
+		v.nameRegistries(in.Content.Records)
+	}
 	if in.Versions != nil {
 		v.readNewerVersions(in.Versions, utc(in.Now))
 		for _, pin := range in.Versions.Pins {
-			if pin.Registry != "" {
+			if pin.Registry != "" && v.registries[pin.RegistryUID] == "" {
 				v.registries[pin.RegistryUID] = pin.Registry
 			}
 			if !pin.Behind || len(pin.Newer) == 0 {
@@ -142,6 +192,18 @@ func (v *view) readNewerVersions(vs *Versions, now time.Time) {
 	}
 }
 
+// nameRegistries keeps the name of each registry that a record names. A record of strata 0.33.0 and
+// before names none, so a pin of behind names its registry then.
+func (v *view) nameRegistries(records []Record) {
+	for _, r := range records {
+		for _, p := range r.Doc.Packs {
+			if p.RegistryName != "" && v.registries[p.RegistryUID] == "" {
+				v.registries[p.RegistryUID] = p.RegistryName
+			}
+		}
+	}
+}
+
 func (v *view) registry(uid string) string {
 	if name := v.registries[uid]; name != "" {
 		return name
@@ -194,6 +256,9 @@ func profileRow(r Record, v *view) Profile {
 	switch {
 	case v.findingProfiles[subject]:
 		p.Status = StatusDrift
+	// a record of a version that the cluster does not run has no newer version: see forThisCluster
+	case !r.Cluster.Runs:
+		p.Status = StatusNotOnThisCluster
 	// a newer version of a pack, or of the profile itself: the page gives each its own words
 	case v.newerProfiles[subject], p.NewerVersion != nil:
 		p.Status = StatusNewer
@@ -343,12 +408,16 @@ func distinctProfiles(rows []Newer) int {
 }
 
 // counts reads the numbers of the page from the rows. A pack counts for the records that the
-// cluster runs, so a record of another cluster adds none.
+// cluster runs, so a record of another cluster adds none. A profile counts unless its status is
+// not-on-this-cluster.
 func (s Summary) counts(in Input, v *view) Counts {
-	n := Counts{Findings: len(s.Findings), NotChecked: len(s.NotChecked), Profiles: len(s.Profiles)}
+	n := Counts{Findings: len(s.Findings), NotChecked: len(s.NotChecked)}
 	for _, p := range s.Profiles {
 		if p.Status == StatusDrift {
 			n.Drift++
+		}
+		if p.Status != StatusNotOnThisCluster {
+			n.Profiles++
 		}
 	}
 	if in.Content == nil {

@@ -44,5 +44,5 @@ pub(crate) fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
         &progress,
     )?;
     print!("{}", a.out.renderer().render_list(&l)?);
-    Ok(ExitCode::SUCCESS)
+    Ok(ExitCode::from(l.exit_code()))
 }

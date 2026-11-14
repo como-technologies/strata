@@ -8,7 +8,8 @@ its checks establishes, so you can see the coverage without running anything.
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
 `packs.sh`, `knurl.sh`, `observer-kind.sh`, and `observer-role.sh` read too. The other scripts below write to the tenant;
 `pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
-in stage 4, which deletes the profile that it makes. `route-bodies.sh` deletes each
+in stage 4, which deletes the profile that it makes, and in stage 7, whose updates Palette
+refuses. `route-bodies.sh` deletes each
 profile that it makes.
 
 Each check names its expected exit code. A run that gets another code fails, and
@@ -119,11 +120,13 @@ a tag on a published version through the API. The source for
 | `compare-exact-json`, `compare-exact-json-says` | 1, 0 | #19: the same as JSON: `sameContent`, the OS pack `tagRenamed`, max impact none |
 | `compare-floating`, `compare-floating-says` | 1, 0 | #19: the floating tag is the same content too |
 | `same-release-tags` | 0 | #19: the three versions are one release |
-| `palette-repave-exact`, `palette-repave-floating` | 0 | Palette repaves nothing for a move between them |
+| `palette-repave-exact`, `palette-repave-floating` | 0 | #864: `tenant.sh repave` sends the body of a swap: each profile of cluster A, with 1.0.2 or 1.0.3 in place of 1.0.0. The code of Palette shows no repave. No result yet: no live window ran the body of a swap. |
+| `palette-repave-exact-replace`, `palette-repave-floating-replace` | ? | #864: the earlier body of `tenant.sh repave`: 1.0.0 alone, with `replaceWithProfile` and the `packValues` of 1.0.2 or 1.0.3. Palette repaves nothing for a move between them with this body. |
 | `palette-repave-control` | 1 | the control, one more kubeadm command, does repave |
 | `a2`, `a2-runs-exact`, `instances2` | 0 | after the move, the selection is `IDENTICAL` to the target |
 | `repaved-to-exact` | 1 | #19: the move kept the cluster's instances |
-| `palette-repave-back` | 0 | Palette repaves nothing for the move back |
+| `palette-repave-back` | 0 | #864: the body of a swap for the move back: each profile of cluster A, with 1.0.0 in place of 1.0.2. The code of Palette shows no repave. No result yet: no live window ran the body of a swap. |
+| `palette-repave-back-replace` | ? | #864: the earlier body: 1.0.2 alone, with `replaceWithProfile` and the `packValues` of 1.0.0. Palette repaves nothing for the move back with this body. |
 | `a3`, `a3-runs-release`, `instances3` | 0 | after the move back, the selection is `IDENTICAL` to the first version |
 | `repaved-back` | 1 | #19: the move back kept the instances |
 | `retag` | 0 | #19: rename a published version's OS pack tag through the API, keeping its pack uid |
@@ -443,14 +446,29 @@ place.
 
 ## order.sh
 
-Read-write. It needs the example at its baseline with cluster A. It sends a
-`PUT` of two published versions with their packs in the other order. It also
-sends a `PUT` of the cluster's profiles in the other order. It reads what
-Palette stores, what it audits, and what `verify` says.
+Read-write. Each stage needs the example at its baseline with cluster A. Stages
+1 to 3 send a `PUT` of two published versions with their packs in the other
+order. They also send a `PUT` of the cluster's profiles in the other order. They
+read what Palette stores, what it audits, and what `verify` says.
 
-It leaves the two versions edited, so
-`live-down` follows it. A second run reverses them again, and passes the same
+They leave the two versions edited, so
+`live-down` follows them. A second run reverses them again, and passes the same
 way.
+
+Stage 4 runs only when you give its number: `just live-order-append`. It builds
+cluster B from the same definition, as the control. It makes the release
+version 1.0.2, with a new uid and the content of 1.0.0. It adds an add-on
+profile of one ConfigMap to cluster A, with a `PUT` that gives that profile
+first. Then it sends the `PATCH` of an upgrade of cluster A to 1.0.2, in the
+form of the provider: one entry with `replaceWithProfile`.
+
+After each step, stage 4 reads `spec.clusterProfileTemplates` of each cluster,
+and `spec.clusterProfileTemplate` of the summary of each cluster. Then it
+returns cluster A to its baseline profiles, deletes the added profile, and
+removes cluster B and 1.0.2. The release profile of cluster A then stays last
+in the stored order. When it stops early, run `just live-down`. The checks
+state what each read must show, from [The order of the profiles of a
+cluster](../internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -461,6 +479,16 @@ way.
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
 | `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: Palette accepts a `PUT` of the cluster's profiles in the other order. The document keeps the stored order. The audit log still has an update of the cluster |
 | `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
+| `append-release` | 0 | #844: the release version 1.0.0. Version 1.0.2 pins the OS pack under the tag of 1.0.0, so it has the content of 1.0.0 |
+| `order-a-<step>`, `summary-a-<step>`, `order-b-<step>`, `summary-b-<step>` | 0 | #844: the document and the summary of cluster A and of cluster B. The step is `before`, `added` after the add, or `upgraded` after the upgrade |
+| `append-profile`, `append-add` | 0 | #844: an add-on profile of one ConfigMap, and the `PUT` of the profiles of cluster A that gives it first. Palette takes the `PUT`. No result yet: the check is new, and no live window ran it |
+| `added-last` | 0 | #844: the stored order of cluster A is the order from before, with the new profile last. No result yet: the check is new, and no live window ran it |
+| `append-upgrade` | 0 | #844: Palette takes the `PATCH` of the upgrade of cluster A from 1.0.0 to 1.0.2. No result yet: the check is new, and no live window ran it |
+| `upgraded-last` | 0 | #844: the stored order drops 1.0.0, keeps the other profiles in their order, and puts 1.0.2 last. So an add-on profile is at position 0. No result yet: the check is new, and no live window ran it |
+| `summary-first` | 0 | #844: in each read of each cluster, `spec.clusterProfileTemplate` of the summary is the profile at position 0 of the document. No result yet: the check is new, and no live window ran it |
+| `summary-addon` | 0 | #844: after the upgrade, `spec.clusterProfileTemplate` of the summary of cluster A has the type `add-on`. No result yet: the check is new, and no live window ran it |
+| `control-kept` | 0 | #844: cluster B, with no change, gives the order and the `spec.clusterProfileTemplate` of its first read in each read. No result yet: the check is new, and no live window ran it |
+| `append-back`, `append-detach`, `append-delete`, `append-baseline` | 0 | #844: cluster A gets 1.0.0 again and loses the added profile, and the profile is deleted. The example is at its baseline: no cluster B and no 1.0.2 |
 
 ## who.sh
 
@@ -486,7 +514,7 @@ without it. Each stage makes one edit in place through the API, reads what
 | `cluster-restored` | 0 | the edit is put back and accepted again, and the cluster record verifies |
 | `noaudit-record`, `noaudit-edit` | 0 | #664: record the add-on version, and edit it in place through the API |
 | `noaudit-who`, `noaudit-who-verdict` | 1, 0 | #664: with a key that cannot read the audit log, the record still reports `DRIFT` and the exit is `1`. The output starts with the verdict. The key belongs to a user with Cluster Viewer, which holds no `audit.list` |
-| `noaudit-who-says` | 0 | #664: the line `who: not read: HTTP 403: <body>` has the code `AccessDenied`. The message names the permission `audit.list` |
+| `noaudit-who-says` | 0 | #664: the line `who: not read: HTTP 403: <code>: <message>` has the code `AccessDenied`. The message names the permission `audit.list` |
 | `noaudit-who-json` | 0 | #664: `--json` gives `verify.whoError` that starts with `HTTP 403`, no `verify.who`, and the status `drifted` |
 | `noaudit-undo`, `noaudit-restored` | 0 | the edit is put back, and the record verifies again |
 
@@ -528,7 +556,9 @@ Read-write. It needs the profiles and no cluster. It creates a profile of the
 tenant with the name, the version, and the packs of the release profile,
 through the API with no project. It deletes the profile at its end. This is the
 source for
-[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version).
+[The scope of a version](../internals/palette/profiles.md#the-scope-of-a-version) and
+for the search of each project in
+[A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -542,6 +572,10 @@ source for
 | `ambiguous`, `ambiguous-says` | 2, 0 | #113: `snapshot <name>@<version>` exits `2` with `profile-name-ambiguous`. The error names each uid with its scope, and tells you to give the uid |
 | `by-uid` | 0 | #113: `snapshot <uid>` records the tenant version |
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
+| `tenant-consumers` | 0 | #621: `consumers` of the tenant version exits `0`: no cluster runs it, and the key reads each project. No result yet: no live window ran this check. |
+| `tenant-consumers-projects` | 0 | #621: its `profile.scope` is `tenant`, and `projectsRead` counts one project or more, with none in `unread`. So strata searched each project of the tenant listing. No result yet: no live window ran this check. |
+| `release-consumers` | 0 | #621: `consumers` of the release gives `profile.scope` `project` and the name of its project, and has no `projectsRead`. No result yet: no live window ran this check. |
+| `release-consumers-edge-hosts` | 0 | #892: `consumers` of the release has no `edgeHostsRead.error`. So the edge host search of the project of the release answers, beside the search at tenant scope. No result yet: no live window ran this check. |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
 ## projects.sh
@@ -862,10 +896,12 @@ console forwards to the mark until Palette starts the forward service again.
 | `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml` |
 | `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600` |
 | `var-strata`, `var-strata-answer` | ? | #132: `compare --repave` of cluster A with 1.0.1 sends the uid of 1.0.1 alone, with no `packValues` and no variables. Palette says no repave: `required` false (recorded 1, 1) |
-| `var-none`, `var-default` | ? | #132: `tenant.sh repave` sends the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
-| `var-control`, `var-control-says` | 1, 0 | #132: with `strata_mode` `644`, the command changes, and Palette says repave for `kubeadmconfig.postKubeadmCommands` |
+| `var-none`, `var-default` | ? | #132: `tenant.sh repave` with `REPAVE_FORM=replace` sends the earlier body: the uid of 1.0.0, `replaceWithProfile` 1.0.1, and the `packValues` of 1.0.1. With no variables, and with `strata_mode` `600`, Palette says repave: `PackValuesUpdated` for `kubeadmconfig.postKubeadmCommands` (recorded 1, 1) |
+| `var-control`, `var-control-says` | 1, 0 | #132: the same earlier body with `strata_mode` `644`: Palette says repave for `kubeadmconfig.postKubeadmCommands` |
+| `var-swap` | ? | #864: `tenant.sh repave` sends the body of a swap. It has the uid of 1.0.1 and its `packValues` in place of 1.0.0, and the uid of the add-on profile. The code of Palette shows the same answer as `var-strata`. No result yet: no live window ran the body of a swap. |
 | `var-undone` | 0 | 1.0.1 is as before the stage: its record from before verifies |
 | `vmo-cluster`, `vmo-runs` | 0 | #717: the cluster runs `virtual-machine-orchestrator`, the values of the pack hold `consoleBaseAddress`, and no cluster template governs the cluster. No result yet: no live window ran stage 9. |
+| `vmo-clear` | 0 | #741: no line `consoleBaseAddress` of a pack of virtual machines in the document of the cluster holds `********`. Palette writes no mask over the console address, so strata writes the mask in each record. No result yet: no live window ran stage 9. |
 | `vmo-summary` | 0 | #717: the summary of the cluster gives the console address of the service `vm-dashboard`. No result yet: no live window ran stage 9. |
 | `vmo-mark-body`, `vmo-before` | 0 | #717: the body holds the mark `https://strata-live-check.invalid` in `consoleBaseAddress`. Before the question, the console address forwards to a host that answers: no 404, no 502, and an answer in 30 seconds. No result yet: no live window ran stage 9. |
 | `vmo-ask`, `vmo-ask-ok` | 0 | #717: `validate/repave` with the mark answers HTTP 200. No result yet: no live window ran stage 9. |
@@ -911,7 +947,8 @@ this result. This is the source for
 ## validate-packs.sh
 
 No cluster and no cost. In stages 1, 2, 3, 5, and 6, each request to Palette is a
-read or a request to a validate route, which writes nothing. It uses `cert-manager`
+read or a request to a validate route, which writes nothing. Stage 7 sends an update
+of a cluster of the lab. It uses `cert-manager`
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
 mark `disabled`. These are the stages and the options:
 
@@ -929,15 +966,24 @@ mark `disabled`. These are the stages and the options:
 - With `CLUSTER=<name>`, `behind` also asks about the record of the cluster.
   The script sends the route of the cluster a tag that no registry has. It
   asks, and it writes nothing.
+- Stage 7 runs only when you give its number:
+  `CLUSTER=<name> SKIP=<name>@<version> VARIABLES=<name>@<version> validate-packs.sh 7`.
+  `SKIP` is a version of a profile that the cluster runs, with Kubernetes two
+  minor versions above the cluster. `VARIABLES` is a version that adds a
+  required variable with no default value. Give one of the two, or both. The
+  stage asks the route about each move, then sends the update. When Palette
+  accepts an update, the cluster moves, so give a cluster of the lab only.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `validate-accepts`, `validate-accepts-says`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` prints `palette    accepts` and writes the record with `source.paletteValidation` `{"accepts": true}` |
+| `validate-accepts`, `validate-accepts-record` | 0 | #152: Palette takes the packs of the candidate; `snapshot --validate` writes the record with `source.paletteValidation` `{"accepts": true}` |
+| `validate-accepts-says` | 0 | #633: the line `strata: Palette accepts the name, the version, and the packs of '<file>'` says that Palette takes the candidate. No result yet: the line is new, and no live window ran it |
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`. It refuses the whole request with `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
-| `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `validate-version` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
+| `validate-version-says` | 0 | #633: the line `strata: Palette accepts the packs of '<ref>' as an update of itself` says that Palette takes the version. No result yet: the line is new, and no live window ran it |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
@@ -955,26 +1001,40 @@ mark `disabled`. These are the stages and the options:
 | `validate-manifest-name`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses the manifest name `Wilma_1`: `InvalidName` |
 | `validate-manifest-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one manifest name two times in a layer: `DuplicatePackManifestsForbidden` |
 | `bump-profile-record` | 0 | #166: a record of `PROFILE`. |
-| `bump-pair` | 0 | #166: the newest version of `kubernetes` is two minor versions or more above the pin. |
+| `bump-pair` | 0 | #166, #623: the newest version of `kubernetes` is two minor versions or more above the pin. `bump.updateChecks.skippedMinor` of `behind` says so. |
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
 | `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
+| `bump-text-skip` | 0 | #623: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Palette refuses the update with K8sUpgradeNotSupported` under the bump. No result yet: no live window ran the check. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
 | `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs. The bump holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move. The code is `DependencyPackUpgradeNotSupported`, and the message is `Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'`. Cluster A is in `clusters`. |
 | `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. So the route does not check the sent tag. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). |
+| `move-cluster-record` | 0 | #623: a record of the cluster `CLUSTER`. No result yet: no live window ran stage 7. |
+| `skip-record`, `skip-validate`, `skip-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <SKIP> --validate` asks the route about the move, and the comparison holds an answer. The answer is a fact of the route: the code of Palette shows that no validate route checks the minor version. No result yet: no live window ran stage 7. |
+| `skip-says` | 0 | #623: `updateChecks.skippedMinor` of the comparison says that the move skips a minor version. No result yet: no live window ran stage 7. |
+| `skip-update`, `skip-refused` | 0 | #623: `api.sh replace-status` sends the update, as the Spectro Cloud provider sends it. Palette refuses it with HTTP 400 and `K8sUpgradeNotSupported`, the code that `skippedMinor.code` names. No result yet: no live window ran stage 7. |
+| `variables-record`, `variables-validate`, `variables-asked` | 0, ?, 0 | #623: `compare cluster:<CLUSTER> <VARIABLES> --validate` asks the route about the move, and the comparison holds an answer. No result yet: no live window ran stage 7. |
+| `variables-accepts`, `variables-says` | 0 | #623: the route accepts the packs, and `updateChecks.requiredVariables.names` holds the required variables that the move adds. No result yet: no live window ran stage 7. |
+| `variables-update`, `variables-refused` | 0 | #623: Palette refuses the update with HTTP 500 and `InvalidVariable`, the code that `requiredVariables.code` names. The message names a variable of `requiredVariables.names`. No result yet: no live window ran stage 7. |
 
-Each check of stage 6 passes on cluster A, built on Kubernetes 1.35.8. That
-version is two minor versions under the newest version of the registry, 1.37.0.
-The stage exits `0`.
+Each check of stage 6 but `bump-text-skip` passes on cluster A, built on
+Kubernetes 1.35.8. That version is two minor versions under the newest version
+of the registry, 1.37.0. The stage exits `0`. `bump-text-skip` has no result
+yet: no live window ran the check.
+
+Stage 7 can use cluster A on Kubernetes 1.35.8 too. `SKIP` is then a version of
+the release profile with Kubernetes 1.37.0. `VARIABLES` is a version of the
+add-on profile of cluster A with one more variable: required, with no default
+value.
 
 Stage 6 needs a cluster two minor versions behind. When cluster A runs the
 release version, Kubernetes 1.36.2, the route of the profile version accepts the
 move to 1.37.0. Then the checks `bump-pair`, `bump-refused`, `bump-clusters`,
-and `bump-text-says` fail. Build cluster A on the older version with this
-command:
+`bump-text-says`, and `bump-text-skip` fail. Build cluster A on the older
+version with this command:
 
 ```bash
 examples/live/tf.sh apply -var k8s_version=1.35.8 \
@@ -1030,6 +1090,8 @@ two checks expect the verdict `passed` and no message.
 | `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. |
 | `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. |
 | `cidr-overlap`, `cidr-overlap-says` | 0 | #816: the route refuses a body whose pod CIDR overlaps the CIDR of its VPC, with `K8SCidrOverlap`. `palette-validate` gives the verdict `failed` with the message of Palette, also when the status is `500`. A live run of the first body, with no subnet for the pools, failed both checks. The route refused that body with `RequiredParam` (#824). A live run of the body with the subnets passes both checks. |
+| `cidr-variable`, `cidr-variable-says` | 0 | #829: the route refuses a body whose pod CIDR comes from the variable `pod_cidr` of a profile, with `K8SCidrOverlap`. The body gives the variable a CIDR in the VPC. No result yet: no live window ran the case `cidr-variable`. |
+| `cidr-variable-reports`, `cidr-variable-marks` | ?, 0 | #614, #829: `palette-validate` writes `report.md`, `report.json`, and `report.html` with `--out`. Each report holds `[value of pod_cidr]`, the mark of the variable, and not the value of the variable. No result yet: no live window ran the case `cidr-variable`. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet: the lab has no cloud account of vSphere (#409). |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet: the lab has no cloud account of vSphere or Edge (#409). |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet: the lab has no cloud account of Azure (#409). |
@@ -1038,10 +1100,10 @@ two checks expect the verdict `passed` and no message.
 ## route-bodies.sh
 
 No cluster, and no cost that stays. It writes the bodies that
-[`validate-route.sh`](#validate-routesh) needs for five cases on AWS. The fault
-of four cases is in a profile, and the fault of `cidr-overlap` needs a VPC. The
-script needs the key, the release profile of the live example on AWS, and the
-cloud account of `terraform.tfvars`.
+[`validate-route.sh`](#validate-routesh) needs for six cases on AWS. The fault
+of four cases is in a profile, and the faults of `cidr-overlap` and
+`cidr-variable` need a VPC. The script needs the key, the release profile of the
+live example on AWS, and the cloud account of `terraform.tfvars`.
 
 A case body is the clean body of a create on AWS with one more profile. The
 script makes that profile through the API, with the name `strata-route-<case>`,
@@ -1095,7 +1157,20 @@ The script sends the body to the route with `api.sh post-status`, and records
 the status and the code. Then `validate-route.sh` sends it through
 `palette-validate`. The script skips the case when Palette lists no VPC with a
 CIDR, or when the Kubernetes pack has no `podCIDR`. It also skips the case when
-no VPC with a CIDR has a subnet in each zone of the pools.
+no VPC with a CIDR has a subnet in each zone of the pools. A pool of
+`aws-clean.json` with no zone names no subnet, so the script skips the case for
+it too (#822).
+
+The case `cidr-variable` makes a profile too (#829). The profile
+`strata-route-cidr-variable` is a copy of the release profile with the variable
+`pod_cidr`: `api.sh variable-copy`. Its Kubernetes pack reads the pod CIDR from
+that variable. The body is `cidr-overlap.json` with the copy in place of the
+release profile. The value of the variable is the first half of the CIDR of the
+VPC.
+
+The script skips the case with no `cidr-overlap.json`, and when Palette refuses
+the copy. It deletes the copy after `validate-route.sh`, as it deletes the
+profile of each case above.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1103,8 +1178,9 @@ no VPC with a CIDR has a subnet in each zone of the pools.
 | `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. |
 | `cidr-overlap-body` | 0 | #816, #824: `cidr-overlap.json` names a VPC of the region, and each pool names a subnet of that VPC in each of its zones. The Kubernetes pack of the release profile has the CIDR of that VPC as its pod CIDR. A case that is skipped has no check. A live run of the first body, with no subnet for the pools, passed. A live run of the body with the subnets passes. |
 | `cidr-overlap-status`, `cidr-overlap-code` | 0, 0 | #816: the route answers the body of `cidr-overlap`, and `cidr-overlap-status.out` holds the status and the answer. The route refuses the body with HTTP `500` and `K8SCidrOverlap`: the code of Palette shows it. A live run of the first body, with no subnet for the pools, gave `0` and `1`. The route refused that body with HTTP `500` and `RequiredParam`: `Parameter 'Subnets' is required` (#824). A live run of the body with the subnets gives `0` and `0`: HTTP `500` and `K8SCidrOverlap`. |
+| `cidr-variable-body` | 0 | #829: `cidr-variable.json` is `cidr-overlap.json` with the copy of the release profile. The copy reads the pod CIDR from the variable `pod_cidr`, and the body gives the variable the first half of the CIDR of the VPC. A case that is skipped has no check. No result yet: no live window ran the case `cidr-variable`. |
 | `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. |
-| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
+| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted`, `cidr-variable-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
 
 ## export.sh
 
@@ -1148,7 +1224,9 @@ repository, a Helm repository with credentials, an OCI registry with basic
 auth, and a Spectro pack registry. The variable also adds a Palette registry
 over each. The script removes each at its end.
 [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind)
-states what it shows.
+and
+[The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack)
+state what it shows.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1160,6 +1238,11 @@ states what it shows.
 | `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading |
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
+| `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. No result yet: no live window ran these checks. |
+| `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. No result yet: no live window ran this check. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran these checks. |
+| `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. No result yet: no live window ran these checks. |
+| `slash-delete` | 0 | #853: the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack. No result yet: no live window ran this check. |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |
@@ -1193,7 +1276,15 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 8 only reads. It needs a third key in `STRATA_LIVE_NARROW_KEY`. Its
   user has a role in the project that does not give `cluster.get`, such as
   Cluster Profile Viewer. It runs only as `tiers.sh 8`. With no key set, it
-  says `could not check` and exits `2`.
+  says `could not check` and exits `2`. The stage also runs `strata list` with
+  that key (#620).
+- Stage 9 only reads. It makes a key of 400 characters that no tenant has, so
+  it needs no other key. It runs only as `tiers.sh 9`.
+- Stage 10 only reads. It needs the key of a second user in
+  `STRATA_LIVE_SECOND_KEY`. That user is active, and has a role in the project
+  that gives `cluster.get`. Cluster A must have a role binding of the system.
+  The stage runs only as `tiers.sh 10`. With no key set, it says
+  `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1230,6 +1321,23 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `narrow-rbacs`, `narrow-namespaces`, `narrow-repave` | 0 | #665: the third key reads `config/rbacs`, `config/namespaces`, and `repave/status` of cluster A. `api.sh get-status` prints the status and the body of each answer, and exits `0`. No result yet: no live window ran stage 8. |
 | `narrow-rbacs-code`, `narrow-namespaces-code`, `narrow-repave-code` | ? | #665: the error code of each answer. No result yet: no live window ran stage 8. |
 | `narrow-rbacs-says`, `narrow-namespaces-says`, `narrow-repave-says` | 0 | #665: each answer is HTTP 500 with the code `OperationForbidden`, and its message names `'cluster.get'`. The code of Palette shows this answer, and the stand-in gives it. No result yet: no live window ran stage 8. |
+| `narrow-list` | 2 | #620: `strata list` with the third key, in the project. It prints what it read, and exits `2` because it could not read the clusters. The run keeps its progress notes. No result yet: no live window ran stage 8. |
+| `narrow-list-profiles` | 0 | #620: the listing holds the release profile, because the role gives `clusterProfile.list`. No result yet: no live window ran stage 8. |
+| `narrow-list-says` | 0 | #620: the listing has the line `clusters: not read (...)` with the answer of Palette to the cluster listing: HTTP 500 with the code `ResourceAccessDenied`. The code of Palette shows this answer for a role in the project without `cluster.list`, and the stand-in gives it. No result yet: no live window ran stage 8. |
+| `narrow-list-once` | 1 | #620: standard error of `narrow-list` holds no line `retry`, so strata asked for the clusters one time. No result yet: no live window ran stage 8. |
+| `unknown-key-read` | 0 | #620: `api.sh get-status` reads the project listing with a key that no tenant has, and prints the status and the body of the answer. No result yet: no live window ran stage 9. |
+| `unknown-key-list` | 2 | #620: `strata list projects` with that key, as text and as JSON, exits `2` with the error. No result yet: no live window ran stage 9. |
+| `unknown-key-masked` | 1 | #620: the output and the errors of `unknown-key-list` hold no copy of the key. No result yet: no live window ran stage 9. |
+| `second-first`, `second-read`, `second-status` | 0 | #838: the key of the example and the second key read the role bindings of cluster A. Palette answers HTTP 200 to both. `api.sh get-status` prints the status and the body of each answer. No result yet: no live window ran stage 10. |
+| `second-system` | 0 | #838: the answer to the key of the example has an item with `spec.isSystem` true, a role binding of the system. No result yet: no live window ran stage 10. |
+| `second-system-first`, `second-system-second` | ? | #838: the role and the names of the subjects of each binding of the system, in the answer to each key. No result yet: no live window ran stage 10. |
+| `second-own-subject` | 0 | #838: in each answer, each binding of the system holds one subject, and all these subjects have one name. The code of Palette shows that this subject is the user of the key. No result yet: no live window ran stage 10. |
+| `second-system-differs` | 1 | #838: the bindings of the system in the two answers differ, so `cmp` exits `1`. No result yet: no live window ran stage 10. |
+| `second-others-same` | 0 | #838: the bindings that are not of the system are the same in the two answers. No result yet: no live window ran stage 10. |
+| `second-record-first`, `second-record-second` | 0 | #838: a record of cluster A with the key of the example, and one with the second key. No result yet: no live window ran stage 10. |
+| `second-compare`, `second-policy` | ? | #838: `compare` of the two records as JSON, and the state of its `policy` tier: `same` or `changed`. No result yet: no live window ran stage 10. |
+| `second-policy-same` | 0 | #838: the state of the `policy` tier is `same`. Strata keeps each binding of the system out of the hash, so the tier does not depend on the user of the key. No result yet: no live window ran stage 10. |
+| `second-system-recorded` | 0 | #838: the `policy` tier of each record names one binding of the system or more, in `systemRbacs`. No result yet: no live window ran stage 10. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1380,6 +1488,7 @@ cluster, and costs nothing.
 | `record-by-uid` | 0 | #78: `appprofile:<uid>` gives the same root |
 | `record-unknown` | 2 | #78: a name and version that no app profile has is `app-profile-not-found` |
 | `verify` | 0 | #78: `verify` of the record |
+| `consumers-project`, `consumers-scope` | 0 | #892: `consumers` of the app profile exits `0`. Its `profile.scope` is `project`, with the name of the project. `projectsRead` counts one project, with none in `unread`: strata listed the app deployments of the project, and Palette answered. No result yet: no live window ran this check. |
 | `edit`, `edit-same-version` | 0 | #78: a plain update of the manifest keeps the uid and the version, and makes no new version |
 | `edit-verify`, `edit-verify-says` | 1, 0 | #78: `verify` of the record reports drift, with the tier `AUTHORED` and the manifest named |
 | `edit-who`, `edit-who-appprofile` | 1, 0 | #140: `verify --who` reads the log of the kind `appprofile`, and its entries name the app profile as their object. |
@@ -1428,7 +1537,7 @@ needs the example at its baseline with cluster A.
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `cluster-plain` | 0 | #615: cluster A runs the release and the add-on. `compare` of the record of the release with `cluster:<uid>` holds the release alone, so the roots are equal. |
 | `ask-repave-plain`, `ask-repave-plain-says` | 1, 0 | #615: `compare cluster:<uid> <next> --repave` asks Palette about the move of the release. The cluster side is `cluster:<uid>/<release>`, and the report names no pack of the add-on. |
-| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
+| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`. Its note says `label repave: Palette says no repave; a run with no --dry-run removes label repave, if the pull request has it`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier. On aws, no rule of the static tier is a preflight check, so the verdict is `**NOT COUNTED: no check counted on aws**` (#619). |
 | `preflight-job`, `preflight-job-says` | 0 | #618: `preflight.sh --offline` runs the static tier of the body, as the job of a pull request. The first line of its log is `preflight: the run is offline, so it reads nothing from Palette: --offline`. The report says `tiers static, offline`. |
@@ -1446,7 +1555,7 @@ needs the example at its baseline with cluster A.
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
 | `override-undo`, `override-gone` | 0 | the override is undone, and the record of cluster A verifies again |
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
-| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
+| `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job with no `--dry-run` opens an issue for the add-on record. The dry run says so in its note: `a run with no --dry-run opens or updates the issue for releases/addon.json`. |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
 | `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`. It names the last write, an update by a user of the tenant. |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |
@@ -2387,8 +2496,8 @@ create itself breaks it. The two new rules find the risk before the create. See
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,
   `cluster.sh`, and `tag-only.sh` have run under OpenTofu, with the same
   provider that Terraform used, and give the same answers. `drift-report.sh` has
-  run under Terraform only. `order.sh` reads the OpenTofu outputs and applies
-  nothing.
+  run under Terraform only. Stages 1 to 3 of `order.sh` read the OpenTofu
+  outputs and apply nothing. No live window ran stage 4.
 - On GCP, the scripts in [A second cloud: GCP](#a-second-cloud-gcp) have run.
   `drift-report.sh`, `merge-gate.sh`, `pack-states.sh`, `registry.sh`,
   `template.sh`, `cluster.sh`, `order.sh`, `who.sh`, `macros.sh`, and

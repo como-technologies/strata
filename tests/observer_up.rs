@@ -54,14 +54,16 @@ case "$*" in
 esac
 "##;
 
-/// The `kubectl` of the run. It logs each call with the `KUBECONFIG` of the call to `$FAKE/args.log`,
-/// and it looks in `$HOME` and `$TMPDIR` for the marker of the key at each call: a file that holds
-/// it is in `$FAKE/leak.log`. What a `create` reads from standard input goes to `$FAKE/stdin.log`, and
-/// what an `apply` sends goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the
-/// cluster is in the files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A
-/// delete of a name that is absent fails with `NotFound` unless `--ignore-not-found` is there. A
-/// delete with a selector never fails, as `kubectl` does. `FAKE_NAMESPACE_FAILS` makes the apply of
-/// the namespace fail.
+/// The `kubectl` of the run. It logs each call with the `KUBECONFIG` of the call to
+/// `$FAKE/args.log`. At each call, it searches `$HOME` and `$TMPDIR` for the marker of the key. A
+/// file that holds the marker is in `$FAKE/leak.log`.
+///
+/// What a `create` reads from standard input goes to `$FAKE/stdin.log`, and what an `apply` sends
+/// goes to `$FAKE/applied.yaml`: both stand for the cluster. The state of the cluster is in the
+/// files `ns`, `deploy`, `clusterrole`, and `clusterrolebinding` of `$FAKE`. A delete of a name
+/// that is absent fails with `NotFound` unless `--ignore-not-found` is there. A delete with a
+/// selector never fails, as `kubectl` does. `FAKE_NAMESPACE_FAILS` makes the apply of the
+/// namespace fail.
 ///
 /// A port-forward runs [`FAKE_PORT_FORWARD`].
 const FAKE_KUBECTL: &str = r##"#!/usr/bin/env bash
@@ -887,7 +889,7 @@ fn the_live_example_names_the_script_and_the_three_recipes_with_what_each_needs(
         "`kubectl`",
         "`gh`",
         "The key of Palette",
-        "A team uses the steps of [Install](../automation/observer.md#install)",
+        "A team uses the steps of [Install with kubectl](../automation/observer.md#install-with-kubectl)",
         "`~/.kube/strata-<cluster>.yaml`",
     ] {
         assert!(section.contains(needle), "the section lacks {needle}");
@@ -972,9 +974,14 @@ fn the_page_of_the_observer_has_the_five_steps_from_the_baseline_to_the_check() 
             .position(|x| *x == h)
             .unwrap_or_else(|| panic!("no {h}"))
     };
+    // A new user reads what the service does and how to install it first (#699).
+    assert_eq!(
+        at("## Install with Helm"),
+        at("## What the service does") + 1
+    );
     assert_eq!(
         at("## The baseline and the check"),
-        at("## What the service does") + 1
+        at("## Install with Helm") + 1
     );
     assert_eq!(
         at("## Run it once"),

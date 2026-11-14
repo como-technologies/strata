@@ -200,6 +200,19 @@ fn pack_ref(text: &str) -> Option<Ref> {
     })
 }
 
+/// The text that names a registry in a pack ref: its name, or its uid when the name is empty or
+/// holds a `/`.
+///
+/// Palette takes a `/` in the name of a registry and in the name of a pack. [`pack_ref`] ends the
+/// registry at the first `/`, so that a pack name can hold one. A uid holds no `/`.
+pub(crate) fn registry_in_ref<'a>(name: &'a str, uid: &'a str) -> &'a str {
+    if name.contains('/') {
+        uid
+    } else {
+        crate::text::name_or_uid(name, uid)
+    }
+}
+
 /// The cluster ref `cluster:<uid>[/<profile>][@pending]`, when `text` is one.
 ///
 /// A `/` with no profile after it is nothing, also after `@pending`. So `cluster:<uid>@pending/`

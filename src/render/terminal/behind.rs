@@ -6,7 +6,7 @@ use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
 use crate::render::behind::{
     arrived_line, behind_heading, bump_line, carrier_lines, created_since, listed_since,
     next_patch_line, palette_lines, pin_status, profile_bump_line, profile_status, record_title,
-    shown_pins, shown_profiles,
+    shown_pins, shown_profiles, update_check_lines,
 };
 use crate::render::entry_error;
 use crate::term::color::Paint;
@@ -57,7 +57,10 @@ fn pin_lines(pin: &Pin, p: &Paint) -> String {
     if let Some(line) = bump_line(pin) {
         out.push_str(&format!("      {line}\n"));
     }
-    for line in palette_lines(pin) {
+    for line in palette_lines(pin)
+        .into_iter()
+        .chain(update_check_lines(pin.bump.as_ref()))
+    {
         out.push_str(&format!("      {line}\n"));
     }
     if let Some(line) = next_patch_line(pin) {
@@ -117,7 +120,10 @@ fn profile_lines(profiles: &[&ProfilePin], p: &Paint) -> String {
         if let Some(created) = created_since(x) {
             out.push_str(&format!("      {}\n", p.dim(&created)));
         }
-        if let Some(line) = profile_bump_line(x) {
+        for line in profile_bump_line(x)
+            .into_iter()
+            .chain(update_check_lines(x.bump.as_ref()))
+        {
             out.push_str(&format!("      {line}\n"));
         }
         if let Some(msg) = entry_error(x.error.as_ref()) {

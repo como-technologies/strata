@@ -981,3 +981,161 @@ fn each_script_that_runs_strata_stops_the_send_of_the_report_or_sources_lib_sh_w
         "a run of these scripts can send a report of the machine of the person: {without:?}"
     );
 }
+
+// ---- the test of the rule rust/cleartext-logging of CodeQL (#843) -------------------------------
+
+/// Run `codeql-rule.sh` with `args`.
+fn codeql_rule(args: &[&str]) -> Output {
+    let mut c = Command::new("bash");
+    c.arg(script("dev/codeql-rule.sh")).args(args);
+    c.output_locked().unwrap()
+}
+
+/// Write the crate of the test of the rule to `dir`, and give the numbers of the lines of its
+/// `src/main.rs` that end with `mark`.
+fn codeql_crate(dir: &Path, mark: &str) -> Vec<usize> {
+    let o = codeql_rule(&["crate", dir.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    std::fs::read_to_string(dir.join("src/main.rs"))
+        .unwrap()
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.ends_with(mark))
+        .map(|(at, _)| at + 1)
+        .collect()
+}
+
+/// The results of CodeQL as SARIF, in the form of an analysis. `rules` are the rules of the pack
+/// of strata, each an id and its tags. The rule `rust/cleartext-logging` gives an alert on each
+/// line of `lines` of `src/main.rs`.
+fn codeql_results(rules: &[(&str, &[&str])], lines: &[usize]) -> String {
+    let rules: Vec<serde_json::Value> = rules
+        .iter()
+        .map(|(id, tags)| serde_json::json!({"id": id, "properties": {"tags": tags}}))
+        .collect();
+    let results: Vec<serde_json::Value> = lines
+        .iter()
+        .map(|line| {
+            serde_json::json!({"ruleId": "rust/cleartext-logging", "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": "src/main.rs", "uriBaseId": "%SRCROOT%"},
+                    "region": {"startLine": line}}}]})
+        })
+        .collect();
+    serde_json::json!({"runs": [{
+        "tool": {"driver": {"name": "CodeQL", "rules": []},
+            "extensions": [{"name": "como-technologies/strata-rust-queries", "rules": rules}]},
+        "results": results}]})
+    .to_string()
+}
+
+/// The crate sends a uid, the name of an account, a field `uid`, and the result of `name_or_uid`
+/// to `println!`. Each of these lines has `// no alert`, and only the line of the API key has
+/// `// alert`.
+/// The crate is a workspace of its own, outside the workspace of strata.
+#[test]
+fn the_crate_of_the_test_of_the_rule_marks_only_the_line_of_the_api_key_for_an_alert() {
+    let dir = tempfile::tempdir().unwrap();
+    let alerts = codeql_crate(dir.path(), "// alert");
+    let main = std::fs::read_to_string(dir.path().join("src/main.rs")).unwrap();
+    let lines: Vec<&str> = main.lines().collect();
+    let line = |at: &usize| lines[at - 1].trim();
+    assert_eq!(
+        alerts.iter().map(line).collect::<Vec<_>>(),
+        [r#"println!("key {}", api_key); // alert"#]
+    );
+    let quiet = codeql_crate(dir.path(), "// no alert");
+    let quiet: Vec<&str> = quiet.iter().map(line).collect();
+    assert_eq!(quiet.len(), 4, "{quiet:?}");
+    for name in [
+        "project_uid",
+        "account_name",
+        "&cluster.uid",
+        "name_or_uid(",
+    ] {
+        assert!(quiet.iter().any(|l| l.contains(name)), "{name}: {quiet:?}");
+    }
+    let manifest = std::fs::read_to_string(dir.path().join("Cargo.toml")).unwrap();
+    assert!(manifest.lines().any(|l| l == "[workspace]"), "{manifest}");
+}
+
+/// The check passes only when the results hold one rule `rust/cleartext-logging`, the rule of
+/// strata with the tag `strata`. It must give an alert on each line with `// alert`, and on no
+/// other line. A results file or a crate that is not there is a wrong use.
+#[test]
+fn the_check_of_the_rule_passes_only_the_rule_of_strata_with_an_alert_on_each_marked_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let crate_dir = dir.path().join("crate");
+    let key = codeql_crate(&crate_dir, "// alert");
+    let uid = codeql_crate(&crate_dir, "// no alert")[0];
+    let strata: (&str, &[&str]) = ("rust/cleartext-logging", &["security", "strata"]);
+    let codeql: (&str, &[&str]) = ("rust/cleartext-logging", &["security"]);
+    let other: (&str, &[&str]) = ("rust/sql-injection", &["security"]);
+    let lines = |at: &[usize]| {
+        at.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let cases = [
+        (
+            vec![strata, other],
+            key.clone(),
+            0,
+            format!("on the lines '{}'", lines(&key)),
+        ),
+        (
+            vec![strata],
+            vec![uid, key[0]],
+            1,
+            format!("on the lines '{}'", lines(&[uid, key[0]])),
+        ),
+        (vec![strata], vec![], 1, "on the lines ''".to_string()),
+        (
+            vec![strata, codeql],
+            key.clone(),
+            1,
+            "2 rules with the id rust/cleartext-logging, not 1".to_string(),
+        ),
+        (
+            vec![codeql],
+            key.clone(),
+            1,
+            "has no tag strata".to_string(),
+        ),
+    ];
+    let sarif = dir.path().join("rust.sarif");
+    for (rules, alerts, code, says) in cases {
+        std::fs::write(&sarif, codeql_results(&rules, &alerts)).unwrap();
+        let o = codeql_rule(&[
+            "check",
+            sarif.to_str().unwrap(),
+            crate_dir.to_str().unwrap(),
+        ]);
+        let printed = format!("{}{}", text(&o.stdout), text(&o.stderr));
+        assert_eq!(
+            o.status.code(),
+            Some(code),
+            "{rules:?} {alerts:?}: {printed}"
+        );
+        assert!(printed.contains(&says), "{says}: {printed}");
+    }
+
+    let missing = dir.path().join("missing.sarif");
+    for args in [
+        vec!["check", sarif.to_str().unwrap()],
+        vec![
+            "check",
+            missing.to_str().unwrap(),
+            crate_dir.to_str().unwrap(),
+        ],
+        vec![
+            "check",
+            sarif.to_str().unwrap(),
+            dir.path().to_str().unwrap(),
+        ],
+        vec!["run"],
+    ] {
+        assert_eq!(codeql_rule(&args).status.code(), Some(2), "{args:?}");
+    }
+}

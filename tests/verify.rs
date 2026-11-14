@@ -11,15 +11,18 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE,
-    PROFILE_EXISTS_CODE, PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
+    CreateRule, Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
+    OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
 use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
+use strata::json::str_at;
 use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::model::profile_type::ProfileType;
+use strata::model::update::MinorSkip;
 use strata::ops;
 use strata::reference::Ref;
 use strata::term::progress::Progress;
@@ -27,16 +30,19 @@ use strata::term::progress::Progress;
 use common::CommandExt;
 use common::{
     APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
-    EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING,
-    PackFixture, REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
-    app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
-    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
-    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
-    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
-    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
-    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
-    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
+    EACH_SCOPE, EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
+    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
+    UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
+    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
+    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
+    cluster_route, cluster_validate_repave_route, cluster_variables_route, clusters_denied,
+    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
+    group_route, listing, manifest_route, manifests_route, no_manifests, no_repave,
+    no_roles_message, no_template, no_variables, operation_forbidden_message, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, system_rbacs, template, template_validate_repave_route, variables_route,
     write_record, write_yaml,
 };
 
@@ -160,6 +166,61 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
 
     let missing = snapshot_of(&api, "lab-profile@9.9.9").unwrap_err();
     assert!(matches!(missing, Error::ProfileNotFound { .. }));
+}
+
+#[test]
+fn a_profile_name_with_no_version_gives_its_versions_and_latest_in_each_command_that_reads_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+    ]});
+    let api =
+        serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A).with(PROFILE_LISTING, listing);
+    // the unit test of the read gives the whole message; each command gives the same refs
+    let words = |refs: &str, latest: &str| format!(": {refs}. Or give {latest}, the highest");
+    let plain = words(
+        "lab-profile@1.2.0, lab-profile@1.10.0",
+        "lab-profile@latest",
+    );
+    let draft = words(
+        "lab-profile@1.2.0@draft, lab-profile@1.10.0@draft",
+        "lab-profile@latest@draft",
+    );
+    let quiet = Progress::silent();
+    let consumers = |text: &str| {
+        ops::consumers_with(
+            &Ref::parse(text),
+            &ops::ConsumersOptions { list_only: true },
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &quiet,
+        )
+        .map(drop)
+    };
+    let candidate = |text: &str| {
+        ops::snapshot_for_candidate(text, || Ok(Palette::new(&api)), "t1", &quiet).map(drop)
+    };
+    // snapshot, compare, and same-release read a ref with snapshot_for
+    for (read, refs) in [
+        (snapshot_of(&api, "lab-profile").map(drop), &plain),
+        (snapshot_of(&api, "lab-profile@draft").map(drop), &draft),
+        (candidate("lab-profile"), &plain),
+        (consumers("lab-profile"), &plain),
+    ] {
+        let err = read.unwrap_err();
+        let message = err.to_string();
+        assert_eq!(err.kind(), "usage", "{err}");
+        assert!(
+            message.starts_with("'lab-profile' is a profile name with no version."),
+            "{message}"
+        );
+        assert!(message.contains(refs.as_str()), "{message}");
+    }
+    // a text that no profile has as its name keeps the 404 of Palette
+    let err = snapshot_of(&api, "barney").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
 }
 
 #[test]
@@ -547,6 +608,32 @@ fn a_500_that_palette_gives_for_a_refusal_is_not_retried() {
     assert_eq!(err.class(), FailureClass::Terminal);
     assert_eq!(api.calls(&profile_path()), 1, "one attempt and no retry");
     assert!(slept.borrow().is_empty());
+}
+
+#[test]
+fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
+    // the answers of Palette to a key with no role in the project that gives the read, to a role
+    // without the permission on one object, and to a user with no role at all
+    for body in [
+        clusters_denied(),
+        error_body(
+            OPERATION_FORBIDDEN_CODE,
+            &operation_forbidden_message("cluster.list"),
+        ),
+        error_body(Denial::NoRole.as_str(), &no_roles_message("barney")),
+    ] {
+        let api = MemoryApi::new().failing_n_times(CLUSTER_LISTING, 99, 500, &body);
+        let (retry, slept) = retrying(&api, 3);
+        let err = Palette::new(retry).cluster_listing().unwrap_err();
+        assert!(err.denial().is_some(), "{err}");
+        assert_eq!(err.class(), FailureClass::Terminal, "{body}");
+        assert_eq!(
+            api.calls(CLUSTER_LISTING),
+            1,
+            "one attempt and no retry: {body}"
+        );
+        assert!(slept.borrow().is_empty(), "{body}");
+    }
 }
 
 #[test]
@@ -1678,39 +1765,6 @@ fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_le
 
 // ---- clusters --------------------------------------------------------------------------------
 
-/// An API that serves the cluster fixture `dir` under `CLUSTER_UID`.
-fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
-    let d = raw_root.join(dir);
-    // the profile documents of the profiles the cluster runs, as they are published: verify of a
-    // cluster record reads them for their current version
-    let mut api = api;
-    for template in read_json(&d.join("cluster.json"))["spec"]["clusterProfileTemplates"]
-        .as_array()
-        .unwrap()
-    {
-        let uid = template["uid"].as_str().unwrap();
-        for fixture in ["a", "b", "addons"] {
-            let profile = read_json(&raw_root.join(fixture).join("profile.json"));
-            if profile["metadata"]["uid"] == uid {
-                api = api.with(profile_route(uid), profile);
-                break;
-            }
-        }
-    }
-    api.with(
-        cluster_route(CLUSTER_UID),
-        read_json(&d.join("cluster.json")),
-    )
-    .with(
-        cluster_manifests_route(CLUSTER_UID),
-        read_json(&d.join("manifests.json")),
-    )
-    .with(
-        cluster_variables_route(CLUSTER_UID),
-        read_json(&d.join("variables.json")),
-    )
-}
-
 /// The record of the cluster under `CLUSTER_UID`, or of its profile `profile` when the test names
 /// one.
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
@@ -1772,6 +1826,54 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
     );
     assert!(recorded_b.source.cluster.is_none());
     assert_eq!(recorded_b.source.title(), "lab-profile@1.3.0");
+}
+
+/// For a sensitive variable that is not a dropdown, the cluster route gives `********` as the
+/// default value. It does so also when the profile has no default value. The profile route then
+/// gives `""` (#884).
+#[test]
+fn a_cluster_copy_with_a_sensitive_variable_with_no_default_value_is_the_release_of_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let served = read_json(&dir.path().join("cluster-b").join("variables.json"));
+    let mut defaults: Vec<(String, String)> = strata::api::profile_variables(&served, UID_B)
+        .filter(|v| v["isSensitive"] == true)
+        .map(|v| {
+            (
+                str_at(v, "/name").to_string(),
+                str_at(v, "/defaultValue").to_string(),
+            )
+        })
+        .collect();
+    defaults.sort();
+    let masked = |name: &str| (name.to_string(), strata::api::MASKED.to_string());
+    assert_eq!(
+        defaults,
+        [masked("db_password"), masked("grafana_password")]
+    );
+    assert!(
+        recorded_b
+            .variables
+            .iter()
+            .all(|v| v.default_value.is_empty() || !v.is_sensitive)
+    );
+
+    let on_b = snapshot_cluster(
+        &serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        None,
+    )
+    .unwrap();
+    assert_eq!(on_b.variables_hash, recorded_b.variables_hash);
+    let d = ops::compare(&recorded_b, &on_b, "t1");
+    assert!(d.same && !d.variables.changed);
+    let records = [
+        ("b".to_string(), recorded_b),
+        ("cluster-b".to_string(), on_b),
+    ];
+    let chain = ops::same_release(&records, Policy::Exact, "t1");
+    assert_eq!(chain.pairs[0].status, PairStatus::Identical);
+    assert!(chain.same);
 }
 
 #[test]
@@ -1879,6 +1981,94 @@ fn the_heading_of_a_record_of_two_profiles_gives_the_count_of_the_profiles() {
             "{verdict}"
         );
     }
+}
+
+/// A row of `verify --summary` names a record of four profiles in the words of the heading of
+/// `compare`, on the terminal and in markdown, also when strata cannot check it (#851). The
+/// document gives the words in `subject`, and keeps the joined `name` and `version` for a script.
+#[test]
+fn a_row_of_the_summary_names_a_record_of_four_profiles_in_the_words_of_the_heading_of_compare() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = common::serve_four_profiles(dir.path());
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let (name, version) = (
+        "lab-profile+lab-addons+lab-logging+lab-quota",
+        "1.3.0+2.0.0+2.0.0+2.0.0",
+    );
+    assert_eq!(
+        (
+            recorded.source.name.as_str(),
+            recorded.source.version.as_str()
+        ),
+        (name, version)
+    );
+    let heading = recorded.source.title();
+    assert_eq!(heading, "4 profiles on cluster lab-cluster");
+
+    let checked = common::verify_summary(&recorded, &api);
+    let failed = common::verify_summary(
+        &recorded,
+        &api.clone()
+            .failing(cluster_route(CLUSTER_UID), 500, "internal error"),
+    );
+    let refused = format!(
+        "GET {} failed with HTTP 500: internal error",
+        cluster_route(CLUSTER_UID)
+    );
+    for (s, status, word, detail) in [
+        (
+            &checked,
+            RecordStatus::Unchanged,
+            "OK",
+            "is unchanged since t0",
+        ),
+        (&failed, RecordStatus::Error, "ERROR", refused.as_str()),
+    ] {
+        let row = &s.records[0];
+        assert_eq!(row.status, status);
+        let lines = common::terminal().render_verify_summary(s).unwrap();
+        let table = common::markdown().render_verify_summary(s).unwrap();
+        assert!(
+            lines.contains(&format!("{word:<5}  {}  {heading}  {detail}", row.path)),
+            "{lines}"
+        );
+        assert!(
+            table.contains(&format!(
+                "| {word} | `{}` | `{heading}` | {detail}",
+                row.path
+            )),
+            "{table}"
+        );
+        for out in [&lines, &table] {
+            assert!(!out.contains(name) && !out.contains(version), "{out}");
+        }
+
+        // the document gives the words, and keeps the joined name and version
+        let json = serde_json::to_value(s).unwrap();
+        let row = &json["records"][0];
+        assert_eq!(
+            (
+                row["subject"].as_str(),
+                row["name"].as_str(),
+                row["version"].as_str()
+            ),
+            (Some(heading.as_str()), Some(name), Some(version))
+        );
+    }
+
+    // a record of a profile version keeps its words
+    let version_record = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let s = common::verify_summary(
+        &version_record,
+        &serve_fixture(MemoryApi::new(), dir.path(), "b", UID_B),
+    );
+    assert_eq!(s.records[0].subject, "lab-profile@1.3.0");
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
+    assert!(
+        lines.contains("  lab-profile@1.3.0  is unchanged since t0"),
+        "{lines}"
+    );
 }
 
 #[test]
@@ -2148,14 +2338,17 @@ fn barney() -> Value {
 }
 
 fn policy_of(s: &Snapshot) -> Value {
+    policy_tier(s).fields.clone()
+}
+
+/// The tier `policy` of the cluster record `s`.
+fn policy_tier(s: &Snapshot) -> &strata::snapshot::ClusterTier {
     s.source
         .cluster
         .as_ref()
         .unwrap()
         .tier(Tier::Policy)
         .unwrap()
-        .fields
-        .clone()
 }
 
 /// The comparison of the policy tiers in `d`.
@@ -2311,6 +2504,117 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
     assert!(!policy_diff(&ops::compare(&older, &live, "t1")).same);
 }
 
+/// The cluster of [`serve_policy`], whose role bindings Palette answers to the key of the user
+/// `user`: the bindings of [`system_rbacs`], with a binding of the system.
+fn serve_system_rbacs(dir: &Path, user: &str) -> MemoryApi {
+    serve_policy(dir, barney()).with(rbacs_route(), rbacs_answer(system_rbacs(), user))
+}
+
+/// The role and the subject names of each binding of the system that the record `s` names.
+fn system_subjects(s: &Snapshot) -> Vec<(String, Vec<String>)> {
+    let text = |v: &Value| v.as_str().unwrap().to_string();
+    let names = |b: &Value| -> Vec<String> {
+        let subjects = b["subjects"].as_array().unwrap();
+        subjects.iter().map(|s| text(&s["name"])).collect()
+    };
+    policy_tier(s)
+        .system_rbacs
+        .iter()
+        .map(|b| (text(&b["role"]["name"]), names(b)))
+        .collect()
+}
+
+/// #838, option 1 of #876: the root and the hash of the policy tier do not depend on the user of
+/// the key.
+#[test]
+fn a_cluster_with_a_role_binding_of_the_system_has_one_root_and_one_policy_hash_for_the_keys_of_two_users()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let fred = snapshot_cluster(&serve_system_rbacs(dir.path(), "fred@example.com"), None).unwrap();
+    let wilma_api = serve_system_rbacs(dir.path(), "wilma@example.com");
+    let wilma = snapshot_cluster(&wilma_api, None).unwrap();
+
+    assert_eq!(fred.root, wilma.root);
+    let (a, b) = (policy_tier(&fred), policy_tier(&wilma));
+    assert_eq!(
+        a.hash, b.hash,
+        "the hash does not cover the bindings of the system"
+    );
+    assert_eq!(a.fields, b.fields);
+    assert_eq!(
+        a.fields["rbacs"],
+        serde_json::json!([{"namespace": "", "role": {"kind": "ClusterRole", "name": "view"},
+            "subjects": [{"name": "platform", "namespace": "", "type": "Group"}],
+            "type": "ClusterRoleBinding"}]),
+        "the binding that is not of the system stays in the fields"
+    );
+    // each record names the binding of the system that its key reads, outside the hash
+    let one = |role: &str, user: &str| vec![(role.to_string(), vec![user.to_string()])];
+    assert_eq!(
+        system_subjects(&fred),
+        one("cluster-admin", "fred@example.com")
+    );
+    assert_eq!(system_subjects(&wilma), one("view", "wilma@example.com"));
+
+    // the record keeps them in the file
+    let saved = dir.path().join("fred.json");
+    common::write_snapshot(&saved, &fred, false);
+    let json = read_json(&saved);
+    let tier = &json["source"]["cluster"]["tiers"]["policy"];
+    assert_eq!(
+        tier["systemRbacs"][0]["subjects"][0]["name"],
+        "fred@example.com"
+    );
+    assert_eq!(policy_tier(&Snapshot::load(&saved).unwrap()), a);
+
+    // compare and verify find no change of the policy tier
+    assert!(policy_diff(&ops::compare(&fred, &wilma, "t1")).same);
+    let v = ops::verify(&fred, &Palette::new(wilma_api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert!(policy_diff(&v.diff).same);
+}
+
+/// A record of strata 0.33 and before holds each binding of the system in `rbacs` of the fields.
+/// Its policy tier differs one time from a new record, at the binding of the system.
+#[test]
+fn a_record_that_holds_a_binding_of_the_system_in_the_fields_names_the_policy_tier_at_that_binding()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_system_rbacs(dir.path(), "fred@example.com");
+    let mut older = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    // the policy tier as strata 0.33 wrote it: the binding of the system in the fields
+    let tier = &mut older["source"]["cluster"]["tiers"]["policy"];
+    let system = tier.as_object_mut().unwrap().remove("systemRbacs").unwrap();
+    tier["fields"]["rbacs"]
+        .as_array_mut()
+        .unwrap()
+        .extend(system.as_array().unwrap().iter().cloned());
+    let older: Snapshot = serde_json::from_value(older).unwrap();
+
+    let v = ops::verify(
+        &older,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the verdict follows the release");
+    let tier = policy_diff(&v.diff);
+    assert!(!tier.same);
+    assert!(
+        tier.diff.iter().all(|l| l.path.starts_with("rbacs[")),
+        "{:?}",
+        tier.diff
+    );
+
+    // a new record of the cluster verifies with no change
+    let again = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&again, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(policy_diff(&v.diff).same);
+}
+
 #[test]
 fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field() {
     let dir = tempfile::tempdir().unwrap();
@@ -2328,13 +2632,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     // a 403 of the route of the role bindings does not stop the record
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(
         tier.fields.get("rbacs").is_none(),
         "an error is not a value"
@@ -2360,13 +2658,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     for status in [404, 405] {
         let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
         let m = snapshot_cluster(&missing, None).unwrap();
-        let missing_tier = &m
-            .source
-            .cluster
-            .as_ref()
-            .unwrap()
-            .tier(Tier::Policy)
-            .unwrap();
+        let missing_tier = policy_tier(&m);
         assert_eq!(missing_tier.fields["rbacs"], Value::Null, "HTTP {status}");
         assert_ne!(missing_tier.hash, tier.hash, "HTTP {status}");
         assert!(missing_tier.errors.is_empty(), "HTTP {status}");
@@ -2382,13 +2674,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     let forbidden =
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
@@ -2466,6 +2752,54 @@ fn verify_and_compare_do_not_compare_a_policy_field_that_strata_could_not_read_a
 }
 
 #[test]
+fn the_note_of_a_part_of_a_cluster_that_palette_refuses_gives_the_words_and_the_record_the_body() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let message = operation_forbidden_message("cluster.get");
+    let body = error_body(OPERATION_FORBIDDEN_CODE, &message);
+    let words = format!("HTTP 500: {OPERATION_FORBIDDEN_CODE}: {message}");
+    let text_of = |recorded: &Snapshot, api: MemoryApi| {
+        let v = ops::verify(recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+        common::terminal()
+            .render(&v.diff, recorded, &v.live, false)
+            .unwrap()
+    };
+
+    // the role bindings: the tier keeps the body, and the note gives the words
+    let recorded = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    let name = recorded.source.cluster.as_ref().unwrap().name.clone();
+    let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 500, body.as_str());
+    let live = snapshot_cluster(&forbidden, None).unwrap();
+    let tier = live.source.cluster.as_ref().unwrap().tier(Tier::Policy);
+    assert_eq!(tier.unwrap().errors["rbacs"], format!("HTTP 500: {body}"));
+    let text = text_of(&recorded, forbidden);
+    let note = format!(
+        "note       strata could not read policy.rbacs of cluster {name} ({words}), so it does \
+         not compare it\n"
+    );
+    assert!(text.contains(&note), "{text}");
+
+    // the reasons of a repave that waits
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
+        repave_route(),
+        500,
+        body.as_str(),
+    );
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let c = recorded.source.cluster.as_ref().unwrap();
+    assert_eq!(
+        c.pending_repave_error(),
+        Some(format!("HTTP 500: {body}").as_str())
+    );
+    let text = text_of(&recorded, api);
+    assert!(
+        text.contains(&format!("(strata could not read its reasons: {words})")),
+        "{text}"
+    );
+    assert!(!text.contains('{'), "no JSON of the body: {text}");
+}
+
+#[test]
 fn a_raw_directory_keeps_the_bindings_and_the_namespaces_so_the_record_is_the_same() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -2534,7 +2868,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(text.contains("project p1"), "{text}");
 
-    // with one, it names the project and keeps the uid
+    // with one, the row names the project by its name, and the JSON keeps the uid
     let named = api.with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
     let r = ops::consumers(
         &Ref::Uid(UID_B.into()),
@@ -2544,8 +2878,54 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     )
     .unwrap();
     assert_eq!(r.consumers[0].project_name, "dev");
+    assert_eq!(r.consumers[0].project_uid, "p1");
     let text = common::terminal().render_consumers(&r).unwrap();
-    assert!(text.contains("project dev (uid p1)"), "{text}");
+    assert!(text.contains("project dev  Running"), "{text}");
+    assert!(!text.contains("uid p1"), "{text}");
+}
+
+/// In a project, Palette lists that project alone. So a consumer in another project takes the
+/// name of its project from the project listing of the tenant (F-019).
+#[test]
+fn a_consumer_in_another_project_takes_the_name_of_its_project_from_the_listing_of_the_tenant() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read_json(&dir.path().join("b").join("profile.json"));
+    profile["status"]["inUseClusters"] = serde_json::json!([
+        {"uid": "cluster-aaa", "name": "alpha", "projectUid": "p2", "kind": "spectrocluster"}
+    ]);
+    // the profile is read in p1, whose listing holds p1 alone
+    let in_p1 = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_B)
+        .with(profile_route(UID_B), profile)
+        .with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
+    let tenant = MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
+    );
+    let in_p2 = MemoryApi::new().with(
+        cluster_route("cluster-aaa"),
+        cluster_doc("cluster-aaa", "alpha", "p2", "Running"),
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_B.into()),
+        |scope| {
+            Ok(Palette::new(match scope {
+                Some(ops::TENANT_SCOPE) => tenant.clone(),
+                Some("p2") => in_p2.clone(),
+                _ => in_p1.clone(),
+            }))
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let alpha = &r.consumers[0];
+    assert_eq!(
+        (alpha.project_uid.as_str(), alpha.project_name.as_str()),
+        ("p2", "prod")
+    );
+    let text = common::terminal().render_consumers(&r).unwrap();
+    assert!(text.contains("project prod  Running"), "{text}");
 }
 
 #[test]
@@ -2809,7 +3189,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     assert_eq!(
         text,
         format!(
-            "lab-profile@1.2.0 (uid {UID_A}): no consumers\n  second reading: 0 of 0 clusters read\n  edge hosts: 0 read\n"
+            "lab-profile@1.2.0 (uid {UID_A}): no consumers\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  no other cluster\n    cluster groups   none pins the version\n    edge hosts       none found\n"
         )
     );
 }
@@ -2849,9 +3229,13 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with(
-            &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
+            &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
         ),
         "{text}"
+    );
+    assert!(
+        text.contains("    cluster groups   not read (the cluster listing failed)\n"),
+        "the second reading stops before it lists the groups: {text}"
     );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
@@ -2891,7 +3275,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
     assert_eq!(
         text,
         format!(
-            "lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: 0 of 1 clusters read\n  edge hosts: 0 read\n"
+            "lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  1 other cluster: 0 on this version, 1 not read\n    cluster groups   none pins the version\n    edge hosts       none found\n"
         )
     );
 }
@@ -2942,7 +3326,8 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_edge_hosts_cannot_be_read() 
     assert_eq!((r.count, r.exit_code()), (0, 2));
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("  edge hosts: not read (") && text.contains("failed with HTTP 500: boom"),
+        text.contains("    edge hosts       not read (")
+            && text.contains("failed with HTTP 500: boom"),
         "{text}"
     );
 }
@@ -3029,13 +3414,15 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
         "{text}"
     );
     assert!(
-        text.ends_with("  second reading: 1 of 1 clusters read\n  edge hosts: 0 read\n"),
+        text.ends_with(
+            "    cluster listing  1 other cluster: 1 on this version\n    cluster groups   none pins the version\n    edge hosts       none found\n"
+        ),
         "{text}"
     );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("(not in the consumer list of the profile)")
-            && md.contains("Second reading: 1 of 1 clusters read."),
+            && md.contains("| cluster listing | 1 other cluster: 1 on this version |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -3196,7 +3583,7 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     );
     assert!(
         text.contains(
-            "  second reading: the cluster search names 2 other clusters with the profile, 2 read\n"
+            "    cluster search   2 other clusters with the profile: 2 on this version, 0 on other versions\n"
         ),
         "{text}"
     );
@@ -3351,7 +3738,9 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
     assert_eq!(api.calls(&cluster_route("vc-1")), 1);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("1 cluster group pins the version, 1 other virtual cluster, 1 read"),
+        text.contains(
+            "    cluster groups   1 pins the version: 1 other virtual cluster: 1 on this version\n"
+        ),
         "{text}"
     );
     let json: Value = serde_json::from_str(
@@ -3361,6 +3750,7 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
     )
     .unwrap();
     assert_eq!(json["clustersRead"]["groups"], 1);
+    assert_eq!(json["clustersRead"]["membersFound"], 1);
     assert_eq!(json["clustersRead"]["members"], 1);
 }
 
@@ -3426,8 +3816,8 @@ fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_re
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains(
-            "the cluster search names 1 other cluster with the profile, 1 read; \
-             1 cluster group pins the version, 1 other virtual cluster, 0 read"
+            "    cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions\n    \
+             cluster groups   1 pins the version: 1 other virtual cluster: 0 on this version, 1 not read\n"
         ),
         "{text}"
     );
@@ -3565,7 +3955,7 @@ fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
     assert_eq!(api.calls(&cluster_route("cluster-ddd")), 1);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("  second reading: 2 of 2 clusters read\n"),
+        text.contains("    cluster listing  2 other clusters: 1 on this version\n"),
         "{text}"
     );
 }
@@ -3598,12 +3988,16 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
     assert_eq!(r.exit_code(), 0);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.ends_with("  second reading: not done (--list-only)\n  edge hosts: 0 read\n"),
+        text.ends_with(
+            "    cluster search   not done (--list-only)\n    cluster groups   not read (--list-only)\n    \
+             edge hosts       none found\n"
+        ),
         "{text}"
     );
+    // the markdown escapes each row as a quoted text, so the flag is in no code span
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
-        md.contains("Second reading: not done (`--list-only`)."),
+        md.contains("| cluster search | not done (--list-only) |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -5447,12 +5841,128 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
 }
 
 #[test]
-fn list_fails_when_a_listing_cannot_be_read() {
-    let api = MemoryApi::new().failing(PROFILE_LISTING, 401, "no key");
-    let err = listing(&api, &ListOptions::default()).unwrap_err();
-    assert_eq!(err.kind(), "api", "{err}");
+fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_denied() {
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [listed_profile("lab-profile", "1.9.0", "u2")]}),
+        )
+        .failing_n_times(CLUSTER_LISTING, 99, 500, clusters_denied())
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
+    let (retry, slept) = retrying(&api, 3);
+    let connect = |_: Option<&str>| Ok(Palette::new(&retry));
+    let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
+    let refs: Vec<&str> = l
+        .profiles
+        .iter()
+        .flatten()
+        .map(|p| p.reference.as_str())
+        .collect();
+    assert_eq!(refs, ["lab-profile@1.9.0"], "the profiles stay");
+    assert!(l.clusters.is_none(), "strata read no cluster");
+    let unread: Vec<String> = l.errors.keys().map(ToString::to_string).collect();
+    assert_eq!(unread, ["clusters"]);
+    let error = &l.errors[&Open::Known(ListKind::Clusters)];
+    assert_eq!(
+        (error["kind"].as_str(), error["status"].as_u64()),
+        (Some("api"), Some(500))
+    );
+    assert_eq!(l.exit_code(), 2);
+    // the code says that access is denied, so strata asks one time and does not wait
+    assert_eq!(api.calls(CLUSTER_LISTING), 1);
+    assert!(slept.borrow().is_empty());
+
+    let text = common::terminal().render_list(&l).unwrap();
+    assert!(text.contains("\n  lab-profile@1.9.0"), "{text}");
+    // the line gives the code and the message of Palette, and not the JSON of the body
+    assert!(
+        text.ends_with(&format!(
+            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}: {}; \
+             no role of the key in the project gives the access of the request)\n",
+            Denial::Project.as_str(),
+            common::project_denied_message("lab")
+        )),
+        "{text}"
+    );
+    assert_eq!(error["body"], clusters_denied());
+    let json = serde_json::to_value(&l).unwrap();
+    assert_eq!(json["errors"]["clusters"]["status"], 500);
+    assert!(json.get("clusters").is_none(), "{json}");
 }
 
+#[test]
+fn list_names_each_kind_that_it_could_not_read_and_fails_as_one_read_when_it_read_none() {
+    // the profiles answer, and the clusters do not
+    let expired = r#"{"code":"ExpiredApiKey"}"#;
+    let api = MemoryApi::new()
+        .with(PROFILE_LISTING, serde_json::json!({"items": []}))
+        .failing(CLUSTER_LISTING, 503, "busy");
+    let l = listing(&api, &ListOptions::default()).unwrap();
+    let unread: Vec<String> = l.errors.keys().map(ToString::to_string).collect();
+    assert_eq!(unread, ["clusters"]);
+    assert_eq!(l.exit_code(), 2);
+    let text = common::markdown().render_list(&l).unwrap();
+    assert!(
+        text.ends_with(&format!(
+            "Clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 503: busy)\n\n"
+        )),
+        "{text}"
+    );
+    // no kind answers: the command fails with the error of the first kind, as one read does
+    let none = MemoryApi::new()
+        .failing(PROFILE_LISTING, 401, expired)
+        .failing(CLUSTER_LISTING, 401, expired);
+    let err = listing(&none, &ListOptions::default()).unwrap_err();
+    assert!(
+        matches!(&err, Error::Api { status: 401, path, .. } if path == PROFILE_LISTING),
+        "{err}"
+    );
+    // a listing that strata read gives exit 0
+    let read = MemoryApi::new()
+        .with(PROFILE_LISTING, serde_json::json!({"items": []}))
+        .with(CLUSTER_LISTING, serde_json::json!([]));
+    let l = listing(&read, &ListOptions::default()).unwrap();
+    assert!(l.errors.is_empty());
+    assert_eq!(l.exit_code(), 0);
+    // a saved tag filter that does not exist is no failed read: the command stops
+    let api = read.with(TAG_FILTER_LISTING, serde_json::json!({"items": []}));
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters],
+        query: ops::ClusterQuery {
+            tags: vec![],
+            filter: Some("nope".into()),
+        },
+        ..ListOptions::default()
+    };
+    let err = listing(&api, &options).unwrap_err();
+    assert_eq!(err.kind(), "filter-not-found");
+}
+
+#[test]
+fn list_filters_names_the_permission_that_the_role_of_the_key_does_not_give() {
+    let api = MemoryApi::new()
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
+        .failing(TAG_FILTER_LISTING, 403, filters_denied());
+    let options = ListOptions {
+        kinds: vec![ListKind::Filters],
+        ..ListOptions::default()
+    };
+    // the first request of the run: nothing proved the key, so the message names it too
+    let first = listing(&api, &options).unwrap_err().to_string();
+    assert!(
+        first.contains("; the role of the key does not give the permission 'filter.list'; check"),
+        "{first}"
+    );
+    // the lookup of a project answered first, as for `PALETTE_PROJECT`: the key is right
+    Palette::new(&api).project_uid_named("lab").unwrap();
+    let after = listing(&api, &options).unwrap_err().to_string();
+    assert!(
+        after.ends_with("; the role of the key does not give the permission 'filter.list'"),
+        "{after}"
+    );
+    assert!(!after.contains("PALETTE_API_KEY"), "{after}");
+}
 // ---- candidates ------------------------------------------------------------------------------
 
 fn never_connect() -> strata::Result<Palette<MemoryApi>> {
@@ -7506,6 +8016,48 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
 }
 
 #[test]
+fn the_refusal_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
+    let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mirror_entity =
+        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    // Palette takes a `/` in the name of a registry
+    let api = serve_registry(
+        vec![mirrored],
+        &[
+            ("reg-public", public_entity()),
+            ("reg-mirror", mirror_entity),
+        ],
+    )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+            {"name": "team/mirror", "uid": "reg-mirror", "kind": "oci"},
+        ]}),
+    );
+
+    let err = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap_err();
+    let Error::PackInSeveralRegistries { registries, .. } = &err else {
+        panic!("unexpected {err}");
+    };
+    assert_eq!(registries, &["Public Repo", "reg-mirror"], "{err}");
+    // the ref that the refusal asks for parses, and records the pack of that registry
+    let named = format!("pack:{}/csi-aws-ebs@1.65.0", registries[1]);
+    let mirror = snapshot_of(&api, &named).unwrap();
+    assert_eq!(mirror.packs[0].hash.upstream_raw, "sha256:ccc");
+    assert_eq!(mirror.packs[0].registry_name, "team/mirror");
+    // a ref ends the registry at the first `/`, because a pack name can hold one too
+    assert_eq!(
+        Ref::parse_with("pack:team/mirror/csi-aws-ebs@1.65.0", |_| false),
+        Ref::Pack {
+            registry: Some("team".into()),
+            name: "mirror/csi-aws-ebs".into(),
+            version: "1.65.0".into(),
+        }
+    );
+}
+
+#[test]
 fn verify_rechecks_a_pack_version_against_its_registry() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
@@ -8296,9 +8848,15 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied","message":"no permission"}"#;
+    let message = access_denied_message("audit.list", EACH_SCOPE);
+    let denied = error_body(Denial::Route.as_str(), &message);
     let fault = r#"{"code":"InternalError"}"#;
-    for (status, body) in [(403, denied), (500, fault)] {
+    let denied_words = format!("HTTP 403: AccessDenied: {message}");
+    for (status, body, words) in [
+        (403, denied.as_str(), denied_words.as_str()),
+        // a body with a code and no message gives the code
+        (500, fault, "HTTP 500: InternalError"),
+    ] {
         // Palette ends a body with a newline: the reason has none
         let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
             profile_audits("t0"),
@@ -8320,17 +8878,21 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
         assert_eq!(ver.status, VerifyStatus::Drifted, "{status}");
         assert!(ver.who.is_none(), "{status}");
         assert_eq!(ver.who_error.as_deref(), Some(reason.as_str()));
+        // the text gives the words of Palette, and not the JSON of the body
         let line = verdict_of(&v);
         assert!(line.starts_with("DRIFT: "), "{line}");
         assert!(
-            line.ends_with(&format!("\nwho: not read: {reason}")),
+            line.ends_with(&format!("\nwho: not read: {words}")),
             "the verdict ends with the one line: {line}"
         );
         let markdown = common::markdown().verdict(&v.diff).unwrap();
         assert!(
-            markdown.contains(&format!("\n\nwho: not read: {reason}")),
+            markdown.contains(&format!("\n\nwho: not read: {words}")),
             "{markdown}"
         );
+        for text in [&line, &markdown] {
+            assert!(!text.contains('{'), "no JSON of the body: {text}");
+        }
         let json = serde_json::to_value(&v.diff).unwrap();
         assert_eq!(json["verify"]["whoError"], reason.as_str());
         assert_eq!(json["verify"]["status"], "drifted");
@@ -8338,16 +8900,70 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
     }
 }
 
+/// The criterion of #887: a record and a verdict keep the reason of a read that failed as
+/// `HTTP <status>: <body>`, with the body as Palette sent it. Only a text form gives the words.
+#[test]
+fn a_record_and_a_verdict_keep_the_reason_of_a_read_that_failed_with_the_body_of_the_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let body = error_body("InternalError", "Internal server error");
+    // Palette ends a body with a newline: the reason has none
+    let sent = format!("{body}\n");
+    let reason = format!("HTTP 500: {body}");
+
+    // verify.whoError
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        500,
+        sent.as_str(),
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["whoError"], reason.as_str());
+
+    // the error of the notifications in a cluster record
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").failing(
+        notifications_route(),
+        500,
+        sent.as_str(),
+    );
+    let json = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    assert_eq!(
+        json["source"]["cluster"]["errors"]["updatesPending"],
+        reason.as_str()
+    );
+
+    // the error of the sync of a registry, in the verdict of a pack record and in a pin of behind
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let (_, json) = verify_pack_on(
+        &recorded,
+        api.failing(PACK_REGISTRY_SUMMARY, 500, sent.as_str()),
+    );
+    assert_eq!(json["verify"]["registrySyncError"], reason.as_str());
+    let api = serve_behind().failing(PACK_REGISTRY_SUMMARY, 500, sent.as_str());
+    let json = serde_json::to_value(behind_current_on(&api).0).unwrap();
+    assert_eq!(json["pins"][0]["registrySyncError"], reason.as_str());
+}
+
 #[test]
 fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_several_records() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
         profile_audits("t0"),
         403,
-        denied,
+        denied.as_str(),
     );
     let s = common::verify_summary_with(&recorded, &api, &who_options());
     assert_eq!(s.summary.status, ops::RecordStatus::Drifted);
@@ -8363,8 +8979,11 @@ fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_
     let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         text.starts_with("DRIFT  ")
-            && text.contains(&format!("; who: not read: HTTP 403: {denied}\n")),
-        "{text}"
+            && text.contains(&format!(
+                "; who: not read: HTTP 403: {}\n",
+                Denial::Route.as_str()
+            )),
+        "the line gives the code of the body: {text}"
     );
     let json = serde_json::to_value(&s).unwrap();
     assert_eq!(
@@ -8423,7 +9042,7 @@ fn verify_who_drops_the_writes_already_read_when_the_log_of_an_overwritten_profi
         ver.who_error.as_deref(),
         Some(r#"HTTP 500: {"code":"InternalError"}"#)
     );
-    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: {\"code\":\"InternalError\"}"));
+    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: InternalError"));
 }
 
 #[test]
@@ -8824,6 +9443,10 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
+    // two records of one cluster that is behind get one note
+    let d = ops::compare(&now, &now, "t1");
+    let text = common::terminal().render(&d, &now, &now, false).unwrap();
+    assert_eq!(text.matches("is behind").count(), 1, "{text}");
 }
 
 /// The repave status of the cluster fixture.
@@ -8833,7 +9456,7 @@ fn repave_route() -> String {
 
 /// The route that asks Palette if a change of the cluster fixture repaves it.
 fn validate_repave_route() -> String {
-    format!("{}/validate/repave", cluster_route(CLUSTER_UID))
+    cluster_validate_repave_route(CLUSTER_UID)
 }
 
 /// The route that asks Palette if it takes the packs of a change of the cluster fixture.
@@ -9334,8 +9957,9 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
         (raw, calls, slept.borrow().len())
     };
     // the answer that the code of Palette shows for each of the three routes
-    let refusal = format!(
-        r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden"}}"#
+    let refusal = error_body(
+        OPERATION_FORBIDDEN_CODE,
+        &operation_forbidden_message("cluster.get"),
     );
     let classes = routes.clone().map(|path| {
         Error::Api {
@@ -9344,6 +9968,7 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
             status: 500,
             body: refusal.clone(),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     });
@@ -10184,7 +10809,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(PaletteRepave::from_palette("c", &answer, ImpactLevel::MayRepave).agrees);
     let r = PaletteRepave::from_palette("c", &answer, ImpactLevel::InPlace);
     assert!(!r.agrees);
-    let none = serde_json::json!({"isRepaveRequired": false});
+    let none = no_repave();
     assert!(!PaletteRepave::from_palette("c", &none, ImpactLevel::Repave).agrees);
 
     let mut d = ops::compare(&cluster, &target, "t1");
@@ -10259,13 +10884,37 @@ fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_sho
                 .is_ok()
         );
     }
-    // two profile records: the records show no cluster, and the other side is a ref
+    // two profile records show no cluster: the error says so, names the command with a cluster in
+    // place of one record, and names plain compare (#633). That command passes the check
+    for (questions, option) in [(repave, "--repave"), (validate, "--validate")] {
+        let said = refused(questions, &a_file, &b_file);
+        assert!(
+            said.starts_with(&format!("{option} needs one side that is a cluster, ")),
+            "{said}"
+        );
+        assert!(
+            said.contains("both sides are records with no cluster"),
+            "{said}"
+        );
+        assert!(
+            said.contains(&format!("strata compare cluster:<name> <record> {option}")),
+            "{said}"
+        );
+        assert!(
+            said.contains("Plain compare of the two records prints the impact"),
+            "{said}"
+        );
+        assert!(
+            questions
+                .check(&Ref::parse("cluster:payments"), &b_file)
+                .is_ok()
+        );
+    }
+    // a record beside a ref that is no cluster gets the error of two refs
     assert!(
-        refused(repave, &a_file, &b_file).starts_with("--repave needs one side that is a cluster")
-    );
-    assert!(
-        refused(validate, &a_file, &Ref::parse("aws-stack@1.1.6"))
-            .starts_with("--validate needs one side that is a cluster")
+        refused(validate, &a_file, &Ref::parse("aws-stack@1.1.6")).starts_with(
+            "--validate needs one side that is a cluster and one that is a profile version"
+        )
     );
     // a record of an edge host is no cluster, and a record with no uid is no profile that
     // Palette holds
@@ -10282,6 +10931,10 @@ fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_sho
     assert!(
         refused(validate, &cluster_file, &candidate_file)
             .contains("a profile version that Palette holds")
+    );
+    assert!(
+        refused(repave, &candidate_file, &a_file)
+            .contains("both sides are records with no cluster")
     );
     // a record of the update that waits: the same cluster, or two uids that show two clusters
     let mut waiting = cluster.clone();
@@ -10325,15 +10978,12 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     // on the route of a cluster in a template, Palette compares nothing and answers no repave; it
     // answers for the template on the route of the template
-    let template_route = "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave";
+    let template_route = template_validate_repave_route("tmpl-1");
     let api = cluster_api
         .clone()
+        .with(post(&validate_repave_route()), no_repave())
         .with(
-            post(&validate_repave_route()),
-            serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-        )
-        .with(
-            post(template_route),
+            post(&template_route),
             serde_json::json!({"isRepaveRequired": true, "reasons": [{
                 "code": "PackUpgraded", "message": "Pack 'kubernetes' is upgraded",
                 "pack": {"current": {"name": "kubernetes"}}}]}),
@@ -10591,10 +11241,9 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
         governed.posted().is_empty(),
         "no POST goes out for the template"
     );
-    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {}).with(
-        "POST /v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave",
-        serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-    );
+    let template_route = template_validate_repave_route("tmpl-1");
+    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {})
+        .with(post(&template_route), no_repave());
     let unchanged = pending_of(&api, None);
     let d = ops::compare(&cluster, &unchanged, "t1");
     let r = ops::palette_repave(
@@ -10609,7 +11258,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     assert_eq!(
         api.posted(),
         [(
-            "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave".to_string(),
+            template_route,
             serde_json::json!({"profiles": [{"uid": infra}, {"uid": addon}], "isUpgradeNow": false})
         )]
     );
@@ -10738,7 +11387,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
             "Pack 'nginx' values override is forbidden",
         ),
     ] {
-        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        let body = error_body(code, message);
         let api = cluster_api
             .clone()
             .failing_n_times(path.clone(), 99, status, body);
@@ -10831,6 +11480,95 @@ fn compare_validate_asks_the_route_of_the_profile_version_when_the_cluster_runs_
     let v = ops::palette_validation(&Palette::new(&accepting), &cluster, &target).unwrap();
     assert!(v.answer.accepts());
     assert_eq!(accepting.calls(&validate_packs_route()), 0);
+}
+
+#[test]
+fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_of_kubernetes() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    // fixture B adds the required variable db_password, with no default value. Here it also moves
+    // kubernetes from 1.29.4 to 1.31.2, and adds two more required variables: one with a default
+    // value, and one with none
+    let mut target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let kubernetes = target
+        .packs
+        .iter_mut()
+        .find(|p| p.name == "kubernetes")
+        .unwrap();
+    kubernetes.version = "1.31.2".to_string();
+    let variable =
+        |fields: Value| -> strata::snapshot::Variable { serde_json::from_value(fields).unwrap() };
+    target.variables.extend([
+        variable(serde_json::json!({"name": "owner", "required": true})),
+        variable(serde_json::json!({"name": "region", "required": true, "defaultValue": "eu"})),
+    ]);
+    let api = cluster_api.with(post(&validate_packs_route()), serde_json::json!({}));
+
+    let mut d = ops::compare(&cluster, &target, "t1");
+    assert!(d.update_checks.is_empty(), "compare alone checks nothing");
+    d.palette_validation =
+        Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
+    d.update_checks = ops::update_checks(&cluster, &target).unwrap();
+    let required = d.update_checks.required_variables.as_ref().unwrap();
+    assert_eq!(required.names, ["db_password", "owner"]);
+    let skip = d.update_checks.skipped_minor.as_ref().unwrap();
+    assert_eq!(
+        (
+            skip.from.as_str(),
+            skip.to.as_str(),
+            skip.next_minor.as_str()
+        ),
+        ("1.29.4", "1.31.2", "1.30")
+    );
+    assert_eq!(skip.next_step, None, "compare reads no registry");
+    // the sides in the other order give the same checks, and two profile versions are a usage
+    // error, before any request
+    assert_eq!(
+        ops::update_checks(&target, &cluster).unwrap(),
+        d.update_checks
+    );
+    let err = ops::update_checks(&target, &target).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+
+    // each check is a note under the answer of Palette
+    let text = common::terminal()
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        text.contains(&format!(
+            "palette    accepts\nnote       the move adds the required variables db_password and owner \
+             with no default value: give each one a value at the update, or Palette refuses the \
+             update with {INVALID_VARIABLE_CODE}\nnote       kubernetes 1.29.4 -> 1.31.2 skips a minor \
+             version: Palette refuses the update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to \
+             a version of 1.30 first\n"
+        )),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        md.contains("**Note:** the move adds the required variables db_password and owner"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), false)
+            .render(&d, &cluster, &target, false)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        json["updateChecks"],
+        serde_json::json!({"requiredVariables": {"code": INVALID_VARIABLE_CODE,
+            "names": ["db_password", "owner"]}, "skippedMinor": {
+            "code": K8S_UPGRADE_NOT_SUPPORTED_CODE, "pack": "kubernetes", "from": "1.29.4",
+            "to": "1.31.2", "nextMinor": "1.30"}})
+    );
+    // a comparison with nothing to check has no field
+    let plain: Value = serde_json::to_value(ops::compare(&cluster, &cluster, "t1")).unwrap();
+    assert!(plain.get("updateChecks").is_none());
 }
 
 // ---- the provider type of an OCI registry ---------------------------------------------------------
@@ -11555,6 +12293,43 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
         )),
         "{text}"
     );
+}
+
+#[test]
+fn compare_and_verify_of_one_cluster_that_runs_behind_print_its_note_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    // the cluster runs its first pack at another version than its profile declares
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read_json(&path);
+    doc["status"]["packs"][0]["version"] = Value::from("0.0.1");
+    let first = doc["status"]["packs"][0]["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let a = snapshot_cluster(&api, None).unwrap();
+    let b = snapshot_cluster(&api, None).unwrap();
+    let note = format!("runs {first} 0.0.1, and its profile declares");
+
+    // each side runs the pack behind its profile, and the report names it one time
+    let d = ops::compare(&a, &b, "t1");
+    let sides: Vec<Side> = d.running_behind.iter().map(|r| r.side).collect();
+    assert_eq!(sides, [Side::A, Side::B]);
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    assert_eq!(md.matches(&note).count(), 1, "{md}");
+
+    // a record of the cluster when it already ran behind, against the cluster now
+    let v = ops::verify(&a, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.diff.running_behind.len(), 2);
+    let text = common::terminal()
+        .render(&v.diff, &a, &v.live, false)
+        .unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
 }
 
 #[test]
@@ -12648,10 +13423,13 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
         text.contains("edge-1  e1  project p1  ready  edge host"),
         "{text}"
     );
-    assert!(text.ends_with("  edge hosts: 1 read\n"), "{text}");
+    assert!(
+        text.ends_with("    edge hosts       1 of 1 bound to the version\n"),
+        "{text}"
+    );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
-        md.contains("(edge host)") && md.contains("Edge hosts: 1 read."),
+        md.contains("(edge host)") && md.contains("| edge hosts | 1 of 1 bound to the version |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -13686,7 +14464,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     );
     assert!(
         text.contains(&format!(
-            "second reading: not done ({})",
+            "    app deployments  not searched ({})\n",
             ops::APP_NO_SECOND_READING
         )),
         "{text}"
@@ -14284,7 +15062,7 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
 
 #[test]
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
-    // Palette reads a version with four numbers as its first three, so it reads 1.65.0.1 and
+    // Palette reads a version with four numbers as its first three. So it reads 1.65.0.1 and
     // 1.65.0 as one version, and here it calls 1.65.0 the latest. Strata puts 1.65.0.1 above it
     let mut release = csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
@@ -14443,9 +15221,66 @@ fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre
     );
 }
 
-/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse: 1.63.1.1, with a tail
-/// of numbers, the develop builds 1.65.0.develop and 1.66.0.develop, with a tail of text, and
-/// 1.66.develop, with two numbers and a tail of text.
+/// The criterion of #854: `--json` of `behind` gives the next patch of a pin that is behind a newer
+/// minor version. So a script names the patch, and splits no version.
+#[test]
+fn the_json_of_behind_gives_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    // 1.63.1 is behind 1.65.2, 1.65.0, and 1.63.4. 1.65.0 is behind 1.65.2 alone, of its own minor
+    // version, so the bump names that patch
+    let more = ["1.63.4", "1.65.2"];
+    let mut entity = public_entity();
+    for v in more {
+        entity = with_tag(entity, v, &format!("pk-{v}"));
+    }
+    let api = serve_registry(
+        more.map(|v| csi_summary_with(v, None, &["aws"])).to_vec(),
+        &[("reg-public", entity)],
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let records: Vec<std::path::PathBuf> = ["1.63.1", "1.65.0"]
+        .iter()
+        .map(|pin| {
+            let path = dir.path().join(format!("{pin}.json"));
+            let record = snapshot_of(&api, &format!("pack:csi-aws-ebs@{pin}")).unwrap();
+            common::write_snapshot(&path, &record, false);
+            path
+        })
+        .collect();
+    let r = behind_of(&api, &records, &ops::BehindOptions::default());
+    let json = render::renderer(Format::Json, Paint::off(), false)
+        .render_behind(&r, false)
+        .unwrap();
+    let doc: Value = serde_json::from_str(&json).unwrap();
+    let pins: Vec<(&Value, &Value, &Value)> = doc["pins"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (&p["version"], &p["newer"][0]["version"], &p["nextPatch"]))
+        .collect();
+    assert_eq!(
+        pins,
+        [
+            (
+                &serde_json::json!("1.63.1"),
+                &serde_json::json!("1.65.2"),
+                &serde_json::json!("1.63.4")
+            ),
+            (
+                &serde_json::json!("1.65.0"),
+                &serde_json::json!("1.65.2"),
+                &Value::Null
+            ),
+        ],
+        "{json}"
+    );
+    // `--since` reads the field of a previous report
+    let back: ops::BehindReport = serde_json::from_str(&json).unwrap();
+    assert_eq!(back.pins[0].next_patch.as_deref(), Some("1.63.4"));
+}
+
+/// A registry with 1.63.1 and 1.65.0, and four versions that do not parse. 1.63.1.1 has a tail of
+/// numbers. The develop builds 1.65.0.develop and 1.66.0.develop have a tail of text. 1.66.develop
+/// has two numbers and a tail of text.
 fn serve_develop_builds() -> MemoryApi {
     let more = [
         "1.63.1.1",
@@ -14823,16 +15658,37 @@ fn upgrade_refusal(message: &str) -> Value {
         "errors": [{"code": UPGRADE_NOT_SUPPORTED_CODE, "message": message}]}]}})
 }
 
-/// The record of a profile version that pins csi-aws-ebs 1.63.1: the record of the pack, with the
-/// uid and the name of a profile version.
-fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
-    let mut snap = snapshot_of(api, "pack:csi-aws-ebs@1.63.1").unwrap();
+/// The record of the profile version `uid`, `name` at `version`, of the type `kind`, that pins
+/// the pack of `pack_ref` (`pack:<name>@<version>`): the record of the pack from `api`, with the
+/// source of a profile version.
+fn version_pinning(
+    api: &MemoryApi,
+    pack_ref: &str,
+    uid: &str,
+    name: &str,
+    version: &str,
+    kind: ProfileType,
+) -> strata::snapshot::Snapshot {
+    let mut snap = snapshot_of(api, pack_ref).unwrap();
     snap.source.pack = None;
-    snap.source.uid = BUMP_PROFILE_UID.to_string();
-    snap.source.name = "csi-stack".to_string();
-    snap.source.version = "1.0.0".to_string();
-    snap.source.kind = ProfileType::AddOn.as_str().to_string();
+    snap.source.uid = uid.to_string();
+    snap.source.name = name.to_string();
+    snap.source.version = version.to_string();
+    snap.source.kind = kind.as_str().to_string();
     snap
+}
+
+/// The record of a profile version that pins csi-aws-ebs 1.63.1: the add-on profile csi-stack
+/// 1.0.0, with the uid `BUMP_PROFILE_UID`.
+fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
+    version_pinning(
+        api,
+        "pack:csi-aws-ebs@1.63.1",
+        BUMP_PROFILE_UID,
+        "csi-stack",
+        "1.0.0",
+        ProfileType::AddOn,
+    )
 }
 
 /// The record of the cluster `payments`, which runs `profile_pinning`: the same pack, in a record
@@ -14968,6 +15824,122 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
     // Palette gave no error, so strata read no document of the profile for the names. It reads
     // the document one time, for the versions of the profile
     assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
+}
+
+/// The versions of kubernetes in the Public Repo of [`serve_kubernetes`], oldest first.
+const KUBERNETES_VERSIONS: [&str; 4] = ["1.34.9", "1.35.2", "1.35.6", "1.36.2"];
+
+/// The Public Repo with kubernetes at each version of [`KUBERNETES_VERSIONS`], for AWS. The uid of
+/// a version is `pk-k8s-<version>`.
+fn serve_kubernetes() -> MemoryApi {
+    let uids = KUBERNETES_VERSIONS.map(|v| format!("pk-k8s-{v}"));
+    let values = KUBERNETES_VERSIONS.map(|v| format!("version: {v}\n"));
+    let fixtures: Vec<PackFixture> = KUBERNETES_VERSIONS
+        .iter()
+        .zip(uids.iter().zip(&values))
+        .map(|(v, (uid, values))| PackFixture::public("kubernetes", "k8s", v, uid, "", values))
+        .collect();
+    let tags: Vec<Value> = KUBERNETES_VERSIONS
+        .iter()
+        .zip(&uids)
+        .map(|(v, uid)| serde_json::json!({"tag": v, "packUid": uid}))
+        .collect();
+    let api = MemoryApi::new().with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+    );
+    serve_registry_pack(
+        api,
+        "kubernetes",
+        fixtures.iter().map(|f| f.summary(&["aws"])).collect(),
+        serde_json::json!({"layer": "k8s", "tags": tags}),
+        "reg-public",
+    )
+}
+
+#[test]
+fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_next_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let accepts = serde_json::json!({"packs": {"results": []}});
+    let base = serve_kubernetes();
+    let api = base
+        .clone()
+        .with(
+            post(&update_validate_packs_route("pr-skip")),
+            accepts.clone(),
+        )
+        .with(post(&update_validate_packs_route("pr-step")), accepts);
+    // the infrastructure profile k8s-stack, which pins kubernetes at the version of the profile
+    let records = [("pr-skip", "1.34.9"), ("pr-step", "1.35.2")].map(|(uid, version)| {
+        let pack = format!("pack:kubernetes@{version}");
+        let record = version_pinning(&base, &pack, uid, "k8s-stack", version, ProfileType::Infra);
+        let path = dir.path().join(format!("{uid}.json"));
+        common::write_snapshot(&path, &record, false);
+        path
+    });
+    let r = behind_of(&api, &records, &WITH_IMPACT);
+    let (skip, step) = (&r.pins[0], &r.pins[1]);
+    assert_eq!(
+        (skip.version.as_str(), step.version.as_str()),
+        ("1.34.9", "1.35.2")
+    );
+
+    // Palette accepts the packs of each move. The move from 1.34.9 to 1.36.2 skips 1.35, and the
+    // update refuses it. The next step is the newest version of 1.35 in the registry
+    let bump = skip.bump.as_ref().unwrap();
+    assert!(bump.palette_validation.as_ref().unwrap().accepts());
+    assert_eq!(
+        bump.update_checks.skipped_minor,
+        Some(MinorSkip {
+            code: K8S_UPGRADE_NOT_SUPPORTED_CODE.to_string(),
+            pack: "kubernetes".to_string(),
+            from: "1.34.9".to_string(),
+            to: "1.36.2".to_string(),
+            next_minor: "1.35".to_string(),
+            next_step: Some("1.35.6".to_string()),
+        })
+    );
+    assert!(bump.update_checks.required_variables.is_none());
+    // the move from 1.35.2 to 1.36.2 goes one minor version
+    let next = step.bump.as_ref().unwrap();
+    assert!(next.update_checks.is_empty(), "{:?}", next.update_checks);
+
+    let line = format!(
+        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
+         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to 1.35.6 first"
+    );
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    assert!(
+        text.contains(&format!("      palette accepts\n      {line}\n")),
+        "the line comes under the answer of Palette: {text}"
+    );
+    assert_eq!(text.matches("skips a minor version").count(), 1, "{text}");
+    // the markdown writes the `->` of the line as `-&gt;`
+    let md = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        md.contains(&format!(
+            "<br>palette accepts<br>{} |",
+            strata::text::html_text(&line)
+        )),
+        "{md}"
+    );
+
+    // --json carries the skip, and a pin with no skip has no field
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["bump"]["updateChecks"],
+        serde_json::json!({"skippedMinor": {"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
+            "pack": "kubernetes", "from": "1.34.9", "to": "1.36.2", "nextMinor": "1.35",
+            "nextStep": "1.35.6"}})
+    );
+    assert!(json["pins"][1]["bump"].get("updateChecks").is_none());
+    let back: ops::BehindReport = serde_json::from_value(json).unwrap();
+    assert_eq!(
+        back.pins[0].bump.as_ref().unwrap().update_checks,
+        bump.update_checks
+    );
+    // the check sends no request: the run asks the route of each version one time
+    assert_eq!(api.posted().len(), 2, "{:?}", api.posted());
 }
 
 #[test]
@@ -15845,7 +16817,7 @@ fn serve_fleet(api: MemoryApi, found: Vec<Value>, all: Vec<Value>) -> MemoryApi 
     )
     .with(CLUSTER_LISTING, Value::Array(all))
     .with(
-        "/v1/filters/metadata?filterType=tag",
+        TAG_FILTER_LISTING,
         serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
     )
     .with(
@@ -16125,7 +17097,7 @@ fn a_saved_tag_filter_is_translated_into_a_search_and_a_tenant_without_a_search_
     let bare = MemoryApi::new()
         .with(CLUSTER_LISTING, Value::Array(vec![payments, old, search]))
         .with(
-            "/v1/filters/metadata?filterType=tag",
+            TAG_FILTER_LISTING,
             serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
         )
         .with(
@@ -16379,6 +17351,91 @@ fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps
     );
 }
 
+/// `snapshot tag:env=prod --dir fleet` over three clusters of one definition, in the projects
+/// `projects`. Gives the count of the requests of the registry listing.
+///
+/// `missing` is the status of the registry listing when Palette has no such listing: HTTP 404 or
+/// 405. With `None`, Palette gives the registry listing of the fixtures.
+fn snapshot_three_clusters(dir: &Path, projects: [&str; 3], missing: Option<u16>) -> u32 {
+    common::make_fixtures(dir);
+    let doc = read_json(&dir.join("cluster-a").join("cluster.json"));
+    let uids = [CLUSTER_UID, "c-two", "c-three"];
+    let rows = uids
+        .iter()
+        .zip(projects)
+        .map(|(uid, project)| fleet_row(uid, uid, project, serde_json::json!({"env": "prod"})))
+        .collect();
+    let mut api = serve_fleet(
+        serve_cluster(MemoryApi::new(), dir, "cluster-a"),
+        rows,
+        vec![],
+    );
+    // a Palette with no listing gives no names
+    let name = match missing {
+        Some(status) => {
+            api = api.failing(REGISTRY_LISTING, status, "{}");
+            ""
+        }
+        None => {
+            api = api.with(
+                REGISTRY_LISTING,
+                serde_json::json!({"items": [
+                    {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+                ]}),
+            );
+            "Public Repo"
+        }
+    };
+    for uid in &uids[1..] {
+        api = api.with(cluster_route(uid), doc.clone());
+    }
+    let report = ops::snapshot_set(
+        &ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        &dir.join("fleet"),
+        false,
+        |_| Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(report.summary.recorded, 3, "{:?}", report.records);
+    for r in &report.records {
+        let snap = Snapshot::load(&r.path).unwrap();
+        assert!(!snap.packs.is_empty());
+        for p in &snap.packs {
+            assert_eq!(p.registry_name, name, "{}: {}", r.path.display(), p.key);
+        }
+    }
+    api.calls(REGISTRY_LISTING)
+}
+
+#[test]
+fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], None);
+    assert_eq!(calls, 1, "one read for the set");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_the_registry_listing_one_time_for_each_project() {
+    // Palette lists the registries that the project of the request can see
+    let dir = tempfile::tempdir().unwrap();
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"], None);
+    assert_eq!(calls, 2, "one read for p1, and one for p2");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_a_registry_listing_that_palette_does_not_have_one_time() {
+    for status in [404, 405] {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], Some(status));
+        assert_eq!(calls, 1, "HTTP {status}: one read for the set");
+    }
+}
+
 // ---- what happened to the object of a record --------------------------------------------------
 
 /// The cluster of fixture `cluster-a`, whose document says `state`, with `extra` merged into its
@@ -16560,6 +17617,9 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
         assert_eq!(ver.status, VerifyStatus::Drifted);
         assert!(ver.gone && ver.deleted_at.is_none());
         assert_eq!(verdict_of(&v), line);
+        // the markdown escapes the whole line as a quoted text, so the uid is in no code span
+        let md = common::markdown().verdict(&v.diff).unwrap();
+        assert_eq!(md, format!("\n**DRIFT**: {}", &line["DRIFT: ".len()..]));
     }
 
     // a host that is not in a cluster, and a group that is not active, say their state
@@ -16815,6 +17875,14 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
         err.to_json()["errors"][0]["code"],
         "DependencyPackWithMinVersionRequired"
     );
+    // the lines of the refusal come before its error, and no sentence of an accept follows
+    assert_eq!(
+        strata::render::refusal_lines(&snap),
+        [format!(
+            "palette    refuses: DependencyPackWithMinVersionRequired kubernetes: {message}"
+        )]
+    );
+    assert_eq!(strata::render::acceptance_sentence(&snap), None);
 
     // a 200 with no error: Palette accepts, and the record holds the answer and the same root
     let api = registry
@@ -16833,6 +17901,15 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     assert_eq!(
         json["source"]["paletteValidation"],
         serde_json::json!({"accepts": true})
+    );
+    // the last line names what Palette checks for a candidate (#633)
+    assert!(strata::render::refusal_lines(&snap).is_empty());
+    assert_eq!(
+        strata::render::acceptance_sentence(&snap),
+        Some(format!(
+            "Palette accepts the name, the version, and the packs of '{}'",
+            snap.source.reference
+        ))
     );
     // without --validate, the record has no such field
     let plain = ops::snapshot_from_candidate(
@@ -16861,7 +17938,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
     let path = key.as_str();
     // Palette sends each refusal of the whole request as HTTP 500
     for code in ValidateRoute::ProfilePacks.refusal_codes() {
-        let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
+        let body = error_body(code, "refused");
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
             method: Method::Post,
@@ -16869,6 +17946,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
             status: 500,
             body: body.clone(),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
@@ -16952,7 +18030,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     };
     let import = post(IMPORT_ROUTE);
     let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
-    let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
+    let body_of = |code: &str| error_body(code, "refused");
     let class_of = |status: u16, code: &str| {
         Error::Api {
             method: Method::Post,
@@ -16960,6 +18038,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
             status,
             body: body_of(code),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     };
@@ -17731,4 +18810,339 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
     assert_eq!(bump.flags[0], ChangeFlag::Identity);
     assert_eq!(bump.flags[1].as_str(), "PROVENANCE");
     assert_eq!(serde_json::to_value(&report).unwrap(), doc);
+}
+
+// ---- a text of an answer in the markdown -----------------------------------------------------
+
+/// The markdown of `verify` that quotes the message of Palette `message`, in three places: a note
+/// of a diff, a verdict, and the sync of a registry in a verdict. Each one holds `start`, the start
+/// of the message as the markdown writes it, after the words of strata.
+fn markdown_that_quotes(message: &str, start: &str) -> [String; 3] {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the note of a cluster whose repave strata could not read
+    let api =
+        serve_repave(dir.path(), "cluster-merged", "Pending").failing(repave_route(), 403, message);
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let note = common::markdown()
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        note.contains(&format!(
+            "(strata could not read its reasons: HTTP 403: {start}"
+        )),
+        "{note}"
+    );
+
+    // the verdict of a record whose audit log Palette refuses
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        403,
+        message,
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let verdict = common::markdown().verdict(&v.diff).unwrap();
+    assert!(
+        verdict.contains(&format!("\n\nwho: not read: HTTP 403: {start}")),
+        "{verdict}"
+    );
+
+    // the verdict also names the message of the last sync of a registry
+    let mut doc = serde_json::to_value(&v.diff).unwrap();
+    doc["verify"]["registrySync"] = serde_json::json!({
+        "lastSyncedTime": "", "status": "Failed", "message": message
+    });
+    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let sync = common::markdown().verdict(&synced).unwrap();
+    assert!(
+        sync.contains(&format!("; the last sync of the registry failed: {start}")),
+        "{sync}"
+    );
+    [note, verdict, sync]
+}
+
+/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
+/// tag of HTML as text in the markdown of a pull request comment.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+    for md in markdown_that_quotes(common::ANSWER_TAGS, "&lt;a href=") {
+        common::assert_answer_tags_as_text(&md);
+    }
+}
+
+/// The criteria of #872: a message of Palette with a link, an emphasis, and two backticks shows
+/// each mark as text in a note and in a verdict. So the two backticks open no code span, and the
+/// tag between them shows as text.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_message_as_text() {
+    for md in markdown_that_quotes(common::ANSWER_MARKS, "\\[x\\]") {
+        common::assert_answer_marks_as_text(&md);
+    }
+}
+
+/// The criterion of #890: a bare address in a message of Palette stays as it is in a note and in
+/// a verdict. So the link that GitHub makes of it holds no escape, and keeps its target.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_keeps_a_bare_address_of_a_message_as_it_is() {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESSES, common::ANSWER_ADDRESSES) {
+        common::assert_answer_addresses_as_they_are(&md);
+    }
+}
+
+/// The criterion of #890: a `@name` in a message of Palette notifies nobody in a note and in a
+/// verdict. So an issue or a pull request comment that quotes the message mentions no person.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_holds_no_mention_of_github_from_a_message() {
+    for md in markdown_that_quotes(common::ANSWER_MENTIONS, "@&#8203;octocat") {
+        common::assert_answer_mentions_as_text(&md);
+    }
+}
+
+/// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
+/// in the markdown of `consumers`.
+#[test]
+fn the_markdown_of_consumers_shows_the_error_of_the_edge_hosts_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(CLUSTER_LISTING, serde_json::json!([]))
+        .failing(post(EDGE_HOST_SEARCH), 500, common::ANSWER_TAGS);
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
+    assert!(md.contains("| edge hosts | not read ("), "{md}");
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: the error of a read in a row of `list` shows each tag of HTML as text in
+/// the markdown. The line breaks that strata writes between the packs and the profiles stay.
+#[test]
+fn the_markdown_of_list_shows_the_error_of_a_read_as_text_and_keeps_its_line_breaks() {
+    let packs = template(
+        "aws",
+        "cluster",
+        serde_json::json!([
+            {"name": "cni-cilium-oss", "layer": "cni", "type": "spectro", "tag": "1.19.6",
+             "version": "1.19.6"},
+            {"name": "csi-aws-ebs", "layer": "csi", "type": "spectro", "tag": "1.28.0",
+             "version": "1.28.0"}
+        ]),
+    );
+    let api = MemoryApi::new()
+        .with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [
+                listed_profile("lab-profile", "1.0.0", "u-p1"),
+                listed_profile("lab-profile", "1.1.0", "u-p2"),
+            ]}),
+        )
+        .with(
+            profile_route("u-p1"),
+            profile_document("u-p1", "lab-profile", "1.0.0", packs, None),
+        )
+        .failing(profile_route("u-p2"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("cni/cni-cilium-oss 1.19.6<br>csi/csi-aws-ebs 1.28.0 |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            CLUSTER_LISTING,
+            serde_json::json!([
+                typed_cluster("shared", "c5", "AlloyAssist"),
+                typed_cluster("gone", "c6", "AlloyMonitor"),
+            ]),
+        )
+        .with(
+            cluster_route("c5"),
+            cluster_document(
+                "c5",
+                &[
+                    ("lab-profile", "1.0.0", UID_A, "cluster"),
+                    ("lab-addons", "2.0.0", UID_ADDONS, "add-on"),
+                ],
+            ),
+        )
+        .failing(cluster_route("c6"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            applied: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("lab-profile@1.0.0 (cluster)<br>lab-addons@2.0.0 (add-on) |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: with `--full`, a line of three backticks in the values of a pack does
+/// not end the block of the diff. So a tag of HTML in the next line of the values stays in the
+/// block, and the markdown shows it as text.
+#[test]
+fn the_markdown_of_full_keeps_a_line_of_three_backticks_of_the_values_in_its_block() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // A text of the values that starts at the margin of the YAML. A line of context of the diff
+    // starts with a space, so the line of three backticks has three spaces before it.
+    let values = |enabled: &str| {
+        let text = format!(
+            "enabled: {enabled}\nnotes: |\n  ```\n  {}\n  ```",
+            common::ANSWER_TAGS
+        );
+        let json = serde_json::to_string(&text).unwrap();
+        json[1..json.len() - 1].to_string()
+    };
+    let snapshot = |name: &str, enabled: &str| {
+        let raw = dir.path().join(name);
+        common::rewrite(
+            &dir.path().join("a"),
+            &raw,
+            &[("enabled: true", &values(enabled))],
+        );
+        ops::snapshot_from_dir(&raw, name, "t0").unwrap()
+    };
+    let (a, b) = (snapshot("tags-a", "true"), snapshot("tags-b", "false"));
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, true).unwrap();
+    assert!(md.contains("\n   ```\n"), "the values hold the line\n{md}");
+    assert!(md.contains("````diff\n"), "{md}");
+    let outside = common::outside_code_blocks(&md);
+    assert!(!outside.contains("AccessDenied"), "{outside}");
+    common::assert_only_strata_tags(&outside);
+}
+
+/// The criterion of #832: the name of a profile, as the answer gives it, shows each tag of HTML as
+/// text in the line `Consumers:` of the markdown, as it does in the heading.
+#[test]
+fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let name = serde_json::to_string(common::ANSWER_TAGS).unwrap();
+    common::rewrite(
+        &dir.path().join("b"),
+        &dir.path().join("b-tags"),
+        &[("\"lab-profile\"", &name)],
+    );
+    let recorded = ops::snapshot_from_dir(&dir.path().join("b-tags"), "b-tags", "t0").unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b");
+    let on_cluster = snapshot_cluster(&api, None).unwrap();
+    let d = ops::compare(&recorded, &on_cluster, "t1");
+    let md = common::markdown()
+        .render(&d, &recorded, &on_cluster, false)
+        .unwrap();
+    let tags = strata::text::html_text(common::ANSWER_TAGS);
+    // the name ends with a `>`, so the `@` of the version can start a mention, and it gets a space
+    assert!(
+        md.contains(&format!(
+            "\n**Consumers:** {tags}@&#8203;1.3.0 has 2 consumers;"
+        )),
+        "{md}"
+    );
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+}
+
+/// The criterion of #832: the tag of a pack, as the answer gives it, shows each tag of HTML as text
+/// in the change cell of the pack table and in the fold of the pack. So do the layer of a pack and
+/// the project of a side.
+#[test]
+fn the_markdown_of_a_tag_a_layer_and_a_project_shows_the_text_of_the_answer_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // the values of side B do not parse, so the fold of the pack names the change flags
+    let b = with_os_pack(dir.path(), "retag-tags", |p| {
+        p["tag"] = Value::from(common::ANSWER_TAGS);
+        p["values"] = Value::from("kubeadmconfig: [\n");
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let os = d.packs.iter().position(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(
+        d.packs[os].tag_renamed && !d.packs[os].values.parseable,
+        "{:?}",
+        d.packs[os]
+    );
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    let tags = strata::text::html_text(common::ANSWER_TAGS);
+    assert!(
+        md.contains(&format!(" | tag 22.04 → {tags} AUTHORED | ")),
+        "{md}"
+    );
+    assert!(
+        md.contains(&format!(
+            "<summary><code>ubuntu-aws</code> tag 22.04 -&gt; {tags} AUTHORED</summary>"
+        )),
+        "{md}"
+    );
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+
+    let mut doc = serde_json::to_value(&d).unwrap();
+    doc["packs"][os]["layer"] = Value::from(common::ANSWER_TAGS);
+    doc["b"]["projectUid"] = Value::from(common::ANSWER_TAGS);
+    let edited: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().render(&edited, &a, &b, false).unwrap();
+    assert!(
+        md.contains(&format!("| `~` | {tags} | `ubuntu-aws` |")),
+        "{md}"
+    );
+    assert!(md.contains(&format!(" | {tags} |\n| root |")), "{md}");
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+}
+
+/// The criterion of #832: a state of a pack version that strata does not know, as the answer gives
+/// it, shows each tag of HTML as text in the markdown of `packs`.
+#[test]
+fn the_markdown_of_packs_shows_a_state_of_the_answer_as_text() {
+    let api = serve_summaries(
+        vec![
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            in_state(
+                csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                common::ANSWER_TAGS,
+            ),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let md = common::markdown().render_packs(&l).unwrap();
+    assert!(
+        md.contains(&format!(
+            "`1.65.0` {} |",
+            strata::text::html_text(common::ANSWER_TAGS)
+        )),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
 }

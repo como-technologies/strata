@@ -6,10 +6,10 @@ use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
 use crate::render::behind::{
     arrived_line, behind_heading, bump_line, carrier_lines, created_since, listed_since,
     next_patch_line, palette_lines, pin_status, profile_bump_line, profile_status, record_title,
-    shown_pins, shown_profiles,
+    shown_pins, shown_profiles, update_check_lines,
 };
 use crate::render::entry_error;
-use crate::text::{dash, markdown_cell};
+use crate::text::{code_cell, dash, lines_cell, markdown_cell};
 
 /// The report of `behind` as markdown. A table that has no row is not there. With `behind_only`,
 /// no table has a row that is current.
@@ -52,22 +52,17 @@ fn pin_row(pin: &Pin) -> String {
     for line in carrier_lines(pin) {
         status.push_str(&format!("; {line}"));
     }
-    let bump: Vec<String> = bump_line(pin)
+    let bump = bump_line(pin)
         .into_iter()
         .chain(palette_lines(pin))
-        .map(|l| markdown_cell(&l))
-        .collect();
+        .chain(update_check_lines(pin.bump.as_ref()));
     format!(
-        "| `{}` | `{}` | {} | {} | {} | {} |\n",
-        markdown_cell(&pin.name),
-        markdown_cell(&pin.version),
+        "| {} | {} | {} | {} | {} | {} |\n",
+        code_cell(&pin.name),
+        code_cell(&pin.version),
         markdown_cell(dash(&pin.registry)),
         markdown_cell(&status),
-        if bump.is_empty() {
-            "-".to_string()
-        } else {
-            bump.join("<br>")
-        },
+        lines_cell(bump),
         pinned_by(&pin.pinned_by)
     )
 }
@@ -82,14 +77,16 @@ fn profile_row(p: &ProfilePin) -> String {
         status.push_str(&format!(" ({msg})"));
     }
     let scope = p.scope.map(|s| s.as_str()).unwrap_or_default();
-    let bump = profile_bump_line(p).unwrap_or_default();
+    let bump = profile_bump_line(p)
+        .into_iter()
+        .chain(update_check_lines(p.bump.as_ref()));
     format!(
-        "| `{}` | `{}` | {} | {} | {} | {} |\n",
-        markdown_cell(&p.name),
-        markdown_cell(&p.version),
+        "| {} | {} | {} | {} | {} | {} |\n",
+        code_cell(&p.name),
+        code_cell(&p.version),
         markdown_cell(dash(scope)),
         markdown_cell(&status),
-        markdown_cell(dash(&bump)),
+        lines_cell(bump),
         pinned_by(&p.pinned_by)
     )
 }
@@ -101,8 +98,8 @@ fn pinned_by(by: &[PinnedBy]) -> String {
         .iter()
         .map(|b| {
             format!(
-                "`{}` ({})",
-                markdown_cell(&b.path),
+                "{} ({})",
+                code_cell(&b.path),
                 markdown_cell(record_title(b))
             )
         })

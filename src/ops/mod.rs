@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
-use crate::api::registry::Registries;
+use crate::api::registry::{Registries, RegistryListing};
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::candidate::pack::pack_snapshot;
 use crate::diff::{self, Diff, Side};
@@ -150,6 +150,8 @@ fn names_a_set(reference: &Ref) -> Error {
 ///
 /// `Usage` for an option that does not fit the ref, and for a set of clusters, before any
 /// request. Then the error of a request, such as a 404 for a uid that Palette does not have.
+/// `Usage` for a uid that Palette does not have and that is the name of a profile: the ref gives
+/// no version.
 ///
 /// # Examples
 ///
@@ -205,10 +207,32 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
+    snapshot_in(reference, options, connect, &mut None, fetched_at, progress)
+}
+
+/// [`snapshot_for`], with `listing`, the registry listing of the project of the client, as
+/// [`Registries::with_metadata`] takes it. After the record, `listing` holds what the record read.
+///
+/// # Errors
+///
+/// The errors of [`snapshot_for`].
+fn snapshot_in<A, F>(
+    reference: &Ref,
+    options: &SnapshotOptions,
+    connect: F,
+    listing: &mut Option<RegistryListing>,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot>
+where
+    A: PaletteApi,
+    F: FnOnce() -> Result<Palette<A>>,
+{
     options.check(reference)?;
     let text = reference.to_string();
     let raw_dir = options.raw_dir.as_deref();
-    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, raw_dir, read);
+    let live =
+        |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| read_live(connect, raw_dir, listing, read);
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(names_a_set(reference)),
@@ -216,11 +240,14 @@ where
             let uid = palette.profile_uid(name, Some(version), progress)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
         }),
-        Ref::Uid(uid) => {
-            live(&|palette| profile_snapshot(palette, uid, options, &text, fetched_at, progress))
-        }
+        // a text with no version can be a name, and the error of the read then says so
+        Ref::Uid(uid) => live(&|palette| {
+            let read = profile_snapshot(palette, uid, options, &text, fetched_at, progress);
+            palette.or_name_with_no_version(reference, read)
+        }),
         Ref::Draft { id, version } => live(&|palette| {
-            draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
+            let read = draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress);
+            palette.or_name_with_no_version(reference, read)
         }),
         Ref::Pack {
             registry,
@@ -272,9 +299,11 @@ where
 /// The record that `read` makes through the [`Palette`] that `connect` returns. A ref that a
 /// request answers connects first, and the record names the project of the client and the
 /// registry of each pack. `raw_dir` is the directory of `--raw-dir`, which keeps the registries.
+/// `listing` is the registry listing of the project, as [`snapshot_in`] takes it.
 fn read_live<A, F>(
     connect: F,
     raw_dir: Option<&Path>,
+    listing: &mut Option<RegistryListing>,
     read: impl FnOnce(&Palette<A>) -> Result<Snapshot>,
 ) -> Result<Snapshot>
 where
@@ -283,7 +312,11 @@ where
 {
     let palette = connect()?;
     let mut snap = read(&palette)?;
-    source::name_registries(&mut Registries::new(&palette), &mut snap, raw_dir)?;
+    let mut registries = Registries::with_metadata(&palette, listing.take());
+    let named = source::name_registries(&mut registries, &mut snap, raw_dir);
+    // the listing goes back before the error, so a failed record keeps what an earlier one read
+    *listing = registries.into_metadata();
+    named?;
     Ok(snap.with_project(palette.project_uid()))
 }
 
@@ -556,7 +589,7 @@ where
             uid,
             profile: None,
             pending,
-        } if other.source.is_profile_version() => read_live(connect, None, |palette| {
+        } if other.source.is_profile_version() => read_live(connect, None, &mut None, |palette| {
             cluster_beside(palette, uid, *pending, &other.source, fetched_at, progress)
         }),
         _ => snapshot_for(

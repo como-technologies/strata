@@ -23,9 +23,8 @@ use crate::support::{AT, UID, answer, fingerprint, scratch, utf8};
 
 /// The text that Palette writes over a secret.
 ///
-/// This is a second text of the const of strata, on purpose. The check states the rule on its own,
-/// and it fails when strata changes the text that a record and a raw directory hold. The library
-/// does not make its const public for a target.
+/// This is a second text of [`strata::api::MASKED`], on purpose. The check states the rule on its
+/// own, and it fails when strata changes the text that a record and a raw directory hold.
 const MASKED: &str = "********";
 
 /// The format that marks a field of a pack schema as a secret.

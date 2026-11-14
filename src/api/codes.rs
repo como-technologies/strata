@@ -8,11 +8,15 @@
 //! A rule that only the create of a profile version checks is a gap that strata fills.
 //! [`CreateRule`] names each such rule with the code that the create gives.
 //!
+//! A refusal that says that the key has no access is a [`Denial`]. The key is right, and its role
+//! does not give the access, so strata does not send the request again.
+//!
 //! Each comment states what Palette does, and not where its code does it.
 
 use serde_json::Value;
 
 use crate::api::Method;
+use crate::closed_set::impl_texts;
 use crate::model::validation::PaletteRefusal;
 
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that [`ValidateRoute`]
@@ -25,10 +29,9 @@ use crate::model::validation::PaletteRefusal;
 /// The property route of AWS refuses a Pod Identity account with `FeatureNotSupported`, and a key
 /// pair that the region lacks with `AwsKeyPairNotFound`. A live run shows the second answer. No
 /// live run shows the first.
-pub(crate) const REFUSAL_CODES: [&str; 8] = [
+pub(crate) const REFUSAL_CODES: [&str; 7] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
-    OPERATION_FORBIDDEN_CODE,
     "ClusterProfileUpdateValidationFailure",
     "ClusterProfileInvalidPackState",
     "InvalidLimit",
@@ -43,6 +46,72 @@ pub(crate) const REFUSAL_CODES: [&str; 8] = [
 /// `cluster.get`. The code of Palette shows it; no live run shows it yet for these three routes.
 pub const OPERATION_FORBIDDEN_CODE: &str = "OperationForbidden";
 
+/// A refusal of Palette that says that the key has no access to the request.
+///
+/// Palette found the user of the key, and the roles of that user do not give the access. So the
+/// key itself is right, and a retry gets the same refusal. Each variant is one code of Palette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Denial {
+    /// The route as a whole, such as the audit log, with HTTP 403. The message names the
+    /// permission that the route needs, as in `required permissions 'audit.list'`.
+    Route,
+    /// One object, such as a profile, a cluster, or a registry, with HTTP 500. The message names
+    /// the permission, as in `Operation 'cluster.get' is forbidden`.
+    Object,
+    /// No role of the user in the project of the request gives the access, with HTTP 500. The
+    /// user has no role in the project, or a role without the permission, such as `cluster.list`
+    /// for the cluster listing. The message names the project, as in `Project 'dev' access denied`.
+    Project,
+    /// The user has no role at all, with HTTP 500.
+    NoRole,
+}
+
+impl_texts!(pub Denial {
+    Route => "AccessDenied",
+    Object => OPERATION_FORBIDDEN_CODE,
+    Project => "ResourceAccessDenied",
+    NoRole => "NoRolesAssociated",
+});
+
+impl Denial {
+    /// The HTTP status that Palette gives the denial: 403 for [`Denial::Route`]. Palette gives each
+    /// other denial the response type of a server fault, HTTP 500.
+    pub fn http_status(self) -> u16 {
+        match self {
+            Denial::Route => 403,
+            Denial::Object | Denial::Project | Denial::NoRole => 500,
+        }
+    }
+
+    /// The permission that `message`, the message of Palette, names: its first text in single
+    /// quotes. `None` for a denial that names no permission, and for a message with no quotes.
+    pub fn permission(self, message: &str) -> Option<&str> {
+        if !matches!(self, Denial::Route | Denial::Object) {
+            return None;
+        }
+        let (_, rest) = message.split_once('\'')?;
+        let (permission, _) = rest.split_once('\'')?;
+        Some(permission).filter(|p| !p.is_empty())
+    }
+
+    /// What the denial says about the key, for the message of an error. An example is `the role
+    /// of the key does not give the permission 'filter.list'`. `message` is the message of Palette.
+    pub fn sentence(self, message: &str) -> String {
+        match (self, self.permission(message)) {
+            (Denial::Route | Denial::Object, Some(permission)) => {
+                format!("the role of the key does not give the permission '{permission}'")
+            }
+            (Denial::Route | Denial::Object, None) => {
+                "the role of the key does not give the permission of the request".to_string()
+            }
+            (Denial::Project, _) => {
+                "no role of the key in the project gives the access of the request".to_string()
+            }
+            (Denial::NoRole, _) => "the user of the key has no role".to_string(),
+        }
+    }
+}
+
 /// The code of the refusal of a profile name and version that the project already holds.
 ///
 /// The name route and the import validate route answer it with HTTP 409.
@@ -56,8 +125,36 @@ pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 /// The code of the one refusal of the cluster packs route with HTTP 403, and not with 500.
 ///
 /// Its response type is `Forbidden`. Palette gives it when a pack that an
-/// integration pack needs read-only has values other than its defaults.
+/// integration pack needs read-only has values other than its defaults. The cluster validate route
+/// gives it too, with HTTP 403: see [`ValidateRoute::ClusterCreate`].
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
+
+/// The codes of the other refusals of the body that the cluster validate route answers with HTTP
+/// 403, and not with 500.
+///
+/// Their response type is `Forbidden`, as for [`PACK_FORBIDDEN_CODE`]. The body has two system
+/// profiles (`MultipleSystemProfilesNotSupported`), or a pack in the state `deleted`
+/// (`ClusterOperationNotAllowedInvalidPackState`). Or Palette runs in FIPS mode, and the cloud does
+/// not support it (`ClusterFipsNotSupported`). The code of Palette shows it; no live run shows it
+/// yet.
+pub const CLUSTER_CREATE_FORBIDDEN_CODES: [&str; 3] = [
+    "MultipleSystemProfilesNotSupported",
+    "ClusterOperationNotAllowedInvalidPackState",
+    "ClusterFipsNotSupported",
+];
+
+/// The codes of the refusals of a create by the cluster validate route when the tenant is at a
+/// limit, with HTTP 403.
+///
+/// A trial tenant over its usage is `FreemiumLimitExceeded`, and over its active clusters
+/// `FreemiumActiveClusterLimitExceeded`. A tenant of the AWS Marketplace over its usage is
+/// `MarketplaceUsageLimitExceeded`. The response type is `Forbidden`, and the key is right. The
+/// code of Palette shows it; no live run shows it yet.
+pub const CLUSTER_CREATE_LIMIT_CODES: [&str; 3] = [
+    "FreemiumLimitExceeded",
+    "FreemiumActiveClusterLimitExceeded",
+    "MarketplaceUsageLimitExceeded",
+];
 
 /// The code of the refusal of a request that names a project on a route of the tenant scope.
 ///
@@ -73,6 +170,16 @@ pub const PROJECT_SCOPE_CODE: &str = "ProjectUidIsNotEmpty";
 /// other errors of a pack. It is not a refusal of the whole request, so no table of a check holds
 /// it. `behind` prints it under the bump, and strata decides nothing from it.
 pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported";
+
+/// The code of the refusal of an update that moves the Kubernetes pack of a cluster more than one
+/// minor version.
+///
+/// Palette refuses it with HTTP 400, on each cloud. It refuses it at the update of the profiles of
+/// a cluster or of a cluster template. It also refuses it at an update or a publish of a profile
+/// version that a cluster runs. No validate route checks the rule, so strata checks it: see
+/// [`MinorSkip`](crate::model::update::MinorSkip). The code of Palette shows it; no live run shows
+/// it yet.
+pub const K8S_UPGRADE_NOT_SUPPORTED_CODE: &str = "K8sUpgradeNotSupported";
 
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no
 /// pack of the body to a registry.
@@ -93,19 +200,21 @@ type Check = &'static [&'static str];
 
 /// The values and the manifests of each pack are YAML.
 ///
-/// The three routes that take packs run it.
+/// The four routes that take packs run it.
 const PACK_YAML: Check = &["PackValuesYamlInvalid", "PackManifestYamlInvalid"];
 
 /// The body holds no more than one dashboard pack.
 ///
-/// The three routes that take packs run it.
+/// The four routes that take packs run it.
 const DASHBOARD_PACKS: Check = &["ClusterDashboardPacksMutuallyExclusive"];
 
 /// The metadata of the packs.
 ///
 /// The name of each manifest and of each manifest pack is a DNS-1123 label of 32 characters at
 /// most. No pack name is two times in a profile. No manifest name is two times in a pack. No pack
-/// has two versions. The cluster packs route and the import validate route run it.
+/// has two versions. The cluster packs route, the import validate route, and the cluster validate
+/// route run it. The cluster validate route also gives `InvalidName` for a name of the cluster or
+/// of a machine pool that it refuses.
 const PACK_METADATA: Check = &[
     "InvalidName",
     "DuplicatePacksForbidden",
@@ -115,13 +224,14 @@ const PACK_METADATA: Check = &[
 
 /// No pack name is in two profiles of one workload scope of the cluster.
 ///
-/// Only the cluster packs route runs it.
+/// The cluster packs route and the cluster validate route run it.
 const CLUSTER_PACKS: Check = &["DuplicateClusterPacksForbidden"];
 
 /// The integration packs.
 ///
 /// The cloud supports each of them. The OIDC identity provider that one names is in the Kubernetes
-/// pack or in the organization. The cluster packs route and the import validate route run it.
+/// pack or in the organization. The cluster packs route, the import validate route, and the cluster
+/// validate route run it.
 const INTEGRATION_PACKS: Check = &[
     "PackSpectroIntegrationNotSupported",
     "ClusterProfileOidcNotConfigured",
@@ -129,13 +239,15 @@ const INTEGRATION_PACKS: Check = &[
 
 /// No pack is disabled.
 ///
-/// The cluster packs route, the profile packs routes, and the import validate route run it. A live
-/// run shows that the import validate route refuses a candidate with a disabled pack.
+/// The four routes that take packs run it. A live run shows that the import validate route refuses
+/// a candidate with a disabled pack.
 const DISABLED_PACKS: Check = &["DisabledPacksForbidden"];
 
-/// No more than 200 packs, and no more than 200 manifests.
+/// No more packs and no more manifests than the limit.
 ///
-/// The profile packs routes and the import validate route run it.
+/// The profile packs routes and the import validate route run it, with a limit of 200 of each.
+/// The cluster validate route runs it with the limit of a cluster, over all the profiles of the
+/// body.
 const SUB_RESOURCE_LIMIT: Check = &["SubResourceLimitValidationFailure"];
 
 /// No other profile of a cluster that runs the version has a pack of the name in the same workload
@@ -171,13 +283,94 @@ const CREATE_VALIDATION: Check = &["ClusterProfileCreationValidationFailure"];
 /// profile of another cloud type, with HTTP 500.
 const PROFILE_CLOUD: Check = &["ClusterProfilesNotSupported"];
 
-/// The value of each variable of the body passes the schema of the variable in the profile.
+/// Each variable of the body is a variable of the profile, and its value passes the schema of the
+/// variable in the profile.
 ///
 /// Of the validate routes, only the cluster validate route runs it. A label that is not an option
 /// of a dropdown variable is `InvalidDropDownVariable`. A value that the format or the pattern of
-/// its variable refuses is `InvalidVariable`. The route refuses each one with HTTP 500. The code of
+/// its variable refuses is `InvalidVariable`. Variables for a profile with no variables are
+/// `ClusterVariablesNotFound`. A value of an immutable or hidden variable that is not its default
+/// value is `ClusterVariableCreateFailure`. The route refuses each one with HTTP 500, as the code
+/// of Palette shows.
+const BODY_VARIABLES: Check = &[
+    "InvalidDropDownVariable",
+    INVALID_VARIABLE_CODE,
+    "ClusterVariablesNotFound",
+    "ClusterVariableCreateFailure",
+];
+
+/// Each profile of the body is published, valid, and not deleted, and one of them is an
+/// infrastructure profile.
+///
+/// Only the cluster validate route runs it. A deleted profile is `ClusterProfileDeleted`. A profile
+/// whose pack tag the registry deleted is `ClusterProfileIsNotValid`. A draft is
+/// `ClusterProfileIsNotPublished`. A body with no infrastructure profile is
+/// `MissingClusterInfraProfile`. The route refuses each one with HTTP 500, as the code of Palette
+/// shows.
+const BODY_PROFILES: Check = &[
+    "ClusterProfileDeleted",
+    "ClusterProfileIsNotValid",
+    "ClusterProfileIsNotPublished",
+    "MissingClusterInfraProfile",
+];
+
+/// The macros of a variable in the values of each pack name a variable.
+///
+/// The cluster validate route runs it. A macro `{{.spectro.var}}` with no name is
+/// `InvalidPackVariable`, with HTTP 500. The code of Palette shows it; no live run shows it yet.
+const PACK_VARIABLES: Check = &["InvalidPackVariable"];
+
+/// When Palette runs in FIPS mode, each pack is FIPS compliant.
+///
+/// Of the validate routes, only the cluster validate route runs it. A pack that is not compliant
+/// is `PackForbidden`, with HTTP 500. The code of Palette shows it; no live run shows it yet.
+const FIPS_PACKS: Check = &["PackForbidden"];
+
+/// The machine pools: a pool of the control plane, and the zones of the worker pools of AWS.
+///
+/// Only the cluster validate route runs it. For AWS, Azure, MAAS, vSphere, and Edge, a body with
+/// no pool of the control plane is `ControlPlanePoolRequired`. For AWS, a worker pool with a zone
+/// that the control plane does not have is `AwsWorkerPoolAzsValidate`. With no VPC, a worker pool
+/// with no zone is `AwsDynamicWorkerPoolAzsRequired`. The route refuses each one with HTTP 500.
+/// The code of Palette shows it; no live run shows it yet.
+const CREATE_POOLS: Check = &[
+    "ControlPlanePoolRequired",
+    "AwsWorkerPoolAzsValidate",
+    "AwsDynamicWorkerPoolAzsRequired",
+];
+
+/// The region and the instance type of each machine pool are known to Palette.
+///
+/// Only the cluster validate route runs it. An empty region is `NoRegionSpecified`. An instance
+/// type that Palette does not list for the region is `InstanceTypeNotFound`. For GCP and GKE, it is
+/// `CustomInstanceTypeNotFound` when no custom type of the region matches it either. The route
+/// refuses each one with HTTP 500. The code of Palette shows it; no live run shows it yet.
+const POOL_MACHINES: Check = &[
+    "NoRegionSpecified",
+    "InstanceTypeNotFound",
+    "CustomInstanceTypeNotFound",
+];
+
+/// The labels and the SSH keys that the cloud reads.
+///
+/// Only the cluster validate route runs it. For Azure, a label key `microsoft`, `azure`, or
+/// `windows` is `ReservedTags`. For GCP, a label key that GCP refuses is `GcpTagValidationFailure`.
+/// For vSphere and Edge, an SSH key that is not a public key is `SshKeyValidationFailure`. The
+/// route refuses each one with HTTP 500. The code of Palette shows it; no live run shows it yet.
+const CLOUD_FIELDS: Check = &[
+    "ReservedTags",
+    "GcpTagValidationFailure",
+    "SshKeyValidationFailure",
+];
+
+/// The code of the refusal of a value of a variable.
+///
+/// The cluster validate route gives it for a value of the body that the format or the pattern of
+/// its variable refuses. The update of the profiles of a cluster gives it with HTTP 500 for a
+/// required variable with no value and no default value. No validate route checks that, so strata
+/// names such a variable: see [`UpdateChecks`](crate::model::update::UpdateChecks). The code of
 /// Palette shows it; no live run shows it yet.
-const BODY_VARIABLES: Check = &["InvalidDropDownVariable", "InvalidVariable"];
+pub const INVALID_VARIABLE_CODE: &str = "InvalidVariable";
 
 /// For AWS with a VPC, the pod CIDR and the service CIDR of the Kubernetes pack are CIDRs. Neither
 /// one overlaps the CIDR of the VPC.
@@ -270,9 +463,25 @@ impl ValidateRoute {
                 NAME_AND_VERSION,
                 CREATE_VALIDATION,
             ],
-            ValidateRoute::ClusterCreate => {
-                &[PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS, POOL_SUBNETS]
-            }
+            ValidateRoute::ClusterCreate => &[
+                CREATE_POOLS,
+                POOL_SUBNETS,
+                PACK_METADATA,
+                BODY_PROFILES,
+                PROFILE_CLOUD,
+                DASHBOARD_PACKS,
+                CLUSTER_PACKS,
+                PACK_YAML,
+                PACK_VARIABLES,
+                INTEGRATION_PACKS,
+                DISABLED_PACKS,
+                SUB_RESOURCE_LIMIT,
+                FIPS_PACKS,
+                BODY_VARIABLES,
+                POOL_MACHINES,
+                CLOUD_FIELDS,
+                VPC_CIDRS,
+            ],
         }
     }
 
@@ -286,6 +495,10 @@ impl ValidateRoute {
     /// A code of a check of the route comes with HTTP 500. These refusals set another type:
     ///
     /// - The cluster packs route gives [`PACK_FORBIDDEN_CODE`] with HTTP 403.
+    /// - The cluster validate route gives [`PACK_FORBIDDEN_CODE`], the codes of
+    ///   [`CLUSTER_CREATE_FORBIDDEN_CODES`], and the codes of [`CLUSTER_CREATE_LIMIT_CODES`] with
+    ///   HTTP 403. Another 403 of the route, such as the refusal of the role of the key, is no
+    ///   refusal of the request.
     /// - The name route and the import validate route give [`PROFILE_EXISTS_CODE`] with HTTP 409.
     /// - The import validate route gives [`PACK_MACRO_UNDEFINED_CODE`] with HTTP 404.
     /// - The API schema checks the body of the profile routes first. It refuses a list with two
@@ -294,6 +507,11 @@ impl ValidateRoute {
         match (self, status) {
             (_, 500) => self.refusal_codes().any(|c| c == code),
             (ValidateRoute::ClusterPacks, 403) => code == PACK_FORBIDDEN_CODE,
+            (ValidateRoute::ClusterCreate, 403) => {
+                code == PACK_FORBIDDEN_CODE
+                    || CLUSTER_CREATE_FORBIDDEN_CODES.contains(&code)
+                    || CLUSTER_CREATE_LIMIT_CODES.contains(&code)
+            }
             (ValidateRoute::ProfileName | ValidateRoute::ProfileImport, 409) => {
                 code == PROFILE_EXISTS_CODE
             }
@@ -361,13 +579,15 @@ impl ValidateRoute {
 /// Whether `code` is the code of a refusal that Palette answers with HTTP 500, and that a retry
 /// does not change.
 ///
-/// The codes are of three kinds. The first kind holds the refusals of the other routes. The second
-/// kind holds the errors of the import validate route that match no pack to a registry. The third
-/// kind holds the checks of each [`ValidateRoute`]. [`Error::class`](crate::Error::class) gives the
-/// class `Terminal` to a 5xx with such a code. A rule of `strata-preflight` that names a code in
-/// `refusal_codes` must name one of them, so that the check and the retry read one list.
+/// The codes are of four kinds. The first two are the refusals of the other routes and each
+/// [`Denial`]. The third kind holds the errors of the import validate route that match no pack to
+/// a registry. The checks of each [`ValidateRoute`] are the fourth.
+/// [`Error::class`](crate::Error::class) gives the class `Terminal` to a 5xx with such a code. A
+/// rule of `strata-preflight` that names a code in `refusal_codes` must name one of them, so that
+/// the check and the retry read one list.
 pub fn is_refusal_code(code: &str) -> bool {
     REFUSAL_CODES.contains(&code)
+        || Denial::from_text(code).is_some()
         || PROFILE_IMPORT_MATCH_CODES.contains(&code)
         || ValidateRoute::ALL
             .iter()
@@ -405,307 +625,4 @@ impl CreateRule {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::error::{Error, FailureClass};
-    use serde_json::json;
-
-    /// Each rule of the create.
-    const RULES: [CreateRule; 4] = [
-        CreateRule::TypeLayer,
-        CreateRule::CoreLayers,
-        CreateRule::Cloud,
-        CreateRule::PackTag,
-    ];
-
-    /// Each table of one check.
-    const CHECKS: [Check; 16] = [
-        PACK_YAML,
-        DASHBOARD_PACKS,
-        PACK_METADATA,
-        CLUSTER_PACKS,
-        INTEGRATION_PACKS,
-        DISABLED_PACKS,
-        SUB_RESOURCE_LIMIT,
-        PACKS_IN_CONFLICT,
-        NAME_AND_VERSION,
-        PROFILE_LIMIT,
-        CLOUD_TYPE,
-        CREATE_VALIDATION,
-        PROFILE_CLOUD,
-        BODY_VARIABLES,
-        VPC_CIDRS,
-        POOL_SUBNETS,
-    ];
-
-    #[test]
-    fn each_code_of_palette_is_in_one_table() {
-        let other_status = [
-            PROFILE_EXISTS_CODE,
-            PACK_MACRO_UNDEFINED_CODE,
-            PACK_FORBIDDEN_CODE,
-        ];
-        let tables = CHECKS.iter().copied().chain([
-            &REFUSAL_CODES[..],
-            &PROFILE_IMPORT_MATCH_CODES[..],
-            &other_status[..],
-        ]);
-        let mut codes: Vec<&str> = tables.flat_map(|table| table.iter().copied()).collect();
-        let count = codes.len();
-        codes.sort_unstable();
-        codes.dedup();
-        assert_eq!(codes.len(), count, "a code is in two tables: {codes:?}");
-        for rule in RULES {
-            assert!(!codes.contains(&rule.code()), "{rule:?}");
-        }
-        // an error of a pack in a 200 answer is in no table of a refusal of the whole request
-        assert!(!codes.contains(&UPGRADE_NOT_SUPPORTED_CODE));
-        // each check that a route runs is one of the tables
-        for route in ValidateRoute::ALL {
-            for check in route.checks() {
-                assert!(CHECKS.contains(check), "{route:?}: {check:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn each_route_reads_the_codes_of_its_checks_with_http_500() {
-        for route in ValidateRoute::ALL {
-            for code in route.refusal_codes() {
-                assert!(route.refuses(500, code), "{route:?} {code}");
-                assert!(!route.refuses(503, code), "{route:?} {code}");
-            }
-            assert!(!route.refuses(500, "InternalError"), "{route:?}");
-            assert!(!route.refuses(500, "610"), "{route:?}");
-        }
-        // the import validate route runs the check of the name route too
-        for code in ValidateRoute::ProfileName.refusal_codes() {
-            assert!(ValidateRoute::ProfileImport.refuses(500, code), "{code}");
-        }
-        // a rule of the create is a gap: no validate route answers its code
-        for rule in RULES {
-            for route in ValidateRoute::ALL {
-                assert!(!route.refuses(500, rule.code()), "{route:?} {rule:?}");
-            }
-        }
-    }
-
-    #[test]
-    fn a_code_of_a_refusal_at_a_5xx_is_a_refusal_code_and_the_class_of_its_error_is_terminal() {
-        let api = |status: u16, code: &str| Error::Api {
-            method: Method::Post,
-            path: "/v1/clouds/aws/properties/validate".into(),
-            status,
-            body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
-            retry_after: None,
-        };
-        let mut listed: Vec<&str> = REFUSAL_CODES.to_vec();
-        listed.extend(PROFILE_IMPORT_MATCH_CODES);
-        listed.extend(ValidateRoute::ALL.iter().flat_map(|r| r.refusal_codes()));
-        // the property route of AWS: a Pod Identity account, and a key pair that the region lacks
-        listed.extend(["FeatureNotSupported", "AwsKeyPairNotFound"]);
-        for code in listed {
-            assert!(is_refusal_code(code), "{code}");
-            assert_eq!(api(500, code).class(), FailureClass::Terminal, "{code}");
-            assert_eq!(api(503, code).class(), FailureClass::Terminal, "{code}");
-        }
-        // a code that a route gives with another status is no refusal at a 5xx. An error of a pack
-        // in a 200 answer is no refusal at a 5xx. A rule of the create and a fault of the server
-        // are no refusal at a 5xx
-        let other = [
-            PROFILE_EXISTS_CODE,
-            PACK_MACRO_UNDEFINED_CODE,
-            PACK_FORBIDDEN_CODE,
-            UPGRADE_NOT_SUPPORTED_CODE,
-            "InternalError",
-            "610",
-            "",
-        ]
-        .into_iter()
-        .chain(RULES.map(CreateRule::code));
-        for code in other {
-            assert!(!is_refusal_code(code), "{code}");
-            assert_eq!(api(500, code).class(), FailureClass::Transient, "{code}");
-        }
-    }
-
-    #[test]
-    fn the_routes_that_check_the_packs_of_a_profile_refuse_a_disabled_pack() {
-        for code in DISABLED_PACKS {
-            for route in [
-                ValidateRoute::ClusterPacks,
-                ValidateRoute::ProfilePacks,
-                ValidateRoute::ProfileImport,
-            ] {
-                assert!(route.refuses(500, code), "{route:?} {code}");
-            }
-            assert!(!ValidateRoute::ProfileName.refuses(500, code), "{code}");
-        }
-    }
-
-    #[test]
-    fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type_a_variable_a_cidr_or_a_pool_with_no_subnet()
-     {
-        for code in [PROFILE_CLOUD, BODY_VARIABLES, VPC_CIDRS, POOL_SUBNETS].concat() {
-            assert!(ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
-            assert!(!ValidateRoute::ClusterCreate.refuses(503, code), "{code}");
-            for route in [
-                ValidateRoute::ClusterPacks,
-                ValidateRoute::ProfilePacks,
-                ValidateRoute::ProfileName,
-                ValidateRoute::ProfileImport,
-            ] {
-                assert!(!route.refuses(500, code), "{route:?} {code}");
-            }
-        }
-    }
-
-    #[test]
-    fn a_route_reads_a_refusal_from_the_body_of_a_palette_error() {
-        let body = r#"{"code":"ClusterProfilesNotSupported","message":"Cluster profiles 'p' are not supported with 'aws' environment"}"#;
-        let refusal = ValidateRoute::ClusterCreate
-            .refusal(500, body)
-            .expect("the route refuses its own code with HTTP 500");
-        assert_eq!(refusal.code, "ClusterProfilesNotSupported");
-        assert_eq!(
-            refusal.message,
-            "Cluster profiles 'p' are not supported with 'aws' environment"
-        );
-        assert_eq!(ValidateRoute::ClusterCreate.refusal(502, body), None);
-        assert_eq!(ValidateRoute::ProfilePacks.refusal(500, body), None);
-        let error: Value = serde_json::from_str(body).unwrap();
-        assert!(ValidateRoute::ClusterCreate.refuses_answer(500, &error));
-        assert!(!ValidateRoute::ClusterCreate.refuses_answer(502, &error));
-        assert!(!ValidateRoute::ProfilePacks.refuses_answer(500, &error));
-        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, &Value::Null));
-        assert!(
-            !ValidateRoute::ClusterCreate.refuses_answer(500, &json!({"code": "InternalError"}))
-        );
-    }
-
-    #[test]
-    fn a_request_goes_to_the_validate_route_that_its_method_and_its_path_name() {
-        let post = Method::Post;
-        for (method, path, route) in [
-            (
-                post,
-                "/v1/spectroclusters/u1/validate/packs",
-                ValidateRoute::ClusterPacks,
-            ),
-            (
-                post,
-                "/v1/clusterprofiles/validate/packs",
-                ValidateRoute::ProfilePacks,
-            ),
-            (
-                post,
-                "/v1/clusterprofiles/u1/validate/packs",
-                ValidateRoute::ProfilePacks,
-            ),
-            (
-                Method::Get,
-                "/v1/clusterprofiles/validate/name?name=a&version=1",
-                ValidateRoute::ProfileName,
-            ),
-            (
-                post,
-                "/v1/clusterprofiles/import/validate",
-                ValidateRoute::ProfileImport,
-            ),
-            (
-                post,
-                "/v1/spectroclusters/aws/validate",
-                ValidateRoute::ClusterCreate,
-            ),
-            (
-                post,
-                "/v1/spectroclusters/edge-native/validate",
-                ValidateRoute::ClusterCreate,
-            ),
-        ] {
-            assert_eq!(ValidateRoute::of(method, path), Some(route), "{path}");
-        }
-        for (method, path) in [
-            (Method::Get, "/v1/spectroclusters/aws/validate"),
-            (post, "/v1/spectroclusters/aws"),
-            (post, "/v1/spectroclusters/u1/validate/repave"),
-            (post, "/v1/clouds/aws/account/validate"),
-            (post, "/v1/spectroclusters/validate"),
-            (post, ""),
-        ] {
-            assert_eq!(ValidateRoute::of(method, path), None, "{path}");
-        }
-    }
-
-    #[test]
-    fn only_a_request_to_the_cluster_validate_route_reads_its_refusal() {
-        let error = json!({"code": "ClusterProfilesNotSupported"});
-        let post = Method::Post;
-        assert!(ValidateRoute::refuses_request(
-            post,
-            "/v1/spectroclusters/aws/validate",
-            500,
-            &error
-        ));
-        // the same body from another route is no refusal of the route that the code belongs to
-        assert!(!ValidateRoute::refuses_request(
-            post,
-            "/v1/clusterprofiles/validate/packs",
-            500,
-            &error
-        ));
-        assert!(!ValidateRoute::refuses_request(
-            post,
-            "/v1/clouds/aws/account/validate",
-            500,
-            &error
-        ));
-        assert!(!ValidateRoute::refuses_request(
-            Method::Get,
-            "/v1/spectroclusters/aws/validate",
-            500,
-            &error
-        ));
-        assert!(!ValidateRoute::refuses_request(
-            post,
-            "/v1/spectroclusters/aws/validate",
-            502,
-            &error
-        ));
-    }
-
-    #[test]
-    fn a_retry_does_not_send_again_the_refusal_of_the_cluster_validate_route() {
-        for code in ValidateRoute::ClusterCreate.refusal_codes() {
-            let error = Error::Api {
-                method: crate::api::Method::Post,
-                path: "/v1/spectroclusters/aws/validate".into(),
-                status: 500,
-                body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
-                retry_after: None,
-            };
-            assert_eq!(error.class(), FailureClass::Terminal, "{code}");
-        }
-    }
-
-    #[test]
-    fn the_refusals_that_set_another_type_belong_to_their_routes() {
-        assert!(ValidateRoute::ClusterPacks.refuses(403, PACK_FORBIDDEN_CODE));
-        assert!(!ValidateRoute::ClusterPacks.refuses(403, "Forbidden"));
-        assert!(!ValidateRoute::ProfilePacks.refuses(403, PACK_FORBIDDEN_CODE));
-        for route in [ValidateRoute::ProfileName, ValidateRoute::ProfileImport] {
-            assert!(route.refuses(409, PROFILE_EXISTS_CODE), "{route:?}");
-            assert!(!route.refuses(409, "Conflict"), "{route:?}");
-        }
-        assert!(!ValidateRoute::ClusterPacks.refuses(409, PROFILE_EXISTS_CODE));
-        assert!(ValidateRoute::ProfileImport.refuses(404, PACK_MACRO_UNDEFINED_CODE));
-        assert!(!ValidateRoute::ProfileName.refuses(404, PACK_MACRO_UNDEFINED_CODE));
-        // the API schema refuses a body of the profile routes with HTTP 422 and a number
-        for route in [ValidateRoute::ProfilePacks, ValidateRoute::ProfileImport] {
-            assert!(route.refuses(422, "610"), "{route:?}");
-        }
-        for route in [ValidateRoute::ClusterPacks, ValidateRoute::ProfileName] {
-            assert!(!route.refuses(422, "610"), "{route:?}");
-        }
-    }
-}
+mod tests;

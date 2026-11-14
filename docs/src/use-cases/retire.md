@@ -18,7 +18,7 @@ Every step reads Palette, so each one needs a key.
 
 `just playground retire` serves this tenant on this machine,
 with no key and no cost. Nothing on this page changes the tenant, so one seed
-serves every step.
+serves steps 1 to 5. Step 6 names its own seed.
 
 </div>
 
@@ -38,9 +38,11 @@ Move them first.
 ```
 
 `no consumers` and exit `0`: no cluster, edge host, or cluster template uses
-the version, and Palette will accept the delete. When strata finds no consumer
-and a reading failed, the first line says so, and the exit is `2`. A consumer
-can be missing: do not delete.
+the version, and Palette will accept the delete. The rows under `searched:` say
+what strata read: the cluster search names two clusters that run other versions
+of `aws-stack`. The line `scope:` says that only the clusters of `dev` can use
+the version. When strata finds no consumer and a reading failed, the first line
+says so, and the exit is `2`. A consumer can be missing: do not delete.
 
 ## 3. A version that a cluster template links
 
@@ -77,6 +79,33 @@ A pipe hides the exit code of step 4. `strata consumers` exits `1` here, and the
 shell reports the exit of `jq`, which is `0`. A script that reads the rows and
 gates on the exit must set `pipefail`, or run the two commands apart.
 
+## 6. A version that each project can use
+
+<div class="playground-demo">
+
+`just playground retire-tenant-2` serves the tenant of this step on this machine, with
+no key and no cost.
+
+</div>
+
+Each project of the tenant can use a profile of the tenant. Here
+`aws-stack@2.0.0` is such a profile, and the key cannot read the project
+`staging`:
+
+```text
+{{#include ../output/retire-tenant-denied.txt}}
+```
+
+Exit `2`: strata searched `dev` and `prod`, and Palette refused the search of
+`staging`. A cluster of `staging` that runs the version can be missing from the
+answer. Palette still refuses the delete while such a cluster runs it. Run the
+retire with a key that reads each project of the tenant, so the line
+`NOT CHECKED` goes. See
+[A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant). The checks
+`tenant-consumers` and `tenant-consumers-projects` of
+[scope.sh](../development/live-runs.md#scopesh) search each project of a live
+tenant.
+
 ## What to do
 
 - After you delete a version, its record reports `DRIFT`: the version no
@@ -86,5 +115,7 @@ gates on the exit must set `pipefail`, or run the two commands apart.
   the same change that records the delete.
 - `consumers` asks Palette at the time of the command. Run it immediately before
   the delete.
+- Give the key a role that reads each project of the tenant. A key that cannot
+  read a project leaves it `NOT CHECKED`, and the gate stays closed.
 - To run this as a job, see
   [The promotion gate and the retire gate](../automation/gates.md).

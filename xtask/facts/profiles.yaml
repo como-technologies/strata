@@ -133,6 +133,7 @@ facts:
         - variables[].immutable
         - variables[].inputType
         - variables[].isSensitive
+        - variables[].options[].default
         - variables[].options[].description
         - variables[].options[].label
         - variables[].options[].value
@@ -153,6 +154,24 @@ facts:
       - internals/palette/profiles.md#the-variables-route
     code:
       - src/api/palette/profiles.rs
+      - src/snapshot/variable.rs
+
+  - id: profile-variables-masked
+    kind: behavior
+    reads:
+      fields:
+        - variables[].defaultValue
+        - variables[].inputType
+        - variables[].isSensitive
+        - variables[].options[].value
+    stand_in:
+      - v1/clusterprofiles/{uid}/variables
+    live: []
+    unchecked: The code of Palette shows it. No run gives a profile a sensitive variable.
+    pages:
+      - internals/palette/profiles.md#the-variables-route
+      - internals/hashes.md#the-node-hash-and-the-root
+    code:
       - src/snapshot/variable.rs
 
   - id: pack-of-draft
@@ -339,6 +358,25 @@ facts:
       - src/diff/verify.rs
       - src/ops/verify.rs
 
+  # The audit log refuses a key whose role does not give audit.list
+  - id: audit-log-access-denied
+    kind: behavior
+    reads:
+      codes: [AccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/audits
+    live:
+      - who.sh:noaudit-who-says
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - commands/verify.md#when-strata-cannot-read-the-log
+    code:
+      - src/ops/verify/who.rs
+      - src/error/mod.rs
+
   - id: project-listing
     kind: request
     request: GET /v1/dashboard/projects/metadata
@@ -450,6 +488,24 @@ facts:
     code:
       - src/api/mask.rs
       - src/api/palette/profiles.rs
+
+  - id: profile-console-address
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+        - spec.draft.packs[].values
+        - spec.packs[].spec.values
+        - spec.clusterProfileTemplates[].packs[].values
+    stand_in: []
+    live:
+      - repave.sh:vmo-clear
+    pages:
+      - internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines
+      - commands/compare/repave.md#the-console-address-of-a-pack-of-virtual-machines
+    code:
+      - src/api/mask/console.rs
+      - src/ops/repave.rs
 
   # The export of a version.
   - id: profile-export-file
@@ -1147,6 +1203,50 @@ facts:
       - src/candidate/gaps.rs
       - src/api/codes.rs
 
+  # The update of a cluster refuses a move of Kubernetes of more than one minor version, and no
+  # validate route checks it. behind and compare --validate check the move (#623).
+  - id: gap-kubernetes-minor-step
+    kind: gap
+    reads:
+      codes:
+        - K8sUpgradeNotSupported
+    stand_in: []
+    live:
+      - validate-packs.sh:bump-text-skip
+      - validate-packs.sh:skip-says
+      - validate-packs.sh:skip-refused
+    pages:
+      - internals/palette/validate-routes.md#what-the-update-checks
+      - internals/palette/profiles.md#the-checks-of-an-update
+      - commands/behind.md#a-move-that-skips-a-minor-version
+      - commands/compare/validate.md#what-the-route-does-not-check
+      - reference/errors.md#refusals-of-the-update-that-strata-names-first
+    code:
+      - src/model/update.rs
+      - src/api/codes.rs
+      - src/reference/version.rs
+
+  # The update of a cluster refuses a required variable with no value and no default value, and no
+  # validate route checks it. behind and compare --validate name each such variable that a move
+  # adds (#623).
+  - id: gap-required-variable
+    kind: gap
+    reads:
+      codes:
+        - InvalidVariable
+    stand_in: []
+    live:
+      - validate-packs.sh:variables-says
+      - validate-packs.sh:variables-refused
+    pages:
+      - internals/palette/validate-routes.md#what-the-update-checks
+      - internals/palette/profiles.md#the-checks-of-an-update
+      - commands/compare/validate.md#what-the-route-does-not-check
+      - reference/errors.md#refusals-of-the-update-that-strata-names-first
+    code:
+      - src/model/update.rs
+      - src/api/codes.rs
+
   # No route says that a newer version of a profile exists. Palette lists the published versions
   # of the profile in no order, and strata orders them (#707).
   - id: gap-newer-profile-version
@@ -1254,11 +1354,34 @@ facts:
       - repave.sh:var-default
       - repave.sh:var-control
       - repave.sh:var-control-says
+      - repave.sh:var-swap
     pages:
       - internals/palette/profiles.md#a-variable-in-a-field-that-repaves
     code:
       - src/ops/repave.rs
       - src/api/palette/clusters.rs
+
+  # The body of a swap: the whole list of the profiles of the cluster, and the earlier body of
+  # tenant.sh with replaceWithProfile.
+  - id: repave-swap-body
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+    stand_in: []
+    live:
+      - tag-only.sh:palette-repave-exact
+      - tag-only.sh:palette-repave-exact-replace
+      - tag-only.sh:palette-repave-floating
+      - tag-only.sh:palette-repave-floating-replace
+      - tag-only.sh:palette-repave-back
+      - tag-only.sh:palette-repave-back-replace
+      - repave.sh:var-swap
+    pages:
+      - internals/palette/profiles.md#the-body-of-a-swap
+    code:
+      - src/ops/repave.rs
 
   # Macros.
   - id: project-macros

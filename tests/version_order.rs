@@ -430,10 +430,11 @@ fn the_crate_has_no_order_for_letters_with_no_number_after_them_so_strata_puts_t
     assert_eq!(compare("1.2rc", "1.2rc0"), Less);
 }
 
-/// Each tail of a string of the generated probe: no text, text right after the last number, a tail
-/// after a dot, and text right after the last number with a tail after a dot. The crate reads
-/// `2rc1`, `2rc`, and `2a1b` as three kinds of part: a number with letters and a number after
-/// them, a number with letters, and a text.
+/// Each tail of a string of the generated probe: no text, text right after the last number, and a
+/// tail after a dot. A tail can also be text right after the last number, with a tail after a dot.
+///
+/// The crate reads `2rc1`, `2rc`, and `2a1b` as three kinds of part. `2rc1` is a number with
+/// letters and a number after them, `2rc` is a number with letters, and `2a1b` is a text.
 const TAILS: &[&str] = &[
     "",
     "rc1",
@@ -483,9 +484,9 @@ impl Probe {
     }
 
     /// False for a text with no number at its start and no three numbers, as brett's rule names
-    /// it: text before fewer than three numbers, as in `chart-1.2`, and one number with a text
-    /// right after it, as in `1a1b` and `1rc1.develop`. A part is a number as the crate reads it:
-    /// the crate reads `1rc1` as a number only in the last part.
+    /// it. One kind is text before fewer than three numbers, as in `chart-1.2`. The other kind is
+    /// one number with a text right after it, as in `1a1b` and `1rc1.develop`. A part is a number
+    /// as the crate reads it: the crate reads `1rc1` as a number only in the last part.
     fn holds_version(&self) -> bool {
         match self.numbers.len() {
             1 | 2 if !self.before.is_empty() => false,
@@ -494,8 +495,8 @@ impl Probe {
         }
     }
 
-    /// The three numbers that decide first. Palette reads the first three numbers, and the crate
-    /// reads a last number with a text right after it as part of the text, as in `1.2a1b`.
+    /// The three numbers that decide first. Palette reads the first three numbers. The crate reads
+    /// a last number with a text right after it as part of the text, as in `1.2a1b`.
     fn read(&self) -> [u64; 3] {
         let mut numbers = self.numbers.clone();
         if numbers.len() < 3 && self.tail == "a1b" {
@@ -506,7 +507,7 @@ impl Probe {
     }
 
     /// True when the crate reads the third number and the text right after it as one text, as in
-    /// `1.2.3a1b`, and Palette reads the three numbers.
+    /// `1.2.3a1b`. Palette reads the three numbers of such a text.
     fn third_with_text(&self) -> bool {
         self.numbers.len() == 3 && self.tail == "a1b"
     }
