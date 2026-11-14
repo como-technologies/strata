@@ -41,6 +41,7 @@ fn each_kind_of_error() -> Vec<Error> {
             status: 503,
             body: "busy".into(),
             retry_after: Some(2),
+            key_proved: false,
         },
         Error::InvalidSetting {
             variable: "STRATA_RETRIES",
@@ -322,6 +323,7 @@ fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
         status,
         body: body.into(),
         retry_after: None,
+        key_proved: false,
     };
     // a refusal by design stays while the inputs stay
     assert_eq!(
@@ -696,14 +698,21 @@ fn each_kind_of_error_is_one_row_of_the_table_of_the_book_and_no_row_is_another_
     );
 }
 
-/// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters.
+/// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters. No
+/// answer proved the key.
 fn api_message(status: u16, body: &str) -> String {
+    api_message_with(status, body, false)
+}
+
+/// [`api_message`], for a client where `key_proved` says whether an earlier answer proved the key.
+fn api_message_with(status: u16, body: &str, key_proved: bool) -> String {
     Error::Api {
         method: Method::Get,
         path: palette::TAG_FILTER_LISTING.into(),
         status,
         body: body.into(),
         retry_after: None,
+        key_proved,
     }
     .to_string()
 }
@@ -753,24 +762,20 @@ fn a_401_or_another_403_still_names_the_key() {
 #[test]
 fn a_403_that_names_a_permission_names_it_and_names_the_key_only_until_an_answer_proves_it() {
     let permission = "the role of the key does not give the permission 'filter.list'";
-    let filters_denied = palette::error_body(
-        Denial::Route.as_str(),
-        &palette::access_denied_message("filter.list", "tenant"),
-    );
+    let filters_denied = palette::filters_denied();
     // the first request of the run: nothing proved the key yet
     let first = api_message(403, &filters_denied);
     assert!(first.contains(permission), "{first}");
     assert!(first.contains("the key can be wrong"), "{first}");
-    // an answer with a 2xx status, such as the lookup of the project, proves the key
-    crate::api::prove_key();
-    let after = api_message(403, &filters_denied);
+    // an answer with a 2xx status to the client, such as the lookup of the project, proves the key
+    let after = api_message_with(403, &filters_denied, true);
     assert!(after.ends_with(&format!("; {permission}")), "{after}");
     for key in KEY_VARS {
         assert!(!after.contains(key), "{after}");
     }
     // a 401 is the key itself, and a 403 that is no denial names no permission
     for (status, body) in [(401, r#"{"code":"ExpiredApiKey"}"#), (403, "forbidden")] {
-        let text = api_message(status, body);
+        let text = api_message_with(status, body, true);
         assert!(text.contains("the key can be wrong"), "{status}: {text}");
         assert!(!text.contains("does not give"), "{status}: {text}");
     }
@@ -802,6 +807,7 @@ fn a_denial_with_http_500_names_what_palette_denied_and_not_the_key() {
             status: 500,
             body: format!("{}\n", palette::error_body(denial.as_str(), &message)),
             retry_after: None,
+            key_proved: false,
         };
         let text = error.to_string();
         let words = format!("{}: {message}", denial.as_str());
@@ -824,6 +830,7 @@ fn the_denial_of_an_error_is_the_code_of_the_body_of_an_answer_of_palette() {
         status: 403,
         body: body.into(),
         retry_after: None,
+        key_proved: false,
     };
     for denial in Denial::ALL {
         let body = palette::error_body(denial.as_str(), "m");
@@ -884,6 +891,7 @@ fn the_message_of_an_answer_gives_the_words_of_palette_and_the_document_keeps_th
             status: 404,
             body: format!("{body}\n"),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(
             error.to_string(),
@@ -905,6 +913,7 @@ fn the_reason_of_an_answer_of_palette_is_its_status_and_its_body_with_no_blank_a
         status: 403,
         body: format!("{denied}\n"),
         retry_after: None,
+        key_proved: false,
     };
     assert_eq!(api.reason(), format!("HTTP 403: {denied}"));
     let transport = Error::Transport {
@@ -925,6 +934,7 @@ fn the_words_of_a_reason_give_the_status_and_the_code_and_the_message_of_palette
         status: 403,
         body: format!("{denied}\n"),
         retry_after: None,
+        key_proved: false,
     };
     // the record keeps the body as Palette sent it, and the text gives its words
     assert_eq!(api.reason(), format!("HTTP 403: {denied}"));

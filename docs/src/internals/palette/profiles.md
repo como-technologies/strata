@@ -90,6 +90,34 @@ nothing. Each other failure of that
 read stops the record, so that strata never writes a secret that it could not
 check.
 
+### The console address of a pack of virtual machines
+
+The packs `virtual-machine-orchestrator`, its older name `spectro-vm-dashboard`,
+and `vm-migration-assistant` have a console. The console forwards to the
+address in the value `charts.<pack>.appConfig.clusterInfo.consoleBaseAddress`,
+where `<pack>` is the name of the pack. The address names the console of one
+cluster. Its schema format is not `password`, so Palette serves it in clear in
+the packs of a profile and of a cluster. The code of Palette shows it, and the
+check `vmo-clear` of [repave.sh](../../development/live-runs.md#repavesh) reads
+it on a cluster.
+
+Strata keeps the address as a secret, as it keeps the password of a pack. A
+record often goes into a repository, and the address tells each reader where
+the console of the cluster is. So strata writes `********` over the value, with
+the rules of a password. It writes no mask over an empty value, or over a value
+that holds a variable. It changes only the line of the value.
+
+Each record of a profile, of a draft, of a cluster, and of a candidate holds the
+mask. So does each answer that `--raw-dir` saves.
+
+The root covers the mask, so a change of the address alone does not move the
+root. `same-release`, `compare`, and `verify` name the path as a masked value.
+A record that an older release wrote holds the address, and it has another
+root: see
+[Release 0.34.0](../../reference/compatibility.md#release-0340-changes-that-need-action).
+`compare --repave` sends the address of the cluster in place of the mask: see
+[Ask Palette if the change repaves](../../commands/compare/repave.md#the-console-address-of-a-pack-of-virtual-machines).
+
 ## The export of a version
 
 Palette writes a profile version as one file: the export

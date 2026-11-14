@@ -132,14 +132,27 @@ fn reads_error(
         })
 }
 
-/// The error that Palette gave to the request `method` `path`: an HTTP error with its body as text.
-fn http_error(method: Method, path: &str, status: u16, body: &str) -> strata::Error {
-    strata::Error::Api {
-        method,
-        path: path.to_string(),
-        status,
-        body: body.to_string(),
-        retry_after: None,
+/// An HTTP error of Palette that the backend gives again: the same error for each check.
+#[derive(Debug, Clone)]
+struct KeptError {
+    status: u16,
+    /// The body as Palette sent it.
+    text: String,
+    /// True when an earlier answer to the client proved the key: see [`strata::Error::Api`].
+    key_proved: bool,
+}
+
+impl KeptError {
+    /// The error that Palette gave to the request `method` `path`.
+    fn error(&self, method: Method, path: &str) -> strata::Error {
+        strata::Error::Api {
+            method,
+            path: path.to_string(),
+            status: self.status,
+            body: self.text.clone(),
+            retry_after: None,
+            key_proved: self.key_proved,
+        }
     }
 }
 
@@ -154,9 +167,8 @@ enum Kept {
     /// a validate route, such as a profile of another cloud type with HTTP 500. A check that names
     /// the code of a 5xx in `refusal_codes` reads that 5xx too, and no other check does.
     Answer {
-        status: u16,
-        /// The body as Palette sent it.
-        text: String,
+        /// The status and the body as Palette sent them, for a check that does not read them.
+        error: KeptError,
         /// The body as an object, so a program reads `.body.message` either way. A body that is
         /// not JSON, such as a plain-text 404 of the gateway, is an object with the text as its
         /// message.
@@ -170,10 +182,10 @@ impl Kept {
     /// an error for a check that does not.
     fn read_by(&self, method: Method, path: &str, refusal_codes: &[String]) -> Result<()> {
         match self {
-            Kept::Answer { status, text, body }
-                if !reads_error(method, path, *status, Some(body), refusal_codes) =>
+            Kept::Answer { error, body }
+                if !reads_error(method, path, error.status, Some(body), refusal_codes) =>
             {
-                Err(http_error(method, path, *status, text).into())
+                Err(error.error(method, path).into())
             }
             _ => Ok(()),
         }
@@ -186,9 +198,9 @@ impl Kept {
                 status: if body.is_null() { 204 } else { 200 },
                 body: body.clone(),
             },
-            Kept::Answer { status, body, .. } => Response {
+            Kept::Answer { error, body } => Response {
                 ok: false,
-                status: *status,
+                status: error.status,
                 body: body.clone(),
             },
         }
@@ -209,9 +221,9 @@ pub struct LiveBackend<'a, A: PaletteApi> {
     palette: Option<&'a A>,
     no_exec: bool,
     kept: RefCell<BTreeMap<String, Kept>>,
-    /// The denials of the key, by the key of `kept`. Each holds the status and the body of a request
-    /// that Palette refused with HTTP 401 or 403. See [`refuses_the_key`].
-    refused: RefCell<BTreeMap<String, (u16, String)>>,
+    /// The denials of the key, by the key of `kept`. Each holds the error of a request that Palette
+    /// refused with HTTP 401 or 403. See [`refuses_the_key`].
+    refused: RefCell<BTreeMap<String, KeptError>>,
 }
 
 impl<'a, A: PaletteApi> LiveBackend<'a, A> {
@@ -248,8 +260,8 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
             kept.read_by(method, path, refusal_codes)?;
             return Ok(read(kept));
         }
-        if let Some((status, text)) = self.refused.borrow().get(&key) {
-            return Err(http_error(method, path, *status, text).into());
+        if let Some(error) = self.refused.borrow().get(&key) {
+            return Err(error.error(method, path).into());
         }
         let answer = match method {
             Method::Get => api.get_json(path),
@@ -263,6 +275,7 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
                 status,
                 body: text,
                 retry_after,
+                key_proved,
             }) => {
                 // the body is parsed one time, for the refusal and for the answer
                 let parsed = serde_json::from_str::<Value>(&text).ok();
@@ -271,9 +284,12 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
                 // known, and a check names the code of any other route in `refusal_codes`.
                 if !reads_error(method, &path, status, parsed.as_ref(), refusal_codes) {
                     if refuses_the_key(status) {
-                        self.refused
-                            .borrow_mut()
-                            .insert(key, (status, text.clone()));
+                        let error = KeptError {
+                            status,
+                            text: text.clone(),
+                            key_proved,
+                        };
+                        self.refused.borrow_mut().insert(key, error);
                     }
                     return Err(strata::Error::Api {
                         method,
@@ -281,13 +297,21 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
                         status,
                         body: text,
                         retry_after,
+                        key_proved,
                     }
                     .into());
                 }
                 let body = parsed
                     .filter(Value::is_object)
                     .unwrap_or_else(|| serde_json::json!({ "message": text }));
-                Kept::Answer { status, text, body }
+                Kept::Answer {
+                    error: KeptError {
+                        status,
+                        text,
+                        key_proved,
+                    },
+                    body,
+                }
             }
             Err(e) => return Err(e.into()),
         };
@@ -355,7 +379,7 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
     fn send(&self, method: Method, path: &str, body: Option<&Value>) -> strata::Result<Value> {
         let read = |kept: &Kept| match kept {
             Kept::Value(value) => Ok(value.clone()),
-            Kept::Answer { status, text, .. } => Err(http_error(method, path, *status, text)),
+            Kept::Answer { error, .. } => Err(error.error(method, path)),
         };
         match self.ask(method, path, body, &[], read) {
             Ok(answer) => answer,
@@ -440,7 +464,13 @@ impl Backend for FixtureBackend {
         if !(200..300).contains(&status)
             && !reads_error(method, path, status, Some(&response.body), refusal_codes)
         {
-            return Err(http_error(method, path, status, &response.body.to_string()).into());
+            // a fixture has no key, so no answer proves one
+            let error = KeptError {
+                status,
+                text: response.body.to_string(),
+                key_proved: false,
+            };
+            return Err(error.error(method, path).into());
         }
         Ok(response)
     }

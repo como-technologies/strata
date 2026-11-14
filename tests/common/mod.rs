@@ -1209,6 +1209,21 @@ pub fn manifest_content<'a>(snap: &'a strata::snapshot::Snapshot, name: &str) ->
         .map(|m| m.content.as_str())
 }
 
+/// Make sure that no file in `dir`, which a `save_dir` wrote, holds a text of `secrets`.
+pub fn assert_no_saved_file_holds(dir: &Path, secrets: &[&str]) {
+    for file in fs::read_dir(dir).unwrap() {
+        let path = file.unwrap().path();
+        let text = fs::read_to_string(&path).unwrap();
+        for secret in secrets {
+            assert!(
+                !text.contains(secret),
+                "{} holds {secret}: {text}",
+                path.display()
+            );
+        }
+    }
+}
+
 // ---- the refs and the listings -----------------------------------------------------------------
 
 /// The ref of the cluster `uid`.
@@ -1221,28 +1236,6 @@ pub fn cluster_ref(uid: &str, profile: Option<&str>, pending: bool) -> strata::r
         profile: profile.map(str::to_string),
         pending,
     }
-}
-
-/// The answer of Palette to the cluster listing for a key whose roles in the project `lab` do not
-/// give `cluster.list`. It is HTTP 500, not 403, with the code of [`Denial::Project`].
-///
-/// [`Denial::Project`]: strata::api::codes::Denial::Project
-pub fn clusters_denied() -> String {
-    error_body(
-        strata::api::codes::Denial::Project.as_str(),
-        &project_denied_message("lab"),
-    )
-}
-
-/// The answer of Palette to [`TAG_FILTER_LISTING`] for a user with no role that gives
-/// `filter.list`: HTTP 403 with the code of [`Denial::Route`].
-///
-/// [`Denial::Route`]: strata::api::codes::Denial::Route
-pub fn filters_denied() -> String {
-    error_body(
-        strata::api::codes::Denial::Route.as_str(),
-        &access_denied_message("filter.list", "tenant"),
-    )
 }
 
 /// The listing that `options` asks for, from the in-memory Palette `api`, read at `t1` with no

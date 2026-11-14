@@ -34,13 +34,14 @@ use common::{
     UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
     behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
     cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
-    cluster_route, cluster_variables_route, clusters_denied, edge_host_route, error_body,
-    fetch_examples, filters_denied, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_roles_message, no_template, no_variables,
-    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
-    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, template, variables_route,
+    cluster_route, cluster_validate_repave_route, cluster_variables_route, clusters_denied,
+    edge_host_route, error_body, fetch_examples, filters_denied, group_resolved_values_route,
+    group_route, listing, manifest_route, manifests_route, no_manifests, no_repave,
+    no_roles_message, no_template, no_variables, operation_forbidden_message, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, project_listing, rbacs_answer,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, system_rbacs, template, template_validate_repave_route, variables_route,
     write_record, write_yaml,
 };
 
@@ -9406,7 +9407,7 @@ fn repave_route() -> String {
 
 /// The route that asks Palette if a change of the cluster fixture repaves it.
 fn validate_repave_route() -> String {
-    format!("{}/validate/repave", cluster_route(CLUSTER_UID))
+    cluster_validate_repave_route(CLUSTER_UID)
 }
 
 /// The route that asks Palette if it takes the packs of a change of the cluster fixture.
@@ -9918,6 +9919,7 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
             status: 500,
             body: refusal.clone(),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     });
@@ -10758,7 +10760,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     assert!(PaletteRepave::from_palette("c", &answer, ImpactLevel::MayRepave).agrees);
     let r = PaletteRepave::from_palette("c", &answer, ImpactLevel::InPlace);
     assert!(!r.agrees);
-    let none = serde_json::json!({"isRepaveRequired": false});
+    let none = no_repave();
     assert!(!PaletteRepave::from_palette("c", &none, ImpactLevel::Repave).agrees);
 
     let mut d = ops::compare(&cluster, &target, "t1");
@@ -10927,15 +10929,12 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
     // on the route of a cluster in a template, Palette compares nothing and answers no repave; it
     // answers for the template on the route of the template
-    let template_route = "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave";
+    let template_route = template_validate_repave_route("tmpl-1");
     let api = cluster_api
         .clone()
+        .with(post(&validate_repave_route()), no_repave())
         .with(
-            post(&validate_repave_route()),
-            serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-        )
-        .with(
-            post(template_route),
+            post(&template_route),
             serde_json::json!({"isRepaveRequired": true, "reasons": [{
                 "code": "PackUpgraded", "message": "Pack 'kubernetes' is upgraded",
                 "pack": {"current": {"name": "kubernetes"}}}]}),
@@ -11193,10 +11192,9 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
         governed.posted().is_empty(),
         "no POST goes out for the template"
     );
-    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {}).with(
-        "POST /v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave",
-        serde_json::json!({"isRepaveRequired": false, "reasons": []}),
-    );
+    let template_route = template_validate_repave_route("tmpl-1");
+    let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {})
+        .with(post(&template_route), no_repave());
     let unchanged = pending_of(&api, None);
     let d = ops::compare(&cluster, &unchanged, "t1");
     let r = ops::palette_repave(
@@ -11211,7 +11209,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     assert_eq!(
         api.posted(),
         [(
-            "/v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave".to_string(),
+            template_route,
             serde_json::json!({"profiles": [{"uid": infra}, {"uid": addon}], "isUpgradeNow": false})
         )]
     );
@@ -17899,6 +17897,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
             status: 500,
             body: body.clone(),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
@@ -17990,6 +17989,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
             status,
             body: body_of(code),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     };
