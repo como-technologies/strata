@@ -1354,6 +1354,11 @@ field, a value, an input, or an option is in the sections above.
 
 ### For a user of the CI drop-ins
 
+- **A note of `--dry-run` of `verify-report.sh` and `upstream-report.sh` has new words.** It
+  says what a run with no `--dry-run` does. A note said "would close the open issue", and now
+  says "a run with no --dry-run closes the open issue". Its "if any" is now "if one is open".
+  "would open or update" is now "a run with no --dry-run opens or updates". A script that reads
+  the notes on standard error must read the new words.
 - **`verify-report.sh` and `upstream-report.sh` quote the new message of the error `api`.** It
   names the code and the message of Palette. Before, it quoted the JSON of the body.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor

@@ -4307,13 +4307,17 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
     assert!(out.contains("**Result:** CHANGED"), "{out}");
     let err = text(&o.stderr);
     assert!(
-        err.contains("would close the open issue for releases/a.json, if any"),
+        err.contains(
+            "a run with no --dry-run closes the open issue for releases/a.json, if one is open"
+        ),
         "{err}"
     );
     assert!(
-        err.contains("would open or update the issue for releases/b.json"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json"),
         "{err}"
     );
+    // each note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!err.contains("would"), "{err}");
 }
 
 /// The criterion of #832: the issue of a record that strata could not check shows the error as
@@ -4457,7 +4461,7 @@ fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_dig
     assert!(out.contains("**UNVERIFIED**: pack addon/x"), "{out}");
     let err = text(&o.stderr);
     assert!(
-        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 cannot be verified (releases/b.json)"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json: strata verify: lab-profile@1.3.0 cannot be verified (releases/b.json)"),
         "{err}"
     );
     assert!(
@@ -4580,7 +4584,7 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
         "{out}"
     );
     assert!(
-        err.contains("would open or update the issue for releases/b.json: strata verify: lab-profile@1.3.0 drifted"),
+        err.contains("a run with no --dry-run opens or updates the issue for releases/b.json: strata verify: lab-profile@1.3.0 drifted"),
         "{err}"
     );
     assert!(!out.contains("could not check"), "{out}");
@@ -5187,13 +5191,15 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
         ["behind --quiet --format json --no-impact releases/*.json"]
     );
     assert!(text(&o.stdout).starts_with("<!-- strata-behind: csi-aws-ebs reg-public -->"));
-    assert!(
-        text(&o.stderr).contains("would open or update the issue for csi-aws-ebs in Public Repo")
-    );
+    assert!(text(&o.stderr).contains(
+        "a run with no --dry-run opens or updates the issue for csi-aws-ebs in Public Repo"
+    ));
     assert!(
         text(&o.stderr)
-            .contains("would close the open issue for kubernetes in Public Repo, if any")
+            .contains("a run with no --dry-run closes the open issue for kubernetes in Public Repo, if one is open")
     );
+    // each note says what a run with no --dry-run does, in ASD-STE100 (#879)
+    assert!(!text(&o.stderr).contains("would"), "{}", text(&o.stderr));
 }
 
 /// The criterion of #854: the issue of a pin that is behind a newer minor version names the next

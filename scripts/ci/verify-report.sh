@@ -262,7 +262,7 @@ while IFS= read -r record <&3; do
       unchanged=$((unchanged + 1))
       recorded=$(jq -r '.recordedAt // ""' <<<"$record")
       if [ -n "$dry" ]; then
-        note "would close the open issue for $path, if any"
+        note "a run with no --dry-run closes the open issue for $path, if one is open"
         continue
       fi
       number=$(issue_for "$path")
@@ -312,7 +312,7 @@ while IFS= read -r record <&3; do
   if [ -n "$dry" ]; then
     cat "$body"
     echo
-    note "would open or update the issue for $path: $title"
+    note "a run with no --dry-run opens or updates the issue for $path: $title"
     continue
   fi
   number=$(issue_for "$path")
