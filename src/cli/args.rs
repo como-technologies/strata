@@ -141,7 +141,7 @@ pub(crate) struct OutputArgs {
     /// The same as --format json
     #[arg(long, conflicts_with = "format")]
     pub(crate) json: bool,
-    /// Color the report: auto, always, or never
+    /// Color the report and the messages: auto, always, or never
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1,
           default_missing_value = "always", hide_possible_values = true)]
     pub(crate) color: ColorMode,

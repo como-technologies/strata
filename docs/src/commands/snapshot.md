@@ -35,7 +35,8 @@ takes:
   with `strata candidate <ref>@draft -o <file>`. Then give that file to
   `--from-candidate`. If Palette refuses the packs, strata exits `2` with the
   error `palette-refuses`, and writes no record. If Palette accepts them, the
-  last line says so, after the record.
+  last line says so after the record, as the answer of a check:
+  `palette    accepts`.
 - `--format` and `--json` need `--dir`: they set the format of the report of
   a set. A record is always JSON.
 - A cluster record holds the value of each variable that nobody marked

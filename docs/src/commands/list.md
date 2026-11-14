@@ -265,7 +265,7 @@ profiles, unless you name the kinds.
 
 `--detail` reads the same packs with no filter, so every profile version shows
 what it carries: see [Read each row deeper](#read-each-row-deeper). A pack
-under another tag name shows the tag: `24.04 (tag LTS__24.x)`. A version
+under another tag name shows the tag after its ref: `(tag LTS__24.x)`. A version
 that strata cannot read stays in the list with its error, because strata
 cannot tell if it carries the pack.
 
@@ -274,10 +274,13 @@ every project.
 
 ## The registry of each pack
 
-Each pack row ends with the registry that the profile version takes the pack
-from. Two registries can have the same pack version, and a profile pins one of
-them. Here `aws-stack@1.1.18` takes `csi-aws-ebs` 1.65.0 from `Palette
-Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`:
+Each pack row gives the layer and the ref of the pack:
+`pack:<registry>/<name>@<version>`, with the registry that the profile version
+takes the pack from. The ref is in single quotes when it holds a space, so a
+copy pastes back into a shell. Two registries can have the same pack version,
+and a profile pins one of them. Here `aws-stack@1.1.18` takes `csi-aws-ebs`
+1.65.0 from `Palette Registry`, and `aws-stack@1.1.1` takes it from
+`Public Repo`:
 
 ```text
 {{#include ../output/pack-which-registry.txt}}
@@ -287,11 +290,11 @@ The pack ref of a profile names its registry by the uid alone. So strata reads
 the names from the registry listing of Palette, with one more request for the
 command. A registry that the key cannot see shows its uid. A registry whose
 name holds a `/` shows its uid too, because a `pack:` ref cannot take that
-name. A `pack:` ref takes the text of the row: see
-[Refs](../reference/refs.md). A pack with no registry, such as
-a manifest pack, ends at its version. The JSON gives `registryUid` and
-`registry` on each pack. With `--format markdown`, the pack ends with `in`
-and the registry.
+name. See [Refs](../reference/refs.md). No `pack:` ref reads a pack with no
+registry, such as a manifest pack, so its row reads
+`pack <name> <version> (no registry)`. The JSON gives `registryUid` and
+`registry` on each pack. With `--format markdown`, the pack ends with `in` and
+the registry. See [The kind of each thing](../reference/formats.md#the-kind-of-each-thing).
 
 When the registry listing answers HTTP 404 or 405, strata reads it as no
 listing, and each pack row shows the uid. Each other error, such as HTTP 403,

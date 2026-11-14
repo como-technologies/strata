@@ -1004,7 +1004,7 @@ mark `disabled`. These are the stages and the options:
 | `bump-pair` | 0 | #166, #623: the newest version of `kubernetes` is two minor versions or more above the pin. `bump.updateChecks.skippedMinor` of `behind` says so. |
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
-| `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
+| `bump-text-says` | 0 | #166, #634: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on cluster <cluster>`, or `on clusters <clusters>`, as the last line of the pin. |
 | `bump-text-skip` | 0 | #623: `behind` prints `kubernetes <pin> -> <newest> skips a minor version: Palette refuses the update with K8sUpgradeNotSupported` under the bump. No result yet: no live window ran the check. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
@@ -1394,7 +1394,7 @@ registry of the example, and no cluster. It empties the registry at its end.
 | `behind-own` | 0 | #79: the pack at 1.0.0 is behind 1.1.0, with the impact of the bump |
 | `behind-csi` | 0 | #79: `csi-aws-ebs` 1.63.1 is behind the newer versions of the Public Repo, and the bump names `IDENTITY` |
 | `behind-release` | 0 | #79: each pin of the release version is checked |
-| `behind-says` | 0 | #79: the report line is `~ [addon] <pack> 1.0.0 <registry> behind: 1.1.0` |
+| `behind-says` | 0 | #79, #634: the report line is `~ [addon] pack:<registry>/<pack>@1.0.0  behind: 1.1.0`, with the ref of the pin |
 | `report-1`, `report-1-issues`, `report-1-first` | 1, 0, 0 | #79: `upstream-report.sh` opens one issue for each pack behind, and each says that this run is the first to find it behind |
 | `push-1.2.0`, `sync-3` | 0 | a third version arrives |
 | `behind-since`, `behind-arrived` | 1, 0 | #79: `--since` the first run names 1.2.0 as arrived, and nothing of `csi-aws-ebs` |

@@ -16,7 +16,11 @@ The examples use the project `dev`, whose records hold `aws-stack@1.0.0` and
 ```
 
 Exit `1`: a pin is behind. Each line is one pack version that the records pin
-from one registry. A pin that is behind names the newer versions, newest first.
+from one registry. The line names it by its pack ref,
+`pack:<registry>/<name>@<version>`, in single quotes when it holds a space. A
+copy of the ref pastes back into `strata compare` or `strata snapshot`.
+
+A pin that is behind names the newer versions, newest first.
 `bump to` names what a move to the newest version does: the impact level and
 the change flags of `compare pack:<name>@<pinned> pack:<name>@<newest>`. See
 [Change flags and impact](../reference/impact.md).
@@ -164,7 +168,8 @@ the tenant holds 2.0.0:
 ```
 
 Exit `1`: a profile version is behind, as a pin is. The line `[profile]` names the
-profile, the version that the records hold, and the scope of the version. Then it
+version that the records hold by its ref, `<name>@<version>`, and the scope of the
+version. Then it
 names the newer versions, newest first. The line under it gives the time that
 Palette created the newest version. Palette gives no time of the publish.
 
@@ -270,11 +275,13 @@ Read the chain from the top of each pin to its end:
 
 1. **The pack.** The line of the pin names the newer versions of the pack in the
    registry.
-2. **The profile version.** `aws-stack@1.1.0 carries csi-aws-ebs@1.65.0` names the
-   newest version of the profile that pins a newer version of the pack. The version
-   of the pack can be between the pinned version and the newest one, as 1.65.0 is
-   here. `no newer version of aws-stack@1.0.0 carries a newer cert-manager` says
-   that the change stopped at the registry.
+2. **The profile version.** `aws-stack@1.1.0 carries pack:csi-aws-ebs@1.65.0`
+   names the newest version of the profile that pins a newer version of the pack.
+   The version of the pack can be between the pinned version and the newest one,
+   as 1.65.0 is here. The ref of the pack names no registry, because the newer
+   version can take the pack from another registry. `no newer version of
+   aws-stack@1.0.0 carries a newer version of the pack cert-manager` says that the
+   change stopped at the registry.
 3. **The cluster.** The lines `pinned by` name the records that pin the old
    version. When a newer profile version carries the pack, the definition of the
    cluster is the step that waits: move it to that profile version.
@@ -378,7 +385,8 @@ Palette can refuse a move: see
 for the rule.
 
 For each pin that is behind, `behind` asks Palette about the move to the newest
-version. The answer is under the `bump to` line:
+version. The answer is the answer of a check, so it is the last line of the lines
+of the pin, after the lines `pinned by`. A terminal shows it in bold:
 
 ```text
 {{#include ../output/behind-refused.txt}}
@@ -387,11 +395,12 @@ version. The answer is under the `bump to` line:
 - `palette accepts`: Palette gives no error for the packs of the move. The route
   does not check the version of Kubernetes, so a line of strata can follow: see
   [A move that skips a minor version](#a-move-that-skips-a-minor-version).
-- `palette refuses: <code> on <clusters>`: Palette gives the error `<code>`, and
-  names the clusters in its message. `DependencyPackUpgradeNotSupported` is the
-  code of a move that the pack does not allow.
-- `palette refuses: <code> <pack>: <message>`: the message names no cluster that
-  runs the version, so the line gives the message of Palette.
+- `palette refuses: <code> on cluster <cluster>`: Palette gives the error
+  `<code>`, and names the cluster in its message. Two clusters or more read
+  `on clusters <a> and <b>`. `DependencyPackUpgradeNotSupported` is the code of
+  a move that the pack does not allow.
+- `palette refuses: <code> for pack <pack>: <message>`: the message names no
+  cluster that runs the version, so the line gives the message of Palette.
 - `palette gave no answer: <message>`: a request failed, or strata did not ask
   a record of another project. The pin stays behind, and the exit does not
   change. Strata prints `palette accepts` only when it asked each record and
@@ -476,7 +485,8 @@ Here the record pins `kubernetes` 1.34.9, and the newest version is 1.36.2:
 {{#include ../output/behind-skip.txt}}
 ```
 
-The line under the answer of Palette says that the move skips a minor version.
+The line under the `bump to` line says that the move skips a minor version. The
+answer of Palette stays the last line of the pin.
 Palette refuses the update with `K8sUpgradeNotSupported`, HTTP 400. The line
 names the next step: the newest version of the next minor version in the
 registry, here 1.35.6. When the registry has no such version, the line ends with

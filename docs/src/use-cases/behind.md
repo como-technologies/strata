@@ -123,8 +123,9 @@ Kubernetes, and refuses a move of more than one. `aws-stack@1.1.20` pins
 {{#include ../output/behind-skip.txt}}
 ```
 
-The line under `palette accepts` says that the move skips a minor version, and
-names the next step, 1.35.6. Move the clusters to a version that pins 1.35.6
+The line under the bump says that the move skips a minor version, and names the
+next step, 1.35.6. The line `palette accepts` comes last, as the answer of the
+check of Palette. Move the clusters to a version that pins 1.35.6
 first. Then move them to 1.36.2. See
 [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
 

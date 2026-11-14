@@ -10,8 +10,8 @@ use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
     CLUSTER_LISTING, ESC, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, Stand, UID_A,
-    UID_B, against_closed_port, isolate_palette, listed, project_listing, read_json, schema,
-    schema_values, snapshot_from_raw, strata_command, strip_ansi, write_record,
+    UID_B, against_closed_port, error_text, isolate_palette, listed, project_listing, read_json,
+    schema, schema_values, snapshot_from_raw, strata_command, strip_ansi, write_record,
 };
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
@@ -743,12 +743,12 @@ fn a_note_is_dim_an_error_is_red_and_with_no_color_each_keeps_its_prefix() {
     let red = run(&[&error[..], &["--color=always"]].concat());
     assert_eq!(red.code, 2);
     assert!(
-        red.err.starts_with(&format!("{ESC}[31mstrata: error: ")),
+        red.err.starts_with(&format!("{ESC}[31m{}", error_text(""))),
         "{:?}",
         red.err
     );
     let plain = run(&error);
-    assert!(plain.err.starts_with("strata: error: "), "{}", plain.err);
+    assert!(plain.err.starts_with(&error_text("")), "{}", plain.err);
     assert_eq!(strip_ansi(&red.err), plain.err);
     // NO_COLOR wins over CLICOLOR_FORCE on standard error too, and --no-color wins over both
     let none = run_in(&error, &[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")], &[]);
@@ -2314,7 +2314,7 @@ fn snapshot_validate_of_a_draft_is_a_usage_error_that_names_the_draft_and_the_ca
         &["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"],
     );
     assert_eq!(r.code, 2, "{}", r.err);
-    assert!(r.err.starts_with("strata: error: --validate "), "{}", r.err);
+    assert!(r.err.starts_with(&error_text("--validate ")), "{}", r.err);
     assert!(r.err.contains("(aws-stack@1.1.1@draft)"), "{}", r.err);
     assert!(
         r.err.contains("`strata candidate aws-stack@1.1.1@draft`"),
@@ -2404,8 +2404,10 @@ fn snapshot_macros_names_the_refs_it_takes_and_refuses_another_before_any_reques
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
             r.err.trim_end(),
-            "strata: error: --macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
-             clustergroup:<group>",
+            error_text(
+                "--macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
+                 clustergroup:<group>"
+            ),
             "{reference}"
         );
     }
@@ -2493,11 +2495,11 @@ fn snapshot_of_a_set_with_no_dir_says_what_records_each_cluster_before_any_reque
         assert_eq!(r.code, 2, "{reference}: {}", r.err);
         assert_eq!(
             r.err.trim_end(),
-            format!(
-                "strata: error: {reference} names a set of clusters, and this command reads one: \
+            error_text(&format!(
+                "{reference} names a set of clusters, and this command reads one: \
                  `strata snapshot {reference} --dir DIR` records each cluster, and \
                  `strata list clusters` lists them"
-            ),
+            )),
             "{reference}"
         );
     }
@@ -2521,7 +2523,7 @@ fn snapshot_validate_with_no_profile_to_ask_about_is_a_usage_error_before_any_re
         );
         assert_eq!(r.code, 2, "{args:?}: {}", r.err);
         assert!(
-            r.err.starts_with("strata: error: --validate "),
+            r.err.starts_with(&error_text("--validate ")),
             "{args:?}: {}",
             r.err
         );
@@ -2729,10 +2731,10 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
     let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
     assert_eq!(code, 2, "{text}");
     assert!(
-        text.ends_with(
-            "palette    refuses: PackDependencyNotFound for pack cert-manager: a pack is missing\n\
-             strata: error: Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record\n"
-        ),
+        text.ends_with(&format!(
+            "palette    refuses: PackDependencyNotFound for pack cert-manager: a pack is missing\n{}\n",
+            error_text("Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record")
+        )),
         "{text}"
     );
     assert!(!text.contains("Palette accepts"), "{text}");

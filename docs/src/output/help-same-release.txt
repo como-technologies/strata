@@ -26,7 +26,7 @@ Options:
       --json
           The same as --format json
       --color [<COLOR>]
-          Color the report: auto, always, or never [default: auto]
+          Color the report and the messages: auto, always, or never [default: auto]
       --no-color
           The same as --color=never
       --compact

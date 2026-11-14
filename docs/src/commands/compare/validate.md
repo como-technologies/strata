@@ -15,10 +15,12 @@ pack than the cluster runs:
 {{#include ../../output/validate-refuses-lines.txt}}
 ```
 
-Each `palette    refuses` line gives one error of Palette: the code, the pack,
-and the sentence of Palette. Strata does not check the packs: Palette does.
-The answer does not change the result of the comparison: here it exits `1`
-because the roots differ. When Palette gives no error, the line is `accepts`:
+Each `palette    refuses` line gives one error of Palette: the code, the pack
+after the words `for pack`, and the sentence of Palette. The lines are the
+answer of the check, so they come last, after the report. Strata does not check
+the packs: Palette does. The answer does not change the result of the
+comparison: here it exits `1` because the roots differ. When Palette gives no
+error, the line is `accepts`:
 
 ```text
 {{#include ../../output/validate-accepts-lines.txt}}

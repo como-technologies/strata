@@ -471,12 +471,7 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         let raw = palette
             .fetch_subject(SubjectKind::Cluster, instance.as_str(), &Progress::silent())
             .map_err(port_error)?;
-        let reference = Ref::Cluster {
-            uid: instance.to_string(),
-            profile: None,
-            pending: false,
-        }
-        .to_string();
+        let reference = Ref::cluster(instance.as_str()).to_string();
         // Each one is the copy that the cluster holds, and not the published profile. Palette
         // lists the profiles of a cluster in an order that differs between two clusters built
         // from one definition, so the order says nothing. The copies are by name (knurl D49).

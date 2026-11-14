@@ -76,8 +76,9 @@ from. The error names the command that shows it:
 {{#include ../output/pack-which-registry.txt}}
 ```
 
-Each pack row ends with its registry. `aws-stack@1.1.18` takes `csi-aws-ebs`
-from `Palette Registry`, and `aws-stack@1.1.1` takes it from `Public Repo`. A
+Each pack row gives the ref of the pack, with its registry. `aws-stack@1.1.18`
+takes `csi-aws-ebs` from `Palette Registry`, and `aws-stack@1.1.1` takes it
+from `Public Repo`. A copy of the ref pastes back into `strata compare`. A
 record of the version names the registry too, beside its uid:
 
 ```text

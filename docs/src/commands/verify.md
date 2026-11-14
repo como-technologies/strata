@@ -81,6 +81,8 @@ person added a note to the entry, the line ends with `; note: <note>`. When the
 log holds no write since the record, the line is
 `who: no audit entry since the record`.
 
+The writes come before the verdict, so the verdict stays the last line.
+
 For a cluster record, strata reads the log by the uid of the cluster alone, with
 no kind. Palette logs the create and the delete of a virtual cluster under the
 kind `virtualCluster`, and not `spectrocluster`. The uid finds the entries of
@@ -217,7 +219,7 @@ their count. The JSON gives these words in `subject`, and keeps the joined
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
 | `DRIFT: <subject> has the content recorded <time>, but macro <m> has another value now` | A record of a version, a cluster, or a cluster group with the digests of its macro values (`snapshot --macros`). Palette gives a macro another value now. The root is the same. | `1` |
 | `DRIFT: <subject> has the content recorded <time>, but pack <key> names image <b> now, not <a>` | A pack names another machine image in `imageId` now. The root is the same. See [The OS pack names a new machine image](../use-cases/os-image.md). | `1` |
-| `INVALID: Palette marks pack <key> invalid now (<reason>)`, under the verdict | Palette marks a pack of the version invalid now: the registry deleted its tag. It does not change the verdict. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). | the exit code of the verdict |
+| `INVALID: Palette marks pack <key> invalid now (<reason>)`, above the verdict | Palette marks a pack of the version invalid now: the registry deleted its tag. It does not change the verdict. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). | the exit code of the verdict |
 | `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show`. The line ends with `; --allow-no-digest accepts it`. | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
 
 A verdict of a cluster record names `cluster <c> running <v>`. A verdict of an

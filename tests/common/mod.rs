@@ -1756,3 +1756,13 @@ pub fn strip_ansi(s: &str) -> String {
     }
     out
 }
+
+/// The line of an error of strata with no color, `strata: error: <message>`, as
+/// [`strata::term::progress::error_line`] writes it.
+pub fn error_text(message: &str) -> String {
+    strata::term::progress::error_line(
+        strata::TOOL_NAME,
+        message,
+        &strata::term::color::Paint::off(),
+    )
+}

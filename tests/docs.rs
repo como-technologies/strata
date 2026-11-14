@@ -18,6 +18,7 @@ use common::{
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
+use strata::render::palette_line;
 
 fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
@@ -6395,9 +6396,9 @@ fn no_output_of_the_book_names_the_folder_of_the_runner() {
     }
     assert!(found.is_empty(), "the folder of the runner is in {found:?}");
     let report = read(&outputs.join("unknown-value-report-invalid.txt"));
-    assert!(
-        report.contains("strata: error: ~/.local/state/strata/strata-unknown.jsonl: line 1 is not")
-    );
+    assert!(report.contains(&common::error_text(
+        "~/.local/state/strata/strata-unknown.jsonl: line 1 is not"
+    )));
 }
 
 /// S9: a page includes the output of each step that the wave added to what a user sees. A row has
@@ -7523,10 +7524,10 @@ fn kind_faults(run: &StrataRun) -> Vec<String> {
             }
         }
         Some("compare" | "verify") if !run.has("--summary") => {
-            if let Some(heading) = run.lines.iter().find(|l| l.contains("  ->  ")) {
-                if heading.starts_with("pack ") || heading.contains("  ->  pack ") {
-                    fault(heading);
-                }
+            if let Some(heading) = run.lines.iter().find(|l| l.contains("  ->  "))
+                && (heading.starts_with("pack ") || heading.contains("  ->  pack "))
+            {
+                fault(heading);
             }
             // the rows of the packs come under a heading that names their kind
             let first_row = run.lines.iter().position(|l| pack_row(l));
@@ -7571,16 +7572,17 @@ fn each_row_that_strata_prints_in_an_output_of_the_book_names_the_kind_of_its_th
 fn answer_faults(run: &StrataRun) -> Option<String> {
     let last = run.last()?;
     // an error stops the check, and it is the last line
-    if last.starts_with(&format!("{TOOL_NAME}: error: ")) {
+    if last.starts_with(&common::error_text("")) {
         return None;
     }
     let args: Vec<&str> = run.args.iter().map(String::as_str).collect();
-    let answers: &[&str] = match args.as_slice() {
-        ["verify", ..] if run.many_records() => &[" record: ", " records: "],
-        ["verify", ..] => &["OK: ", "DRIFT: ", "UNVERIFIED: "],
-        ["same-release", ..] => &["SAME RELEASE: ", "NOT THE SAME RELEASE: "],
-        ["compare", ..] if run.has("--validate") || run.has("--repave") => &["palette    "],
-        ["snapshot", ..] if run.has("--validate") => &["palette    accepts "],
+    let (palette, accepts) = (palette_line(""), palette_line("accepts "));
+    let answers: Vec<&str> = match args.as_slice() {
+        ["verify", ..] if run.many_records() => vec![" record: ", " records: "],
+        ["verify", ..] => vec!["OK: ", "DRIFT: ", "UNVERIFIED: "],
+        ["same-release", ..] => vec!["SAME RELEASE: ", "NOT THE SAME RELEASE: "],
+        ["compare", ..] if run.has("--validate") || run.has("--repave") => vec![&palette],
+        ["snapshot", ..] if run.has("--validate") => vec![&accepts],
         _ => return None,
     };
     let answered = answers

@@ -174,7 +174,7 @@ impl Ref {
     }
 
     /// `cluster:<uid>`: each profile that the cluster runs now.
-    pub(crate) fn cluster(uid: &str) -> Ref {
+    pub fn cluster(uid: &str) -> Ref {
         Ref::Cluster {
             uid: uid.to_string(),
             profile: None,

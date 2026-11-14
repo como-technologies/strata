@@ -1842,7 +1842,7 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         // two records of profile versions: no cluster, and the commands to use
         (
             [h.a.clone(), h.b.clone()],
-            "strata: error: --repave needs one side that is a cluster, and both sides are records with \
+            "--repave needs one side that is a cluster, and both sides are records with \
              no cluster. Palette answers only for a cluster, so give the cluster in place of one \
              record: strata compare cluster:<name> <record> --repave. Plain compare of the two \
              records prints the impact\n",
@@ -1850,12 +1850,12 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         // a candidate is not in Palette
         (
             [cluster.clone(), candidate],
-            "strata: error: --repave needs the profile side to be a profile version that Palette holds, with its uid",
+            "--repave needs the profile side to be a profile version that Palette holds, with its uid",
         ),
         // two clusters: a pair that the script once passed on to strata
         (
             [cluster, billing],
-            "strata: error: --repave needs one side that is a cluster and one that is a profile version, or",
+            "--repave needs one side that is a cluster and one that is a profile version, or",
         ),
     ];
     for ([a, b], refusal) in &pairs {
@@ -1867,7 +1867,8 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         );
         assert!(o.status.success(), "{}", text(&o.stderr));
         let said = text(&o.stderr);
-        assert!(said.contains(refusal), "strata says why:\n{said}");
+        let refusal = common::error_text(refusal);
+        assert!(said.contains(&refusal), "strata says why:\n{said}");
         assert!(
             said.contains("pr-comment: --repave got no answer, so the table decides"),
             "{said}"
