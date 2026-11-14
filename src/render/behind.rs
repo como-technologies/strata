@@ -4,8 +4,8 @@ use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::impl_texts;
 use crate::model::validation::answer_lines;
 use crate::ops::{BehindReport, Pin, PinnedBy, ProfilePin};
-use crate::reference::{Ref, name_version};
-use crate::text::{and_list, name_or_uid, shell_words};
+use crate::reference::{Ref, name_version, pack_registry};
+use crate::text::{and_list, shell_words};
 
 /// The state of a pin or of a profile version in the report of `behind`, as its status names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,11 +185,12 @@ pub(crate) fn listed_since(pin: &Pin) -> Option<String> {
 /// command that gives what a move to it does.
 ///
 /// An example is `next patch 1.36.4: strata compare <pin> <patch>`, with the pack ref of each
-/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. Strata sends no request for the
-/// line. None when the pin has no such patch: see [`Pin::next_patch`].
+/// side, such as `'pack:Public Repo/kubernetes@1.36.2'`. The ref names the registry as
+/// [`pack_registry`] gives it, so that it parses. Strata sends no request for the line. None when
+/// the pin has no such patch: see [`Pin::next_patch`].
 pub(crate) fn next_patch_line(pin: &Pin) -> Option<String> {
     let patch = pin.next_patch.as_deref()?;
-    let registry = name_or_uid(&pin.registry, &pin.registry_uid);
+    let registry = pack_registry(&pin.registry, &pin.registry_uid);
     let pack = |version: &str| {
         Ref::Pack {
             registry: Some(registry.to_string()),

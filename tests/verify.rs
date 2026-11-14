@@ -7762,6 +7762,48 @@ fn a_pack_in_several_registries_needs_the_registry_named() {
 }
 
 #[test]
+fn the_refusal_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
+    let mirrored = csi_summary("pk-65-mirror", "1.65.0", "reg-mirror", "sha256:ccc", CSI_65);
+    let mirror_entity =
+        serde_json::json!({"layer": "csi", "tags": [{"tag": "1.65.0", "packUid": "pk-65-mirror"}]});
+    // Palette takes a `/` in the name of a registry
+    let api = serve_registry(
+        vec![mirrored],
+        &[
+            ("reg-public", public_entity()),
+            ("reg-mirror", mirror_entity),
+        ],
+    )
+    .with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+            {"name": "team/mirror", "uid": "reg-mirror", "kind": "oci"},
+        ]}),
+    );
+
+    let err = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap_err();
+    let Error::PackInSeveralRegistries { registries, .. } = &err else {
+        panic!("unexpected {err}");
+    };
+    assert_eq!(registries, &["Public Repo", "reg-mirror"], "{err}");
+    // the ref that the refusal asks for parses, and records the pack of that registry
+    let named = format!("pack:{}/csi-aws-ebs@1.65.0", registries[1]);
+    let mirror = snapshot_of(&api, &named).unwrap();
+    assert_eq!(mirror.packs[0].hash.upstream_raw, "sha256:ccc");
+    assert_eq!(mirror.packs[0].registry_name, "team/mirror");
+    // a ref ends the registry at the first `/`, because a pack name can hold one too
+    assert_eq!(
+        Ref::parse_with("pack:team/mirror/csi-aws-ebs@1.65.0", |_| false),
+        Ref::Pack {
+            registry: Some("team".into()),
+            name: "mirror/csi-aws-ebs".into(),
+            version: "1.65.0".into(),
+        }
+    );
+}
+
+#[test]
 fn verify_rechecks_a_pack_version_against_its_registry() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();

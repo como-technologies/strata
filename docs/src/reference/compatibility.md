@@ -1121,8 +1121,8 @@ field, a value, an input, or an option is in the sections above.
   [The registry of each pack](../commands/list.md#the-registry-of-each-pack).
 - **A record, `compare`, `same-release`, and `list --packs` read the registry listing.** This
   is one more request, `GET /v1/registries/metadata`, when a pack names a registry. `compare`
-  and `same-release` send it for each side that Palette answers. A snapshot of a set sends it
-  one time for each project of the set. A key needs the permission
+  and `same-release` send it for each side that Palette answers, and `snapshot` of a set for
+  each project of the set. A key needs the permission
   `packRegistry.list` for it, which each built-in role with `clusterProfile.get` holds. A key
   without it gets HTTP 403, and the command exits `2` with the error `api`. Before, these
   commands did not read the listing. See
@@ -1130,6 +1130,10 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **`pack-in-several-registries` gives a registry whose name holds a `/` by its uid.** Before,
+  `registries` and the message gave the name, and a ref with that name named another registry.
+  A script that looks for such a name in `registries` must look for the uid. See
+  [Refs](refs.md#rules).
 - **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
   it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
   `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
@@ -1139,8 +1143,8 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
-- **`registry` of a pack of `/v1/profiles` is the name that the record gives.** Before, a pack
-  that no pin of `behind` holds had the uid of its registry there. A record of strata 0.33.0
+- **A pack of `/v1/profiles` names the registry of the record.** Before, `registry` held the
+  uid for a pack that no pin of `behind` holds. A record of strata 0.33.0
   and before names no registry, so its packs keep the earlier value. A program that reads the
   uid there must read `packs[].registryUid` of the record. See
   [The summary](../development/observer.md#the-summary).

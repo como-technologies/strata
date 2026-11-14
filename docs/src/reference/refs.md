@@ -130,6 +130,12 @@ A ref names the thing that a command reads.
   under one version, so the ref must name one. `strata list --pack <name>`
   names the registry that each profile version takes the pack from, and a
   record names it in `packs[].registryName`.
+  - Give the uid of a registry whose name holds a `/`. The ref ends the
+    registry at the first `/`, because the name of a pack can hold one too.
+    Palette takes a `/` in both names: see
+    [The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack).
+  - `behind` and the error `pack-in-several-registries` give such a registry
+    by its uid.
 - **`<cluster>`.** A uid, or the name of one cluster in the scope. A name that
   two clusters have is the error `cluster-name-ambiguous`, which lists their
   uids. A name that no cluster has is `cluster-not-found`, which lists the

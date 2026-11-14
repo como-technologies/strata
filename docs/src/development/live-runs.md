@@ -1197,7 +1197,9 @@ repository, a Helm repository with credentials, an OCI registry with basic
 auth, and a Spectro pack registry. The variable also adds a Palette registry
 over each. The script removes each at its end.
 [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind)
-states what it shows.
+and
+[The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack)
+state what it shows.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1209,6 +1211,11 @@ states what it shows.
 | `packs-zarf`, `packs-zarf-says` | 0 | #128: `strata packs` of the Zarf pack says `no digest` on the row of `1.0.0`, and `no digests` in the heading |
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
+| `slash-registry`, `slash-listing`, `slash-listed` | 0 | #853: Palette takes a second registry over the Spectro pack registry, with the name `strata-live/packs`, and the registry listing names it. No result yet: no live window ran these checks. |
+| `slash-sync` | 0 | Palette reads the registry `strata-live/packs`. No result yet: no live window ran this check. |
+| `slash-several`, `slash-several-uid` | 2, 0 | #853: a ref of the pack with no registry is `pack-in-several-registries`. The field `registries` gives `strata-live/packs` by its uid, and never by its name. No result yet: no live window ran these checks. |
+| `slash-record`, `slash-named` | 0 | #853: the ref `pack:<uid>/strata-live-pack@1.0.0` records the pack, and the record names the registry `strata-live/packs` and its uid. No result yet: no live window ran these checks. |
+| `slash-delete` | 0 | the registry `strata-live/packs` goes at the end of stage 1, so the later stages see one registry with the pack |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
 | `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |
