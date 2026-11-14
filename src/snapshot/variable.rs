@@ -156,8 +156,8 @@ pub struct VariableOption {
     /// True when the option is the default of a dropdown variable. A record has the field only
     /// when it is true, and a record of strata 0.33 and before does not have it.
     ///
-    /// A dropdown variable with no default value takes the label of this option. The hash does not
-    /// cover the mark, so the root of a record of an older release stays.
+    /// Palette accepts an update that gives no value to a required dropdown variable with such an
+    /// option. The hash does not cover the mark, so the root of a record of an older release stays.
     #[serde(
         default,
         deserialize_with = "flag_or_null",

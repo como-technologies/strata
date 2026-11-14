@@ -669,7 +669,7 @@ check each rule for a move, and print a line under the answer of Palette:
 | Rule | Code |
 | --- | --- |
 | One update moves the pack of the `k8s` layer one minor version at most, and not to a higher major version. Strata compares the version of the pin, or the version that the cluster runs, with the version of the move. | `K8sUpgradeNotSupported` |
-| Each required variable has a value or a default value. A dropdown variable can take its default option. Strata names each required variable with no default value and no default option that the move adds. | `InvalidVariable` |
+| Each required variable has a value or a default value. Palette also accepts a dropdown variable with a default option. Strata names each required variable with no default value and no default option that the move adds. | `InvalidVariable` |
 
 Palette is the owner of each rule. When a validate route checks a rule, strata
 removes its check and reads the answer of the route. See
@@ -744,18 +744,19 @@ these answers on the live tenant.
 ## The body of a swap
 
 `tenant.sh repave` asks `POST /v1/spectroclusters/<uid>/validate/repave` if a
-move of a cluster to another profile version repaves it. Palette reads the body
-as the whole list of the profiles of the cluster, and reads no
-`replaceWithProfile`: see
+move of a cluster to another profile version repaves it. The route answers for
+a cluster with only the profiles that the body names. It gives the same answer
+with and without `replaceWithProfile` in the body: see
 [the repave route](./validate-routes.md#post-v1spectroclustersuidvalidaterepave).
 So the script sends the body of a swap. The body names each profile of the
 cluster by its uid, with the new version and its `packValues` in place of the
 old version.
 
 An earlier script sent another body: the old version alone, with
-`replaceWithProfile` and the `packValues` of the new version. Palette reads
-that body as the old version with the values of the new version. A pack with a
-new tag then comes from the old version. Stage 2 and stage 4 of
+`replaceWithProfile` and the `packValues` of the new version. The route answers
+for that body as for the old version with the values of the new version. The
+tags of the old version stay: see
+[The sent tag](./validate-routes.md#the-sent-tag). Stage 2 and stage 4 of
 [tag-only.sh](../../development/live-runs.md#tag-onlysh) ask about a change of
 the tag of the OS pack with each body:
 
@@ -766,9 +767,10 @@ the tag of the OS pack with each body:
 | 1.0.2 back to 1.0.0 | No live run shows it yet. | No repave. |
 
 The three versions hold one pack version of the OS pack, with one pack uid and
-the same values. Palette compares the version and the values of each pack of
-the OS and Kubernetes layers. So the code of Palette shows no repave for the
-body of a swap too.
+the same values. The route gives a reason for a pack of the OS or Kubernetes
+layer with another version or other values. It also gives one for a pack that
+one side does not hold: see [the codes](../../commands/compare/repave.md). So
+the code of Palette shows no repave for the body of a swap too.
 
 ## A variable in a field that repaves
 
@@ -793,16 +795,17 @@ about such a move:
 | The same, with `strata_mode` `644` | The same repave. |
 
 So the value that the body gives a variable does not change the answer. The
-code of Palette shows why: the route reads no `variables[]` of the body. So
-`compare --repave` sends no `variables[]`.
+code of Palette shows the same: the route gives the same answer with and
+without `variables[]` in the body. So `compare --repave` sends no
+`variables[]`.
 
 The earlier body asks about 1.0.0 with the values of 1.0.1, and not about the
 move: see [The body of a swap](#the-body-of-a-swap). So its answer is not the
 answer for the move. For the body of a swap, the code of Palette shows the
-target of `compare --repave`: the published 1.0.1. The sent values are the
-published values of 1.0.1. Stage 8
-of [repave.sh](../../development/live-runs.md#repavesh) asks with each body:
-`examples/live/repave.sh 8`.
+same answer as for the body of `compare --repave`. The sent values are the
+published values of 1.0.1, so the two bodies ask about the same profile
+version. Stage 8 of [repave.sh](../../development/live-runs.md#repavesh) asks
+with each body: `examples/live/repave.sh 8`.
 
 ## Macros
 

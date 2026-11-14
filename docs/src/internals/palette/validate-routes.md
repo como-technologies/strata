@@ -309,7 +309,8 @@ code of Palette, not from a live run:
 - A profile that the cluster does not run is the published profile, with the
   sent values over it.
 - The target holds no profile that the body does not name.
-- Palette reads no `replaceWithProfile` and no `variables[]` of the body.
+- The route gives the same answer with and without `replaceWithProfile` and
+  `variables[]` in the body.
 
 Then Palette compares the cluster with the target, and gives a reason for each
 pack that repaves the cluster.
@@ -539,13 +540,14 @@ version at a time.
 ### A value of each required variable
 
 - The update gives each variable of the new profile version a value: the value
-  of the body, or the default value of the variable. A dropdown variable with
-  no default value takes the label of its default option, the option with
-  `default: true`. Palette reads no option of a variable of another input
-  type. The code of Palette shows it; no live run shows it yet.
+  of the body, or the default value of the variable.
 - Palette refuses a required variable with no value, and changes nothing. The
   answer is HTTP 500 and `InvalidVariable`. The message ends with
   `can't be empty for required variable '<name>'`.
+- Palette accepts a required dropdown variable with no default value when it
+  has a default option, the option with `default: true`. It refuses a required
+  variable of another input type with no default value, also with a default
+  option. The code of Palette shows it; no live run shows it yet.
 - No validate route checks a variable. The body of the profile routes has no
   field for one.
 

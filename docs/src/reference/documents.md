@@ -173,8 +173,9 @@ profile, or pack version.
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
   - `options[].default`, only when it is `true`: the option is the default of
-    the variable. A dropdown variable with no default value takes the label of
-    this option. A record of strata 0.33 and before does not have the field.
+    the variable. Palette accepts an update that gives no value to a required
+    dropdown variable with such an option. A record of strata 0.33 and before
+    does not have the field.
     It is outside the root, so the root of such a record stays. `behind` and
     `compare --validate` read it: see
     [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).

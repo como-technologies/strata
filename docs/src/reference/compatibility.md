@@ -1344,9 +1344,8 @@ field, a value, an input, or an option is in the sections above.
 - **`behind` and `compare --validate` name a required dropdown variable with no default
   option.** Before, strata named no required variable that has options. Now it names a
   required dropdown variable with no default value and no option with the mark `default`. It
-  also names a required variable of another input type with options and no default value,
-  because Palette reads no option of such a variable. The line and `requiredVariables` keep
-  their form. See
+  also names a required variable of another input type with a default option and no default
+  value, because Palette refuses it. The line and `requiredVariables` keep their form. See
   [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
 - **A record keeps the `default` mark of an option of a variable.** The default option has
   `variables[].options[].default: true`, and another option has no field. The root does not

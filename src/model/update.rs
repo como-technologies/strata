@@ -85,12 +85,11 @@ impl RequiredVariables {
     }
 }
 
-/// True when Palette gives the variable `v` a value at an update that gives it none.
+/// True when Palette accepts an update that gives the variable `v` no value.
 ///
-/// Palette takes the default value. A dropdown variable with no default value takes the label of
-/// its default option. Palette reads no option of a variable of another input type. A record of
-/// strata 0.33 and before holds no default mark, so a dropdown variable of such a record takes no
-/// default option here.
+/// Palette accepts a default value. It accepts a default option only for a dropdown variable. A
+/// record of strata 0.33 and before holds no default mark, so a dropdown variable of such a
+/// record has no default option here.
 fn takes_a_default(v: &Variable) -> bool {
     !v.default_value.is_empty()
         || (InputType::from_text(&v.input_type) == Some(InputType::Dropdown)
@@ -314,7 +313,7 @@ mod tests {
         let to = [
             dropdown("size", false),
             dropdown("zone", true),
-            // Palette reads no option of a text variable, also an option with the mark
+            // Palette refuses a text variable with no value, also with an option with the mark
             variable(json!({"name": "label", "required": true, "options": options(true)})),
             // a dropdown variable with a default value takes it
             variable(

@@ -92,8 +92,8 @@ the owner of each rule: see
 
 - **A required variable with no default value.** The body of the route holds no
   value of a variable. Palette refuses an update that gives such a variable no
-  value, with `InvalidVariable` and HTTP 500. A dropdown variable with no
-  default value takes its default option, the option with the mark `default`.
+  value, with `InvalidVariable` and HTTP 500. Palette accepts such a dropdown
+  variable when it has a default option, the option with the mark `default`.
   Strata names each such variable with no default value and no default option
   that the profile version adds. The move of the cluster `payments` to
   `aws-stack@1.1.1` adds `platform_owner`: see

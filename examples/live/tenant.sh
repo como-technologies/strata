@@ -24,8 +24,8 @@
 #                              version TARGET_UID in place of CURRENT_UID: Palette's own check,
 #                              given TARGET_UID's pack values (not its manifests). The body names
 #                              each profile of the cluster by its uid, with TARGET_UID in place of
-#                              CURRENT_UID. The route reads the body as the whole list of the
-#                              profiles, as a PUT of the profiles of a cluster does, and reads no
+#                              CURRENT_UID. The route answers for a cluster with only the
+#                              profiles of the body, and gives the same answer with and without
 #                              replaceWithProfile. REPAVE_FORM=replace sends the body of the
 #                              earlier script: CURRENT_UID alone, with replaceWithProfile
 #                              TARGET_UID and the pack values of TARGET_UID. Only the live check
