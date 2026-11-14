@@ -24,9 +24,10 @@ function route() {
 }
 
 // put writes markup to one place of the page. It is the one write of markup in the scripts of the page.
+//
 // put writes markup into an element. In a browser it parses the markup in a template, and patches the nodes of the element in
-// place: each node that stays, stays, so a read of the observer does not flicker, and the scroll, the focus, an open card, and the
-// text of a filter stay. With no DOM, as in the tests with node, it writes the markup into the element itself.
+// place. Each node that stays, stays. So a read of the observer does not flicker, and the scroll, the focus, an open card, and
+// the text of a filter stay. With no DOM, as in the tests with node, it writes the markup into the element itself.
 function put(dest, markup) {
   const inPlace = typeof document.createElement === "function";
   const el = inPlace ? document.createElement("template") : dest;

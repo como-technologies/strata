@@ -109,8 +109,8 @@ type view struct {
 	causes *causes
 	// registries maps the uid of a registry to its name.
 	registries map[string]string
-	// newest maps a pack of a profile to the newest version that a pin names, and carried to the newer
-	// version of the profile that carries a newer version of the pack.
+	// newest maps a pack of a profile to the newest version that a pin names. carried maps a pack of a
+	// profile to the newer version of the profile that carries a newer version of the pack.
 	newest  map[string]string
 	carried map[string]Carried
 	// newerProfiles holds the profiles that a pin that is behind names.
