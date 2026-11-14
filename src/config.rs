@@ -108,9 +108,8 @@ impl Config {
 
     /// The digest of the address and the key. It names one key at one address of Palette.
     ///
-    /// It holds no part of the key, so a set or a cache of the process can keep it. One address
-    /// can serve many tenants, and a tenant can have many keys. So the address alone, or the key
-    /// alone, names no tenant.
+    /// It holds no part of the key, so a set or a cache of the process can keep it. A client with
+    /// another key, or at another address, has another digest.
     pub(crate) fn key_digest(&self) -> String {
         sha256_hex(&format!("{}\n{}", self.base_url, self.api_key))
     }
