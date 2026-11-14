@@ -39,6 +39,28 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
+# The jq functions that write a text into markdown, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
+# `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
+# as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
+# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
+# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
+# `text::code_block`, so that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def cell: marks | html | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
+
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
 # set of the chosen host.
@@ -183,12 +205,12 @@ fi
 title="Approve the first-seen records of the observer"
 {
   printf '<!-- strata-observer-records -->\n'
-  printf 'The observer of the cluster `%s` recorded what each of its profiles holds, ' "$cluster"
+  printf 'The observer of the cluster %s recorded what each of its profiles holds, ' "$(md span "$cluster")"
   printf 'when it first saw the cluster. No person approved that content.\n\n'
   printf 'Review each record. Merge this request to approve the records. Then the pipeline '
   printf 'publishes them with the revision of the merge, and the page of the observer removes '
   printf 'the notice.\n\nThe records:\n\n'
-  for f in "${files[@]}"; do printf -- '- `%s`\n' "$f"; done
+  for f in "${files[@]}"; do printf -- '- %s\n' "$(md span "$f")"; done
 } > "$work/body.md"
 
 quietly git add -- "${files[@]}" || die "git cannot add the records"

@@ -147,14 +147,15 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
 /// `second reading: 3 of 3 clusters read`, or why strata did not do the second reading.
 ///
 /// `--list-only` asked for none, an app profile has none, or the search or the listing failed.
-/// `code` puts the flag in the form of the report.
-pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String) -> String {
+/// The line holds no code span and no other mark of markdown of strata. So the markdown escapes the
+/// whole line as one quoted text.
+pub(crate) fn second_reading_line(read: &ClustersRead) -> String {
     // The consumer list of a profile is empty on an error too, so the second reading says how
     // far it got.
     let what = if read.skipped && !read.reason.is_empty() {
         format!("not done ({})", read.reason)
     } else if read.skipped {
-        format!("not done ({})", code("--list-only"))
+        "not done (--list-only)".to_string()
     } else if let Some(e) = &read.error {
         format!("not done ({})", error_message(e))
     } else {

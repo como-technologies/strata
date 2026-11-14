@@ -298,7 +298,7 @@ impl Renderer for MarkdownRenderer {
 
     fn verdict(&self, d: &Diff) -> Option<String> {
         let v = d.verify.as_ref()?;
-        let parts = verdict_parts(v, d.same, &d.a, code_span);
+        let parts = verdict_parts(v, d.same, &d.a);
         let mut line = format!(
             "\n**{}**: {}",
             parts.word(),
@@ -408,10 +408,7 @@ impl Renderer for MarkdownRenderer {
         );
         let second = format!(
             "{}.",
-            capitalized(&markdown_cell(&second_reading_line(
-                &r.clusters_read,
-                code_span
-            )))
+            capitalized(&markdown_cell(&second_reading_line(&r.clusters_read)))
         );
         let edge = format!("{}.", capitalized(&markdown_cell(&edge_hosts_line(r))));
         if r.consumers.is_empty() {
