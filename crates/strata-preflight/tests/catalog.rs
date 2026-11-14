@@ -57,7 +57,8 @@ const AZURE_TYPES: &str = "GET /v1/clouds/azure/regions/eastus/instancetypes?clo
 /// What Palette answers to a key that cannot read a route. A live run reads a 403 as an `ERROR`,
 /// and the fixture backend does too.
 fn forbidden() -> serde_json::Value {
-    serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}})
+    serde_json::json!({"ok": false, "status": 403,
+        "body": {"code": strata::api::codes::Denial::Route.as_str(), "message": "no"}})
 }
 
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the

@@ -11,8 +11,8 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
-    PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    CreateRule, Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE,
+    OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
     PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
@@ -30,16 +30,17 @@ use common::CommandExt;
 use common::{
     APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
     EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING,
-    PackFixture, REGISTRY_LISTING, SECRET_VALUE, UID_A, UID_ADDONS, UID_B, WITH_IMPACT,
-    app_profile_route, app_tiers_route, behind_of, candidate_snapshot, cluster_manifests_route,
-    cluster_namespaces_route, cluster_rbacs_route, cluster_ref, cluster_repave_route,
-    cluster_resolved_values_route, cluster_route, cluster_variables_route, edge_host_route,
-    fetch_examples, group_resolved_values_route, group_route, listing, manifest_route,
-    manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, project_listing, read_json,
-    resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing, serve_profile,
-    serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template,
-    variables_route, write_record, write_yaml,
+    PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B,
+    WITH_IMPACT, app_profile_route, app_tiers_route, behind_of, candidate_snapshot,
+    cluster_manifests_route, cluster_namespaces_route, cluster_rbacs_route, cluster_ref,
+    cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
+    clusters_denied, edge_host_route, error_body, fetch_examples, filters_denied,
+    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
+    no_manifests, no_roles_message, no_template, no_variables, operation_forbidden_message,
+    pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
+    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
+    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
+    strata_command, template, variables_route, write_record, write_yaml,
 };
 
 #[test]
@@ -549,6 +550,32 @@ fn a_500_that_palette_gives_for_a_refusal_is_not_retried() {
     assert_eq!(err.class(), FailureClass::Terminal);
     assert_eq!(api.calls(&profile_path()), 1, "one attempt and no retry");
     assert!(slept.borrow().is_empty());
+}
+
+#[test]
+fn a_500_whose_code_says_that_access_is_denied_is_not_retried() {
+    // the answers of Palette to a key with no role in the project that gives the read, to a role
+    // without the permission on one object, and to a user with no role at all
+    for body in [
+        clusters_denied(),
+        error_body(
+            OPERATION_FORBIDDEN_CODE,
+            &operation_forbidden_message("cluster.list"),
+        ),
+        error_body(Denial::NoRole.as_str(), &no_roles_message("barney")),
+    ] {
+        let api = MemoryApi::new().failing_n_times(CLUSTER_LISTING, 99, 500, &body);
+        let (retry, slept) = retrying(&api, 3);
+        let err = Palette::new(retry).cluster_listing().unwrap_err();
+        assert!(err.denial().is_some(), "{err}");
+        assert_eq!(err.class(), FailureClass::Terminal, "{body}");
+        assert_eq!(
+            api.calls(CLUSTER_LISTING),
+            1,
+            "one attempt and no retry: {body}"
+        );
+        assert!(slept.borrow().is_empty(), "{body}");
+    }
 }
 
 #[test]
@@ -5504,12 +5531,125 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
 }
 
 #[test]
-fn list_fails_when_a_listing_cannot_be_read() {
-    let api = MemoryApi::new().failing(PROFILE_LISTING, 401, "no key");
-    let err = listing(&api, &ListOptions::default()).unwrap_err();
-    assert_eq!(err.kind(), "api", "{err}");
+fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_denied() {
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [listed_profile("lab-profile", "1.9.0", "u2")]}),
+        )
+        .failing_n_times(CLUSTER_LISTING, 99, 500, clusters_denied())
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]));
+    let (retry, slept) = retrying(&api, 3);
+    let connect = |_: Option<&str>| Ok(Palette::new(&retry));
+    let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
+    let refs: Vec<&str> = l
+        .profiles
+        .iter()
+        .flatten()
+        .map(|p| p.reference.as_str())
+        .collect();
+    assert_eq!(refs, ["lab-profile@1.9.0"], "the profiles stay");
+    assert!(l.clusters.is_none(), "strata read no cluster");
+    let unread: Vec<String> = l.errors.keys().map(ToString::to_string).collect();
+    assert_eq!(unread, ["clusters"]);
+    let error = &l.errors[&Open::Known(ListKind::Clusters)];
+    assert_eq!(
+        (error["kind"].as_str(), error["status"].as_u64()),
+        (Some("api"), Some(500))
+    );
+    assert_eq!(l.exit_code(), 2);
+    // the code says that access is denied, so strata asks one time and does not wait
+    assert_eq!(api.calls(CLUSTER_LISTING), 1);
+    assert!(slept.borrow().is_empty());
+
+    let text = common::terminal().render_list(&l).unwrap();
+    assert!(text.contains("\n  lab-profile@1.9.0"), "{text}");
+    assert!(
+        text.ends_with(&format!(
+            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+             no role of the key in the project gives the access of the request)\n",
+            clusters_denied()
+        )),
+        "{text}"
+    );
+    let json = serde_json::to_value(&l).unwrap();
+    assert_eq!(json["errors"]["clusters"]["status"], 500);
+    assert!(json.get("clusters").is_none(), "{json}");
 }
 
+#[test]
+fn list_names_each_kind_that_it_could_not_read_and_fails_as_one_read_when_it_read_none() {
+    // the profiles answer, and the clusters do not
+    let expired = r#"{"code":"ExpiredApiKey"}"#;
+    let api = MemoryApi::new()
+        .with(PROFILE_LISTING, serde_json::json!({"items": []}))
+        .failing(CLUSTER_LISTING, 503, "busy");
+    let l = listing(&api, &ListOptions::default()).unwrap();
+    let unread: Vec<String> = l.errors.keys().map(ToString::to_string).collect();
+    assert_eq!(unread, ["clusters"]);
+    assert_eq!(l.exit_code(), 2);
+    let text = common::markdown().render_list(&l).unwrap();
+    assert!(
+        text.ends_with(&format!(
+            "Clusters: not read (GET {CLUSTER_LISTING} failed with HTTP 503: busy)\n\n"
+        )),
+        "{text}"
+    );
+    // no kind answers: the command fails with the error of the first kind, as one read does
+    let none = MemoryApi::new()
+        .failing(PROFILE_LISTING, 401, expired)
+        .failing(CLUSTER_LISTING, 401, expired);
+    let err = listing(&none, &ListOptions::default()).unwrap_err();
+    assert!(
+        matches!(&err, Error::Api { status: 401, path, .. } if path == PROFILE_LISTING),
+        "{err}"
+    );
+    // a listing that strata read gives exit 0
+    let read = MemoryApi::new()
+        .with(PROFILE_LISTING, serde_json::json!({"items": []}))
+        .with(CLUSTER_LISTING, serde_json::json!([]));
+    let l = listing(&read, &ListOptions::default()).unwrap();
+    assert!(l.errors.is_empty());
+    assert_eq!(l.exit_code(), 0);
+    // a saved tag filter that does not exist is no failed read: the command stops
+    let api = read.with(TAG_FILTER_LISTING, serde_json::json!({"items": []}));
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters],
+        query: ops::ClusterQuery {
+            tags: vec![],
+            filter: Some("nope".into()),
+        },
+        ..ListOptions::default()
+    };
+    let err = listing(&api, &options).unwrap_err();
+    assert_eq!(err.kind(), "filter-not-found");
+}
+
+#[test]
+fn list_filters_names_the_permission_that_the_role_of_the_key_does_not_give() {
+    let api = MemoryApi::new()
+        .with(PROJECT_LISTING, project_listing(&[("lab", "p1")]))
+        .failing(TAG_FILTER_LISTING, 403, filters_denied());
+    let options = ListOptions {
+        kinds: vec![ListKind::Filters],
+        ..ListOptions::default()
+    };
+    // the first request of the run: nothing proved the key, so the message names it too
+    let first = listing(&api, &options).unwrap_err().to_string();
+    assert!(
+        first.contains("; the role of the key does not give the permission 'filter.list'; check"),
+        "{first}"
+    );
+    // the lookup of a project answered first, as for `PALETTE_PROJECT`: the key is right
+    Palette::new(&api).project_uid_named("lab").unwrap();
+    let after = listing(&api, &options).unwrap_err().to_string();
+    assert!(
+        after.ends_with("; the role of the key does not give the permission 'filter.list'"),
+        "{after}"
+    );
+    assert!(!after.contains("PALETTE_API_KEY"), "{after}");
+}
 // ---- candidates ------------------------------------------------------------------------------
 
 fn never_connect() -> strata::Result<Palette<MemoryApi>> {
@@ -8353,9 +8493,9 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied","message":"no permission"}"#;
+    let denied = error_body(Denial::Route.as_str(), "no permission");
     let fault = r#"{"code":"InternalError"}"#;
-    for (status, body) in [(403, denied), (500, fault)] {
+    for (status, body) in [(403, denied.as_str()), (500, fault)] {
         // Palette ends a body with a newline: the reason has none
         let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
             profile_audits("t0"),
@@ -8400,11 +8540,11 @@ fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = r#"{"code":"AccessDenied"}"#;
+    let denied = format!(r#"{{"code":"{}"}}"#, Denial::Route.as_str());
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
         profile_audits("t0"),
         403,
-        denied,
+        denied.as_str(),
     );
     let s = common::verify_summary_with(&recorded, &api, &who_options());
     assert_eq!(s.summary.status, ops::RecordStatus::Drifted);
@@ -9391,8 +9531,9 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
         (raw, calls, slept.borrow().len())
     };
     // the answer that the code of Palette shows for each of the three routes
-    let refusal = format!(
-        r#"{{"code":"{OPERATION_FORBIDDEN_CODE}","message":"Operation 'cluster.get' is forbidden"}}"#
+    let refusal = error_body(
+        OPERATION_FORBIDDEN_CODE,
+        &operation_forbidden_message("cluster.get"),
     );
     let classes = routes.clone().map(|path| {
         Error::Api {
@@ -10823,7 +10964,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
             "Pack 'nginx' values override is forbidden",
         ),
     ] {
-        let body = serde_json::json!({"code": code, "message": message}).to_string();
+        let body = error_body(code, message);
         let api = cluster_api
             .clone()
             .failing_n_times(path.clone(), 99, status, body);
@@ -16156,7 +16297,7 @@ fn serve_fleet(api: MemoryApi, found: Vec<Value>, all: Vec<Value>) -> MemoryApi 
     )
     .with(CLUSTER_LISTING, Value::Array(all))
     .with(
-        "/v1/filters/metadata?filterType=tag",
+        TAG_FILTER_LISTING,
         serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
     )
     .with(
@@ -16436,7 +16577,7 @@ fn a_saved_tag_filter_is_translated_into_a_search_and_a_tenant_without_a_search_
     let bare = MemoryApi::new()
         .with(CLUSTER_LISTING, Value::Array(vec![payments, old, search]))
         .with(
-            "/v1/filters/metadata?filterType=tag",
+            TAG_FILTER_LISTING,
             serde_json::json!({"items": [{"metadata": {"name": "prod", "uid": "f1"}}]}),
         )
         .with(
@@ -17189,7 +17330,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
     let path = key.as_str();
     // Palette sends each refusal of the whole request as HTTP 500
     for code in ValidateRoute::ProfilePacks.refusal_codes() {
-        let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
+        let body = error_body(code, "refused");
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
             method: Method::Post,
@@ -17280,7 +17421,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     };
     let import = post(IMPORT_ROUTE);
     let refusal = |api: MemoryApi| ops::profile_validation(&Palette::new(&api), &candidate);
-    let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
+    let body_of = |code: &str| error_body(code, "refused");
     let class_of = |status: u16, code: &str| {
         Error::Api {
             method: Method::Post,

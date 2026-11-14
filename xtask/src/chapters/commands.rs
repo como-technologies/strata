@@ -7,16 +7,18 @@ use super::ids::{
     DEVELOP_1110, DEVELOP_BUILD, DEVELOP_SHORT, LEGACY, PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::{Edit, TENANT, profile_exists_message};
+use crate::common_palette::{access_denied_message, project_denied_message};
+use crate::tenant::{CLUSTER_LISTING, Edit, TAG_FILTER_LISTING, TENANT, profile_exists_message};
 use serde_json::json;
 use strata::api::PROJECT_UID_HEADER;
-use strata::api::codes::PROFILE_EXISTS_CODE;
+use strata::api::codes::{Denial, PROFILE_EXISTS_CODE};
 use strata::closed_set::ClosedSet;
 use strata::model::cluster_state::ClusterState;
 
 /// Run the chapters of the command pages.
 pub(super) fn run(r: &mut Runner) {
     list(r);
+    list_denied(r);
     unknown_value(r);
     scope(r);
     snapshot(r);
@@ -84,6 +86,23 @@ fn list(r: &mut Runner) {
     );
     r.step("list-pack-json", 0, false, r#"strata list --pack cilium --json | jq -r '.profiles[] | .ref as $ref | .packs[] | select(.name | contains("cilium")) | "\($ref) \(.name) \(.version)"'"#);
     list_edge_cases(r);
+}
+
+/// The chapter `list-denied`: a key whose roles do not give each read. Its role in the project
+/// gives the profiles and not the clusters. No role of its user gives the saved tag filters.
+fn list_denied(r: &mut Runner) {
+    r.chapter("list-denied", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    // the answer of Palette to a role in the project without cluster.list
+    let project = project_denied_message("dev");
+    r.tenant(|t| t.deny(DEV, CLUSTER_LISTING, Denial::Project, &project));
+    r.step("list-denied", 2, false, "strata list");
+    // the answer of Palette to a user with no role that gives filter.list
+    let filters = access_denied_message("filter.list", "tenant");
+    r.tenant(|t| t.deny(TENANT, TAG_FILTER_LISTING, Denial::Route, &filters));
+    r.step("list-denied-filters", 2, true, "strata list filters");
 }
 
 /// The chapter `unknown-value`: a read that gives a value which this release of strata does not

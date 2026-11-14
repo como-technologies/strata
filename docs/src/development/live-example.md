@@ -38,7 +38,7 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
-| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key, and runs only as `tiers.sh 6` (#276). Stage 7 sets an override on a machine pool of cluster A, and runs only as `tiers.sh 7` (#515). Stage 8 reads three routes of cluster A with a third key, and runs only as `tiers.sh 8` (#665). |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key (#276), and stage 7 sets an override on a machine pool of cluster A (#515). Stage 8 reads three routes of cluster A with a third key (#665), and runs `strata list` with it (#620). Stage 9 reads with a key that no tenant has (#620), and stages 6 to 9 each run only as `tiers.sh <N>`. |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78); a change of the CPU limit of the group (#110). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78); two app profiles whose tiers differ in the install order (#112). It needs no cluster. |
@@ -578,7 +578,8 @@ just live-registry-kinds                                                       #
 just live-tiers                                                                # #76, needs just live-up; builds and removes cluster B
 just live-tiers-limited                                                        # #276, needs just live-up and STRATA_LIVE_LIMITED_KEY; reads only
 just live-tiers-pool                                                           # #515, needs just live-up; sets an override on a pool of cluster A, and puts the pool back
-just live-tiers-narrow                                                         # #665, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
+just live-tiers-narrow                                                         # #665, #620, needs just live-up and STRATA_LIVE_NARROW_KEY; reads only
+just live-tiers-unknown-key                                                    # #620, needs just live-up; reads only, with a key that no tenant has
 just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows

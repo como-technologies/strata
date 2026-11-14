@@ -1,12 +1,13 @@
 //! The answers of the routes that check a change, and of the routes that report a repave.
 
 use serde_json::{Value, json};
-use strata::api::codes::OPERATION_FORBIDDEN_CODE;
+use strata::api::codes::Denial;
 
 use super::Tenant;
 use super::routes::{
     CLUSTERS, PROFILES, cluster_route, cluster_validate_route, profile_route, repave_route,
 };
+use crate::common_palette::{access_denied_message, error_body, operation_forbidden_message};
 
 /// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
 /// error with its `code` and its `message`.
@@ -23,12 +24,6 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
 /// validate route, and a PUT of a profile give it.
 pub fn profile_exists_message(name: &str, version: &str) -> String {
     format!("Cluster Profile with name '{name}' and version '{version}' already exists")
-}
-
-/// The message of the refusal of one object with [`OPERATION_FORBIDDEN_CODE`], to a role that
-/// does not give `permission`, such as `cluster.get`. The message names the permission two times.
-fn operation_forbidden_message(permission: &str) -> String {
-    format!("Operation '{permission}' is forbidden. Verify the user has '{permission}' permission")
 }
 
 /// The entries of `packs.results` for a move that a pack does not allow on the clusters of the
@@ -160,16 +155,11 @@ impl Tenant {
     ///
     /// `path` is the route of the role bindings, the namespaces, or the repave of a cluster. The
     /// code of Palette shows the answer to such a key: HTTP 500 with
-    /// [`OPERATION_FORBIDDEN_CODE`], and a message that names the permission. No live run shows it
+    /// the code of [`Denial::Object`], and a message that names the permission. No live run shows it
     /// yet.
     pub fn forbid(&self, project: &str, path: &str) {
-        self.deny(
-            project,
-            path,
-            500,
-            OPERATION_FORBIDDEN_CODE,
-            &operation_forbidden_message("cluster.get"),
-        );
+        let message = operation_forbidden_message("cluster.get");
+        self.deny(project, path, Denial::Object, &message);
     }
 
     /// Make Palette refuse the validate route of the create of `cloud` in `project`, as it does
@@ -177,25 +167,26 @@ impl Tenant {
     /// that creates nothing. Palette answers HTTP 403 with the code `AccessDenied`, and the
     /// message names the permission and its scopes.
     pub fn deny_create(&self, project: &str, cloud: &str) {
+        let message = access_denied_message("cluster.create", "project or tenant or system");
         self.deny(
             project,
             &cluster_validate_route(cloud),
-            403,
-            "AccessDenied",
-            "cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system",
+            Denial::Route,
+            &message,
         );
     }
 
-    /// Make Palette refuse `path` in `project` with HTTP `status`, `code`, and `message`. The
-    /// answer of the route goes, so each request gets the refusal.
-    fn deny(&self, project: &str, path: &str, status: u16, code: &str, message: &str) {
+    /// Make Palette refuse `path` in `project` with `denial`, as it refuses a key whose roles do
+    /// not give the access. The answer has the status of the denial, its code, and `message`.
+    ///
+    /// After the call, the route gives no document, so each request gets the refusal.
+    pub fn deny(&self, project: &str, path: &str, denial: Denial, message: &str) {
         let file = self.doc(project, path);
         if file.is_file() {
             std::fs::remove_file(&file).unwrap_or_else(|e| panic!("{}: {e}", file.display()));
         }
-        let refused = crate::palette::refused(&file, status);
-        let body = json!({"code": code, "message": message});
-        std::fs::write(&refused, body.to_string() + "\n")
+        let refused = crate::palette::refused(&file, denial.http_status());
+        std::fs::write(&refused, error_body(denial.as_str(), message) + "\n")
             .unwrap_or_else(|e| panic!("{}: {e}", refused.display()));
     }
 
@@ -338,7 +329,7 @@ impl Tenant {
             let (target, text) = match refusal {
                 Some((status, code, message)) => (
                     crate::palette::refused(&file, status),
-                    json!({"code": code, "message": message}).to_string() + "\n",
+                    error_body(code, message) + "\n",
                 ),
                 None => (file, body.map_or(String::new(), |b| b.to_string() + "\n")),
             };
@@ -350,8 +341,10 @@ impl Tenant {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common_palette::project_denied_message;
     use crate::palette::refused;
-    use crate::tenant::routes::rbacs_route;
+    use crate::tenant::routes::{CLUSTER_LISTING, TAG_FILTER_LISTING, rbacs_route};
+    use strata::api::codes::OPERATION_FORBIDDEN_CODE;
 
     #[test]
     fn a_read_without_cluster_get_gets_http_500_with_the_code_operation_forbidden() {
@@ -369,10 +362,40 @@ mod tests {
         let body: Value =
             serde_json::from_slice(&std::fs::read(refused(&answer, 500)).unwrap()).unwrap();
         assert_eq!(body["code"], OPERATION_FORBIDDEN_CODE);
-        assert_eq!(
-            body["message"],
-            "Operation 'cluster.get' is forbidden. Verify the user has 'cluster.get' permission"
-        );
+        assert_eq!(body["message"], operation_forbidden_message("cluster.get"));
+    }
+
+    #[test]
+    fn a_denial_of_a_route_gets_http_403_and_a_denial_in_a_project_gets_http_500() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), std::path::Path::new("/nowhere"));
+        let filters = access_denied_message("filter.list", "tenant");
+        tenant.deny("tenant", TAG_FILTER_LISTING, Denial::Route, &filters);
+        let project = project_denied_message("dev");
+        tenant.deny("p1", CLUSTER_LISTING, Denial::Project, &project);
+        for (scope, route, status, code, message) in [
+            (
+                "tenant",
+                TAG_FILTER_LISTING,
+                403,
+                Denial::Route.as_str(),
+                filters.as_str(),
+            ),
+            (
+                "p1",
+                CLUSTER_LISTING,
+                500,
+                Denial::Project.as_str(),
+                project.as_str(),
+            ),
+        ] {
+            let file = refused(&tenant.doc(scope, route), status);
+            let body: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+            assert_eq!(
+                (body["code"].as_str(), body["message"].as_str()),
+                (Some(code), Some(message))
+            );
+        }
     }
 
     #[test]

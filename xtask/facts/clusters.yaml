@@ -1135,7 +1135,8 @@ facts:
     kind: behavior
     reads:
       codes: [AccessDenied, OperationForbidden, NoRolesAssociated, ResourceAccessDenied]
-    stand_in: []
+    stand_in:
+      - v1/filters/metadata
     live:
       - observer-role.sh:control-<name>
       - observer-role.sh:role-<name>
@@ -1144,8 +1145,31 @@ facts:
       - observer-role.sh:command-role-behind
     pages:
       - internals/palette/clusters.md#the-role-that-a-key-needs
+      - reference/errors.md#refusals-that-strata-does-not-send-again
     code:
       - examples/live/observer-role.sh
+      - src/api/codes.rs
+      - src/error/hint.rs
+
+  - id: listing-access-denied
+    kind: behavior
+    reads:
+      codes: [ResourceAccessDenied]
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/dashboard/spectroclusters/meta
+    unchecked: The code of Palette shows HTTP 500 with the code ResourceAccessDenied on the cluster listing and on the profile listing, for a key whose roles in the project do not give cluster.list or clusterProfile.list. The message names the project by its name. The checks narrow-list, narrow-list-profiles, narrow-list-says, and narrow-list-once of tiers.sh stage 8 have no result yet.
+    pages:
+      - internals/palette/clusters.md#the-role-that-a-key-needs
+      - commands/list.md#a-kind-that-the-key-cannot-read
+      - internals/palette/limits.md#what-no-run-covers
+      - development/live-runs.md#tierssh
+    code:
+      - src/ops/list.rs
+      - src/api/codes.rs
+      - src/error/hint.rs
 
   # ---- clusters.md: The order of the profiles of a cluster
 

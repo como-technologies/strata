@@ -1161,6 +1161,27 @@ field, a value, an input, or an option is in the sections above.
   [Check many records](../commands/verify.md#check-many-records).
 - **`compare --help` gives the exit codes, and what does not change them.** The
   codes stay the same. See [What to expect](../commands/compare.md#what-to-expect).
+- **`list` keeps each kind that it read.** When strata cannot read one kind, such
+  as the clusters, `list` prints the other kinds. The line
+  `<kind>: not read (<error>)` follows them, and the exit is `2`. `--json` gives
+  the error of the kind under `errors` of `strata-list/1`. Before, `list` printed
+  nothing and gave the error alone. When strata reads no kind, the command fails
+  with the error of the first kind, as before. See
+  [A kind that the key cannot read](../commands/list.md#a-kind-that-the-key-cannot-read).
+- **The message of `api` names what Palette denied.** A denial, such as
+  `AccessDenied`, adds the permission or the project to the end of the message. A
+  `403` that is a denial names the key only when no earlier answer of the run
+  proved the key. The message has no blank between the body and its end, and the
+  kind and the fields stay. A script that matches the whole message must match
+  the new text. See
+  [Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
+- **Strata sends no 5xx with `ResourceAccessDenied` or `NoRolesAssociated`
+  again.** Before, it sent the request again up to `STRATA_RETRIES` times, and
+  waited between the requests. Each request got the same denial.
+- **The error of an answer holds no copy of the API key.** Strata masks each
+  whole copy of the key in the body with `********`. It does so before it
+  prints or keeps the error. See
+  [The role that a key needs](../internals/palette/clusters.md#the-role-that-a-key-needs).
 - **A preflight run with no counted check says `NOT COUNTED`, not `OK`.** See
   [The static tier](../commands/preflight/tiers.md#the-static-tier-no-key-no-network).
   - Only a counted check can fail a run: a preflight check of severity `fail`, or a probe with
@@ -1317,6 +1338,14 @@ field, a value, an input, or an option is in the sections above.
   the error of that request. `ops::list` reads it with `packs` or `pack`.
 - `ops::snapshot_from_dir` reads `registries.json` when the directory has it. `--raw-dir`
   writes that file.
+- `ops::Listing` has the new field `errors`. A struct literal must set it, and a
+  pattern with no `..` must name it. `ops::list` gives a listing with the error
+  of a kind that it could not read, in place of the error, when it read another
+  kind. `ops::ListKind` is a closed set of `closed_set::ClosedSet` with serde,
+  and `Listing::exit_code` is new.
+- `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
+  accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
+  one of them.
 - `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
 - `text::code_block` is new. It writes a fenced code block with a fence that no line of the text
   ends.

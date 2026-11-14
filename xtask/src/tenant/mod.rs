@@ -52,9 +52,9 @@ pub(crate) use registries::{BITNAMI, RegistrySync, registry_sync};
 #[cfg(test)]
 pub(crate) use routes::download_route;
 pub(crate) use routes::{
-    CLUSTER_LISTING, REGISTRY_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
-    group_route, manifests_route, pack_listing, profile_route, registry_summary_route,
-    variables_route,
+    CLUSTER_LISTING, REGISTRY_LISTING, TAG_FILTER_LISTING, app_profile_route,
+    app_tier_manifest_route, app_tiers_route, group_route, manifests_route, pack_listing,
+    profile_route, registry_summary_route, variables_route,
 };
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.

@@ -144,10 +144,12 @@ impl MemoryApi {
         if let Some((status, body)) = self.fail.get(key) {
             return Err(error(*status, body.clone(), None));
         }
-        canned
+        let answer = canned
             .get(key)
             .cloned()
-            .ok_or_else(|| error(404, r#"{"code":"ResourceNotFound"}"#.to_string(), None))
+            .ok_or_else(|| error(404, r#"{"code":"ResourceNotFound"}"#.to_string(), None))?;
+        super::prove_key();
+        Ok(answer)
     }
 }
 

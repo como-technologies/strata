@@ -528,6 +528,9 @@ impl Renderer for MarkdownRenderer {
         if let Some(filters) = &l.filters {
             list_filters(&mut o, filters);
         }
+        for line in super::list::unread_lines(l) {
+            o.push_str(&format!("{}\n\n", markdown_cell(&capitalized(&line))));
+        }
         Ok(o)
     }
 }

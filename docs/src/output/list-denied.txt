@@ -1,0 +1,8 @@
+$ strata list
+project dev (uid 64f20000000000000000a0d1)
+
+2 profiles
+  aws-stack@1.0.0  64e0000000000000000000a1  aws
+  aws-stack@1.1.1  64e0000000000000000000c3  aws
+
+clusters: not read (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: {"code":"ResourceAccessDenied","message":"Project 'dev' access denied"}; no role of the key in the project gives the access of the request)

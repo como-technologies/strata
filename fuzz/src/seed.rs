@@ -25,6 +25,7 @@ use strata::api::{RawCluster, RawProfile};
 use strata::ops;
 use strata::snapshot::{Snapshot, Tool};
 
+use crate::routes::error_body;
 use crate::support::{AT, cluster_files, profile_files, raw_profile, scratch, utf8};
 use crate::{
     behind, candidate, canon, config, download, mask, palette, preflight, record, reference,
@@ -575,30 +576,28 @@ fn answers() -> Vec<Vec<u8>> {
 
 // ---- the errors of Palette ------------------------------------------------------------------
 
-/// The body of an error of Palette with `code` and `message`.
-fn coded(code: &str, message: &str) -> String {
-    format!(r#"{{"code":"{code}","message":"{message}"}}"#)
-}
-
 /// An error of Palette as a validate route or another route gives it: the status, and the body.
 /// A code that `strata::api::codes` names comes from there.
 fn error_cases() -> Vec<(u16, String)> {
     vec![
         (
             403,
-            coded(PACK_FORBIDDEN_CODE, "the values of a pack are forbidden"),
+            error_body(PACK_FORBIDDEN_CODE, "the values of a pack are forbidden"),
         ),
         (
             403,
-            coded(
+            error_body(
                 PROJECT_SCOPE_CODE,
                 "the operation is not allowed in the project scope",
             ),
         ),
-        (409, coded(PROFILE_EXISTS_CODE, "lab-profile 1.0.0 exists")),
+        (
+            409,
+            error_body(PROFILE_EXISTS_CODE, "lab-profile 1.0.0 exists"),
+        ),
         (
             404,
-            coded(
+            error_body(
                 PACK_MACRO_UNDEFINED_CODE,
                 "macro spectro.var.x is not defined",
             ),
@@ -607,12 +606,12 @@ fn error_cases() -> Vec<(u16, String)> {
             422,
             r#"{"code":422,"message":"list items must be unique"}"#.into(),
         ),
-        (500, coded("InternalError", "try again")),
+        (500, error_body("InternalError", "try again")),
         (
             500,
             r#"{"code":["PackYaml"],"message":"the code is a list"}"#.into(),
         ),
-        (500, coded("PackYaml", "é 日本語 🙂")),
+        (500, error_body("PackYaml", "é 日本語 🙂")),
         (502, "<html><body>Bad Gateway</body></html>".into()),
         (429, String::new()),
         (401, r#"{"code":"Unauthorized"}"#.into()),
@@ -633,7 +632,7 @@ fn palette_errors() -> Vec<Vec<u8>> {
     cases.extend(
         codes
             .into_iter()
-            .map(|code| (500, coded(code, &format!("{code} on the pack")))),
+            .map(|code| (500, error_body(code, &format!("{code} on the pack")))),
     );
     cases
         .iter()
