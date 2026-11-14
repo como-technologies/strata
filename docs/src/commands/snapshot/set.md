@@ -11,7 +11,9 @@ the key can read. `--dir DIR` writes one record for each:
 Each record is `<cluster name>.json`, or `<name>.<uid>.json` when two clusters of
 the set have one name, and each cluster is read in its own project. Strata reads
 the registry listing one time for each project of the set, and each record of
-that project takes its names from it: see
+that project takes its names from it. When the listing answers HTTP 404 or 405,
+strata also reads it one time for the project, and the records name no
+registry: see
 [The registry of each pack](profile-version.md#the-registry-of-each-pack). A virtual
 cluster that carries the label is in the set: see
 [The virtual clusters](../list.md#the-virtual-clusters). `--prune`
