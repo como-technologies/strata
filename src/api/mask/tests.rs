@@ -329,17 +329,15 @@ fn the_mask_of_a_secret_takes_each_whole_copy_and_leaves_a_part_of_a_word() {
     let touched = format!(r#"{{"message":"a\n{key}\t{key}","query":"k%3D{key}","x":"{key}s"}}"#);
     assert_eq!(
         mask_secret(&touched, &key),
-        r#"{"message":"a\n********\t********","query":"k%3D********","x":"********s"}"#
+        format!(r#"{{"message":"a\n{MASKED}\t{MASKED}","query":"k%3D{MASKED}","x":"{MASKED}s"}}"#)
     );
+    // a key of LONG_SECRET characters is long, and a key with one character less is short
+    let text = "0123456789abcdefg";
     assert_eq!(
-        mask_secret("0123456789abcdefg", "0123456789abcdef"),
-        "********g"
+        mask_secret(text, &text[..LONG_SECRET]),
+        format!("{MASKED}{}", &text[LONG_SECRET..])
     );
-    // a key of 15 characters is short
-    assert_eq!(
-        mask_secret("0123456789abcdeg", "0123456789abcde"),
-        "0123456789abcdeg"
-    );
+    assert_eq!(mask_secret(text, &text[..LONG_SECRET - 1]), text);
     // a short key masks its whole copies only
     assert_eq!(
         mask_secret(&palette::error_body("PackNotFound", "key 'k'"), "k"),
@@ -353,45 +351,51 @@ fn the_mask_of_a_secret_takes_each_whole_copy_and_leaves_a_part_of_a_word() {
     assert_eq!(mask_secret("no key here", ""), "no key here");
 }
 
+/// The mask as strata writes it as a value of YAML: in quotes.
+fn quoted_mask() -> String {
+    format!("'{MASKED}'")
+}
+
 #[test]
 fn the_console_address_of_a_pack_of_virtual_machines_gets_the_mask_and_an_empty_value_or_a_variable_stays()
  {
     let vma = "vm-migration-assistant";
-    let pack = |name: &str, values: String| json!({"name": name, "values": values});
-    let mut cluster = json!({"spec": {"clusterProfileTemplates": [{"packs": [
-        pack(vma, palette::console_pack_values(vma, "https://vma.invalid # the console", 2)),
-        pack(vma, palette::console_pack_values(vma, "''", 2)),
-        pack(vma, palette::console_pack_values(vma, "'{{.spectro.var.console}}'", 2)),
+    let mask = quoted_mask();
+    let other = "cert-manager";
+    let values = |pack: &str, address: &str| palette::console_pack_values(pack, address, 2);
+    // each pack: its name, the pack of the path of its values, the address, and the mask, if any
+    let cases = [
+        (
+            vma,
+            vma,
+            "https://vma.invalid # the console",
+            Some(mask.as_str()),
+        ),
+        (vma, vma, "''", None),
+        (vma, vma, "'{{.spectro.var.console}}'", None),
         // the path of another pack is no console address of this pack
-        pack("spectro-vm-dashboard", palette::console_pack_values(vma, "https://other.invalid", 2)),
-        pack("cert-manager", palette::console_pack_values("cert-manager", "https://cert.invalid", 2)),
-    ]}]}});
+        ("spectro-vm-dashboard", vma, "https://other.invalid", None),
+        (other, other, "https://cert.invalid", None),
+    ];
+    let packs: Vec<Value> = cases
+        .iter()
+        .map(|(name, of, address, _)| json!({"name": name, "values": values(of, address)}))
+        .collect();
+    let mut cluster = json!({"spec": {"clusterProfileTemplates": [{"packs": packs}]}});
     let mut manifests = json!({"profiles": [{"spec": {"packs": [
-        {"metadata": {"name": vma}, "spec": {"values": palette::console_pack_values(vma, "https://vma.invalid", 2)}},
+        {"metadata": {"name": vma}, "spec": {"values": values(vma, "https://vma.invalid")}},
     ]}}]});
     mask_console_cluster(&mut cluster, &mut manifests).unwrap();
-    let values =
-        |i: usize| cluster["spec"]["clusterProfileTemplates"][0]["packs"][i]["values"].clone();
-    assert_eq!(
-        values(0),
-        palette::console_pack_values(vma, "'********'", 2)
-    );
-    assert_eq!(values(1), palette::console_pack_values(vma, "''", 2));
-    assert_eq!(
-        values(2),
-        palette::console_pack_values(vma, "'{{.spectro.var.console}}'", 2)
-    );
-    assert_eq!(
-        values(3),
-        palette::console_pack_values(vma, "https://other.invalid", 2)
-    );
-    assert_eq!(
-        values(4),
-        palette::console_pack_values("cert-manager", "https://cert.invalid", 2)
-    );
+    for (i, (name, of, address, masked)) in cases.iter().enumerate() {
+        assert_eq!(
+            cluster["spec"]["clusterProfileTemplates"][0]["packs"][i]["values"],
+            values(of, masked.unwrap_or(address)),
+            "{i}: {name}"
+        );
+    }
     assert_eq!(
         manifests["profiles"][0]["spec"]["packs"][0]["spec"]["values"],
-        palette::console_pack_values(vma, "'********'", 2)
+        values(vma, &mask)
     );
     // a second mask changes nothing
     let (before, before_manifests) = (cluster.clone(), manifests.clone());
@@ -402,7 +406,8 @@ fn the_console_address_of_a_pack_of_virtual_machines_gets_the_mask_and_an_empty_
 #[test]
 fn a_question_sends_the_console_address_of_the_cluster_in_place_of_the_mask() {
     let vmo = "virtual-machine-orchestrator";
-    let masked = palette::console_pack_values(vmo, "'********'", 2);
+    let mask = quoted_mask();
+    let masked = palette::console_pack_values(vmo, &mask, 2);
     let held = palette::console_pack_values(vmo, "https://vmo.invalid/it's # the console", 2);
     // the values of the cluster with the mask are the values of the record: they go as they are
     assert_eq!(
@@ -410,7 +415,7 @@ fn a_question_sends_the_console_address_of_the_cluster_in_place_of_the_mask() {
         Some(held.clone())
     );
     // other values take the address of the cluster in place of the mask
-    let more = palette::console_pack_values(vmo, "'********'", 3);
+    let more = palette::console_pack_values(vmo, &mask, 3);
     assert_eq!(
         console_values(vmo, &more, Some(&held)).unwrap(),
         Some(palette::console_pack_values(

@@ -525,6 +525,11 @@ pub fn console_pack_values(pack: &str, address: &str, replicas: u8) -> String {
     )
 }
 
+/// The line of the console address in values that strata wrote, with `address` in quotes.
+pub fn console_address_line(address: &str) -> String {
+    format!("consoleBaseAddress: '{address}'")
+}
+
 /// The field of [`console_pack_values`] that holds the console address, as a path of keys with
 /// dots. The tests pin this text of Palette on purpose, because the type of strata that holds it
 /// is private.

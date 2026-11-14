@@ -6,7 +6,7 @@
 
 use serde_json::{Value, json};
 
-use strata::api::{MemoryApi, Palette, RawCluster, RawProfile, ReadErrors};
+use strata::api::{MASKED, MemoryApi, Palette, RawCluster, RawProfile, ReadErrors};
 use strata::diff::ImpactLevel;
 use strata::ops;
 use strata::snapshot::Snapshot;
@@ -14,9 +14,9 @@ use strata::snapshot::Snapshot;
 use crate::common;
 use common::{
     CLUSTER_UID, PackFixture, UID_A, assert_no_saved_file_holds, cluster_route, cluster_template,
-    cluster_validate_repave_route, console_address_field, console_pack_values, manifests_answer,
-    no_repave, no_template, no_variables, post, profile_document, template,
-    template_validate_repave_route,
+    cluster_validate_repave_route, console_address_field, console_address_line,
+    console_pack_values, manifests_answer, no_repave, no_template, no_variables, post,
+    profile_document, template, template_validate_repave_route,
 };
 
 /// The made-up address of the console of the orchestrator of virtual machines.
@@ -206,7 +206,7 @@ fn assert_masked(what: &str, snap: &Snapshot, orchestrator: &str) {
             p.values
         );
         assert!(
-            p.values.contains("consoleBaseAddress: '********'"),
+            p.values.contains(&console_address_line(MASKED)),
             "{what}: {}",
             p.values
         );
@@ -285,11 +285,11 @@ fn a_question_to_palette_sends_the_console_address_of_the_cluster_in_place_of_th
     let sent = &body["profiles"][0]["packValues"];
     let orchestrator = values_named(sent, ORCHESTRATOR);
     assert!(
-        orchestrator.contains(&format!("consoleBaseAddress: '{CONSOLE}'")),
+        orchestrator.contains(&console_address_line(CONSOLE)),
         "{orchestrator}"
     );
     assert!(orchestrator.contains("replicas: 3"), "{orchestrator}");
-    assert!(!orchestrator.contains("********"), "{orchestrator}");
+    assert!(!orchestrator.contains(MASKED), "{orchestrator}");
     // a pack with no other change goes with the values that the cluster holds
     let held = &raw.cluster["spec"]["clusterProfileTemplates"][0]["packs"];
     assert_eq!(
@@ -321,8 +321,8 @@ fn a_question_for_a_cluster_that_does_not_run_the_pack_sends_an_empty_console_ad
     .unwrap();
     let (_, body) = api.posted().pop().unwrap();
     let text = body.to_string();
-    assert!(text.contains("consoleBaseAddress: ''"), "{text}");
-    assert!(!text.contains("********"), "{text}");
+    assert!(text.contains(&console_address_line("")), "{text}");
+    assert!(!text.contains(MASKED), "{text}");
 }
 
 #[test]

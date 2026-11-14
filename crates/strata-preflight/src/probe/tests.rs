@@ -1141,12 +1141,14 @@ fn a_fixture_gives_the_outputs_that_it_answers_a_command_with() {
 #[test]
 fn the_cut_of_the_body_of_an_error_leaves_no_part_of_a_value_of_a_variable() {
     const VALUE: &str = "10.244.0.0/16";
+    // the route of the read that fails
+    const PATH: &str = "/v1/x";
     let jq = Jq::new();
     let world = json!({"cloud": "aws", "entity": {"spec": {"profiles": [
         {"uid": "p1", "variables": [{"name": "pod_cidr", "value": VALUE}]}]}}});
     let palette = rule(Check::Palette(PaletteCheck {
         method: Method::Get,
-        path: "/v1/x".into(),
+        path: PATH.into(),
         body: None,
         each: None,
         refusal_codes: Vec::new(),
@@ -1158,9 +1160,7 @@ fn the_cut_of_the_body_of_an_error_leaves_no_part_of_a_value_of_a_variable() {
         argv: vec!["true".into()],
         needs: Vec::new(),
         timeout: None,
-        palette: Some(PaletteRead {
-            path: "/v1/x".into(),
-        }),
+        palette: Some(PaletteRead { path: PATH.into() }),
         also: Vec::new(),
         expr: "[]".into(),
     }));
@@ -1169,7 +1169,7 @@ fn the_cut_of_the_body_of_an_error_leaves_no_part_of_a_value_of_a_variable() {
         for pad in 0..400 {
             let message = format!("{} '{VALUE}'", "a".repeat(pad));
             let body = error_body("K8SCidrOverlap", &message);
-            let api = strata::api::MemoryApi::new().failing("/v1/x", 500, body);
+            let api = strata::api::MemoryApi::new().failing(PATH, 500, body);
             let out = run_check(&r, &world, &LiveBackend::new(Some(&api), false), &jq);
             assert_eq!(out.verdict, Verdict::Error, "{kind} {pad}");
             // the report puts the mask over each message again

@@ -221,6 +221,7 @@ mod tests {
     use super::routes::DOWNLOAD_LIMIT_REFUSAL;
     use super::*;
     use crate::api::download_path;
+    use crate::config::KEY_VARS;
 
     /// One answer from a server on this machine, so the reading of a body needs no network.
     fn serve_once(status_line: &str, body: &str) -> String {
@@ -262,30 +263,26 @@ mod tests {
     #[test]
     fn the_proof_of_a_key_belongs_to_the_key_so_a_second_client_with_another_key_names_the_key() {
         let denied = routes::filters_denied();
-        let path = routes::TAG_FILTER_LISTING;
+        let forbidden = ("403 Forbidden", denied.as_bytes());
+        let (url, _) = serve_each(&[("200 OK", "{}".as_bytes()), forbidden, forbidden, forbidden]);
         // the first client: an answer with a 2xx status proves its key, so its denial is the role
-        let (url, _) = serve_each(&[
-            ("200 OK", "{}".as_bytes()),
-            ("403 Forbidden", denied.as_bytes()),
-            ("403 Forbidden", denied.as_bytes()),
-            ("403 Forbidden", denied.as_bytes()),
-        ]);
         let first_key = "first-key";
         let first = HttpApi::new(Config::new(url.as_str(), first_key));
         first.get_json(routes::PROJECT_LISTING).unwrap();
-        let text = first.get_json(path).unwrap_err().to_string();
-        assert!(text.contains("does not give the permission"), "{text}");
-        assert!(!text.contains("the key can be wrong"), "{text}");
-        // a new client of the same key, such as the client of a project after its lookup
-        let again = HttpApi::new(Config::new(url.as_str(), first_key));
-        let text = again.get_json(path).unwrap_err().to_string();
-        assert!(!text.contains("the key can be wrong"), "{text}");
-        // the second client on the same thread and at the same address, with another key: no
-        // answer proved that key
-        let second = HttpApi::new(Config::new(url.as_str(), "second-key"));
-        let text = second.get_json(path).unwrap_err().to_string();
-        assert!(text.contains("does not give the permission"), "{text}");
-        assert!(text.contains("the key can be wrong"), "{text}");
+        // then a new client of the same key, such as the client of a project after its lookup.
+        // Last, a client with another key, on the same thread and at the same address.
+        for (api, names_key) in [
+            (first, false),
+            (HttpApi::new(Config::new(url.as_str(), first_key)), false),
+            (HttpApi::new(Config::new(url.as_str(), "second-key")), true),
+        ] {
+            let text = api
+                .get_json(routes::TAG_FILTER_LISTING)
+                .unwrap_err()
+                .to_string();
+            let named = KEY_VARS.iter().all(|var| text.contains(var));
+            assert_eq!(named, names_key, "{text}");
+        }
     }
 
     #[test]

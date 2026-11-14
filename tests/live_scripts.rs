@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
-use strata::api::PROJECT_UID_HEADER;
 use strata::api::codes::{
     Denial, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
     PROFILE_EXISTS_CODE, UPGRADE_NOT_SUPPORTED_CODE,
 };
+use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
 
@@ -5507,8 +5507,9 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
         r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
             "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
     );
+    let validate = cluster_validate_repave_route("c-a");
     stage.route(
-        &cluster_validate_repave_route("c-a"),
+        &validate,
         r#"{"isRepaveRequired":true,"reasons":[{"code":"PackValuesUpdated","message":"Pack 'kubernetes' values are updated",
             "pack":{"diffConfigKeys":["kubeadmconfig.postKubeadmCommands"]}}]}"#,
     );
@@ -5551,7 +5552,7 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     ] {
         assert!(has_verdict(&steps, "SEEN", seen), "{seen}: {steps}");
     }
-    let sent = stage.sent("POST", &cluster_validate_repave_route("c-a"));
+    let sent = stage.sent("POST", &validate);
     let variables: Vec<_> = sent
         .iter()
         .map(|b| b["profiles"][0]["variables"].clone())
@@ -5643,10 +5644,8 @@ fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_
             ),
         );
     }
-    stage.route(
-        &cluster_validate_repave_route("c-a"),
-        &no_repave().to_string(),
-    );
+    let validate = cluster_validate_repave_route("c-a");
+    stage.route(&validate, &no_repave().to_string());
 
     let (_, steps) = stage.run("tag-only.sh", &["2"]);
     passed(&steps, &["palette-repave-exact", "palette-repave-floating"]);
@@ -5661,7 +5660,7 @@ fn tag_only_sh_stage_2_asks_the_repave_route_with_each_body_about_the_change_of_
     // itself. In stage 4, the cluster of the stand-in still runs 1.0.0, so the swap of the move
     // back stops. The last question is the earlier body of the move back
     let bodies: Vec<serde_json::Value> = stage
-        .sent("POST", &cluster_validate_repave_route("c-a"))
+        .sent("POST", &validate)
         .iter()
         .map(|b| {
             let profiles = b["profiles"].as_array().unwrap();
@@ -5882,10 +5881,7 @@ fn repave_sh_stage_9_stops_before_the_first_question_when_a_check_before_it_fail
         r#""name":"spectro-vm-dashboard""#,
     );
     // a mask over the console address in the document of the cluster
-    let masked = VMO_CLUSTER.replace(
-        r#"consoleBaseAddress: \"\""#,
-        "consoleBaseAddress: '********'",
-    );
+    let masked = VMO_CLUSTER.replace(r#"consoleBaseAddress: \"\""#, &console_address_line(MASKED));
     assert_ne!(masked, VMO_CLUSTER);
     for (cluster, forward, fails, reads) in [
         (template.as_str(), FAKE_CONSOLE_FORWARD, "vmo-runs", 0),
@@ -6077,10 +6073,8 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
                 "clusterProfileTemplates":[{"uid":"r-1"},{"uid":"ad-1"}]}}"#,
     );
     stage.published("n-1", KUBERNETES_PACK, "{}");
-    stage.route(
-        &cluster_validate_repave_route("c-t"),
-        &no_repave().to_string(),
-    );
+    let validate = cluster_validate_repave_route("c-t");
+    stage.route(&validate, &no_repave().to_string());
     stage.strata(
         "compare cluster:c-t/strata-live-profile n-1 --repave",
         1,
@@ -6133,8 +6127,7 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
         "the cluster goes before the next stage, and the template stays: {applies:?}"
     );
 
-    let route = &cluster_validate_repave_route("c-t");
-    let asked = stage.sent("POST", route);
+    let asked = stage.sent("POST", &validate);
     assert_eq!(asked.len(), 1, "the route of the cluster, once: {asked:?}");
     assert_eq!(
         (

@@ -11192,8 +11192,9 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
         governed.posted().is_empty(),
         "no POST goes out for the template"
     );
+    let template_route = template_validate_repave_route("tmpl-1");
     let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {})
-        .with(post(&template_validate_repave_route("tmpl-1")), no_repave());
+        .with(post(&template_route), no_repave());
     let unchanged = pending_of(&api, None);
     let d = ops::compare(&cluster, &unchanged, "t1");
     let r = ops::palette_repave(
@@ -11208,7 +11209,7 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     assert_eq!(
         api.posted(),
         [(
-            template_validate_repave_route("tmpl-1"),
+            template_route,
             serde_json::json!({"profiles": [{"uid": infra}, {"uid": addon}], "isUpgradeNow": false})
         )]
     );

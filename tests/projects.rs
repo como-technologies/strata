@@ -149,11 +149,14 @@ fn each_command_that_reads_palette_finds_the_uid_of_project_name_and_reads_that_
     }
 }
 
-/// The routes of a tenant with one project, `lab`, whose uid is `uid`.
+/// The name of the one project of [`lab_tenant`].
+const LAB_PROJECT: &str = "lab";
+
+/// The routes of a tenant with one project, [`LAB_PROJECT`], whose uid is `uid`.
 fn lab_tenant(uid: &str) -> BTreeMap<String, Value> {
     BTreeMap::from([(
         PROJECT_LISTING.to_string(),
-        project_listing(&[("lab", uid)]),
+        project_listing(&[(LAB_PROJECT, uid)]),
     )])
 }
 
@@ -161,20 +164,21 @@ fn lab_tenant(uid: &str) -> BTreeMap<String, Value> {
 fn a_project_name_gives_the_uid_in_the_tenant_of_the_address_and_the_key_of_each_client() {
     // one address with two tenants: each key reads the projects of its own tenant
     let (first, second) = ("first-key", "second-key");
+    let (first_uid, second_uid, other_uid) = ("p-first", "p-second", "p-other");
     let shared = serve_tenants(BTreeMap::from([
-        (first.to_string(), lab_tenant("p-first")),
-        (second.to_string(), lab_tenant("p-second")),
+        (first.to_string(), lab_tenant(first_uid)),
+        (second.to_string(), lab_tenant(second_uid)),
     ]));
     // another address, where the first key has a tenant too
-    let other = serve_tenants(BTreeMap::from([(first.to_string(), lab_tenant("p-other"))]));
+    let other = serve_tenants(BTreeMap::from([(first.to_string(), lab_tenant(other_uid))]));
     let uid = |address: &str, key: &str| {
-        project_uid_named(&Config::new(address, key), "lab", Progress::silent())
+        project_uid_named(&Config::new(address, key), LAB_PROJECT, Progress::silent())
             .unwrap_or_else(|e| panic!("{key} at {address}: {e}"))
     };
-    assert_eq!(uid(&shared, first), "p-first");
-    assert_eq!(uid(&shared, second), "p-second", "another key");
-    assert_eq!(uid(&other, first), "p-other", "another address");
-    assert_eq!(uid(&shared, first), "p-first", "the first client again");
+    assert_eq!(uid(&shared, first), first_uid);
+    assert_eq!(uid(&shared, second), second_uid, "another key");
+    assert_eq!(uid(&other, first), other_uid, "another address");
+    assert_eq!(uid(&shared, first), first_uid, "the first client again");
 }
 
 /// The project of each request for the routes of the profile `uid`.
