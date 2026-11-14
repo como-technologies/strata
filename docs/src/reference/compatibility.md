@@ -1278,7 +1278,8 @@ field, a value, an input, or an option is in the sections above.
 - `ops::Bump` and `diff::Diff` have the new field `update_checks: model::update::UpdateChecks`. A
   struct literal must set it. `ops::update_checks` is new: the checks of `compare --validate`.
   The module `model::update` is new, with `UpdateChecks`, `RequiredVariables`, and
-  `MinorSkip`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
+  `MinorSkip`. Its public functions are `UpdateChecks::is_empty`, `MinorSkip::of`, and
+  `MinorSkip::line`. `api::codes` has the new consts `K8S_UPGRADE_NOT_SUPPORTED_CODE` and
   `INVALID_VARIABLE_CODE`.
 
 ### For a user of the library of strata-preflight

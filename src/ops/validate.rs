@@ -328,8 +328,8 @@ pub fn palette_validation<A: PaletteApi>(
 /// What strata checks about the move from the cluster side to the profile side, beside the answer
 /// of [`palette_validation`].
 ///
-/// These are the rules that Palette checks only at the update: see [`UpdateChecks::between`].
-/// The checks send no request.
+/// These are the rules that Palette checks only at the update: see [`UpdateChecks`]. The checks
+/// send no request.
 ///
 /// # Errors
 ///

@@ -14969,16 +14969,37 @@ fn upgrade_refusal(message: &str) -> Value {
         "errors": [{"code": UPGRADE_NOT_SUPPORTED_CODE, "message": message}]}]}})
 }
 
-/// The record of a profile version that pins csi-aws-ebs 1.63.1: the record of the pack, with the
-/// uid and the name of a profile version.
-fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
-    let mut snap = snapshot_of(api, "pack:csi-aws-ebs@1.63.1").unwrap();
+/// The record of the profile version `uid`, `name` at `version`, of the type `kind`, that pins
+/// the pack of `pack_ref` (`pack:<name>@<version>`): the record of the pack from `api`, with the
+/// source of a profile version.
+fn version_pinning(
+    api: &MemoryApi,
+    pack_ref: &str,
+    uid: &str,
+    name: &str,
+    version: &str,
+    kind: ProfileType,
+) -> strata::snapshot::Snapshot {
+    let mut snap = snapshot_of(api, pack_ref).unwrap();
     snap.source.pack = None;
-    snap.source.uid = BUMP_PROFILE_UID.to_string();
-    snap.source.name = "csi-stack".to_string();
-    snap.source.version = "1.0.0".to_string();
-    snap.source.kind = ProfileType::AddOn.as_str().to_string();
+    snap.source.uid = uid.to_string();
+    snap.source.name = name.to_string();
+    snap.source.version = version.to_string();
+    snap.source.kind = kind.as_str().to_string();
     snap
+}
+
+/// The record of a profile version that pins csi-aws-ebs 1.63.1: the add-on profile csi-stack
+/// 1.0.0, with the uid `BUMP_PROFILE_UID`.
+fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
+    version_pinning(
+        api,
+        "pack:csi-aws-ebs@1.63.1",
+        BUMP_PROFILE_UID,
+        "csi-stack",
+        "1.0.0",
+        ProfileType::AddOn,
+    )
 }
 
 /// The record of the cluster `payments`, which runs `profile_pinning`: the same pack, in a record
@@ -15147,17 +15168,6 @@ fn serve_kubernetes() -> MemoryApi {
     )
 }
 
-/// The record of the profile version `uid` that pins kubernetes at `version`, from `api`.
-fn kubernetes_pinning(api: &MemoryApi, uid: &str, version: &str) -> strata::snapshot::Snapshot {
-    let mut snap = snapshot_of(api, &format!("pack:kubernetes@{version}")).unwrap();
-    snap.source.pack = None;
-    snap.source.uid = uid.to_string();
-    snap.source.name = "k8s-stack".to_string();
-    snap.source.version = version.to_string();
-    snap.source.kind = ProfileType::Infra.as_str().to_string();
-    snap
-}
-
 #[test]
 fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_next_step() {
     let dir = tempfile::tempdir().unwrap();
@@ -15170,9 +15180,12 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
             accepts.clone(),
         )
         .with(post(&update_validate_packs_route("pr-step")), accepts);
+    // the infrastructure profile k8s-stack, which pins kubernetes at the version of the profile
     let records = [("pr-skip", "1.34.9"), ("pr-step", "1.35.2")].map(|(uid, version)| {
+        let pack = format!("pack:kubernetes@{version}");
+        let record = version_pinning(&base, &pack, uid, "k8s-stack", version, ProfileType::Infra);
         let path = dir.path().join(format!("{uid}.json"));
-        common::write_snapshot(&path, &kubernetes_pinning(&base, uid, version), false);
+        common::write_snapshot(&path, &record, false);
         path
     });
     let r = behind_of(&api, &records, &WITH_IMPACT);

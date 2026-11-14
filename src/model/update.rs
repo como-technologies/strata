@@ -74,7 +74,7 @@ impl RequiredVariables {
 
     /// `the move adds the required variable a with no default value: give it a value at the
     /// update, or Palette refuses the update with InvalidVariable`.
-    pub fn line(&self) -> String {
+    pub(crate) fn line(&self) -> String {
         let n = self.names.len();
         format!(
             "the move adds the required {} {} with no default value: give {} a value at the \
@@ -176,7 +176,7 @@ impl UpdateChecks {
     /// A cluster that runs `from` has a value of each variable of `from`, so only a variable that
     /// `from` does not hold counts. The Kubernetes pack is the pack of the `k8s` layer on each
     /// side. A side with no such pack, such as an add-on profile, moves no Kubernetes pack.
-    pub fn between(from: &Snapshot, to: &Snapshot) -> UpdateChecks {
+    pub(crate) fn between(from: &Snapshot, to: &Snapshot) -> UpdateChecks {
         UpdateChecks {
             required_variables: RequiredVariables::added(&from.variables, &to.variables),
             skipped_minor: MinorSkip::between(&from.packs, &to.packs),
@@ -190,7 +190,7 @@ impl UpdateChecks {
 
     /// One line for each check that finds something: the required variables, then the skip of a
     /// minor version. See [`RequiredVariables::line`] and [`MinorSkip::line`].
-    pub fn lines(&self) -> Vec<String> {
+    pub(crate) fn lines(&self) -> Vec<String> {
         self.required_variables
             .as_ref()
             .map(RequiredVariables::line)
