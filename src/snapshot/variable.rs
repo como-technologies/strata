@@ -212,7 +212,7 @@ impl Variable {
     /// the comparison of two variables by leaf.
     ///
     /// The document holds no default mark of an option. A record of strata 0.33 and before does
-    /// not hold the mark, so a hash of it would move the root of such a record.
+    /// not hold the mark. If the hash covers it, the root of such a record moves.
     pub(crate) fn to_value(&self) -> Value {
         let hashed = Variable {
             options: self
