@@ -11,6 +11,7 @@ mod benches;
 mod ci_scripts;
 mod cli;
 mod closed_set;
+mod consumers;
 mod content;
 mod contract;
 mod crate_root;

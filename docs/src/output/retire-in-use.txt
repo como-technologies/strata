@@ -1,6 +1,10 @@
 $ strata consumers aws-stack@1.1.0
 aws-stack@1.1.0 (uid 64e0000000000000000000b2): 2 consumers
-  payments  64f1000000000000000000e1  project dev (uid 64f20000000000000000a0d1)  Running
-  search    64f1000000000000000000e2  project dev (uid 64f20000000000000000a0d1)  Running
-  second reading: the cluster search names no other cluster with the profile
-  edge hosts: 0 read
+  payments  64f1000000000000000000e1  project dev  Running
+  search    64f1000000000000000000e2  project dev  Running
+  searched:
+    consumer list    2 clusters, no cluster templates
+    cluster search   no other cluster with the profile
+    cluster groups   none pins the version
+    edge hosts       none found
+  scope: project profile, so only project dev can use it

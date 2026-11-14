@@ -280,11 +280,13 @@ impl Tenant {
                     rows.retain(|r| r != &json!(uid) && r["uid"] != json!(uid));
                 }
             }
-            self.write(project, &profile_route(p), &doc);
+            self.write(home_of(project, &doc), &profile_route(p), &doc);
         }
         for p in profiles {
             let path = profile_route(p);
-            let mut doc = self.read(project, &path);
+            let doc = self.read(project, &path);
+            let home = home_of(project, &doc);
+            let mut doc = self.read(home, &path);
             let mut uids: Vec<Value> = doc["status"]["inUseClusterUids"]
                 .as_array()
                 .cloned()
@@ -304,7 +306,7 @@ impl Tenant {
             rows.push(json!({"kind": "spectrocluster", "name": name,
                              "projectUid": project, "uid": uid}));
             doc["status"]["inUseClusters"] = json!(rows);
-            self.write(project, &path, &doc);
+            self.write(home, &path, &doc);
         }
     }
 
@@ -343,6 +345,19 @@ impl Tenant {
             }
         }
         self.write(project, &path, &doc);
+    }
+}
+
+/// The directory that holds the document `doc` of a profile that the project `project` serves.
+///
+/// A profile of the tenant is in the tenant, and each project gets a copy of it: see
+/// [`Tenant::listings`]. So its consumer list names the clusters of each project that the key can
+/// read, as Palette computes it.
+fn home_of<'a>(project: &'a str, doc: &Value) -> &'a str {
+    if doc["metadata"]["annotations"]["scope"] == ProfileScope::Tenant.as_str() {
+        TENANT
+    } else {
+        project
     }
 }
 

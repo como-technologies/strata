@@ -2818,7 +2818,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(text.contains("project p1"), "{text}");
 
-    // with one, it names the project and keeps the uid
+    // with one, the row names the project by its name, and the JSON keeps the uid
     let named = api.with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
     let r = ops::consumers(
         &Ref::Uid(UID_B.into()),
@@ -2828,8 +2828,54 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     )
     .unwrap();
     assert_eq!(r.consumers[0].project_name, "dev");
+    assert_eq!(r.consumers[0].project_uid, "p1");
     let text = common::terminal().render_consumers(&r).unwrap();
-    assert!(text.contains("project dev (uid p1)"), "{text}");
+    assert!(text.contains("project dev  Running"), "{text}");
+    assert!(!text.contains("uid p1"), "{text}");
+}
+
+/// In a project, Palette lists that project alone. So a consumer in another project takes the
+/// name of its project from the project listing of the tenant (F-019).
+#[test]
+fn a_consumer_in_another_project_takes_the_name_of_its_project_from_the_listing_of_the_tenant() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut profile = read_json(&dir.path().join("b").join("profile.json"));
+    profile["status"]["inUseClusters"] = serde_json::json!([
+        {"uid": "cluster-aaa", "name": "alpha", "projectUid": "p2", "kind": "spectrocluster"}
+    ]);
+    // the profile is read in p1, whose listing holds p1 alone
+    let in_p1 = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_B)
+        .with(profile_route(UID_B), profile)
+        .with(PROJECT_LISTING, project_listing(&[("dev", "p1")]));
+    let tenant = MemoryApi::new().with(
+        PROJECT_LISTING,
+        project_listing(&[("dev", "p1"), ("prod", "p2")]),
+    );
+    let in_p2 = MemoryApi::new().with(
+        cluster_route("cluster-aaa"),
+        cluster_doc("cluster-aaa", "alpha", "p2", "Running"),
+    );
+    let r = ops::consumers(
+        &Ref::Uid(UID_B.into()),
+        |scope| {
+            Ok(Palette::new(match scope {
+                Some(ops::TENANT_SCOPE) => tenant.clone(),
+                Some("p2") => in_p2.clone(),
+                _ => in_p1.clone(),
+            }))
+        },
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let alpha = &r.consumers[0];
+    assert_eq!(
+        (alpha.project_uid.as_str(), alpha.project_name.as_str()),
+        ("p2", "prod")
+    );
+    let text = common::terminal().render_consumers(&r).unwrap();
+    assert!(text.contains("project prod  Running"), "{text}");
 }
 
 #[test]
@@ -3093,7 +3139,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     assert_eq!(
         text,
         format!(
-            "lab-profile@1.2.0 (uid {UID_A}): no consumers\n  second reading: 0 of 0 clusters read\n  edge hosts: 0 read\n"
+            "lab-profile@1.2.0 (uid {UID_A}): no consumers\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  no other cluster\n    cluster groups   none pins the version\n    edge hosts       none found\n"
         )
     );
 }
@@ -3133,9 +3179,13 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with(
-            &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
+            &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
         ),
         "{text}"
+    );
+    assert!(
+        text.contains("    cluster groups   not read (the cluster listing failed)\n"),
+        "the second reading stops before it lists the groups: {text}"
     );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
@@ -3175,7 +3225,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
     assert_eq!(
         text,
         format!(
-            "lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: 0 of 1 clusters read\n  edge hosts: 0 read\n"
+            "lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  searched:\n    consumer list    no clusters, no cluster templates\n    cluster listing  1 other cluster: 0 on this version, 1 not read\n    cluster groups   none pins the version\n    edge hosts       none found\n"
         )
     );
 }
@@ -3226,7 +3276,8 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_edge_hosts_cannot_be_read() 
     assert_eq!((r.count, r.exit_code()), (0, 2));
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("  edge hosts: not read (") && text.contains("failed with HTTP 500: boom"),
+        text.contains("    edge hosts       not read (")
+            && text.contains("failed with HTTP 500: boom"),
         "{text}"
     );
 }
@@ -3313,13 +3364,15 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
         "{text}"
     );
     assert!(
-        text.ends_with("  second reading: 1 of 1 clusters read\n  edge hosts: 0 read\n"),
+        text.ends_with(
+            "    cluster listing  1 other cluster: 1 on this version\n    cluster groups   none pins the version\n    edge hosts       none found\n"
+        ),
         "{text}"
     );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("(not in the consumer list of the profile)")
-            && md.contains("Second reading: 1 of 1 clusters read."),
+            && md.contains("| cluster listing | 1 other cluster: 1 on this version |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -3480,7 +3533,7 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     );
     assert!(
         text.contains(
-            "  second reading: the cluster search names 2 other clusters with the profile, 2 read\n"
+            "    cluster search   2 other clusters with the profile: 2 on this version, 0 on other versions\n"
         ),
         "{text}"
     );
@@ -3635,7 +3688,9 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
     assert_eq!(api.calls(&cluster_route("vc-1")), 1);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("1 cluster group pins the version, 1 other virtual cluster, 1 read"),
+        text.contains(
+            "    cluster groups   1 pins the version: 1 other virtual cluster: 1 on this version\n"
+        ),
         "{text}"
     );
     let json: Value = serde_json::from_str(
@@ -3645,6 +3700,7 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
     )
     .unwrap();
     assert_eq!(json["clustersRead"]["groups"], 1);
+    assert_eq!(json["clustersRead"]["membersFound"], 1);
     assert_eq!(json["clustersRead"]["members"], 1);
 }
 
@@ -3710,8 +3766,8 @@ fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_re
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains(
-            "the cluster search names 1 other cluster with the profile, 1 read; \
-             1 cluster group pins the version, 1 other virtual cluster, 0 read"
+            "    cluster search   1 other cluster with the profile: 0 on this version, 1 on other versions\n    \
+             cluster groups   1 pins the version: 1 other virtual cluster: 0 on this version, 1 not read\n"
         ),
         "{text}"
     );
@@ -3849,7 +3905,7 @@ fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
     assert_eq!(api.calls(&cluster_route("cluster-ddd")), 1);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("  second reading: 2 of 2 clusters read\n"),
+        text.contains("    cluster listing  2 other clusters: 1 on this version\n"),
         "{text}"
     );
 }
@@ -3882,13 +3938,16 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
     assert_eq!(r.exit_code(), 0);
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.ends_with("  second reading: not done (--list-only)\n  edge hosts: 0 read\n"),
+        text.ends_with(
+            "    cluster search   not done (--list-only)\n    cluster groups   not read (--list-only)\n    \
+             edge hosts       none found\n"
+        ),
         "{text}"
     );
-    // the markdown escapes the whole line as a quoted text, so the flag is in no code span
+    // the markdown escapes each row as a quoted text, so the flag is in no code span
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
-        md.contains("Second reading: not done (--list-only)."),
+        md.contains("| cluster search | not done (--list-only) |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -9292,6 +9351,10 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
+    // two records of one cluster that is behind get one note
+    let d = ops::compare(&now, &now, "t1");
+    let text = common::terminal().render(&d, &now, &now, false).unwrap();
+    assert_eq!(text.matches("is behind").count(), 1, "{text}");
 }
 
 /// The repave status of the cluster fixture.
@@ -12144,6 +12207,43 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
 }
 
 #[test]
+fn compare_and_verify_of_one_cluster_that_runs_behind_print_its_note_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    // the cluster runs its first pack at another version than its profile declares
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read_json(&path);
+    doc["status"]["packs"][0]["version"] = Value::from("0.0.1");
+    let first = doc["status"]["packs"][0]["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let a = snapshot_cluster(&api, None).unwrap();
+    let b = snapshot_cluster(&api, None).unwrap();
+    let note = format!("runs {first} 0.0.1, and its profile declares");
+
+    // each side runs the pack behind its profile, and the report names it one time
+    let d = ops::compare(&a, &b, "t1");
+    let sides: Vec<Side> = d.running_behind.iter().map(|r| r.side).collect();
+    assert_eq!(sides, [Side::A, Side::B]);
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    assert_eq!(md.matches(&note).count(), 1, "{md}");
+
+    // a record of the cluster when it already ran behind, against the cluster now
+    let v = ops::verify(&a, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.diff.running_behind.len(), 2);
+    let text = common::terminal()
+        .render(&v.diff, &a, &v.live, false)
+        .unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+}
+
+#[test]
 fn between_two_clusters_the_applied_tier_compares_the_infra_hash_alone() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -13234,10 +13334,13 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
         text.contains("edge-1  e1  project p1  ready  edge host"),
         "{text}"
     );
-    assert!(text.ends_with("  edge hosts: 1 read\n"), "{text}");
+    assert!(
+        text.ends_with("    edge hosts       1 of 1 bound to the version\n"),
+        "{text}"
+    );
     let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
-        md.contains("(edge host)") && md.contains("Edge hosts: 1 read."),
+        md.contains("(edge host)") && md.contains("| edge hosts | 1 of 1 bound to the version |"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -14272,7 +14375,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     );
     assert!(
         text.contains(&format!(
-            "second reading: not done ({})",
+            "    app deployments  not searched ({})\n",
             ops::APP_NO_SECOND_READING
         )),
         "{text}"
@@ -18645,7 +18748,7 @@ fn the_markdown_of_consumers_shows_the_error_of_the_edge_hosts_as_text() {
     )
     .unwrap();
     let md = common::markdown().render_consumers(&r).unwrap();
-    assert!(md.contains("Edge hosts: not read ("), "{md}");
+    assert!(md.contains("| edge hosts | not read ("), "{md}");
     common::assert_answer_tags_as_text(&md);
 }
 

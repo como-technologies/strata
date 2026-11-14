@@ -84,9 +84,12 @@ a consumer can be missing.
 Exit `0` means that no cluster in the projects the key can read applies the
 version, and no edge host is bound to it. Do not add `--list-only` to the gate:
 it reads the consumer list of Palette alone, and that list is also empty when
-the read fails. Give the retire gate a key that reads every project of the tenant. A
-key of one project misses a cluster of another project that runs a tenant
-profile. See [strata consumers](../commands/consumers.md).
+the read fails. Give the retire gate a key that reads every project of the tenant.
+
+Each project can use a profile of the tenant, so strata searches each project for
+it. When the key cannot read one of them, the line `NOT CHECKED` names it. The
+gate then stays closed: with no consumer found, the exit is `2`. See
+[A profile of the tenant](../commands/consumers.md#a-profile-of-the-tenant).
 
 To see the reach of a key,
 run `strata list clusters --tag <label>`. It searches every project that the

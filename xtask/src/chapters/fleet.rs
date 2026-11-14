@@ -1,14 +1,17 @@
-//! The chapters of the fleet, the registries, and the retire of a version.
+//! The chapters of the fleet, the registries, and the retire of a version. `retire.rs` holds the
+//! chapters of the retire.
 
 use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
     A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118, A1120,
-    AWS_STANDARD, DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
+    DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
 use super::{DEV_ENV, payments_addons, payments_cluster};
 use crate::book::Runner;
 use crate::tenant::{Edit, UpgradeRefusal};
 use serde_json::json;
+
+mod retire;
 
 /// Run the chapters of the fleet, the registries, and the retire of a version.
 pub(super) fn run(r: &mut Runner) {
@@ -20,7 +23,8 @@ pub(super) fn run(r: &mut Runner) {
     packs(r);
     palette_latest(r);
     behind_pre_release(r);
-    retire(r);
+    retire::retire(r);
+    retire::retire_tenant(r);
 }
 
 /// The chapter `behind`: the pins that are behind the registry, and a version that arrives between
@@ -751,44 +755,5 @@ fn behind_pre_release(r: &mut Runner) {
         "behind-pre-release-lines",
         "behind-pre-release-shown",
         r"^(\$|\d+ pins|~ \[csi)",
-    );
-}
-
-/// The chapter `retire`: the consumers of a version that a team retires.
-fn retire(r: &mut Runner) {
-    r.chapter("retire", DEV_ENV);
-    r.tenant(|t| t.projects(&[("dev", DEV)]));
-    r.profile(DEV, A100, "1.0.0", "aws-stack@1.0.0", &[]);
-    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
-    r.tenant(|t| t.cluster(DEV, SEARCH, "search", &[A110], &[]));
-    r.step(
-        "retire-in-use",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.0",
-    );
-    r.step(
-        "consumers-list-only",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.0 --list-only",
-    );
-    r.step("retire-free", 0, false, "strata consumers aws-stack@1.0.0");
-    r.step(
-        "retire-gate",
-        0,
-        false,
-        r#"strata consumers aws-stack@1.0.0 && echo "no cluster uses aws-stack@1.0.0""#,
-    );
-    r.step("retire-json", 1, false, r#"strata consumers aws-stack@1.1.0 --json | jq -r '.consumers[] | "\(.name) \(.state) \(.version)"'"#);
-    // no cluster runs 1.1.1, and a cluster template links it: Palette refuses the delete
-    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.tenant(|t| t.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A111]));
-    r.step(
-        "retire-template",
-        1,
-        false,
-        "strata consumers aws-stack@1.1.1",
     );
 }
