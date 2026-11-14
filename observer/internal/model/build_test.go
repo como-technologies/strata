@@ -327,6 +327,23 @@ func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *te
 	}
 }
 
+// The page joins a pack row and its row of a newer version by the name of the registry. So the two
+// rows give the name of the record, also when the pin of behind names no registry.
+func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.63.1")
+	csi.RegistryName = "Palette Registry"
+	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", "aws-stack@1.1.0")
+	behind.Registry = ""
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{behind}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if len(s.Newer) != 1 {
+		t.Fatalf("newer %+v", s.Newer)
+	}
+	if pack, row := s.Profiles[0].Packs[0].Registry, s.Newer[0].Registry; pack != "Palette Registry" || row != pack {
+		t.Errorf("the pack row names %q, and the newer row %q", pack, row)
+	}
+}
+
 func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
 		docs.Diff{Packs: []docs.Pack{{Key: "csi/csi-aws-ebs", Masked: []string{"a.b", "a.c"}}}})
