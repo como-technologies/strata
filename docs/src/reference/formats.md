@@ -116,6 +116,11 @@ shows as it is. [same-release](../commands/same-release.md#the-archives-of-the-t
 shows the answer of the host of a chart in a reason. `strata-preflight` writes
 its markdown in the same way.
 
+Each fenced block has a fence of three backticks. When its text holds a run of
+three or more backticks, the fence is longer than each run. So a line of the
+values of a pack cannot end the block of `--full`, and the text after that line
+stays in the block.
+
 ## The JSON document
 
 The JSON is never colored and never cut. `--compact` writes it on one line.

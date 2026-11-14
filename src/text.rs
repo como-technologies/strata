@@ -2,8 +2,8 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, a text of HTML, a text in a cell of a markdown table, and a text in
-//!   a code span.
+//! - A mark for an empty text, a text of HTML, a text in a cell of a markdown table, a text in a
+//!   code span, and a text in a fenced code block.
 //! - A command as a person types it in a shell.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
@@ -160,14 +160,35 @@ fn table_text(s: &str) -> String {
 /// table cell needs one: see [`code_cell`]. Each issue and each report that shows a value of an
 /// unknown set writes the value here, so the value has one form in both.
 pub fn code_span(text: &str) -> String {
-    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
-    let fence = "`".repeat(longest + 1);
+    let fence = "`".repeat(longest_backticks(text) + 1);
     let pad = if text.starts_with('`') || text.ends_with('`') {
         " "
     } else {
         ""
     };
     format!("{fence}{pad}{text}{pad}{fence}")
+}
+
+/// `text` as a fenced code block of markdown, with the info string `info`, such as `diff`. The
+/// fence has three backticks, or more when the text holds a run of three or more. So a line of the
+/// text cannot end the block.
+///
+/// The last line of the text gets a line break when it has none. Each block of a markdown output
+/// of strata and of `strata-preflight` is written here. So a text of an answer, such as the values
+/// of a pack, stays in its block.
+pub fn code_block(info: &str, text: &str) -> String {
+    let fence = "`".repeat((longest_backticks(text) + 1).max(3));
+    let end = if text.is_empty() || text.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    format!("{fence}{info}\n{text}{end}{fence}\n")
+}
+
+/// The length of the longest run of backticks in `text`, or 0 when it holds no backtick.
+fn longest_backticks(text: &str) -> usize {
+    text.split(|c| c != '`').map(str::len).max().unwrap_or(0)
 }
 
 /// `text` as a code span in one cell of a markdown table: [`code_span`], with each `|` escaped and
@@ -217,8 +238,16 @@ pub fn query_value(text: &str) -> String {
     out
 }
 
+// The text of an answer with tags of HTML, in the file that the tests of strata use. A unit test
+// here uses the text only, so the checks of a markdown output are dead code here.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../tests/common/answer_tags.rs"]
+mod answer_tags;
+
 #[cfg(test)]
 mod tests {
+    use super::answer_tags::ANSWER_TAGS;
     use super::*;
 
     #[test]
@@ -311,15 +340,11 @@ mod tests {
         assert_eq!(markdown_cell("plain"), "plain");
     }
 
-    /// A link and a tag of an answer, as a chart host or a message of Palette can hold them.
-    const TAGS: &str = "<a href=\"https://example.com\">x</a> <Error><Code>AccessDenied</Code>";
-
     #[test]
     fn a_text_of_html_shows_each_tag_and_each_entity_as_text() {
         assert_eq!(
-            html_text(TAGS),
-            "&lt;a href=\"https://example.com\"&gt;x&lt;/a&gt; \
-             &lt;Error&gt;&lt;Code&gt;AccessDenied&lt;/Code&gt;"
+            html_text(ANSWER_TAGS),
+            "&lt;a href=\"https://example.com\"&gt;x&lt;/a&gt; &lt;Code&gt;AccessDenied&lt;/Code&gt;"
         );
         // an entity of the answer shows as it is, and not as the character that it names
         assert_eq!(html_text("a &lt; b & c"), "a &amp;lt; b &amp; c");
@@ -328,9 +353,9 @@ mod tests {
 
     #[test]
     fn a_cell_of_a_markdown_table_holds_no_tag_of_html_from_a_quoted_text() {
-        let cell = markdown_cell(&format!("{TAGS}\n| next"));
+        let cell = markdown_cell(&format!("{ANSWER_TAGS}\n| next"));
         assert!(!cell.contains('<'), "{cell}");
-        assert_eq!(cell, format!("{} \\| next", html_text(TAGS)));
+        assert_eq!(cell, format!("{} \\| next", html_text(ANSWER_TAGS)));
     }
 
     #[test]
@@ -355,6 +380,24 @@ mod tests {
     fn a_code_span_writes_the_text_as_it_is_for_a_title_and_a_sentence() {
         assert_eq!(code_span("a|b"), "`a|b`");
         assert_eq!(code_span("first\nsecond"), "`first\nsecond`");
+    }
+
+    #[test]
+    fn a_code_block_has_a_fence_of_three_backticks_or_one_longer_than_each_run_in_the_text() {
+        assert_eq!(code_block("diff", "+ a\n- b\n"), "```diff\n+ a\n- b\n```\n");
+        assert_eq!(code_block("diff", "+ a``b\n"), "```diff\n+ a``b\n```\n");
+        // a line of three backticks, after the space of a line of context, does not end the block
+        assert_eq!(
+            code_block("diff", " ```\n <Code>\n"),
+            "````diff\n ```\n <Code>\n````\n"
+        );
+        assert_eq!(code_block("", "`````"), "``````\n`````\n``````\n");
+        // the last line gets its line break, and an empty text gives an empty block
+        assert_eq!(
+            code_block("bash", "strata diff"),
+            "```bash\nstrata diff\n```\n"
+        );
+        assert_eq!(code_block("diff", ""), "```diff\n```\n");
     }
 
     #[test]

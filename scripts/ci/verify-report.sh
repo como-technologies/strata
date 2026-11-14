@@ -44,6 +44,15 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
+# The jq functions that write a text into the markdown of an issue, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a text that strata quotes from an
+# answer shows each tag of HTML as text. `cell` is `text::markdown_cell`: also each `|` escaped,
+# and each line break as a space. `fence` is the fence of `text::code_block`: three backticks, or
+# more than the longest run of backticks in the text, so that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def cell: html | split("|") | join("\\|") | split("\n") | join(" ");
+  def fence: ([scan("`+") | length] | max // 0) as $n | [range([$n + 1, 3] | max)] | map("`") | join("");'
+
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
 # set of the chosen host. Each set prints issues as [{number, title, body}].
@@ -242,13 +251,17 @@ while IFS= read -r record <&3; do
     *)
       errors=$((errors + 1))
       title="strata verify: $path could not be checked"
+      # the error and the output of strata can quote the body of an answer
+      fence=$(jq -Rrs "$markdown_jq fence" "$work/report.err")
       {
         echo "<!-- strata-verify: $path -->"
-        echo "\`strata verify $path\` could not check the record, checked $now: $(jq -r 'if .error then "\(.error.kind): \(.error.message)" else "see the output below" end' <<<"$record")"
+        echo "\`strata verify $path\` could not check the record, checked $now: $(jq -r "$markdown_jq"' if .error then "\(.error.kind): \(.error.message)" | cell else "see the output below" end' <<<"$record")"
         echo
-        echo '```'
+        echo "$fence"
         cat "$work/report.err"
-        echo '```'
+        # the last line gets its line break, or the fence joins it
+        [ -z "$(tail -c 1 "$work/report.err")" ] || echo
+        echo "$fence"
       } > "$body"
       ;;
   esac

@@ -18173,3 +18173,39 @@ fn the_markdown_of_list_shows_the_error_of_a_read_as_text_and_keeps_its_line_bre
     );
     common::assert_answer_tags_as_text(&md);
 }
+
+/// The criterion of #832: with `--full`, a line of three backticks in the values of a pack does
+/// not end the block of the diff. So a tag of HTML in the next line of the values stays in the
+/// block, and the markdown shows it as text.
+#[test]
+fn the_markdown_of_full_keeps_a_line_of_three_backticks_of_the_values_in_its_block() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // A text of the values that starts at the margin of the YAML. A line of context of the diff
+    // starts with a space, so the line of three backticks has three spaces before it.
+    let values = |enabled: &str| {
+        let text = format!(
+            "enabled: {enabled}\nnotes: |\n  ```\n  {}\n  ```",
+            common::ANSWER_TAGS
+        );
+        let json = serde_json::to_string(&text).unwrap();
+        json[1..json.len() - 1].to_string()
+    };
+    let snapshot = |name: &str, enabled: &str| {
+        let raw = dir.path().join(name);
+        common::rewrite(
+            &dir.path().join("a"),
+            &raw,
+            &[("enabled: true", &values(enabled))],
+        );
+        ops::snapshot_from_dir(&raw, name, "t0").unwrap()
+    };
+    let (a, b) = (snapshot("tags-a", "true"), snapshot("tags-b", "false"));
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, true).unwrap();
+    assert!(md.contains("\n   ```\n"), "the values hold the line\n{md}");
+    assert!(md.contains("````diff\n"), "{md}");
+    let outside = common::outside_code_blocks(&md);
+    assert!(!outside.contains("AccessDenied"), "{outside}");
+    common::assert_only_strata_tags(&outside);
+}

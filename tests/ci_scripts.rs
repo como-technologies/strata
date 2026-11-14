@@ -4313,6 +4313,40 @@ fn verify_report_dry_run_prints_each_report_and_calls_no_host() {
     );
 }
 
+/// The criterion of #832: the issue of a record that strata could not check shows the error as
+/// text. The error can quote an answer with tags of HTML. A line of three backticks in the output
+/// of strata does not end the block of the output.
+#[test]
+fn verify_report_shows_each_tag_of_an_answer_in_the_error_of_a_record_as_text() {
+    let d = Report::verify();
+    d.summary(2, &[("releases/c.json", "error", "lab-profile", "1.0.0")]);
+    let message = format!("GET /v1/x failed with HTTP 403: {}", common::ANSWER_TAGS);
+    let mut summary = read_json(&d.dir.path().join("summary.json"));
+    summary["records"][0]["error"]["message"] = serde_json::json!(message);
+    d.put("summary.json", &summary.to_string());
+    d.record(
+        "c",
+        2,
+        "",
+        &format!("strata: {message}\n```\n{}\n", common::ANSWER_TAGS),
+    );
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let out = text(&o.stdout);
+    let body = out
+        .strip_prefix("<!-- strata-verify: releases/c.json -->\n")
+        .unwrap_or_else(|| panic!("the marker starts the body:\n{out}"));
+    assert!(
+        body.contains(&format!(
+            ": api: GET /v1/x failed with HTTP 403: {}\n",
+            strata::text::html_text(common::ANSWER_TAGS)
+        )),
+        "{body}"
+    );
+    assert!(body.contains("\n````\nstrata: GET /v1/x"), "{body}");
+    common::assert_only_strata_tags(&common::outside_code_blocks(body));
+}
+
 #[test]
 fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_digest_on() {
     let d = Report::verify();
@@ -4823,6 +4857,16 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             refuses(vec![upgrade(&["fred"])]),
             Some("1 record of project prod was not asked"),
         ),
+        // a message with tags of HTML shows each tag as text, as in the markdown of `behind`
+        (
+            refuses(vec![error(
+                "csi-aws-ebs",
+                "PackValidationFailed",
+                common::ANSWER_TAGS,
+                &[],
+            )]),
+            Some(common::ANSWER_TAGS),
+        ),
     ];
     // the skip of a minor version of Kubernetes comes under the answer of Palette. It names the
     // next step, or only the next minor version (#623)
@@ -4904,6 +4948,73 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
         "{}",
         text(&o.stdout)
     );
+}
+
+/// The criterion of #832: the issue of a pack that is behind shows each text of an answer as text.
+/// These are the name of the registry, the error of a pin that strata could not check, and a
+/// refusal of Palette. The state line holds the same texts, and a `-->` in a text does not end its
+/// comment. So the next run reads the same pins.
+#[test]
+fn upstream_report_shows_each_tag_of_an_answer_as_text_and_keeps_the_state_line_whole() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0"], None);
+    let answer = format!("{} -->", common::ANSWER_TAGS);
+    let mut report = read_json(&u.dir.path().join("report.json"));
+    let mut failed = report["pins"][0].clone();
+    failed["version"] = serde_json::json!("1.62.0");
+    failed["behind"] = serde_json::json!(false);
+    failed["newer"] = serde_json::json!([]);
+    failed.as_object_mut().unwrap().remove("bump");
+    failed["error"] = serde_json::json!({"kind": "api",
+        "message": format!("GET /v1/x failed with HTTP 403: {answer}")});
+    report["pins"][0]["bump"]["paletteValidation"] = serde_json::json!({"accepts": false,
+        "errors": [{"pack": "csi-aws-ebs", "code": "PackValidationFailed", "message": answer,
+                    "clusters": []}]});
+    report["pins"].as_array_mut().unwrap().push(failed);
+    for pin in report["pins"].as_array_mut().unwrap() {
+        if pin["name"] == "csi-aws-ebs" {
+            pin["registry"] = serde_json::json!(common::ANSWER_TAGS);
+        }
+    }
+    u.put("report.json", &report.to_string());
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let body = text(&o.stdout);
+    let lines: Vec<&str> = body.lines().collect();
+    let state = lines[1]
+        .strip_prefix("<!-- strata-behind-state: ")
+        .and_then(|l| l.strip_suffix(" -->"))
+        .unwrap_or_else(|| panic!("the second line holds the state:\n{body}"));
+    assert!(!state.contains(['<', '>', '&']), "{state}");
+    let state: serde_json::Value = serde_json::from_str(state).unwrap();
+    assert_eq!(
+        state["pins"][0]["bump"]["paletteValidation"]["errors"][0]["message"],
+        answer.as_str()
+    );
+    let shown = lines[2..].join("\n");
+    common::assert_answer_tags_as_text(&shown);
+    let html = strata::text::html_text;
+    for line in [
+        format!("behind in {}, checked", html(common::ANSWER_TAGS)),
+        format!(
+            "<br>palette refuses: PackValidationFailed csi-aws-ebs: {} |",
+            html(&answer)
+        ),
+        format!(
+            "| not checked: GET /v1/x failed with HTTP 403: {} |",
+            html(&answer)
+        ),
+    ] {
+        assert!(shown.contains(&line), "{line}\n{shown}");
+    }
+
+    // the next run gives the same pins to `strata behind --since`
+    let issue = serde_json::json!([{"number": 41, "title": "t", "body": body}]);
+    u.put("issues.json", &issue.to_string());
+    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let previous = read_json(&u.dir.path().join("since-used.json"));
+    assert_eq!(previous["pins"], state["pins"]);
 }
 
 #[test]

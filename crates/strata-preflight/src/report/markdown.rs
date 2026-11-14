@@ -1,6 +1,6 @@
 //! The markdown form of a report: a pull request comment.
 
-use strata::text::{markdown_cell, plural};
+use strata::text::{code_block, markdown_cell, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, FAILED_REQUESTS, FailedRequest, Report, SectionScore, pct};
@@ -109,10 +109,8 @@ fn reproduce_section(checks: &[CheckResult]) -> String {
     for c in shown {
         out.push_str(&format!("**`{}`** — {}\n\n", c.id, c.title));
         if !c.shown_reproduce().is_empty() {
-            out.push_str(&format!(
-                "```bash\n{}\n```\n\n",
-                c.shown_reproduce().join("\n")
-            ));
+            out.push_str(&code_block("bash", &c.shown_reproduce().join("\n")));
+            out.push('\n');
         }
         if let Some(fix) = c.shown_fix() {
             out.push_str(&format!("Fix: {}\n\n", fix.line()));

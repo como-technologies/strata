@@ -66,6 +66,12 @@ An unverified record holds a pack with no upstream digest. Its issue says that
 `--allow-no-digest` accepts it. See
 [verify](../commands/verify.md#the-verdicts).
 
+The issue of a record that strata could not check gives the error and the
+output of strata. The error can quote the body of an answer. The issue shows
+each tag of HTML in it as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. The
+output is in a fenced block that no line of the output ends.
+
 When `verify` checks nothing, for example when no pattern matches a file, the
 script exits `2` and touches no issue. The script also exits `2` when `verify`
 prints nothing, with each `jq` from 1.6. A host call that fails ends the script

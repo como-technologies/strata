@@ -2,8 +2,15 @@ use super::*;
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
+use answer_tags::{ANSWER_TAGS, assert_only_strata_tags};
 use std::time::Duration;
 use strata::api::Method;
+
+// The text of an answer with tags of HTML, and the check of the tags, in the file that the tests
+// of strata use. A test here uses only those two, so the other checks are dead code here.
+#[allow(dead_code)]
+#[path = "../../../../tests/common/answer_tags.rs"]
+mod answer_tags;
 
 fn check(
     id: &str,
@@ -1277,9 +1284,8 @@ fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
 /// in the row of a check that failed and in the line of the checks that did not run.
 #[test]
 fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
-    let tags = "<a href=\"https://example.com\">x</a> <Code>AccessDenied</Code>";
-    let message = format!("HTTP 403: {tags}");
-    let escaped = format!("HTTP 403: {}", strata::text::html_text(tags));
+    let message = format!("HTTP 403: {ANSWER_TAGS}");
+    let escaped = format!("HTTP 403: {}", strata::text::html_text(ANSWER_TAGS));
     let failed = Outcome {
         verdict: Verdict::Failed,
         messages: vec![message.clone()],
@@ -1297,7 +1303,7 @@ fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
             outcome,
         ));
         assert!(md.contains(&line), "{line:?} in\n{md}");
-        assert!(!md.contains("<a ") && !md.contains("<Code>"), "{md}");
+        assert_only_strata_tags(&md);
     }
 }
 

@@ -38,6 +38,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 use strata::model::pack_type::PackType;
 
 mod answer;
+mod answer_tags;
 pub mod closed_set;
 mod code_span;
 mod download;
@@ -50,6 +51,7 @@ mod toml;
 mod walk;
 
 pub use answer::*;
+pub use answer_tags::*;
 pub use closed_set::schema_values;
 pub use code_span::*;
 pub use download::*;
@@ -1276,38 +1278,6 @@ pub fn markdown() -> Box<dyn strata::render::Renderer> {
         strata::term::color::Paint::off(),
         false,
     )
-}
-
-/// The body of an answer with a link and a tag of HTML, as a message of Palette can hold them.
-pub const ANSWER_TAGS: &str = "<a href=\"https://example.com\">x</a> <Code>AccessDenied</Code>";
-
-/// The tags of HTML that the markdown of strata writes itself.
-const STRATA_TAGS: [&str; 7] = [
-    "<br>",
-    "<details>",
-    "</details>",
-    "<summary>",
-    "</summary>",
-    "<code>",
-    "</code>",
-];
-
-/// Make sure that each tag of HTML in `markdown` is a tag that strata writes. So a text that
-/// strata quotes from an answer shows its tags as text.
-pub fn assert_only_strata_tags(markdown: &str) {
-    let rest = STRATA_TAGS
-        .iter()
-        .fold(markdown.to_string(), |text, tag| text.replace(tag, ""));
-    assert_eq!(rest.find('<'), None, "a tag of an answer in\n{markdown}");
-}
-
-/// Make sure that `markdown` shows [`ANSWER_TAGS`] as text, with no tag of HTML from it.
-pub fn assert_answer_tags_as_text(markdown: &str) {
-    assert!(
-        markdown.contains(&strata::text::html_text(ANSWER_TAGS)),
-        "the answer as text in\n{markdown}"
-    );
-    assert_only_strata_tags(markdown);
 }
 
 /// Run `strata verify` on `record` against the in-memory Palette `api`, read at `t1`.

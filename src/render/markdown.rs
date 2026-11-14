@@ -38,7 +38,7 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::{code_cell, code_span, dash, html_text, markdown_cell};
+use crate::text::{code_block, code_cell, code_span, dash, html_text, markdown_cell};
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
@@ -187,17 +187,14 @@ fn variables_section(d: &Diff) -> String {
         return String::new();
     }
     let g = &d.variables.by_name;
-    let mut o = format!(
-        "<details><summary>variables: {} added, {} removed, {} changed</summary>\n\n```diff\n",
+    let lines: String = variable_lines(g).iter().map(variable_line).collect();
+    format!(
+        "<details><summary>variables: {} added, {} removed, {} changed</summary>\n\n{}</details>\n\n",
         g.added.len(),
         g.removed.len(),
-        g.changed.len()
-    );
-    for v in variable_lines(g) {
-        o.push_str(&variable_line(&v));
-    }
-    o.push_str("```\n</details>\n\n");
-    o
+        g.changed.len(),
+        code_block("diff", &lines)
+    )
 }
 
 /// The line with the state of each tier of the cluster, and the fold with the tiers that differ.
@@ -211,13 +208,12 @@ fn tiers_section(d: &Diff) -> String {
                 .iter()
                 .map(|(t, same)| format!("{t} {}", moved(!*same).as_str()))
                 .collect();
-            let mut o = format!("**Cluster tiers:** {}\n\n", words.join(", "));
-            o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
-            for line in tier_op_lines(d) {
-                o.push_str(&op_line(&line));
-            }
-            o.push_str("```\n</details>\n\n");
-            o
+            let lines: String = tier_op_lines(d).iter().map(op_line).collect();
+            format!(
+                "**Cluster tiers:** {}\n\n<details><summary>cluster tiers that differ</summary>\n\n{}</details>\n\n",
+                words.join(", "),
+                code_block("diff", &lines)
+            )
         }
     }
 }
@@ -227,15 +223,16 @@ fn cluster_values_section(d: &Diff) -> String {
     let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) else {
         return String::new();
     };
-    let mut o = format!(
-        "<details><summary>cluster values: {}</summary>\n\n```diff\n",
-        values_changed(cv.values.len())
-    );
-    for c in &cv.values {
-        o.push_str(&op_line(&OpLine::cluster_value(c)));
-    }
-    o.push_str("```\n</details>\n\n");
-    o
+    let lines: String = cv
+        .values
+        .iter()
+        .map(|c| op_line(&OpLine::cluster_value(c)))
+        .collect();
+    format!(
+        "<details><summary>cluster values: {}</summary>\n\n{}</details>\n\n",
+        values_changed(cv.values.len()),
+        code_block("diff", &lines)
+    )
 }
 
 /// The fold with the detail of a changed pack. It is empty when the pack has no detail to show.
@@ -245,11 +242,8 @@ fn pack_detail(pd: &PackDiff) -> String {
         body.push_str(&format!("{line}\n\n"));
     }
     if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
-        body.push_str("```diff\n");
-        for l in &pd.values.diff {
-            body.push_str(&leaf(l));
-        }
-        body.push_str("```\n");
+        let lines: String = pd.values.diff.iter().map(leaf).collect();
+        body.push_str(&code_block("diff", &lines));
     }
     if pd.values.changed && !pd.values.parseable {
         body.push_str(&values_unparsed_sentence(code));
@@ -257,11 +251,8 @@ fn pack_detail(pd: &PackDiff) -> String {
     }
     let artifacts = artifact_lines(pd);
     if !artifacts.is_empty() {
-        body.push_str("```diff\n");
-        for line in &artifacts {
-            body.push_str(&format!("{line}\n"));
-        }
-        body.push_str("```\n");
+        let lines: String = artifacts.iter().map(|line| format!("{line}\n")).collect();
+        body.push_str(&code_block("diff", &lines));
     }
     for m in &pd.manifests {
         body.push_str(&format!("- {}\n", manifest_change(m, code)));

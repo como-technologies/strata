@@ -54,13 +54,19 @@ See
 [Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
 and [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
 
+The issue shows each text of an answer as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. Such
+a text is a message of Palette, the error of a pin, or the name of a registry. A
+tag of HTML in it shows as text.
+
 ## Two runs name what arrived
 
 The second line of each issue keeps the pins of its pack as JSON, in a comment
 that the host does not show. The next run gives them to `strata behind --since`,
 so the issue names each version that arrived since its last update, with no
-storage outside the code host. `--save FILE` keeps the report of the whole run,
-for a job that stores it.
+storage outside the code host. The JSON writes each `<`, `>`, and `&` as an
+escape of JSON, such as `\u003c`. So a text of an answer cannot end the comment.
+`--save FILE` keeps the report of the whole run, for a job that stores it.
 
 ## Run it
 
