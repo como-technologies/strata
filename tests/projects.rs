@@ -1,14 +1,18 @@
 //! The project of each command that reads Palette, and of each side of `compare` and
-//! `same-release`: a tenant with one project for each environment (#486).
+//! `same-release`: a tenant with one project for each environment (#486). The uid of a project
+//! name belongs to the address and the key of each client (#875).
 
 use std::collections::BTreeMap;
 
 use serde_json::{Value, json};
+use strata::api::project_uid_named;
+use strata::config::Config;
+use strata::term::progress::Progress;
 
 use crate::common::{
     PROJECT_LISTING, Stand, UID_A, UID_B, against_closed_port, command_names, manifests_route,
-    no_manifests, no_variables, profile_document, profile_route, project_listing, strata_command,
-    template, variables_route,
+    no_manifests, no_variables, profile_document, profile_route, project_listing, serve_tenants,
+    strata_command, template, variables_route,
 };
 
 /// The uids of the projects `dev` and `prod` of the stand-in.
@@ -143,6 +147,40 @@ fn each_command_that_reads_palette_finds_the_uid_of_project_name_and_reads_that_
             "{args:?}: {asked:?}"
         );
     }
+}
+
+/// The routes of a tenant with one project, `lab`, whose uid is `uid`.
+fn lab_tenant(uid: &str) -> BTreeMap<String, Value> {
+    BTreeMap::from([(
+        PROJECT_LISTING.to_string(),
+        project_listing(&[("lab", uid)]),
+    )])
+}
+
+#[test]
+fn a_project_name_gives_the_uid_in_the_tenant_of_the_address_and_the_key_of_each_client() {
+    // one address with two tenants: each key reads the projects of its own tenant
+    let shared = serve_tenants(BTreeMap::from([
+        ("first-key".to_string(), lab_tenant("p-first")),
+        ("second-key".to_string(), lab_tenant("p-second")),
+    ]));
+    // another address, where the first key has a tenant too
+    let other = serve_tenants(BTreeMap::from([(
+        "first-key".to_string(),
+        lab_tenant("p-other"),
+    )]));
+    let uid = |address: &str, key: &str| {
+        project_uid_named(&Config::new(address, key), "lab", Progress::silent())
+            .unwrap_or_else(|e| panic!("{key} at {address}: {e}"))
+    };
+    assert_eq!(uid(&shared, "first-key"), "p-first");
+    assert_eq!(uid(&shared, "second-key"), "p-second", "another key");
+    assert_eq!(uid(&other, "first-key"), "p-other", "another address");
+    assert_eq!(
+        uid(&shared, "first-key"),
+        "p-first",
+        "the first client again"
+    );
 }
 
 /// The project of each request for the routes of the profile `uid`.

@@ -9543,6 +9543,7 @@ fn a_refusal_to_a_role_without_cluster_get_is_terminal_so_strata_asks_once_and_r
             status: 500,
             body: refusal.clone(),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     });
@@ -17399,6 +17400,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
             status: 500,
             body: body.clone(),
             retry_after: None,
+            key_proved: false,
         };
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
@@ -17490,6 +17492,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
             status,
             body: body_of(code),
             retry_after: None,
+            key_proved: false,
         }
         .class()
     };

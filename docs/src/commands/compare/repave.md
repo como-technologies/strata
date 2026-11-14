@@ -82,6 +82,17 @@ console forwards to, until the agent reads the cluster again. See
 The comment of a pull request asks the same question. See
 [Ask Palette if the change repaves](../../automation/pr-comments.md#ask-palette-if-the-change-repaves).
 
+### The console address of a pack of virtual machines
+
+A record holds `********` in place of the console address of such a pack: see
+[The console address of a pack of virtual machines](../../internals/palette/profiles.md#the-console-address-of-a-pack-of-virtual-machines).
+Palette saves the value of the body as the address, also when the value is the
+mask. So the question sends the values of the pack with the address that the
+cluster holds in place of the mask. When the record holds the values of the
+cluster, the question sends those values. When the cluster does not run the
+pack, the question sends an empty address. Palette then makes the address from
+the `serviceType` of the pack, as for a pack with no address.
+
 ## Ask about the update that waits
 
 When an update waits for a cluster, give `cluster:<cluster>@pending` as the

@@ -12,6 +12,7 @@ use super::cluster::{
 use super::pack::Pack;
 use super::variable::{Variable, hash_of};
 use super::{Consumers, SNAPSHOT_SCHEMA, Snapshot, Source, SubjectKind, Template, Tool, macros_of};
+use crate::api::mask::console::mask_console_profile;
 use crate::api::registry::registry_name;
 use crate::api::{CLUSTER_TEMPLATE, PROFILE_TEMPLATE, RawCluster, RawProfile};
 use crate::content::hash::{content_of, root_of};
@@ -70,7 +71,9 @@ impl Snapshot {
     ///
     /// # Errors
     ///
-    /// None at present: the build reads only `raw`, and a field that is not there is empty.
+    /// [`Error::Serialize`] when strata cannot write the values of a pack of virtual machines with
+    /// the mask over its console address. The build reads only `raw`, and a field that is not
+    /// there is empty.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         Self::from_raw_at(raw, reference, fetched_at, PROFILE_TEMPLATE)
     }
@@ -107,7 +110,7 @@ impl Snapshot {
     ///
     /// # Errors
     ///
-    /// [`Error::NoDraft`] for a profile with no draft.
+    /// [`Error::NoDraft`] for a profile with no draft, and the errors of [`Snapshot::from_raw`].
     pub fn from_raw_draft(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let prof = &raw.profile;
         if !crate::api::has_draft(prof) {
@@ -127,7 +130,8 @@ impl Snapshot {
     }
 
     /// Build a snapshot of one template of a profile: [`Template::Published`] or
-    /// [`Template::Draft`].
+    /// [`Template::Draft`]. The record holds `********` over the console address of each pack of
+    /// virtual machines: see [`mask_console_profile`].
     fn from_raw_template(
         raw: &RawProfile,
         reference: &str,
@@ -135,6 +139,7 @@ impl Snapshot {
         template: Template,
         route: &'static str,
     ) -> Result<Snapshot> {
+        let raw = &*mask_console_profile(raw)?;
         let prof = &raw.profile;
         let tpl_ptr = format!("/spec/{template}");
         let tpl_packs = arr(prof, &format!("{tpl_ptr}/packs"));
@@ -270,7 +275,8 @@ impl Snapshot {
     /// - [`Error::ClusterProfileNotFound`] when `profile` names none of the applied profiles of the
     ///   cluster.
     /// - [`Error::Serialize`] for a cluster group whose values have no canonical form, when strata
-    ///   cannot mask a password in them.
+    ///   cannot mask a password in them. Also the errors of [`Snapshot::from_raw`] for each
+    ///   profile of the cluster.
     pub fn from_cluster(
         raw: &RawCluster,
         profile: Option<&str>,

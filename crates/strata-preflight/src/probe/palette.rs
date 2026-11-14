@@ -38,6 +38,23 @@ pub(super) struct Failed {
     pub(super) error: Error,
 }
 
+impl Failed {
+    /// The outcome of a check whose one request failed: the error, with the mask of [`Mask`]
+    /// over the body before the cut, and the request when it went out. A check of Palette and an
+    /// exec check with a read give it. `world` holds the values that the mask covers.
+    pub(super) fn outcome(self, world: &Value, started: Instant) -> Outcome {
+        let mut out = Outcome::new(
+            Verdict::Error,
+            vec![failed_message(&self.error, world)],
+            started,
+        );
+        if let Some(call) = self.call {
+            out.ran = Ran::Request(call);
+        }
+        out
+    }
+}
+
 /// Fill the templates of the request for `item`, and ask Palette. A check with no `each` has no
 /// item.
 fn ask(
@@ -139,17 +156,7 @@ pub(super) fn run_palette(
                 out.ran = Ran::Request(call);
                 out
             }
-            Err(failed) => {
-                let mut out = Outcome::new(
-                    Verdict::Error,
-                    vec![failed_message(&failed.error, world)],
-                    started,
-                );
-                if let Some(call) = failed.call {
-                    out.ran = Ran::Request(call);
-                }
-                out
-            }
+            Err(failed) => failed.outcome(world, started),
         };
     };
     let items = match jq.first(&rule.id, each, world, None) {
@@ -204,12 +211,14 @@ fn failed_message(error: &Error, world: &Value) -> String {
             status,
             body,
             retry_after,
+            key_proved,
         }) => strata::Error::Api {
             method: *method,
             path: path.clone(),
             status: *status,
             body: Mask::of(world).apply(body),
             retry_after: *retry_after,
+            key_proved: *key_proved,
         }
         .to_string(),
         other => other.to_string(),

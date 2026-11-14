@@ -371,7 +371,7 @@ pub(crate) fn masked_sentence(key: &str, paths: &[String]) -> String {
     format!("pack {key} has {at}: an equal root does not show an equal secret")
 }
 
-/// One note for each pack with a value that Palette masks: see [`masked_sentence`].
+/// One note for each pack with a masked value: see [`masked_sentence`].
 fn masked_notes(d: &Diff) -> Vec<String> {
     d.masked_packs()
         .iter()

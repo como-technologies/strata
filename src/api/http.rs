@@ -1,5 +1,8 @@
 //! [`PaletteApi`] over HTTP: one attempt per call.
 
+use std::collections::BTreeSet;
+use std::sync::{Mutex, PoisonError};
+
 use serde_json::Value;
 
 use super::mask::mask_secret;
@@ -23,10 +26,52 @@ const FILE_TYPE: &str = "application/octet-stream";
 /// The most bytes that strata reads of one answer.
 const BODY_LIMIT: u64 = 256 * 1024 * 1024;
 
+/// The keys that an answer with a 2xx status proved in this process: see [`KeyProof`].
+///
+/// The proof belongs to the key, and not to a client or a thread. A run of strata makes more than
+/// one client of a key. Two examples are the client of the lookup of a project and the client of
+/// the project. The clients of one key can also run on many threads, such as the reads of an adapter,
+/// so the set is behind a lock.
+static PROVED_KEYS: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+
+/// The proof of one key at one address of Palette: true after an answer with a 2xx status to a
+/// client of the key. Then the key is right, and a 403 that is a
+/// [`Denial`](super::codes::Denial) is a refusal of the role of the key.
+///
+/// It holds [`Config::key_digest`], so [`PROVED_KEYS`] holds no key either. A client with another
+/// key starts with no proof, also at the same address.
+struct KeyProof(String);
+
+impl KeyProof {
+    /// The proof of the key of `config`.
+    fn of(config: &Config) -> Self {
+        KeyProof(config.key_digest())
+    }
+
+    /// Note an answer with a 2xx status: Palette took the key.
+    fn prove(&self) {
+        // a panic of another thread with the lock leaves the set as it was, so the set stays true
+        let mut proved = PROVED_KEYS.lock().unwrap_or_else(PoisonError::into_inner);
+        if !proved.contains(&self.0) {
+            proved.insert(self.0.clone());
+        }
+    }
+
+    /// True when an answer to a client of the key had a 2xx status.
+    fn proved(&self) -> bool {
+        PROVED_KEYS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .contains(&self.0)
+    }
+}
+
 /// The HTTP implementation. One attempt per call; wrap it in [`Retry`](super::Retry) for more.
 pub struct HttpApi {
     config: Config,
     agent: ureq::Agent,
+    /// The proof of the key of `config`: see [`Error::Api`].
+    proof: KeyProof,
 }
 
 impl HttpApi {
@@ -37,7 +82,11 @@ impl HttpApi {
             .timeout_global(Some(config.timeout))
             .build()
             .into();
-        HttpApi { config, agent }
+        HttpApi {
+            proof: KeyProof::of(&config),
+            config,
+            agent,
+        }
     }
 }
 
@@ -55,7 +104,8 @@ impl HttpApi {
 
     /// The status and the body of an answer with a 2xx status. Else the error that the answer
     /// stands for: a status out of 2xx, or a body that strata cannot read. The body of the error
-    /// holds no copy of the key of the request.
+    /// holds no copy of the key of the request. The error says whether an earlier answer to a client
+    /// of the key proved the key.
     fn body(
         &self,
         method: Method,
@@ -93,9 +143,10 @@ impl HttpApi {
                 body: mask_secret(&String::from_utf8_lossy(&body), &self.config.api_key)
                     .replace(['\n', '\r'], " "),
                 retry_after,
+                key_proved: self.proof.proved(),
             });
         }
-        super::prove_key();
+        self.proof.prove();
         Ok((status, body))
     }
 
@@ -196,6 +247,63 @@ mod tests {
             s.write_all(&answer).unwrap();
         });
         (format!("http://{addr}"), request)
+    }
+
+    /// The answers `answers`, each a status line and a body, one for each request in turn, from a
+    /// server on this machine.
+    fn serve_each(answers: &[(&str, &str)]) -> String {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let answers: Vec<String> = answers
+            .iter()
+            .map(|(status_line, body)| {
+                format!(
+                    "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+            })
+            .collect();
+        std::thread::spawn(move || {
+            for answer in answers {
+                let (mut s, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                s.write_all(answer.as_bytes()).unwrap();
+            }
+        });
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn the_proof_of_a_key_belongs_to_the_key_so_a_second_client_with_another_key_names_the_key() {
+        let denied = routes::error_body(
+            crate::api::codes::Denial::Route.as_str(),
+            &routes::access_denied_message("filter.list", "tenant"),
+        );
+        let path = routes::TAG_FILTER_LISTING;
+        // the first client: an answer with a 2xx status proves its key, so its denial is the role
+        let url = serve_each(&[
+            ("200 OK", "{}"),
+            ("403 Forbidden", &denied),
+            ("403 Forbidden", &denied),
+            ("403 Forbidden", &denied),
+        ]);
+        let first = HttpApi::new(Config::new(url.as_str(), "first-key"));
+        first.get_json("/v1/dashboard/projects/metadata").unwrap();
+        let text = first.get_json(path).unwrap_err().to_string();
+        assert!(text.contains("does not give the permission"), "{text}");
+        assert!(!text.contains("the key can be wrong"), "{text}");
+        // a new client of the same key, such as the client of a project after its lookup
+        let again = HttpApi::new(Config::new(url.as_str(), "first-key"));
+        let text = again.get_json(path).unwrap_err().to_string();
+        assert!(!text.contains("the key can be wrong"), "{text}");
+        // the second client on the same thread and at the same address, with another key: no
+        // answer proved that key
+        let second = HttpApi::new(Config::new(url.as_str(), "second-key"));
+        let text = second.get_json(path).unwrap_err().to_string();
+        assert!(text.contains("does not give the permission"), "{text}");
+        assert!(text.contains("the key can be wrong"), "{text}");
     }
 
     #[test]

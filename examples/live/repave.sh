@@ -26,8 +26,9 @@
 #      as the control (#132). Then 1.0.1 back. Cluster A takes no update
 #   9  validate/repave saves the address of the console of the VM Orchestrator pack (#717). It
 #      runs only with VMO_CLUSTER=<uid> of a cluster with the pack virtual-machine-orchestrator
-#      and no cluster template. It reads the console address of the pack before and after each
-#      question. A body with a mark in consoleBaseAddress moves the console to the mark, which
+#      and no cluster template. Palette writes no mask over the console address in the document
+#      of the cluster (#741). The stage reads the console address of the pack before and after
+#      each question. A body with a mark in consoleBaseAddress moves the console to the mark, which
 #      answers 502. A body with the values of the cluster moves it back. The stage stops before
 #      the first question when a check before it fails. The forward of Palette keeps the address
 #      that it read, usually for at most 15 minutes. So the stage waits VMO_WAIT seconds (default
@@ -237,6 +238,11 @@ vmo_stage() {
   # Palette answers the route of a cluster that a cluster template governs with no reasons, and saves nothing
   check vmo-runs 0 "#717: the cluster runs $vmo_pack, its values hold consoleBaseAddress, and no cluster template governs it" -- \
     jq -e --arg p "$vmo_pack" '(.spec.clusterTemplate.uid // "") == "" and any(.spec.clusterProfileTemplates[].packs[]; .name == $p and (.values // "" | test("consoleBaseAddress:")))' vmo-cluster.out
+  # Palette writes ******** over a value whose schema format is password, and this value has none
+  check vmo-clear 0 "#741: Palette writes no mask over the console address of a pack of virtual machines" -- \
+    jq -e --argjson vm "$vm_packs" '[.spec.clusterProfileTemplates[].packs[] | select(.name | IN($vm[]))
+      | (.values // "") | splits("\n") | select(test("consoleBaseAddress:"))]
+      | length > 0 and all(contains("********") | not)' vmo-cluster.out
   vmo_stopped "$before" && return
   check vmo-summary 0 "#717: the summary of the cluster gives the console address of the service vm-dashboard" -- \
     "$live/api.sh" get "/v1/dashboard/spectroclusters/$V"

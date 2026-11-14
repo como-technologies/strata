@@ -306,9 +306,12 @@ the code of Palette. A custom role at project scope needs `cluster.get`,
 `clusterProfile.get`, `packRegistry.get`, `packRegistry.list`, and `audit.list`. A
 virtual cluster needs `virtualCluster.get` too.
 
-Strata writes `********` over each whole copy of the key of the run in the body
-of an error, before it prints or keeps the error. So the terminal, `--json`, a
-record, and the log of a job hold no copy of the key.
+Strata writes `********` over each copy of the key of the run in the body of an
+error, before it prints or keeps the error. It also masks a copy that a letter
+or a digit touches, as after the escape `\n` or the URL code `%3D`. A key of
+fewer than 16 characters can be a part of a word, so strata masks only its
+whole copies. So the terminal, `--json`, a record, and the log of a job hold
+no copy of the key.
 
 The tier `palette` of [`strata preflight`](../../commands/preflight/tiers.md#the-key-of-the-live-tier)
 sends more requests. The validate route of a create needs a permission that a viewer role

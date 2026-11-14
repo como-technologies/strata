@@ -38,9 +38,9 @@ pub enum Error {
     /// message names where a key comes from. The body alone names nothing that the reader can set.
     /// A 403 with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the
     /// route is of the tenant scope and that the request named a project. A [`Denial`] names what
-    /// Palette denied, such as the permission, and a 403 names the key only when no answer of the
-    /// run proved it.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body.trim(), BODY_IN_MESSAGE), status_hint(*status, path, body))]
+    /// Palette denied, such as the permission, and a 403 names the key only when `key_proved` is
+    /// false.
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body.trim(), BODY_IN_MESSAGE), status_hint(*status, path, body, *key_proved))]
     Api {
         /// The request method.
         method: Method,
@@ -53,6 +53,10 @@ pub enum Error {
         body: String,
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
+        /// True when an earlier answer to a client of the same key had a 2xx status, so Palette
+        /// took the key. Then a 403 that is a [`Denial`] is a refusal of the role of the key, and the
+        /// message does not name the key.
+        key_proved: bool,
     },
     /// Palette asked strata to wait longer than strata waits before retrying.
     #[error(

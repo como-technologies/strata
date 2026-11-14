@@ -71,19 +71,37 @@ fn warn_on_scope_conflict(config: &Config, progress: Progress) {
 
 /// The uid of the project named `name`, found at tenant scope once per run.
 ///
+/// The cache of the process keeps the uid with the name, the address, and the key of `config`.
+/// So a client of another tenant, or of another key, finds the project of its own tenant.
+///
 /// # Errors
 ///
 /// [`Error::ProjectNotFound`](crate::Error::ProjectNotFound) when no project has the name, and
 /// each error of the request.
 pub fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Result<String> {
-    static RESOLVED: OnceLock<(String, String)> = OnceLock::new();
-    if let Some((_, uid)) = RESOLVED.get().filter(|(n, _)| n == name) {
-        return Ok(uid.clone());
+    static RESOLVED: OnceLock<Resolved> = OnceLock::new();
+    let key = config.key_digest();
+    if let Some(found) = RESOLVED.get().filter(|r| r.key == key && r.name == name) {
+        return Ok(found.uid.clone());
     }
     let tenant = config.clone().without_project();
     progress.note(&format!("looking up project {name}"));
     let uid = connect_with(tenant, progress).project_uid_named(name)?;
-    // the cache holds one name: when it holds another, the next lookup of this name asks again
-    let _ = RESOLVED.set((name.to_string(), uid.clone()));
+    // the cache holds one name of one key: for another, the next lookup asks again
+    let _ = RESOLVED.set(Resolved {
+        key,
+        name: name.to_string(),
+        uid: uid.clone(),
+    });
     Ok(uid)
+}
+
+/// The uid that [`project_uid_named`] found for a name, and the key that asked.
+struct Resolved {
+    /// The [`Config::key_digest`] of the client that asked.
+    key: String,
+    /// The name of the project.
+    name: String,
+    /// The uid of the project.
+    uid: String,
 }

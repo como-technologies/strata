@@ -4,5 +4,5 @@ root       7dbf0976d17a -> 7dbf0976d17a   IDENTICAL
 note       pack addon/cert-manager has a masked value at registryPassword: an equal root does not show an equal secret
 ...
   [addon] cert-manager               1.21.1             unchanged
-      masked: registryPassword: Palette serves ******** in place of the secret
+      masked: registryPassword: the record holds ******** in place of the secret
 OK: published version aws-stack@1.1.10 is unchanged since 2026-09-17T09:30:00Z

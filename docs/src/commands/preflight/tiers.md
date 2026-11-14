@@ -79,7 +79,7 @@ route with HTTP 403, and three rules send it:
 Strata sends the request one time, because the refusal stays for the run. The
 report shows the error once, under `Requests that failed`, with the rules that
 it stopped. The error names the permission that the role does not give. An
-earlier answer of the run proved the key, so the error does not name the key.
+earlier answer to the key proved it, so the error does not name the key.
 
 Each of these rules gives `ERROR`, and the exit is `2`. To run them,
 give the key a role with `cluster.create`, such as Cluster Admin. Or give

@@ -245,7 +245,7 @@ and the `flags` of the pack. It also holds these lists:
 | `values.settings`, `values.followsTheVersion`, `values.repeatsTheLists` | Each changed value with its `op`, `path`, `old`, and `new`, in the group of the fold that the summary counts. |
 | `values.unified` | The text of the raw values, as a unified diff. One string, empty when the pack has no text. |
 | `imageChanges`, `chartChanges` | The `op` and the `name` of each change, and the old and the new tag or version. |
-| `masked` | The paths that Palette masks. They have no value. |
+| `masked` | The paths of the masked values. They have no value. |
 | `manifests` | The `op`, the `name`, and the `unified` text of each changed, added, or removed manifest. `unified` is empty when the pack has no text. |
 | `paramChanges` | The `op` and the `name` of each change. |
 | `build` | Each field of the build of the pack that differs: `version`, `tag`, `packUid`, or `upstream`, with its value `a` before and `b` after. Empty for an added or a removed pack. |

@@ -205,7 +205,7 @@ pub struct PackDiff {
     /// not show. A manifest pack has no archive, so it is never true for one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upstream_unknown: bool,
-    /// The path of each value that Palette masks on either side, sorted: see [`Pack::masked_paths`].
+    /// The path of each masked value on either side, sorted: see [`Pack::masked_paths`].
     /// The root covers the mask and not the secret, so an equal root does not show an equal
     /// secret.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -273,18 +273,18 @@ impl PackDiff {
     }
 }
 
-/// One pack with a value that Palette masks: see [`Pack::masked_paths`].
+/// One pack with a masked value: see [`Pack::masked_paths`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MaskedPack {
     /// `<layer>/<name>` of the pack.
     pub key: String,
-    /// The path of each value that Palette masks, on either side, sorted.
+    /// The path of each masked value, on either side, sorted.
     pub paths: Vec<String>,
 }
 
 impl Diff {
-    /// Each pack with a value that Palette masks on either side, in pack order.
+    /// Each pack with a masked value on either side, in pack order.
     pub(crate) fn masked_packs(&self) -> Vec<MaskedPack> {
         self.packs
             .iter()

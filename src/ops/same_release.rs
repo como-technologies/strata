@@ -201,9 +201,9 @@ pub struct Pair {
     /// `packs[].mintedUidOnly`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_uid_only: Vec<String>,
-    /// Each pack, on either side, with a value that Palette masks. The root covers the mask and
-    /// not the secret, so an equal root does not show an equal secret. It does not change
-    /// `status`: the mask is what Palette serves.
+    /// Each pack, on either side, with a masked value. The root covers the mask and not the
+    /// secret, so an equal root does not show an equal secret. It does not change `status`: the
+    /// mask is in each record of the content.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub masked: Vec<MaskedPack>,
     /// When both records hold the digests of their macro values: each macro whose value differs,

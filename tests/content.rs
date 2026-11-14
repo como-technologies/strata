@@ -197,6 +197,7 @@ fn an_error_has_a_failure_class() {
         path: "/v1/x".into(),
         body: String::new(),
         retry_after: None,
+        key_proved: false,
     };
     assert_eq!(api(503).class(), FailureClass::Transient);
     assert_eq!(api(429).class(), FailureClass::Transient);
