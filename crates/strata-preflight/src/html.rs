@@ -5,6 +5,7 @@
 //! run directory, or a job attaches it.
 
 use strata::closed_set::ClosedSet;
+use strata::text::html_text;
 
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
@@ -12,11 +13,10 @@ use crate::report::{
     CheckResult, DEFAULT_GATE, FAILED_REQUESTS, Report, SectionScore, pct, percent,
 };
 
+/// `s` as [`html_text`], with each `"` as an entity too, so that it can also be the value of an
+/// attribute in quotes.
 fn esc(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    html_text(s).replace('"', "&quot;")
 }
 
 const STYLE: &str = r#"

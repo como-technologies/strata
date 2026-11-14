@@ -1,0 +1,7 @@
+$ strata same-release --allow renumber web-addons@1.0.0 web-addons@1.0.1 --format markdown
+### same release: NOT THE SAME RELEASE: 1 of 1 pair failed
+
+| status | from | to | detail |
+|---|---|---|---|
+| DIFFERENT | `web-addons@1.0.0` | `web-addons@1.0.1` | root 5ff3ae43359b -&gt; b6cf4b4ff05e<br>nginx  25.1.5 -&gt; 25.1.6 (archive: not readable)<br>pack addon/nginx 25.1.5 archive: not readable: 263 bytes of text: &lt;?xml version="1.0" encoding="UTF-8"?&gt; &lt;Error&gt;&lt;Code&gt;AccessDenied&lt;/Code&gt;&lt;Message&gt;Access Denied&lt;/Message&gt;&lt;RequestId&gt;4V6Q3…<br>pack addon/nginx 25.1.6 archive: not readable: 263 bytes of text: &lt;?xml version="1.0" encoding="UTF-8"?&gt; &lt;Error&gt;&lt;Code&gt;AccessDenied&lt;/Code&gt;&lt;Message&gt;Access Denied&lt;/Message&gt;&lt;RequestId&gt;4V6Q3… |
+

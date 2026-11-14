@@ -15394,9 +15394,13 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
         "the line comes under the answer of Palette: {text}"
     );
     assert_eq!(text.matches("skips a minor version").count(), 1, "{text}");
+    // the markdown writes the `->` of the line as `-&gt;`
     let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
-        md.contains(&format!("<br>palette accepts<br>{line} |")),
+        md.contains(&format!(
+            "<br>palette accepts<br>{} |",
+            strata::text::html_text(&line)
+        )),
         "{md}"
     );
 
@@ -18196,4 +18200,302 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
     assert_eq!(bump.flags[0], ChangeFlag::Identity);
     assert_eq!(bump.flags[1].as_str(), "PROVENANCE");
     assert_eq!(serde_json::to_value(&report).unwrap(), doc);
+}
+
+// ---- a text of an answer in the markdown -----------------------------------------------------
+
+/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
+/// tag of HTML as text in the markdown of a pull request comment.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the note of a cluster whose repave strata could not read
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
+        repave_route(),
+        403,
+        common::ANSWER_TAGS,
+    );
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    let md = common::markdown()
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        md.contains("(strata could not read its reasons: HTTP 403: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    // the verdict of a record whose audit log Palette refuses
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        403,
+        common::ANSWER_TAGS,
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().verdict(&v.diff).unwrap();
+    assert!(
+        md.contains("\n\nwho: not read: HTTP 403: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    // the verdict also names the message of the last sync of a registry
+    let mut doc = serde_json::to_value(&v.diff).unwrap();
+    doc["verify"]["registrySync"] = serde_json::json!({
+        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_TAGS
+    });
+    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().verdict(&synced).unwrap();
+    assert!(
+        md.contains("; the last sync of the registry failed: &lt;a href="),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
+/// in the markdown of `consumers`.
+#[test]
+fn the_markdown_of_consumers_shows_the_error_of_the_edge_hosts_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(CLUSTER_LISTING, serde_json::json!([]))
+        .failing(post(EDGE_HOST_SEARCH), 500, common::ANSWER_TAGS);
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
+    assert!(md.contains("Edge hosts: not read ("), "{md}");
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: the error of a read in a row of `list` shows each tag of HTML as text in
+/// the markdown. The line breaks that strata writes between the packs and the profiles stay.
+#[test]
+fn the_markdown_of_list_shows_the_error_of_a_read_as_text_and_keeps_its_line_breaks() {
+    let packs = template(
+        "aws",
+        "cluster",
+        serde_json::json!([
+            {"name": "cni-cilium-oss", "layer": "cni", "type": "spectro", "tag": "1.19.6",
+             "version": "1.19.6"},
+            {"name": "csi-aws-ebs", "layer": "csi", "type": "spectro", "tag": "1.28.0",
+             "version": "1.28.0"}
+        ]),
+    );
+    let api = MemoryApi::new()
+        .with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [
+                listed_profile("lab-profile", "1.0.0", "u-p1"),
+                listed_profile("lab-profile", "1.1.0", "u-p2"),
+            ]}),
+        )
+        .with(
+            profile_route("u-p1"),
+            profile_document("u-p1", "lab-profile", "1.0.0", packs, None),
+        )
+        .failing(profile_route("u-p2"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("cni/cni-cilium-oss 1.19.6<br>csi/csi-aws-ebs 1.28.0 |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+
+    let api = MemoryApi::new()
+        .in_project("p1")
+        .with(
+            CLUSTER_LISTING,
+            serde_json::json!([
+                typed_cluster("shared", "c5", "AlloyAssist"),
+                typed_cluster("gone", "c6", "AlloyMonitor"),
+            ]),
+        )
+        .with(
+            cluster_route("c5"),
+            cluster_document(
+                "c5",
+                &[
+                    ("lab-profile", "1.0.0", UID_A, "cluster"),
+                    ("lab-addons", "2.0.0", UID_ADDONS, "add-on"),
+                ],
+            ),
+        )
+        .failing(cluster_route("c6"), 403, common::ANSWER_TAGS);
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Clusters],
+            applied: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains("lab-profile@1.0.0 (cluster)<br>lab-addons@2.0.0 (add-on) |"),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
+}
+
+/// The criterion of #832: with `--full`, a line of three backticks in the values of a pack does
+/// not end the block of the diff. So a tag of HTML in the next line of the values stays in the
+/// block, and the markdown shows it as text.
+#[test]
+fn the_markdown_of_full_keeps_a_line_of_three_backticks_of_the_values_in_its_block() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // A text of the values that starts at the margin of the YAML. A line of context of the diff
+    // starts with a space, so the line of three backticks has three spaces before it.
+    let values = |enabled: &str| {
+        let text = format!(
+            "enabled: {enabled}\nnotes: |\n  ```\n  {}\n  ```",
+            common::ANSWER_TAGS
+        );
+        let json = serde_json::to_string(&text).unwrap();
+        json[1..json.len() - 1].to_string()
+    };
+    let snapshot = |name: &str, enabled: &str| {
+        let raw = dir.path().join(name);
+        common::rewrite(
+            &dir.path().join("a"),
+            &raw,
+            &[("enabled: true", &values(enabled))],
+        );
+        ops::snapshot_from_dir(&raw, name, "t0").unwrap()
+    };
+    let (a, b) = (snapshot("tags-a", "true"), snapshot("tags-b", "false"));
+    let d = ops::compare(&a, &b, "t1");
+    let md = common::markdown().render(&d, &a, &b, true).unwrap();
+    assert!(md.contains("\n   ```\n"), "the values hold the line\n{md}");
+    assert!(md.contains("````diff\n"), "{md}");
+    let outside = common::outside_code_blocks(&md);
+    assert!(!outside.contains("AccessDenied"), "{outside}");
+    common::assert_only_strata_tags(&outside);
+}
+
+/// The criterion of #832: the name of a profile, as the answer gives it, shows each tag of HTML as
+/// text in the line `Consumers:` of the markdown, as it does in the heading.
+#[test]
+fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let name = serde_json::to_string(common::ANSWER_TAGS).unwrap();
+    common::rewrite(
+        &dir.path().join("b"),
+        &dir.path().join("b-tags"),
+        &[("\"lab-profile\"", &name)],
+    );
+    let recorded = ops::snapshot_from_dir(&dir.path().join("b-tags"), "b-tags", "t0").unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-b");
+    let on_cluster = snapshot_cluster(&api, None).unwrap();
+    let d = ops::compare(&recorded, &on_cluster, "t1");
+    let md = common::markdown()
+        .render(&d, &recorded, &on_cluster, false)
+        .unwrap();
+    let tags = strata::text::html_text(common::ANSWER_TAGS);
+    assert!(
+        md.contains(&format!("\n**Consumers:** {tags}@1.3.0 has 2 consumers;")),
+        "{md}"
+    );
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+}
+
+/// The criterion of #832: the tag of a pack, as the answer gives it, shows each tag of HTML as text
+/// in the change cell of the pack table and in the fold of the pack. So do the layer of a pack and
+/// the project of a side.
+#[test]
+fn the_markdown_of_a_tag_a_layer_and_a_project_shows_the_text_of_the_answer_as_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    // the values of side B do not parse, so the fold of the pack names the change flags
+    let b = with_os_pack(dir.path(), "retag-tags", |p| {
+        p["tag"] = Value::from(common::ANSWER_TAGS);
+        p["values"] = Value::from("kubeadmconfig: [\n");
+    });
+    let d = ops::compare(&a, &b, "t1");
+    let os = d.packs.iter().position(|p| p.name == "ubuntu-aws").unwrap();
+    assert!(
+        d.packs[os].tag_renamed && !d.packs[os].values.parseable,
+        "{:?}",
+        d.packs[os]
+    );
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    let tags = strata::text::html_text(common::ANSWER_TAGS);
+    assert!(
+        md.contains(&format!(" | tag 22.04 → {tags} AUTHORED | ")),
+        "{md}"
+    );
+    assert!(
+        md.contains(&format!(
+            "<summary><code>ubuntu-aws</code> tag 22.04 -&gt; {tags} AUTHORED</summary>"
+        )),
+        "{md}"
+    );
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+
+    let mut doc = serde_json::to_value(&d).unwrap();
+    doc["packs"][os]["layer"] = Value::from(common::ANSWER_TAGS);
+    doc["b"]["projectUid"] = Value::from(common::ANSWER_TAGS);
+    let edited: strata::diff::Diff = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().render(&edited, &a, &b, false).unwrap();
+    assert!(
+        md.contains(&format!("| `~` | {tags} | `ubuntu-aws` |")),
+        "{md}"
+    );
+    assert!(md.contains(&format!(" | {tags} |\n| root |")), "{md}");
+    common::assert_only_strata_tags(&common::outside_code_blocks(&md));
+}
+
+/// The criterion of #832: a state of a pack version that strata does not know, as the answer gives
+/// it, shows each tag of HTML as text in the markdown of `packs`.
+#[test]
+fn the_markdown_of_packs_shows_a_state_of_the_answer_as_text() {
+    let api = serve_summaries(
+        vec![
+            csi_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+            in_state(
+                csi_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65),
+                common::ANSWER_TAGS,
+            ),
+        ],
+        &[("reg-public", public_entity())],
+    );
+    let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let md = common::markdown().render_packs(&l).unwrap();
+    assert!(
+        md.contains(&format!(
+            "`1.65.0` {} |",
+            strata::text::html_text(common::ANSWER_TAGS)
+        )),
+        "{md}"
+    );
+    common::assert_answer_tags_as_text(&md);
 }

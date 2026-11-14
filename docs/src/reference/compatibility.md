@@ -1123,6 +1123,19 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
+  `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
+  request comment shows a tag in a message of Palette as text. The reason of
+  `archivesNotReadable` also shows the answer of the host of a chart as text. Before, GitHub read
+  such a tag as HTML, and kept a link in it.
+  - A script that reads the markdown as text reads `-&gt;` in place of `->`.
+  - A value in a code span, such as a pack name or a uid, shows as before. A backtick in such a
+    value does not end the span now.
+  - A fenced block, such as a diff of `--full`, has a fence longer than each run of three
+    or more backticks in its text. So a line of three backticks in the values of a pack does not
+    end the block.
+  - `strata-preflight` writes its markdown in the same way. Its terminal form, its HTML form,
+    and the JSON documents of both tools do not change.
 - **A pack whose only difference is a pack uid that Palette mints has no impact.**
   `packs[].mintedUidOnly` of `strata-diff/1` is `true` for such a pack. Its
   `impact` is `none` with no text, and `compare` prints no `impact:` line under
@@ -1286,6 +1299,19 @@ field, a value, an input, or an option is in the sections above.
 - **The issue of `upstream-report.sh` names a move of Kubernetes that skips a minor
   version.** The bump column gives this line of `behind`. A script that reads the cell must
   read the new line.
+- **`verify-report.sh` and `upstream-report.sh` write a quoted text as the markdown form does.**
+  An issue shows a tag of HTML in it as text.
+  - The state line of an issue of `upstream-report.sh` writes each `<`, `>`, and `&` of its
+    JSON as an escape of JSON, such as `\u003c`. So a `-->` in a message cannot end the comment.
+    A reader of JSON reads the same pins, and the next run reads the state line of an older
+    issue too.
+  - The output of strata in an issue of `verify-report.sh` has a fence that no line of the output
+    ends.
+  - Each code span of a name, a version, a tag, or a path has a fence longer than each run of
+    backticks in it.
+  - The marker on the first line of an issue writes each `&`, `<`, and `>` of the path or of the
+    pack name as an entity. A marker with none of these characters does not change, so the next
+    run finds an older issue.
 - **`pr-comment.sh` adds no label of an impact for a pack uid that Palette
   mints.** The script reads `summary.maxImpact` of `compare`. Two copies of one
   profile with a manifest pack have the maximum impact `none`. So a threshold of
@@ -1320,6 +1346,13 @@ field, a value, an input, or an option is in the sections above.
 - `api::codes::Denial` and `Error::denial` are new. `api::codes::is_refusal_code`
   accepts each code of a denial, so `Error::class` gives `Terminal` to a 5xx with
   one of them.
+- `text::html_text` is new. It writes each `&`, `<`, and `>` of a text as an entity.
+- `text::code_block` is new. It writes a fenced code block with a fence that no line of the text
+  ends.
+- `text::markdown_cell` also writes each `&`, `<`, and `>` as an entity. A caller that puts the
+  cell in a code span calls `text::code_cell` in its place, because a code span shows an entity as
+  it is.
+- `text::code_cell` writes no entity. It escapes a `|` and a line break, as before.
 - `ops::VerifiedRecord` has the new field `subject`. A struct literal must set it, and a
   pattern with no `..` must name it.
 - `render::Renderer::render_behind` takes a second argument, `behind_only`. Give `false` to get
