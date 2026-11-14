@@ -134,8 +134,8 @@ A ref names the thing that a command reads.
     registry at the first `/`, because the name of a pack can hold one too.
     Palette takes a `/` in both names: see
     [The names of a registry and a pack](../internals/palette/packs.md#the-names-of-a-registry-and-a-pack).
-  - `behind` and the error `pack-in-several-registries` give such a registry
-    by its uid.
+  - `behind`, a pack row of `list`, and the error `pack-in-several-registries`
+    give such a registry by its uid.
 - **`<cluster>`.** A uid, or the name of one cluster in the scope. A name that
   two clusters have is the error `cluster-name-ambiguous`, which lists their
   uids. A name that no cluster has is `cluster-not-found`, which lists the

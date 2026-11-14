@@ -17305,9 +17305,11 @@ fn a_set_names_each_variable_with_a_secret_like_name_and_a_clear_value_and_keeps
 }
 
 /// `snapshot tag:env=prod --dir fleet` over three clusters of one definition, in the projects
-/// `projects`, with the registry listing of the fixtures. Gives the count of the requests of the
-/// registry listing.
-fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
+/// `projects`. Gives the count of the requests of the registry listing.
+///
+/// `missing` is the status of the registry listing when Palette has no such listing: HTTP 404 or
+/// 405. With `None`, Palette gives the registry listing of the fixtures.
+fn snapshot_three_clusters(dir: &Path, projects: [&str; 3], missing: Option<u16>) -> u32 {
     common::make_fixtures(dir);
     let doc = read_json(&dir.join("cluster-a").join("cluster.json"));
     let uids = [CLUSTER_UID, "c-two", "c-three"];
@@ -17320,13 +17322,23 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
         serve_cluster(MemoryApi::new(), dir, "cluster-a"),
         rows,
         vec![],
-    )
-    .with(
-        REGISTRY_LISTING,
-        serde_json::json!({"items": [
-            {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
-        ]}),
     );
+    // a Palette with no listing gives no names
+    let name = match missing {
+        Some(status) => {
+            api = api.failing(REGISTRY_LISTING, status, "{}");
+            ""
+        }
+        None => {
+            api = api.with(
+                REGISTRY_LISTING,
+                serde_json::json!({"items": [
+                    {"name": "Public Repo", "uid": common::PUBLIC_REGISTRY, "kind": "pack"},
+                ]}),
+            );
+            "Public Repo"
+        }
+    };
     for uid in &uids[1..] {
         api = api.with(cluster_route(uid), doc.clone());
     }
@@ -17347,13 +17359,7 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
         let snap = Snapshot::load(&r.path).unwrap();
         assert!(!snap.packs.is_empty());
         for p in &snap.packs {
-            assert_eq!(
-                p.registry_name,
-                "Public Repo",
-                "{}: {}",
-                r.path.display(),
-                p.key
-            );
+            assert_eq!(p.registry_name, name, "{}: {}", r.path.display(), p.key);
         }
     }
     api.calls(REGISTRY_LISTING)
@@ -17362,7 +17368,7 @@ fn snapshot_three_clusters(dir: &Path, projects: [&str; 3]) -> u32 {
 #[test]
 fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
     let dir = tempfile::tempdir().unwrap();
-    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"]);
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], None);
     assert_eq!(calls, 1, "one read for the set");
 }
 
@@ -17370,8 +17376,17 @@ fn a_snapshot_of_a_set_of_three_clusters_reads_the_registry_listing_one_time() {
 fn a_snapshot_of_a_set_reads_the_registry_listing_one_time_for_each_project() {
     // Palette lists the registries that the project of the request can see
     let dir = tempfile::tempdir().unwrap();
-    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"]);
+    let calls = snapshot_three_clusters(dir.path(), ["p1", "p2", "p1"], None);
     assert_eq!(calls, 2, "one read for p1, and one for p2");
+}
+
+#[test]
+fn a_snapshot_of_a_set_reads_a_registry_listing_that_palette_does_not_have_one_time() {
+    for status in [404, 405] {
+        let dir = tempfile::tempdir().unwrap();
+        let calls = snapshot_three_clusters(dir.path(), ["p1", "p1", "p1"], Some(status));
+        assert_eq!(calls, 1, "HTTP {status}: one read for the set");
+    }
 }
 
 // ---- what happened to the object of a record --------------------------------------------------

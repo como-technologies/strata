@@ -28,14 +28,17 @@ use crate::term::progress::Progress;
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
 
+/// The entries of a registry listing, or `None` when Palette has no such listing: it answers
+/// HTTP 404 or 405.
+pub(crate) type RegistryListing = Option<Vec<Value>>;
+
 /// The registry listings of one command, each read one time, when a check first needs it.
 pub(crate) struct Registries<'a, A: PaletteApi> {
     palette: &'a Palette<A>,
-    /// The entries of `GET /v1/registries/metadata`, after the first read.
-    metadata: Option<Vec<Value>>,
-    /// The entries of the summary listing of each kind, after the first read. `None` for a kind
-    /// whose listing Palette does not have.
-    summaries: BTreeMap<RegistryKind, Option<Vec<Value>>>,
+    /// The answer of `GET /v1/registries/metadata`, after the first read.
+    metadata: Option<RegistryListing>,
+    /// The answer of the summary listing of each kind, after the first read.
+    summaries: BTreeMap<RegistryKind, RegistryListing>,
 }
 
 impl<'a, A: PaletteApi> Registries<'a, A> {
@@ -44,12 +47,16 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         Self::with_metadata(palette, None)
     }
 
-    /// [`Registries::new`], with `metadata`, the entries of [`Registries::metadata`] that another
-    /// client of the same project read. [`Registries::into_metadata`] gives them back.
+    /// [`Registries::new`], with `metadata`, the answer of `GET /v1/registries/metadata` that
+    /// another client of the same project read. [`Registries::into_metadata`] gives it back.
     ///
     /// Palette lists the registries that the project of the request can see. So a command that
-    /// reads several records of one project reads the listing one time.
-    pub(crate) fn with_metadata(palette: &'a Palette<A>, metadata: Option<Vec<Value>>) -> Self {
+    /// reads several records of one project reads the listing one time, also when Palette has no
+    /// such listing.
+    pub(crate) fn with_metadata(
+        palette: &'a Palette<A>,
+        metadata: Option<RegistryListing>,
+    ) -> Self {
         Registries {
             palette,
             metadata,
@@ -57,9 +64,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         }
     }
 
-    /// The entries of [`Registries::metadata`], when a check read them, for the next client of
+    /// The answer of `GET /v1/registries/metadata`, when a check read it, for the next client of
     /// the same project.
-    pub(crate) fn into_metadata(self) -> Option<Vec<Value>> {
+    pub(crate) fn into_metadata(self) -> Option<RegistryListing> {
         self.metadata
     }
 
@@ -73,13 +80,15 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ///
     /// # Errors
     ///
-    /// Each error of the request.
+    /// Each error of the request. When [`Registries::listed`] kept an answer of HTTP 404 or 405,
+    /// this check reads the listing again, so that it gives the error of Palette.
     pub(crate) fn metadata(&mut self) -> Result<&[Value]> {
         match &mut self.metadata {
-            Some(entries) => Ok(entries.as_slice()),
-            none => Ok(none
-                .insert(take_items(self.palette.registry_metadata()?))
-                .as_slice()),
+            Some(Some(entries)) => Ok(entries.as_slice()),
+            listing => {
+                let entries = take_items(self.palette.registry_metadata()?);
+                Ok(listing.get_or_insert(None).insert(entries).as_slice())
+            }
         }
     }
 
@@ -150,14 +159,19 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     /// answers HTTP 404 or 405.
     ///
     /// A record and a pack row of `list` read the name of the registry of each pack here. The
-    /// pack ref of a profile gives the uid of its registry, and no name.
+    /// pack ref of a profile gives the uid of its registry, and no name. The answer of HTTP 404 or
+    /// 405 stays too, so the records of a set of one project read the listing one time.
     ///
     /// # Errors
     ///
     /// Each other error of the request, also a 401, a 403, or a 429. A record holds the names, so
     /// a key that cannot read the listing must not change the record with no error.
     pub(crate) fn listed(&mut self) -> Result<Option<&[Value]>> {
-        served(self.metadata())
+        let listing = match &mut self.metadata {
+            Some(listing) => listing,
+            none => none.insert(served(self.palette.registry_metadata())?.map(take_items)),
+        };
+        Ok(listing.as_deref())
     }
 
     /// The name of the registry `uid`, or `None` when the key cannot see the registry.
@@ -507,6 +521,32 @@ mod tests {
             Registries::new(&next).into_metadata().is_none(),
             "no check read it"
         );
+    }
+
+    #[test]
+    fn a_listing_that_palette_does_not_have_is_kept_and_a_check_of_its_entries_gets_the_error() {
+        for status in [404, 405] {
+            let api = MemoryApi::new().failing(METADATA, status, "{}");
+            let (first, next) = (Palette::new(&api), Palette::new(&api));
+            let mut registries = Registries::new(&first);
+            assert!(registries.listed().unwrap().is_none());
+            assert!(registries.listed().unwrap().is_none());
+            let mut registries = Registries::with_metadata(&next, registries.into_metadata());
+            assert!(registries.listed().unwrap().is_none());
+            assert_eq!(
+                api.calls(METADATA),
+                1,
+                "HTTP {status}: one read for the two clients"
+            );
+            // a check that needs the entries reads again, and gets the answer of Palette
+            let err = registries.metadata().unwrap_err();
+            assert!(
+                matches!(err, Error::Api { status: s, .. } if s == status),
+                "{err}"
+            );
+            assert!(registries.listed().unwrap().is_none(), "the answer stays");
+            assert_eq!(api.calls(METADATA), 2, "HTTP {status}");
+        }
     }
 
     #[test]

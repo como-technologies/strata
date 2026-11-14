@@ -151,6 +151,54 @@ fn a_registry_that_the_key_cannot_see_has_no_name_and_the_pack_row_gives_its_uid
 }
 
 #[test]
+fn a_pack_row_of_list_gives_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref_parses() {
+    let dir = tempfile::tempdir().unwrap();
+    // Palette takes a `/` in the name of a registry
+    let slashed = json!({"items": [
+        {"name": "Public Repo", "uid": PUBLIC_REGISTRY, "kind": "pack"},
+        {"name": "team/prod", "uid": PROD_REGISTRY, "kind": "pack"},
+    ]});
+    let api = serve_two_copies(dir.path(), Some(slashed));
+    let options = ListOptions {
+        pack: Some("csi-aws-ebs".into()),
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &options).unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
+    assert!(
+        text.contains(&format!(
+            "    csi    csi-aws-ebs          1.28.0  {PROD_REGISTRY}\n"
+        )),
+        "{text}"
+    );
+    let md = common::markdown().render_list(&l).unwrap();
+    assert!(
+        md.contains(&format!("csi/csi-aws-ebs 1.28.0 in {PROD_REGISTRY}")),
+        "{md}"
+    );
+    assert!(!text.contains("team/prod"), "{text}");
+    assert!(!md.contains("team/prod"), "{md}");
+    // the JSON keeps the name beside the uid
+    let json: Value = serde_json::to_value(&l).unwrap();
+    let pack = &json["profiles"][0]["packs"][3];
+    assert_eq!(
+        (&pack["registryUid"], &pack["registry"]),
+        (&json!(PROD_REGISTRY), &json!("team/prod"))
+    );
+    // the text of the row parses as the registry of a pack ref
+    assert_eq!(
+        Ref::parse_with(&format!("pack:{PROD_REGISTRY}/csi-aws-ebs@1.28.0"), |_| {
+            false
+        }),
+        Ref::Pack {
+            registry: Some(PROD_REGISTRY.into()),
+            name: "csi-aws-ebs".into(),
+            version: "1.28.0".into(),
+        }
+    );
+}
+
+#[test]
 fn a_pack_row_of_list_names_the_registry_that_each_profile_version_takes_the_pack_from() {
     let dir = tempfile::tempdir().unwrap();
     let api = serve_two_copies(dir.path(), Some(two_registries()));
