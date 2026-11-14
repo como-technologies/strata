@@ -620,3 +620,37 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 		t.Errorf("newer rows with no content cycle %+v", rows)
 	}
 }
+
+// Issue #834. A finding wins: an edit of a version that the cluster does not run stays a drift, as aws-stack@1.0.0 on ledger of the
+// book. The record still has no newer version, and no pack of it has one: Palette lists csi-aws-ebs 1.66.0 and dns 1.2.0, and the
+// summary names neither for 1.0.0. The record counts as a profile and as a drift. Its packs, its pins, and its profile version count
+// nowhere, and no event of a newer version names it.
+func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
+	old := notOnCluster(drifted(rec("aws-stack", "1.0.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("addon", "dns", "1.0.0")), &docs.Verify{}, "csi/csi-aws-ebs"))
+	runs := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.66.0"))
+	v := &Versions{At: t0, Strata: "0.33.0", Moves: map[string]Move{},
+		Pins:     []docs.Pin{pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.0.0"), pin("dns", "addon", "1.0.0", "1.2.0", "aws-stack@1.0.0")},
+		Profiles: []docs.ProfilePin{profilePin("aws-stack", "1.0.0", "1.1.0", at(-2*time.Hour)), profilePin("aws-stack", "1.1.0", "", "")}}
+	s := build(ptr(content(t, old, runs)), v)
+	row := s.Profiles[0]
+	if row.Version != "1.0.0" || row.Status != StatusDrift || row.NewerVersion != nil || row.ClusterCopy.Status != CopyNotOnThisCluster {
+		t.Errorf("1.0.0: status %q, newer version %+v, copy %+v", row.Status, row.NewerVersion, row.ClusterCopy)
+	}
+	for _, p := range row.Packs {
+		if p.Newer != "" || p.Carried != nil || p.Status == StatusNewer {
+			t.Errorf("1.0.0: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+		}
+	}
+	want := Counts{Findings: 1, Drift: 1, Packs: 1, PacksInFull: 1, Profiles: 2}
+	if s.Counts != want {
+		t.Errorf("counts %+v, want %+v", s.Counts, want)
+	}
+	if len(s.Newer) != 0 {
+		t.Errorf("newer rows %+v", s.Newer)
+	}
+	for _, e := range s.Events {
+		if e.Type == EventNewer {
+			t.Errorf("an event of a newer version: %+v", e)
+		}
+	}
+}

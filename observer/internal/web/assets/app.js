@@ -502,8 +502,11 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
-// notRunHere says that the cluster does not run the profile version x. No filter and no count of the profiles holds such a record.
-const notRunHere = x => !!x && x.status === STATUS.NOT_ON_CLUSTER;
+// copyStatusOf gives the status of the cluster copy of the profile x. It is undefined when the summary holds no cluster copy.
+const copyStatusOf = x => x.clusterCopy && x.clusterCopy.status;
+// notRunHere says that the cluster does not run the profile version x: its cluster copy is not on this cluster. The summary uses the
+// same rule, and gives such a record no newer version. A record with a finding has the status drift, and the rule holds for it too.
+const notRunHere = x => copyStatusOf(x) === COPY.NOT_ON_CLUSTER;
 // NEWER_STATE is what strata knows of a newer version of a pack. Strata does not look for a newer version of a pack of a profile version
 // that the cluster does not run, so such a pack is NOT_RUN, and never CURRENT. Each screen reads the state from newerStateOf. The state
 // is no word of the API, so its values are numbers.

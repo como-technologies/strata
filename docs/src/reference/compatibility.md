@@ -1124,9 +1124,10 @@ field, a value, an input, or an option is in the sections above.
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
 - **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
-  it had a status such as `ok` or `newer`. Now the record and its packs have no newer version.
-  `counts.profiles` of `/v1/cluster` does not count it. No row of `/v1/newer`, no event, and
-  no alert names it. The page lists it in a fold under the table of the profiles. See
+  it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
+  `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
+  and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
+  does not count a record with the new status. See
   [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read

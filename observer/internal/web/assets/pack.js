@@ -312,8 +312,7 @@ function comparePanel(id, d, href, command) {
 // strata read it, the pack against its newer version, and the record against the newest version of its profile when strata compared them.
 function sidesOf(x, row) {
   const out = [[SIDE.PUBLISHED, "Record → Published now"]];
-  const cp = x.clusterCopy && x.clusterCopy.status;
-  if (COPY_READ.includes(cp)) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
+  if (COPY_READ.includes(copyStatusOf(x))) out.push([SIDE.CLUSTER, "Record → This cluster's copy"]);
   if (row) out.push([SIDE.NEWER, `${at(row.name, row.version)} → ${at(row.name, row.newest)}`]);
   if (x.newerVersion && x.newerVersion.move) out.push([SIDE.NEWEST, "Record → Newest version"]);
   return out;
@@ -340,10 +339,9 @@ const quietTone = () => calmOk() ? TONE.CALM : TONE.OFF;
 // sideFacts gives the facts of a pack: the published version, the copy of this cluster, and the newer version. A pack that strata does
 // not look for has no fact of a newer version.
 function sideFacts(x, p, changed) {
-  const copy = x.clusterCopy && x.clusterCopy.status;
-  const readCopy = COPY_READ.includes(copy);
+  const readCopy = COPY_READ.includes(copyStatusOf(x));
   const published = publishedUnread(x) ? ["Not read", "Published now"] : changed[SIDE.PUBLISHED] ? ["Changed", "Published now"] : ["Same", "Published now", "ok"];
-  const cluster = readCopy ? (changed[SIDE.CLUSTER] ? ["Changed", "This cluster's copy"] : ["Same", "This cluster's copy", "ok"]) : copy === COPY.NOT_ON_CLUSTER ? ["Not here", "This cluster's copy"] : ["Not read", "This cluster's copy"];
+  const cluster = readCopy ? (changed[SIDE.CLUSTER] ? ["Changed", "This cluster's copy"] : ["Same", "This cluster's copy", "ok"]) : notRunHere(x) ? ["Not here", "This cluster's copy"] : ["Not read", "This cluster's copy"];
   const newer = newerFact(x, p);
   return newer ? [published, cluster, newer] : [published, cluster];
 }

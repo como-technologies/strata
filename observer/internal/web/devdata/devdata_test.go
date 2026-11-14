@@ -165,7 +165,8 @@ func TestEachSetGivesItsPageAndConsistentCounts(t *testing.T) {
 		StateNoRecords: model.PageNoRecords, StateStale: model.PageStale, StateLost: model.PageLost, StateFirstSeen: model.PageOK,
 		StateStaleUnchecked: model.PageStale, StateLostUnchecked: model.PageLost, StateReadError: model.PageOK,
 		StateImages: model.PageOK, StateImagesSplit: model.PageOK, StateImagesOff: model.PageOK, StateImagesUnread: model.PageOK,
-		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK}
+		StateAsks: model.PageOK, StateTextTooLarge: model.PageOK, StateAlerts: model.PageOK, StateAlertsUnset: model.PageOK,
+		StateMovedDrift: model.PageOK}
 	if len(pages) != len(States) {
 		t.Fatalf("States lists %d sets, and the table of pages %d", len(States), len(pages))
 	}
@@ -244,6 +245,38 @@ func TestFirstSeenIsTheOKSetWithAFirstSeenBaseline(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ok.Profiles, first.Profiles) {
 		t.Error("first-seen does not take the profiles of ok")
+	}
+}
+
+// The set moved-drift holds the record of ok of a version that the cluster no longer runs, wilma-gateway@3.0.4, with a finding. A
+// finding wins, so its status is drift, and its copy is not on this cluster. It and its packs have no newer version, and no row of the
+// newer versions names it, as the summary gives them. The record that the cluster runs, wilma-gateway@3.1.2, has a newer pack.
+func TestMovedDriftHoldsADriftOfAVersionThatTheClusterDoesNotRun(t *testing.T) {
+	const moved, runs = "wilma-gateway@3.0.4", "wilma-gateway@3.1.2"
+	set := load(t, StateMovedDrift)
+	p, mock, here := profileOf(set, moved), profileOf(load(t, StateOK), moved), profileOf(set, runs)
+	if p == nil || mock == nil || here == nil {
+		t.Fatalf("a set lacks %s or %s", moved, runs)
+	}
+	if p.Status != model.StatusDrift || p.ClusterCopy == nil || p.ClusterCopy.Status != model.CopyNotOnThisCluster || p.NewerVersion != nil ||
+		len(p.Findings) != 1 || p.Findings[0].Kind != model.PublishedChanged {
+		t.Errorf("%s: status %q, copy %+v, newer version %+v, findings %+v", moved, p.Status, p.ClusterCopy, p.NewerVersion, p.Findings)
+	}
+	if len(p.Packs) != len(mock.Packs) {
+		t.Fatalf("%s: %d packs, and ok gives %d", moved, len(p.Packs), len(mock.Packs))
+	}
+	for i, k := range p.Packs {
+		if k.Newer != "" || k.Carried != nil || k.Status == model.StatusNewer || k.Key != mock.Packs[i].Key || k.Version != mock.Packs[i].Version {
+			t.Errorf("%s: the pack %+v", moved, k)
+		}
+	}
+	for _, r := range set.Newer.Newer {
+		if !slices.Equal(r.Profiles, []string{runs}) {
+			t.Errorf("the newer row of %s names %v", r.Name, r.Profiles)
+		}
+	}
+	if here.Status != model.StatusNewer || len(set.Newer.Newer) != 1 || set.Cluster.Counts.Profiles != 2 {
+		t.Errorf("%s: status %q, %d newer rows, counts %+v", runs, here.Status, len(set.Newer.Newer), set.Cluster.Counts)
 	}
 }
 
@@ -371,19 +404,20 @@ func TestTheDocumentOfThePodsAgreesWithItselfAndWithItsSet(t *testing.T) {
 	}
 }
 
-// hasPack says whether the profiles hold a pack with this key in this profile.
-func hasPack(s *Set, profile, key string) bool {
-	for _, p := range s.Profiles.Profiles {
-		if model.Subject(p.Name, p.Version) != profile {
-			continue
-		}
-		for _, k := range p.Packs {
-			if k.Key == key {
-				return true
-			}
+// profileOf gives the profile of the set with this subject, or nil.
+func profileOf(s *Set, subject string) *api.ProfileView {
+	for i, p := range s.Profiles.Profiles {
+		if model.Subject(p.Name, p.Version) == subject {
+			return &s.Profiles.Profiles[i]
 		}
 	}
-	return false
+	return nil
+}
+
+// hasPack says whether the profiles hold a pack with this key in this profile.
+func hasPack(s *Set, profile, key string) bool {
+	p := profileOf(s, profile)
+	return p != nil && slices.ContainsFunc(p.Packs, func(k model.Pack) bool { return k.Key == key })
 }
 
 // A finding of an image names the images of the document, and an image that makes a finding has one. The

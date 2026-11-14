@@ -240,8 +240,9 @@ A replace removes each record that the step does not write, also a first-seen re
 of the seed.
 
 The glob also writes the records of the older versions. After you move the cluster, the
-page lists each of them in a fold under the table of the profiles, as "Not on this
-cluster", and names no newer version for it. See [A version that the cluster no longer
+page names no newer version for them. It lists each of them in a fold under the table of
+the profiles, as "Not on this cluster". A record with a finding stays in the table as a
+drift. See [A version that the cluster no longer
 runs](./automation/observer.md#a-version-that-the-cluster-no-longer-runs).
 
 The script stops when two records are for one version. So the glob must not match

@@ -27,6 +27,10 @@
 // The file alerts.json is optional: it holds the answer of /v1/alerts. A set that lacks it, and whose base lacks
 // it, is a page of an observer that started without --alerts. The set alerts is ok with rules, and the set
 // alerts-unset is ok with that answer written out.
+//
+// The set ok holds the record of wilma-gateway@3.0.4, a version that the cluster no longer runs. The set
+// moved-drift holds that record with a finding: a person edited the published version after the move. A
+// finding wins, so the record is a drift. It still has no newer version, and no pack of it is current.
 package devdata
 
 import (
@@ -85,12 +89,15 @@ const (
 	// started without --alerts.
 	StateAlerts      State = "alerts"
 	StateAlertsUnset State = "alerts-unset"
+
+	// The state of a move. Moved-drift holds a record with a finding of a version that the cluster no longer runs.
+	StateMovedDrift State = "moved-drift"
 )
 
 // States lists the sets, in the order that the recipe `observer-dev` names them.
 var States = []State{StateOK, StateQuiet, StateFirstLoad, StateNoRecords, StateStale, StateLost, StateFirstSeen,
 	StateStaleUnchecked, StateLostUnchecked, StateReadError, StateImages, StateImagesSplit, StateImagesOff, StateImagesUnread,
-	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset}
+	StateAsks, StateTextTooLarge, StateAlerts, StateAlertsUnset, StateMovedDrift}
 
 // Reference is the time that the data is written for. Load moves each time of a set by the
 // difference between now and Reference, so that the ages on the page are those of the data.

@@ -487,11 +487,15 @@ them:
 - The filters of Newer versions and Images sit in the head of the card, at the right,
   as the filter of Profiles does.
 - The table of the profiles lists the profiles that the cluster runs. A fold under it
-  lists each record of a version that the cluster does not run, with the filter "All"
-  only. No filter counts such a record. The slabs of its packs name no newer version,
-  and the tile "Versions newer than the pins" does not count them as current. The page
-  of such a pack has the facts "Published now" and "This cluster's copy", and no fact
-  of a newer version. One rule of the scripts gives these words and the count.
+  lists each record with the status `not-on-this-cluster`, with the filter "All" only.
+  No filter counts such a record. A record with a finding stays in the table as a
+  drift, also when the cluster does not run it.
+- For each record of a version that the cluster does not run, also a drift, the slabs
+  of its packs name no newer version. The tile "Versions newer than the pins" does not
+  count them as current. The page of such a pack shows no fact of a newer version. With
+  no change, it has the facts "Published now" and "This cluster's copy". One rule of the
+  scripts gives these words and the count. It reads `clusterCopy`, as the summary does,
+  and not `status`.
 - The card "Move to" shows the facts of the move in a row of labeled values, with the
   words of strata for the impact under them. The panel "Ask Palette" sits beside them in
   its own box, with what it asks, the button, and the answer.
@@ -527,9 +531,9 @@ just observer-dev stale    # the set stale
 The recipe runs `go -C observer run ./internal/web/devserver -state STATE`. The
 sets are `ok`, `quiet`, `first-load`, `no-records`, `stale`, `lost`,
 `first-seen`, `stale-unchecked`, `lost-unchecked`, `read-error`, `images`,
-`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`, and `alerts-unset`. The server
-listens on `127.0.0.1:8080`. The flag `-listen` takes another loopback address,
-and `-data` takes another directory of sets.
+`images-split`, `images-off`, `images-unread`, `asks`, `text-too-large`, `alerts`,
+`alerts-unset`, and `moved-drift`. The server listens on `127.0.0.1:8080`. The flag
+`-listen` takes another loopback address, and `-data` takes another directory of sets.
 
 A set is a directory of `observer/internal/web/testdata/api/`. It holds the answer
 of each route as a JSON file. The dev server serves them through the real server
@@ -551,6 +555,10 @@ the page are those of the data.
 - The set `read-error` holds 3 profiles. One has a `verify` row that strata could
   not read, and one has a cluster side that it could not read. One has a move
   that it could not compare.
+- The set `moved-drift` holds 2 profiles: the record of `wilma-gateway@3.0.4` of `ok`,
+  and the record of `wilma-gateway@3.1.2` that the cluster runs. A person edited the
+  published version 3.0.4 after the move. A finding wins, so the record is a drift. It
+  has no newer version, and no pack of it is current.
 - The set `no-records` is the output of the observer with no record. A test runs
   the observer on a stand-in and makes sure of this.
 - The sets `images`, `images-split`, `images-off`, and `images-unread` differ in

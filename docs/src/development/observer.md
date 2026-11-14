@@ -549,13 +549,15 @@ A pack is never `no-record` or `not-on-this-cluster`. A finding of the kind
 changes is `drift`.
 
 A record that the cluster does not run is `not-on-this-cluster`, the word of its
-`clusterCopy`. The versions cycle asks about each record, and the summary drops such
-a record from its answers: no pin, no profile version, and no carrier names it. So
-the record has no `newerVersion`, and no pack of it has `newer` or `carried`. A pin or
-a profile version that only such records hold gives no row of `newer` and no event. It
-gives no cause `pin-error` or `older-registry-copy` either. `counts.profiles` does not
-count the record. Before the first good content cycle, the observer does not know what
-the cluster runs, so it keeps each answer.
+`clusterCopy`, unless a finding names it. The versions cycle asks about each record, and
+the summary drops such a record from its answers, also a drift: no pin, no profile
+version, and no carrier names it. So the record has no `newerVersion`, and no pack of it
+has `newer` or `carried`. A pin or a profile version that only such records hold gives no
+row of `newer` and no event. It gives no cause `pin-error` or `older-registry-copy`
+either. Before the first good content cycle, the observer does not know what the cluster
+runs, so it keeps each answer.
+
+`counts.profiles` does not count a record with the status `not-on-this-cluster`.
 
 `clusterCopy.status` is `same`, `same-content`, `differs`,
 `not-on-this-cluster`, or `not-read`. `not-read` says that the side or the

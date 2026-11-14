@@ -316,9 +316,8 @@ function findingLine(f, x) {
   const names = f.packs.map(packName).join(", ");
   let text = NAMES_PACKS.includes(f.kind) ? (names ? `${names} ${w.line}` : w.title + ".") : w.line;
   if (f.kind === KIND.PUBLISHED) {
-    const copy = x.clusterCopy && x.clusterCopy.status;
     if (f.alsoOnCluster) text += " This cluster has the edit too.";
-    else if (COPY_KEPT.includes(copy)) text += " This cluster keeps its copy.";
+    else if (COPY_KEPT.includes(copyStatusOf(x))) text += " This cluster keeps its copy.";
   }
   return text;
 }
@@ -389,8 +388,11 @@ function notCheckedLine(x) {
 
 // PROFILE_KEYS sort the rows of the table of the profiles and of its fold.
 const PROFILE_KEYS = {status: [x => SEVERITY.indexOf(x.status), "num"], profile: [x => x.name, "text"], type: [x => x.type, "text"], packs: [x => x.packs.length, "num"]};
-// awayFold lists under the table the records of the profile versions that the cluster does not run. No filter counts them, and the
-// fold shows with the filter All only.
+// folded says that the row of the profile x is in the fold under the table: its status is not-on-this-cluster. A finding wins, so a
+// record with a finding stays in the table with the status drift, also when the cluster does not run it.
+const folded = x => x.status === STATUS.NOT_ON_CLUSTER;
+// awayFold lists under the table the rows that folded gives: records of profile versions that the cluster does not run. No filter
+// counts them, and the fold shows with the filter All only.
 function awayFold(rows, head) {
   if (!rows.length) return "";
   return h`<details data-open="not-on-cluster" ${openAttr("not-on-cluster")}><summary>${rows.length} ${plural(rows.length, "record of a profile version", "records of profile versions")} that this cluster does not run</summary><div class="tw"><table>${head}<tbody>${rows}</tbody></table></div></details>`;
@@ -399,7 +401,7 @@ function awayFold(rows, head) {
 function profilesCard() {
   // A profile with a newer version of itself or of a pack shows under "Newer", also when its status is a drift.
   const has = (x, k) => k === "all" || (k === STATUS.OK ? x.status === STATUS.OK : k === STATUS.NEWER ? !!x.newerVersion || x.packs.some(p => p.newer) : asCount(x.status) === k || x.packs.some(p => p.status === k));
-  const list = D.profiles.filter(x => !notRunHere(x)).sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
+  const list = D.profiles.filter(x => !folded(x)).sort((a, b) => SEVERITY.indexOf(a.status) - SEVERITY.indexOf(b.status));
   const cnt = {};
   FILTERS.forEach(([k]) => { cnt[k] = list.filter(x => has(x, k)).length; });
   const q = S.q.toLowerCase();
@@ -413,7 +415,7 @@ function profilesCard() {
   const clear = h` <button type="button" class="lnk" data-clear="filter">Clear the filter</button>`;
   const empty = h`<tr><td colspan="5">${list.length ? inline(TONE.OFF, what, clear) : inline(TONE.OFF, "No profile yet.")}</td></tr>`;
   const head = h`<thead><tr>${sortTh("pt", "status", "Status")}${sortTh("pt", "profile", "Profile")}${sortTh("pt", "type", "Type", "narrow-hide")}${sortTh("pt", "packs", "Packs", "narrow-hide")}<th>Message</th></tr></thead>`;
-  const fold = S.filter === "all" ? awayFold(sortBy("pt", D.profiles.filter(x => notRunHere(x) && named(x)), PROFILE_KEYS).map(row), head) : "";
+  const fold = S.filter === "all" ? awayFold(sortBy("pt", D.profiles.filter(x => folded(x) && named(x)), PROFILE_KEYS).map(row), head) : "";
   return h`<section class="card"><div class="chead"><h2>Profiles <span class="sub">${neverChecked() ? "Not read yet" : `${D.cluster.counts.profiles} profiles, ${D.cluster.counts.packs} packs`}</span></h2>
     <div class="tb"><div class="seg" role="group" aria-label="Filter by status">${FILTERS.map(([k, l]) => h`<button data-filter="${k}" class="${S.filter === k ? "on" : ""}">${l} ${num(cnt[k])}</button>`)}</div>
     <input class="search" id="q" type="search" placeholder="Filter by name" aria-label="Filter by name" value="${S.q}"></div></div>
