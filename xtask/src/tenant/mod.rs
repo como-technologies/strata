@@ -44,7 +44,8 @@ pub use answers::{PackRefusal, UpgradeRefusal, profile_exists_message};
 pub use edit::Edit;
 pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,
-    downloaded_profile, empty_audit_log, exported_profile, rbacs_route, validated_cloud,
+    downloaded_profile, empty_audit_log, exported_profile, is_rbacs_route, rbacs_route,
+    validated_cloud,
 };
 // the routes and the sync answers that the chapter `fields` writes: each document there has the
 // route and the answer of its kind
@@ -59,6 +60,10 @@ pub(crate) use routes::{
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
 pub const TENANT: &str = "tenant";
+
+/// The file at the root of the tenant that names the user of each key. It maps each key to the
+/// email of its user. No request reads it, so it is outside the directory of each scope.
+pub const KEY_USERS: &str = "key-users.json";
 
 /// The tenant directory, and the repository that holds the example pack data.
 pub struct Tenant {
@@ -150,6 +155,18 @@ impl Tenant {
         }
         self.write(TENANT, PROJECT_LISTING, &json!({"items": items}));
         self.listings();
+    }
+
+    /// The user of each key, as `key=email` pairs, in the file [`KEY_USERS`]. The stand-in answers
+    /// a role binding of the system to that user.
+    pub fn key_users(&self, pairs: &[(&str, &str)]) {
+        let users: serde_json::Map<String, Value> = pairs
+            .iter()
+            .map(|(key, email)| (key.to_string(), Value::from(*email)))
+            .collect();
+        let file = self.root.join(KEY_USERS);
+        std::fs::write(&file, Value::Object(users).to_string())
+            .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
     }
 }
 

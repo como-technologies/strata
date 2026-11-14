@@ -95,12 +95,6 @@ create_body aws "$R" strata-route-aws "$bodies/aws-clean.json"
 check aws-clean-body 0 "#408: aws-clean.json names the account $account_name and the release profile $R" -- \
   jq -e --arg a "$A" --arg r "$R" '.spec.cloudAccountUid == $a and .spec.profiles[0].uid == $r' "$bodies/aws-clean.json"
 
-# refused STATUS CODE FILE: FILE, the output of api.sh post-status, holds HTTP STATUS and an
-# answer with the code CODE
-refused() {
-  [ "$(head -n 1 "$3")" = "HTTP $1" ] && tail -n +2 "$3" | jq -e --arg c "$2" '.code == $c' > /dev/null
-}
-
 # cidr_body: write BODIES/cidr-overlap.json, send it to the route, and record the answer. Skip the
 # case when Palette lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. Also skip
 # it when no VPC with a CIDR has a subnet in each zone of the pools.

@@ -253,11 +253,11 @@ vmo_stage() {
   sleep "$wait"
   check vmo-ask 0 "#717: validate/repave with the mark in the values of $vmo_pack" -- \
     "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-mark.json
-  check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- grep -qx 'HTTP 200' vmo-ask.out
+  check vmo-ask-ok 0 "#717: Palette answers the question with 200" -- answered 200 vmo-ask.out
   console_check vmo-saved mark "#717: the console address forwards to the mark: Palette saved it at the question, and the forward answers 502"
   check vmo-own 0 "#717: validate/repave with the values of the cluster: Palette saves the address of the cluster again" -- \
     "$live/api.sh" post-status "/v1/spectroclusters/$V/validate/repave" vmo-own.json
-  check vmo-own-ok 0 "#717: Palette answers the second question with 200" -- grep -qx 'HTTP 200' vmo-own.out
+  check vmo-own-ok 0 "#717: Palette answers the second question with 200" -- answered 200 vmo-own.out
   console_check vmo-back host "#717: the console address forwards to a host that answers again"
 }
 

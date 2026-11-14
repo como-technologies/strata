@@ -38,9 +38,10 @@ use common::{
     group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
     no_manifests, no_roles_message, no_template, no_variables, operation_forbidden_message,
     pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
-    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
-    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
-    strata_command, template, variables_route, write_record, write_yaml,
+    rbacs_answer, read_json, resolved_values_route, serve_cluster, serve_fixture,
+    serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at,
+    snapshot_of_ref, strata_command, system_rbacs, template, variables_route, write_record,
+    write_yaml,
 };
 
 #[test]
@@ -2232,14 +2233,17 @@ fn barney() -> Value {
 }
 
 fn policy_of(s: &Snapshot) -> Value {
+    policy_tier(s).fields.clone()
+}
+
+/// The tier `policy` of the cluster record `s`.
+fn policy_tier(s: &Snapshot) -> &strata::snapshot::ClusterTier {
     s.source
         .cluster
         .as_ref()
         .unwrap()
         .tier(Tier::Policy)
         .unwrap()
-        .fields
-        .clone()
 }
 
 /// The comparison of the policy tiers in `d`.
@@ -2395,6 +2399,117 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
     assert!(!policy_diff(&ops::compare(&older, &live, "t1")).same);
 }
 
+/// The cluster of [`serve_policy`], whose role bindings Palette answers to the key of the user
+/// `user`: the bindings of [`system_rbacs`], with a binding of the system.
+fn serve_system_rbacs(dir: &Path, user: &str) -> MemoryApi {
+    serve_policy(dir, barney()).with(rbacs_route(), rbacs_answer(system_rbacs(), user))
+}
+
+/// The role and the subject names of each binding of the system that the record `s` names.
+fn system_subjects(s: &Snapshot) -> Vec<(String, Vec<String>)> {
+    let text = |v: &Value| v.as_str().unwrap().to_string();
+    let names = |b: &Value| -> Vec<String> {
+        let subjects = b["subjects"].as_array().unwrap();
+        subjects.iter().map(|s| text(&s["name"])).collect()
+    };
+    policy_tier(s)
+        .system_rbacs
+        .iter()
+        .map(|b| (text(&b["role"]["name"]), names(b)))
+        .collect()
+}
+
+/// #838, option 1 of #876: the root and the hash of the policy tier do not depend on the user of
+/// the key.
+#[test]
+fn a_cluster_with_a_role_binding_of_the_system_has_one_root_and_one_policy_hash_for_the_keys_of_two_users()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let fred = snapshot_cluster(&serve_system_rbacs(dir.path(), "fred@example.com"), None).unwrap();
+    let wilma_api = serve_system_rbacs(dir.path(), "wilma@example.com");
+    let wilma = snapshot_cluster(&wilma_api, None).unwrap();
+
+    assert_eq!(fred.root, wilma.root);
+    let (a, b) = (policy_tier(&fred), policy_tier(&wilma));
+    assert_eq!(
+        a.hash, b.hash,
+        "the hash does not cover the bindings of the system"
+    );
+    assert_eq!(a.fields, b.fields);
+    assert_eq!(
+        a.fields["rbacs"],
+        serde_json::json!([{"namespace": "", "role": {"kind": "ClusterRole", "name": "view"},
+            "subjects": [{"name": "platform", "namespace": "", "type": "Group"}],
+            "type": "ClusterRoleBinding"}]),
+        "the binding that is not of the system stays in the fields"
+    );
+    // each record names the binding of the system that its key reads, outside the hash
+    let one = |role: &str, user: &str| vec![(role.to_string(), vec![user.to_string()])];
+    assert_eq!(
+        system_subjects(&fred),
+        one("cluster-admin", "fred@example.com")
+    );
+    assert_eq!(system_subjects(&wilma), one("view", "wilma@example.com"));
+
+    // the record keeps them in the file
+    let saved = dir.path().join("fred.json");
+    common::write_snapshot(&saved, &fred, false);
+    let json = read_json(&saved);
+    let tier = &json["source"]["cluster"]["tiers"]["policy"];
+    assert_eq!(
+        tier["systemRbacs"][0]["subjects"][0]["name"],
+        "fred@example.com"
+    );
+    assert_eq!(policy_tier(&Snapshot::load(&saved).unwrap()), a);
+
+    // compare and verify find no change of the policy tier
+    assert!(policy_diff(&ops::compare(&fred, &wilma, "t1")).same);
+    let v = ops::verify(&fred, &Palette::new(wilma_api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert!(policy_diff(&v.diff).same);
+}
+
+/// A record of strata 0.33 and before holds each binding of the system in `rbacs` of the fields.
+/// Its policy tier differs one time from a new record, at the binding of the system.
+#[test]
+fn a_record_that_holds_a_binding_of_the_system_in_the_fields_names_the_policy_tier_at_that_binding()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_system_rbacs(dir.path(), "fred@example.com");
+    let mut older = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    // the policy tier as strata 0.33 wrote it: the binding of the system in the fields
+    let tier = &mut older["source"]["cluster"]["tiers"]["policy"];
+    let system = tier.as_object_mut().unwrap().remove("systemRbacs").unwrap();
+    tier["fields"]["rbacs"]
+        .as_array_mut()
+        .unwrap()
+        .extend(system.as_array().unwrap().iter().cloned());
+    let older: Snapshot = serde_json::from_value(older).unwrap();
+
+    let v = ops::verify(
+        &older,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the verdict follows the release");
+    let tier = policy_diff(&v.diff);
+    assert!(!tier.same);
+    assert!(
+        tier.diff.iter().all(|l| l.path.starts_with("rbacs[")),
+        "{:?}",
+        tier.diff
+    );
+
+    // a new record of the cluster verifies with no change
+    let again = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&again, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(policy_diff(&v.diff).same);
+}
+
 #[test]
 fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field() {
     let dir = tempfile::tempdir().unwrap();
@@ -2412,13 +2527,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     // a 403 of the route of the role bindings does not stop the record
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(
         tier.fields.get("rbacs").is_none(),
         "an error is not a value"
@@ -2444,13 +2553,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     for status in [404, 405] {
         let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
         let m = snapshot_cluster(&missing, None).unwrap();
-        let missing_tier = &m
-            .source
-            .cluster
-            .as_ref()
-            .unwrap()
-            .tier(Tier::Policy)
-            .unwrap();
+        let missing_tier = policy_tier(&m);
         assert_eq!(missing_tier.fields["rbacs"], Value::Null, "HTTP {status}");
         assert_ne!(missing_tier.hash, tier.hash, "HTTP {status}");
         assert!(missing_tier.errors.is_empty(), "HTTP {status}");
@@ -2466,13 +2569,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     let forbidden =
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(

@@ -68,6 +68,7 @@ mod tests {
             let request = Request {
                 target: target.to_string(),
                 project: Some("p1".to_string()),
+                key: None,
                 accept: accept.map(str::to_string),
                 body: Vec::new(),
             };

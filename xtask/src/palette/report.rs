@@ -65,6 +65,7 @@ mod tests {
         let request = Request {
             target: REPORT_ENDPOINT.to_string(),
             project: None,
+            key: None,
             accept: None,
             body: report.clone(),
         };

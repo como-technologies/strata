@@ -80,6 +80,13 @@ These are open:
   [Cluster tiers](clusters.md#cluster-tiers). `strata snapshot` of the cluster
   writes no record and exits `2`: see
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
+- The answer of `config/rbacs` to the keys of two users, for a cluster with a
+  role binding of the system. The code of Palette shows that each binding of
+  that item holds only the subject that is the user of the key. The stand-in
+  gives that answer. Stage 10 of
+  [tiers.sh](../../development/live-runs.md#tierssh) reads such a cluster with
+  two keys, and has no result yet. See
+  [Cluster tiers](clusters.md#cluster-tiers).
 - The answer of the profile listing and the cluster listing to a key whose
   roles in the project do not give `clusterProfile.list` or `cluster.list`.
   The code of Palette shows HTTP 500 with the code `ResourceAccessDenied`, and

@@ -999,6 +999,7 @@ fn two_profile_cluster(record: &Path, running: bool, dir: &Path) -> PathBuf {
             hash: String::new(),
             fields,
             errors: BTreeMap::new(),
+            system_rbacs: Vec::new(),
         };
         let cluster = snap.source.cluster.as_mut().unwrap();
         cluster.tiers.insert(Tier::Running.into(), tier);
