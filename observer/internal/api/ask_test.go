@@ -253,11 +253,11 @@ func TestTheClickAnswers404ForAProfileAPackOrAMoveThatIsNotKnownAndSendsNothing(
 	h := handlerOf(o)
 	for _, path := range []string{
 		"/v1/packs/nope@1/k8s/kubernetes/ask",
-		"/v1/packs/aws-stack@1.1.0/k8s/nope/ask",
+		awsPacks + "/k8s/nope/ask",
 		// cert-manager is current: no move exists for it
-		"/v1/packs/aws-stack@1.1.0/addon/cert-manager/ask",
+		awsPacks + "/addon/cert-manager/ask",
 		// the layer is part of the key
-		"/v1/packs/aws-stack@1.1.0/addon/kubernetes/ask",
+		awsPacks + "/addon/kubernetes/ask",
 	} {
 		rec := click(h, path)
 		if rec.Code != http.StatusNotFound || strings.Contains(rec.Body.String(), "nope") {
@@ -357,23 +357,7 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 func recorded(t *testing.T, r *rig) (check.Strata, string) {
 	t.Helper()
 	log := filepath.Join(r.fixtures, "calls.log")
-	bin := testkit.Strata(t, `echo "$cmd $*" >> '`+log+`'
-case $cmd in
-verify) cat '`+r.fixtures+`/verify.json'; exit 1 ;;
-snapshot) cp '`+r.fixtures+`/cluster.json' "$out"; exit 0 ;;
-compare)
-  case $ref in
-  pack:*) cat '`+r.fixtures+`/move.json'; exit 1 ;;
-  *) cat '`+r.fixtures+`/compare-cluster.json'; exit 1 ;;
-  esac ;;
-behind)
-  case "$*" in
-  *--pin*) cat '`+r.fixtures+`/`+askRefuses+`'; exit 1 ;;
-  *) cat '`+r.fixtures+`/behind.json'; exit 1 ;;
-  esac ;;
-esac
-exit 3`)
-	return check.InDir{Runner: runner.Runner{Binary: bin, Timeout: time.Minute}}, log
+	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures, log, askRefuses), Timeout: time.Minute}}, log
 }
 
 func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.T) {

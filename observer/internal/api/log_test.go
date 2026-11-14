@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/check"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
@@ -17,28 +18,31 @@ import (
 // script writes a shell script that stands for the strata binary. It answers from the fixtures. A
 // command that fails prints the sentinel to its stderr, in a line of the error and in a plain line.
 // A message of Palette can do the same. A marker file makes a command fail: fail-verify,
-// fail-behind, or fail-moves.
-func script(t *testing.T, fixtures string) string {
+// fail-behind, or fail-moves. When log is not empty, the script first keeps the command line of each
+// call in that file. `behind --pin` prints the fixture pin.
+func script(t *testing.T, fixtures, log, pin string) string {
 	t.Helper()
-	return testkit.Strata(t, `fail() {
-  echo '{"error":{"kind":"api","status":500,"message":"`+sentinelValue+`"}}' >&2
+	keep := ""
+	if log != "" {
+		keep = `echo "$cmd $*" >> '` + log + `'` + "\n"
+	}
+	return testkit.Strata(t, keep+`fail() {
+  `+testkit.ErrorLine(docs.KindAPI, `"status":500,"message":"`+sentinelValue+`"`)+`
   echo '`+sentinelValue+`' >&2
   exit 2
 }
-case $cmd in
-verify)
-  if [ -e '`+fixtures+`/fail-verify' ]; then fail; fi
+`+testkit.VerifyFirst+`  if [ -e '`+fixtures+`/fail-verify' ]; then fail; fi
   cat '`+fixtures+`/verify.json'; exit 1 ;;
 snapshot) cp '`+fixtures+`/cluster.json' "$out"; exit 0 ;;
-compare)
-  case $ref in
-  pack:*)
-    if [ -e '`+fixtures+`/fail-moves' ]; then fail; fi
+`+testkit.PacksFirst+`    if [ -e '`+fixtures+`/fail-moves' ]; then fail; fi
     cat '`+fixtures+`/move.json'; exit 1 ;;
-  *) cat '`+fixtures+`/compare-cluster.json'; exit 1 ;;
+  *) cat '`+fixtures+`/`+compareFixture+`'; exit 1 ;;
   esac ;;
 behind)
   if [ -e '`+fixtures+`/fail-behind' ]; then fail; fi
+  case "$*" in
+  *--pin*) cat '`+fixtures+`/`+pin+`'; exit 1 ;;
+  esac
   cat '`+fixtures+`/behind.json'; exit 1 ;;
 esac
 exit 3`)
@@ -54,7 +58,7 @@ func marker(t *testing.T, fixtures, name string) {
 // scripted makes the strata of a test from the script, with the real runner.
 func scripted(t *testing.T, r *rig) check.Strata {
 	t.Helper()
-	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures), Timeout: time.Minute}}
+	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures, "", "behind.json"), Timeout: time.Minute}}
 }
 
 // requestEverything calls each route, so that the log holds the lines of a full run.

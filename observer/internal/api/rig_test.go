@@ -35,13 +35,33 @@ const (
 	sentinelText = "SENTINEL-TEXT"
 )
 
-// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/.
+// compareFixture is the fixture of the compare of a record with the cluster.
+const compareFixture = "compare-cluster.json"
+
+// csiChart starts the path of a value of the chart of the pack csi-aws-ebs. replicaPath is the path of the setting that
+// the fixtures change, after the chart.
 const (
-	pathHealth    = "/healthz"
-	pathPublished = "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=published"
-	pathCluster   = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=cluster"
-	pathNewer     = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newer"
-	pathAsk       = "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/ask"
+	csiChart    = "charts.aws-ebs-csi-driver."
+	replicaPath = "controller.replicaCount"
+)
+
+// cyclesFailed is the failure of a test whose cycles of the rig failed. noSuchSide names a side of a diff that does
+// not exist, in the names of the cases.
+const (
+	cyclesFailed = "the cycles failed: %v"
+	noSuchSide   = "a side that does not exist"
+)
+
+// The paths of the routes, with the profile aws-stack@1.1.0 of testdata/. awsPacks starts the route of a pack of the
+// profile, and kubernetesDiff is the route of the diff of its pack kubernetes, with no side.
+const (
+	awsPacks       = "/v1/packs/aws-stack@1.1.0"
+	kubernetesDiff = awsPacks + testkit.KubernetesDiff
+	pathHealth     = "/healthz"
+	pathPublished  = awsPacks + "/csi/csi-aws-ebs/diff?side=published"
+	pathCluster    = kubernetesDiff + "?side=cluster"
+	pathNewer      = kubernetesDiff + "?side=newer"
+	pathAsk        = awsPacks + "/k8s/kubernetes/ask"
 	// pathProfileByName names the profile with no version.
 	pathProfileByName = "/v1/profiles/aws-stack"
 )
@@ -123,7 +143,7 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), res.Stdout, 0o600)
 	case runner.CmdCompare:
 		if !strings.HasPrefix(args[1], "pack:") {
-			return f.answer(1, "compare-cluster.json")
+			return f.answer(1, compareFixture)
 		}
 		f.moves++
 		if f.failMoves {
@@ -234,7 +254,7 @@ func (r *rig) cycled(s check.Strata) *check.Observer {
 	r.t.Helper()
 	o := r.observer(s)
 	if _, err := o.Once(context.Background()); err != nil {
-		r.t.Fatalf("the cycles failed: %v\n%s", err, r.log.String())
+		r.t.Fatalf(cyclesFailed+"\n%s", err, r.log.String())
 	}
 	return o
 }

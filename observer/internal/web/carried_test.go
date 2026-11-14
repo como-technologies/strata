@@ -39,7 +39,7 @@ func TestACarriedAnswerOnAPackWithANewerVersionIsNotIdenticalUndisturbedOrSame(t
 		t.Run(side, func(t *testing.T) {
 			page := pageWith(t, dir, "scratch", ubuntuHash, `S.side["`+ubuntuSide+`"] = "`+side+`"`)
 			mustHold(t, side, page, `<option value="`+side+`" selected>`, hiddenTitle, "Strata could not read the record.")
-			mustNotHold(t, side, page, "Identical", "Undisturbed", `<b class="ok">Same</b>`, "tone-calm")
+			mustNotHold(t, side, page, "Identical", "Undisturbed", sameBadge, "tone-calm")
 		})
 	}
 }

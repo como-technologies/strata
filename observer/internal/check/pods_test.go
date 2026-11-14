@@ -234,7 +234,7 @@ func TestAFailedReadGivesTheCausePodsNotReadAndTheCycleEndsWell(t *testing.T) {
 		t.Errorf("document %+v", doc)
 	}
 	logged := r.log.String()
-	if !strings.Contains(logged, "kube-api") || strings.Contains(logged, "forbidden") {
+	if !strings.Contains(logged, docs.KindKubeAPI) || strings.Contains(logged, "forbidden") {
 		t.Errorf("log %s", logged)
 	}
 }

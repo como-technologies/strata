@@ -79,3 +79,17 @@ func TestOncallRulesIsAFileOfRulesInJSON(t *testing.T) {
 		t.Errorf("got %+v, %v", got, err)
 	}
 }
+
+func TestRulesHoldsEachChannelAndPutsEachRuleOnALineFromLine4(t *testing.T) {
+	text := Rules([]string{Channel("a", "/a"), Channel("b", "/b")}, DriftNow, LostNow)
+	var got struct {
+		Channels map[string]struct{ URLFile string }
+		Rules    []map[string]string
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil || got.Channels["a"].URLFile != "/a" || got.Channels["b"].URLFile != "/b" || len(got.Rules) != 2 {
+		t.Errorf("got %+v, %v", got, err)
+	}
+	if lines := strings.Split(text, "\n"); len(lines) < 5 || lines[3] != DriftNow+"," || lines[4] != LostNow {
+		t.Errorf("the lines %q", lines)
+	}
+}

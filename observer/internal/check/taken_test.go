@@ -18,7 +18,7 @@ import (
 func firstSeenWithANewProfile(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, unchanged())
-	r.meta(`{"baseline":"first-seen","firstSeenFrom":"c1"}`)
+	r.meta(testkit.FirstSeenMeta("c1"))
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "fred-edge@1.0.0")
 	return r, w
@@ -114,7 +114,7 @@ func TestAFailedSnapshotKeepsTheCycleGoodAndARecordOfTheSecretsWins(t *testing.T
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatalf("a failed snapshot failed the cycle: %v", err)
 	}
-	if len(o.kicks[cycleContent]) != 0 || !strings.Contains(r.log.String(), "verdict=failed kind=api status=429") {
+	if len(o.kicks[cycleContent]) != 0 || !strings.Contains(r.log.String(), "verdict=failed kind="+docs.KindAPI+" status=429") {
 		t.Fatalf("tokens %d, the log:\n%s", len(o.kicks[cycleContent]), r.log.String())
 	}
 	w.profileErr = nil

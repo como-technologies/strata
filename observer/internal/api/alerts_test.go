@@ -27,9 +27,7 @@ func alerting(t *testing.T, r *rig, w *testkit.Receiver, s check.Strata) *check.
 	if err := os.WriteFile(file, []byte(w.URL+"/"+addressMarker+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rules, err := alert.Parse([]byte(testkit.OncallRules(file, `
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"},
+	rules, err := alert.Parse([]byte(testkit.OncallRules(file, testkit.DriftNow, `{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"},
 		{"level": "profile", "match": "other-profile", "news": "drift", "muteUntil": "2099-01-01"}`)))
 	if err != nil {
 		t.Fatal(err)

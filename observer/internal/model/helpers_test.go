@@ -11,6 +11,9 @@ import (
 
 var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 
+// currentVersion is the failure of a check of a profile version that is current, and of its newer version.
+const currentVersion = "a current version: %+v"
+
 // allKinds lists every kind of finding. A test that walks the kinds uses it, so a new kind fails the
 // tests that did not learn it.
 var allKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffers, ImageIDChanged, ImageMoved, ImageSplit}

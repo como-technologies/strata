@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
@@ -33,7 +34,7 @@ type secretFile struct {
 }
 
 var (
-	secretName = regexp.MustCompile(`^  name: (strata-observer-records-\d)$`)
+	secretName = regexp.MustCompile(`^  name: (` + recordsSecret + `\d)$`)
 	secretData = regexp.MustCompile(`^  ([^ :]+): (\S+)$`)
 )
 
@@ -154,7 +155,7 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 		}
 	}
 	record := filepath.Join(t.TempDir(), "release.json")
-	const body = `{"schema":"strata-snapshot/1","source":{"name":"fred identity!","version":"2.3.0","cluster":null},"packs":[1,2,3]}`
+	body := testkit.Record(docs.SnapshotSchema, "fred identity!", "2.3.0", `,"cluster":null`, `,"packs":[1,2,3]`)
 	if err := os.WriteFile(record, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 		t.Errorf("a key that is not there gave exit %d and %q:\n%s", code, got, out)
 	}
 	// The stand-in refuses any other call, so the test would fail if the page gave another command for the Secrets.
-	if code, _ := runBash(t, dir, bin, "kubectl -n other get secret strata-observer-records-0 -o json"); code == 0 {
+	if code, _ := runBash(t, dir, bin, "kubectl -n other get secret "+recordsSecret+"0 -o json"); code == 0 {
 		t.Error("the stand-in for kubectl answered a call for another namespace")
 	}
 }
@@ -195,10 +196,11 @@ func mustAnswer(t *testing.T, command string, code int, out string) {
 }
 
 func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
+	const checkRegistry = "STRATA_CHECK_REGISTRY"
 	strata := os.Getenv("STRATA_BIN")
-	record, apiDir, registry := os.Getenv("STRATA_CHECK_RECORD"), os.Getenv("STRATA_CHECK_API"), os.Getenv("STRATA_CHECK_REGISTRY")
+	record, apiDir, registry := os.Getenv("STRATA_CHECK_RECORD"), os.Getenv("STRATA_CHECK_API"), os.Getenv(checkRegistry)
 	if strata == "" || record == "" || (apiDir == "" && registry == "") {
-		t.Skip("STRATA_BIN, STRATA_CHECK_RECORD, and STRATA_CHECK_API or STRATA_CHECK_REGISTRY are not set: run scripts/observer-contract.sh")
+		t.Skip("STRATA_BIN, STRATA_CHECK_RECORD, and STRATA_CHECK_API or " + checkRegistry + " are not set: run scripts/observer-contract.sh")
 	}
 	want, err := os.ReadFile(record)
 	if err != nil {

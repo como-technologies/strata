@@ -262,7 +262,7 @@ func TestTheFirstCycleOfEachTimerRunsAtTheStartAndThePoolBoundsTheProcesses(t *t
 	cancel()
 	<-done
 	if w.count(runner.CmdVerify) != 1 || w.count(runner.CmdBehind) != 1 {
-		t.Errorf("verify %d, behind %d", w.count(runner.CmdVerify), w.count(runner.CmdBehind))
+		t.Errorf(verifyBehind, w.count(runner.CmdVerify), w.count(runner.CmdBehind))
 	}
 	if most := w.overlap.Most(); most < 2 || most > defaultProcesses {
 		t.Errorf("%d processes ran at once, want from 2 to %d", most, defaultProcesses)

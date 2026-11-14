@@ -372,7 +372,7 @@ func TestEachFindingMakesOneEventTheNewestFirst(t *testing.T) {
 	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), Files: 2, FilesKnown: true,
 		FirstSeen: map[string]time.Time{FindingID(PublishedChanged, "a-stack@1.0.0"): t0.Add(-time.Hour)}}
 	events := Build(in).Events
-	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != "Gone" || events[1].Reason != "DriftFound" || events[1].Type != "drift" {
+	if len(events) != 2 || events[0].Object != "b-stack@1.0.0" || events[0].Reason != "Gone" || events[1].Reason != "DriftFound" || events[1].Type != EventDrift {
 		t.Errorf("events %+v", events)
 	}
 	for kind := range eventKinds {
@@ -402,7 +402,7 @@ func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
 		VersionsClock: Clock{Every: 6 * time.Hour, Last: ptr(t0)}}
 	out := string(testkit.MustJSON(t, Build(in)))
 	for _, want := range []string{
-		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"api","status":401}}`,
+		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"` + docs.KindAPI + `","status":401}}`,
 		`"versions":{"readAt":"2026-11-03T14:00:00Z","every":"6h","failedRuns":0,"lastError":null}`,
 	} {
 		if !strings.Contains(out, want) {
@@ -426,7 +426,7 @@ func TestAMoveReadsTheCountsOfTheCompare(t *testing.T) {
 
 func TestTheKeyOfAMoveNamesTheRegistryThePackAndTheTwoVersions(t *testing.T) {
 	p := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "x@1")
-	if got := MoveKey(p); got != "reg1/kubernetes@1.35.3->1.36.2" {
+	if got := MoveKey(p); got != "reg1"+testkit.KubernetesMove {
 		t.Errorf("key %q", got)
 	}
 	if got := MoveKey(pin("kubernetes", "k8s", "1.35.3", "")); got != "" {
@@ -501,7 +501,7 @@ func TestAProfileWithANewerPublishedVersionShowsItAndCountsIt(t *testing.T) {
 	for _, versions := range []*Versions{v, {At: t0, Strata: "0.29.0", Moves: map[string]Move{}}} {
 		s := build(&c, versions)
 		if s.Profiles[0].NewerVersion != nil || s.Profiles[0].Status != StatusOK || s.Counts.NewerProfileVersions != 0 {
-			t.Errorf("a current version: %+v, status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
+			t.Errorf(currentVersion+", status %q, counts %+v", s.Profiles[0].NewerVersion, s.Profiles[0].Status, s.Counts)
 		}
 	}
 }
@@ -553,7 +553,7 @@ func TestTheMoveToTheNewestProfileVersionNamesEachPackThatChangesAndNoValue(t *t
 	// a version that is current shows no move, also when a compare of an earlier cycle is there
 	v.Profiles, v.ProfileMoves, v.ProfileUnread = []docs.ProfilePin{profilePin("barney-addons", "1.3.1", "", "")}, map[string]docs.Diff{"barney-addons@1.3.1": diff}, nil
 	if n := build(&c, v).Profiles[0].NewerVersion; n != nil {
-		t.Errorf("a current version: %+v", n)
+		t.Errorf(currentVersion, n)
 	}
 }
 

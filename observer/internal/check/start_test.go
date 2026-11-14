@@ -119,7 +119,7 @@ func TestAChangeOfTheRecordsStartsAContentCycle(t *testing.T) {
 	})
 	// the kubelet changes a mounted Secret in one step, so the test writes a new file and renames it
 	newMeta := filepath.Join(t.TempDir(), "meta.json")
-	if err := os.WriteFile(newMeta, []byte(`{"baseline":"approved","revision":"5f2d8b3c"}`), 0o600); err != nil {
+	if err := os.WriteFile(newMeta, []byte(newRevision), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Rename(newMeta, filepath.Join(r.records, "meta.json")); err != nil {
@@ -144,7 +144,7 @@ func TestTheLookAtTheRecordsComparesWithTheMarkOfTheStartOfRun(t *testing.T) {
 	o := r.observer(&world{})
 	o.recordsPoll = time.Millisecond
 	mark := baseline.Mark(r.records)
-	r.meta(`{"baseline":"approved","revision":"5f2d8b3c"}`)
+	r.meta(newRevision)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { o.watchRecords(ctx, mark); close(done) }()

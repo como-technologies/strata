@@ -128,7 +128,7 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 	w.rows[0] = notRead()
 	s := at(t, o, t0.Add(time.Hour))
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Counts.Drift != 1 || s.Profiles[0].Status != model.StatusDrift {
-		t.Fatalf("a failed read cleared the drift: findings %+v, counts %+v", s.Findings, s.Counts)
+		t.Fatalf("a failed read cleared the drift: "+testkit.FindingsCounts, s.Findings, s.Counts)
 	}
 	readErrorNames(t, s, "aws-stack@1.1.0")
 	keepsFirstSight(t, r, id)
@@ -234,7 +234,7 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 	}
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 || w.countMoves() != 4 {
-		t.Fatalf("versions %+v, newer %d, compares %d", s.Versions, len(s.Newer), w.countMoves())
+		t.Fatalf(versionsNewer+", compares %d", s.Versions, len(s.Newer), w.countMoves())
 	}
 	countsAllButKubernetes(t, s)
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" || s.NotChecked[0].Profiles[0] != moveSubject {
@@ -269,7 +269,7 @@ func TestACycleWhereEveryMoveFailsIsStillAGoodCycle(t *testing.T) {
 	}
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || len(s.Newer) != 4 || len(s.NotChecked) != 4 {
-		t.Errorf("versions %+v, newer %d, notChecked %d", s.Versions, len(s.Newer), len(s.NotChecked))
+		t.Errorf(versionsNewer+", notChecked %d", s.Versions, len(s.Newer), len(s.NotChecked))
 	}
 }
 
@@ -346,7 +346,7 @@ func breakRecord(t *testing.T, r *rig, how string) {
 			t.Fatal(err)
 		}
 	default:
-		testkit.WriteGzip(t, r.records, testkit.RecordFile, `{"schema":"strata-snapshot/2","source":{"name":"aws-stack","version":"1.1.0"}}`)
+		testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.Record("strata-snapshot/2", "aws-stack", "1.1.0", "", ""))
 	}
 }
 
@@ -365,7 +365,7 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
 			at(t, o, t0)
 			if len(sender.texts) != 1 {
-				t.Fatalf("the open message %q", sender.texts)
+				t.Fatalf(testkit.OpenMessage, sender.texts)
 			}
 			// The file of the drifted record is not a record any more. The row of the other record is the only one.
 			breakRecord(t, r, how)
@@ -423,7 +423,7 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	// A read of no change decides.
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
 	at(t, o, t0.Add(3*time.Hour))
-	if len(sender.texts) != 4 || !strings.Contains(sender.texts[3], "Drift cleared\naws-stack@1.1.0") {
+	if len(sender.texts) != 4 || !strings.Contains(sender.texts[3], paymentsCleared) {
 		t.Errorf("messages %q", sender.texts)
 	}
 }

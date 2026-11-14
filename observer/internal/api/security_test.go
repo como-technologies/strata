@@ -49,7 +49,7 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 		{"a summary route", "GET", summaryRoutes[patternCluster], "127.0.0.1:8080", 200},
 		{"the detail route", "GET", pathPublished, "localhost:1", 200},
 		{"a profile that does not exist", "GET", "/v1/profiles/nope", "127.0.0.1:8080", 404},
-		{"a side that does not exist", "GET", "/v1/packs/aws-stack/k8s/kubernetes/diff?side=x", "127.0.0.1:8080", 400},
+		{noSuchSide, "GET", "/v1/packs/aws-stack" + testkit.KubernetesDiff + "?side=x", "127.0.0.1:8080", 400},
 		{"the page", "GET", "/", "127.0.0.1:8080", 404},
 		{"a post", "POST", summaryRoutes[patternCluster], "127.0.0.1:8080", 405},
 		{"a host that is not loopback", "GET", summaryRoutes[patternCluster], "evil.example", 421},

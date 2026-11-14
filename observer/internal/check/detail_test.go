@@ -187,7 +187,7 @@ func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 	}()
 	wg.Wait()
 	if most := w.overlap.Most(); most != 2 {
-		t.Errorf("%d processes ran together, want the 2 of the pool", most)
+		t.Errorf(testkit.RanTogether+", want the 2 of the pool", most)
 	}
 }
 

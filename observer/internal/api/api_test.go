@@ -167,13 +167,13 @@ func TestEachRouteGivesItsStatusAndContentType(t *testing.T) {
 		{"the diff of the cluster side", pathCluster, 200, jsonType},
 		{"the diff of the newer side", pathNewer, 200, jsonType},
 		{"an unknown profile", "/v1/profiles/nope", 404, jsonType},
-		{"the diff of an unknown profile", "/v1/packs/nope/k8s/kubernetes/diff?side=cluster", 404, jsonType},
-		{"the diff of an unknown pack", "/v1/packs/aws-stack@1.1.0/k8s/nope/diff?side=cluster", 404, jsonType},
-		{"the diff of a pack with no change on the side", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=published", 404, jsonType},
-		{"the diff of a pack that no pin names", "/v1/packs/aws-stack@1.1.0/csi/csi-aws-ebs/diff?side=newer", 404, jsonType},
-		{"the diff of a profile with no newer version", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=newest", 404, jsonType},
-		{"a diff with no side", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff", 400, jsonType},
-		{"a diff with a side that does not exist", "/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=nope", 400, jsonType},
+		{"the diff of an unknown profile", "/v1/packs/nope" + testkit.KubernetesDiff + "?side=cluster", 404, jsonType},
+		{"the diff of an unknown pack", awsPacks + "/k8s/nope/diff?side=cluster", 404, jsonType},
+		{"the diff of a pack with no change on the side", kubernetesDiff + "?side=published", 404, jsonType},
+		{"the diff of a pack that no pin names", awsPacks + "/csi/csi-aws-ebs/diff?side=newer", 404, jsonType},
+		{"the diff of " + testkit.NoNewerProfile, kubernetesDiff + "?side=newest", 404, jsonType},
+		{"a diff with no side", kubernetesDiff, 400, jsonType},
+		{"a diff with " + noSuchSide, kubernetesDiff + "?side=nope", 400, jsonType},
 		{"an unknown route", "/v1/nope", 404, jsonType},
 		{"the root with no page", "/", 404, jsonType},
 	} {
@@ -191,9 +191,9 @@ func TestAnUnknownProfileOrPackGets404AndNamesNoValue(t *testing.T) {
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	for _, path := range []string{
 		"/v1/profiles/SENTINEL-PROFILE",
-		"/v1/packs/SENTINEL-PROFILE/k8s/kubernetes/diff?side=cluster",
-		"/v1/packs/aws-stack@1.1.0/SENTINEL-LAYER/SENTINEL-PACK/diff?side=cluster",
-		"/v1/packs/aws-stack@1.1.0/k8s/kubernetes/diff?side=SENTINEL-SIDE",
+		"/v1/packs/SENTINEL-PROFILE" + testkit.KubernetesDiff + "?side=cluster",
+		awsPacks + "/SENTINEL-LAYER/SENTINEL-PACK/diff?side=cluster",
+		kubernetesDiff + "?side=SENTINEL-SIDE",
 		"/SENTINEL-PATH",
 	} {
 		rec := get(h, path)
@@ -326,8 +326,8 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 		t.Errorf("%+v", got)
 	}
 	v := got.Values
-	if len(v.Settings) != 1 || v.Settings[0].Path != "charts.aws-ebs-csi-driver.controller.replicaCount" || v.Settings[0].Old != sentinelValue || v.Settings[0].New != sentinelValue ||
-		len(v.FollowsTheVersion) != 1 || v.FollowsTheVersion[0].Path != "charts.aws-ebs-csi-driver.image.tag" ||
+	if len(v.Settings) != 1 || v.Settings[0].Path != csiChart+replicaPath || v.Settings[0].Old != sentinelValue || v.Settings[0].New != sentinelValue ||
+		len(v.FollowsTheVersion) != 1 || v.FollowsTheVersion[0].Path != csiChart+"image.tag" ||
 		len(v.RepeatsTheLists) != 1 || v.RepeatsTheLists[0].Path != testkit.ImagePath || !v.Parseable {
 		t.Errorf("values %+v", v)
 	}
@@ -386,7 +386,7 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	planted := strings.Replace(string(raw), "controller.replicaCount", "clients[name="+pathMarker+"].id", 1)
+	planted := strings.Replace(string(raw), replicaPath, "clients[name="+pathMarker+"].id", 1)
 	if planted == string(raw) {
 		t.Fatal("the fixture holds no path to change")
 	}
@@ -396,7 +396,7 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	o := r.observer(&fakeStrata{dir: r.fixtures})
 	once, err := o.Once(context.Background())
 	if err != nil {
-		t.Fatalf("the cycles failed: %v", err)
+		t.Fatalf(cyclesFailed, err)
 	}
 	printed := testkit.MustJSON(t, once)
 	if strings.Contains(string(printed), pathMarker) {

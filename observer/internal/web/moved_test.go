@@ -92,11 +92,11 @@ func TestThePageOfAPackOfAVersionThatTheClusterNoLongerRunsHasNoFactOfANewerVers
 			if name == c.changed {
 				mustHold(t, where, pageOf(t, screens, hash, ""), badge("r", "Changed"), "charts.traefik.deployment.replicas")
 			} else {
-				mustHold(t, where, pageOf(t, screens, hash, ""), samePublished, `<b class="">Not here</b><span>This cluster&#39;s copy</span>`)
+				mustHold(t, where, pageOf(t, screens, hash, ""), samePublished, `<b class="">Not here</b>`+clusterCopy)
 			}
 			for _, s := range screens {
 				if s.Hash == hash {
-					mustNotHold(t, fmt.Sprintf("%s %q", where, s.Variant), s.HTML, "Current", "No newer version", "<span>Newer version</span>")
+					mustNotHold(t, fmt.Sprintf("%s %q", where, s.Variant), s.HTML, "Current", "No newer version", newerSpan)
 				}
 			}
 		}

@@ -39,7 +39,7 @@ func TestThePodsFollowTheContinueTokenUntilTheListEnds(t *testing.T) {
 		{"ns2/b", "repo/b:2-init", "repo/b@sha256:bb-init"}, {"ns2/b", "repo/b:2", "repo/b@sha256:bb"}, {"ns2/b", "idle:1", ""},
 	}
 	if !slices.Equal(got, want) {
-		t.Errorf("containers %+v, want %+v", got, want)
+		t.Errorf(containersWant, got, want)
 	}
 	seen := a.Requests()
 	if len(seen) != 2 || seen[0].Query != "limit=500" || seen[1].Query != "continue=page-2&limit=500" {
@@ -57,16 +57,16 @@ func TestThePodsFollowTheContinueTokenUntilTheListEnds(t *testing.T) {
 func TestAContainerKeepsTheImageOfItsSpecAndJoinsItsStatusByName(t *testing.T) {
 	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(testkit.PodList("", `{"metadata":{"name":"p","namespace":"n"},
-		 "spec":{"containers":[{"name":"one","image":"docker.io/library/nginx:1"},{"name":"two","image":"two:2"}]},
+		 "spec":{"containers":[{"name":"one","image":"`+testkit.NginxImage+`:1"},{"name":"two","image":"two:2"}]},
 		 "status":{"containerStatuses":[{"name":"two","image":"rewritten/two:2","imageID":"two@sha256:22"},{"name":"one","image":"nginx:1","imageID":"nginx@sha256:11"}]}}`)))
 	})
 	got, err := New(cfgOf(a)).Pods(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Container{{"n/p", "docker.io/library/nginx:1", "nginx@sha256:11"}, {"n/p", "two:2", "two@sha256:22"}}
+	want := []Container{{"n/p", testkit.NginxImage + ":1", "nginx@sha256:11"}, {"n/p", "two:2", "two@sha256:22"}}
 	if !slices.Equal(got, want) {
-		t.Errorf("containers %+v, want %+v", got, want)
+		t.Errorf(containersWant, got, want)
 	}
 }
 
@@ -99,6 +99,9 @@ func TestTheCAIsReadAtEachCall(t *testing.T) {
 		t.Errorf("a CA that is not a certificate: %v", err)
 	}
 }
+
+// containersWant is the failure of a check of the containers of the pods.
+const containersWant = "containers %+v, want %+v"
 
 // cfgOf gives the Config that points at the stand-in.
 func cfgOf(a *testkit.KubeAPI) Config {
@@ -133,7 +136,7 @@ func TestAFailureHasAKindAndAStatusAndNeverTheBodyOfTheAnswer(t *testing.T) {
 		{"an expired continue token", func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, testkit.EnvMarker, http.StatusGone)
 		}, docs.KindKubeAPI, 410},
-		{"an answer that is not JSON", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>" + testkit.EnvMarker)) }, docs.KindNotJSON, 0},
+		{testkit.NotJSONAnswer, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("<html>" + testkit.EnvMarker)) }, docs.KindNotJSON, 0},
 		{"a list that stops", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"items":[{"metadata":`)) }, docs.KindNotJSON, 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {

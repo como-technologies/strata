@@ -5,12 +5,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
+
+// planAddress is the file of the address of the channel platform-oncall of the file of the plan.
+const planAddress = "/alert-channels/platform-oncall"
 
 // theFile is the file of the plan of the item: a webhook for the team on call, rules at each level, and
 // a mute with an end date.
 const theFile = `{
-  "channels": {"platform-oncall": {"urlFile": "/alert-channels/platform-oncall"}},
+  "channels": {"platform-oncall": {"urlFile": "` + planAddress + `"}},
   "rules": [
     {"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall"},
     {"level": "profile", "match": "fred-identity", "news": "drift", "send": "now", "to": "platform-oncall"},
@@ -24,7 +29,7 @@ func TestTheFileOfThePlanParses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(rules.List) != 4 || rules.List[1].Match != "fred-identity" || !rules.List[3].mute() || rules.Channels["platform-oncall"].URLFile != "/alert-channels/platform-oncall" {
+	if len(rules.List) != 4 || rules.List[1].Match != "fred-identity" || !rules.List[3].mute() || rules.Channels["platform-oncall"].URLFile != planAddress {
 		t.Errorf("rules %+v", rules)
 	}
 	if got := rules.Names(); len(got) != 1 || got[0] != "platform-oncall" {
@@ -34,7 +39,29 @@ func TestTheFileOfThePlanParses(t *testing.T) {
 
 // fileWith puts a rule in a file that has the channel platform-oncall.
 func fileWith(rule string) string {
-	return "{\n\"channels\": {\"platform-oncall\": {\"urlFile\": \"f\"}},\n\"rules\": [\n" + rule + "\n]\n}"
+	return testkit.Rules([]string{testkit.Channel("platform-oncall", "f")}, rule)
+}
+
+// The rules of the tests of the parse that send to the channel a.
+const (
+	driftToA  = `{"level": "cluster", "news": "drift", "send": "now", "to": "a"}`
+	lostToA   = `{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`
+	digestToA = `{"level": "profile", "match": "fred-identity", "news": "drift", "send": "digest", "to": "a"}`
+)
+
+// toA gives the text of a file of rules with the one channel a.
+func toA(rules ...string) string {
+	return testkit.Rules([]string{testkit.Channel("a", "f")}, rules...)
+}
+
+// muteLost gives a rule that mutes the loss of contact until the date. muteDex gives a rule that mutes each drift of
+// fred-identity until the date.
+func muteLost(until string) string {
+	return `{"level": "cluster", "news": "lost", "muteUntil": "` + until + `"}`
+}
+
+func muteDex(until string) string {
+	return `{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "` + until + `"}`
 }
 
 func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
@@ -56,11 +83,11 @@ func TestAFileThatCannotBeUsedStopsWithTheLineOfTheFault(t *testing.T) {
 		{"lost below the cluster", fileWith(`{"level": "profile", "match": "x", "news": "lost", "send": "now", "to": "platform-oncall"}`), 4, "about the cluster"},
 		{"a way to send that is not in the list", fileWith(`{"level": "cluster", "news": "drift", "send": "soon", "to": "platform-oncall"}`), 4, "send must be"},
 		{"a rule for a channel that the file lacks", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "nobody"}`), 4, "name a channel"},
-		{"a mute with no end date", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer"}`), 4, "end date"},
+		{testkit.NoEndDate.Name, testkit.OncallRules("f", testkit.NoEndDate.Rule), 4, testkit.NoEndDate.Want},
 		{"a mute with an end that is no date", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "soon"}`), 4, "end date"},
 		{"a mute with a channel", fileWith(`{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01", "to": "platform-oncall"}`), 4, "no to"},
 		{"a rule that sends and mutes", fileWith(`{"level": "cluster", "news": "drift", "send": "now", "to": "platform-oncall", "muteUntil": "2026-12-01"}`), 4, "second rule"},
-		{"a newer version that pages a person", fileWith(`{"level": "cluster", "news": "newer", "send": "now", "to": "platform-oncall"}`), 4, "never pages"},
+		{testkit.NewerNow.Name, testkit.OncallRules("f", testkit.NewerNow.Rule), 4, testkit.NewerNow.Want},
 		{"two rules for one thing", fileWith("{\"level\": \"cluster\", \"news\": \"drift\", \"send\": \"now\", \"to\": \"platform-oncall\"},\n{\"level\": \"cluster\", \"news\": \"drift\", \"send\": \"digest\", \"to\": \"platform-oncall\"}"), 5, "rule 2"},
 		{"a channel with no file", "{\n\"channels\": {\"a\": {}}\n}", 2, "needs urlFile"},
 	}
@@ -88,10 +115,7 @@ func TestAFaultNamesNoValueOfTheFile(t *testing.T) {
 var now = time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
 
 func TestALowerLevelOverridesAHigherOne(t *testing.T) {
-	rules, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "a"},
-		{"level": "pack", "match": "dex", "news": "drift", "muteUntil": "2026-12-01"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "send": "digest", "to": "a"}]}`))
+	rules, err := Parse([]byte(toA(driftToA, `{"level": "pack", "match": "dex", "news": "drift", "muteUntil": "2026-12-01"}`, digestToA)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,9 +142,7 @@ func TestALowerLevelOverridesAHigherOne(t *testing.T) {
 }
 
 func TestAMuteHoldsThroughTheDayOfItsEndDateAndThenCountsAsNoMute(t *testing.T) {
-	rules, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "a"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"}]}`))
+	rules, err := Parse([]byte(toA(driftToA, muteDex("2026-12-01"))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,11 +178,7 @@ func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
 }
 
 func TestAMuteBesideASendRuleAtOneLevelParsesAndTheLiveMuteWins(t *testing.T) {
-	rules, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
-		{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "send": "digest", "to": "a"}]}`))
+	rules, err := Parse([]byte(toA(lostToA, muteLost("2026-12-01"), muteDex("2026-12-01"), digestToA)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,24 +203,20 @@ func TestAMuteBesideASendRuleAtOneLevelParsesAndTheLiveMuteWins(t *testing.T) {
 
 func TestTwoRulesThatSendForOneThingAreStillRefusedAndAMuteCountsInNoDuplicate(t *testing.T) {
 	cases := []struct {
-		name string
-		body string
-		ok   bool
+		name  string
+		rules []string
+		ok    bool
 	}{
-		{"two rules that send", `{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
-			{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`, false},
-		{"a mute after a rule that sends", `{"level": "cluster", "news": "lost", "send": "now", "to": "a"},
-			{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"}`, true},
-		{"a mute before a rule that sends", `{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
-			{"level": "cluster", "news": "lost", "send": "now", "to": "a"}`, true},
-		{"two mutes", `{"level": "cluster", "news": "lost", "muteUntil": "2026-12-01"},
-			{"level": "cluster", "news": "lost", "muteUntil": "2027-01-01"}`, true},
+		{"two rules that send", []string{lostToA, lostToA}, false},
+		{"a mute after a rule that sends", []string{lostToA, muteLost("2026-12-01")}, true},
+		{"a mute before a rule that sends", []string{muteLost("2026-12-01"), lostToA}, true},
+		{"two mutes", []string{muteLost("2026-12-01"), muteLost("2027-01-01")}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := Parse([]byte(`{"channels": {"a": {"urlFile": "f"}}, "rules": [` + c.body + `]}`))
+			_, err := Parse([]byte(toA(c.rules...)))
 			if (err == nil) != c.ok {
-				t.Errorf("error %v, want ok %v", err, c.ok)
+				t.Errorf(testkit.ErrorWantOK, err, c.ok)
 			}
 		})
 	}

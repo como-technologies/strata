@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
@@ -24,12 +25,12 @@ import (
 var profiles = [][2]string{{"aws-stack", "1.0.0"}, {"platform-addons", "2.3.0"}}
 
 func clusterJSON() string {
-	return `{"schema":"strata-snapshot/1","source":{"cluster":{"uid":"` + testkit.ClusterUID + `","name":"fred","profiles":[` +
+	return testkit.ClusterHead + testkit.ClusterUID + `","name":"fred","profiles":[` +
 		`{"name":"aws-stack","version":"1.0.0","type":"cluster"},{"name":"platform-addons","version":"2.3.0","type":"add-on"}]}}}`
 }
 
 func recordJSON(name, version string) string {
-	return `{"schema":"strata-snapshot/1","source":{"name":"` + name + `","version":"` + version + `"},"root":"r-` + name + `"}`
+	return testkit.Record(docs.SnapshotSchema, name, version, "", `,"root":"r-`+name+`"`)
 }
 
 // fakeStrata writes the documents of a snapshot into the file of -o, as strata does.
@@ -92,7 +93,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 		t.Fatalf(testkit.ResultAndError, res, err)
 	}
 	first := store.data[Name(0)]
-	if got := string(first[MetaKey]); got != `{"baseline":"first-seen","firstSeenFrom":"`+testkit.ClusterUID+`"}` {
+	if got := string(first[MetaKey]); got != testkit.FirstSeenMeta(testkit.ClusterUID) {
 		t.Errorf("meta.json is %s", got)
 	}
 	for _, p := range profiles {

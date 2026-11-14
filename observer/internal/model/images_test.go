@@ -16,7 +16,7 @@ const d3 = "sha256:3333333333333333333333333333333333333333333333333333333333333
 // nginxFull and nginxHub are the same image of nginx, with its full name and with the short name of Docker Hub. vendorAt
 // starts the image id of the image testkit.VendorRef.
 const (
-	nginxFull = "docker.io/library/nginx:1.27"
+	nginxFull = testkit.NginxImage + ":1.27"
 	nginxHub  = "docker.io/nginx:1.27"
 	vendorAt  = "vendor.example/product@"
 )
@@ -329,7 +329,7 @@ func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
 	s := Build(in)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != ImageMoved || s.Counts.Findings != 1 {
-		t.Fatalf("findings %+v, counts %+v", s.Findings, s.Counts)
+		t.Fatalf(testkit.FindingsCounts, s.Findings, s.Counts)
 	}
 	if s.Counts.Drift != 0 || s.Profiles[0].Status != StatusOK || s.Profiles[0].Packs[0].Status != StatusOK {
 		t.Errorf("profile %q, pack %q, counts %+v", s.Profiles[0].Status, s.Profiles[0].Packs[0].Status, s.Counts)

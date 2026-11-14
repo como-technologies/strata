@@ -2,8 +2,10 @@
 // The helpers are a script that stands for the strata binary, a gzip file, a cluster read, and the
 // documents that the commands promise. They also read a JSON file and the documents of the real
 // binary, and they encode a value. They are also a wait, a count of the calls that run at one time,
-// and a webhook that keeps each request. The package also holds the values of the test data that the
-// tests of more than one package use. Only test files import it.
+// and a webhook that keeps each request. Other helpers write a file of alert rules, a record, a meta
+// file, and the parts of a script of a fake of strata. The package also holds the values of the test
+// data and the messages of a failure that the tests of more than one package use. Only test files
+// import it.
 package testkit
 
 import (
@@ -27,8 +29,10 @@ import (
 const (
 	// VerifyUnchanged is the answer of `verify` for one record, record-0.json, that did not change.
 	VerifyUnchanged = `{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}`
-	// ClusterPayments is the snapshot of the cluster c1, named payments, that runs aws-stack@1.1.0.
-	ClusterPayments = `{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
+	// ClusterHead starts the snapshot of a cluster, before its uid. ClusterPayments is the snapshot of the cluster c1,
+	// named payments, that runs aws-stack@1.1.0.
+	ClusterHead     = `{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"`
+	ClusterPayments = ClusterHead + `c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
 	// CompareSame is the answer of `compare` for two sides that are the same.
 	CompareSame = `{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}`
 )
@@ -74,20 +78,35 @@ const (
 	// the JSON of the route. The list is empty, and not null.
 	AsksRoute = "/v1/asks"
 	NoAnswers = `"asks":[]`
-	// NoErrorVerdict and RefusesVerdict are the verdicts of an answer of the kind no-error and refuses, in the JSON of an
-	// answer.
-	NoErrorVerdict = `"verdict":"no-error"`
-	RefusesVerdict = `"verdict":"refuses"`
+	// NoErrorVerdict, RefusesVerdict, and NoAnswerVerdict are the verdicts of an answer of the kind no-error, refuses, and
+	// no-answer, in the JSON of an answer.
+	NoErrorVerdict  = `"verdict":"no-error"`
+	RefusesVerdict  = `"verdict":"refuses"`
+	NoAnswerVerdict = `"verdict":"no-answer"`
 	// KubeHost and KubePort are the variables of the address of the API server that the kubelet gives a pod.
 	KubeHost = "KUBERNETES_SERVICE_HOST"
 	KubePort = "KUBERNETES_SERVICE_PORT"
-	// RecordsScript is the script that writes the records of a cluster, from the directory of a package of internal/.
-	RecordsScript = "../../../scripts/ci/observer-records.sh"
+	// RecordsTool is the script that writes the records of a cluster, from the root of the repository. RecordsScript is
+	// its path from the directory of a package of internal/.
+	RecordsTool   = "scripts/ci/observer-records.sh"
+	RecordsScript = "../../../" + RecordsTool
 	// JSONType is the Content-Type of a document of JSON.
 	JSONType = "application/json"
 	// HeaderPolicy and HeaderNoSniff are two headers that the server sets on each answer.
 	HeaderPolicy  = "Content-Security-Policy"
 	HeaderNoSniff = "X-Content-Type-Options"
+	// NginxImage is the image of nginx, with its full name and no tag.
+	NginxImage = "docker.io/library/nginx"
+	// DexExpiry is the path of the settings of the expiry of the tokens of dex, in the values of its pack.
+	DexExpiry = "charts.dex.config.expiry"
+	// KubernetesMove is the key of the move of kubernetes from 1.35.3 to 1.36.2, after the uid of its registry.
+	KubernetesMove = "/kubernetes@1.35.3->1.36.2"
+	// KubernetesDiff ends the route of the diff of the pack kubernetes of a profile.
+	KubernetesDiff = "/k8s/kubernetes/diff"
+	// DexValuesHead is the head of the diff of the values of dex in the dev data. NoEOL is the note of a diff for a side
+	// with no newline at its end.
+	DexValuesHead = "--- a: addon/dex values\n+++ b: addon/dex values\n"
+	NoEOL         = `\ No newline at end of file`
 )
 
 // PageTypes is the Content-Type of each kind of file that the server of the page serves.
@@ -116,6 +135,12 @@ const (
 	ProfileCopy        = "profile %q, clusterCopy %+v"
 	FindingsNotChecked = "findings %+v, notChecked %+v"
 	FindingsWant       = "findings %v, want %v"
+	FindingsCounts     = "findings %+v, counts %+v"
+	// ErrorWantOK is the failure of a check of a call that must give an error, or none.
+	ErrorWantOK = "error %v, want ok %v"
+	// PackCompares counts the compares of two packs, and RanTogether the most processes that ran at one time.
+	PackCompares = "%d compares of two packs"
+	RanTogether  = "%d processes ran together"
 	// NoDiff is the failure of a search for the diff of a profile, a pack, and a side.
 	NoDiff = "no diff for %s %s %s"
 	// HeadersMissing is the failure of a check of the headers that the server sets on the answer for a file.
@@ -154,11 +179,63 @@ func AskFlow(t *testing.T, get func(path string) (int, string), post func(path s
 	}
 }
 
-// OncallRules gives the text of a file of alert rules with one channel, oncall, whose address is in the file address.
-// rules are the JSON objects of the list of rules.
-func OncallRules(address, rules string) string {
-	return `{"channels": {"oncall": {"urlFile": "` + address + `"}}, "rules": [` + rules + `]}`
+// Channel gives the member of the object channels of a file of alert rules: the channel name, whose address is in the
+// file address.
+func Channel(name, address string) string {
+	return `"` + name + `": {"urlFile": "` + address + `"}`
 }
+
+// Rules gives the text of a file of alert rules with the channels, each from Channel, and the rules, each a JSON
+// object. Each rule starts a line, and the first one is on line 4.
+func Rules(channels []string, rules ...string) string {
+	return "{\n\"channels\": {" + strings.Join(channels, ", ") + "},\n\"rules\": [\n" + strings.Join(rules, ",\n") + "\n]\n}"
+}
+
+// OncallRules gives the text of a file of alert rules with one channel, oncall, whose address is in the file address.
+func OncallRules(address string, rules ...string) string {
+	return Rules([]string{Channel("oncall", address)}, rules...)
+}
+
+// The rules of the alerts that the tests of more than one package give. Each one sends a drift, a loss of contact, or
+// a change of an image of the cluster at once to the channel oncall.
+const (
+	DriftNow = `{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"}`
+	LostNow  = `{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}`
+	ImageNow = `{"level": "cluster", "news": "image", "send": "now", "to": "oncall"}`
+)
+
+// A BadRule is a rule that the parse of a file of rules refuses. It holds the name of the case and the words of the
+// error.
+type BadRule struct{ Name, Rule, Want string }
+
+// The rules that the tests of the parse and of the start refuse. A mute needs an end date, and a newer version never
+// pages a person.
+var (
+	NoEndDate = BadRule{"a mute with no end date", `{"level": "profile", "match": "barney-base", "news": "newer"}`, "end date"}
+	NewerNow  = BadRule{"a newer version that pages a person", `{"level": "cluster", "news": "newer", "send": "now", "to": "oncall"}`, "never pages"}
+)
+
+// Quarry starts the head of a message of the cluster quarry-1 of the dev data, and QuarryDrift is the head of a drift.
+// NoReach starts the detail of a loss of contact with Palette. LostCleared is in the message when the observer reaches
+// Palette again.
+const (
+	Quarry      = "strata · quarry-1 · "
+	QuarryDrift = Quarry + "Drift"
+	NoReach     = "The observer cannot reach Palette."
+	LostCleared = "Lost contact cleared"
+)
+
+// NoReachAfter is the detail of a loss of contact after n content checks that each failed with an HTTP 401.
+func NoReachAfter(n int) string {
+	return fmt.Sprintf("%s The last %d content checks failed: %s, HTTP 401.", NoReach, n, docs.KindAPI)
+}
+
+// The failures of the check of the messages of a finding that opens, stays for one more cycle, and clears.
+const (
+	OpenMessage  = "the open message %q"
+	NextCycle    = "the next cycle sent %d messages"
+	ClearMessage = "the clear message %q"
+)
 
 // Unknown is the error of a fake of the strata binary for a command that the fake does not know.
 func Unknown(args []string) error {
@@ -278,4 +355,41 @@ func WaitFor(t *testing.T, what string, ready func() bool) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// The words of a check that the tests of more than one package hold.
+const (
+	// NoNewerProfile names a profile with no newer version, in the name of a case or of a check.
+	NoNewerProfile = "a profile with no newer version"
+	// NotJSONAnswer names an answer of the kind not-json: a case of the read of the pods, and the words of the page.
+	NotJSONAnswer = "an answer that is not JSON"
+	// KubernetesValues names the values of the pack kubernetes in a check of a diff.
+	KubernetesValues = "the values of kubernetes"
+)
+
+// The parts of the script of a fake of strata that the tests of more than one package write. VerifyFirst starts the
+// cases of the command with the branch of verify. VerifyAndSnapshot ends that branch: verify prints VerifyUnchanged.
+// It then gives the branch of snapshot, which writes ClusterPayments to the file of -o. PacksFirst starts the branch
+// of compare with the case of a compare of two packs.
+const (
+	VerifyFirst       = "case $cmd in\nverify)\n"
+	VerifyAndSnapshot = "  echo '" + VerifyUnchanged + "' ;;\nsnapshot) echo '" + ClusterPayments + "' > \"$out\" ;;\n"
+	PacksFirst        = "compare)\n  case $ref in\n  pack:*)\n"
+)
+
+// ErrorLine gives the line of the script of a fake of strata that writes the error document of strata to its stderr.
+// The document holds the kind and the other fields, such as `"status":401`.
+func ErrorLine(kind, fields string) string {
+	return `echo '{"error":{"kind":"` + kind + `",` + fields + `}}' >&2`
+}
+
+// FirstSeenMeta gives the meta file of records that the observer took from the cluster from.
+func FirstSeenMeta(from string) string {
+	return `{"baseline":"first-seen","firstSeenFrom":"` + from + `"}`
+}
+
+// Record gives a record of strata with the schema id, and the name and the version of its profile. source holds the
+// other members of the source, and rest the other members of the record, each after a comma.
+func Record(schema, name, version, source, rest string) string {
+	return `{"schema":"` + schema + `","source":{"name":"` + name + `","version":"` + version + `"` + source + `}` + rest + `}`
 }

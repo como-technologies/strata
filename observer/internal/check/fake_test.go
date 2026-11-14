@@ -26,6 +26,15 @@ var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 
 const sentinel = "SENTINEL-CLEAR-VALUE"
 
+// verifyBehind is the failure of a check of the count of the runs of verify and of behind. versionsNewer is the failure
+// of a check of the versions and the newer versions of a summary. newRevision is the meta file of a new revision that a pipeline
+// approved.
+const (
+	verifyBehind  = "verify %d, behind %d"
+	versionsNewer = "versions %+v, newer %d"
+	newRevision   = `{"baseline":"approved","revision":"5f2d8b3c"}`
+)
+
 // world holds the answers of the fake strata. A record is known by its index: record-<i>.json.
 type world struct {
 	// rows gives one `verify` row for each record, by index. The fake sets the path of the row.

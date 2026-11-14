@@ -10,6 +10,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndTheLoss(t *testing.T) {
@@ -35,7 +36,7 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 			t.Errorf("subject %d is %s %s, want %s %s", i, got[i].ID, got[i].News, w.id, w.news)
 		}
 	}
-	if got[4].Detail != "The observer cannot reach Palette. The last 3 content checks failed: api, HTTP 401." {
+	if got[4].Detail != testkit.NoReachAfter(3) {
 		t.Errorf("the detail of the loss: %q", got[4].Detail)
 	}
 	if none := SubjectsOf(model.Summary{Page: model.PageOK}); len(none) != 0 {
@@ -57,7 +58,7 @@ func TestAMessageHoldsNothingOfAFindingButItsProfilePacksSentenceAndFirstSight(t
 			t.Errorf("the message lacks the profile: %s", text)
 		}
 	}
-	want := "strata · quarry-1 · Drift\nfred-identity@2.3.0: The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-04T12:00:00Z"
+	want := dexDrift + "The published version differs from its record.\nPacks: addon/dex\nFirst seen: 2026-11-04T12:00:00Z"
 	if got := openText("quarry-1", s); got != want {
 		t.Errorf("the open message\n%s\nwant\n%s", got, want)
 	}
@@ -92,7 +93,7 @@ func TestADigestListsAtMostThirtySubjectsAndSaysHowManyMore(t *testing.T) {
 }
 
 func TestTheSampleIsTheMessageOfAFindingForAMadeUpProfile(t *testing.T) {
-	if got := Sample("quarry-1"); !strings.HasPrefix(got, "strata · quarry-1 · Drift\nfred-identity@2.3.0: ") || !strings.HasSuffix(got, "First seen: 2026-11-03T06:09:00Z") {
+	if got := Sample("quarry-1"); !strings.HasPrefix(got, dexDrift) || !strings.HasSuffix(got, "First seen: 2026-11-03T06:09:00Z") {
 		t.Errorf("sample %q", got)
 	}
 }

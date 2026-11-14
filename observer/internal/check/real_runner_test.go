@@ -15,10 +15,7 @@ import (
 // script stands for the strata binary. It prints the smallest document that each command promises.
 func script(t *testing.T) string {
 	t.Helper()
-	return testkit.Strata(t, `case $cmd in
-verify) echo '`+testkit.VerifyUnchanged+`' ;;
-snapshot) echo '`+testkit.ClusterPayments+`' > "$out" ;;
-compare) echo '`+testkit.CompareSame+`' ;;
+	return testkit.Strata(t, testkit.VerifyFirst+testkit.VerifyAndSnapshot+`compare) echo '`+testkit.CompareSame+`' ;;
 behind) echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registryUid":"reg1","version":"1.35.3","behind":true,"pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2"}]}]}' ;;
 esac`)
 }

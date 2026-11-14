@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -184,8 +185,8 @@ func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != "unknown" || s.Records.Count != 0 {
-		t.Errorf("page %q, verify %d, behind %d, records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
+	if s.Page != model.PageNoRecords || w.count(runner.CmdVerify) != 0 || w.count(runner.CmdBehind) != 0 || s.Records.Baseline != baseline.Unknown || s.Records.Count != 0 {
+		t.Errorf("page %q, "+verifyBehind+", records %+v", s.Page, w.count(runner.CmdVerify), w.count(runner.CmdBehind), s.Records)
 	}
 }
 
@@ -385,13 +386,14 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 // The body can hold output of Palette, and the message can hold an address. So the line of the log
 // holds the status, or the words no answer, and never more of the text.
 func TestTheLineAboutAnUnreadAuditLogHoldsTheStatusAndNoOtherText(t *testing.T) {
+	const refusal = "HTTP 403: AUDIT-BODY-MARKER"
 	for _, c := range []struct{ name, whoError, want string }{
-		{"a refusal with a body", "HTTP 403: AUDIT-BODY-MARKER", `reason="HTTP 403"`},
+		{"a refusal with a body", refusal, `reason="HTTP 403"`},
 		{"a server error with a body", "HTTP 500: AUDIT-BODY-MARKER", `reason="HTTP 500"`},
 		{"a status with no body", "HTTP 502", `reason="HTTP 502"`},
 		{"a request that did not complete", "error sending request for url (https://AUDIT-BODY-MARKER.example/v1/audits)", `reason="no answer"`},
 		{"a status that has no three digits", "HTTP 4: AUDIT-BODY-MARKER", `reason="no answer"`},
-		{"a status that does not start the text", "the answer was HTTP 403: AUDIT-BODY-MARKER", `reason="no answer"`},
+		{"a status that does not start the text", "the answer was " + refusal, `reason="no answer"`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r, w := oneRecord(t, unchanged())

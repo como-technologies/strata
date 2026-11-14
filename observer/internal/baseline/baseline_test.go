@@ -42,7 +42,7 @@ func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 
 func TestTheMetaOfAFirstSeenBaselineNamesTheCluster(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "meta.json", `{"baseline":"first-seen","firstSeenFrom":"64f1"}`)
+	write(t, dir, "meta.json", testkit.FirstSeenMeta("64f1"))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -71,12 +71,15 @@ func TestABaselineWithNoMetaOrABadMetaIsUnknown(t *testing.T) {
 	}
 }
 
+// otherSchema is a record file that holds a document of another schema.
+const otherSchema = "c-other-schema.json.gz"
+
 func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, "a-good.json.gz", aws)
 	write(t, dir, "b-plain.json.gz", aws)
-	testkit.WriteGzip(t, dir, "c-other-schema.json.gz", `{"schema":"`+docs.DiffSchema+`"}`)
-	testkit.WriteGzip(t, dir, "d-cluster.json.gz", `{"schema":"`+docs.SnapshotSchema+`","source":{"cluster":{"uid":"c1"}}}`)
+	testkit.WriteGzip(t, dir, otherSchema, `{"schema":"`+docs.DiffSchema+`"}`)
+	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterHead+`c1"}}}`)
 	testkit.WriteGzip(t, dir, "e-not-json.json.gz", `not json`)
 	testkit.WriteGzip(t, dir, "f-good.json.gz", aws)
 	set, err := Load(dir)
@@ -86,7 +89,7 @@ func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	if got := len(set.Entries); got != 2 {
 		t.Errorf("%d records", got)
 	}
-	want := "b-plain.json.gz c-other-schema.json.gz d-cluster.json.gz e-not-json.json.gz"
+	want := "b-plain.json.gz " + otherSchema + " d-cluster.json.gz e-not-json.json.gz"
 	if got := strings.Join(set.Unreadable, " "); got != want {
 		t.Errorf("unreadable %q, want %q", got, want)
 	}

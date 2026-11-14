@@ -94,7 +94,15 @@ func readUnified(text string) []diffLine {
 	return out
 }
 
-const noEOLNote = `\ No newline at end of file`
+// The words of a diff that more than one test reads. manifestCell starts the cell of a manifest in the table of the
+// changes. notAHeader is a line of a hunk that looks like a header. splitPressed is the button of the layout split when
+// it is on. idTokens is a line of the values of dex that its change adds.
+const (
+	manifestCell = `<td>Manifest</td><td class="m">`
+	notAHeader   = "++ not a header either"
+	splitPressed = `data-view="split" aria-pressed="true"`
+	idTokens     = "+        idTokens: 168h\n"
+)
 
 // rowString writes a row of a diff table as the tests compare it: the class of the row, then the class and
 // the text of each cell.
@@ -117,7 +125,7 @@ func unifiedRowsOf(text string) []string {
 		class := map[string]string{"+": "a", "-": "d", " ": ""}[l.sign]
 		out = append(out, rowString(class, [2]string{"no", l.na}, [2]string{"no", l.nb}, [2]string{"c", l.sign + " " + l.text}))
 		if l.noEOL {
-			out = append(out, rowString("n", [2]string{"no", ""}, [2]string{"no", ""}, [2]string{"c", noEOLNote}))
+			out = append(out, rowString("n", [2]string{"no", ""}, [2]string{"no", ""}, [2]string{"c", testkit.NoEOL}))
 		}
 	}
 	return out
@@ -127,7 +135,7 @@ func unifiedRowsOf(text string) []string {
 func noteRow(left, right bool) string {
 	word := func(on bool) string {
 		if on {
-			return noEOLNote
+			return testkit.NoEOL
 		}
 		return ""
 	}
@@ -386,7 +394,7 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 			}
 			// A manifest with text has no row in the small table.
 			for _, m := range d.Manifests {
-				mustNotHold(t, where, card, `<td>Manifest</td><td class="m">`+m.Name+`</td>`)
+				mustNotHold(t, where, card, manifestCell+m.Name+`</td>`)
 			}
 		}
 	}
@@ -410,10 +418,10 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 // head of a hunk shows the gap, a line "--- x" in a hunk is a removed line, and a head with a missing
 // count or with an empty side gives the right numbers.
 func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
-	const text = "--- a: addon/dex values\n+++ b: addon/dex values\n" +
-		"@@ -0,0 +1,2 @@\n+one\n+two\n" + noEOLNote + "\n" +
-		"@@ -7 +9,2 @@\n--- not a header\n+++ not a header either\n+added\n" +
-		"@@ -20,3 +22,3 @@\n keep\n-old\n" + noEOLNote + "\n+new\n" + noEOLNote + "\n keep\n"
+	const text = testkit.DexValuesHead +
+		"@@ -0,0 +1,2 @@\n+one\n+two\n" + testkit.NoEOL + "\n" +
+		"@@ -7 +9,2 @@\n--- not a header\n+" + notAHeader + "\n+added\n" +
+		"@@ -20,3 +22,3 @@\n keep\n-old\n" + testkit.NoEOL + "\n+new\n" + testkit.NoEOL + "\n keep\n"
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished).Values.Unified = text
 	})})
@@ -429,7 +437,7 @@ func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
 	// The reference reading follows the rules too, so the two readings do not agree by accident.
 	lines := readUnified(text)
 	if len(lines) != 11 || lines[2].sign != "@" || lines[3].sign != "-" || lines[3].text != "-- not a header" || lines[3].na != "7" ||
-		lines[4].sign != "+" || lines[4].text != "++ not a header either" || lines[4].nb != "9" || lines[5].nb != "10" || lines[0].nb != "1" || lines[1].nb != "2" {
+		lines[4].sign != "+" || lines[4].text != notAHeader || lines[4].nb != "9" || lines[5].nb != "10" || lines[0].nb != "1" || lines[1].nb != "2" {
 		t.Errorf("the lines: %+v", lines)
 	}
 }
@@ -492,7 +500,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 		mustNotHold(t, c.where, page, `aria-pressed="true" class="on">Split`)
 	}
 	split := pageOf(t, screens, dexHash, "split")
-	mustHold(t, "split", split, `<button data-view="unified" aria-pressed="false" class="">Unified</button><button data-view="split" aria-pressed="true" class="on">Split</button>`)
+	mustHold(t, "split", split, `<button data-view="unified" aria-pressed="false" class="">Unified</button><button `+splitPressed+` class="on">Split</button>`)
 	mustNotHold(t, "split", split, `<td class="c">`)
 
 	// A click on Split changes each diff of the page and nothing else. A click on a tab keeps the layout.
@@ -501,7 +509,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 	mustNotHold(t, "before the click", r.Before, `class="cd"`)
 	mustHold(t, "after the click", r.After, `class="cd"`, `class="ca"`)
 	mustNotHold(t, "after the click", r.After, `<td class="c">`)
-	if got, want := strings.Count(r.After, `data-view="split" aria-pressed="true"`), strings.Count(r.After, diffHeadTag); got != want || got < 1 {
+	if got, want := strings.Count(r.After, splitPressed), strings.Count(r.After, diffHeadTag); got != want || got < 1 {
 		t.Errorf("%d controls show Split for %d diffs", got, want)
 	}
 	if len(r.Posts) != 0 {
@@ -520,7 +528,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 func TestALineOfADiffWithMarkupShowsAsText(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
 		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
-		d.Values.Unified = strings.Replace(d.Values.Unified, "+        idTokens: 168h\n", "+        idTokens: 168h\n+"+evil+"\n-"+evil+"\n context "+evil+"\n", 1)
+		d.Values.Unified = strings.Replace(d.Values.Unified, idTokens, idTokens+"+"+evil+"\n-"+evil+"\n context "+evil+"\n", 1)
 		d.Manifests[0].Unified = strings.Replace(d.Manifests[0].Unified, "@@ -5,5 +5,5 @@\n", "@@ -5,5 +5,5 @@ "+evil+"\n+"+evil+"\n", 1) + "@@ -90 +90 @@ " + evil + "\n-" + evil + "\n+" + evil + "\n"
 	})})
 	for _, clicks := range [][]string{nil, {splitClick}, {tabClick(dexPublished, "manifests")}, {splitClick, tabClick(dexPublished, "manifests")}} {
@@ -562,7 +570,7 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	// The manifest keeps its row in the small table, because it has no text, and the splash comes with the command.
 	manifests := cardOf(t, pageOf(t, screens, dexHash, "tab "+dexPublished+" manifests"), tabAttrs(dexPublished, "manifests"))
 	where = "the manifests of dex"
-	mustHold(t, where, manifests, tooLargeTitle, tooLargeFact, dexFullCompare, `<tr><td class="m">changed</td><td>Manifest</td><td class="m">fred-realm-config</td></tr>`)
+	mustHold(t, where, manifests, tooLargeTitle, tooLargeFact, dexFullCompare, `<tr><td class="m">changed</td>`+manifestCell+`fred-realm-config</td></tr>`)
 	mustNotHold(t, where, manifests, diffHead, diffBody)
 	// The newer side of the same pack keeps its text.
 	move := cardOf(t, pageOf(t, screens, dexHash, "side newer"), tabOf(dexMove))
@@ -571,8 +579,8 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 	mustNotHold(t, where, move, tooLargeTitle)
 	// The newer side of kubernetes has the command with the two versions of the pack.
 	k8s := cardOf(t, pageOf(t, screens, k8sHash, ""), tabOf(k8sMove))
-	where = "the values of kubernetes"
-	mustHold(t, where, k8s, tooLargeTitle, tooLargeFact, "<code>strata compare pack:"+uid+"/kubernetes@1.35.3 pack:"+uid+"/kubernetes@1.36.2 --full</code>")
+	where = testkit.KubernetesValues
+	mustHold(t, where, k8s, tooLargeTitle, tooLargeFact, "<code>"+comparePacks+uid+"/kubernetes@1.35.3 pack:"+uid+"/kubernetes@1.36.2 --full</code>")
 	mustNotHold(t, where, k8s, diffHead)
 	// The pack has no manifest, so the Manifests tab says so, links to the tab with the change, and shows no splash of a large text.
 	none := cardOf(t, pageOf(t, screens, k8sHash, "tab "+k8sMove+" manifests"), tabAttrs(k8sMove, "manifests"))
@@ -887,7 +895,7 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing.T) {
 	for _, newest := range []string{"2.44.0", ""} {
 		t.Run("newest "+newest, func(t *testing.T) {
-			reply := `{"asks":[{"profile":"` + dexSubject + `","key":"addon/dex","newest":"` + newest + `","verdict":"no-answer","refusals":[],"status":502}]}`
+			reply := `{"asks":[{"profile":"` + dexSubject + `","key":"addon/dex","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
 			r := clickIn(t, dir, "scratch", dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")

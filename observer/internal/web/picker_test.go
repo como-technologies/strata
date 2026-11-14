@@ -20,10 +20,12 @@ func TestTheListOfTheCompareDropdownTakesTheTokensOfTheTheme(t *testing.T) {
 	if inside == "" {
 		t.Fatalf("app.css has no block %q", baseSelect)
 	}
+	// pickerRule is the rule of the list that a select opens.
+	const pickerRule = "select.search::picker(select)"
 	// ruleOf removes the spaces of a value, so the border reads border:1pxsolidvar(--line).
 	rulesHold(t, inside, map[string][]string{
-		"select.search,select.search::picker(select)":                   {"appearance:base-select;"},
-		"select.search::picker(select)":                                 {"background:var(--panel);", "color:var(--ink);", "border:1pxsolidvar(--line);"},
+		"select.search," + pickerRule: {"appearance:base-select;"},
+		pickerRule:                    {"background:var(--panel);", "color:var(--ink);", "border:1pxsolidvar(--line);"},
 		"select.search option:hover,select.search option:focus-visible": {"background:var(--violet-t);", "color:var(--violet);"},
 	})
 	// A color of the list is a token, and never a literal that holds one theme only.

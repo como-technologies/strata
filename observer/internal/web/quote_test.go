@@ -72,7 +72,7 @@ func renamedSet(t *testing.T, from devdata.State, swaps [][2]string) string {
 	return writeSet(t, from, edit)
 }
 
-var commandOf = regexp.MustCompile(`<code>([^<]*)</code>`)
+var commandOf = regexp.MustCompile(codeOf)
 
 // commandAfter gives the first command in the markup that follows a text.
 func commandAfter(t *testing.T, markup, text string) string {
@@ -155,7 +155,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			bin, dir := checkWork(t, "")
 			writeTool(t, filepath.Join(bin, "strata"), standIn)
 			writeTool(t, filepath.Join(bin, "kubectl"), sink)
-			writeTool(t, filepath.Join(dir, "scripts/ci/observer-records.sh"), standIn)
+			writeTool(t, filepath.Join(dir, testkit.RecordsTool), standIn)
 			profile, cluster, pack, kubernetes, uid := c.value("p"), c.value("c"), c.value("k"), c.value("m"), c.value("u")
 			subject := profile + "@2.3.0"
 			// check runs a command. A plain name leaves no quote in it, and another name has one, when the command holds a name.
@@ -172,7 +172,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 					t.Errorf("%s: the command %q has no quote around the name", where, command)
 				}
 				if got := argumentsOf(t, bin, dir, command); got != nil && !slices.Equal(got, want) {
-					t.Errorf("%s: the command %q gave the arguments %q, want %q", where, command, got, want)
+					t.Errorf("%s: "+gaveArgs, where, command, got, want)
 				}
 			}
 

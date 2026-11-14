@@ -75,12 +75,12 @@ func TestSplitGivesEmptyListsAndNeverNull(t *testing.T) {
 
 func TestGroupOfReadsThePathOfAValue(t *testing.T) {
 	for path, want := range map[string]Group{
-		testkit.ImagePath:                  GroupRepeats,
-		"pack.content.charts[1].version":   GroupRepeats,
-		dexTag:                             GroupFollows,
-		"charts.dex.image.repository":      GroupFollows,
-		"charts.dex.config.expiry.idToken": GroupSettings,
-		"pack.k8sHardening":                GroupSettings,
+		testkit.ImagePath:                GroupRepeats,
+		"pack.content.charts[1].version": GroupRepeats,
+		dexTag:                           GroupFollows,
+		"charts.dex.image.repository":    GroupFollows,
+		testkit.DexExpiry + ".idToken":   GroupSettings,
+		"pack.k8sHardening":              GroupSettings,
 	} {
 		if got := GroupOf(path); got != want {
 			t.Errorf("%s: %v, want %v", path, got, want)

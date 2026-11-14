@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -14,7 +15,7 @@ wilma-gateway@3.2.0 carries that version. They need node, like the other tests o
 
 const (
 	carriedByWilma = `carried by <span class="m">wilma-gateway<span class="ver">@3.2.0</span></span>`
-	traefikSlab    = `<span class="m ref">` + traefikPin + `</span>`
+	traefikSlab    = refSpan + traefikPin + `</span>`
 )
 
 // Two places name the newer profile version that carries a newer version of a pack that is behind. One is the slab of the pack
@@ -27,7 +28,7 @@ func TestThePackThatIsBehindNamesTheNewerProfileVersionThatCarriesIt(t *testing.
 	mustHold(t, "the row of traefik in the newer versions", rowWith(t, pages[1], `>traefik</a>`),
 		`<div class="mut small">`+carriedByWilma+`</div>`)
 	mustNotHold(t, "the row of dex, whose profile has no newer version", rowWith(t, pages[1], `>dex</a>`), "carried by")
-	mustNotHold(t, "the page of a profile with no newer version", pages[2], "carried by", "carrier not read")
+	mustNotHold(t, "the page of "+testkit.NoNewerProfile, pages[2], "carried by", "carrier not read")
 }
 
 // A carrier with no version says that no newer profile version carries the pack. A carrier at a version of the pack below the
@@ -72,7 +73,7 @@ func TestTheCompareBadgeOfANewerVersionIsTheNeutralBadgeNewer(t *testing.T) {
 		where, hash, variant, option, badge string
 	}{
 		{"the newer version of traefik", traefikHash, "", `<option value="newer" selected>`, badge("b", "Newer")},
-		{"the newest profile version of vendor-product", vendor, "", `<option value="newest" selected>`, badge("b", "Newer")},
+		{"the newest profile version of vendor-product", vendor, "", newestSelected, badge("b", "Newer")},
 		{"the published side of dex", dexHash, "", `<option value="published" selected>`, badge("r", "Changed")},
 	} {
 		head := compareHead(t, pageOf(t, screens, c.hash, c.variant))
@@ -109,7 +110,7 @@ func compareHead(t *testing.T, markup string) string {
 	}
 	end := strings.Index(markup[at:], "</div>")
 	if end < 0 {
-		t.Fatal("the head of the card Compare has no end")
+		t.Fatal(cardHead + " Compare has no end")
 	}
 	return markup[at : at+end]
 }

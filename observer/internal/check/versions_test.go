@@ -77,7 +77,7 @@ func TestTheCacheAsksEachMoveOnce(t *testing.T) {
 		}
 	}
 	if got := w.countMoves(); got != 4 {
-		t.Fatalf("%d compares of two packs after three cycles", got)
+		t.Fatalf(testkit.PackCompares+" after three cycles", got)
 	}
 	if got := w.count(runner.CmdBehind); got != 3 {
 		t.Errorf("%d behind", got)
@@ -93,11 +93,11 @@ func TestTheCacheOfTheMovesSurvivesARestartAndHoldsNoValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := w.countMoves(); got != 4 {
-		t.Errorf("%d compares of two packs after a restart", got)
+		t.Errorf(testkit.PackCompares+" after a restart", got)
 	}
 	// The real compare of the Kubernetes pack changes the value v1.13.1 of dns.imageTag.
 	stateHoldsNone(t, r, "v1.13.1", "v1.14.2", "imageTag", "apiserver")
-	if raw := stateText(t, r); !strings.Contains(raw, w.behind.Tool.Version+" "+registryUID+"/kubernetes@1.35.3->1.36.2") {
+	if raw := stateText(t, r); !strings.Contains(raw, w.behind.Tool.Version+" "+registryUID+testkit.KubernetesMove) {
 		t.Errorf("the key holds no version of the binary: %s", raw)
 	}
 }
@@ -113,7 +113,7 @@ func TestANewBinaryAsksAgainAndTheOldKeysGo(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got := w.countMoves(); got != 8 {
-		t.Errorf("%d compares of two packs", got)
+		t.Errorf(testkit.PackCompares, got)
 	}
 	state, err := loadState(r.state)
 	if err != nil {

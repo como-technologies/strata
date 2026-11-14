@@ -22,9 +22,7 @@ func rulesFile(t *testing.T, w *testkit.Receiver) string {
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "alerts.json")
-	rules := testkit.OncallRules(address, `
-  {"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-  {"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}`)
+	rules := testkit.OncallRules(address, testkit.DriftNow, testkit.LostNow)
 	if err := os.WriteFile(path, []byte(rules), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -46,13 +44,9 @@ func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 }
 
 func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T) {
-	cases := []struct{ name, rule, want string }{
-		{"a mute with no end date", `{"level": "profile", "match": "barney-base", "news": "newer"}`, "end date"},
-		{"a newer version that pages a person", `{"level": "cluster", "news": "newer", "send": "now", "to": "oncall"}`, "never pages"},
-	}
-	for _, c := range cases {
+	for _, c := range []testkit.BadRule{testkit.NoEndDate, testkit.NewerNow} {
 		bad := filepath.Join(t.TempDir(), "alerts.json")
-		file := "{\n\"channels\": {\"oncall\": {\"urlFile\": \"f\"}},\n\"rules\": [\n" + c.rule + "\n]\n}"
+		file := testkit.OncallRules("f", c.Rule)
 		if err := os.WriteFile(bad, []byte(file), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -61,11 +55,11 @@ func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T
 			args := append(onceArgs(t, "strata"), "--alerts", bad)
 			args[0] = command
 			if code := run(args, &out, &errs); code != 2 || out.Len() != 0 {
-				t.Fatalf("%s, %s: exit %d, stdout %q", c.name, command, code, out.String())
+				t.Fatalf("%s, %s: exit %d, stdout %q", c.Name, command, code, out.String())
 			}
-			for _, want := range []string{"--alerts", "alerts.json", "line 4", "rule 1", c.want} {
+			for _, want := range []string{"--alerts", "alerts.json", "line 4", "rule 1", c.Want} {
 				if !strings.Contains(errs.String(), want) {
-					t.Errorf("%s, %s: stderr lacks %q: %s", c.name, command, want, errs.String())
+					t.Errorf("%s, %s: stderr lacks %q: %s", c.Name, command, want, errs.String())
 				}
 			}
 		}
@@ -82,7 +76,7 @@ func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddre
 		t.Fatal(err)
 	}
 	rules := filepath.Join(dir, "alerts.json")
-	if err := os.WriteFile(rules, []byte(testkit.OncallRules(filepath.Join(dir, "oncall"), "")), 0o600); err != nil {
+	if err := os.WriteFile(rules, []byte(testkit.OncallRules(filepath.Join(dir, "oncall"))), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https"); strings.Contains(stderr, "TOKEN-SECRET") {

@@ -29,7 +29,7 @@ const (
 func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T) {
 	page := shown(t, devdata.StateOK, wilmaHash)[0]
 	card := cardOf(t, page, "<h2>Move to ")
-	mustHold(t, "the head of the card", card, `<h2>Move to wilma-gateway<span class="ver">@3.2.0</span> <span class="sub">Created `,
+	mustHold(t, cardHead, card, `<h2>Move to wilma-gateway<span class="ver">@3.2.0</span> <span class="sub">Created `,
 		"</h2>"+badge("y", "In place"))
 	for _, flag := range []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"} {
 		mustHold(t, "the flags", card, plainFlag("b", flag))
@@ -59,7 +59,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	}
 	// a profile with no newer version shows no move
 	other := shown(t, devdata.StateOK, fredHash)[0]
-	mustNotHold(t, "a profile with no newer version", other, "<h2>Move to ", moveQuestion)
+	mustNotHold(t, testkit.NoNewerProfile, other, "<h2>Move to ", moveQuestion)
 }
 
 // The Compare menu of a pack page has the choice "Record → Newest version" when strata compared the record with the newest version
@@ -69,7 +69,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	vendor := packPage(wilmaSubject, "addon", "vendor-product")
 	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
 	where := "the pack page of vendor-product"
-	mustHold(t, where, page, `<option value="newest" selected>Record → Newest version</option>`, badge("b", "Newer"), "product.replicas")
+	mustHold(t, where, page, newestSelected+newestLabel+`</option>`, badge("b", "Newer"), "product.replicas")
 	// a newer version is no drift: the side keeps the neutral badge of a newer version (#709)
 	mustNotHold(t, where, page, badge("r", "Changed"))
 
@@ -96,7 +96,7 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 	pages := pagesOf(t, dir, wilmaHash, vendor)
 	mustHold(t, "the card of a move that strata could not compare", cardOf(t, pages[0], "<h2>Move to "),
 		badge("y", "Not read"), "Strata could not compare the record with this version now.")
-	mustNotHold(t, "the pack page of a move that strata could not compare", pages[1], `<option value="newest"`)
+	mustNotHold(t, "the pack page of a move that strata could not compare", pages[1], newestOption)
 }
 
 // The command of the move of a profile pastes as the arguments it means, also for a name that a shell reads as code.
@@ -119,7 +119,7 @@ func TestTheCommandOfTheMoveOfAProfilePastesAsTheArgumentsItMeans(t *testing.T) 
 			}
 			want := []string{"compare", "record.json", profile + "@3.2.0", "--full"}
 			if got := argumentsOf(t, bin, dir, rows[0].command); got != nil && !slices.Equal(got, want) {
-				t.Errorf("the command %q gave the arguments %q, want %q", rows[0].command, got, want)
+				t.Errorf(gaveArgs, rows[0].command, got, want)
 			}
 			noMarkers(t, dir)
 		})

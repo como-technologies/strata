@@ -113,7 +113,7 @@ func TestTheSetAsksListsOneAnswerOfEachVerdictAtTheStart(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("the list gave %d", code)
 	}
-	for _, want := range []string{testkit.NoErrorVerdict, testkit.RefusesVerdict, `"verdict":"no-answer"`, `"code":"` + testkit.CodeDependency + `"`, `"status":403`} {
+	for _, want := range []string{testkit.NoErrorVerdict, testkit.RefusesVerdict, testkit.NoAnswerVerdict, `"code":"` + testkit.CodeDependency + `"`, `"status":403`} {
 		if !strings.Contains(list, want) {
 			t.Errorf("the list has no %s: %s", want, list)
 		}

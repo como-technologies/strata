@@ -31,12 +31,15 @@ func reasons(events []Event) []string {
 // dexDrift is the reason of the event of the drift of fred-identity@2.3.0, as reasons gives it.
 const dexDrift = "drift DriftFound fred-identity@2.3.0"
 
+// hoppy is a profile that runs an old copy of coredns.
+const hoppy = "hoppy-autoscale@1.0.0"
+
 func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	who := &docs.Verify{Who: []docs.Who{{Time: at(-6 * time.Hour), Actor: "Betty Rubble", ActorType: "user", Action: "update"}}}
 	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
 	kubernetes := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
 	kubernetes.Newer[0].Listed = at(-48 * time.Hour)
-	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", "hoppy-autoscale@1.0.0")
+	bitnami := pin("coredns", "addon", "1.0.0", "", "rubble-dns@1.0.0", hoppy)
 	bitnami.Registry = "Bitnami"
 	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{kubernetes, bitnami}, Moves: map[string]Move{}}
@@ -45,7 +48,7 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 		dexDrift,
 		"info ProfileUpdated fred-identity@2.3.0",
 		"newer NewVersion wilma-gateway@3.1.2",
-		"not-checked OldCopy hoppy-autoscale@1.0.0, rubble-dns@1.0.0",
+		"not-checked OldCopy " + hoppy + ", rubble-dns@1.0.0",
 	}
 	if got := reasons(events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)

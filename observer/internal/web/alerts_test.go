@@ -6,8 +6,12 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/alert"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
+
+// rulesHead starts the head of the screen of the alert rules, before the count.
+const rulesHead = `<h2>Alert rules <span class="sub">`
 
 // navOfAlerts finds the nav item Alerts and its count.
 var navOfAlerts = regexp.MustCompile(`<a href="#alerts" class="[^"]*"><span>Alerts</span><span class="cnt( r)?">([^<]*)</span></a>`)
@@ -52,7 +56,7 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	screen := pageOf(t, render(t, devdata.StateAlerts, false), "#alerts", "")
 	mustHold(t, "the screen", screen,
 		`<div class="alertbar b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>`,
-		`<h2>Alert rules <span class="sub">7</span></h2>`,
+		rulesHead+`7</span></h2>`,
 		`<th>State</th><th>Level</th><th>Applies to</th><th>News</th><th>Send</th><th>Where</th>`,
 		`<h2>Sample message</h2>`)
 	mustNotHold(t, "the screen", screen, "A sketch for later", notSet)
@@ -72,7 +76,7 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	for _, line := range strings.Split(set.AlertRules.Sample, "\n") {
 		mustHold(t, "the sample message", screen, line)
 	}
-	mustHold(t, "the sample message", screen, `<div class="pre mt0">strata · quarry-1 · Drift`)
+	mustHold(t, "the sample message", screen, `<div class="pre mt0">`+testkit.QuarryDrift)
 }
 
 // The screen of an observer that started without --alerts is an offer: it says that no rule is set, what a message
@@ -81,7 +85,7 @@ func TestWithNoAlertsFlagTheScreenSaysTheSendIsOptIn(t *testing.T) {
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAlertsUnset} {
 		t.Run(string(state), func(t *testing.T) {
 			screen := pageOf(t, render(t, state, false), "#alerts", "")
-			mustHold(t, "the screen", screen, `<h2>Alert rules <span class="sub">`+notSet+`</span></h2>`, alertsOffTitle, alertsOffFact,
+			mustHold(t, "the screen", screen, rulesHead+notSet+`</span></h2>`, alertsOffTitle, alertsOffFact,
 				"The rules are a file in Git, so a mute always has a name and an end date.",
 				alertsNext, splashClass("md", "off"))
 			mustNotHold(t, "the screen", screen, "<table>", "Sample message", "Firing")
@@ -100,7 +104,7 @@ func TestAMuteThatEndedAndAMessageThatWaitsShowTheirWords(t *testing.T) {
 		}),
 	})
 	screen := pagesOf(t, dir, "#alerts")[0]
-	mustHold(t, "the screen", screen, `<div class="alertbar a">2 messages wait for a retry. <span>The log names the channel and the status. It never holds the address.</span></div>`,
+	mustHold(t, "the screen", screen, amberBar+`2 messages wait for a retry. <span>The log names the channel and the status. It never holds the address.</span></div>`,
 		`<td>Mute ended 2026-10-01</td>`)
 	mustNotHold(t, "the screen", screen, "Muted until 2026-10-01")
 	one := writeSet(t, devdata.StateAlerts, map[string]func([]byte) []byte{

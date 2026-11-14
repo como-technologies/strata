@@ -98,7 +98,7 @@ func TestAMoveWithAnotherSchemaIsAMoveThatWasNotRead(t *testing.T) {
 	}
 	s := o.Summary()
 	if s.Versions.ReadAt == nil || s.Versions.FailedRuns != 0 || s.Versions.LastError != nil || len(s.Newer) != 4 {
-		t.Fatalf("versions %+v, newer %d", s.Versions, len(s.Newer))
+		t.Fatalf(versionsNewer, s.Versions, len(s.Newer))
 	}
 	countsAllButKubernetes(t, s)
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" {

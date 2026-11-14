@@ -37,7 +37,7 @@ func TestExitTwoWithADocumentIsAnAnswer(t *testing.T) {
 }
 
 func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
-	_, err := fake(t, `echo '{"error":{"kind":"api","message":"HTTP 401","status":401}}' >&2; exit 2`).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
+	_, err := fake(t, testkit.ErrorLine(docs.KindAPI, `"message":"HTTP 401","status":401`)+"; exit 2").Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 	var re *RunError
 	if !errors.As(err, &re) || re.Kind != docs.KindAPI || re.Status != 401 {
 		t.Fatalf("error %v", err)
@@ -47,7 +47,7 @@ func TestExitTwoWithNoDocumentIsTheKindOfTheError(t *testing.T) {
 func TestStderrStaysOutOfTheError(t *testing.T) {
 	for _, body := range []string{
 		`echo 'SENTINEL value' >&2; exit 2`,
-		`echo '{"error":{"kind":"api","message":"SENTINEL body of Palette","status":500}}' >&2; exit 2`,
+		testkit.ErrorLine(docs.KindAPI, `"message":"SENTINEL body of Palette","status":500`) + "; exit 2",
 	} {
 		_, err := fake(t, body).Run(context.Background(), CmdVerify, "a.json", "--json", "-q")
 		if err == nil || strings.Contains(err.Error(), "SENTINEL") {
@@ -109,7 +109,7 @@ func TestTheFlagsOfTheClickAreAllowedForTheirCommandsOnly(t *testing.T) {
 	} {
 		_, err := x.Run(context.Background(), c.args...)
 		if (err == nil) != c.ok {
-			t.Errorf("%v: error %v, want ok %v", c.args, err, c.ok)
+			t.Errorf("%v: "+testkit.ErrorWantOK, c.args, err, c.ok)
 		}
 	}
 }

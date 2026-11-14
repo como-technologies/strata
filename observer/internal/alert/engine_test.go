@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 type message struct{ channel, text string }
@@ -71,10 +72,27 @@ func (b *bench) texts() []string {
 	return out
 }
 
-const oncall = `{"channels": {"oncall": {"urlFile": "f"}, "planning": {"urlFile": "g"}}, "rules": [
-	{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-	{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"},
-	{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"}]}`
+// newerToPlanning sends each newer version to the channel planning, in the digest.
+const newerToPlanning = `{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"}`
+
+// The channels oncall and planning of the rules of the bench.
+var (
+	oncallF   = testkit.Channel("oncall", "f")
+	planningG = testkit.Channel("planning", "g")
+)
+
+// oncall sends a drift and a loss of contact at once to oncall, and a newer version in the digest to planning.
+var oncall = testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.LostNow, newerToPlanning)
+
+// dexDrift starts the open message of the drift of fred-identity@2.3.0 on quarry-1, and quarryLost the message of a loss
+// of contact.
+const (
+	dexDrift   = testkit.QuarryDrift + "\nfred-identity@2.3.0: "
+	quarryLost = testkit.Quarry + "Lost contact\n"
+)
+
+// sentWaiting is the failure of a check of the messages that went, the messages that wait, and the item.
+const sentWaiting = "sent %d, waiting %d, item %+v"
 
 var firstSight = now.Add(-time.Hour)
 
@@ -86,19 +104,19 @@ var content = Known{Content: true}
 func TestOneMessageWhenAFindingOpensNoneOnTheNextCycleAndOneWhenItClears(t *testing.T) {
 	b := newBench(t, oncall)
 	b.cycle([]Subject{drift}, content)
-	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], "strata · quarry-1 · Drift\nfred-identity@2.3.0: ") {
-		t.Fatalf("the open message %q", got)
+	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], dexDrift) {
+		t.Fatalf(testkit.OpenMessage, got)
 	}
 	b.later(15 * time.Minute)
 	b.cycle([]Subject{drift}, content)
 	if len(b.send.sent) != 1 {
-		t.Fatalf("the next cycle sent %d messages", len(b.send.sent))
+		t.Fatalf(testkit.NextCycle, len(b.send.sent))
 	}
 	b.later(15 * time.Minute)
 	b.cycle(nil, content)
 	got := b.texts()
-	if len(got) != 2 || !strings.HasPrefix(got[1], "strata · quarry-1 · Drift cleared\nfred-identity@2.3.0\nA check proved that this is gone, at 2026-11-04T12:30:00Z.") {
-		t.Fatalf("the clear message %q", got)
+	if len(got) != 2 || !strings.HasPrefix(got[1], testkit.QuarryDrift+" cleared\nfred-identity@2.3.0\nA check proved that this is gone, at 2026-11-04T12:30:00Z.") {
+		t.Fatalf(testkit.ClearMessage, got)
 	}
 	b.later(15 * time.Minute)
 	b.cycle(nil, content)
@@ -131,7 +149,7 @@ func TestAFailedSendKeepsTheMessageAndSendsItOnceAfterItWorks(t *testing.T) {
 	b.later(15 * time.Minute)
 	b.cycle([]Subject{drift}, content)
 	if len(b.send.sent) != 0 || len(b.store.Outbox) != 1 || b.store.Items["d1"].Sent != nil {
-		t.Fatalf("sent %d, waiting %d, item %+v", len(b.send.sent), len(b.store.Outbox), b.store.Items["d1"])
+		t.Fatalf(sentWaiting, len(b.send.sent), len(b.store.Outbox), b.store.Items["d1"])
 	}
 	for _, want := range []string{"channel=oncall", "verdict=failed", "kind=status", "status=503"} {
 		if !strings.Contains(b.log.String(), want) {
@@ -144,7 +162,7 @@ func TestAFailedSendKeepsTheMessageAndSendsItOnceAfterItWorks(t *testing.T) {
 	b.later(15 * time.Minute)
 	b.cycle([]Subject{drift}, content)
 	if len(b.send.sent) != 1 || len(b.store.Outbox) != 0 || b.store.Items["d1"].Sent == nil {
-		t.Errorf("sent %d, waiting %d, item %+v", len(b.send.sent), len(b.store.Outbox), b.store.Items["d1"])
+		t.Errorf(sentWaiting, len(b.send.sent), len(b.store.Outbox), b.store.Items["d1"])
 	}
 }
 
@@ -175,23 +193,21 @@ func TestAFindingThatClearsBeforeItsMessageWentSendsNeither(t *testing.T) {
 
 func TestTheLossOfContactOpensOnAFailedCycleAndClearsOnlyAfterAGoodOne(t *testing.T) {
 	b := newBench(t, oncall)
-	lost := Subject{ID: lostID, News: NewsLost, Detail: "The observer cannot reach Palette. The last 2 content checks failed: api, HTTP 401."}
+	lost := Subject{ID: lostID, News: NewsLost, Detail: testkit.NoReachAfter(2)}
 	b.cycle([]Subject{lost}, Known{})
 	b.cycle([]Subject{lost}, Known{})
 	b.cycle(nil, Known{})
-	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], "strata · quarry-1 · Lost contact\nThe observer cannot reach Palette.") {
+	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], quarryLost+testkit.NoReach) {
 		t.Fatalf("messages %q", got)
 	}
 	b.cycle(nil, content)
-	if got := b.texts(); len(got) != 2 || !strings.Contains(got[1], "Lost contact cleared\nThe observer reached Palette again") {
+	if got := b.texts(); len(got) != 2 || !strings.Contains(got[1], testkit.LostCleared+"\nThe observer reached Palette again") {
 		t.Errorf("messages %q", got)
 	}
 }
 
 func TestAMuteSendsNothingAndTheMessageOfTheFindingGoesWhenTheMuteEnds(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-11-05"}]}`)
+	b := newBench(t, testkit.OncallRules("f", testkit.DriftNow, muteDex("2026-11-05")))
 	b.cycle([]Subject{drift}, content)
 	b.later(24 * time.Hour)
 	b.cycle([]Subject{drift}, content)
@@ -206,9 +222,7 @@ func TestAMuteSendsNothingAndTheMessageOfTheFindingGoesWhenTheMuteEnds(t *testin
 }
 
 func TestAMuteHoldsBackTheClearOfAMessageThatWent(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"}]}`)
+	b := newBench(t, testkit.OncallRules("f", testkit.DriftNow, muteDex("2026-12-01")))
 	b.store.Items["d1"] = Item{Subject: drift, To: "oncall", Sent: &now}
 	b.cycle(nil, content)
 	if len(b.send.sent) != 0 || len(b.store.Items) != 0 {
@@ -228,7 +242,7 @@ func TestADigestGoesOncePerPeriodListsTheOpenItemsAndHasNoClear(t *testing.T) {
 		t.Fatalf("messages %+v", b.send.sent)
 	}
 	text := b.send.sent[0].text
-	if !strings.HasPrefix(text, "strata · quarry-1 · Digest\n2 open items:\n- Newer version · barney-base@1.5.0: ") || !strings.Contains(text, "\n- Newer version · fred-identity@2.3.0: ") {
+	if !strings.HasPrefix(text, testkit.Quarry+"Digest\n2 open items:\n- Newer version · barney-base@1.5.0: ") || !strings.Contains(text, "\n- Newer version · fred-identity@2.3.0: ") {
 		t.Errorf("the digest %q", text)
 	}
 	if it := b.store.Items["n1"]; it.Sent == nil {
@@ -298,7 +312,7 @@ func TestAnItemWhoseOpenMessageWasDroppedAsksAgain(t *testing.T) {
 }
 
 func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}]}`)
+	b := newBench(t, testkit.OncallRules("f", testkit.LostNow))
 	b.cycle([]Subject{drift}, content)
 	b.cycle(nil, content)
 	if len(b.send.sent) != 0 || len(b.store.Items) != 0 {
@@ -307,12 +321,8 @@ func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
 }
 
 func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}, "planning": {"urlFile": "g"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "cluster", "news": "image", "send": "now", "to": "oncall"},
-		{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"},
-		{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"},
-		{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}]}`)
+	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"},
+		{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
 	n := Subject{ID: "n1", News: NewsNewer, Profile: "fred-identity@2.3.0", Detail: "x"}
 	muted := Subject{ID: "n2", News: NewsNewer, Profile: "barney-base@1.5.0", Detail: "x"}
 	b.cycle([]Subject{drift, n, muted}, Known{Content: true, Newer: true})
@@ -354,10 +364,8 @@ func (b *bench) rulesNow(rules string) {
 }
 
 func TestAMuteOrTheLossOfARuleDropsTheMessageOfTheOpenThatWaitsForARetry(t *testing.T) {
-	muted := `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-12-01"}]}`
-	none := `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"}]}`
+	muted := testkit.OncallRules("f", testkit.DriftNow, muteDex("2026-12-01"))
+	none := testkit.OncallRules("f", testkit.LostNow)
 	for name, rules := range map[string]string{"a mute": muted, "no rule": none} {
 		t.Run(name, func(t *testing.T) {
 			b := newBench(t, oncall)
@@ -378,11 +386,9 @@ func TestAMuteOrTheLossOfARuleDropsTheMessageOfTheOpenThatWaitsForARetry(t *test
 }
 
 func TestAMuteThatEndsLetsTheFindingQueueItsOpenAgain(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"},
-		{"level": "profile", "match": "fred-identity", "news": "drift", "muteUntil": "2026-11-04"}]}`)
+	b := newBench(t, testkit.OncallRules("f", testkit.DriftNow, muteDex("2026-11-04")))
 	b.send.fail["oncall"] = errors.New("down")
-	b.rulesNow(`{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "oncall"}]}`)
+	b.rulesNow(testkit.OncallRules("f", testkit.DriftNow))
 	b.cycle([]Subject{drift}, content)
 	delete(b.send.fail, "oncall")
 	b.cycle([]Subject{drift}, content)
@@ -392,16 +398,18 @@ func TestAMuteThatEndsLetsTheFindingQueueItsOpenAgain(t *testing.T) {
 }
 
 func TestTheClearGoesToTheChannelOfTheOpenMessageAndToNoChannelThatTheRulesLack(t *testing.T) {
+	otherG := testkit.Channel("other", "g")
+	const driftToOther = `{"level": "cluster", "news": "drift", "send": "now", "to": "other"}`
 	b := newBench(t, oncall)
 	b.cycle([]Subject{drift}, content)
-	b.rulesNow(`{"channels": {"oncall": {"urlFile": "f"}, "other": {"urlFile": "g"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "other"}]}`)
+	b.rulesNow(testkit.Rules([]string{oncallF, otherG}, driftToOther))
 	b.cycle(nil, content)
 	if len(b.send.sent) != 2 || b.send.sent[1].channel != "oncall" {
 		t.Fatalf("messages %+v", b.send.sent)
 	}
 	again := newBench(t, oncall)
 	again.cycle([]Subject{drift}, content)
-	again.rulesNow(`{"channels": {"other": {"urlFile": "g"}}, "rules": [{"level": "cluster", "news": "drift", "send": "now", "to": "other"}]}`)
+	again.rulesNow(testkit.Rules([]string{otherG}, driftToOther))
 	again.cycle(nil, content)
 	if len(again.send.sent) != 1 || len(again.store.Outbox) != 0 {
 		t.Errorf("a channel that the rules lack got a message: %+v", again.send.sent)
@@ -431,7 +439,7 @@ func TestADigestThatWaitsIsMadeAgainFromTheItemsThatAreOpenAndNeverTwice(t *test
 }
 
 func TestAnImageFindingIsNotClearedByACycleThatReadNoPod(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [{"level": "cluster", "news": "image", "send": "now", "to": "oncall"}]}`)
+	b := newBench(t, testkit.OncallRules("f", testkit.ImageNow))
 	moved := Subject{ID: "i1", News: NewsImage, Kind: model.ImageMoved, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Detail: "x"}
 	b.cycle([]Subject{moved}, Known{Content: true, Image: true})
 	b.cycle(nil, Known{Content: true})
@@ -458,9 +466,7 @@ func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
 }
 
 func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) {
-	b := newBench(t, `{"channels": {"planning": {"urlFile": "f"}, "platform": {"urlFile": "g"}}, "rules": [
-		{"level": "cluster", "news": "newer", "send": "digest", "to": "planning"},
-		{"level": "profile", "match": "barney-base", "news": "newer", "send": "digest", "to": "platform"}]}`)
+	b := newBench(t, testkit.Rules([]string{testkit.Channel("planning", "f"), testkit.Channel("platform", "g")}, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "send": "digest", "to": "platform"}`))
 	item := func(id, profile string) Subject {
 		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
 	}
@@ -494,10 +500,8 @@ func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) 
 }
 
 func TestAMuteBesideASendRuleAtOneLevelHoldsBackTheMessageUntilItsEndAndThenTheRuleSends(t *testing.T) {
-	b := newBench(t, `{"channels": {"oncall": {"urlFile": "f"}}, "rules": [
-		{"level": "cluster", "news": "lost", "send": "now", "to": "oncall"},
-		{"level": "cluster", "news": "lost", "muteUntil": "2026-11-05"}]}`)
-	lost := Subject{ID: lostID, News: NewsLost, Detail: "The observer cannot reach Palette."}
+	b := newBench(t, testkit.OncallRules("f", testkit.LostNow, muteLost("2026-11-05")))
+	lost := Subject{ID: lostID, News: NewsLost, Detail: testkit.NoReach}
 	b.cycle([]Subject{lost}, content)
 	if v := b.e.View(b.store, []Subject{lost}, "quarry-1", b.at); len(b.send.sent) != 0 || v.Rules[0].State != StateInactive || v.Rules[1].State != StateMuted {
 		t.Fatalf("sent %q, view %+v", b.texts(), v.Rules)
@@ -509,7 +513,7 @@ func TestAMuteBesideASendRuleAtOneLevelHoldsBackTheMessageUntilItsEndAndThenTheR
 	}
 	b.later(24 * time.Hour)
 	b.cycle([]Subject{lost}, content)
-	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], "strata · quarry-1 · Lost contact\n") {
+	if got := b.texts(); len(got) != 1 || !strings.HasPrefix(got[0], quarryLost) {
 		t.Errorf("after the mute the rule sent %q", got)
 	}
 	if v := b.e.View(b.store, []Subject{lost}, "quarry-1", b.at); v.Rules[0].State != StateFiring || v.Rules[1].State != StateInactive {

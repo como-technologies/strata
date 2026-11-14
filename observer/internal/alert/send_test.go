@@ -33,7 +33,7 @@ func hook(t *testing.T, addr string, allowHTTP bool, srv *httptest.Server) (*Web
 func TestAMessageIsAPostOfJSONWithTheTextToAnHttpsAddress(t *testing.T) {
 	r := testkit.NewTLSReceiver(t)
 	w, _ := hook(t, r.URL+"/services/T0/B0/TOKEN", false, r.Server)
-	const text = "strata · quarry-1 · Drift"
+	const text = testkit.QuarryDrift
 	if err := w.Send(context.Background(), "platform-oncall", text); err != nil {
 		t.Fatal(err)
 	}

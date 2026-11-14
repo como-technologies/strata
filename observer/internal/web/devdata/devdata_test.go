@@ -601,6 +601,9 @@ func lineCount(s string) int {
 	return n
 }
 
+// beforeHunk is the problem of a line of a unified text that comes before the first hunk.
+const beforeHunk = "before the first hunk"
+
 // unifiedProblem says what is wrong in a unified text, or it gives "". The text has two header lines,
 // and each hunk has as many lines on each side as its head says.
 func unifiedProblem(text string) string {
@@ -623,7 +626,7 @@ func unifiedProblem(text string) string {
 		}
 		switch {
 		case hunks == 0:
-			return "a line comes before the first hunk"
+			return "a line comes " + beforeHunk
 		case strings.HasPrefix(l, "\\ "):
 		case strings.HasPrefix(l, "-"):
 			old++
@@ -667,13 +670,13 @@ func TestEachUnifiedTextOfEachSetAgreesWithItsHunkHeads(t *testing.T) {
 		"--- a: x\n+++ b: x\n@@ -1,2 +1,2 @@\n a\n-b\n": "the last hunk",
 		"--- a: x\n+++ b: x\n@@ -1 +1 @@\n-a\n+b\nc\n":  "no sign",
 		"@@ -1 +1 @@\n-a\n+b\n":                         "header lines",
-		"--- a: x\n+++ b: x\n-a\n":                      "before the first hunk",
+		"--- a: x\n+++ b: x\n-a\n":                      beforeHunk,
 	} {
 		if got := unifiedProblem(text); !strings.Contains(got, want) {
 			t.Errorf("the check gave %q for %q, want %q", got, text, want)
 		}
 	}
-	if got := unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n\\ No newline at end of file\n"); got != "" {
+	if got := unifiedProblem("--- a: x\n+++ b: x\n@@ -0,0 +1,2 @@\n+a\n+b\n" + testkit.NoEOL + "\n"); got != "" {
 		t.Errorf("a good text has the problem %q", got)
 	}
 }
@@ -692,18 +695,18 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 		return api.PackDiff{}
 	}
 	dex := find("fred-identity@2.3.0", "addon/dex", model.SidePublished)
-	if !strings.HasPrefix(dex.Values.Unified, "--- a: addon/dex values\n+++ b: addon/dex values\n@@ -15,8 +15,8 @@\n") ||
+	if !strings.HasPrefix(dex.Values.Unified, testkit.DexValuesHead+"@@ -15,8 +15,8 @@\n") ||
 		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
 		t.Errorf("the text of dex: %+v", dex)
 	}
 	if k := find("barney-base@1.5.0", "k8s/kubernetes", model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
-		t.Errorf("the values of kubernetes hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
+		t.Errorf(testkit.KubernetesValues+" hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
 	}
 	ops := map[string]bool{}
 	var noEnd bool
 	for _, m := range find("fred-identity@2.3.0", "addon/dex", model.SideNewer).Manifests {
 		ops[m.Op] = true
-		noEnd = noEnd || strings.Contains(m.Unified, "\n\\ No newline at end of file\n")
+		noEnd = noEnd || strings.Contains(m.Unified, "\n"+testkit.NoEOL+"\n")
 	}
 	if !ops["added"] || !ops["removed"] || !noEnd {
 		t.Errorf("the manifests of the newer side of dex: ops %v, no end of line %v", ops, noEnd)

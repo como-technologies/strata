@@ -20,7 +20,7 @@ func TestTheNewerSideAfterARestartAsksForOneCompareAndKeepsTheAnswer(t *testing.
 	strata := &fakeStrata{dir: r.fixtures}
 	first := r.cycled(strata)
 	if strata.moveCompares() != 1 {
-		t.Fatalf("the first cycle ran %d compares of two packs", strata.moveCompares())
+		t.Fatalf("the first cycle ran "+testkit.PackCompares, strata.moveCompares())
 	}
 	// Before the restart the values are in memory: the request runs no compare.
 	if rec := get(handlerOf(first), pathNewer); rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), sentinelValue) || strata.moveCompares() != 1 {
@@ -65,7 +65,7 @@ func TestRequestsForTheSameMoveRunOneCompareAndNeverTwoProcessesTogether(t *test
 		t.Errorf("%d compares, want 2", strata.moveCompares())
 	}
 	if most := slow.overlap.Most(); most != 1 {
-		t.Errorf("%d processes ran together", most)
+		t.Errorf(testkit.RanTogether, most)
 	}
 }
 

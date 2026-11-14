@@ -67,6 +67,21 @@ const reducedMotion = "@media (prefers-reduced-motion:reduce)"
 // lostTop is the top slab of a lost mark, which is red and moves from its place.
 const lostTop = ".slabs.tone-lost .s0"
 
+// The parts of the rules for less motion, and the problems that motionProblems gives. noAnimation stops the animation of
+// a slab. buildSlabs are the slabs of a mark that builds, and buildHeld holds them in their state. lostMoved holds the
+// top slab of a lost mark off its place. slabsSVG starts the markup of a mark.
+const (
+	noAnimation     = "animation:none!important"
+	wantNoAnimation = "want " + noAnimation + ";"
+	buildSlabs      = ".slabs.tone-build .s"
+	buildHeld       = buildSlabs + "{opacity:.7}"
+	lostMoved       = "{transform:translate(9px,-8px)}"
+	buildMark       = "a mark that builds does not hold its state"
+	lostMark        = "a lost mark does not hold its state"
+	noMotionRule    = "no rule for prefers-reduced-motion"
+	slabsSVG        = `<svg class="slabs tone-`
+)
+
 // motionProblems lists what is wrong in the way that a style stops its animations for a person who asks for less motion. Each
 // rule outside that block that runs an animation belongs to a mark (a selector that starts with .slabs), and the block turns off
 // the animation of each slab with !important, so that no tone keeps one. A mark holds its state: the slabs that build stay in place,
@@ -75,7 +90,7 @@ func motionProblems(css string) []string {
 	var out []string
 	still := block(css, reducedMotion)
 	if still == "" {
-		return []string{"the style has no rule for prefers-reduced-motion"}
+		return []string{"the style has " + noMotionRule}
 	}
 	rest := without(css, reducedMotion)
 	for strings.Contains(rest, "@keyframes ") {
@@ -91,14 +106,14 @@ func motionProblems(css string) []string {
 			}
 		}
 	}
-	if got := ruleOf(still, ".slabs .s"); got != "animation:none!important;" {
-		out = append(out, "the rule for less motion gives the slabs "+got+", want animation:none!important;")
+	if got := ruleOf(still, ".slabs .s"); got != noAnimation+";" {
+		out = append(out, "the rule for less motion gives the slabs "+got+", "+wantNoAnimation)
 	}
-	if !strings.Contains(ruleOf(still, ".slabs.tone-build .s"), "opacity:") {
-		out = append(out, "a mark that builds does not hold its state for less motion")
+	if !strings.Contains(ruleOf(still, buildSlabs), "opacity:") {
+		out = append(out, buildMark+" for less motion")
 	}
 	if !strings.Contains(ruleOf(still, lostTop), "transform:") {
-		out = append(out, "a lost mark does not hold its state for less motion")
+		out = append(out, lostMark+" for less motion")
 	}
 	return out
 }
@@ -120,15 +135,15 @@ func TestTheCheckOfMotionFindsEachProblem(t *testing.T) {
 @keyframes march{to{stroke-dashoffset:-70}}
 @keyframes pulse{0%{opacity:.5}}
 @keyframes slip{0%{transform:none}}
-` + reducedMotion + `{.slabs .s{animation:none!important}.slabs.tone-build .s{opacity:.7}` + lostTop + `{transform:translate(9px,-8px)}}`
+` + reducedMotion + `{.slabs .s{` + noAnimation + `}` + buildHeld + lostTop + lostMoved + `}`
 	noProblems(t, "a good style", motionProblems(good))
 	cases := []struct{ name, css, want string }{
-		{"no rule for less motion", strings.Replace(good, reducedMotion, "@media (min-width:1px)", 1), "no rule for prefers-reduced-motion"},
+		{"no rule for less motion", strings.Replace(good, reducedMotion, "@media (min-width:1px)", 1), noMotionRule},
 		{"an animation on a card", good + ".card{animation:breathe 1s infinite}", "the rule of .card runs an animation"},
 		{"a spinner in a list of selectors", good + ".slabs.tone-calm .s,.spin{animation:rise 1s infinite}", "the rule of .spin runs an animation"},
-		{"no important", strings.Replace(good, "animation:none!important", "animation:none", 1), "want animation:none!important;"},
-		{"the build slabs vanish", strings.Replace(good, ".slabs.tone-build .s{opacity:.7}", "", 1), "a mark that builds does not hold its state"},
-		{"the lost slab comes back", strings.Replace(good, lostTop+"{transform:translate(9px,-8px)}", "", 1), "a lost mark does not hold its state"},
+		{"no important", strings.Replace(good, noAnimation, "animation:none", 1), wantNoAnimation},
+		{"the build slabs vanish", strings.Replace(good, buildHeld, "", 1), buildMark},
+		{"the lost slab comes back", strings.Replace(good, lostTop+lostMoved, "", 1), lostMark},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { findsProblem(t, c.name, motionProblems(c.css), c.want) })
@@ -167,7 +182,7 @@ func TestEachToneHasItsLookAndItsAnimationInTheStyle(t *testing.T) {
 		".facts":                   {"display:flex;"},
 		".slabs.tone-lost .s":      {"fill:color-mix("},
 		".slabs.tone-warn .s0":     {"fill:none;"},
-		".slabs.tone-build .s0":    {"animation-delay:"},
+		buildSlabs + "0":           {"animation-delay:"},
 		".slabs.tone-calm .s1":     {"animation-delay:"},
 		".splash.tone-off":         {"background:none;"},
 		".splash.tone-lost>.slabs": {"drop-shadow("},
@@ -230,7 +245,7 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 		}
 	}
 	// The mark is drawn in markup through h``, like every other part of the page.
-	if !strings.Contains(script, `<svg class="slabs tone-${tone}"`) || strings.Count(script, "innerHTML") != 1 {
+	if !strings.Contains(script, slabsSVG+`${tone}"`) || strings.Count(script, "innerHTML") != 1 {
 		t.Error("the mark is not drawn through the template of the scripts")
 	}
 }

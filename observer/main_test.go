@@ -73,11 +73,10 @@ const (
 	clusterUIDRequired = "--cluster-uid is required"
 	// alertSend is the file that sends the message of an alert to a webhook.
 	alertSend = "internal/alert/send.go"
-	// verifyAndSnapshot ends the branch of verify of the scripts of fakeStrata and of holdingStrata. verify prints that no
-	// record changed, and snapshot writes the read of the cluster payments.
-	verifyAndSnapshot = `  echo '` + testkit.VerifyUnchanged + `' ;;
-snapshot) echo '` + testkit.ClusterPayments + `' > "$out" ;;
-`
+	// exitFindings is the failure of a check of the exit code and the findings of a run. kubeRequests counts the requests
+	// to the API server of the cluster.
+	exitFindings = "exit %d, findings %+v"
+	kubeRequests = "%d requests went to the API server"
 )
 
 // fakeStrata writes a script that stands for the strata binary. compare is the line that
@@ -85,12 +84,10 @@ snapshot) echo '` + testkit.ClusterPayments + `' > "$out" ;;
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
 	compare = strings.Replace(compare, "{", `{"schema":"`+docs.DiffSchema+`",`, 1)
-	return testkit.Strata(t, `case $cmd in
-verify)
-  if [ `+strconv.Itoa(verifyExit)+` = 2 ]; then echo '{"error":{"kind":"transport","message":"SENTINEL"}}' >&2; exit 2; fi
-`+verifyAndSnapshot+`compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
+	return testkit.Strata(t, testkit.VerifyFirst+`  if [ `+strconv.Itoa(verifyExit)+` = 2 ]; then `+testkit.ErrorLine(docs.KindTransport, `"message":"SENTINEL"`)+`; exit 2; fi
+`+testkit.VerifyAndSnapshot+`compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
-  if [ `+strconv.FormatBool(behindFails)+` = true ]; then echo '{"error":{"kind":"api","status":404}}' >&2; exit 2; fi
+  if [ `+strconv.FormatBool(behindFails)+` = true ]; then `+testkit.ErrorLine(docs.KindAPI, `"status":404`)+`; exit 2; fi
   echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[]}' ;;
 esac`)
 }
@@ -126,7 +123,7 @@ func TestOnceExitsOneWhenAFindingExists(t *testing.T) {
 		t.Fatalf("stdout %q: %v", out.String(), err)
 	}
 	if code != 1 || len(s.Findings) != 1 || s.Findings[0].Kind != model.ClusterDiffers {
-		t.Fatalf("exit %d, findings %+v", code, s.Findings)
+		t.Fatalf(exitFindings, code, s.Findings)
 	}
 }
 
@@ -386,7 +383,7 @@ func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
 		t.Fatalf("stdout %q: %v", out.String(), err)
 	}
 	if code != 1 || len(s.Findings) != 1 || s.Versions.FailedRuns != 1 || s.Versions.LastError == nil || s.Versions.LastError.Status != 404 {
-		t.Fatalf("exit %d, findings %+v, versions %+v", code, s.Findings, s.Versions)
+		t.Fatalf(exitFindings+", versions %+v", code, s.Findings, s.Versions)
 	}
 }
 
@@ -505,13 +502,8 @@ func TestHealthRefusesAWrongFlagAndAnAddressThatIsNotLoopback(t *testing.T) {
 // `verify` also waits 0.2 s, so the content cycle usually ends after the versions cycle.
 func holdingStrata(t *testing.T, hold, pids string) string {
 	t.Helper()
-	return testkit.Strata(t, `case $cmd in
-verify)
-  if [ -e '`+hold+`' ]; then sleep 0.2; fi
-`+verifyAndSnapshot+`compare)
-  case $ref in
-  pack:*)
-    if [ -e '`+hold+`' ]; then echo $$ > '`+pids+`'; exec sleep 60; fi
+	return testkit.Strata(t, testkit.VerifyFirst+`  if [ -e '`+hold+`' ]; then sleep 0.2; fi
+`+testkit.VerifyAndSnapshot+testkit.PacksFirst+`    if [ -e '`+hold+`' ]; then echo $$ > '`+pids+`'; exec sleep 60; fi
     echo '{"schema":"`+docs.DiffSchema+`","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
     exit 1 ;;
   *) echo '`+testkit.CompareSame+`' ;;
@@ -575,7 +567,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	go func() {
 		defer close(answered)
 		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Get("http://" + addr + "/v1/packs/" + subject + "/k8s/kubernetes/diff?side=newer")
+		resp, err := client.Get("http://" + addr + "/v1/packs/" + subject + testkit.KubernetesDiff + "?side=newer")
 		if err == nil {
 			resp.Body.Close()
 		}
@@ -653,7 +645,7 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
 	if n := len(kubeAPI.Requests()); n != 0 {
-		t.Errorf("%d requests went to the API server", n)
+		t.Errorf(kubeRequests, n)
 	}
 	serve := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
 	addr, stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()))
@@ -668,7 +660,7 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	}
 	stop()
 	if n := len(kubeAPI.Requests()); n != 0 {
-		t.Errorf("%d requests went to the API server with the server running", n)
+		t.Errorf(kubeRequests+" with the server running", n)
 	}
 }
 
@@ -723,7 +715,7 @@ func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
 	}
 	errs.Reset()
 	t.Setenv(testkit.KubeHost, "")
-	if code := runContext(context.Background(), []string{"seed", "--cluster-uid", "c1", "--namespace", "strata-observer", "--strata", "/no/strata"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "kube-config") {
+	if code := runContext(context.Background(), []string{"seed", "--cluster-uid", "c1", "--namespace", "strata-observer", "--strata", "/no/strata"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), docs.KindKubeConfig) {
 		t.Errorf("exit %d, stderr %q", code, errs.String())
 	}
 }
