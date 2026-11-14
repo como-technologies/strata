@@ -2096,7 +2096,7 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
     let t = text(&recorded, &on_cluster);
     assert!(
         t.contains(
-            "consumers  lab-profile@1.3.0 has 2 consumers; lab-cluster is not one of them\n"
+            "consumers  lab-profile@1.3.0 has 2 consumers; cluster lab-cluster is not one of them\n"
         ),
         "{t}"
     );
@@ -2108,12 +2108,16 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
     consumers.count = 3;
     let t = text(&recorded, &on_cluster);
     assert!(
-        t.contains("consumers  lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them\n"),
+        t.contains(
+            "consumers  lab-profile@1.3.0 has 3 consumers; cluster lab-cluster is one of them\n"
+        ),
         "{t}"
     );
     let t = text(&on_cluster, &recorded);
     assert!(
-        t.contains("consumers  lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them\n"),
+        t.contains(
+            "consumers  lab-profile@1.3.0 has 3 consumers; cluster lab-cluster is one of them\n"
+        ),
         "{t}"
     );
 
@@ -2128,7 +2132,9 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
         .unwrap();
     assert!(!md.contains("| consumers |"), "{md}");
     assert!(
-        md.contains("**Consumers:** lab-profile@1.3.0 has 3 consumers; lab-cluster is one of them"),
+        md.contains(
+            "**Consumers:** lab-profile@1.3.0 has 3 consumers; cluster lab-cluster is one of them"
+        ),
         "{md}"
     );
 
@@ -4305,7 +4311,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
         "{text}"
     );
     assert!(
-        text.contains("    addon  cert-manager         1.14.0  Public Repo\n"),
+        text.contains("    addon  'pack:Public Repo/cert-manager@1.14.0'\n"),
         "{text}"
     );
     assert!(text.contains("forbidden"), "the error is shown: {text}");
@@ -7597,7 +7603,7 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     // the heading and the row say so, in both text formats
     let text = common::terminal().render_packs(&l).unwrap();
     assert!(
-        text.contains("csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
+        text.contains("registry Mirror, pack csi-aws-ebs: 1 version, disabled, no tags"),
         "{text}"
     );
     assert!(
@@ -7607,7 +7613,7 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     );
     let md = common::markdown().render_packs(&l).unwrap();
     assert!(
-        md.contains("### csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
+        md.contains("### registry Mirror, pack csi-aws-ebs: 1 version, disabled, no tags"),
         "{md}"
     );
     assert!(md.contains("`1.65.0` deprecated"), "{md}");
@@ -7690,7 +7696,7 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
 
     let text = common::terminal().render_packs(&l).unwrap();
     assert!(
-        text.contains("csi-aws-ebs in Mirror (1 version, disabled)"),
+        text.contains("registry Mirror, pack csi-aws-ebs: 1 version, disabled"),
         "{text}"
     );
     assert!(
@@ -7734,7 +7740,9 @@ fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stop
     assert_eq!(mirror.versions_offered, 2);
     let text = common::terminal().render_packs(&l).unwrap();
     assert!(
-        text.contains("csi-aws-ebs in Mirror (2 versions, no tags: the registry answered 404)"),
+        text.contains(
+            "registry Mirror, pack csi-aws-ebs: 2 versions, no tags: the registry answered 404"
+        ),
         "{text}"
     );
 
@@ -7822,9 +7830,12 @@ fn packs_says_in_each_format_that_no_version_supports_the_cloud() {
     .unwrap();
     assert!(none.registries.is_empty());
     let text = common::terminal().render_packs(&none).unwrap();
-    assert_eq!(text, "no version of csi-aws-ebs supports edge-native\n");
+    assert_eq!(
+        text,
+        "no version of pack csi-aws-ebs supports edge-native\n"
+    );
     let md = common::markdown().render_packs(&none).unwrap();
-    assert_eq!(md, "No version of csi-aws-ebs supports edge-native.\n");
+    assert_eq!(md, "No version of pack csi-aws-ebs supports edge-native.\n");
 }
 
 #[test]
@@ -7836,9 +7847,9 @@ fn packs_says_in_each_format_that_palette_serves_no_version_of_the_pack() {
     assert!(none.registries.is_empty());
     assert_eq!(none.cloud, None);
     let text = common::terminal().render_packs(&none).unwrap();
-    assert_eq!(text, "Palette serves no version of csi-aws-ebs\n");
+    assert_eq!(text, "Palette serves no version of pack csi-aws-ebs\n");
     let md = common::markdown().render_packs(&none).unwrap();
-    assert_eq!(md, "Palette serves no version of csi-aws-ebs.\n");
+    assert_eq!(md, "Palette serves no version of pack csi-aws-ebs.\n");
 }
 
 #[test]
@@ -8439,12 +8450,13 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
         ]
     );
     let verdict = common::terminal().verdict(&v.diff).unwrap();
+    // the writes come first, and the verdict is the last line
     assert!(
-        verdict.ends_with(
-            "\nwho: 2 writes in the audit log since the record\n  \
+        verdict.starts_with(
+            "who: 2 writes in the audit log since the record\n  \
              2026-09-18T14:02:11.482Z  John Doe (user)  update\n  \
-             2026-09-18T15:00:00.000Z  system (service)  update: strata pack version is updated 1.0.1 > 1.0.2"
-        ),
+             2026-09-18T15:00:00.000Z  system (service)  update: strata pack version is updated 1.0.1 > 1.0.2\n"
+        ) && verdict.lines().last().is_some_and(|l| l.starts_with("DRIFT: ")),
         "{verdict}"
     );
     let json = serde_json::to_value(&v.diff).unwrap();
@@ -8475,7 +8487,7 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
     assert_eq!(ver.who.as_deref(), Some(&[][..]));
     let terminal = common::terminal().verdict(&v.diff).unwrap();
     assert!(
-        terminal.ends_with("\nwho: no audit entry since the record"),
+        terminal.starts_with("who: no audit entry since the record\n"),
         "{terminal}"
     );
     let json = serde_json::to_value(&v.diff).unwrap();
@@ -8692,9 +8704,9 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
     );
     let line = verdict_of(&v);
     assert!(
-        line.ends_with(
-            "\nwho: 1 write in the audit log since the record\n  \
-             2026-09-18T14:02:11.482Z  John Doe (user)  update"
+        line.starts_with(
+            "who: 1 write in the audit log since the record\n  \
+             2026-09-18T14:02:11.482Z  John Doe (user)  update\n"
         ),
         "the write to the group itself names no object: {line}"
     );
@@ -8735,8 +8747,8 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
     );
     let line = verdict_of(&v);
     assert!(
-        line.ends_with(
-            "\n  2026-09-18T14:03:11.482Z  John Doe (user)  update; note: CHG-42: three replicas"
+        line.contains(
+            "\n  2026-09-18T14:03:11.482Z  John Doe (user)  update; note: CHG-42: three replicas\n"
         ),
         "{line}"
     );
@@ -8815,11 +8827,11 @@ fn verify_who_of_a_cluster_record_names_the_write_that_overwrote_the_profile_it_
     assert_eq!((api.calls(&cluster_log), api.calls(&profile_log)), (1, 1));
     let line = verdict_of(&v);
     assert!(
-        line.ends_with(
-            "\nwho: 3 writes in the audit log since the record\n  \
+        line.starts_with(
+            "who: 3 writes in the audit log since the record\n  \
              2026-09-18T14:02:11.482Z  John Doe (user)  update clusterprofile lab-profile\n  \
              2026-09-18T14:05:00.000Z  John Doe (user)  update\n  \
-             2026-09-18T14:09:00.000Z  system (service)  update clusterprofile lab-profile"
+             2026-09-18T14:09:00.000Z  system (service)  update clusterprofile lab-profile\n"
         ),
         "the writes of both logs, oldest first, each to the profile named: {line}"
     );
@@ -8880,10 +8892,15 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
         assert_eq!(ver.who_error.as_deref(), Some(reason.as_str()));
         // the text gives the words of Palette, and not the JSON of the body
         let line = verdict_of(&v);
-        assert!(line.starts_with("DRIFT: "), "{line}");
         assert!(
-            line.ends_with(&format!("\nwho: not read: {words}")),
-            "the verdict ends with the one line: {line}"
+            line.lines()
+                .last()
+                .is_some_and(|l| l.starts_with("DRIFT: ")),
+            "{line}"
+        );
+        assert!(
+            line.starts_with(&format!("who: not read: {words}\n")),
+            "the one line comes before the verdict: {line}"
         );
         let markdown = common::markdown().verdict(&v.diff).unwrap();
         assert!(
@@ -9042,7 +9059,7 @@ fn verify_who_drops_the_writes_already_read_when_the_log_of_an_overwritten_profi
         ver.who_error.as_deref(),
         Some(r#"HTTP 500: {"code":"InternalError"}"#)
     );
-    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: InternalError"));
+    assert!(verdict_of(&v).starts_with("who: not read: HTTP 500: InternalError\n"));
 }
 
 #[test]
@@ -11318,7 +11335,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         .unwrap();
     assert!(
         text.contains(&format!(
-            "palette    refuses: PackDependencyNotFound strata-live-pack: {message}\n"
+            "palette    refuses: PackDependencyNotFound for pack strata-live-pack: {message}\n"
         )),
         "{text}"
     );
@@ -11532,18 +11549,18 @@ fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_o
     let err = ops::update_checks(&target, &target).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
 
-    // each check is a note under the answer of Palette
+    // each check is a note of the head, and the answer of Palette is the last line
     let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(
         text.contains(&format!(
-            "palette    accepts\nnote       the move adds the required variables db_password and owner \
+            "note       the move adds the required variables db_password and owner \
              with no default value: give each one a value at the update, or Palette refuses the \
              update with {INVALID_VARIABLE_CODE}\nnote       kubernetes 1.29.4 -> 1.31.2 skips a minor \
              version: Palette refuses the update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to \
              a version of 1.30 first\n"
-        )),
+        )) && text.ends_with("\n\npalette    accepts\n"),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
@@ -13420,7 +13437,7 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
 
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("edge-1  e1  project p1  ready  edge host"),
+        text.contains("  edgehost:e1  edge-1  project p1  ready\n"),
         "{text}"
     );
     assert!(
@@ -13505,7 +13522,7 @@ fn consumers_counts_a_cluster_template_that_links_the_version() {
     .unwrap();
     let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
-        text.contains("barney-template  tmpl-1  project p1  cluster template\n"),
+        text.contains("  tmpl-1  barney-template  project p1  cluster template\n"),
         "{text}"
     );
     let md = common::markdown().render_consumers(&r).unwrap();
@@ -14459,7 +14476,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
         "{text}"
     );
     assert!(
-        text.contains("  shop-dev  d1  project p1  Deployed  app deployment\n"),
+        text.contains("  d1  shop-dev  project p1  Deployed  app deployment\n"),
         "{text}"
     );
     assert!(
@@ -14789,7 +14806,7 @@ fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_
                 registry http status 404";
     assert!(
         text.contains(&format!(
-            "  [csi  ] csi-aws-ebs  1.65.0  Public Repo  {note}\n"
+            "  [csi  ] 'pack:Public Repo/csi-aws-ebs@1.65.0'  {note}\n"
         )),
         "{text}"
     );
@@ -14846,14 +14863,14 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
     let api = serve_behind().with(PACK_REGISTRY_SUMMARY, public_repo_summary(completed));
     let (r, text) = behind_current_on(&api);
     assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
-    assert!(text.contains("  Public Repo  current\n"), "{text}");
+    assert!(text.contains("csi-aws-ebs@1.65.0'  current\n"), "{text}");
     let json = serde_json::to_value(&r).unwrap();
     assert!(json["pins"][0].get("registrySync").is_none(), "{json}");
 
     // Palette does not serve the summary listing: no note, and no error
     let (r, text) = behind_current_on(&serve_behind());
     assert!(r.pins[0].registry_sync.is_none() && r.pins[0].registry_sync_error.is_none());
-    assert!(text.contains("  Public Repo  current\n"), "{text}");
+    assert!(text.contains("csi-aws-ebs@1.65.0'  current\n"), "{text}");
 
     // Palette answers the summary listing with a 5xx: the pin stays current, and the report
     // names the reason
@@ -14865,7 +14882,7 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
         Some(r#"HTTP 500: {"code":"InternalError"}"#)
     );
     assert_eq!(r.exit_code(), 0);
-    assert!(text.contains("  Public Repo  current\n"), "{text}");
+    assert!(text.contains("csi-aws-ebs@1.65.0'  current\n"), "{text}");
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(
         json["pins"][0]["registrySyncError"],
@@ -15764,7 +15781,8 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     assert_eq!(answer.errors()[0].code, UPGRADE_NOT_SUPPORTED_CODE);
     assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
     let text = common::terminal().render_behind(&r, false).unwrap();
-    let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
+    let refusal =
+        format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster payments\n");
     assert!(text.contains(&refusal), "{text}");
     // the answer of Palette is under the bump line
     let (bump_at, refusal_at) = (
@@ -15775,7 +15793,7 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     let md = common::markdown().render_behind(&r, false).unwrap();
     assert!(
         md.contains(&format!(
-            "<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments"
+            "<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster payments"
         )),
         "{md}"
     );
@@ -15909,9 +15927,14 @@ fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_nex
          {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to 1.35.6 first"
     );
     let text = common::terminal().render_behind(&r, false).unwrap();
+    // the line of strata comes under the bump, and the answer of Palette is the last line
+    let (line_at, answer_at) = (
+        text.find(&format!("      {line}\n")),
+        text.find("      palette accepts\n"),
+    );
     assert!(
-        text.contains(&format!("      palette accepts\n      {line}\n")),
-        "the line comes under the answer of Palette: {text}"
+        line_at.zip(answer_at).is_some_and(|(l, a)| l < a),
+        "the line comes before the answer of Palette: {text}"
     );
     assert_eq!(text.matches("skips a minor version").count(), 1, "{text}");
     // the markdown writes the `->` of the line as `-&gt;`
@@ -16106,7 +16129,7 @@ fn behind_asks_the_route_of_the_profile_version_that_a_cluster_runs_about_the_bu
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(&format!(
-            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n"
+            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster payments\n"
         )),
         "{text}"
     );
@@ -16359,7 +16382,7 @@ fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(&format!(
-            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} csi-aws-ebs: {message}\n"
+            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} for pack csi-aws-ebs: {message}\n"
         )),
         "{text}"
     );
@@ -16528,7 +16551,8 @@ fn behind_keeps_the_refusal_of_palette_and_says_that_it_did_not_ask_a_record_of_
         Some("1 record of project prod was not asked")
     );
     let text = common::terminal().render_behind(&r, false).unwrap();
-    let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
+    let refusal =
+        format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster payments\n");
     let missing = "      palette gave no answer: 1 record of project prod was not asked\n";
     assert!(text.contains(&format!("{refusal}{missing}")), "{text}");
 }
@@ -16781,12 +16805,12 @@ fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_r
     let text = common::terminal().render_behind(&r, false).unwrap();
     assert!(
         text.contains(
-            "1.63.1  Public Repo  behind: 1.65.0, 1.64.0 (deprecated) (floating tag 1.x, now 1.65.0)"
+            "@1.63.1'  behind: 1.65.0, 1.64.0 (deprecated) (floating tag 1.x, now 1.65.0)"
         ),
         "{text}"
     );
     assert!(
-        text.contains("1.65.0  Public Repo  current (floating tag 1.x, now 1.65.0)"),
+        text.contains("@1.65.0'  current (floating tag 1.x, now 1.65.0)"),
         "{text}"
     );
     assert_eq!(r.exit_code(), 2, "a pin that strata could not check");
@@ -17275,13 +17299,13 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 3, "{text}");
     assert!(
-        lines[0].starts_with("could not record cluster gone (uid c-gone): "),
+        lines[0].starts_with("could not record cluster:c-gone (gone): "),
         "{text}"
     );
     assert_eq!(
         lines[1],
         format!(
-            "wrote {}  cluster lab-cluster (uid {CLUSTER_UID})  root {}",
+            "wrote {}  cluster:{CLUSTER_UID}  lab-cluster  root {}",
             out.join("lab-cluster.json").display(),
             &old.root[..12]
         )
@@ -17807,7 +17831,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     assert_eq!(v.errors().len(), 1, "{v:?}");
     assert_eq!(
         v.errors()[0].line(),
-        format!("DependencyPackWithMinVersionRequired kubernetes: {message}")
+        format!("DependencyPackWithMinVersionRequired for pack kubernetes: {message}")
     );
     // one GET of the name and the version
     assert_eq!(api.calls(&name_route(&snap)), 1);
@@ -17875,14 +17899,14 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
         err.to_json()["errors"][0]["code"],
         "DependencyPackWithMinVersionRequired"
     );
-    // the lines of the refusal come before its error, and no sentence of an accept follows
+    // the lines of the refusal come before its error, and no line of an accept follows
     assert_eq!(
         strata::render::refusal_lines(&snap),
         [format!(
-            "palette    refuses: DependencyPackWithMinVersionRequired kubernetes: {message}"
+            "palette    refuses: DependencyPackWithMinVersionRequired for pack kubernetes: {message}"
         )]
     );
-    assert_eq!(strata::render::acceptance_sentence(&snap), None);
+    assert_eq!(strata::render::acceptance_line(&snap), None);
 
     // a 200 with no error: Palette accepts, and the record holds the answer and the same root
     let api = registry
@@ -17905,11 +17929,11 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     // the last line names what Palette checks for a candidate (#633)
     assert!(strata::render::refusal_lines(&snap).is_empty());
     assert_eq!(
-        strata::render::acceptance_sentence(&snap),
-        Some(format!(
-            "Palette accepts the name, the version, and the packs of '{}'",
+        strata::render::acceptance_line(&snap),
+        Some(strata::render::palette_line(&format!(
+            "accepts the name, the version, and the packs of '{}'",
             snap.source.reference
-        ))
+        )))
     );
     // without --validate, the record has no such field
     let plain = ops::snapshot_from_candidate(
@@ -18371,9 +18395,16 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     );
     let sentence = format!("Palette marks pack os/ubuntu-aws invalid now ({INVALID_REASON})");
     let verdict = common::terminal().verdict(&v.diff).unwrap();
-    assert!(verdict.starts_with("OK: "), "{verdict}");
+    // the line of the flag comes first, and the verdict is the last line
     assert!(
-        verdict.contains(&format!("\nINVALID: {sentence}")),
+        verdict
+            .lines()
+            .last()
+            .is_some_and(|l| l.starts_with("OK: ")),
+        "{verdict}"
+    );
+    assert!(
+        verdict.starts_with(&format!("INVALID: {sentence}\n")),
         "{verdict}"
     );
     let verdict = common::markdown().verdict(&v.diff).unwrap();

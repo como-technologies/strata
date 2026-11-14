@@ -6,8 +6,8 @@ use super::notes::{tag_rename, tier_path};
 use super::{count_of, short_digest, show, shown};
 use crate::closed_set::ClosedSet;
 use crate::diff::{
-    ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
-    VariableSummary, VariablesByName,
+    ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, Summary,
+    ValuesDiff, VariableSummary, VariablesByName,
 };
 use crate::term::color::Paint;
 
@@ -21,6 +21,25 @@ pub(crate) fn op_mark(op: Op) -> &'static str {
         Op::Added => "+",
         Op::Removed => "-",
     }
+}
+
+/// `4 changed, 0 added, 0 removed, 1 unchanged`: the packs of a diff by status, in the words of
+/// each report.
+pub(crate) fn pack_counts(s: &Summary) -> String {
+    format!(
+        "{} changed, {} added, {} removed, {} unchanged",
+        s.packs_changed, s.packs_added, s.packs_removed, s.packs_unchanged
+    )
+}
+
+/// `5 packs: 4 changed, 0 added, 0 removed, 1 unchanged`: the heading of the packs of a diff in
+/// the terminal report. It names the kind, so each row below it gives its layer and its name alone.
+pub(crate) fn packs_heading(d: &Diff) -> String {
+    format!(
+        "{}: {}",
+        count_of(d.packs.len(), "pack"),
+        pack_counts(&d.summary)
+    )
 }
 
 /// The mark of a pack in a comparison, as the text reports print it.

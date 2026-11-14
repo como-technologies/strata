@@ -1,7 +1,8 @@
 $ strata compare 'pack:Public Repo/ubuntu-aws@20.04' 'pack:Public Repo/ubuntu-aws@24.04'
-pack ubuntu-aws@20.04 (uid 626808ffd9c586788e0be610)  ->  pack ubuntu-aws@24.04 (uid 6917446d9da9b9852faf5f60)
+'pack:Public Repo/ubuntu-aws@20.04' (uid 626808ffd9c586788e0be610)  ->  'pack:Public Repo/ubuntu-aws@24.04' (uid 6917446d9da9b9852faf5f60)
 root       a5bd379fcf68 -> 433151944a0c   CHANGED
 
+  1 pack: 1 changed, 0 added, 0 removed, 0 unchanged
 ~ [os   ] ubuntu-aws                 20.04 -> 24.04     IDENTITY UPSTREAM
       upstream digest: sha256:d7aee32a7be4 -> sha256:2df05daa4eb4 (packRef.digest)
       impact: node repave (OS image change)

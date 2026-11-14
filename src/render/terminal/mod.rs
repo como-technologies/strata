@@ -1,15 +1,13 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::changes::{OpLine, artifacts_summary, moved_word, tier_op_lines, variable_lines};
+use super::changes::{
+    OpLine, artifacts_summary, moved_word, packs_heading, tier_op_lines, variable_lines,
+};
 use super::consumers::{
-    NOT_LISTED, consumer_count, consumer_counts, consumer_project, consumer_runs,
-    consumers_heading, consumers_sentence, not_checked_line, scope_line, searched_rows,
+    NOT_LISTED, consumer_counts, consumer_project, consumer_ref, consumer_runs, consumers_heading,
+    consumers_sentence, not_checked_line, scope_line, searched_rows,
 };
-use super::list::{
-    applied_ref, cluster_count, list_count, list_scope, listed_registry, no_version_sentence,
-    pack_version, profile_marks, project_label, registry_count, registry_heading,
-    registry_kind_cell, side_projects, version_note, virtual_line, virtual_note,
-};
+use super::list::{list_scope, no_version_sentence, registry_heading, side_projects, version_note};
 use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
     variables_comparable,
@@ -20,23 +18,27 @@ use super::same_release::{
     renumber_lines,
 };
 use super::verify::{counts_line, record_detail, verdict_parts, who_entry, who_heading};
-use super::{Reading, Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
+use super::{
+    Kind, Reading, Renderer, count_of, entry_error, key_line, paint_state, palette_line, short,
+};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject,
-    ListedRegistry, Listing, PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
+    Chain, ConsumersReport, Listing, PackListing, PairStatus, RecordStatus, VerifySummary,
 };
-use crate::snapshot::Snapshot;
-use crate::term::color::Paint;
+use crate::reference::Ref;
+use crate::snapshot::{Snapshot, Source};
+use crate::term::color::{LineClass, Paint};
 use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
-use table::{column_widths, matched, painted_text, table_line};
+use list::{list_clusters, list_filters, list_profiles, list_projects, list_registries};
+use table::{column_widths, painted_text, table_line};
 
 mod behind;
 mod lines;
+mod list;
 mod table;
 
 /// `text` in the color of a record status. Green is a record that agrees with Palette, and red is
@@ -56,14 +58,15 @@ pub struct TerminalRenderer {
 }
 
 /// The lines above the variables: the two records, the root, and the notes. The images and the
-/// consumers follow when the diff has them.
+/// consumers follow when the diff has them. The answer of Palette is not here: it is the last line
+/// of the report, see [`answer_lines`].
 fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     out.push(format!(
         "{} (uid {})  ->  {} (uid {})",
-        p.bold(&d.a.title()),
+        side_title(&d.a, p),
         p.dim(dash(d.a.shown_uid())),
-        p.bold(&d.b.title()),
+        side_title(&d.b, p),
         p.dim(dash(d.b.shown_uid()))
     ));
     let word = diff_word(d);
@@ -87,9 +90,7 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
         match note {
             DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&text))),
             DiffNote::Good(text) => out.push(key_line("note", p.bgreen(&text))),
-            DiffNote::Palette(lines) => {
-                out.extend(lines.iter().map(|line| palette_line(line)));
-            }
+            DiffNote::Palette(_) => {}
         }
     }
     if let Some(line) = artifacts_summary(d) {
@@ -103,6 +104,33 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
         out.push(key_line("consumers", sentence));
     }
     out
+}
+
+/// A side of the heading of a diff: the ref of a pack, such as
+/// `'pack:Public Repo/kubernetes@1.36.2'`, or the title of each other record, such as
+/// `aws-stack@1.1.1 on cluster payments`.
+fn side_title(s: &Source, p: &Paint) -> String {
+    match &s.pack {
+        Some(pk) => {
+            let r = Ref::pack_in(&pk.registry_name, &pk.registry_uid, &pk.name, &pk.version);
+            Kind::Pack.paint(p, &r.shell_word())
+        }
+        None => p.bold(&s.title()),
+    }
+}
+
+/// The answer of Palette to `--repave` and to `--validate`, one bold line each, such as
+/// `palette    accepts`. It is the answer of a check, so it is the last part of the report.
+fn answer_lines(d: &Diff, p: &Paint) -> Vec<String> {
+    diff_notes(d)
+        .into_iter()
+        .filter_map(|note| match note {
+            DiffNote::Palette(lines) => Some(lines),
+            DiffNote::Warn(_) | DiffNote::Good(_) => None,
+        })
+        .flatten()
+        .map(|line| p.line(LineClass::Answer, &palette_line(&line)))
+        .collect()
 }
 
 /// The lines of the variables, the values of the cluster, and the tiers of the cluster.
@@ -149,6 +177,7 @@ impl Renderer for TerminalRenderer {
         let mut out = head_lines(d, p);
         out.extend(change_lines(d, p));
         out.push(String::new());
+        out.push(format!("  {}", packs_heading(d)));
         for pd in &d.packs {
             out.push(packline(pd, p));
             packdetail(pd, p, &mut out);
@@ -162,6 +191,10 @@ impl Renderer for TerminalRenderer {
         if full {
             s.push_str(&super::unified::full_diffs(a, b, d, p, false));
         }
+        let answer = answer_lines(d, p);
+        if !answer.is_empty() {
+            s.push_str(&format!("\n{}\n", answer.join("\n")));
+        }
         Ok(s)
     }
 
@@ -169,20 +202,21 @@ impl Renderer for TerminalRenderer {
         let v = d.verify.as_ref()?;
         let p = &self.paint;
         let parts = verdict_parts(v, d.same, &d.a);
-        let word = paint_status(p, RecordStatus::from(v.status), parts.word());
-        let mut line = format!("{word}: {}", parts.line(&d.a));
-        for sentence in invalid_pack_sentences(&v.invalid_packs) {
-            line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
-        }
+        let mut lines = Vec::new();
         if let Some(heading) = who_heading(v) {
-            line.push('\n');
-            line.push_str(&heading);
+            lines.push(heading);
             for e in v.who.iter().flatten() {
-                line.push_str("\n  ");
-                line.push_str(&who_entry(e, &v.uid));
+                lines.push(format!("  {}", who_entry(e, &v.uid)));
             }
         }
-        Some(line)
+        for sentence in invalid_pack_sentences(&v.invalid_packs) {
+            lines.push(format!("{}: {sentence}", p.bred("INVALID")));
+        }
+        // the verdict is the answer of the check, so it is the last line
+        let word = paint_status(p, RecordStatus::from(v.status), parts.word());
+        let verdict = format!("{word}: {}", parts.line(&d.a));
+        lines.push(p.line(LineClass::Answer, &verdict));
+        Some(lines.join("\n"))
     }
 
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String> {
@@ -198,7 +232,7 @@ impl Renderer for TerminalRenderer {
                 record_detail(r)
             ));
         }
-        out.push_str(&counts_line(s));
+        out.push_str(&p.line(LineClass::Answer, &counts_line(s)));
         out.push('\n');
         Ok(out)
     }
@@ -245,26 +279,43 @@ impl Renderer for TerminalRenderer {
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String> {
         let p = &self.paint;
         let mut out = format!("{}\n", consumers_heading(r));
+        // a row starts with the ref of the consumer, which names its kind, or with its uid for a
+        // kind that no ref reads
+        let refs: Vec<Option<Ref>> = r.consumers.iter().map(consumer_ref).collect();
+        let ids: Vec<String> = r
+            .consumers
+            .iter()
+            .zip(&refs)
+            .map(|(c, reference)| match reference {
+                Some(reference) => reference.shell_word(),
+                None => dash(&c.uid).to_string(),
+            })
+            .collect();
+        let id_w = ids.iter().map(|i| i.chars().count()).max().unwrap_or(0);
         let width = r
             .consumers
             .iter()
-            .map(|c| dash(&c.name).len())
+            .map(|c| dash(&c.name).chars().count())
             .max()
             .unwrap_or(0);
-        for c in &r.consumers {
+        for ((c, reference), id) in r.consumers.iter().zip(&refs).zip(&ids) {
             let state = paint_state(p, &c.state);
+            let id = format!("{id:<id_w$}");
             out.push_str(&format!(
                 "  {}  {}  project {}",
-                p.bold(&format!("{:<width$}", dash(&c.name))),
-                p.dim(&c.uid),
+                match reference {
+                    Some(_) => painted_text(&id, |t| Kind::Cluster.paint(p, t)),
+                    None => p.dim(&id),
+                },
+                format_args!("{:<width$}", dash(&c.name)),
                 consumer_project(c),
             ));
             // a cluster template has no state
             if !state.is_empty() {
                 out.push_str(&format!("  {state}"));
             }
-            // the heading names the clusters, so a row names each other kind
-            if c.kind != ConsumerKind::Cluster {
+            // a ref names the kind, so a row with none names its kind in words
+            if reference.is_none() {
                 out.push_str(&format!("  {}", p.cyan(c.kind.noun())));
             }
             if let Some(runs) = consumer_runs(c, r, str::to_string) {
@@ -300,18 +351,18 @@ impl Renderer for TerminalRenderer {
     fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
         let mut out = String::new();
         for rec in &r.records {
+            // each line names the cluster by its ref, and then by its name
+            let cluster = Ref::cluster(&rec.cluster.uid).shell_word();
             out.push_str(&match &rec.root {
                 Some(root) => format!(
-                    "wrote {}  cluster {} (uid {})  root {}\n",
+                    "wrote {}  {cluster}  {}  root {}\n",
                     rec.path.display(),
-                    rec.cluster.name,
-                    rec.cluster.uid,
+                    dash(&rec.cluster.name),
                     short(root)
                 ),
                 None => format!(
-                    "could not record cluster {} (uid {}): {}\n",
-                    rec.cluster.name,
-                    rec.cluster.uid,
+                    "could not record {cluster} ({}): {}\n",
+                    dash(&rec.cluster.name),
                     super::list::set_error(rec)
                 ),
             });
@@ -363,7 +414,10 @@ impl Renderer for TerminalRenderer {
             return Ok(format!("{sentence}\n"));
         }
         for r in &l.registries {
-            out.push_str(&format!("{}\n", registry_heading(l, r, |t| p.bold(t))));
+            out.push_str(&format!(
+                "{}\n",
+                registry_heading(l, r, |kind, name| kind.paint(p, name))
+            ));
             // the note column only where a version has a note, so a registry in use reads as before
             let notes: Vec<Option<String>> = r.versions.iter().map(version_note).collect();
             let any_note = notes.iter().any(Option::is_some);
@@ -434,302 +488,10 @@ impl Renderer for TerminalRenderer {
     }
 }
 
-/// The table of the profile versions of a listing, with its count and the packs of each one.
-fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedProfile]) {
-    out.push_str(&format!(
-        "\n{}\n",
-        list_count(profiles.len(), "profile", l.pack.as_deref())
-    ));
-    // the marks of a version end its row, so their column moves with the columns before
-    let (rows, marked): (Vec<Vec<String>>, Vec<Option<usize>>) = profiles
-        .iter()
-        .map(|pr| {
-            let mut row = vec![
-                pr.reference.clone(),
-                pr.uid.clone(),
-                dash(&pr.cloud_type).to_string(),
-            ];
-            if let Some(msg) = entry_error(pr.error.as_ref()) {
-                row.push(format!("({msg})"));
-            } else if pr.packs.is_some() {
-                row.push(super::list::profile_type_cell(pr).to_string());
-                row.push(consumer_count(pr.consumers.unwrap_or(0)));
-            }
-            let marks = profile_marks(pr, l);
-            let marked = marks.as_ref().map(|_| row.len());
-            row.extend(marks);
-            (row, marked)
-        })
-        .unzip();
-    let widths = column_widths(&rows);
-    for ((pr, row), marked) in profiles.iter().zip(&rows).zip(&marked) {
-        let failed = pr.error.is_some();
-        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-            0 => p.bold(cell),
-            1 => p.dim(cell),
-            3 if failed => p.dim(cell),
-            i if Some(i) == *marked => p.yellow(cell),
-            _ => cell.to_string(),
-        }));
-        let packs: Vec<Vec<String>> = pr
-            .packs
-            .iter()
-            .flatten()
-            .map(|pk| {
-                let mut row = vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)];
-                // a pack with no registry ends at its version, with no space after it
-                row.extend(listed_registry(pk).map(str::to_string));
-                row
-            })
-            .collect();
-        let pack_widths = column_widths(&packs);
-        for row in &packs {
-            out.push_str(&table_line("    ", row, &pack_widths, |i, cell| match i {
-                0 => p.dim(cell),
-                1 => matched(p, cell, l.pack.as_deref()),
-                _ => cell.to_string(),
-            }));
-        }
-    }
-}
-
-/// The table of the clusters of a listing, with its count, the lines of its query, and the
-/// profiles of each cluster.
-fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: &[ListedCluster]) {
-    out.push_str(&format!(
-        "\n{}\n",
-        cluster_count(clusters.len(), l.cluster.as_deref())
-    ));
-    for line in super::list::query_line(l)
-        .into_iter()
-        .chain(virtual_line(l))
-    {
-        out.push_str(&format!("{}\n", p.dim(&line)));
-    }
-    let rows: Vec<Vec<String>> = clusters.iter().map(|c| cluster_row(l, c)).collect();
-    let widths = column_widths(&rows);
-    for (c, row) in clusters.iter().zip(&rows) {
-        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-            0 => p.bold(cell),
-            1 => matched(p, cell, l.cluster.as_deref()),
-            2 => painted_text(cell, |state| paint_state(p, state)),
-            _ => cell.to_string(),
-        }));
-        let applied = applied_rows(c);
-        let applied_widths = column_widths(&applied);
-        for row in &applied {
-            out.push_str(&table_line(
-                "    ",
-                row,
-                &applied_widths,
-                |i, cell| match i {
-                    1 => p.dim(cell),
-                    3 => p.yellow(cell),
-                    _ => cell.to_string(),
-                },
-            ));
-        }
-    }
-}
-
-/// The cells of the row of a cluster.
-fn cluster_row(l: &Listing, c: &ListedCluster) -> Vec<String> {
-    let mut row = vec![
-        c.reference.clone(),
-        dash(&c.name).to_string(),
-        dash(&c.state).to_string(),
-        dash(&c.cloud_type).to_string(),
-    ];
-    if c.project_uid != l.project_uid {
-        row.push(format!(
-            "project {}",
-            project_label(&c.project_uid, &c.project_name)
-        ));
-    }
-    // a query is a question about labels, so its rows show them
-    if l.query.is_some() {
-        row.push(super::list::labels_text(&c.labels));
-    }
-    row.extend(virtual_note(c));
-    if let Some(msg) = entry_error(c.error.as_ref()) {
-        row.push(format!("({msg})"));
-    }
-    if let Some(note) = super::list::imported_note(c) {
-        row.push(note.to_string());
-    }
-    row
-}
-
-/// The rows of the profiles that a cluster runs, under the row of the cluster.
-fn applied_rows(c: &ListedCluster) -> Vec<Vec<String>> {
-    c.profiles
-        .iter()
-        .flatten()
-        .map(|a| {
-            let mut row = vec![
-                applied_ref(a),
-                dash(&a.uid).to_string(),
-                dash(&a.kind).to_string(),
-            ];
-            if c.pending_updates.iter().any(|u| u.profile_uid == a.uid) {
-                row.push("behind: an update waits".to_string());
-            }
-            row
-        })
-        .collect()
-}
-
-/// The table of the projects of a listing, with its count.
-fn list_projects(out: &mut String, p: &Paint, projects: &[ListedProject]) {
-    out.push_str(&format!("\n{}\n", count_of(projects.len(), "project")));
-    let rows: Vec<Vec<String>> = projects
-        .iter()
-        .map(|pr| vec![dash(&pr.name).to_string(), pr.uid.clone()])
-        .collect();
-    let widths = column_widths(&rows);
-    for row in &rows {
-        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-            0 => p.bold(cell),
-            _ => p.dim(cell),
-        }));
-    }
-}
-
-/// The table of the saved tag filters of a listing, with its count.
-fn list_filters(out: &mut String, p: &Paint, filters: &[SavedFilter]) {
-    out.push_str(&format!(
-        "\n{}\n",
-        count_of(filters.len(), "saved tag filter")
-    ));
-    let rows: Vec<Vec<String>> = filters
-        .iter()
-        .map(|f| vec![f.reference(), f.uid.clone(), f.expression()])
-        .collect();
-    let widths = column_widths(&rows);
-    for row in &rows {
-        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-            0 => p.bold(cell),
-            1 => p.dim(cell),
-            _ => cell.to_string(),
-        }));
-    }
-}
-
-/// The table of the registries of a listing, with its count.
-fn list_registries(out: &mut String, p: &Paint, registries: &[ListedRegistry]) {
-    out.push_str(&format!("\n{}\n", registry_count(registries.len())));
-    let rows: Vec<Vec<String>> = registries
-        .iter()
-        .map(|r| {
-            vec![
-                dash(&r.name).to_string(),
-                r.uid.clone(),
-                registry_kind_cell(r).to_string(),
-            ]
-        })
-        .collect();
-    let widths = column_widths(&rows);
-    for row in &rows {
-        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-            0 => p.bold(cell),
-            1 => p.dim(cell),
-            _ => cell.to_string(),
-        }));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::term::color::{ColorMode, Stream};
-
-    #[test]
-    fn the_part_of_a_pack_name_that_matched_is_marked() {
-        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
-        assert_eq!(
-            matched(&on, "cni-cilium-oss", Some("cilium")),
-            format!("cni-{}-oss", on.byellow("cilium")),
-            "the match is marked, and the rest of the name is not"
-        );
-        // the search ignores case, and the name keeps its own
-        assert_eq!(
-            matched(&on, "cni-Cilium-oss", Some("cilium")),
-            format!("cni-{}-oss", on.byellow("Cilium"))
-        );
-        // the padding of the column stays in the cell
-        assert_eq!(
-            matched(&on, "csi-aws-ebs   ", Some("aws")),
-            format!("csi-{}-ebs   ", on.byellow("aws"))
-        );
-
-        // nothing to mark, nothing to do
-        assert_eq!(matched(&on, "kubernetes", Some("cilium")), "kubernetes");
-        assert_eq!(matched(&on, "kubernetes", None), "kubernetes");
-        assert_eq!(matched(&on, "kubernetes", Some("")), "kubernetes");
-        // no color: the plain name, so a pipe and a file read the same
-        let off = Paint::off();
-        assert_eq!(
-            matched(&off, "cni-cilium-oss", Some("cilium")),
-            "cni-cilium-oss"
-        );
-        // text that is not ASCII is left alone, because lowercasing can change its length
-        assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
-        assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
-    }
-
-    #[test]
-    fn the_table_of_clusters_paints_the_state_of_each_row_and_not_its_padding() {
-        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
-        let listing = Listing {
-            schema: crate::ops::LIST_SCHEMA.to_string(),
-            tool: crate::snapshot::Tool::current(),
-            generated_at: "2026-11-02T00:00:00Z".to_string(),
-            project_uid: String::new(),
-            project_name: String::new(),
-            pack: None,
-            cluster: None,
-            profiles: None,
-            clusters: None,
-            includes_virtual: None,
-            projects: None,
-            query: None,
-            resolved: None,
-            query_filter: None,
-            filters: None,
-            registries: None,
-            errors: std::collections::BTreeMap::new(),
-        };
-        let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
-            .into_iter()
-            .map(|state| {
-                serde_json::from_value(serde_json::json!({
-                    "ref": format!("cluster:{state}"),
-                    "name": state,
-                    "uid": state,
-                    "state": state,
-                    "cloudType": "aws",
-                    "projectUid": "",
-                }))
-                .unwrap()
-            })
-            .collect();
-        let mut out = String::new();
-        list_clusters(&mut out, &on, &listing, &clusters);
-        for (state, painted) in [
-            ("Running", on.green("Running")),
-            ("Provisioning", on.yellow("Provisioning")),
-            ("Error", on.red("Error")),
-        ] {
-            // the renderer paints the state whatever the width of its column, and not its padding
-            let padding = " ".repeat("Provisioning".len() - state.len());
-            let cell = format!("{painted}{padding}  aws");
-            assert!(out.contains(&cell), "{state}: {out:?}");
-        }
-        let mut plain = String::new();
-        list_clusters(&mut plain, &Paint::off(), &listing, &clusters);
-        assert!(!plain.contains('\x1b'), "{plain:?}");
-        assert!(plain.contains("Running       aws"), "{plain:?}");
-    }
 
     #[test]
     fn a_record_status_has_one_color_in_the_verdict_and_in_the_row_of_the_summary() {

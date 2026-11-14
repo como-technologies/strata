@@ -3,14 +3,13 @@
 
 use std::process::ExitCode;
 
-use strata::TOOL_NAME;
 use strata::error::Result;
 use strata::ops::{self, ObjectSource, SnapshotSource};
 use strata::render;
-use strata::term::color::Paint;
+use strata::term::color::{LineClass, Paint};
 use strata::term::progress::Progress;
 
-use super::args::SnapshotArgs;
+use super::args::{SnapshotArgs, stderr_paint_auto};
 use super::{connect_in, connect_to, now_utc};
 
 pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
@@ -54,9 +53,10 @@ fn record_object(
     let snap = ops::snapshot_object(source, options, connect, now, &progress)?;
     // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
     // standard error, beside the record on standard output. The error of a refusal follows the
-    // lines of its errors, and the sentence of an accept follows the record
+    // lines of its errors, and the line of an accept follows the record
+    let answer = |line: &str| eprintln!("{}", stderr_paint_auto().line(LineClass::Answer, line));
     for line in render::refusal_lines(&snap) {
-        eprintln!("{line}");
+        answer(&line);
     }
     ops::require_acceptance(&snap)?;
     for warning in render::invalid_pack_warnings(&snap) {
@@ -77,8 +77,8 @@ fn record_object(
     for note in render::secret_like_notes(&snap.secret_like_variables(), None) {
         progress.note(&note);
     }
-    if let Some(sentence) = render::acceptance_sentence(&snap) {
-        eprintln!("{TOOL_NAME}: {sentence}");
+    if let Some(line) = render::acceptance_line(&snap) {
+        answer(&line);
     }
     Ok(ExitCode::SUCCESS)
 }

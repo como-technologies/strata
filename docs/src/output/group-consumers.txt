@@ -1,7 +1,7 @@
 $ strata consumers platform-addons@1.0.0
 platform-addons@1.0.0 (uid 64e2000000000000000000a1): 2 consumers
-  tenant-a  64f1000000000000000000e4  project dev  Running
-  tenant-b  64f1000000000000000000e5  project dev  Running  not in the consumer list of the profile
+  cluster:64f1000000000000000000e4  tenant-a  project dev  Running
+  cluster:64f1000000000000000000e5  tenant-b  project dev  Running  not in the consumer list of the profile
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   no other cluster with the profile

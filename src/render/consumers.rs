@@ -7,7 +7,7 @@ use crate::closed_set::impl_texts;
 use crate::diff::Diff;
 use crate::model::profile_type::ProfileType;
 use crate::ops::{ClustersRead, Consumer, ConsumerKind, ConsumersReport, Resolved, UnreadProject};
-use crate::reference::name_version;
+use crate::reference::{Ref, name_version};
 use crate::snapshot::Source;
 use crate::text::{and_list, dash, name_or_uid, plural};
 
@@ -32,6 +32,23 @@ pub(crate) fn consumer_runs(
             code(&r.profile.uid)
         )
     })
+}
+
+/// The ref of a consumer: `cluster:<uid>` for a cluster, and `edgehost:<uid>` for an edge host.
+/// `None` for a cluster template and an app deployment, which no ref of strata reads, and for a
+/// consumer with no uid.
+pub(crate) fn consumer_ref(c: &Consumer) -> Option<Ref> {
+    if c.uid.is_empty() {
+        return None;
+    }
+    match c.kind {
+        ConsumerKind::Cluster => Some(Ref::cluster(&c.uid)),
+        ConsumerKind::EdgeHost => Some(Ref::EdgeHost {
+            uid: c.uid.clone(),
+            profile: None,
+        }),
+        ConsumerKind::Template | ConsumerKind::App => None,
+    }
 }
 
 /// The project of a consumer, as a row names it: its name, or its uid with no project listing.
@@ -60,7 +77,7 @@ pub(crate) fn consumer_counts(d: &Diff) -> Option<(usize, usize)> {
 }
 
 /// What the consumers of the profile side say, when the other side is a cluster or a pack:
-/// `aws-stack@1.1.0 has 1 consumer; payments is one of them`. The count of the other side is 0
+/// `aws-stack@1.1.0 has 1 consumer; cluster payments is one of them`. The count of the other side is 0
 /// because it has no consumers, so the reports state the profile side alone. None when both sides
 /// are profile versions, or when neither is.
 pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
@@ -79,7 +96,7 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
         // the consumer list of Palette names clusters, and never an edge host
         Some(c) if !c.kind.is_cluster() => Some(has),
         Some(c) if consumers.count > 0 => Some(format!(
-            "{has}; {} is {}one of them",
+            "{has}; cluster {} is {}one of them",
             c.name,
             if consumers.clusters.contains(&c.uid) {
                 ""

@@ -172,6 +172,35 @@ impl Ref {
             Ref::NameVersion { .. } | Ref::Uid(_) | Ref::Draft { .. }
         )
     }
+
+    /// `cluster:<uid>`: each profile that the cluster runs now.
+    pub(crate) fn cluster(uid: &str) -> Ref {
+        Ref::Cluster {
+            uid: uid.to_string(),
+            profile: None,
+            pending: false,
+        }
+    }
+
+    /// `pack:<registry>/<name>@<version>`, with the registry as [`registry_in_ref`] names it.
+    /// `pack:<name>@<version>` when the pack names no registry.
+    pub(crate) fn pack_in(registry: &str, registry_uid: &str, name: &str, version: &str) -> Ref {
+        Ref::Pack {
+            registry: Some(registry_in_ref(registry, registry_uid))
+                .filter(|r| !r.is_empty())
+                .map(str::to_string),
+            name: name.to_string(),
+            version: version.to_string(),
+        }
+    }
+
+    /// The ref as a person types it in a shell: in single quotes when it holds a space or another
+    /// character that the shell reads, as in `'pack:Public Repo/kubernetes@1.36.2'`.
+    ///
+    /// A report prints each ref that a person can copy here, so a copy pastes back as written.
+    pub fn shell_word(&self) -> String {
+        crate::text::shell_words(&[self.to_string()])
+    }
 }
 
 /// `<uid>/<profile>` or `<uid>`: the uid, and the profile when the text names one after the

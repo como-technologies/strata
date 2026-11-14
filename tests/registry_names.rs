@@ -67,9 +67,15 @@ fn names(snap: &Snapshot) -> Vec<(&str, &str)> {
         .collect()
 }
 
-/// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`.
+/// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`: the
+/// layer and the ref of the pack, as a person types it in a shell.
 fn csi_row(registry: &str) -> String {
-    format!("    csi    csi-aws-ebs          1.28.0  {registry}\n")
+    let pack = strata::reference::Ref::Pack {
+        registry: Some(registry.to_string()),
+        name: "csi-aws-ebs".to_string(),
+        version: "1.28.0".to_string(),
+    };
+    format!("    csi    {}\n", pack.shell_word())
 }
 
 /// The markdown line of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`.

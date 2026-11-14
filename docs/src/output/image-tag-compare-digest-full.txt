@@ -6,6 +6,7 @@ consumers  0 -> 0 clusters
 
   variables unchanged
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
 ~ [k8s  ] kubernetes                 1.36.2             AUTHORED IMAGES
       ~ image vendor.example/product:2026.2: sha256:1111aaaa2222bbbb3333cccc4444dddd5555eeee6666ffff7777000088889999 -> sha256:9999888877776666555544443333222211110000ffffeeeeddddccccbbbbaaaa

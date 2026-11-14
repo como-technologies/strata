@@ -5302,8 +5302,8 @@ fn packs_paged(count: u32, headings: &str) -> String {
 fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() {
     let steps = packs_paged(
         266,
-        "kubernetes in Palette Registry (169 versions)\n  1.36.2  1.36.x\n\
-         kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+        "registry Palette Registry, pack kubernetes: 169 versions\n  1.36.2  1.36.x\n\
+         registry Public Repo, pack kubernetes: 97 versions\n  1.36.2  1.36.x\n",
     );
     passed(
         &steps,
@@ -5312,7 +5312,7 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
 
     let steps = packs_paged(
         97,
-        "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
+        "registry Public Repo, pack kubernetes: 97 versions\n  1.36.2  1.36.x\n",
     );
     failed(&steps, &["packs-paged-listing"]);
     failed(&steps, &["packs-paged-count"]);
@@ -7742,7 +7742,7 @@ fn packs_arch_stage(line: &str, json: &str) -> String {
 #[test]
 fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     let steps = packs_arch_stage(
-        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7 (drops arm64)\n",
+        "1 pin from 1 record: 1 behind\n~ [addon] 'pack:Public Repo/loki@2.10.2'  behind: 3.6.7 (drops arm64)\n",
         r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7","drops":["arm64"]}]}]}"#,
     );
     passed(
@@ -7758,7 +7758,7 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
 
     // a behind that says nothing of the architectures fails the two checks that read it
     let steps = packs_arch_stage(
-        "1 pin from 1 record: 1 behind\n~ [addon] loki  2.10.2  Public Repo  behind: 3.6.7\n",
+        "1 pin from 1 record: 1 behind\n~ [addon] 'pack:Public Repo/loki@2.10.2'  behind: 3.6.7\n",
         r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7"}]}]}"#,
     );
     passed(&steps, &["arch-listing", "arch-record", "arch-behind"]);
@@ -7894,7 +7894,7 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
  {
     let row = "  1.0.0  pk-z  oci  all  1.0.0  no digest\n";
     let (stage, steps) = registry_kinds(&format!(
-        "strata-live-zarf in strata-live-oci (1 version, no digests)\n{row}"
+        "registry strata-live-oci, pack strata-live-zarf: 1 version, no digests\n{row}"
     ));
     passed(&steps, &["packs-zarf", "packs-zarf-says"]);
     let calls = lines_of(&stage.path("strata/calls"));
@@ -7907,11 +7907,11 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
 
     // a heading with no mark, or a row with no mark, fails the check
     let (_, steps) = registry_kinds(&format!(
-        "strata-live-zarf in strata-live-oci (1 version)\n{row}"
+        "registry strata-live-oci, pack strata-live-zarf: 1 version\n{row}"
     ));
     failed(&steps, &["packs-zarf-says"]);
     let (_, steps) = registry_kinds(
-        "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
+        "registry strata-live-oci, pack strata-live-zarf: 1 version, no digests\n  1.0.0  pk-z  oci  all  1.0.0\n",
     );
     failed(&steps, &["packs-zarf-says"]);
 }
@@ -8030,8 +8030,8 @@ fn accepted_line(reference: &str, candidate: bool) -> String {
     }
     snap.source.palette_validation =
         Some(serde_json::from_value(serde_json::json!({"accepts": true})).unwrap());
-    let sentence = strata::render::acceptance_sentence(&snap).unwrap();
-    format!("{}: {sentence}\n", strata::TOOL_NAME)
+    let line = strata::render::acceptance_line(&snap).unwrap();
+    format!("{line}\n")
 }
 
 #[test]
@@ -10009,7 +10009,7 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     let issue = std::fs::read_to_string(stage.path("out/upstream-asks.out")).unwrap();
     assert!(
         issue.contains(&format!(
-            "| 1.37.0 | 1.37.0: repave IDENTITY<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred | - |"
+            "| 1.37.0 | 1.37.0: repave IDENTITY<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on cluster fred | - |"
         )),
         "{issue}"
     );

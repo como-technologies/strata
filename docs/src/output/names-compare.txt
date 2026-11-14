@@ -12,6 +12,7 @@ project    64f20000000000000000a0d1 -> 64f20000000000000000a0f1
         ~ running[name=kubernetes].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
         ~ running[name=ubuntu-aws].profileUid: "64e0000000000000000000c3" -> "64e1000000000000000000c3"
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

@@ -1,2 +1,2 @@
 $ strata compare aws-stack@1.1.1 aws-stack@1.1.6 --repave
-strata: --repave needs one side that is a cluster and one that is a profile version
+strata: error: --repave needs one side that is a cluster and one that is a profile version

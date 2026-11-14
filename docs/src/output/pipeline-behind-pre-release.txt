@@ -1,17 +1,17 @@
 $ strata behind pre/dev.json --no-impact
 5 pins (1 with a floating tag) from 1 record: 1 behind, 4 current; 1 profile version: 1 behind
-  [addon] cert-manager    1.21.1                Public Repo  current
+  [addon] 'pack:Public Repo/cert-manager@1.21.1'               current
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)
-  [cni  ] cni-cilium-oss  1.20.1                Public Repo  current
+  [cni  ] 'pack:Public Repo/cni-cilium-oss@1.20.1'             current
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)
-~ [csi  ] csi-aws-ebs     1.66.0-g4f1c2a9b7d30  Public Repo  behind: 1.66.0
+~ [csi  ] 'pack:Public Repo/csi-aws-ebs@1.66.0-g4f1c2a9b7d30'  behind: 1.66.0
       1.66.0 listed since 2026-09-11T14:32:12.028Z
-      aws-stack@1.1.3 carries csi-aws-ebs@1.66.0
+      aws-stack@1.1.3 carries pack:csi-aws-ebs@1.66.0
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)
-  [k8s  ] kubernetes      1.36.2                Public Repo  current
+  [k8s  ] 'pack:Public Repo/kubernetes@1.36.2'                 current
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)
-  [os   ] ubuntu-aws      24.04                 Public Repo  current (floating tag LTS__24.x, now 24.04)
+  [os   ] 'pack:Public Repo/ubuntu-aws@24.04'                  current (floating tag LTS__24.x, now 24.04)
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)
-~ [profile] aws-stack  1.1.3-g8e2d1c0b9a7f  project  behind: 1.1.3
+~ [profile] aws-stack@1.1.3-g8e2d1c0b9a7f  project  behind: 1.1.3
       1.1.3 created 2026-09-15T08:05:00.000Z
       pinned by pre/dev.json (aws-stack@1.1.3-g8e2d1c0b9a7f)

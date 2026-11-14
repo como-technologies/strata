@@ -5,6 +5,7 @@ root       088136c929bd -> 088136c929bd   IDENTICAL
   variables unchanged
   cluster tiers unchanged
 
+  5 packs: 0 changed, 0 added, 0 removed, 5 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

@@ -1,6 +1,6 @@
 $ PALETTE_PROJECT=dev strata consumers aws-stack@1.1.0 --list-only
 aws-stack@1.1.0 (uid 64e0000000000000000000b2): 1 consumer
-  payments  64f1000000000000000000e1  project dev  Running
+  cluster:64f1000000000000000000e1  payments  project dev  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   not done (--list-only)
@@ -9,7 +9,7 @@ aws-stack@1.1.0 (uid 64e0000000000000000000b2): 1 consumer
   scope: project profile, so only project dev can use it
 $ PALETTE_PROJECT=prod strata consumers aws-stack@1.1.0 --list-only
 aws-stack@1.1.0 (uid 64e1000000000000000000b2): 1 consumer
-  payments  64f1000000000000000000f1  project prod  Running
+  cluster:64f1000000000000000000f1  payments  project prod  Running
   searched:
     consumer list    1 cluster, no cluster templates
     cluster search   not done (--list-only)

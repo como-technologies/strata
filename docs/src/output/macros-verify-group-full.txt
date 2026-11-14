@@ -7,5 +7,6 @@ note       macro podSecurity has another value on each side: Palette applies oth
   variables unchanged
   cluster tiers unchanged
 
+  1 pack: 0 changed, 0 added, 0 removed, 1 unchanged
   [addon] namespace-policy           1.0.0              unchanged
 DRIFT: platform-addons@1.0.0 pinned by cluster group dev-group has the content recorded 2026-09-17T09:30:00Z, but macro podSecurity has another value now

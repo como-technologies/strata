@@ -8,6 +8,7 @@ note       cluster payments is behind: Palette says an update of aws-stack waits
   cluster tiers applied CHANGED, policy unchanged, running unchanged, labels unchanged
         ~ applied.spcInfraHash: "fbc58a142284288d" -> "f830b56257538a13"
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

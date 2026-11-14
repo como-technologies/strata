@@ -6,6 +6,7 @@ consumers  0 -> 0 clusters
 
   variables unchanged
 
+  5 packs: 1 changed, 0 added, 0 removed, 4 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
 ~ [k8s  ] kubernetes                 1.36.2             AUTHORED IMAGES
       + image mirror.example/product:2026.2.0-1234.1

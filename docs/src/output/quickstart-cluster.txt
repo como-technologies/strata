@@ -1,10 +1,11 @@
 $ strata compare aws-stack-1.1.0.json cluster:payments
 aws-stack@1.1.0 (uid 64e0000000000000000000b2)  ->  aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)
 root       8a8a64d3f95d -> 8a8a64d3f95d   IDENTICAL
-consumers  aws-stack@1.1.0 has 1 consumer; payments is one of them
+consumers  aws-stack@1.1.0 has 1 consumer; cluster payments is one of them
 
   variables unchanged
 
+  5 packs: 0 changed, 0 added, 0 removed, 5 unchanged
   [os   ] ubuntu-aws                 24.04              unchanged
   [k8s  ] kubernetes                 1.36.2             unchanged
   [cni  ] cni-cilium-oss             1.20.1             unchanged

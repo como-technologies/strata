@@ -1127,9 +1127,9 @@ if [ "$1" = compare ] && [[ $3 == cluster:* ]]; then
   exit 1
 fi
 if [ "$1" = compare ] && [[ " $* " == *" --repave "* ]]; then
-  if [ -n "${FAKE_REPAVE_FAIL:-}" ]; then echo "strata: Palette gave no answer" >&2; exit 2; fi
+  if [ -n "${FAKE_REPAVE_FAIL:-}" ]; then echo "strata: error: Palette gave no answer" >&2; exit 2; fi
   refusal=$(PALETTE_API_KEY=k PALETTE_API=http://127.0.0.1:9 STRATA_RETRIES=0 \
-    "$REAL_STRATA" compare "$2" "$3" --repave 2>&1 >/dev/null | grep '^strata: --repave needs' || true)
+    "$REAL_STRATA" compare "$2" "$3" --repave 2>&1 >/dev/null | grep '^strata: error: --repave needs' || true)
   if [ -n "$refusal" ]; then echo "$refusal" >&2; exit 2; fi
   args=()
   for a in "$@"; do [ "$a" = --repave ] || args+=("$a"); done
@@ -1842,7 +1842,7 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         // two records of profile versions: no cluster, and the commands to use
         (
             [h.a.clone(), h.b.clone()],
-            "strata: --repave needs one side that is a cluster, and both sides are records with \
+            "strata: error: --repave needs one side that is a cluster, and both sides are records with \
              no cluster. Palette answers only for a cluster, so give the cluster in place of one \
              record: strata compare cluster:<name> <record> --repave. Plain compare of the two \
              records prints the impact\n",
@@ -1850,12 +1850,12 @@ fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_dec
         // a candidate is not in Palette
         (
             [cluster.clone(), candidate],
-            "strata: --repave needs the profile side to be a profile version that Palette holds, with its uid",
+            "strata: error: --repave needs the profile side to be a profile version that Palette holds, with its uid",
         ),
         // two clusters: a pair that the script once passed on to strata
         (
             [cluster, billing],
-            "strata: --repave needs one side that is a cluster and one that is a profile version, or",
+            "strata: error: --repave needs one side that is a cluster and one that is a profile version, or",
         ),
     ];
     for ([a, b], refusal) in &pairs {
@@ -5038,7 +5038,7 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
     assert!(
         text(&o.stdout).contains(&format!(
             "| 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED<br>palette refuses: \
-             {UPGRADE_NOT_SUPPORTED_CODE} on betty, fred, and wilma<br>palette gave no answer: m \
+             {UPGRADE_NOT_SUPPORTED_CODE} on clusters betty, fred, and wilma<br>palette gave no answer: m \
              | - |"
         )),
         "{}",
@@ -5106,7 +5106,7 @@ fn upstream_report_shows_each_tag_of_an_answer_as_text_and_keeps_the_state_line_
     for line in [
         format!("behind in {}, checked", html(common::ANSWER_TAGS)),
         format!(
-            "<br>palette refuses: PackValidationFailed csi-aws-ebs: {} |",
+            "<br>palette refuses: PackValidationFailed for pack csi-aws-ebs: {} |",
             html(&answer)
         ),
         format!(
