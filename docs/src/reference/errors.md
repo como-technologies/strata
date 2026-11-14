@@ -62,6 +62,14 @@ the kind.
 | `file-not-json` | A file in a `--from-raw` directory is not JSON. | `path` |
 | `serialize` | Strata could not write a document. | |
 
+The `message` of `api` gives the code and the message of Palette. `body`
+holds the body as Palette sent it. Here the role of the key does not give
+`filter.list`:
+
+```text
+{{#include ../output/list-denied-filters-json.txt}}
+```
+
 A record that is empty or is not JSON is `not-snapshot`.
 
 The error `snapshot-schema` names the field that does not match. Here a person

@@ -103,6 +103,14 @@ fn list_denied(r: &mut Runner) {
     let filters = access_denied_message("filter.list", "tenant");
     r.tenant(|t| t.deny(TENANT, TAG_FILTER_LISTING, Denial::Route, &filters));
     r.step("list-denied-filters", 2, true, "strata list filters");
+    // the error document gives the words of Palette in its message, and the body as Palette sent
+    // it (#632); the page of the errors shows it
+    r.step(
+        "list-denied-filters-json",
+        2,
+        true,
+        "strata list filters --json --quiet",
+    );
 }
 
 /// The chapter `unknown-value`: a read that gives a value which this release of strata does not
