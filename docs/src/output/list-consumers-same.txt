@@ -1,5 +1,9 @@
 $ strata consumers aws-stack@1.0.0 --list-only
 aws-stack@1.0.0 (uid 64e0000000000000000000a1): 1 consumer
-  aws-standard  64f8000000000000000000a1  project dev (uid 64f20000000000000000a0d1)  cluster template
-  second reading: not done (--list-only)
-  edge hosts: 0 read
+  aws-standard  64f8000000000000000000a1  project dev  cluster template
+  searched:
+    consumer list    no clusters, 1 cluster template
+    cluster search   not done (--list-only)
+    cluster groups   not read (--list-only)
+    edge hosts       none found
+  scope: project profile, so only project dev can use it

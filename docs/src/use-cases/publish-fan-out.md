@@ -164,7 +164,7 @@ person or a job can decide. The block gives that answer for three versions of
 one profile:
 
 ```text
-{{#include ../output/list-pack-consumers.txt:1:6}}
+{{#include ../output/list-pack-consumers.txt:1:24}}
 ```
 
 `strata packs <name> --latest` says which version each registry offers now,
