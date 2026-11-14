@@ -41,7 +41,8 @@
 # refuses it with HTTP 500 and K8SCidrOverlap: the code of Palette shows it; no live run shows it
 # yet. cidr-overlap.json stays, as aws-clean.json does. The script skips the case when Palette
 # lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. It also skips the case
-# when no VPC with a CIDR has a subnet in each zone of the pools.
+# when a pool of the clean body has no zone, or when no VPC with a CIDR has a subnet in each zone
+# of the pools.
 #
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
@@ -103,11 +104,18 @@ refused() {
 
 # cidr_body: write BODIES/cidr-overlap.json, send it to the route, and record the answer. Skip the
 # case when Palette lists no VPC with a CIDR, or when the Kubernetes pack has no podCIDR. Also skip
-# it when no VPC with a CIDR has a subnet in each zone of the pools.
+# it when a pool has no zone, or when no VPC with a CIDR has a subnet in each zone of the pools.
 cidr_body() {
   local zones vpc cidr
   echo "== cidr-overlap: the pod CIDR of the Kubernetes pack is the CIDR of the VPC (#816)" | tee -a steps.log
   rm -f "$bodies/cidr-overlap.json"
+  # each pool names the subnet of each of its zones, so a pool with no zone names no subnet. The
+  # route refuses a pool with no subnet for a body with a VPC (#824), so the case has no body.
+  jq -e 'all(.spec.machinepoolconfig[].cloudConfig; (.azs // []) | length > 0)' "$bodies/aws-clean.json" > /dev/null || {
+    echo "skipped cidr-overlap: a pool of aws-clean.json has no zone, so it names no subnet, and the route refuses such a pool (#824)" |
+      tee -a steps.log
+    return
+  }
   if ! "$live/api.sh" get "/v1/clouds/aws/regions/$region/vpcs?cloudAccountUid=$A" > vpcs.json 2> vpcs.err; then
     echo "skipped cidr-overlap: Palette lists no VPC of $region: $(head -n 1 vpcs.err)" | tee -a steps.log
     return

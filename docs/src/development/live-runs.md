@@ -1144,7 +1144,9 @@ The script sends the body to the route with `api.sh post-status`, and records
 the status and the code. Then `validate-route.sh` sends it through
 `palette-validate`. The script skips the case when Palette lists no VPC with a
 CIDR, or when the Kubernetes pack has no `podCIDR`. It also skips the case when
-no VPC with a CIDR has a subnet in each zone of the pools.
+no VPC with a CIDR has a subnet in each zone of the pools. A pool of
+`aws-clean.json` with no zone names no subnet, so the script skips the case for
+it too (#822).
 
 | Check | Expected exit | What it shows |
 |---|---|---|

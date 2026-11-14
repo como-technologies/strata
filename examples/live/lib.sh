@@ -49,11 +49,24 @@ if : | command jq -e . > /dev/null 2>&1; then
   export -f jq
 fi
 
-# The default binary must be built from these sources: a run with an older one tests old code.
-# `just build`, and each live recipe, builds it. A binary set with STRATA_BIN is the caller's.
-if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then
-  stale=$(find "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock" -type f -newer "$strata" -print -quit 2>/dev/null)
-  [ -z "$stale" ] || die "$strata is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+# refuse_stale BINARY SOURCE...: stop the script when BINARY exists and a file of SOURCE is newer.
+refuse_stale() {
+  local binary=$1 stale
+  shift
+  [ -e "$binary" ] || return 0
+  stale=$(find "$@" -type f -newer "$binary" -print -quit 2>/dev/null)
+  [ -z "$stale" ] || die "$binary is older than $(cd "$(dirname "$stale")" && pwd)/$(basename "$stale"); run just build"
+}
+
+# The default binaries must be built from these sources: a run with an older one tests old code.
+# `just build`, and each live recipe, builds both. `strata preflight` runs the strata-preflight
+# beside strata, and it holds the code of strata too. A binary set with STRATA_BIN is the
+# caller's, and so is the strata-preflight beside it.
+if [ -z "${STRATA_BIN:-}" ]; then
+  refuse_stale "$strata" "$live/../../src" "$live/../../Cargo.toml" "$live/../../Cargo.lock"
+  refuse_stale "$(dirname "$strata")/strata-preflight" "$live/../../src" "$live/../../Cargo.toml" \
+    "$live/../../Cargo.lock" "$live/../../crates/strata-preflight/src" \
+    "$live/../../crates/strata-preflight/rules" "$live/../../crates/strata-preflight/Cargo.toml"
 fi
 
 # ---- OpenTofu outputs ----------------------------------------------------------------------------
