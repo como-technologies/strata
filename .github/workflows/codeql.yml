@@ -1,0 +1,73 @@
+name: codeql
+
+# The advanced setup of CodeQL (#843). It analyzes the four languages of the repository with the
+# default queries. For Rust, the config .github/codeql/rust.yml gives the rule rust/cleartext-logging
+# of strata in place of the rule of CodeQL: it reads no uid and no name of Palette as sensitive.
+# The job `the test of the rule` runs that rule on a small crate. See "CodeQL" in
+# docs/src/development/build-test.md.
+#
+# GitHub refuses the results of this workflow while the default setup of CodeQL is on, so the
+# settings of the repository have it off.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: go
+            build-mode: autobuild
+          - language: javascript-typescript
+            build-mode: none
+          - language: rust
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          config-file: ${{ matrix.language == 'rust' && './.github/codeql/rust.yml' || '' }}
+      # the category of the default setup, so that each alert keeps its history
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  rule:
+    name: the test of the rule rust/cleartext-logging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - run: scripts/dev/codeql-rule.sh crate codeql-rule
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: rust
+          build-mode: none
+          config-file: ./.github/codeql/rust.yml
+          source-root: codeql-rule
+      # the results stay in the job: they hold the alert of the crate, which is no alert of strata
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /strata/codeql-rule
+          upload: never
+          output: ${{ runner.temp }}/codeql-rule-results
+      - run: scripts/dev/codeql-rule.sh check "$RUNNER_TEMP/codeql-rule-results/rust.sarif" codeql-rule

@@ -1794,3 +1794,92 @@ fn the_page_of_the_adapter_says_that_no_job_of_ci_tests_it_and_names_no_job_of_k
         "the page names a secret of strata"
     );
 }
+
+/// The `with` of the step of `job` that uses the action `github/codeql-action/<action>`.
+fn codeql_step<'a>(job: &'a serde_yaml::Value, action: &str) -> &'a serde_yaml::Value {
+    let uses = format!("github/codeql-action/{action}@");
+    let step = job["steps"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|step| step["uses"].as_str().is_some_and(|u| u.starts_with(&uses)))
+        .unwrap_or_else(|| panic!("no step uses {uses}"));
+    &step["with"]
+}
+
+/// The workflow codeql analyzes the four languages of the default setup of CodeQL, each with the
+/// category of that setup. The analysis of Rust and the test of the rule read the config of
+/// strata. The config keeps the rule rust/cleartext-logging of strata, and drops the rule of
+/// CodeQL with the same id. The test runs the rule on the crate of `codeql-rule.sh` (#843).
+#[test]
+fn the_codeql_workflow_analyzes_each_language_and_tests_the_rule_of_strata_on_its_crate() {
+    let doc = workflow("codeql.yml");
+    let analyze = &doc["jobs"]["analyze"];
+    let languages: Vec<&str> = analyze["strategy"]["matrix"]["include"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["language"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        languages,
+        ["actions", "go", "javascript-typescript", "rust"]
+    );
+    let config = "./.github/codeql/rust.yml";
+    assert_eq!(
+        codeql_step(analyze, "init")["config-file"].as_str(),
+        Some(format!("${{{{ matrix.language == 'rust' && '{config}' || '' }}}}").as_str())
+    );
+    assert_eq!(
+        codeql_step(analyze, "analyze")["category"].as_str(),
+        Some("/language:${{ matrix.language }}")
+    );
+
+    let rule = &doc["jobs"]["rule"];
+    let init = codeql_step(rule, "init");
+    assert_eq!(init["languages"].as_str(), Some("rust"));
+    assert_eq!(init["config-file"].as_str(), Some(config));
+    assert_eq!(init["source-root"].as_str(), Some("codeql-rule"));
+    let results = codeql_step(rule, "analyze");
+    assert_eq!(results["upload"].as_str(), Some("never"));
+    assert_eq!(
+        results["output"].as_str(),
+        Some("${{ runner.temp }}/codeql-rule-results")
+    );
+    assert_eq!(
+        runs_of("codeql.yml", "rule"),
+        [
+            "scripts/dev/codeql-rule.sh crate codeql-rule",
+            "scripts/dev/codeql-rule.sh check \"$RUNNER_TEMP/codeql-rule-results/rust.sarif\" codeql-rule",
+        ]
+    );
+
+    let config: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file(config.trim_start_matches("./"))).unwrap();
+    let expected: serde_yaml::Value = serde_yaml::from_str(
+        "queries:\n  - uses: ./.github/codeql/rust\nquery-filters:\n  - exclude:\n      id: rust/cleartext-logging\n  - include:\n      tags contain: strata\n",
+    )
+    .unwrap();
+    for key in ["queries", "query-filters"] {
+        assert_eq!(config[key], expected[key], "{key}");
+    }
+    let query = repo_file(".github/codeql/rust/CleartextLogging.ql");
+    let metadata: Vec<&str> = query
+        .lines()
+        .take_while(|line| *line != " */")
+        .map(|line| line.trim_start_matches([' ', '/', '*']))
+        .collect();
+    assert!(
+        metadata.contains(&"@id rust/cleartext-logging"),
+        "{metadata:?}"
+    );
+    assert!(
+        metadata.contains(&"strata"),
+        "the tag of the filter: {metadata:?}"
+    );
+    assert!(query.contains("source instanceof Source and not isOnlyAccountInfo(source)"));
+    assert!(!query.contains("observeDiffInformedIncrementalMode"));
+    let pack: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file(".github/codeql/rust/qlpack.yml")).unwrap();
+    assert_eq!(pack["dependencies"]["codeql/rust-all"].as_str(), Some("*"));
+}

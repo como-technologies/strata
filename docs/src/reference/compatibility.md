@@ -1330,13 +1330,12 @@ field, a value, an input, or an option is in the sections above.
   [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - **`compare --help` says that the two sides can be of different kinds.** The help of `<B>`
   said "in the same forms as the first". The refs and the exit codes stay the same.
-- **Two options of the help and three descriptions of the schemas have sentences of 25 words or
-  fewer.** In `compare --help`, the note of `--repave` about the console of a pack of virtual
-  machines is two sentences. In `behind --help`, `--no-impact` is two sentences. In `strata schema
-  behind`, the descriptions of `carriers` and of the definition `Bump` have new words. In `strata
-  schema diff` and `strata schema verify-summary`, the description of `renumbered` has new words.
-  The options, the fields, and their meaning stay the same. A script that matches the whole text
-  of a help or of a description must match the new text.
+- **The help of two options and three descriptions of the schemas have shorter sentences.** Each
+  sentence has 25 words or fewer. The options are `--repave` of `compare` and `--no-impact` of
+  `behind`. `strata schema behind` gives new words for `carriers` and the definition `Bump`.
+  `strata schema diff` and `strata schema verify-summary` give new words for `renumbered`. The
+  options, the fields, and their meaning stay the same. A script that matches the whole text of a
+  help or of a description must match the new text.
 - **The error of `compare --repave` and `--validate` for two records names the commands to use.**
   It says that both sides are records. It names `strata compare cluster:<name> <record> --repave`,
   or the same with `--validate`, and says that plain `compare` prints the impact. Two records of
