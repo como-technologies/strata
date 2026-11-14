@@ -116,11 +116,7 @@ func TestAClickShowsTheChecksOfTheAnswerAtOnce(t *testing.T) {
 // The checks are words of the detail tier, and they raise no severity. The screens that do not show a move have the nav and the
 // tiles of the set ok, and no word of a check.
 func TestTheChecksChangeNoScreenThatShowsNoMove(t *testing.T) {
-	checks := render(t, devdata.StateUpdateChecks, false)
-	sameNavAndTiles(t, render(t, devdata.StateOK, false), checks)
-	for _, hash := range noMoveScreens {
-		mustNotHold(t, hash, pageOf(t, checks, hash, ""), "Skips a minor version", "required variable", "Strata checks th")
-	}
+	sameScreensWithNoMove(t, render(t, devdata.StateOK, false), render(t, devdata.StateUpdateChecks, false), "Skips a minor version", "required variable", "Strata checks th")
 }
 
 // A code, a version, and the name of a variable of a check with the text of a tag show as text on the card.

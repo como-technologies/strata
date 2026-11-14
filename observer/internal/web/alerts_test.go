@@ -40,9 +40,7 @@ func TestTheNavItemAlertsSaysNotSetOrCountsTheRulesThatFire(t *testing.T) {
 			if m == nil || m[1] != c.red || m[2] != c.count {
 				t.Fatalf("the nav item is %q, want %q %q", m, c.red, c.count)
 			}
-			if notChecked, alerts := strings.Index(overview, `<a href="#notchecked" class=`), strings.Index(overview, `<a href="#alerts" class=`); !(notChecked >= 0 && notChecked < alerts) {
-				t.Errorf("the nav item Alerts does not follow Not checked: %d %d", notChecked, alerts)
-			}
+			mustHoldInOrder(t, "the nav", overview, `<a href="#notchecked" class=`, `<a href="#alerts" class=`)
 		})
 	}
 }

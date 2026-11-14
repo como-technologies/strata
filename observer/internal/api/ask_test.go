@@ -99,13 +99,9 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 // noSummaryRouteStateOrLogHolds fails when a summary route, the state, or the log holds one of the words.
 func noSummaryRouteStateOrLogHolds(t *testing.T, r *rig, h http.Handler, words ...string) {
 	t.Helper()
+	noSummaryRouteHolds(t, h, words...)
 	state := r.stateText()
 	for _, word := range words {
-		for pattern, path := range summaryRoutes {
-			if body := get(h, path).Body.String(); strings.Contains(body, word) {
-				t.Errorf("%s holds %s: %s", pattern, word, body)
-			}
-		}
 		if strings.Contains(state, word) {
 			t.Errorf("the state holds %s: %s", word, state)
 		}
@@ -332,7 +328,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInTheLog(t *testing.T) {
 	r, o, _ := asked(t, askRefuses)
 	h := handlerOf(o)
-	for _, path := range []string{pathPublished, pathCluster, pathNewer} {
+	for _, path := range detailRoutes[patternPackDiff] {
 		if body := get(h, path).Body.String(); !strings.Contains(body, sentinelText) {
 			t.Errorf("%s holds no text: %s", path, body)
 		}

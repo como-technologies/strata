@@ -1335,10 +1335,7 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 			t.Errorf("button %d is %q, want %q", i, b[1:], want[i])
 		}
 	}
-	nav, foot, last, end := strings.Index(index, `id="navl"`), strings.Index(index, `<div class="navfoot">`), strings.Index(index, `data-theme-choice="dark"`), strings.Index(index, "</aside>")
-	if nav < 0 || foot < nav || last < foot || end < last {
-		t.Error("the control of the theme is not at the foot of the nav, after the sections")
-	}
+	mustHoldInOrder(t, "the nav of index.html", index, `id="navl"`, `<div class="navfoot">`, `data-theme-choice="dark"`, "</aside>")
 	head, body, _ := strings.Cut(index, "</head>")
 	if !strings.Contains(head, `<script src="theme.js"></script>`) || strings.Contains(body, "theme.js") {
 		t.Error("theme.js must be a plain script in the head, and only there")

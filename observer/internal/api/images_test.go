@@ -100,13 +100,5 @@ func TestNoRouteCarriesAValueOfAPodThatTheAPIServerSends(t *testing.T) {
 	if len(kubeAPI.Requests()) == 0 {
 		t.Fatal("the observer did not read the pods")
 	}
-	for pattern, path := range summaryRoutes {
-		rec := get(h, path)
-		if rec.Code != http.StatusOK || strings.Contains(rec.Body.String(), "MARKER") {
-			t.Errorf("%s: status %d, body %s", pattern, rec.Code, rec.Body.String())
-		}
-	}
-	if strings.Contains(r.log.String(), "MARKER") {
-		t.Errorf("the log holds a value of a pod: %s", r.log.String())
-	}
+	noSummaryRouteStateOrLogHolds(t, r, h, "MARKER")
 }

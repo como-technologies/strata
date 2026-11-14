@@ -84,20 +84,27 @@ func hasRoute(pattern string, tier Tier) bool {
 	return false
 }
 
+// noSummaryRouteHolds fails when a summary route does not answer 200, or its body holds one of the words.
+func noSummaryRouteHolds(t *testing.T, h http.Handler, words ...string) {
+	t.Helper()
+	for pattern, path := range summaryRoutes {
+		rec := get(h, path)
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK {
+			t.Errorf("%s: status %d, body %s", pattern, rec.Code, body)
+		}
+		for _, word := range words {
+			if strings.Contains(body, word) {
+				t.Errorf("%s holds %s: %s", pattern, word, body)
+			}
+		}
+	}
+}
+
 func TestEachSummaryRouteHoldsNoSentinelAndTheDetailRouteHoldsIt(t *testing.T) {
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	for pattern, path := range summaryRoutes {
-		t.Run(pattern, func(t *testing.T) {
-			rec := get(h, path)
-			if rec.Code != http.StatusOK {
-				t.Fatalf("status %d, body %s", rec.Code, rec.Body.String())
-			}
-			if body := rec.Body.String(); strings.Contains(body, "SENTINEL") {
-				t.Errorf("the summary route holds a sentinel: %s", body)
-			}
-		})
-	}
+	noSummaryRouteHolds(t, h, "SENTINEL")
 	for pattern, paths := range detailRoutes {
 		for _, path := range paths {
 			t.Run(pattern+" "+path, func(t *testing.T) {
@@ -118,10 +125,9 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 	t.Setenv("PALETTE_API_KEY", "SENTINEL-KEY")
 	r := newRig(t)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
-	paths := []string{"/healthz", "/", "/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"}
-	for _, p := range summaryRoutes {
-		paths = append(paths, p)
-	}
+	noSummaryRouteHolds(t, h, "SENTINEL-KEY", sentinelVariable)
+	unknown := []string{"/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"}
+	paths := append([]string{"/healthz", "/"}, unknown...)
 	for _, ps := range detailRoutes {
 		paths = append(paths, ps...)
 	}
@@ -130,7 +136,7 @@ func TestNoRouteCarriesAVariableOrTheEnvironment(t *testing.T) {
 			t.Errorf("%s: %s", path, body)
 		}
 	}
-	for _, path := range []string{"/debug", "/debug/vars", "/env", "/v1/env", "/v1/records", "/v1/raw"} {
+	for _, path := range unknown {
 		if rec := get(h, path); rec.Code != http.StatusNotFound {
 			t.Errorf("%s gave %d", path, rec.Code)
 		}
@@ -398,11 +404,7 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 		t.Errorf("once prints the path: %s", printed)
 	}
 	h := handlerOf(o)
-	for _, path := range summaryRoutes {
-		if body := get(h, path).Body.String(); strings.Contains(body, pathMarker) {
-			t.Errorf("%s holds the path: %s", path, body)
-		}
-	}
+	noSummaryRouteHolds(t, h, pathMarker)
 	if body := get(h, pathPublished).Body.String(); !strings.Contains(body, pathMarker) {
 		t.Errorf("the detail route does not hold the path, so the marker tests nothing: %s", body)
 	}

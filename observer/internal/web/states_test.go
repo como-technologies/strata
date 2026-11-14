@@ -316,10 +316,7 @@ func TestLostAndStaleWithFindingsStayABarOverTheFindings(t *testing.T) {
 			screens := crawl(t, c.state)
 			for _, hash := range []string{"#overview", "#findings"} {
 				page := pageOf(t, screens, hash, "")
-				bar, row := strings.Index(page, c.bar), strings.Index(page, "Published version changed after its record")
-				if bar < 0 || row < 0 || bar > row {
-					t.Errorf("%s: the bar is at %d and the finding is at %d", hash, bar, row)
-				}
+				mustHoldInOrder(t, hash, page, c.bar, "Published version changed after its record")
 				mustHold(t, hash, page, `<tr class="link" data-go="#k-fred-identity@2.3.0/addon/dex">`)
 				mustNotHold(t, hash, page, `class="splash lg`)
 			}

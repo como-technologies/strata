@@ -678,20 +678,27 @@ func TestTheAnswersOfPaletteReadExactlyAsTheIssueSays(t *testing.T) {
 // noMoveScreens are the screens that show no move. They show no answer of Palette and no check of strata.
 var noMoveScreens = []string{"#overview", "#findings", "#profiles", "#notchecked", "#images"}
 
-// sameNavAndTiles fails when a screen that shows no move has another nav or other tiles in got than in want.
-// The nav and the tiles hold every count.
-func sameNavAndTiles(t *testing.T, want, got []screen) {
+// sameScreensWithNoMove fails when a screen that shows no move has another nav or other tiles in got than in want,
+// or holds one of the words in got. The nav and the tiles hold every count.
+func sameScreensWithNoMove(t *testing.T, want, got []screen, words ...string) {
 	t.Helper()
 	for _, hash := range noMoveScreens {
 		a, b := pageOf(t, want, hash, ""), pageOf(t, got, hash, "")
-		navA, _, _ := strings.Cut(a, "\n")
-		navB, _, _ := strings.Cut(b, "\n")
-		if navA != navB {
-			t.Errorf("%s: the nav differs\n%s\n%s", hash, navA, navB)
-		}
+		sameNav(t, hash, a, b)
 		if tileSection.FindString(a) != tileSection.FindString(b) {
 			t.Errorf("%s: the tiles differ", hash)
 		}
+		mustNotHold(t, hash, b, words...)
+	}
+}
+
+// sameNav fails when two pages have another nav. The nav is the first line of a page.
+func sameNav(t *testing.T, where, a, b string) {
+	t.Helper()
+	navA, _, _ := strings.Cut(a, "\n")
+	navB, _, _ := strings.Cut(b, "\n")
+	if navA != navB {
+		t.Errorf("%s: the nav differs\n%s\n%s", where, navA, navB)
 	}
 }
 
@@ -699,20 +706,12 @@ func sameNavAndTiles(t *testing.T, want, got []screen) {
 // move are the same as in ok, and the rows of the move hold no badge for it.
 func TestAnAnswerRaisesNoSeverityAndANoAnswerIsNoFinding(t *testing.T) {
 	ok, asks := render(t, devdata.StateOK, false), render(t, devdata.StateAsks, false)
-	sameNavAndTiles(t, ok, asks)
+	sameScreensWithNoMove(t, ok, asks, "No answer", "Refuses", "Palette refuses", "Palette gave")
 	table := pageOf(t, asks, "#newer", "")
 	dexRow := rowWith(t, table, `data-go="`+dexHash+`"`)
 	mustNotHold(t, "the row of a no-answer", dexRow, "badge r", ">Drift<", "Not checked")
-	for _, hash := range []string{"#overview", "#findings", "#profiles", "#notchecked"} {
-		page := pageOf(t, asks, hash, "")
-		mustNotHold(t, hash, page, "No answer", "Refuses", "Palette refuses", "Palette gave")
-	}
 	// The same counts on the cards of the pack: one drift pack, as in ok.
-	navOK, _, _ := strings.Cut(pageOf(t, ok, dexHash, ""), "\n")
-	navAsks, _, _ := strings.Cut(pageOf(t, asks, dexHash, ""), "\n")
-	if navOK != navAsks {
-		t.Error("the nav of the pack differs")
-	}
+	sameNav(t, "the pack", pageOf(t, ok, dexHash, ""), pageOf(t, asks, dexHash, ""))
 }
 
 // A click asks once. The button is off and reads "Asking..." while the question is on its way, a second click
