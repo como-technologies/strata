@@ -14,11 +14,13 @@
 # and the next run passes them to `strata behind --since`, so the issue names each version that
 # arrived since its last update; the issue that a run opens says that this run is the first to find
 # the pack behind. A pack that strata could not check keeps its issue as it is.
-# Issues of packs that no record pins are left alone. The bump column also says whether Palette
-# accepts the move. When Palette refuses it, the column gives each error as `strata behind` writes
-# it. --no-impact skips the comparison of each pin with the newest version, and the question to
-# Palette. --save FILE keeps the report of the run. --dry-run prints each issue body and what would
-# happen, and calls no host.
+# Issues of packs that no record pins are left alone. For a pin that is behind a newer minor
+# version, the newer column names the next patch, when the pin has one. It is the newest patch of
+# the minor version of the pin, from `nextPatch` of `strata behind`. The bump column also says
+# whether Palette accepts the move. When Palette refuses it, the column gives each error as
+# `strata behind` writes it. --no-impact skips the comparison of each pin with the newest version,
+# and the question to Palette. --save FILE keeps the report of the run. --dry-run prints each issue
+# body and the change to each issue, and calls no host.
 #
 # Exit 0 when no pin is behind, 1 when one is, 2 when a pin could not be checked or strata checked
 # nothing; the issues are handled first, so a scheduled job shows the state too. Behind is a
@@ -291,8 +293,9 @@ while IFS= read -r group <&3; do
       def bump_cell:
         (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines]) | map(cell) | join("<br>");
       .pins[] | "| \(.version | code)\(if .floating then " (floating tag \(.tag | code))" else "" end) | \(
-        if .behind then [.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
-          | if length > 0 then " (\(join(", ")))" else "" end)] | join(", ") | cell
+        if .behind then ([.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
+          | if length > 0 then " (\(join(", ")))" else "" end)] | join(", "))
+          + (if .nextPatch then "; next patch \(.nextPatch)" else "" end) | cell
         elif .error then "not checked: \(.error.message)" | cell else "current" end) | \(
         if .bump then (.bump | bump_cell) else "-" end) | \(
         if .arrived == null then "-" elif (.arrived | length) == 0 then "none" else (.arrived | join(", ") | cell) end) | \(

@@ -1261,18 +1261,20 @@ fn behind_only_omits_the_rows_that_are_current_and_keeps_the_heading_and_the_jso
     );
 }
 
+/// The line `next patch` comes from `nextPatch` of the pin. A unit test of `ops::behind` gives the
+/// rule of the patch.
 #[test]
-fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_command() {
+fn a_pin_with_a_next_patch_names_the_patch_and_the_command_under_its_line() {
+    let mut patched = pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]);
+    patched["nextPatch"] = json!("1.36.4");
     let mut no_name = pin_doc("cert-manager", "1.21.1", &["1.22.0", "1.21.3"]);
     no_name["registry"] = json!("");
+    no_name["nextPatch"] = json!("1.21.3");
     let pins = vec![
-        pin_doc("kubernetes", "1.36.2", &["1.37.0", "1.36.4", "1.36.3"]),
-        // the newest version is of the minor version of the pin: the bump names it
+        patched,
+        // a pin with no next patch has no line
         pin_doc("kubernetes", "1.36.3", &["1.36.4"]),
-        // no newer version of the minor version of the pin
         pin_doc("csi-aws-ebs", "1.63.1", &["1.65.0", "1.64.0"]),
-        // a version that does not parse has no minor version
-        pin_doc("ubuntu-aws", "LTS__20.4.x", &["24.04"]),
         no_name,
     ];
     let r = report_of(pins, Vec::new());
@@ -1310,7 +1312,8 @@ fn a_pin_behind_a_newer_minor_version_names_the_newest_patch_of_its_own_and_the_
         ),
         "{markdown}"
     );
-    // the line is a hint of the report: the JSON holds the newer versions, and no other field
+    // the JSON gives the patch, and not the line: a script makes its own text
     let doc = serde_json::to_value(&r).unwrap();
+    assert_eq!(doc["pins"][0]["nextPatch"], "1.36.4");
     assert!(!doc.to_string().contains("next patch"), "{doc}");
 }

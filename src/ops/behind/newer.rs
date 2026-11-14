@@ -45,24 +45,25 @@ pub(super) fn newer_versions(
         .collect()
 }
 
-impl Pin {
-    /// The newest of the newer versions of the minor version of the pin, when the newest version
-    /// is of another minor version. A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives
-    /// `1.36.4`: a team can take that patch before the move to the newest version.
-    ///
-    /// None when the pin is current, when the newest version is of the minor version of the pin,
-    /// and when the version of the pin does not parse. [`version::line`] gives the minor version.
-    pub(crate) fn next_patch(&self) -> Option<&Newer> {
-        let minor = |v: &str| version::line(v, 2);
-        let own = minor(&self.version)?;
-        let newest = self.newer.first()?;
-        if minor(&newest.version).as_ref() == Some(&own) {
-            return None;
-        }
-        self.newer
-            .iter()
-            .find(|n| minor(&n.version).as_ref() == Some(&own))
+/// The newest of the versions `newer` of the minor version of `pinned`, when the newest version is
+/// of another minor version. This is [`Pin::next_patch`].
+///
+/// A pin of `1.36.2` that is behind `1.37.0` and `1.36.4` gives `1.36.4`. A team can take that
+/// patch before the move to the newest version. `newer` is newest first, as [`newer_versions`]
+/// gives it. None when `newer` is empty, when the newest version is of the minor version of
+/// `pinned`, and when `pinned` does not parse. None also when `newer` has no version of that minor
+/// version. [`version::line`] gives the minor version.
+pub(super) fn next_patch(pinned: &str, newer: &[Newer]) -> Option<String> {
+    let minor = |v: &str| version::line(v, 2);
+    let own = minor(pinned)?;
+    let newest = newer.first()?;
+    if minor(&newest.version).as_ref() == Some(&own) {
+        return None;
     }
+    newer
+        .iter()
+        .find(|n| minor(&n.version).as_ref() == Some(&own))
+        .map(|n| n.version.clone())
 }
 
 /// True when `candidate` is a newer version than `pin`: it is above `pin` by [`version::compare`].
@@ -89,4 +90,50 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
         .filter(|a| !newer.contains(a))
         .cloned()
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The newer versions `versions`, newest first, as the registry lists them.
+    fn newer(versions: &[&str]) -> Vec<Newer> {
+        versions
+            .iter()
+            .map(|v| Newer {
+                version: v.to_string(),
+                state: None,
+                palette_latest: false,
+                listed: String::new(),
+                drops: Vec::new(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_next_patch_is_the_newest_patch_of_the_minor_version_of_the_pin_under_a_newer_minor() {
+        let cases = [
+            (
+                "1.36.2",
+                &["1.37.0", "1.36.4", "1.36.3"][..],
+                Some("1.36.4"),
+            ),
+            ("1.21.1", &["1.22.0", "1.21.3"], Some("1.21.3")),
+            // the newest version is of the minor version of the pin: the bump names it
+            ("1.36.3", &["1.36.4"], None),
+            // no newer version of the minor version of the pin
+            ("1.63.1", &["1.65.0", "1.64.0"], None),
+            // a version that does not parse has no minor version
+            ("LTS__20.4.x", &["24.04"], None),
+            // a pin that is current
+            ("1.36.4", &[], None),
+        ];
+        for (pinned, versions, patch) in cases {
+            assert_eq!(
+                next_patch(pinned, &newer(versions)).as_deref(),
+                patch,
+                "{pinned} behind {versions:?}"
+            );
+        }
+    }
 }
