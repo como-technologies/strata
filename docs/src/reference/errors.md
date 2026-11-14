@@ -21,7 +21,7 @@ the kind.
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `method`, `path` |
 | `not-json` | Palette answered with a body that is not JSON. | `method`, `path` |
-| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. A file of one pack that is no archive does not give this error: see `archivesNotReadable` of [`strata-chain/1`](./documents.md#strata-chain1). See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
+| `not-archive` | Palette answered the download of a profile version with a file that strata cannot read. The file is no gzip or no tar, or its list of the packs does not parse. A file of one pack that is no archive, or that the download does not hold, does not give this error: see `archivesNotReadable` of [`strata-chain/1`](./documents.md#strata-chain1). See [The download of a version](../internals/palette/profiles.md#the-download-of-a-version). | `method`, `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
 | `profile-name-ambiguous` | Two or more profile versions in the scope have this name and version: a profile of the tenant and a profile of the project. Give the uid in place of the name. | `name`, `version`, `profiles[]` of `uid` and `scope` |
 | `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |

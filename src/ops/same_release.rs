@@ -116,7 +116,7 @@ impl Described for PairStatus {
                 "The roots differ only because a pack moved to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
             }
             Self::Renumber => {
-                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this when the archives agree. Strata compares the archives of each such pack in the downloads of Palette. archivesCompared names each pack whose archives differ only by the version in pack.json, or by the line version of Chart.yaml for a Helm chart. archivesNotReadable names each pack whose file in a download is no archive, and the pair fails. archivesNotCompared names each pack whose archive the pipeline must check."
+                "The roots differ only because the version of packs changed, with the same values, manifests, params, and images. --allow renumber accepts this when the archives agree. Strata compares the archives of each such pack in the downloads of Palette. archivesCompared names each pack whose archives differ only by the version in pack.json, or by the line version of Chart.yaml for a Helm chart. archivesNotReadable names each pack whose file in a download is no archive or is missing, and the pair fails. archivesNotCompared names each pack whose archive the pipeline must check."
             }
             Self::Different => {
                 "This is not the same release. The field reasons lists each difference."
@@ -230,7 +230,8 @@ pub struct ArchiveChange {
 }
 
 /// One side of a renumbered pack whose file in the download is not a tar archive that gzip
-/// compresses. Palette can put an error answer of the host of a Helm chart there.
+/// compresses, or is not in the download. Palette can put an error answer of the host of a Helm
+/// chart there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ArchiveNotReadable {
@@ -239,7 +240,8 @@ pub struct ArchiveNotReadable {
     /// The version of the pack on the side whose file strata cannot read.
     pub version: String,
     /// What the file holds: its size, and the start of its text when it is text, else the error
-    /// of the read. An example is `263 bytes of text: <?xml version="1.0" ...`.
+    /// of the read. An example is `263 bytes of text: <?xml version="1.0" ...`. For a file that
+    /// the download does not hold, it is `the download does not hold <path>`.
     pub reason: String,
 }
 

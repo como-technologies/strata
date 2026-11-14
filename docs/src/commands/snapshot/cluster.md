@@ -67,9 +67,10 @@ values of a pack: there, the same words name many settings that are no secret.
 [The report as JSON](set.md#the-report-as-json).
 
 > **Mark a variable that holds a secret as sensitive in Palette.** Palette then
-> gives no value of it, and the record holds none. If the variable stays as it
-> is, keep the record in the object store, and not in the repository: see
-> [Where to keep a record](profile-version.md#where-to-keep-a-record).
+> gives `********` in place of its value. For a dropdown variable, Palette gives
+> the label of the option. The record holds no value of a sensitive variable. If
+> the variable stays as it is, keep the record in the object store, and not in
+> the repository: see [Where to keep a record](profile-version.md#where-to-keep-a-record).
 
 ## More of the cluster than its release
 
