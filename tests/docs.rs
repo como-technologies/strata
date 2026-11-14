@@ -16,7 +16,7 @@ use common::{
     toml_table, toml_value, version_of, walk, without_code,
 };
 use strata::TOOL_NAME;
-use strata::api::codes::ValidateRoute;
+use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
 
 fn docs() -> PathBuf {
@@ -319,6 +319,17 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
             "{route:?}: the table in errors.md and ValidateRoute::refusal_codes differ"
         );
     }
+}
+
+/// `behind` and `compare --validate` name two refusals of the update before it: the codes of
+/// `codes.rs`. The table of `errors.md` lists the same codes.
+#[test]
+fn the_book_lists_each_refusal_of_the_update_that_strata_names_first() {
+    let errors = read(&docs().join("reference/errors.md"));
+    let book = codes_after(&errors, "## Refusals of the update that strata names first");
+    let mut kept = [INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE];
+    kept.sort_unstable();
+    assert_eq!(book, kept);
 }
 
 /// The fields that release 0.18.0 added to a record, with no new schema id. A reader of an older

@@ -15,8 +15,8 @@ use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
 use strata::closed_set::unknown::sighting::Sighting;
 
 use super::{
-    PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, profile_document, profile_route,
-    strata_command, template,
+    CommandExt, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, profile_document,
+    profile_route, strata_command, template,
 };
 
 /// The profile type that a later Palette release adds.
@@ -134,6 +134,24 @@ impl Stand {
     /// [`Stand::run`] with the progress notes that a person sees.
     pub fn run_loud(&self, args: &[&str]) -> Run {
         Run::of(self.command(args).env_remove("STRATA_QUIET"))
+    }
+
+    /// [`Stand::run_loud`] with standard output and standard error in one file, as a terminal
+    /// shows them. It gives the exit code, and the text in the order that strata wrote it.
+    pub fn run_joined(&self, args: &[&str]) -> (i32, String) {
+        let path = self.home.path().join("joined.out");
+        let out = std::fs::File::create(&path).unwrap();
+        let err = out.try_clone().unwrap();
+        let status = self
+            .command(args)
+            .env_remove("STRATA_QUIET")
+            .stdout(out)
+            .stderr(err)
+            .spawn_locked()
+            .and_then(|mut strata| strata.wait())
+            .unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        (status.code().unwrap_or(-1), text)
     }
 
     /// The command of strata with `args` against the stand-in, in the folder of the home. The

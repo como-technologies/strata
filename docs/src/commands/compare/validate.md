@@ -24,6 +24,9 @@ because the roots differ. When Palette gives no error, the line is `accepts`:
 {{#include ../../output/validate-accepts-lines.txt}}
 ```
 
+`accepts` covers the packs of the move, and not each rule of the update: see
+[What the route does not check](#what-the-route-does-not-check).
+
 `--json` carries the answer as `paletteValidation`, with `accepts` and each
 error:
 
@@ -73,5 +76,39 @@ the pair before any request, as `--repave` does:
 {{#include ../../output/validate-usage.txt}}
 ```
 
+For two records with no cluster, the error names the commands to use: see
+[Usage errors](repave.md#usage-errors) of `--repave`.
+
 One command can take `--repave` and `--validate`: strata prints the two
 answers.
+
+## What the route does not check
+
+The route checks the packs. Palette checks two more rules only at the update,
+and no validate route checks them. So strata checks them for the move. It prints
+a `note` line under the answer of Palette for each one that it finds. Palette is
+the owner of each rule: see
+[The gaps that strata fills](../../internals/palette/profiles.md#the-checks-of-an-update).
+
+- **A required variable with no default value.** The body of the route holds no
+  value of a variable. Palette refuses an update that gives such a variable no
+  value, with `InvalidVariable` and HTTP 500. Strata names each such variable
+  that the profile version adds. The move of the cluster `payments` to
+  `aws-stack@1.1.1` adds `platform_owner`: see
+  [Compare a profile version with a cluster](./clusters.md#compare-a-profile-version-with-a-cluster).
+- **A move of Kubernetes that skips a minor version.** Palette refuses the
+  update with `K8sUpgradeNotSupported` and HTTP 400. Here the cluster `search`
+  runs Kubernetes 1.34.9, and `aws-stack@1.1.1` pins 1.36.2:
+
+```text
+{{#include ../../output/validate-skip-lines.txt}}
+```
+
+The line names the next minor version. `compare` reads no registry, so it names
+no version of that minor version. `strata behind` on a record of the cluster
+names one: see
+[A move that skips a minor version](../behind.md#a-move-that-skips-a-minor-version).
+
+`--json` gives the two checks in `updateChecks`: see
+[`strata-diff/1`](../../reference/documents.md#strata-diff1). The checks send no
+request, and they do not change the exit.

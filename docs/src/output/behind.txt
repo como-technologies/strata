@@ -39,6 +39,7 @@ $ strata behind 'releases/*/dev.json'
 ~ [profile] aws-stack  1.0.0  project  behind: 1.1.1
       1.1.1 created 2026-09-15T08:01:00.000Z
       bump to 1.1.1: repave IDENTITY UPSTREAM AUTHORED IMAGES CHARTS
+      the move adds the required variable platform_owner with no default value: give it a value at the update, or Palette refuses the update with InvalidVariable
       pinned by releases/1.0.0/dev.json (aws-stack@1.0.0)
   [profile] aws-stack  1.1.1  project  current
       pinned by releases/1.1.1/dev.json (aws-stack@1.1.1)

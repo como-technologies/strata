@@ -133,6 +133,9 @@ pub(super) const A1118: &str = "64e000000000000000000116";
 // aws-stack@1.1.19 of the chapter cluster-secret (#626): the content of 1.1.1, with the variable
 // client_secret, which nobody marked sensitive
 pub(super) const A1119: &str = "64e000000000000000000117";
+// aws-stack@1.1.20 of the chapter behind (#623): the content of 1.1.1, with kubernetes 1.34.9, two
+// minor versions below the newest version
+pub(super) const A1120: &str = "64e000000000000000000118";
 
 #[cfg(test)]
 mod tests {

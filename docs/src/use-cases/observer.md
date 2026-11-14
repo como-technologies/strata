@@ -164,7 +164,10 @@ one of three ways:
 
 - **Palette gave no error.** Palette checked the default values of the new version.
   It did not check the values of your team: see [Palette accepts the move, or refuses
-  it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+  it](../commands/behind.md#palette-accepts-the-move-or-refuses-it). It did not check
+  the minor version of Kubernetes either. `strata behind --pin` on the record says
+  when the move skips one: see [A move that skips a minor
+  version](../commands/behind.md#a-move-that-skips-a-minor-version).
 - **`Palette refuses: <code>`.** Palette gave an error, such as
   `DependencyPackUpgradeNotSupported`. The page shows the message of Palette and the
   clusters that it names. See [The upgrade

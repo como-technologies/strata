@@ -1,4 +1,4 @@
 $ STRATA_QUIET=1 scripts/ci/pr-comment.sh aws-stack@1.1.1 aws-stack@1.1.6 --repave --dry-run > comment.md
-strata: --repave needs one side that is a cluster and one that is a profile version
+strata: --repave needs one side that is a cluster, and both sides are records with no cluster. Palette answers only for a cluster, so give the cluster in place of one record: strata compare cluster:<name> <record> --repave. Plain compare of the two records prints the impact
 pr-comment: --repave got no answer, so the table decides
 pr-comment: max impact: may-repave; label repave: the table decides; would remove label repave if present

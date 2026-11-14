@@ -12,6 +12,7 @@
 //! - [`profile_type`]: the type of a profile.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`scope`]: the scope of a profile version.
+//! - [`update`]: the rules of Palette for the update of a cluster that no validate route checks.
 //! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 
 pub mod cloud;
@@ -25,4 +26,5 @@ pub mod pack_type;
 pub mod profile_type;
 pub mod repave;
 pub mod scope;
+pub mod update;
 pub mod validation;

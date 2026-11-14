@@ -242,7 +242,8 @@ while IFS= read -r group <&3; do
     echo
     echo "| pinned | newer | bump | arrived | pinned by |"
     echo "|---|---|---|---|---|"
-    # the lines under the bump of `strata behind`: PaletteRefusal::line and palette_lines
+    # the lines under the bump of `strata behind`: PaletteRefusal::line, palette_lines, and
+    # MinorSkip::line
     jq -r 'def and_list: if length < 3 then join(" and ") else (.[:-1] | join(", ")) + ", and " + .[-1] end;
       def refusal_line:
         if (.clusters // [] | length) > 0 then "\(.code) on \(.clusters | and_list)"
@@ -251,7 +252,9 @@ while IFS= read -r group <&3; do
       def palette_lines:
         (.paletteValidation // empty
           | if .accepts then "palette accepts" else (.errors // [])[] | "palette refuses: \(refusal_line)" end),
-        (.paletteValidationError // empty | "palette gave no answer: \(.)");
+        (.paletteValidationError // empty | "palette gave no answer: \(.)"),
+        (.updateChecks.skippedMinor // empty
+          | "\(.pack) \(.from) -> \(.to) skips a minor version: Palette refuses the update with \(.code); move to \(.nextStep // "a version of \(.nextMinor)") first");
       def bump_cell:
         (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines])
         | map(split("|") | join("\\|")) | join("<br>");

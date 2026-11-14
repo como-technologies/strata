@@ -786,10 +786,19 @@ fn compare_refuses_a_pair_that_a_question_to_palette_cannot_take_before_it_needs
             &["tag:env=dev", "cluster:payments", "--repave"][..],
             "tag:env=dev names a set of clusters",
         ),
-        // a record file shows its side after the read of the file, which sends no request
+        // a record file shows its side after the read of the file, which sends no request. Two
+        // records get the command with a cluster in place of one record (#633)
         (
             &[fx.a.as_str(), fx.b.as_str(), "--repave"][..],
-            "--repave needs one side that is a cluster and one that is a profile version",
+            "--repave needs one side that is a cluster, and both sides are records with no \
+             cluster. Palette answers only for a cluster, so give the cluster in place of one \
+             record: strata compare cluster:<name> <record> --repave. Plain compare of the two \
+             records prints the impact",
+        ),
+        (
+            &[fx.a.as_str(), fx.b.as_str(), "--validate"][..],
+            "strata compare cluster:<name> <record> --validate. Plain compare of the two records \
+             prints the impact",
         ),
         (
             &[fx.a.as_str(), "aws-stack@1.1.1", "--validate"][..],
@@ -825,9 +834,12 @@ fn compare_refuses_a_pair_that_a_question_to_palette_cannot_take_before_it_needs
             "{args:?}: {error}"
         );
     }
-    // with no question, the refs are not checked: two profile versions compare
+    // with no question, the refs are not checked: two profile versions compare, and the report
+    // gives the impact, as the error of two records says
     let r = run_in(&["compare", "--json", &fx.a, &fx.b], &no_key, &clear);
     assert_eq!((r.code, r.err.as_str()), (1, ""), "{}", r.err);
+    let report: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    assert!(report["summary"]["maxImpact"].is_string(), "{report}");
 }
 
 #[test]
@@ -2263,6 +2275,23 @@ fn the_help_of_repave_says_what_palette_saves_at_the_request() {
     );
 }
 
+/// The help of `<B>` said "in the same forms as the first", and a reader took it to mean that the
+/// two sides must match. They can differ, such as a cluster and a profile version (#633).
+#[test]
+fn the_help_of_compare_says_that_the_two_sides_can_be_of_different_kinds() {
+    let help = run(&["compare", "--help"]);
+    assert_eq!(help.code, 0, "{}", help.err);
+    assert!(
+        help.out.contains(
+            "<B>  The second side: a ref or a snapshot file. The two sides can be of different \
+             kinds."
+        ),
+        "{}",
+        help.out
+    );
+    assert!(!help.out.contains("in the same forms"), "{}", help.out);
+}
+
 /// Two clusters on one release can print `CHANGED` for their values and exit 0. So the help
 /// states each exit code, and what does not change it (#624).
 #[test]
@@ -2493,6 +2522,59 @@ fn a_ref_to_latest_names_the_version_it_takes_and_the_pre_release_it_skips() {
     let r = strata(&["snapshot", "barney@1.0.0", "-o", out]);
     assert_eq!(r.code, 0, "{}", r.err);
     assert!(!r.err.contains("@latest"), "{}", r.err);
+}
+
+/// Issue #633. On a terminal, the record on standard output came after the answer of Palette, and
+/// hid it. So the sentence of an accept is the last line, after the record, also with `-o` and
+/// with `-q`. A refusal keeps its lines of errors, and its error is the last line.
+#[test]
+fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
+    let validate_route = format!("{}/validate/packs", common::profile_route(UID_A));
+    let mut routes = barney_tenant();
+    routes.insert(validate_route.clone(), serde_json::json!({}));
+    let stand = Stand::new(routes.clone(), "p-dev");
+    let sentence = "strata: Palette accepts the packs of 'barney@1.0.0' as an update of itself\n";
+
+    let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
+    assert_eq!(code, 0, "{text}");
+    let (record, last) = text
+        .rsplit_once("}\n")
+        .unwrap_or_else(|| panic!("no record: {text}"));
+    assert_eq!(last, sentence, "{text}");
+    assert!(!record.contains("palette    accepts"), "{text}");
+    for args in [&["-o", "barney.json"][..], &["-q"][..]] {
+        let args = [&["snapshot", "barney@1.0.0", "--validate"][..], args].concat();
+        let (code, text) = stand.run_joined(&args);
+        assert_eq!(code, 0, "{args:?}: {text}");
+        assert!(text.ends_with(sentence), "{args:?}: {text}");
+        assert_eq!(
+            text.matches("Palette accepts").count(),
+            1,
+            "{args:?}: {text}"
+        );
+    }
+    let (_, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "-o", "barney.json"]);
+    assert!(
+        !text.contains("Palette accepts"),
+        "no question, no answer: {text}"
+    );
+
+    routes.insert(
+        validate_route,
+        serde_json::json!({"packs": {"results": [{"name": "cert-manager", "errors": [
+            {"code": "PackDependencyNotFound", "message": "a pack is missing"}]}]}}),
+    );
+    let stand = Stand::new(routes, "p-dev");
+    let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
+    assert_eq!(code, 2, "{text}");
+    assert!(
+        text.ends_with(
+            "palette    refuses: PackDependencyNotFound cert-manager: a pack is missing\n\
+             strata: Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record\n"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("Palette accepts"), "{text}");
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the

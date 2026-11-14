@@ -30,6 +30,15 @@
 #      route of the cluster gets a body with a tag that no registry has (#453): Palette keeps the
 #      tag of the copy of the cluster, and checks no sent tag. It asks and
 #      writes nothing. It runs only when you give its number.
+#   7  the update that no validate route checks (#623). It needs CLUSTER=<name>, a cluster of the
+#      lab. SKIP=<name>@<version> is a version of a profile that the cluster runs, and it pins
+#      Kubernetes two minor versions above the cluster. VARIABLES=<name>@<version> is such a version
+#      that adds a required variable with no default value, and moves Kubernetes one minor
+#      version at most. For each one that you give, `strata compare --validate` asks the route.
+#      Then the update PATCH /v1/spectroclusters/{uid}/profiles puts the version in the place of
+#      the version of its profile that the cluster runs. Palette refuses each update, so the cluster
+#      does not change. When Palette accepts one, the cluster moves: give a cluster of the lab
+#      only. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -72,8 +81,8 @@ if [ "$stage" = all ] || [ "$stage" = 1 ]; then
   candidate strata-validate-barney ""
   check validate-accepts 0 '#152: snapshot --from-candidate --validate writes the record when Palette takes the packs' -- \
     "$strata" snapshot --from-candidate strata-validate-barney.yaml --validate -o barney.json
-  check validate-accepts-says 0 '#152: it prints palette accepts' -- \
-    grep -qx 'palette    accepts' validate-accepts.err
+  check validate-accepts-says 0 '#152, #633: it says in a sentence that Palette accepts the candidate' -- \
+    grep -qx "strata: Palette accepts the name, the version, and the packs of 'strata-validate-barney.yaml'" validate-accepts.err
   check validate-accepts-record 0 '#152: the record holds source.paletteValidation.accepts true' -- \
     jq -e '.source.paletteValidation == {"accepts": true}' barney.json
 fi
@@ -128,8 +137,8 @@ if [ "$stage" = all ] || [ "$stage" = 3 ]; then
     echo "== a version that Palette holds, as an update of itself (#152)" | tee -a steps.log
     check validate-version 0 "#152: snapshot $PROFILE --validate asks the route of an update, and Palette takes the version as it is" -- \
       "$strata" snapshot "$PROFILE" --validate -o version.json
-    check validate-version-says 0 '#152: it prints palette accepts' -- \
-      grep -qx 'palette    accepts' validate-version.err
+    check validate-version-says 0 '#152, #633: it says in a sentence that Palette accepts the packs of the version' -- \
+      grep -qx "strata: Palette accepts the packs of '$PROFILE' as an update of itself" validate-version.err
     echo "== a candidate with the name and the version of $PROFILE (#273)" | tee -a steps.log
     {
       echo "name: ${PROFILE%@*}"
@@ -259,8 +268,8 @@ if [ "$stage" = 6 ]; then
     # exit 1: a pin is behind. The record can pin nothing that is behind, and then the checks below fail
     check bump-behind '?' '#166: behind asks Palette about the bump of each pin that is behind' -- \
       "$strata" behind bump-profile.json --json
-    check bump-pair 0 '#166: the newest version of kubernetes is two minor versions or more above the pin' -- \
-      jq -e "$kubernetes_pin | ((.newer[0].version | split(\".\")[1] | tonumber) - (.version | split(\".\")[1] | tonumber)) >= 2" bump-behind.out
+    check bump-pair 0 '#166, #623: strata says that the move of kubernetes to the newest version skips a minor version' -- \
+      jq -e "$kubernetes_pin | .bump.updateChecks.skippedMinor != null" bump-behind.out
     check bump-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
       jq -e "[$kubernetes_pin | select(.bump.paletteValidation != null)] | length == 1" bump-behind.out
     check bump-refused 0 '#166: Palette refuses the move with DependencyPackUpgradeNotSupported' -- \
@@ -270,6 +279,8 @@ if [ "$stage" = 6 ]; then
     check bump-text '?' '#166: behind prints the answer under the bump' -- "$strata" behind bump-profile.json
     check bump-text-says 0 '#166: palette refuses, with the code and the clusters' -- \
       grep -Eq '^      palette refuses: DependencyPackUpgradeNotSupported on .+' bump-text.out
+    check bump-text-skip 0 '#623: behind says that the move skips a minor version, and that the update refuses it' -- \
+      grep -Eq '^      kubernetes .+ skips a minor version: Palette refuses the update with ' bump-text.out
     check bump-no-impact '?' '#166: --no-impact sends no request to a validate route' -- \
       "$strata" behind bump-profile.json --no-impact --json
     check bump-no-impact-says 0 '#166: the report holds no bump, so no answer of Palette' -- \
@@ -304,6 +315,53 @@ if [ "$stage" = 6 ]; then
         "$live/api.sh" post-status "/v1/spectroclusters/$cluster_uid/validate/packs" cluster-route-body.json
       check cluster-route-tag-says 0 '#453: the answer is HTTP 200 with no error: the route does not check the sent tag' -- \
         bash -c "head -n 1 cluster-route-tag.out | grep -qx 'HTTP 200' && sed 1d cluster-route-tag.out | jq -e '(.profiles // []) | length == 0'"
+    fi
+  fi
+fi
+
+# move_check ID REF: ask the route about the move of cluster $CLUSTER to the profile version REF,
+# then send the update. The version takes the place of the version of its profile that the
+# cluster runs. Writes ID.json, ID-validate.out, and ID-update.out
+move_check() {
+  local id=$1 ref=$2 from to
+  check "$id-record" 0 "#623: a record of $ref" -- "$strata" snapshot "$ref" -o "$id.json"
+  check "$id-validate" '?' "#623: compare --validate asks the route about the move of cluster $CLUSTER to $ref" -- \
+    "$strata" compare "cluster:$CLUSTER" "$ref" --validate --json
+  check "$id-asked" 0 '#623: the comparison holds an answer of the route' -- \
+    jq -e '.paletteValidation | has("accepts")' "$id-validate.out"
+  from=$(jq -r --arg n "${ref%@*}" '[.source.cluster.profiles[] | select(.name == $n) | .uid] | first // empty' move-cluster.json)
+  to=$(jq -r '.source.uid' "$id.json")
+  check "$id-update" 0 "#623: the update of cluster $CLUSTER from $from to $to" -- \
+    "$live/api.sh" replace-status "$cluster_uid" "$from" "$to"
+}
+
+if [ "$stage" = 7 ]; then
+  if [ -z "${CLUSTER:-}" ] || { [ -z "${SKIP:-}" ] && [ -z "${VARIABLES:-}" ]; }; then
+    echo "== stage 7 skipped: give CLUSTER=<name>, and SKIP=<name>@<version> or VARIABLES=<name>@<version>" | tee -a steps.log
+  else
+    check move-cluster-record 0 "#623: a record of cluster $CLUSTER" -- \
+      "$strata" snapshot "cluster:$CLUSTER" -o move-cluster.json
+    cluster_uid=$(jq -r '.source.cluster.uid' move-cluster.json)
+    if [ -n "${SKIP:-}" ]; then
+      echo "== a move of Kubernetes that skips a minor version: $SKIP on $CLUSTER (#623)" | tee -a steps.log
+      move_check skip "$SKIP"
+      check skip-says 0 '#623: strata says that the move skips a minor version' -- \
+        jq -e '.updateChecks.skippedMinor.code != null' skip-validate.out
+      # the update refuses the move with the code that strata names
+      check skip-refused 0 '#623: Palette refuses the update with HTTP 400 and K8sUpgradeNotSupported' -- \
+        bash -c "head -n 1 skip-update.out | grep -qx 'HTTP 400' && sed 1d skip-update.out | jq -e --slurpfile d skip-validate.out '.code == \$d[0].updateChecks.skippedMinor.code'"
+    fi
+    if [ -n "${VARIABLES:-}" ]; then
+      echo "== a move that adds a required variable with no default value: $VARIABLES on $CLUSTER (#623)" | tee -a steps.log
+      move_check variables "$VARIABLES"
+      check variables-accepts 0 '#623: the route accepts the packs of the move' -- \
+        jq -e '.paletteValidation.accepts' variables-validate.out
+      check variables-says 0 '#623: strata names the required variables that the move adds' -- \
+        jq -e '.updateChecks.requiredVariables.names | length > 0' variables-validate.out
+      # the update refuses the move with the code that strata names, and the message names a
+      # variable that strata names
+      check variables-refused 0 '#623: Palette refuses the update with HTTP 500 and InvalidVariable' -- \
+        bash -c "head -n 1 variables-update.out | grep -qx 'HTTP 500' && sed 1d variables-update.out | jq -e --slurpfile d variables-validate.out '\$d[0].updateChecks.requiredVariables as \$r | .code == \$r.code and (.message as \$m | any(\$r.names[]; . as \$v | \$m | contains(\$v)))'"
     fi
   fi
 fi

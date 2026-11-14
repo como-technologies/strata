@@ -268,3 +268,18 @@ no JSON line, also with `--json`.
 
 `verify` with many files does not stop at a failed record. The record gets an
 `ERROR` line, and its entry in the summary has the `error` object.
+
+## Refusals of the update that strata names first
+
+Palette refuses these at the update of a cluster, and no validate route checks
+them. `behind` and `compare --validate` check them for a move, and print a line
+under the answer of Palette. The line is no error of strata, and the exit does
+not change. See
+[The checks of an update](../internals/palette/profiles.md#the-checks-of-an-update).
+
+| Code | Palette refuses |
+| --- | --- |
+| `K8sUpgradeNotSupported` | HTTP `400`: a move of the pack of the `k8s` layer of more than one minor version, or to a higher major version. See [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version). |
+| `InvalidVariable` | HTTP `500`: a required variable with no value and no default value. See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check). |
+
+The code of Palette shows the two refusals, and no live run shows them yet.
