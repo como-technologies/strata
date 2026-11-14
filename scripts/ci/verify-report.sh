@@ -44,6 +44,25 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
+# The jq functions that write a text into the markdown of an issue, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`: it also escapes each `|`, and writes a line break as a space. `span` is
+# `text::code_span`: its fence is longer than each run of backticks in the text. `code` is
+# `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of `text::code_block`, so
+# that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def cell: html | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
+
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
 # set of the chosen host. Each set prints issues as [{number, title, body}].
@@ -169,9 +188,13 @@ if [ -z "$dry" ]; then
   host open_issues > "$work/issues.json"
 fi
 
+# marker_of PATH -> the first line of the issue of the record at PATH. The path has each `&`, `<`,
+# and `>` as an entity, so a `-->` in it cannot end the comment.
+marker_of() { printf '<!-- strata-verify: %s -->\n' "$(md html "$1")"; }
+
 # issue_for PATH -> the lowest open issue number whose body starts with PATH's marker
 issue_for() {
-  jq -r --arg m "<!-- strata-verify: $1 -->" \
+  jq -r --arg m "$(marker_of "$1")" \
     '[.[] | select(((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
@@ -194,6 +217,8 @@ while IFS= read -r record <&3; do
   # the words of the heading of compare, which name a record of many profiles by their count
   subject=$(jq -r 'if (.subject // "") == "" then .path else .subject end' <<<"$record")
   body="$work/body.md"
+  # the path is a code span: a backtick in it cannot end the span
+  verify_md=$(md span "strata verify $path")
   if [ "$status" != unchanged ]; then
     rc=0
     # --who only here: it reads the audit log, and only a record that did not verify has an issue
@@ -215,7 +240,8 @@ while IFS= read -r record <&3; do
       fi
       number=$(issue_for "$path")
       [ -n "$number" ] || continue
-      host close_issue "$number" "\`$path\` verifies again: $subject is unchanged since $recorded (checked $now)."
+      # the subject and the time come from the record
+      host close_issue "$number" "$(md span "$path") verifies again: $(md cell "$subject") is unchanged since $(md cell "$recorded") (checked $now)."
       actions+=("closed #$number for $path")
       continue
       ;;
@@ -223,8 +249,8 @@ while IFS= read -r record <&3; do
       drifted=$((drifted + 1))
       title="strata verify: $subject drifted ($path)"
       {
-        echo "<!-- strata-verify: $path -->"
-        echo "\`strata verify $path\` reports drift, checked $now."
+        marker_of "$path"
+        echo "$verify_md reports drift, checked $now."
         echo
         cat "$work/report.md"
       } > "$body"
@@ -233,8 +259,8 @@ while IFS= read -r record <&3; do
       unverified=$((unverified + 1))
       title="strata verify: $subject cannot be verified ($path)"
       {
-        echo "<!-- strata-verify: $path -->"
-        echo "\`strata verify $path\` cannot verify the record, checked $now: a pack has no upstream digest, so a change of its archive does not show. \`--allow-no-digest\` accepts it."
+        marker_of "$path"
+        echo "$verify_md cannot verify the record, checked $now: a pack has no upstream digest, so a change of its archive does not show. \`--allow-no-digest\` accepts it."
         echo
         cat "$work/report.md"
       } > "$body"
@@ -242,13 +268,17 @@ while IFS= read -r record <&3; do
     *)
       errors=$((errors + 1))
       title="strata verify: $path could not be checked"
+      # the error and the output of strata can quote the body of an answer
+      fence=$(jq -Rrs "$markdown_jq fence" "$work/report.err")
       {
-        echo "<!-- strata-verify: $path -->"
-        echo "\`strata verify $path\` could not check the record, checked $now: $(jq -r 'if .error then "\(.error.kind): \(.error.message)" else "see the output below" end' <<<"$record")"
+        marker_of "$path"
+        echo "$verify_md could not check the record, checked $now: $(jq -r "$markdown_jq"' if .error then "\(.error.kind): \(.error.message)" | cell else "see the output below" end' <<<"$record")"
         echo
-        echo '```'
+        echo "$fence"
         cat "$work/report.err"
-        echo '```'
+        # the last line gets its line break, or the fence joins it
+        [ -z "$(tail -c 1 "$work/report.err")" ] || echo
+        echo "$fence"
       } > "$body"
       ;;
   esac

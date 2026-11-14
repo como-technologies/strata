@@ -25,6 +25,12 @@ record as the heading of `compare` does. So does the comment of its close. The
 script reads these words from `records[].subject` of the summary. So the issue
 of a cluster that runs four profiles names `4 profiles on cluster <name>`.
 
+The marker writes each `&`, `<`, and `>` of the path as an entity. So a `-->`
+in a path cannot end the comment. Each body and each comment shows the names
+and the versions of the record as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. The
+path is in a code span, with a fence longer than each run of backticks in it.
+
 ## Try it first
 
 `--dry-run` prints each issue body and the action, and calls no host:
@@ -65,6 +71,12 @@ The script handles the issues, then exits like `verify`:
 An unverified record holds a pack with no upstream digest. Its issue says that
 `--allow-no-digest` accepts it. See
 [verify](../commands/verify.md#the-verdicts).
+
+The issue of a record that strata could not check gives the error and the
+output of strata. The error can quote the body of an answer. The issue shows
+each tag of HTML in it as text, as
+[the markdown comment](../reference/formats.md#the-markdown-comment) does. The
+output is in a fenced block that no line of the output ends.
 
 When `verify` checks nothing, for example when no pattern matches a file, the
 script exits `2` and touches no issue. The script also exits `2` when `verify`

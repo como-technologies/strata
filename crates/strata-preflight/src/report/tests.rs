@@ -2,8 +2,25 @@ use super::*;
 use crate::curl::Saves;
 use crate::probe::{Invocation, Ran};
 use crate::rule::EvidenceKind;
+use answer_tags::{ANSWER_TAGS, assert_only_strata_tags};
+use code_block::outside_code_blocks;
+use code_span::without_code;
 use std::time::Duration;
 use strata::api::Method;
+
+// The text of an answer with tags of HTML, and the checks of the tags, in the file that the tests
+// of strata use. A test here uses some of them, so the others are dead code here.
+#[allow(dead_code)]
+#[path = "../../../../tests/common/answer_tags.rs"]
+mod answer_tags;
+// The reads of the code blocks and of the code spans of markdown, in the files of the tests of
+// strata. A test here uses one read of each file, so the other reads are dead code here.
+#[allow(dead_code)]
+#[path = "../../../../tests/common/code_block.rs"]
+mod code_block;
+#[allow(dead_code)]
+#[path = "../../../../tests/common/code_span.rs"]
+mod code_span;
 
 fn check(
     id: &str,
@@ -1271,6 +1288,82 @@ fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
         text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
         "{text}"
     );
+}
+
+/// The criterion of #832: a message from an answer shows each tag of HTML as text in the markdown,
+/// in the row of a check that failed and in the line of the checks that did not run.
+#[test]
+fn the_markdown_shows_each_tag_of_a_message_from_an_answer_as_text() {
+    let message = format!("HTTP 403: {ANSWER_TAGS}");
+    let escaped = format!("HTTP 403: {}", strata::text::html_text(ANSWER_TAGS));
+    let failed = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![message.clone()],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get("/v1/edgehosts/h2", Some("HTTP 403"))),
+    };
+    let not_run = Outcome::not_run(Verdict::NotRun, message);
+    for (outcome, line) in [
+        (failed, format!("<br>{escaped} |")),
+        (not_run, format!("\n1 check did not run: {escaped} (1)\n")),
+    ] {
+        let md = markdown(&report_of_edge_host_in_use(
+            None,
+            "/v1/edgehosts/h2",
+            outcome,
+        ));
+        assert!(md.contains(&line), "{line:?} in\n{md}");
+        // a block of the report holds a command of the shell, and a code block shows it as text
+        assert_only_strata_tags(&outside_code_blocks(&md));
+    }
+}
+
+/// The criterion of #832: the markdown of a request that failed keeps its error in one block. The
+/// error quotes the body of the answer, with a line of three backticks and tags of HTML.
+#[test]
+fn the_markdown_of_a_request_that_failed_keeps_the_body_of_the_answer_in_its_block() {
+    let message = format!("HTTP 403:\n```\n{ANSWER_TAGS}");
+    let failed = Outcome {
+        verdict: Verdict::Error,
+        messages: vec![message.clone()],
+        elapsed: Duration::from_millis(3),
+        ran: Ran::Request(Call::get("/v1/edgehosts/h2", None)),
+    };
+    let md = markdown(&report_of_edge_host_in_use(
+        None,
+        "/v1/edgehosts/h2",
+        failed,
+    ));
+    let block = format!(
+        "`GET /v1/edgehosts/h2` stopped 1 check: edge-host-in-use.\n\n````text\n{message}\n````\n"
+    );
+    assert!(md.contains(&block), "{block:?} in\n{md}");
+    assert_only_strata_tags(&outside_code_blocks(&md));
+}
+
+/// The criterion of #832: the heading of the markdown shows the cloud type, the name of the
+/// cluster, and the source as text. A watch adds the state of the cluster to the source. A backtick
+/// in a value cannot end its code span.
+#[test]
+fn the_heading_of_the_markdown_shows_the_cloud_the_name_and_the_source_as_text() {
+    let mut report = report_of_edge_host_in_use(
+        None,
+        "/v1/edgehosts/h2",
+        Outcome::not_run(Verdict::NotRun, "no reading"),
+    );
+    let value = format!("`{ANSWER_TAGS}");
+    report.subject.cloud = ANSWER_TAGS.into();
+    report.subject.name = format!("fred{value}");
+    report.subject.source = format!("cluster:c1 (Running{value} after 3s, 2 readings)");
+    let md = markdown(&report);
+    let heading = format!(
+        "## strata-preflight: {} cluster ``fred{value}``\n",
+        strata::text::html_text(ANSWER_TAGS)
+    );
+    assert!(md.contains(&heading), "{heading:?} in\n{md}");
+    let source = format!("source ``cluster:c1 (Running{value} after 3s, 2 readings)``,");
+    assert!(md.contains(&source), "{source:?} in\n{md}");
+    assert_only_strata_tags(&without_code(&outside_code_blocks(&md)));
 }
 
 /// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,
