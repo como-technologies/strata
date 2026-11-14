@@ -316,6 +316,17 @@ func TestTheRegistryIsTheUidWhenNoPinNamesIt(t *testing.T) {
 	}
 }
 
+func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *testing.T) {
+	csi := pk("csi", "csi-aws-ebs", "1.65.0")
+	csi.RegistryUID, csi.RegistryName = "reg2", "Palette Registry"
+	// behind pins another pack of another registry, so no pin names reg2
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", "aws-stack@1.1.0")}}
+	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
+	if got := s.Profiles[0].Packs[0].Registry; got != "Palette Registry" {
+		t.Errorf("registry %q", got)
+	}
+}
+
 func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 	r := onCluster(drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{}, "csi/csi-aws-ebs"),
 		docs.Diff{Packs: []docs.Pack{{Key: "csi/csi-aws-ebs", Masked: []string{"a.b", "a.c"}}}})

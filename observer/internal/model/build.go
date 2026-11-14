@@ -1,6 +1,7 @@
 package model
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"time"
@@ -270,7 +271,10 @@ func copyOf(side ClusterSide) *ClusterCopy {
 
 func packRow(r Record, rp docs.RecordPack, v *view) Pack {
 	id := packID(r.subject(), rp.Key)
-	p := Pack{Key: rp.Key, Name: rp.Name, Layer: rp.Layer, Version: rp.Version, Registry: v.registry(rp.RegistryUID), Kind: rp.RegistryProviderType,
+	// The record names the registry of a pack that no pin of behind holds. A record of strata
+	// 0.33.0 and before names none, so the pin gives it.
+	registry := cmp.Or(rp.RegistryName, v.registry(rp.RegistryUID))
+	p := Pack{Key: rp.Key, Name: rp.Name, Layer: rp.Layer, Version: rp.Version, Registry: registry, Kind: rp.RegistryProviderType,
 		Upstream: rp.Hash.UpstreamRaw, UpstreamSource: rp.Hash.UpstreamSource, Images: len(rp.Images), Newer: v.newest[id]}
 	if p.Kind == "" {
 		p.Kind = rp.Type
