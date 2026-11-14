@@ -142,8 +142,13 @@ pub(crate) fn items(listing: &Value) -> impl Iterator<Item = &Value> {
 }
 
 /// The `items` of `listing`, taken out of it. No entry when it has none.
-pub(crate) fn take_items(mut listing: Value) -> Vec<Value> {
-    match listing.get_mut("items").map(Value::take) {
+pub(crate) fn take_items(listing: Value) -> Vec<Value> {
+    take_array(listing, "items")
+}
+
+/// The array at the key `key` of `listing`, taken out of it. No entry when it has none.
+pub(crate) fn take_array(mut listing: Value, key: &str) -> Vec<Value> {
+    match listing.get_mut(key).map(Value::take) {
         Some(Value::Array(items)) => items,
         _ => Vec::new(),
     }

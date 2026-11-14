@@ -729,7 +729,7 @@ fn a_listing_whose_next_page_is_the_page_it_is_ends_there_and_does_not_ask_again
     let asked = std::cell::Cell::new(0);
     let page = json!({"items": [{"metadata": {"uid": "a"}}], "listmeta": {"continue": "tok"}});
     let items = palette
-        .each_continue_page("/v1/things", |_| {
+        .each_continue_page("/v1/things", take_items, |_| {
             asked.set(asked.get() + 1);
             assert!(asked.get() < 10, "the walk asks for the same page for ever");
             Ok(page.clone())

@@ -34,7 +34,8 @@ consumer is a line above the block.
 | `cluster search` | The cluster search, with the name of the profile. | The other clusters that the search names: how many run this version, how many run other versions, and how many strata could not read. |
 | `cluster listing` | Each cluster of the cluster listing, in place of the search when the search of Palette takes no `clusterProfiles`. | The other clusters of the listing, and how many run this version. |
 | `cluster groups` | The cluster groups that pin the version, and their virtual clusters. | The groups, their other virtual clusters, and how many run this version. |
-| `edge hosts` | The edge host search. | `none found` when the search names no edge host, or how many of its edge hosts are bound to the version. |
+| `edge hosts` | The edge host search, and the edge host search of the project of a profile of a project. | `none found` when the search names no edge host, or how many of its edge hosts are bound to the version. |
+| `app deployments` | For an app profile, the app deployment listing of each project that can use the version. | The app deployments of the listing that run the version, and that the consumer list does not name. |
 
 A row that says `not done` or `not read` gives the reason. The line `scope:`
 follows the block: see [A profile of the tenant](#a-profile-of-the-tenant).
@@ -86,13 +87,18 @@ search. Palette refuses the delete of a version that a cluster of any project
 uses, also of a project that the key cannot read. Give the gate a key that reads
 each project of the tenant.
 
-The line can also give two other cases:
+The line can also give three other cases:
 
 - `each project that this key cannot list`: Palette refused the search at tenant
   scope. Then the key has no `project.list` in the tenant, and Palette lists only
   the projects of its roles.
+- Each project of the listing, with `the cluster search failed`: the search at
+  tenant scope failed with an error that is not a denial. The row
+  `cluster search` gives the error, such as HTTP 500. Strata searched no project, so the line
+  `scope:` gives `0 of 3 projects searched`.
 - `each project of the tenant`, with the error: strata could not read the
-  project listing, so it searched no project one by one.
+  project listing, so it searched no project one by one. The line `scope:` then
+  gives no count.
 
 `--json` gives the counts in `projectsRead`. `unread` names each project that
 strata could not search, with `denied` and the error:
@@ -167,8 +173,36 @@ the consumer is `app`:
 {{#include ../output/app-consumers-json.txt}}
 ```
 
-The consumer list of the app profile stands alone: strata searches no app
-deployment, and reads no edge host. The two last rows say why. See
+The line `scope:` gives the scope of the app profile. Only the app deployments
+of its project can use an app profile of a project. Palette names them in the
+consumer list only when a role of the key gives `cluster.get` in that project.
+So strata also lists the app deployments of the project, and keeps each one
+that runs the version. The row `app deployments` counts the ones that the
+consumer list does not name. Here the consumer list of the key is empty:
+
+```text
+{{#include ../output/app-consumers-unlisted.txt}}
+```
+
+Exit `1`. When Palette refuses the listing, the line `NOT CHECKED` names the
+project, and the exit is `2`:
+
+```text
+{{#include ../output/app-consumers-not-checked.txt}}
+```
+
+Each project of the tenant can use an app profile of the tenant or of the
+system. So for such an app profile, strata lists the app deployments of each
+project of the tenant listing. The line `scope:` then counts the projects, and
+`NOT CHECKED` names each one that refuses the listing, as for
+[a profile of the tenant](#a-profile-of-the-tenant).
+
+The listing of the app deployments goes to each project. So strata also sends
+one page of the cluster search at tenant scope. When Palette refuses it,
+`NOT CHECKED` names each project that this key cannot list. When the search
+fails in another way, strata lists no project, and the row `app deployments`
+gives the error. No edge host binds an app profile. See
+[App profiles](../internals/palette/other-objects.md#app-profiles) and
 [An app profile is updated in place](../use-cases/app-profiles.md#5-find-the-app-deployments-before-a-delete).
 
 ## A cluster that the list does not name
@@ -219,6 +253,10 @@ The search beside the list costs these requests:
   Then each project gets one search of the clusters and one of the edge hosts.
   When the search takes `environment`, each project gets one more search for
   the virtual clusters.
+- For a profile of a project, one for each 50 edge hosts of its project.
+- For an app profile, one for each 50 app deployments of each project that can
+  use the version. For an app profile of the tenant or of the system, one more
+  for the project listing, and one for the cluster search.
 
 When the search of Palette takes no `clusterProfiles`, the listing costs one
 request for each cluster of the fleet. With `--list-only`, the rows of the
@@ -276,7 +314,9 @@ version bump or a rename overwrote the version that the cluster runs. See
   reads each cluster of the cluster listing for the profiles it applies. The
   listing names no virtual cluster.
 - Strata then searches the edge hosts, at tenant scope, and at the scope of
-  the key when it cannot read the tenant. An edge host that the version is
+  the key when it cannot read the tenant. For a profile of a project, it also
+  searches the edge hosts of that project. The search at tenant scope omits a
+  project where the key cannot list them. An edge host that the version is
   bound to joins the answer with `kind: edgehost`. A Palette without the search
   has no edge hosts.
 - Each project can use a profile of the tenant or of the system. So strata also
@@ -294,21 +334,20 @@ version bump or a rename overwrote the version that the cluster runs. See
 - When strata finds no consumer, and a reading failed, a consumer can be
   missing. The reading that failed can be the search, the listing, or a cluster
   group. It can also be a cluster that one of them names, the edge host search,
-  or the search of a project. The first line then says `no consumer found, and a reading
-  failed`, and the exit is `2`. The rows and the line `NOT CHECKED` name the
+  a search of a project, or an app deployment listing. The first line then says
+  `no consumer found, and a reading failed`, and the exit is `2`. The rows and the line `NOT CHECKED` name the
   reading. An empty consumer list alone is not "nothing uses it".
 - For an app profile, the names and the projects come from
   `status.inUseApps` of the app profile. Strata then reads each app deployment
   in its own project, for its state and the version that its copy names. An app
   deployment that strata cannot read shows `unknown` and the error, and counts.
-  Palette lists app deployments by name, cluster, and tag, and not by profile,
-  so strata searches no app deployment beside the list. No edge host binds an
-  app profile, so strata reads no edge host. Strata gives no scope for an app
-  profile.
+  Strata also lists the app deployments of each project that can use the
+  version. A project that refuses the listing is in the line `NOT CHECKED`.
+  No edge host binds an app profile, so strata reads no edge host.
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Nothing uses the version, and each reading succeeded. The profile lists no cluster and no cluster template. The search beside the list finds no cluster that applies it, and no edge host binds it. For a profile of the tenant, strata searched each project. For an app profile: the app profile lists no app deployment. |
+| `0` | Nothing uses the version, and each reading succeeded. The profile lists no cluster and no cluster template. The search beside the list finds no cluster that applies it, and no edge host binds it. For a profile of the tenant, strata searched each project. For an app profile: the app profile lists no app deployment, and the listing of each project finds none. |
 | `1` | A cluster, an edge host, a cluster template, or an app deployment uses the version, whatever else failed. |
 | `2` | Strata could not answer: it found no consumer, and a reading failed or a project was not checked. A consumer can be missing, so do not delete the version. |
 

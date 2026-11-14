@@ -46,6 +46,43 @@ pub(super) fn edge_host_search<A: PaletteApi>(
     Ok(served(wide_else_home(wide, home, Palette::edge_hosts))?.unwrap_or_default())
 }
 
+/// Every edge host that the scope of `palette` lists, from its edge host search. A Palette
+/// without the search has no edge hosts.
+///
+/// # Errors
+///
+/// The error of the search.
+pub(super) fn listed_hosts<A: PaletteApi>(palette: &Palette<A>) -> Result<Vec<Value>> {
+    Ok(served(palette.edge_hosts())?.unwrap_or_default())
+}
+
+/// The edge hosts of `project`, the project of a profile of a project. No edge host when
+/// `project` is empty.
+///
+/// The search at tenant scope omits each project where no role of the key gives `edgehost.list`,
+/// with no error. The search of that project refuses the key with a denial, such as
+/// `ResourceAccessDenied`. So strata also searches the project of the profile, and a refusal
+/// there is a failed reading.
+///
+/// # Errors
+///
+/// The error of the client of the project, or of its search.
+pub(super) fn project_edge_hosts<A, F>(
+    project: &str,
+    home: &Palette<A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+) -> Result<Vec<Value>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    if project.is_empty() {
+        return Ok(Vec::new());
+    }
+    listed_hosts(client_for(clients, home, project, connect)?)
+}
+
 /// Add each edge host of `hosts` that the profile `uid` is bound to. `hosts` is the answer of the
 /// edge host search, or its error.
 pub(super) fn edge_hosts_bound(
@@ -198,7 +235,8 @@ pub(super) struct Candidates {
 ///
 /// The search goes to `project`, the project of the profile, where each cluster that can run it
 /// is. It goes to `wide` for a profile of the tenant. It goes to `home`, the scope of the key, when
-/// that scope cannot answer. The listing is read through `wide` and then `home`.
+/// that scope cannot answer. A denial of the search of `project` is the answer: the search of
+/// `home` at tenant scope omits that project. The listing is read through `wide` and then `home`.
 pub(super) fn candidate_clusters<A, F>(
     name: &str,
     project: &str,
@@ -219,8 +257,10 @@ where
         } else {
             client_for(clients, home, project, connect)
         };
-        match own {
-            Ok(own) => wide_else_home(own, home, |p| searched_consumers(p, name)),
+        match own.map(|own| searched_consumers(own, name)) {
+            // the search at tenant scope omits the project that denies its search, with no error
+            Ok(Err(e)) if !project.is_empty() && e.denial().is_some() => Err(e),
+            Ok(searched) => searched.or_else(|_| searched_consumers(home, name)),
             Err(_) => searched_consumers(home, name),
         }
     };

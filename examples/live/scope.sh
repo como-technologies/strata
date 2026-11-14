@@ -9,7 +9,7 @@
 # profile, through the API with no project. It reads the profile listing and the profile search
 # of the project, and the document of each version. It lists the versions with strata, asks for
 # the ref that two scopes answer, and records the tenant version by its uid. It asks strata for
-# the consumers of each version (#621). Then it deletes the tenant profile.
+# the consumers of each version (#621, #892). Then it deletes the tenant profile.
 #
 # Needs the profiles (just live-profiles) and no cluster: no cost. It leaves the tenant as it
 # found it. Needs the strata release binary, jq, and the key as verify.sh needs it. Results go
@@ -98,6 +98,10 @@ check tenant-consumers-projects 0 '#621: consumers searched each project of the 
   jq -e '.profile.scope == "tenant" and .projectsRead.read >= 1 and ((.projectsRead.unread // []) | length) == 0' tenant-consumers.out
 check release-consumers 0 '#621: consumers of the release names its project by name, and searches no other project' -- \
   bash -c "\"$strata\" consumers '$R' --json | jq -e '.profile.scope == \"project\" and (.profile.projectName // \"\" | length) > 0 and (has(\"projectsRead\") | not)'"
+# the search of the edge hosts at tenant scope omits a project where the key cannot list them, so
+# consumers of the release also searches the edge hosts of its project (#892)
+check release-consumers-edge-hosts 0 '#892: consumers of the release also searches the edge hosts of its project, and the search answers' -- \
+  bash -c "\"$strata\" consumers '$R' --json | jq -e '.edgeHostsRead | has(\"error\") | not'"
 
 echo "== the tenant profile goes" | tee -a steps.log
 check tenant-delete 0 "#113: delete the tenant profile $T" -- "$live/api.sh" delete-tenant "$T"

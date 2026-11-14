@@ -1,0 +1,8 @@
+$ strata consumers appprofile:shop@1.0.0
+shop@1.0.0 (uid 64f6000000000000000000a1): no consumer found, and a reading failed
+  searched:
+    consumer list    no app deployments
+    app deployments  not done (POST /v1/dashboard/appDeployments?limit=50 failed with HTTP 500: ResourceAccessDenied: Project 'dev' access denied; no role of the key in the project gives the access of the request)
+    edge hosts       not read (an app profile: no edge host binds one)
+  scope: project profile, so only project dev can use it
+  NOT CHECKED: dev (this key cannot read it)

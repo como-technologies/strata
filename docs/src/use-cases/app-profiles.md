@@ -121,6 +121,36 @@ it to another version. The record from step 1 gives the same answer as the ref:
 {{#include ../output/app-consumers-json.txt}}
 ```
 
+A key with no `cluster.get` in `dev` gets an empty consumer list from Palette.
+Strata also lists the app deployments of `dev`, and finds `shop-dev` there:
+
+<div class="playground-demo">
+
+`just playground app-profiles-reach-1` serves this tenant on this machine, with no key and no cost.
+
+</div>
+
+```text
+{{#include ../output/app-consumers-unlisted.txt}}
+```
+
+Exit `1`. When the key cannot list the app deployments of `dev` either, strata
+cannot answer:
+
+<div class="playground-demo">
+
+`just playground app-profiles-reach-2` serves this tenant on this machine, with no key and no cost.
+
+</div>
+
+```text
+{{#include ../output/app-consumers-not-checked.txt}}
+```
+
+Exit `2`: do not delete the version. Give the gate a key that reads the app
+deployments of the project. See
+[App profiles](../internals/palette/other-objects.md#app-profiles).
+
 ## What to do
 
 - Record each app profile version that you deploy, and verify the records on a

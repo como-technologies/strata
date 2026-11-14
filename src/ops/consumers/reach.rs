@@ -12,9 +12,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::reads::{Candidates, search_or_listing};
+use super::Scopes;
+use super::reads::{Candidates, listed_hosts, search_or_listing};
 use crate::api::{Palette, PaletteApi};
-use crate::error::{Error, ErrorDocument, Result, served};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::json::text;
 use crate::ops::client_for;
 use crate::ops::list::{ListedCluster, ListedProject, ProjectListings};
@@ -45,19 +46,24 @@ pub struct UnreadProject {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectsRead {
     /// The projects of the tenant listing that strata searched for the clusters, the virtual
-    /// clusters, and the edge hosts.
+    /// clusters, and the edge hosts, or could not search. For an app profile, strata listed their
+    /// app deployments.
     pub read: usize,
     /// The projects of `read` where a search failed. A consumer in one of them can be missing.
+    /// When the cluster search at tenant scope failed with an error that is not a denial, strata
+    /// searched no project, and each project of `read` is here with that error.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unread: Vec<UnreadProject>,
     /// Why Palette refused the cluster search at tenant scope, when it did. Palette lists every
     /// project of the tenant only to a key whose role gives `project.list` in the tenant, and that
-    /// search needs the same permission. So a project outside the listing is not checked.
+    /// search needs the same permission. So a project outside the listing is not checked. For an
+    /// app profile, strata sends one page of the search only for this answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub tenant_error: Option<Value>,
     /// Why strata could not read the project listing of the tenant. Then strata searched no
-    /// project one by one.
+    /// project one by one. With no client of the tenant, it is the error of that client: in a
+    /// project, Palette lists that project alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
@@ -87,16 +93,14 @@ pub(super) struct EachProject {
 /// Search the tenant and each project of the tenant listing for the clusters that can run a
 /// version of the profile `name`. Search each project for its edge hosts too.
 ///
-/// `wide` is the client of the tenant, and `home` the client of the scope of the key. A search of
-/// a project that fails puts the project in [`ProjectsRead::unread`]. A denial of the cluster
-/// search at tenant scope goes in [`ProjectsRead::tenant_error`], and strata still searches each
-/// project that the key can list. Each other error of that search stops the second reading, as
-/// it does for a profile of a project.
-#[allow(clippy::too_many_arguments)]
+/// A search of a project that fails puts the project in [`ProjectsRead::unread`]. A denial of the
+/// cluster search at tenant scope goes in [`ProjectsRead::tenant_error`], and strata still
+/// searches each project that the key can list. Each other error of that search stops the second
+/// reading, as it does for a profile of a project. Then each project of the listing is in
+/// [`ProjectsRead::unread`] with that error.
 pub(super) fn search_each_project<A, F>(
     name: &str,
-    wide: &Palette<A>,
-    home: &Palette<A>,
+    scopes: &Scopes<'_, A>,
     clients: &mut HashMap<Option<String>, Palette<A>>,
     connect: &mut F,
     listings: &mut ProjectListings,
@@ -106,46 +110,93 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
+    let Scopes { wide, home, .. } = *scopes;
     progress.note("searching the clusters that run the version");
     let mut projects = ProjectsRead::default();
     let mut found = Found::default();
     let Candidates { clusters, resolved } = search_or_listing(wide, name, progress);
-    match clusters {
-        Ok(clusters) => found.clusters.extend(clusters),
-        Err(e) if e.denial().is_some() => projects.tenant_error = Some(e.to_json()),
-        Err(e) => {
-            return EachProject {
-                candidates: Candidates {
-                    clusters: Err(e),
-                    resolved,
-                },
-                hosts: Vec::new(),
-                projects,
-            };
+    let stopped = match tenant_search(clusters, &mut projects) {
+        Ok(clusters) => {
+            found.clusters.extend(clusters);
+            None
         }
-    }
-    match listings.of(wide) {
-        Ok(listed) => {
+        Err(e) => Some(e),
+    };
+    if let Some(listed) = tenant_listing(scopes, listings, &mut projects) {
+        if stopped.is_none() {
             progress.note("searching each project of the tenant");
-            for project in listed {
-                projects.read += 1;
-                let searched = client_for(clients, home, &project.uid, connect)
-                    .and_then(|p| found.search(p, name, progress));
-                if let Err(e) = searched {
-                    projects.unread.push(unread_project(project, &e));
-                }
-            }
         }
-        Err(e) => projects.error = Some(e.to_json()),
+        search_listed(listed, stopped.as_ref(), &mut projects, |project| {
+            client_for(clients, home, &project.uid, connect)
+                .and_then(|p| found.search(p, name, progress))
+        });
     }
     EachProject {
         candidates: Candidates {
-            clusters: Ok(found.clusters),
+            clusters: stopped.map_or(Ok(found.clusters), Err),
             resolved,
         },
         hosts: found.hosts,
         projects,
     }
+}
+
+/// The answer `searched` of the cluster search at tenant scope, for the projects of `read`.
+///
+/// Palette refuses that search with a denial, such as `AccessDenied`, to a key whose role does not
+/// give `project.list` in the tenant. The denial goes in [`ProjectsRead::tenant_error`], and the
+/// answer is then empty: strata still searches each project that the key can list. Each other
+/// error stays the answer, and it stops the search of each project.
+pub(super) fn tenant_search<T: Default>(searched: Result<T>, read: &mut ProjectsRead) -> Result<T> {
+    match searched {
+        Err(e) if e.denial().is_some() => {
+            read.tenant_error = Some(e.to_json());
+            Ok(T::default())
+        }
+        searched => searched,
+    }
+}
+
+/// Search each project of `listed`, the projects of the tenant listing, with `search`.
+///
+/// A project whose search fails goes in [`ProjectsRead::unread`] of `read`. When `stopped` holds
+/// the error of the cluster search at tenant scope, strata searches no project. Then each project
+/// of `listed` is in `unread` with that error.
+pub(super) fn search_listed(
+    listed: &[ListedProject],
+    stopped: Option<&Error>,
+    read: &mut ProjectsRead,
+    mut search: impl FnMut(&ListedProject) -> Result<()>,
+) {
+    read.read = listed.len();
+    for project in listed {
+        let failed = match stopped {
+            Some(e) => Some(unread_project(project, e)),
+            None => search(project).err().map(|e| unread_project(project, &e)),
+        };
+        read.unread.extend(failed);
+    }
+}
+
+/// The project listing of the tenant, through the client of the tenant. None when strata cannot
+/// read it, and [`ProjectsRead::error`] of `read` then says why.
+///
+/// When strata has no client of the tenant and the client of the profile is in a project, the
+/// error is the error of the client of the tenant: in a project, Palette lists that project alone.
+pub(super) fn tenant_listing<'l, A: PaletteApi>(
+    scopes: &Scopes<'_, A>,
+    listings: &'l mut ProjectListings,
+    read: &mut ProjectsRead,
+) -> Option<&'l [ListedProject]> {
+    let error = match scopes.no_tenant {
+        Some(e) if scopes.wide.project_uid().is_some() => e.to_json(),
+        _ => match listings.of(scopes.wide) {
+            Ok(listed) => return Some(listed),
+            Err(e) => e.to_json(),
+        },
+    };
+    read.error = Some(error);
+    None
 }
 
 /// The edge hosts of `hosts`, the answer of the edge host search, and the other hosts of `more`.
@@ -187,7 +238,7 @@ impl Found {
         progress: &Progress,
     ) -> Result<()> {
         let clusters = search_or_listing(palette, name, progress).clusters?;
-        let hosts = served(palette.edge_hosts())?.unwrap_or_default();
+        let hosts = listed_hosts(palette)?;
         self.clusters.extend(clusters);
         self.hosts = joined_hosts(Ok(std::mem::take(&mut self.hosts)), hosts)?;
         Ok(())
@@ -195,7 +246,7 @@ impl Found {
 }
 
 /// The project `project`, which strata could not search, with the error `e`.
-fn unread_project(project: &ListedProject, e: &Error) -> UnreadProject {
+pub(super) fn unread_project(project: &ListedProject, e: &Error) -> UnreadProject {
     UnreadProject {
         uid: project.uid.clone(),
         name: project.name.clone(),

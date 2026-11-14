@@ -85,13 +85,14 @@ filter into a condition of the search. The property is `tags`, with the values
 | --- | --- |
 | `GET /v1/edgehosts/{uid}` | `spec.clusterProfileTemplates`: the profiles bound to the edge host. `verify` reads the state in `status.state`, and takes a 404 as a host that is gone. |
 | `GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that the edge host holds, by the uid that its template names. |
-| `POST /v1/dashboard/edgehosts/search?limit=50` | Every edge host that the key can list, every page, with a summary of its profiles. It gives the uid of an edge host name, and the edge hosts that `consumers` counts. The body has no filter. A Palette with no edge host search answers HTTP 404 or 405, and `consumers` counts no edge host. For a profile of the tenant or of the system, `consumers` also sends it in each project of the tenant listing. |
+| `POST /v1/dashboard/edgehosts/search?limit=50` | Every edge host that the key can list, every page, with a summary of its profiles. It gives the uid of an edge host name, and the edge hosts that `consumers` counts. The body has no filter. A Palette with no edge host search answers HTTP 404 or 405, and `consumers` counts no edge host. For a profile of the tenant or of the system, `consumers` also sends it in each project of the tenant listing. For a profile of a project, `consumers` also sends it in that project. |
 | `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. `spec.clustersConfig`: the config that the group gives each virtual cluster, for the `policy` tier. `verify` reads `status.isActive`, and takes a 404 as a group that is gone. The second reading of `consumers` reads it for each group, to find the groups that pin the version. |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that a cluster group holds, by the uid that its template names. |
 | `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group. It gives the uid of a group name. For the second reading of `consumers`, it gives the groups to read, at tenant scope and at the scope of the key. |
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. `verify` sends no such request. For the second reading of `consumers`, the virtual clusters of each group that pins the version. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |
-| `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. |
+| `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. `metadata.annotations` gives the scope, and the project of an app profile of a project. |
+| `POST /v1/dashboard/appDeployments?limit=50` | Every app deployment of the project, every page, with the app profile version that each one runs. `consumers` sends it in each project that can use an app profile version, and keeps each app deployment of the version. For an app profile of a project, that is its project. For an app profile of the tenant or of the system, it is each project of the tenant listing. The body has no filter: the filter takes no profile. |
 | `GET /v1/appDeployments/{uid}` | One app deployment, for `consumers` of an app profile: its state, and the version its copy names. |
 | `GET /v1/appProfiles/{uid}/tiers` | Each tier in full: its type, version, source tier, registry, values, properties, and manifests. |
 | `GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}` | The content of one manifest of a tier. |
@@ -130,8 +131,12 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
   Then it searches the edge hosts. For a profile of the tenant or of the
   system, it also searches each project of the tenant listing.
 - For an app profile, `consumers` reads `GET /v1/appDeployments/{uid}` for each
-  app deployment that the app profile lists, in its own project, and nothing
-  more.
+  app deployment that the app profile lists, in its own project. Then it lists
+  the app deployments of each project that can use the version. For an app
+  profile of the tenant or of the system, it also sends one page of the cluster
+  search at tenant scope. The page has no condition. Palette refuses it to a key
+  with no `project.list` in the tenant, so the answer shows if the project
+  listing holds each project. `--list-only` stops both.
 - `verify` on a cluster record reads each profile that the cluster runs.
 
 A command reads the project listing of a scope one time. A record, a resolve

@@ -6,8 +6,8 @@ use strata::api::codes::Denial;
 
 use super::Tenant;
 use super::routes::{
-    CLUSTER_SEARCH_PATH, CLUSTERS, PROFILES, audit_log_file, cluster_route, cluster_validate_route,
-    paged, profile_route, repave_route,
+    APP_DEPLOYMENT_LISTING, CLUSTER_SEARCH_PATH, CLUSTERS, PROFILES, audit_log_file, cluster_route,
+    cluster_validate_route, paged, profile_route, repave_route,
 };
 use crate::common_palette::{
     EACH_SCOPE, access_denied_message, error_body, operation_forbidden_message,
@@ -189,13 +189,21 @@ impl Tenant {
     /// clusters of the project. So the chapter that calls it puts no cluster there. No live run
     /// shows it yet.
     pub fn deny_project(&self, project: &str, name: &str) {
+        self.deny_listing(project, name, CLUSTER_SEARCH_PATH);
+    }
+
+    /// Make Palette refuse the app deployment listing of `project` to a key that has no role there
+    /// that gives `appDeployment.list`. `name` is the name of the project. The code of Palette
+    /// shows the answer, the same as for [`Tenant::deny_project`]. No live run shows it yet.
+    pub fn deny_app_deployments(&self, project: &str, name: &str) {
+        self.deny_listing(project, name, APP_DEPLOYMENT_LISTING);
+    }
+
+    /// Make Palette refuse the listing or the search `path` of `project`, which it pages, with
+    /// HTTP 500, the code of [`Denial::Project`], and a message that names the project `name`.
+    fn deny_listing(&self, project: &str, name: &str, path: &str) {
         let message = project_denied_message(name);
-        self.deny(
-            project,
-            &paged(CLUSTER_SEARCH_PATH),
-            Denial::Project,
-            &message,
-        );
+        self.deny(project, &paged(path), Denial::Project, &message);
     }
 
     /// Make Palette refuse the audit log of the profile `uid` in `project`, as it does for a key

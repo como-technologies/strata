@@ -4,7 +4,8 @@
 #   examples/live/app-profile.sh [FROM_STAGE]
 #
 #   1  an app profile with one manifest tier: a record of appprofile:<name>@<version> holds the
-#      tier as a pack, with no digest; verify of it is OK
+#      tier as a pack, with no digest; verify of it is OK; consumers lists the app deployments
+#      of its project (#892)
 #   2  a plain update of the manifest: the uid and the version stay, and verify of the record
 #      reports drift, with the tier AUTHORED; --who reads the log of the kind appprofile (#140)
 #   3  two app profiles with the same two tiers, made with the install orders 2 and 5, and 5
@@ -52,6 +53,12 @@ if stage 1 "an app profile"; then
   check record-unknown 2 '#78: an app profile that is not there is an error that lists the app profiles' -- \
     "$strata" snapshot "appprofile:$N@9.9.9"
   check verify 0 '#78: verify of the record' -- "$strata" verify app.json
+  # only the app deployments of its project can use an app profile of a project, so consumers
+  # lists the app deployments of that project
+  check consumers-project 0 '#892: consumers of the app profile lists the app deployments of its project, and none uses it' -- \
+    "$strata" consumers "appprofile:$N@1.0.0" --json
+  check consumers-scope 0 '#892: the app profile gives the scope project and its project, and consumers names the project that it listed' -- \
+    jq -e '.profile.scope == "project" and (.profile.projectName // "" | length) > 0 and .projectsRead.read == 1 and ((.projectsRead.unread // []) | length) == 0' consumers-project.out
 fi
 
 U=${U:-$(cat uid 2> /dev/null)}
