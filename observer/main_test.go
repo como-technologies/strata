@@ -67,8 +67,6 @@ func exitsTwoSaying(t *testing.T, args []string, words ...string) string {
 }
 
 const (
-	// sameCompare is the answer of `compare` for two sides that are the same, before fakeStrata adds the schema.
-	sameCompare = `{"same":true,"sameContent":true}`
 	// clusterUIDRequired is the error of a run with no --cluster-uid.
 	clusterUIDRequired = "--cluster-uid is required"
 	// alertSend is the file that sends the message of an alert to a webhook.
@@ -83,7 +81,6 @@ const (
 // `compare` prints. verifyExit is the exit code of `verify`.
 func fakeStrata(t *testing.T, compare string, verifyExit int, behindFails bool) string {
 	t.Helper()
-	compare = strings.Replace(compare, "{", `{"schema":"`+docs.DiffSchema+`",`, 1)
 	return testkit.Strata(t, testkit.VerifyFirst+`  if [ `+strconv.Itoa(verifyExit)+` = 2 ]; then `+testkit.ErrorLine(docs.KindTransport, `"message":"SENTINEL"`)+`; exit 2; fi
 `+testkit.VerifyAndSnapshot+`compare) echo '`+compare+`'; case '`+compare+`' in *'"same":true'*) exit 0 ;; *) exit 1 ;; esac ;;
 behind)
@@ -96,13 +93,13 @@ esac`)
 func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	records := t.TempDir()
-	testkit.WriteGzip(t, records, "aws-stack.json.gz", `{"schema":"`+docs.SnapshotSchema+`","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"packs":[]}`)
+	testkit.WriteGzip(t, records, testkit.RecordFile, testkit.AWSStack(`,"packs":[]`))
 	return []string{"once", "--strata", bin, "--cluster-uid", "c1", "--records", records, "--work", t.TempDir(), "--state", filepath.Join(t.TempDir(), "state")}
 }
 
 func TestOnceExitsZeroWithNoFindingAndPrintsTheSummary(t *testing.T) {
 	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), &out, &errs)
+	code := run(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), &out, &errs)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr %q", code, errs.String())
 	}
@@ -129,7 +126,7 @@ func TestOnceExitsOneWhenAFindingExists(t *testing.T) {
 
 func TestOnceExitsTwoWhenACycleFailsAndStillPrintsTheSummary(t *testing.T) {
 	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, `{"same":true}`, 2, false)), &out, &errs)
+	code := run(onceArgs(t, fakeStrata(t, testkit.CompareSame, 2, false)), &out, &errs)
 	var s model.Summary
 	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
 		t.Fatalf("stdout %q: %v", out.String(), err)
@@ -418,7 +415,7 @@ func TestServeRefusesAMissingFlagLikeOnce(t *testing.T) {
 }
 
 func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
+	args := serveArgs(t, fakeStrata(t, testkit.CompareSame, 0, false))
 	addr, stop, stderr := startServe(t, args)
 	client := &http.Client{Timeout: 5 * time.Second}
 	get := func(method, path, host string) *http.Response {
@@ -462,7 +459,7 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 }
 
 func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
+	args := serveArgs(t, fakeStrata(t, testkit.CompareSame, 0, false))
 	addr, stop, _ := startServe(t, args)
 	defer stop()
 	// The state of the page reads the content cycle only, so the wait also reads the versions cycle.
@@ -473,7 +470,7 @@ func TestServeRunsTheFirstCycleOfEachTimerAtTheStart(t *testing.T) {
 }
 
 func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
-	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
+	args := serveArgs(t, fakeStrata(t, testkit.CompareSame, 0, false))
 	addr, stop, _ := startServe(t, args)
 	var errs bytes.Buffer
 	if code := run([]string{"health", "--listen", addr}, io.Discard, &errs); code != 0 {
@@ -509,7 +506,7 @@ func holdingStrata(t *testing.T, hold, pids string) string {
   *) echo '`+testkit.CompareSame+`' ;;
   esac ;;
 behind)
-  echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}'
+  echo '`+testkit.KubernetesBehind+`'
   exit 1 ;;
 esac`)
 }
@@ -599,7 +596,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 // directory of the process. So a relative --strata must become absolute at the start, or each run
 // fails with no process.
 func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
-	bin := fakeStrata(t, sameCompare, 0, false)
+	bin := fakeStrata(t, testkit.CompareSame, 0, false)
 	dir := filepath.Dir(bin)
 	for _, c := range []struct{ name, path string }{
 		{"the current directory", "./strata"},
@@ -640,14 +637,14 @@ func podsAPI(t *testing.T) *testkit.KubeAPI {
 func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), "--kube-dir", kubeAPI.Dir())
+	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
 	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf(kubeRequests, n)
 	}
-	serve := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
+	serve := serveArgs(t, fakeStrata(t, testkit.CompareSame, 0, false))
 	addr, stop, _ := startServe(t, append(serve, "--kube-dir", kubeAPI.Dir()))
 	// With --read-pods, the content cycle reads the pods. So the count of the requests waits for its end.
 	testkit.WaitFor(t, "the first content cycle", func() bool {
@@ -667,7 +664,7 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *testing.T) {
 	kubeAPI := podsAPI(t)
 	var out, errs bytes.Buffer
-	args := append(onceArgs(t, fakeStrata(t, sameCompare, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
+	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
 		t.Fatalf("exit %d, stderr %s", code, errs.String())
 	}
@@ -682,7 +679,7 @@ func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *te
 
 func TestServeWithReadPodsServesTheDigestsOfTheImages(t *testing.T) {
 	kubeAPI := podsAPI(t)
-	args := serveArgs(t, fakeStrata(t, sameCompare, 0, false))
+	args := serveArgs(t, fakeStrata(t, testkit.CompareSame, 0, false))
 	addr, stop, _ := startServe(t, append(args, "--read-pods", "--kube-dir", kubeAPI.Dir()))
 	var doc model.Observed
 	testkit.WaitFor(t, "the first read of the pods", func() bool {

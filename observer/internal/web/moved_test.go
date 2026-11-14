@@ -23,6 +23,12 @@ const (
 	foldWords    = "1 record of a profile version that this cluster does not run"
 )
 
+// filterButton gives the button of the filter of the table of the profiles, with its words. The filter is on when on is
+// true.
+func filterButton(filter, words string, on bool) string {
+	return `<button data-filter="` + filter + `" class="` + onClass(on) + `">` + words + `</button>`
+}
+
 // versionPageOfMoved checks the page of the version moved. It must hold the badge of the status and the fact of a version
 // that the cluster no longer runs. It names no move and no newer version. Each of its 3 packs says only what images it lists.
 func versionPageOfMoved(t *testing.T, screens []screen, badgeOfStatus string) {
@@ -43,7 +49,7 @@ func versionPageOfMoved(t *testing.T, screens []screen, badgeOfStatus string) {
 func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testing.T) {
 	screens := crawl(t, devdata.StateOK)
 	profiles := pageOf(t, screens, "#profiles", "")
-	mustHold(t, "the filters", profiles, `<button data-filter="all" class="on">All 12</button>`, `<button data-filter="newer" class="">Newer 6</button>`)
+	mustHold(t, "the filters", profiles, filterButton("all", "All 12", true), filterButton("newer", "Newer 6", false))
 	table, fold, found := strings.Cut(profiles, `<details `+movedFold)
 	if !found {
 		t.Fatal("the screen has no fold of the versions that the cluster does not run")
@@ -68,8 +74,7 @@ func TestAVersionThatTheClusterNoLongerRunsIsInAFoldWithAStatusOfItsOwn(t *testi
 func TestAVersionThatTheClusterNoLongerRunsWithAFindingIsADriftWithNoNewerVersion(t *testing.T) {
 	screens := crawl(t, devdata.StateMovedDrift)
 	profiles := pageOf(t, screens, "#profiles", "")
-	mustHold(t, "the filters", profiles, `<button data-filter="all" class="on">All 2</button>`, `<button data-filter="drift" class="">Drift 1</button>`,
-		`<button data-filter="newer" class="">Newer 1</button>`)
+	mustHold(t, "the filters", profiles, filterButton("all", "All 2", true), filterButton("drift", "Drift 1", false), filterButton("newer", "Newer 1", false))
 	mustNotHold(t, "the profiles", profiles, movedFold)
 	mustHold(t, "the row", rowTo(t, profiles, movedHash), badge("r", "Drift"), "traefik changed in the published version.")
 	overview := pageOf(t, screens, "#overview", "")

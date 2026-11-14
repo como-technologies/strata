@@ -87,7 +87,7 @@ var oncall = testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testk
 // dexDrift starts the open message of the drift of fred-identity@2.3.0 on quarry-1, and quarryLost the message of a loss
 // of contact.
 const (
-	dexDrift   = testkit.QuarryDrift + "\nfred-identity@2.3.0: "
+	dexDrift   = testkit.QuarryDrift + "\n" + testkit.DexProfile + ": "
 	quarryLost = testkit.Quarry + "Lost contact\n"
 )
 
@@ -96,7 +96,7 @@ const sentWaiting = "sent %d, waiting %d, item %+v"
 
 var firstSight = now.Add(-time.Hour)
 
-var drift = Subject{ID: "d1", News: NewsDrift, Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"},
+var drift = Subject{ID: "d1", News: NewsDrift, Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"},
 	Detail: model.PublishedChanged.Sentence(), Since: &firstSight}
 
 var content = Known{Content: true}
@@ -115,7 +115,7 @@ func TestOneMessageWhenAFindingOpensNoneOnTheNextCycleAndOneWhenItClears(t *test
 	b.later(15 * time.Minute)
 	b.cycle(nil, content)
 	got := b.texts()
-	if len(got) != 2 || !strings.HasPrefix(got[1], testkit.QuarryDrift+" cleared\nfred-identity@2.3.0\nA check proved that this is gone, at 2026-11-04T12:30:00Z.") {
+	if len(got) != 2 || !strings.HasPrefix(got[1], testkit.QuarryDrift+" cleared\n"+testkit.DexProfile+"\nA check proved that this is gone, at 2026-11-04T12:30:00Z.") {
 		t.Fatalf(testkit.ClearMessage, got)
 	}
 	b.later(15 * time.Minute)
@@ -235,14 +235,14 @@ func TestADigestGoesOncePerPeriodListsTheOpenItemsAndHasNoClear(t *testing.T) {
 	newer := func(id, profile string) Subject {
 		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "dex@2.42.0 has a newer version, dex@2.44.0."}
 	}
-	subjects := []Subject{newer("n1", "fred-identity@2.3.0"), newer("n2", "barney-base@1.5.0")}
+	subjects := []Subject{newer("n1", testkit.DexProfile), newer("n2", "barney-base@1.5.0")}
 	known := Known{Content: true, Newer: true}
 	b.cycle(subjects, known)
 	if len(b.send.sent) != 1 || b.send.sent[0].channel != "planning" {
 		t.Fatalf("messages %+v", b.send.sent)
 	}
 	text := b.send.sent[0].text
-	if !strings.HasPrefix(text, testkit.Quarry+"Digest\n2 open items:\n- Newer version · barney-base@1.5.0: ") || !strings.Contains(text, "\n- Newer version · fred-identity@2.3.0: ") {
+	if !strings.HasPrefix(text, testkit.Quarry+"Digest\n2 open items:\n- Newer version · barney-base@1.5.0: ") || !strings.Contains(text, "\n- Newer version · "+testkit.DexProfile+": ") {
 		t.Errorf("the digest %q", text)
 	}
 	if it := b.store.Items["n1"]; it.Sent == nil {
@@ -270,7 +270,7 @@ func TestADigestWithNothingToListWaitsForTheFirstItem(t *testing.T) {
 	known := Known{Content: true, Newer: true}
 	b.cycle(nil, known)
 	b.later(30 * 24 * time.Hour)
-	b.cycle([]Subject{{ID: "n1", News: NewsNewer, Profile: "fred-identity@2.3.0", Detail: "x"}}, known)
+	b.cycle([]Subject{{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}}, known)
 	if len(b.send.sent) != 1 {
 		t.Errorf("messages %q", b.texts())
 	}
@@ -278,7 +278,7 @@ func TestADigestWithNothingToListWaitsForTheFirstItem(t *testing.T) {
 
 func TestANewerVersionIsNotClearedByACycleThatDidNotReadVersions(t *testing.T) {
 	b := newBench(t, oncall)
-	n := Subject{ID: "n1", News: NewsNewer, Profile: "fred-identity@2.3.0", Detail: "x"}
+	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
 	b.cycle([]Subject{n}, Known{Content: true, Newer: true})
 	b.cycle(nil, Known{Content: true})
 	if len(b.store.Items) != 1 {
@@ -323,7 +323,7 @@ func TestACycleWithNoRuleForTheNewsSendsNothing(t *testing.T) {
 func TestTheViewShowsFiringPendingInactiveAndMuted(t *testing.T) {
 	b := newBench(t, testkit.Rules([]string{oncallF, planningG}, testkit.DriftNow, testkit.ImageNow, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "muteUntil": "2026-12-01"},
 		{"level": "profile", "match": "wilma-gateway", "news": "newer", "muteUntil": "2026-11-01"}`))
-	n := Subject{ID: "n1", News: NewsNewer, Profile: "fred-identity@2.3.0", Detail: "x"}
+	n := Subject{ID: "n1", News: NewsNewer, Profile: testkit.DexProfile, Detail: "x"}
 	muted := Subject{ID: "n2", News: NewsNewer, Profile: "barney-base@1.5.0", Detail: "x"}
 	b.cycle([]Subject{drift, n, muted}, Known{Content: true, Newer: true})
 	// The digest went, so the newer version fires. A second newer version waits for the next digest.
@@ -466,11 +466,12 @@ func TestAnItemKeepsWhatItsSubjectSaysNowForTheClearAndTheDigest(t *testing.T) {
 }
 
 func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) {
+	const sentCounts = "%s: planning got %d, platform got %d, outbox %+v"
 	b := newBench(t, testkit.Rules([]string{testkit.Channel("planning", "f"), testkit.Channel("platform", "g")}, newerToPlanning, `{"level": "profile", "match": "barney-base", "news": "newer", "send": "digest", "to": "platform"}`))
 	item := func(id, profile string) Subject {
 		return Subject{ID: id, News: NewsNewer, Profile: profile, Packs: []string{"dex"}, Detail: "x"}
 	}
-	subjects := []Subject{item("n1", "fred-identity@2.3.0"), item("n2", "barney-base@1.5.0")}
+	subjects := []Subject{item("n1", testkit.DexProfile), item("n2", "barney-base@1.5.0")}
 	known := Known{Content: true, Newer: true}
 	sentTo := func(channel string) int {
 		n := 0
@@ -487,7 +488,7 @@ func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) 
 		b.later(15 * time.Minute)
 	}
 	if sentTo("planning") != 1 || sentTo("platform") != 0 || len(b.store.Outbox) != 1 || b.store.Outbox[0].Channel != "platform" {
-		t.Fatalf("while platform is down: planning got %d, platform got %d, outbox %+v", sentTo("planning"), sentTo("platform"), b.store.Outbox)
+		t.Fatalf(sentCounts, "while platform is down", sentTo("planning"), sentTo("platform"), b.store.Outbox)
 	}
 	delete(b.send.fail, "platform")
 	for range 2 {
@@ -495,7 +496,7 @@ func TestADigestThatOneChannelMissedIsMadeAgainForThatChannelOnly(t *testing.T) 
 		b.later(15 * time.Minute)
 	}
 	if sentTo("planning") != 1 || sentTo("platform") != 1 || len(b.store.Outbox) != 0 {
-		t.Errorf("after platform came back: planning got %d, platform got %d, outbox %+v", sentTo("planning"), sentTo("platform"), b.store.Outbox)
+		t.Errorf(sentCounts, "after platform came back", sentTo("planning"), sentTo("platform"), b.store.Outbox)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestThePageStateFollowsTheFirstRowThatMatches(t *testing.T) {
@@ -26,7 +27,7 @@ func TestThePageStateFollowsTheFirstRowThatMatches(t *testing.T) {
 		{"two 401 with no good cycle", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindAPI, 401)}, PageLost},
 		{"a 403", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindAPI, 403)}, PageLost},
 		{"a link that fails", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindTransport, 0)}, PageLost},
-		{"an answer that is no JSON", true, 2, Clock{Every: every, FailedRuns: 3, LastError: e(docs.KindNotJSON, 0)}, PageLost},
+		{testkit.NotJSONAnswer, true, 2, Clock{Every: every, FailedRuns: 3, LastError: e(docs.KindNotJSON, 0)}, PageLost},
 		{"a timeout", true, 2, Clock{Every: every, FailedRuns: 2, LastError: e(docs.KindTimeout, 0)}, PageLost},
 		{"lost after a good cycle", true, 2, Clock{Every: every, Last: &fresh, FailedRuns: 2, LastError: e(docs.KindAPI, 401)}, PageLost},
 		{"one failed run is not lost", true, 2, Clock{Every: every, FailedRuns: 1, LastError: e(docs.KindAPI, 401)}, PageFirstLoad},

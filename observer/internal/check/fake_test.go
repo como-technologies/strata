@@ -27,12 +27,10 @@ var t0 = time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 const sentinel = "SENTINEL-CLEAR-VALUE"
 
 // verifyBehind is the failure of a check of the count of the runs of verify and of behind. versionsNewer is the failure
-// of a check of the versions and the newer versions of a summary. newRevision is the meta file of a new revision that a pipeline
-// approved.
+// of a check of the versions and the newer versions of a summary.
 const (
 	verifyBehind  = "verify %d, behind %d"
 	versionsNewer = "versions %+v, newer %d"
-	newRevision   = `{"baseline":"approved","revision":"5f2d8b3c"}`
 )
 
 // world holds the answers of the fake strata. A record is known by its index: record-<i>.json.
@@ -149,12 +147,7 @@ func (w *world) runSnapshot(dir string, args []string) (runner.Result, error) {
 		if w.profileErr != nil {
 			return runner.Result{}, w.profileErr
 		}
-		raw, err := json.Marshal(map[string]any{"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r-" + name,
-			"source": map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"}, "packs": []any{}})
-		if err != nil {
-			return runner.Result{}, err
-		}
-		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), raw, 0o600)
+		return runner.Result{}, os.WriteFile(filepath.Join(dir, out), []byte(testkit.Snapshot(name, version)), 0o600)
 	}
 	if w.clusterErr != nil {
 		return runner.Result{}, w.clusterErr
@@ -308,13 +301,7 @@ func (r *rig) record(name, version string, keys ...string) {
 		layer, pack, _ := strings.Cut(k, "/")
 		packs = append(packs, map[string]any{"key": k, "layer": layer, "name": pack, "version": "1.0.0", "registryUid": "reg1", "images": []string{imageRef}})
 	}
-	body := testkit.MustJSON(r.t, map[string]any{
-		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
-		"source":    map[string]any{"uid": "u-" + name, "name": name, "version": version, "type": "cluster"},
-		"packs":     packs,
-		"variables": []map[string]any{{"name": "team", "value": sentinel}},
-	})
-	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", string(body))
+	testkit.WriteGzip(r.t, r.records, name+"@"+version+".json.gz", testkit.RigRecord(r.t, name, version, packs, sentinel))
 }
 
 func (r *rig) meta(body string) {

@@ -27,7 +27,7 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	if Mark(dir) != first {
 		t.Error("a file that is no record changed the mark")
 	}
-	if err := os.WriteFile(filepath.Join(dir, metaFile), []byte(`{"baseline":"approved"}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, metaFile), []byte(testkit.ApprovedMeta(testkit.Revision)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	second := Mark(dir)

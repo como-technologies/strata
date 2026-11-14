@@ -62,6 +62,28 @@ type place struct {
 // splashClass gives the class of a splash of the size and the tone.
 func splashClass(size, tone string) string { return `class="splash ` + size + ` tone-` + tone + `"` }
 
+// bookNext gives the next step of a place that ends with the section of The observer in the book. step holds the first
+// words of the step.
+func bookNext(step, section string) string {
+	return nextOpen + step + " The book of strata tells how, in The observer: " + section + ".</div>"
+}
+
+// retryButton gives the button of a place that asks again for what, such as the page or a diff.
+func retryButton(what string) string {
+	return `<button type="button" class="btn" data-retry="` + what + `">Try now</button>`
+}
+
+// labelStart starts a row of a header or of a panel with its label.
+func labelStart(label string) string { return "<div><span>" + label + "</span>" }
+
+// labelRow gives a row of a header or of a panel with its label and its value.
+func labelRow(label, value string) string { return labelStart(label) + value + "</div>" }
+
+// upstreamRow gives the row of the upstream digest of a pack.
+func upstreamRow(digest string) string {
+	return labelRow("Upstream", `<span class="m bright">`+digest+`</span>`)
+}
+
 // checkPlace fails when the screen lacks the mark of the tone, the title, the fact, or the next step of the place.
 func checkPlace(t *testing.T, p place, html string) {
 	t.Helper()
@@ -81,15 +103,19 @@ func checkPlace(t *testing.T, p place, html string) {
 
 // The words of the places that more than one test reads: the titles, the facts, the next steps, and the commands.
 const (
-	kubeLogs       = "kubectl -n strata-observer logs"
+	kubeNS         = "kubectl -n strata-observer"
+	kubeLogs       = kubeNS + " logs"
 	logCommand     = "<code>" + kubeLogs + " deploy/strata-observer --tail=20</code>"
 	keySecret      = "strata-observer-key"
 	noRecordsTitle = "Nothing to compare against yet"
 	noRecordsFact  = "A record is the copy of a profile that the observer checks against. Start with what the cluster runs now, and let your pipeline approve records later."
 	firstSeenCmd   = testkit.RecordsTool + " --first-seen " + testkit.ClusterUID
 	applyEnd       = " | kubectl apply --server-side -f -</code>"
-	// nextStep starts the next step of a place, and readTheLog ends a next step that sends a person to the log.
-	nextStep       = `<div class="next"><b>Next</b> `
+	// nextOpen opens the next step of a place, and nextWord is its first word. nextStep starts the next step, and readTheLog
+	// ends a next step that sends a person to the log.
+	nextOpen       = `<div class="next">`
+	nextWord       = "<b>Next</b> "
+	nextStep       = nextOpen + nextWord
 	readTheLog     = ", then read the log."
 	lostTitle      = "We lost the signal from Palette"
 	noGoodCheck    = "No check has ended well"
@@ -99,8 +125,8 @@ const (
 	firstCheck     = "The first check is running"
 	noApproval     = "No pipeline approved that content."
 	alertsOffFact  = "This install has no alert rules."
-	alertsNext     = "<b>Next</b> Turn on the alerts when you install the observer."
-	podsOffNext    = "<b>Next</b> Turn on the read of the pods when you install the observer: with the chart, set readPods to true and upgrade."
+	alertsNext     = nextWord + "Turn on the alerts when you install the observer."
+	podsOffNext    = nextWord + "Turn on the read of the pods when you install the observer: with the chart, set readPods to true and upgrade."
 	podsUnread     = "the read of the pods failed"
 	stoppedTitle   = "Checks stopped before one ended well"
 	offlineTitle   = "This page lost its line to the observer"
@@ -120,7 +146,7 @@ const (
 	samePublished  = sameBadge + publishedNow
 	sameCopy       = sameBadge + clusterCopy
 	noNewerVersion = `<b class="ok">Current</b><span>No newer version</span>`
-	dexCompare     = compareRecord + dexSubject + " --full"
+	dexCompare     = compareRecord + testkit.DexProfile + " --full"
 	dexFullCompare = "<code>" + dexCompare + "</code>"
 	checkTheKey    = "Check the key in the Secret"
 	reachPalette   = "Check that the observer can reach Palette"
@@ -137,12 +163,14 @@ const (
 	coverJump    = "What a check does not cover"
 	lostContact  = "Lost contact with Palette"
 	repaveHint   = "is a hint from strata"
-	amberBar     = `<div class="alertbar a">`
-	linkButton   = `<button type="button" class="lnk" `
-	changedHere  = " changed here.</span>"
-	newerSpan    = "<span>Newer version</span>"
-	refSpan      = `<span class="m ref">`
-	flagWrap     = `<span class="flagw">`
+	// alertBar starts the bar of an alert, before the letter of its tone. amberBar starts an amber bar.
+	alertBar    = `<div class="alertbar `
+	amberBar    = alertBar + `a">`
+	linkButton  = `<button type="button" class="lnk" `
+	changedHere = " changed here.</span>"
+	newerSpan   = "<span>Newer version</span>"
+	refSpan     = `<span class="m ref">`
+	flagWrap    = `<span class="flagw">`
 	// checkCard is the head of the card "Check this yourself", qaRow starts a row of it, and codeOf finds a command.
 	checkCard = "<h2>Check this yourself</h2>"
 	qaRow     = `<li><div class="qa">`
@@ -189,7 +217,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			return before
 		}, "lost", "lg", offlineTitle,
 			[]string{"The port-forward may have ended, or the pod may have restarted. This page asks again each 30 seconds."},
-			[]string{"<code>kubectl -n strata-observer port-forward deploy/strata-observer 18080:8080</code>", `<button type="button" class="btn" data-retry="page">Try now</button>`}},
+			[]string{"<code>" + kubeNS + " port-forward deploy/strata-observer 18080:8080</code>", retryButton("page")}},
 		{"a route that does not exist", func(t *testing.T) string { return shown(t, devdata.StateOK, "#p-old-profile@1.0.0")[0] }, "off", "lg", "This profile is not here",
 			[]string{`<span class="m">old-profile@1.0.0</span> is in no record now. A new revision of the records can remove it.`}, []string{`<a class="btn" href="#profiles">All profiles</a>`}},
 		{"no findings", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
@@ -202,13 +230,13 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{linkButton + `data-jump="coverage">` + coverJump + `</button>`}},
 		{"the pods off", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesOff), "#images", "") }, "off", "md", podsOffTitle,
 			[]string{podsOffFact + " With the read on, the page shows the digest that each tag runs, and finds a tag that moved."},
-			[]string{`<div class="next">` + podsOffNext + ` The book of strata tells how, in The observer: The pods of the cluster.</div>`}},
+			[]string{bookNext(podsOffNext, "The pods of the cluster")}},
 		{podsUnread, func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateImagesUnread), "#images", "") }, "warn", "md", podsTitle,
 			[]string{podsRefusedWords + " The findings of the content check are not affected."},
 			[]string{askListPods, canListPods}},
 		{"alerts not set", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateAlertsUnset), "#alerts", "") }, "off", "md", alertsOffTitle,
 			[]string{alertsOffFact + " A message goes to a webhook when a finding opens and when it clears."},
-			[]string{`<div class="next">` + alertsNext + ` The book of strata tells how, in The observer: Alerts.</div>`}},
+			[]string{bookNext(alertsNext, "Alerts")}},
 		{matchesRecord, func(t *testing.T) string {
 			return pageOf(t, crawl(t, devdata.StateQuiet), dexHash, "")
 		}, "same", "md", "Undisturbed",
@@ -223,7 +251,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 		}, "warn", "md", hiddenTitle,
 			[]string{"This pack was not fully checked. velero has no upstream digest. The content check runs every 15m."}, []string{nextStep + `<a href="#notchecked">Why, on the ` + wordNotChecked + ` page</a></div>`}},
 		{"a diff that a cycle holds", func(t *testing.T) string { return retried(t, dexHash)[0] }, "build", "sm", busyTitle, []string{"The observer answers one read at a time. This page asks again each 30 seconds."},
-			[]string{`<button type="button" class="btn" data-retry="diff">Try now</button>`}},
+			[]string{retryButton("diff")}},
 		{"a text too large", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateTextTooLarge), dexHash, "") }, "off", "sm", tooLargeTitle,
 			[]string{tooLargeFact},
 			[]string{dexFullCompare}},
@@ -365,7 +393,7 @@ func TestLostAndStaleWithFindingsStayABarOverTheFindings(t *testing.T) {
 		state devdata.State
 		bar   string
 	}{
-		{devdata.StateLost, `<div class="alertbar r">` + lostContact + `.`},
+		{devdata.StateLost, alertBar + `r">` + lostContact + `.`},
 		{devdata.StateStale, amberBar + `Checks stopped.`},
 	} {
 		t.Run(string(c.state), func(t *testing.T) {
@@ -631,7 +659,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	mustNotHold(t, where, ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
@@ -642,7 +670,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 // An empty tab says so, and it links to the tab that has the change. A click on the link opens that tab.
 func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	empty := pageWith(t, dir, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
@@ -656,7 +684,7 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	mustHold(t, "after the link", r.After, tabOn(dexPublished, "manifests"), dexManifest)
 	// A card with no change anywhere says only that nothing changed, and it links nowhere.
 	none := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified, d.Manifests = []docs.Leaf{}, "", []docs.Manifest{}
 	})})
 	page := pageWith(t, none, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
@@ -781,7 +809,7 @@ func TestTheWordsOfTheFlagsHaveOneCopyAndTheyComeFromTheBook(t *testing.T) {
 // AUTHORED opens Manifests when only a manifest changed. IMAGES opens Images, CHARTS opens Charts, and IDENTITY and UPSTREAM stay plain.
 func TestAuthoredOpensManifestsWhenOnlyAManifestChanged(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Settings, d.Values.Unified = []docs.Leaf{}, ""
 	})})
 	page := pagesOf(t, dir, dexHash)[0]
@@ -823,7 +851,7 @@ func termRows(t *testing.T, page string) []termRow {
 	return out
 }
 
-const recordRead = "for i in 0 1 2 3; do kubectl -n strata-observer get secret " + recordsSecret + "$i -o json | jq -r --arg k '%s' '.data[$k] // empty'; done | base64 -d | gunzip > record.json"
+const recordRead = "for i in 0 1 2 3; do " + kubeNS + " get secret " + recordsSecret + "$i -o json | jq -r --arg k '%s' '.data[$k] // empty'; done | base64 -d | gunzip > record.json"
 
 // The questions of the card "Check this yourself", and the commands of strata that it gives, that more than one test reads.
 const (
@@ -847,7 +875,7 @@ func TestTheCardCheckThisYourselfHasTheRowsOfTheMockWithRealNames(t *testing.T) 
 		t.Fatalf("the profile page has %d rows, want 5: %+v", len(profile), profile)
 	}
 	for i, want := range []termRow{
-		{"Get the record that this check used", fmt.Sprintf(recordRead, "fred-identity_2.3.0.json.gz"), `<span class="m">rev 4e1c7a2</span>`},
+		{"Get the record that this check used", fmt.Sprintf(recordRead, "fred-identity_2.3.0.json.gz"), `<span class="m">rev ` + testkit.Revision + `</span>`},
 		{qPaletteHas, verifyRecord, badge("r", "Drift")},
 		{"Who changed it?", verifyWho, ""},
 		{"What changed?", dexCompare, "1 pack"},
@@ -919,7 +947,7 @@ func TestTheNamesInTheCommandsOfTheCardAreRealNames(t *testing.T) {
 // The digest in Upstream reads like the other values, and a blank value reads "none".
 func TestTheHeaderOfAPackShowsTheDigestLikeTheOtherValuesAndNoneForABlank(t *testing.T) {
 	page := shown(t, devdata.StateOK, reloaderHash)[0]
-	mustHold(t, "the header", page, `<div><span>Upstream</span><span class="m bright">sha256:94ccf3b3b185</span></div>`, `<div><span>Registry</span>Public Repo</div>`)
+	mustHold(t, "the header", page, upstreamRow("sha256:94ccf3b3b185"), labelRow("Registry", "Public Repo"))
 	css := string(readPage(t, "app.css"))
 	rulesHold(t, css, map[string][]string{".meta div span.bright": {"color:var(--ink);", "display:inline;"}})
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"profiles.json": editJSON(t, func(v *api.ProfilesView) {
@@ -932,7 +960,7 @@ func TestTheHeaderOfAPackShowsTheDigestLikeTheOtherValuesAndNoneForABlank(t *tes
 		}
 	})})
 	blank := pagesOf(t, dir, reloaderHash)[0]
-	mustHold(t, "a blank value", blank, `<div><span>Registry</span>none</div><div><span>Kind</span>none</div><div><span>Upstream</span><span class="m bright">none</span></div>`)
+	mustHold(t, "a blank value", blank, labelRow("Registry", "none")+labelRow("Kind", "none")+upstreamRow("none"))
 }
 
 // No inline style reaches a screen of any set. The policy of the page stops it, and the color of a slab is a rule of app.css.
@@ -1102,7 +1130,7 @@ func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 	mustHold(t, "the tiles", table, tileLabel("Packs with a newer version")+tileValue("10"), tileLabel("Moves that repave")+tileValue("2"),
 		tileLabel("New this week"), tileLabel("Versions newer than the pins")+tileValue("16"))
 	mustNotHold(t, "the words of the table", strings.ToLower(textOf(table)), "behind")
-	mustHold(t, "the head", table, `<button data-nview="table" aria-pressed="true" class="on">Table</button>`, `id="q-newer"`)
+	mustHold(t, "the head", table, pressedButton("nview", "table", "Table", true), `id="q-newer"`)
 	mustHold(t, "the row of ubuntu-aws", rowTo(t, table, ubuntuHash), `title="Only the build of the pack changes: the values stay the same">same</span>`)
 	timeline := pageWith(t, "testdata/api", devdata.StateOK, "#newer", `S.newerView = "timeline"`)
 	mustNotHold(t, "the words of the timeline", strings.ToLower(textOf(timeline)), "behind")
@@ -1128,11 +1156,19 @@ func TestTheNewerPageHasTilesATableAndATimeline(t *testing.T) {
 	}
 }
 
+// runningJS gives the code of the page that sets the progress of the cycle, such as content. The cycle started at the
+// time of the JavaScript expression start, or now when start is empty.
+func runningJS(cycle, start string, done, total int) string {
+	return fmt.Sprintf("D.cluster.%s.running = {startedAt: new Date(%s).toISOString(), done: %d, total: %d};", cycle, start, done, total)
+}
+
+// versionsUnread is the code of the page for a versions cycle that has not read the registries yet.
+const versionsUnread = "D.cluster.versions.readAt = null; "
+
 // While a cycle runs, its pill shows a ring of its progress and how much is done, with the age of the
 // last good cycle of its kind. A cycle that knows no work yet has an open ring and says "checking".
 func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
-	page := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.running = {startedAt: new Date(Date.now() - 120000).toISOString(), done: 3, total: 8};
-		D.cluster.content.running = {startedAt: new Date().toISOString(), done: 0, total: 1};`)
+	page := pageWith(t, "testdata/api", devdata.StateOK, "#overview", runningJS("versions", "Date.now() - 120000", 3, 8)+" "+runningJS("content", "", 0, 1))
 	mustHold(t, "the pill of the versions", page, `<svg class="ring" viewBox="0 0 16 16"`, `Versions <b>checking 3 of 8</b> · last `)
 	mustHold(t, "the pill of the content", page, `<svg class="ring open" viewBox="0 0 16 16"`, `Content <b>checking</b> · last `)
 	mustNotHold(t, "the pills", page, "every 15m", "every 6h")
@@ -1141,10 +1177,10 @@ func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
 // Before the first read of the versions ends, the tile and the nav item of the newer versions show a
 // dash and say why: a count of 0 would read as "every pack is current".
 func TestNewerVersionsShowADashUntilTheFirstReadOfTheVersions(t *testing.T) {
-	unread := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.readAt = null; D.cluster.versions.running = null;`)
+	unread := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+"D.cluster.versions.running = null;")
 	mustHold(t, "unread", unread, tileLabel(newerVersions)+tileValue("-")+`<div class="s">`+notReadYet+`</div>`,
 		`<span>`+newerVersions+`</span><span class="cnt">-</span>`)
-	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", `D.cluster.versions.readAt = null; D.cluster.versions.running = {startedAt: new Date().toISOString(), done: 0, total: 1};`)
+	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+runningJS("versions", "", 0, 1))
 	mustHold(t, "reading", reading, tileValue("-")+`<div class="s">Reading the registries</div>`)
 	read := pageWith(t, "testdata/api", devdata.StateOK, "#overview", "")
 	mustNotHold(t, "read", read, tileLabel(newerVersions)+tileValue("-"))

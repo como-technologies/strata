@@ -31,8 +31,10 @@ const (
 	variablesNote   = "The move adds 2 " + variableWords + "s:"
 	twoVariables    = variablesNote + " identity_owner, issuer_url"
 	twoValues       = "They have no default value. Give each one a value at the update, or " + variableRefuses
-	oneRule         = "Strata checks this rule, because the question to Palette does not check it."
-	twoRules        = "Strata checks these rules, because the question to Palette does not check them."
+	oneRule         = "Strata checks this rule" + paletteNoCheck + "it."
+	twoRules        = "Strata checks these rules" + paletteNoCheck + "them."
+	// paletteNoCheck is in the last sentence of the note of the checks.
+	paletteNoCheck = ", because the question to Palette does not check "
 	// variableWords are in each line of a required variable, on the column and on the card.
 	variableWords = "required variable"
 )
@@ -57,7 +59,7 @@ func checkAnswers(t *testing.T) (k8s, traefik model.Answer) {
 	k8s, traefik = asks[0], asks[1]
 	if k8s.Key != "k8s/kubernetes" || k8s.UpdateChecks == nil || k8s.UpdateChecks.SkippedMinor == nil ||
 		traefik.Key != "addon/traefik" || traefik.UpdateChecks == nil || traefik.UpdateChecks.RequiredVariables == nil {
-		t.Fatalf("the set update-checks changed: %+v", asks)
+		t.Fatalf("the set %s changed: %+v", devdata.StateUpdateChecks, asks)
 	}
 	return k8s, traefik
 }

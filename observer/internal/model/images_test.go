@@ -18,7 +18,7 @@ const d3 = "sha256:3333333333333333333333333333333333333333333333333333333333333
 const (
 	nginxFull = testkit.NginxImage + ":1.27"
 	nginxHub  = "docker.io/nginx:1.27"
-	vendorAt  = "vendor.example/product@"
+	vendorAt  = testkit.VendorImage + "@"
 )
 
 // ran makes a container of the given pod that runs the image with the image id repo@digest.

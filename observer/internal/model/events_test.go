@@ -29,7 +29,7 @@ func reasons(events []Event) []string {
 }
 
 // dexDrift is the reason of the event of the drift of fred-identity@2.3.0, as reasons gives it.
-const dexDrift = "drift DriftFound fred-identity@2.3.0"
+const dexDrift = "drift DriftFound " + testkit.DexProfile
 
 // hoppy is a profile that runs an old copy of coredns.
 const hoppy = "hoppy-autoscale@1.0.0"
@@ -43,10 +43,10 @@ func TestTheEventsOfTheLastSevenDaysCarryFourReasons(t *testing.T) {
 	bitnami.Registry = "Bitnami"
 	bitnami.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{kubernetes, bitnami}, Moves: map[string]Move{}}
-	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
+	events := eventsAt(&c, v, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	want := []string{
 		dexDrift,
-		"info ProfileUpdated fred-identity@2.3.0",
+		"info ProfileUpdated " + testkit.DexProfile,
 		"newer NewVersion wilma-gateway@3.1.2",
 		"not-checked OldCopy " + hoppy + ", rubble-dns@1.0.0",
 	}
@@ -67,7 +67,7 @@ func TestTheEventsAreOrderedByTimeTheNewestFirst(t *testing.T) {
 	c := content(t, drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, pk("addon", "dex", "2.42.0")), who, "addon/dex"))
 	p := pin("traefik", "addon", "37.0.0", "38.1.0", "wilma-gateway@3.1.2")
 	p.Newer[0].Listed = at(-48 * time.Hour)
-	events := eventsAt(&c, &Versions{At: t0, Pins: []docs.Pin{p}}, map[string]time.Time{FindingID(PublishedChanged, "fred-identity@2.3.0"): t0.Add(-5 * time.Hour)})
+	events := eventsAt(&c, &Versions{At: t0, Pins: []docs.Pin{p}}, map[string]time.Time{FindingID(PublishedChanged, testkit.DexProfile): t0.Add(-5 * time.Hour)})
 	for i := 1; i < len(events); i++ {
 		if events[i].Time.After(events[i-1].Time) {
 			t.Errorf("event %d is newer than event %d: %+v", i, i-1, events)
@@ -143,7 +143,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadStillGivesAFindingAndSaysSo(t 
 		t.Errorf("counts %+v", s.Counts)
 	}
 	// the notice is as new as the last sight, and the drift is as old as the first
-	want := []string{"info AuditUnread fred-identity@2.3.0", dexDrift}
+	want := []string{"info AuditUnread " + testkit.DexProfile, dexDrift}
 	if got := reasons(s.Events); !slices.Equal(got, want) {
 		t.Fatalf("events %q\nwant %q", got, want)
 	}

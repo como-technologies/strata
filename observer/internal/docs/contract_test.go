@@ -12,6 +12,9 @@ import (
 // The contract test runs against the strata binary of this commit. scripts/observer-contract.sh
 // sets STRATA_BIN and STRATA_DOCS. Without them, `go test` skips it, and it needs no network.
 
+// notSet ends the reason of a skip of the contract test.
+const notSet = " is not set: run scripts/observer-contract.sh"
+
 // schemaProps finds the properties of a JSON Schema node. It follows $ref, anyOf, oneOf, and items.
 func schemaProps(root, node map[string]any, out map[string]map[string]any) {
 	if ref, ok := node["$ref"].(string); ok {
@@ -75,7 +78,7 @@ func missing(root, node map[string]any, t reflect.Type, path string, seen map[re
 func TestEachAllowedFieldIsInTheSchemaOfTheBinary(t *testing.T) {
 	bin := os.Getenv("STRATA_BIN")
 	if bin == "" {
-		t.Skip("STRATA_BIN is not set: run scripts/observer-contract.sh")
+		t.Skip("STRATA_BIN" + notSet)
 	}
 	for _, c := range []struct {
 		kind string
@@ -107,7 +110,7 @@ func contractDir(t *testing.T) string {
 	t.Helper()
 	dir := os.Getenv("STRATA_DOCS")
 	if dir == "" {
-		t.Skip("STRATA_DOCS is not set: run scripts/observer-contract.sh")
+		t.Skip("STRATA_DOCS" + notSet)
 	}
 	return dir
 }

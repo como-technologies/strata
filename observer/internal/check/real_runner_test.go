@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -16,7 +15,7 @@ import (
 func script(t *testing.T) string {
 	t.Helper()
 	return testkit.Strata(t, testkit.VerifyFirst+testkit.VerifyAndSnapshot+`compare) echo '`+testkit.CompareSame+`' ;;
-behind) echo '{"schema":"`+docs.BehindSchema+`","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registryUid":"reg1","version":"1.35.3","behind":true,"pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2"}]}]}' ;;
+behind) echo '`+testkit.KubernetesBehind+`' ;;
 esac`)
 }
 

@@ -16,11 +16,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-const (
-	imageRef = "a/b:1"
-	// revisedMeta is the meta file of a new revision of the records, after testkit.ApprovedMeta.
-	revisedMeta = `{"baseline":"approved","revision":"5f2d8b1"}`
-)
+const imageRef = "a/b:1"
 
 // fakePods answers the read of the pods with a list or an error, and counts the calls.
 type fakePods struct {
@@ -129,7 +125,7 @@ func TestAGoodReadFillsTheDocumentAndTheStateKeepsTheFirstDigestByIdOnly(t *test
 		t.Fatalf("document %+v", doc)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != "4e1c7a2" || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
+	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
 		t.Errorf("state %+v", st.Images)
 	}
 	stateHoldsNone(t, r, imageRef, "web-1", "ns/")
@@ -181,13 +177,13 @@ func TestANewRevisionOfTheRecordsResetsTheFirstDigest(t *testing.T) {
 	if got := imageKindsOf(o.Summary()); !slices.Equal(got, []model.Kind{model.ImageMoved}) {
 		t.Fatalf("findings %v", got)
 	}
-	r.meta(revisedMeta)
+	r.meta(testkit.ApprovedMeta(testkit.NewRevision))
 	cycle(t, o)
 	if got := imageKindsOf(o.Summary()); len(got) != 0 {
 		t.Errorf("a new revision leaves the findings %v", got)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != "5f2d8b1" || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest2 {
+	if st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest2 {
 		t.Errorf("state %+v", st.Images)
 	}
 	_ = w

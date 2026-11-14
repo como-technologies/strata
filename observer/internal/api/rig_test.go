@@ -204,17 +204,12 @@ type rig struct {
 func newRig(t *testing.T) *rig {
 	t.Helper()
 	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
-	record := testkit.MustJSON(t, map[string]any{
-		"schema": docs.SnapshotSchema, "tool": map[string]any{"version": "0.28.0"}, "root": "r1",
-		"source": map[string]any{"uid": "u1", "name": "aws-stack", "version": "1.1.0", "type": "cluster"},
-		"packs": []map[string]any{
-			{"key": "k8s/kubernetes", "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{"a/b:1"}},
-			{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{"a/c@sha256:abc"}},
-		},
-		"variables": []map[string]any{{"name": "team", "value": sentinelVariable}},
-	})
-	testkit.WriteGzip(t, r.records, testkit.RecordFile, string(record))
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(testkit.ApprovedMeta), 0o600); err != nil {
+	packs := []map[string]any{
+		{"key": "k8s/kubernetes", "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{"a/b:1"}},
+		{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{"a/c@sha256:abc"}},
+	}
+	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
+	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(testkit.ApprovedMeta(testkit.Revision)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return r

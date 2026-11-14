@@ -601,8 +601,12 @@ func lineCount(s string) int {
 	return n
 }
 
-// beforeHunk is the problem of a line of a unified text that comes before the first hunk.
-const beforeHunk = "before the first hunk"
+// beforeHunk is the problem of a line of a unified text that comes before the first hunk. hunkLines ends the problem of
+// a hunk that has more or fewer lines than its head names.
+const (
+	beforeHunk = "before the first hunk"
+	hunkLines  = " hunk does not hold the lines that its head names"
+)
 
 // unifiedProblem says what is wrong in a unified text, or it gives "". The text has two header lines,
 // and each hunk has as many lines on each side as its head says.
@@ -619,7 +623,7 @@ func unifiedProblem(text string) string {
 	for _, l := range lines[2:] {
 		if m := hunkHead.FindStringSubmatch(l); m != nil {
 			if hunks > 0 && !closed() {
-				return "a hunk does not hold the lines that its head names"
+				return "a" + hunkLines
 			}
 			hunks, old, now, wantOld, wantNow = hunks+1, 0, 0, lineCount(m[2]), lineCount(m[4])
 			continue
@@ -639,7 +643,7 @@ func unifiedProblem(text string) string {
 		}
 	}
 	if hunks == 0 || !closed() {
-		return "the last hunk does not hold the lines that its head names"
+		return "the last" + hunkLines
 	}
 	return ""
 }
@@ -694,7 +698,7 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 		t.Fatalf(testkit.NoDiff, profile, key, side)
 		return api.PackDiff{}
 	}
-	dex := find("fred-identity@2.3.0", "addon/dex", model.SidePublished)
+	dex := find(testkit.DexProfile, "addon/dex", model.SidePublished)
 	if !strings.HasPrefix(dex.Values.Unified, testkit.DexValuesHead+"@@ -15,8 +15,8 @@\n") ||
 		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
 		t.Errorf("the text of dex: %+v", dex)
@@ -704,7 +708,7 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 	}
 	ops := map[string]bool{}
 	var noEnd bool
-	for _, m := range find("fred-identity@2.3.0", "addon/dex", model.SideNewer).Manifests {
+	for _, m := range find(testkit.DexProfile, "addon/dex", model.SideNewer).Manifests {
 		ops[m.Op] = true
 		noEnd = noEnd || strings.Contains(m.Unified, "\n"+testkit.NoEOL+"\n")
 	}
@@ -765,6 +769,13 @@ func moveOf(moves []model.Answer, a model.Answer) int {
 	return slices.IndexFunc(moves, func(m model.Answer) bool { return m.Profile == a.Profile && m.Key == a.Key })
 }
 
+// notAMove is the failure of a check of an answer or a reply that is not about a move of the Newer table. clickGave is the
+// failure of a check of a click and of the answers that the set holds after it.
+const (
+	notAMove  = "the %s for %s is not about a move of the table"
+	clickGave = "the %s gave %+v and the set holds %d answers"
+)
+
 // isMove says whether an answer is about a move of the Newer table, to the newest version of the row.
 func isMove(moves []model.Answer, a model.Answer) bool {
 	i := moveOf(moves, a)
@@ -788,7 +799,7 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 		got[a.Verdict] = a
 		seen[a.Profile+" "+a.Key] = true
 		if !isMove(moves, a) {
-			t.Errorf("the answer for %s %s %s is not about a move of the table", a.Profile, a.Key, a.Newest)
+			t.Errorf(notAMove, "answer", a.Profile+" "+a.Key+" "+a.Newest)
 		}
 	}
 	if len(got) != 3 || len(seen) != 3 {
@@ -807,7 +818,7 @@ func TestTheSetAsksHoldsOneAnswerOfEachVerdict(t *testing.T) {
 	}
 	for _, r := range asks.Replies.Asks {
 		if !isMove(moves, r) {
-			t.Errorf("the reply for %s %s %s is not about a move of the table", r.Profile, r.Key, r.Newest)
+			t.Errorf(notAMove, "reply", r.Profile+" "+r.Key+" "+r.Newest)
 		}
 	}
 	if len(ok.Replies.Asks) == 0 || len(ok.Replies.Asks) >= len(moves) {
@@ -823,7 +834,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 	ok, asks, checks := load(t, StateOK), load(t, StateAsks), load(t, StateUpdateChecks)
 	moves := movesOf(checks)
 	if len(checks.Asks.Asks) != len(asks.Asks.Asks) {
-		t.Fatalf("update-checks holds %d answers, and asks %d", len(checks.Asks.Asks), len(asks.Asks.Asks))
+		t.Fatalf("%s holds %d answers, and asks %d", StateUpdateChecks, len(checks.Asks.Asks), len(asks.Asks.Asks))
 	}
 	var skips, variables int
 	for i, a := range checks.Asks.Asks {
@@ -833,7 +844,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		}
 		row := moveOf(moves, a)
 		if row < 0 {
-			t.Fatalf("the answer for %s %s is not about a move of the table", a.Profile, a.Key)
+			t.Fatalf(notAMove, "answer", a.Profile+" "+a.Key)
 		}
 		if a.UpdateChecks == nil {
 			t.Fatalf("the answer for %s %s holds no check", a.Profile, a.Key)
@@ -863,7 +874,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 // it. A request that failed gets its reply, and a move with no reply is not found.
 func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	ctx := context.Background()
-	const dex, csi, longhorn = "fred-identity@2.3.0", "barney-base@1.5.0", "dino-storage@1.1.0"
+	const dex, csi, longhorn = testkit.DexProfile, "barney-base@1.5.0", "dino-storage@1.1.0"
 	s := load(t, StateOK)
 	a, found, err := s.Ask(ctx, dex, "addon/dex")
 	if err != nil || !found || a.Verdict != model.VerdictNoError || a.Newest != "2.44.0" {
@@ -873,7 +884,7 @@ func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 		t.Errorf("the set holds %+v after the click", got)
 	}
 	if again, found, _ := s.Ask(ctx, dex, "addon/dex"); !found || !reflect.DeepEqual(again, a) || len(s.Answers()) != 1 {
-		t.Errorf("the second click gave %+v and the set holds %d answers", again, len(s.Answers()))
+		t.Errorf(clickGave, "second click", again, len(s.Answers()))
 	}
 	// A reply that is a request that failed: the next click asks again, and the set keeps one entry.
 	failed, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs")
@@ -881,7 +892,7 @@ func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 		t.Fatalf("the click on a move with a failed reply gave %+v", failed)
 	}
 	if again, found, _ := s.Ask(ctx, csi, "csi/csi-aws-ebs"); !found || !reflect.DeepEqual(again, failed) || len(s.Answers()) != 2 {
-		t.Errorf("the next click gave %+v and the set holds %d answers", again, len(s.Answers()))
+		t.Errorf(clickGave, "next click", again, len(s.Answers()))
 	}
 	if a, found, err := s.Ask(ctx, longhorn, "addon/longhorn"); found || err != nil || a.Profile != "" || len(s.Answers()) != 2 {
 		t.Errorf("a move with no reply gave %+v, %v, %v", a, found, err)
@@ -900,7 +911,7 @@ func TestAClickOnAMoveGivesItsReplyAndTheSetKeepsIt(t *testing.T) {
 	}
 	again, found, _ := held.Ask(ctx, dex, "addon/dex")
 	if !found || again.Verdict != model.VerdictNoError || len(held.Answers()) != 3 {
-		t.Errorf("the click on the failed request gave %+v and the set holds %d answers", again, len(held.Answers()))
+		t.Errorf(clickGave, "click on the failed request", again, len(held.Answers()))
 	}
 	for _, a := range held.Answers() {
 		if a.Profile == dex && a.Verdict != model.VerdictNoError {

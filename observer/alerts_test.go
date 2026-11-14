@@ -9,6 +9,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/alert"
 	"github.com/como-technologies/strata/observer/internal/api"
+	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
@@ -29,7 +30,8 @@ func rulesFile(t *testing.T, w *testkit.Receiver) string {
 	return path
 }
 
-const drifting = `{"same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`
+// drifting is the answer of `compare` for a record whose pack kubernetes changed.
+const drifting = `{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`
 
 func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 	w := testkit.NewReceiver(t)

@@ -37,7 +37,7 @@ func TestASideThatWasNotReadIsNotCheckedForTheProfileAndItsPacks(t *testing.T) {
 			t.Errorf("pack %s is %q", k.Key, k.Status)
 		}
 	}
-	want := NotChecked{Cause: ReadError, Profiles: []string{"fred-identity@2.3.0"}, Packs: []string{"addon/cert-manager", "addon/dex"}}
+	want := NotChecked{Cause: ReadError, Profiles: []string{testkit.DexProfile}, Packs: []string{"addon/cert-manager", "addon/dex"}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
@@ -201,7 +201,7 @@ func TestAReadThatFailedIsACauseAlsoWhenItsAnswerIsCarried(t *testing.T) {
 	now := content(t, notRead(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex)))
 	now.Carry(&last)
 	s := build(&now, nil)
-	want := NotChecked{Cause: ReadError, Profiles: []string{"fred-identity@2.3.0"}, Packs: []string{"addon/dex"}}
+	want := NotChecked{Cause: ReadError, Profiles: []string{testkit.DexProfile}, Packs: []string{"addon/dex"}}
 	if len(s.Findings) != 1 || len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Fatalf(testkit.FindingsNotChecked, s.Findings, s.NotChecked)
 	}
@@ -215,7 +215,7 @@ func TestHeldIDsNameTheFindingsOfAPartThatWasNotRead(t *testing.T) {
 	id := func(k ...Kind) []string {
 		var out []string
 		for _, kind := range k {
-			out = append(out, FindingID(kind, "fred-identity@2.3.0"))
+			out = append(out, FindingID(kind, testkit.DexProfile))
 		}
 		slices.Sort(out)
 		return out
@@ -293,14 +293,14 @@ func TestCarryPutsTheLastRecordOfAFileThatCannotBeReadInPlaceOfTheFile(t *testin
 	if !r.readError() {
 		t.Error("the carried record is no read error")
 	}
-	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != "fred-identity@2.3.0" {
+	if got := FindingsOf(now, nil); len(got) != 1 || got[0].Kind != PublishedChanged || got[0].Profile != testkit.DexProfile {
 		t.Errorf("findings %+v", got)
 	}
 	if now.Blind() {
 		t.Error("a file with a last record is not blind")
 	}
 	for _, kind := range publishedKinds {
-		if !slices.Contains(HeldIDs(now), FindingID(kind, "fred-identity@2.3.0")) {
+		if !slices.Contains(HeldIDs(now), FindingID(kind, testkit.DexProfile)) {
 			t.Errorf("HeldIDs lacks %s", kind)
 		}
 	}
@@ -339,7 +339,7 @@ func TestCarryTakesNoRecordForAFileThatCannotBeReadWhenTheLastCycleHeldNone(t *t
 func TestABlindContentHoldsEachKnownIDThatNoReadableRecordGives(t *testing.T) {
 	dex := pk("addon", "dex", "2.42.0")
 	readable := rec("zed", "1.0.0", docs.VerifyUnchanged, dex)
-	known := []string{FindingID(PublishedChanged, "fred-identity@2.3.0"), FindingID(ImageMoved, "fred-identity@2.3.0"),
+	known := []string{FindingID(PublishedChanged, testkit.DexProfile), FindingID(ImageMoved, testkit.DexProfile),
 		FindingID(PublishedChanged, "zed@1.0.0"), FindingID(ClusterDiffers, "zed@1.0.0"), FindingID(ImageSplit, "zed@1.0.0")}
 	now := bad(t, "fred-identity.json.gz", readable)
 	got := BlindIDs(now, known)

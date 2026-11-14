@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
@@ -83,7 +84,7 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 	if snapshotsOf(w, "fred-edge@1.0.0") != 1 {
 		t.Errorf("the second cycle took a second snapshot")
 	}
-	if s.Records.Baseline != "first-seen" {
+	if s.Records.Baseline != baseline.FirstSeen {
 		t.Errorf("baseline %q", s.Records.Baseline)
 	}
 }
@@ -92,7 +93,7 @@ func TestFirstSeenRecordsGetARecordOfAProfileThatTheClusterRunsAfterTheSeed(t *t
 // stays no-record until the pipeline publishes its record.
 func TestApprovedRecordsGetNoRecordFromTheObserver(t *testing.T) {
 	r, w := firstSeenWithANewProfile(t)
-	r.meta(testkit.ApprovedMeta)
+	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	o := r.observer(w)
 	for range 2 {
 		if err := o.RunContent(context.Background()); err != nil {

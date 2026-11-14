@@ -75,7 +75,7 @@ func content(t *testing.T, records ...Record) Content {
 			profiles = append(profiles, r.subject())
 		}
 	}
-	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster("payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: "4e1c7a2"}, Records: records}
+	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster("payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: testkit.Revision}, Records: records}
 }
 
 func goodClock(every time.Duration, at time.Time) Clock {

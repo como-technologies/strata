@@ -3,6 +3,7 @@ package web
 import (
 	"testing"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -20,15 +21,18 @@ func failPost(answer string) string {
 
 // The markup and the scripts of the menus of the cycles that more than one test reads. cycleMenu starts the menu of a
 // cycle, and chipSummary follows its name. openContent opens the menu of the content cycle, and checkContent also clicks
-// its button. contentButton is that button, contentOff is the button when it is off, and checkingVersions is the pill
-// of the versions while they are read.
+// its button. nowButton starts the button of a cycle in its menu, and contentNow ends the button of the content cycle.
+// contentButton is that button, contentOff is the button when it is off, and checkingVersions is the pill of the
+// versions while they are read.
 const (
 	cycleMenu        = `<details class="cyclemenu" data-open="cycle-`
 	chipSummary      = `"><summary class="chip"`
 	openContent      = `S.open["cycle-content"] = true`
 	checkContent     = openContent + `; checkNow("content")`
-	contentButton    = `<button class="btn" data-now="content">Check the content now</button>`
-	contentOff       = `<button class="btn" data-now="content" disabled>Check the content now</button>`
+	nowButton        = `<button class="btn" data-now="`
+	contentNow       = "Check the content now</button>"
+	contentButton    = nowButton + `content">` + contentNow
+	contentOff       = nowButton + `content" disabled>` + contentNow
 	checkingVersions = "Versions <b>checking</b>"
 	panelOfVersions  = "the panel of versions"
 	recordsIt        = "the observer records it"
@@ -50,22 +54,22 @@ func TestThePillOfEachCycleIsAMenuThatDrawsNoPanelWhileClosed(t *testing.T) {
 func TestAnOpenMenuShowsTheTimerOfItsCycleAndTheButtonThatStartsIt(t *testing.T) {
 	page := overviewWith(t, openContent)
 	mustHold(t, "the open menu", page, cycleMenu+`content" open>`)
-	for _, want := range []string{`<div><span>Last good end</span>`, `<div><span>Every</span>15m</div>`, `<div><span>Next</span>about `,
+	for _, want := range []string{labelStart("Last good end"), labelRow("Every", "15m"), labelStart("Next") + "about ",
 		"Compares the records with the cluster and with Palette.", contentButton} {
 		mustHold(t, "the panel of content", page, want)
 	}
 	mustNotHold(t, "one panel", page, `data-now="versions"`)
 	versions := overviewWith(t, `S.open["cycle-versions"] = true`)
-	mustHold(t, panelOfVersions, versions, `<button class="btn" data-now="versions">Read the versions now</button>`)
+	mustHold(t, panelOfVersions, versions, nowButton+`versions">Read the versions now</button>`)
 	mustHold(t, panelOfVersions, versions, "Reads the registries for newer versions of each pack.")
 }
 
 // While a cycle runs, the pill shows its progress and the button is off, with the reason.
 func TestTheButtonIsOffWhileItsCycleRuns(t *testing.T) {
-	page := overviewWith(t, `D.cluster.content.running = {startedAt: new Date().toISOString(), done: 3, total: 12}; `+openContent)
+	page := overviewWith(t, runningJS("content", "", 3, 12)+" "+openContent)
 	mustHold(t, "the pill", page, `<summary class="chip run" title="Started`)
 	mustHold(t, "the pill", page, `Content <b>checking 3 of 12</b>`)
-	mustHold(t, "the panel", page, `<div><span>Now</span>checking 3 of 12</div>`)
+	mustHold(t, "the panel", page, labelRow("Now", "checking 3 of 12"))
 	mustHold(t, "the panel", page, contentOff+`<span class="sub">A cycle runs now. The pill shows its progress.</span>`)
 	mustNotHold(t, "a running cycle", page, `<span>Next</span>`)
 }
@@ -100,7 +104,7 @@ func TestTheButtonWaitsTheSecondsOfA429AndSaysWhenARequestFailed(t *testing.T) {
 // cannot: the row says so.
 func TestARowOfNoRecordSaysWhatAddsTheRecordForEachBaseline(t *testing.T) {
 	row := `D.notChecked = [{cause: "no-record", profiles: ["fred-edge@1.0.0"], packs: [], registry: ""}];`
-	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "first-seen", firstSeenFrom: "c1"}`)
+	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "`+baseline.FirstSeen+`", firstSeenFrom: "c1"}`)
 	mustHold(t, "first-seen", firstSeen, "No record holds this profile version yet. The records are first-seen, so "+recordsIt+" at its next content check.")
 	approved := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row)
 	mustHold(t, "approved", approved, "No record holds this profile version, so strata cannot say that anything changed. Your pipeline must publish its record: a check cannot add one.")

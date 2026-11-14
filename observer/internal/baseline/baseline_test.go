@@ -19,20 +19,21 @@ func write(t *testing.T, dir, name, body string) {
 	}
 }
 
-const aws = `{"schema":"` + docs.SnapshotSchema + `","tool":{"version":"0.28.0"},"source":{"uid":"u1","name":"aws-stack","version":"1.1.0","type":"cluster"},"root":"r1","packs":[]}`
+// aws is the record of aws-stack@1.1.0 that the tests of Load read.
+var aws = testkit.AWSStack(`,"packs":[]`)
 
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
-	testkit.WriteGzip(t, dir, "aws-stack.json.gz", aws)
-	write(t, dir, "meta.json", testkit.ApprovedMeta)
+	testkit.WriteGzip(t, dir, testkit.RecordFile, aws)
+	write(t, dir, "meta.json", testkit.ApprovedMeta(testkit.Revision))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if set.Meta != (Meta{Baseline: Approved, Revision: "4e1c7a2"}) {
+	if set.Meta != (Meta{Baseline: Approved, Revision: testkit.Revision}) {
 		t.Errorf("meta %+v", set.Meta)
 	}
-	if len(set.Entries) != 1 || set.Entries[0].File != "aws-stack.json.gz" || set.Entries[0].Record.Source.Name != "aws-stack" {
+	if len(set.Entries) != 1 || set.Entries[0].File != testkit.RecordFile || set.Entries[0].Record.Source.Name != "aws-stack" {
 		t.Fatalf("entries %+v", set.Entries)
 	}
 	if string(set.Entries[0].Raw) != aws {
@@ -117,11 +118,11 @@ func TestAMountedSecretWithLinksIsRead(t *testing.T) {
 	if err := os.Mkdir(data, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	testkit.WriteGzip(t, data, "aws-stack.json.gz", aws)
+	testkit.WriteGzip(t, data, testkit.RecordFile, aws)
 	if err := os.Symlink("..2026_11_03", filepath.Join(dir, "..data")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join("..data", "aws-stack.json.gz"), filepath.Join(dir, "aws-stack.json.gz")); err != nil {
+	if err := os.Symlink(filepath.Join("..data", testkit.RecordFile), filepath.Join(dir, testkit.RecordFile)); err != nil {
 		t.Fatal(err)
 	}
 	set, err := Load(dir)
@@ -136,7 +137,7 @@ func TestEachLoadReadsTheDirectoryAgain(t *testing.T) {
 	if err != nil || first.Files() != 0 {
 		t.Fatalf("first %+v, error %v", first, err)
 	}
-	testkit.WriteGzip(t, dir, "aws-stack.json.gz", aws)
+	testkit.WriteGzip(t, dir, testkit.RecordFile, aws)
 	second, err := Load(dir)
 	if err != nil || len(second.Entries) != 1 {
 		t.Fatalf("second %+v, error %v", second, err)
@@ -151,8 +152,8 @@ func TestADirectoryThatDoesNotExistIsAnError(t *testing.T) {
 
 func TestARecordDecodesOnlyIntoTheAllowList(t *testing.T) {
 	dir := t.TempDir()
-	body := strings.Replace(aws, `"root":"r1"`, `"root":"r1","variables":[{"name":"x","value":"`+marker+`"}]`, 1)
-	testkit.WriteGzip(t, dir, "aws-stack.json.gz", body)
+	body := testkit.AWSStack(`,"packs":[],"variables":[{"name":"x","value":"` + marker + `"}]`)
+	testkit.WriteGzip(t, dir, testkit.RecordFile, body)
 	set, err := Load(dir)
 	if err != nil || len(set.Entries) != 1 {
 		t.Fatalf("set %+v, error %v", set, err)

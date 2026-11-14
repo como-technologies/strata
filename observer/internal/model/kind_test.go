@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func TestOnlyTheKindsOfThePodsAreImageKinds(t *testing.T) {
@@ -28,7 +29,7 @@ func TestEachKindHasASentenceThatIsTheMessageOfItsEvent(t *testing.T) {
 func TestTheKeyOfARowIsTheKeyOfItsPin(t *testing.T) {
 	pin := docs.Pin{Name: "dex", RegistryUID: "reg1", Version: "2.42.0", Newer: []docs.Newer{{Version: "2.44.0"}}}
 	row := Newer{Name: pin.Name, RegistryUID: pin.RegistryUID, Version: pin.Version, Newest: "2.44.0"}
-	if row.Key() != MoveKey(pin) || row.Key() != "reg1/dex@2.42.0->2.44.0" {
+	if row.Key() != MoveKey(pin) || row.Key() != "reg1"+testkit.DexMove {
 		t.Errorf("key %q, pin %q", row.Key(), MoveKey(pin))
 	}
 }

@@ -29,7 +29,7 @@ const (
 func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T) {
 	page := shown(t, devdata.StateOK, wilmaHash)[0]
 	card := cardOf(t, page, "<h2>Move to ")
-	mustHold(t, cardHead, card, `<h2>Move to wilma-gateway<span class="ver">@3.2.0</span> <span class="sub">Created `,
+	mustHold(t, cardHead, card, "<h2>Move to "+wilmaNewest+` <span class="sub">Created `,
 		"</h2>"+badge("y", "In place"))
 	for _, flag := range []string{"IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"} {
 		mustHold(t, "the flags", card, plainFlag("b", flag))
@@ -66,6 +66,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 // of the profile. A pack that the move changes opens on it, with the full diff of the pack, as "Record → Published now" shows it.
 // A pack that the move does not change shows "Undisturbed". A compare that failed gives no choice, and the card "Move to" says so.
 func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *testing.T) {
+	const notCompared = "a move that strata could not compare"
 	vendor := packPage(wilmaSubject, "addon", "vendor-product")
 	page := pageOf(t, crawl(t, devdata.StateOK), vendor, "")
 	where := "the pack page of vendor-product"
@@ -94,9 +95,9 @@ func TestTheCompareMenuShowsTheFullDiffOfTheMoveToTheNewestProfileVersion(t *tes
 		}
 	})})
 	pages := pagesOf(t, dir, wilmaHash, vendor)
-	mustHold(t, "the card of a move that strata could not compare", cardOf(t, pages[0], "<h2>Move to "),
+	mustHold(t, "the card of "+notCompared, cardOf(t, pages[0], "<h2>Move to "),
 		badge("y", "Not read"), "Strata could not compare the record with this version now.")
-	mustNotHold(t, "the pack page of a move that strata could not compare", pages[1], newestOption)
+	mustNotHold(t, "the pack page of "+notCompared, pages[1], newestOption)
 }
 
 // The command of the move of a profile pastes as the arguments it means, also for a name that a shell reads as code.

@@ -29,7 +29,7 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
 	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
-	r.meta(testkit.ApprovedMeta)
+	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
 }
 

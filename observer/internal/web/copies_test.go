@@ -7,6 +7,7 @@ import (
 
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -51,7 +52,7 @@ func TestEachBuilderOfACommandQuotesItsValues(t *testing.T) {
 		}
 	}
 	// A line that is no builder writes a command with the file of the record and a quoted word only.
-	command := regexp.MustCompile("`((?:strata (?:compare|behind|verify)|scripts/ci/observer-records\\.sh)[^`]*)`")
+	command := regexp.MustCompile("`((?:strata (?:compare|behind|verify)|" + regexp.QuoteMeta(testkit.RecordsTool) + ")[^`]*)`")
 	for _, l := range linesOf(script) {
 		if startsBuilder(strings.TrimSpace(l)) {
 			continue

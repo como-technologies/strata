@@ -180,7 +180,7 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 			return p
 		}(),
 		func() docs.Pin {
-			p := pin("cilium", "cni", "1.19.6", "", "fred-identity@2.3.0", "gazoo-backup@1.2.0")
+			p := pin("cilium", "cni", "1.19.6", "", testkit.DexProfile, "gazoo-backup@1.2.0")
 			p.Error = &docs.Error{Kind: docs.KindAPI, Status: 404}
 			return p
 		}(),
@@ -190,13 +190,15 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	for _, row := range s.NotChecked {
 		got = append(got, string(row.Cause)+" "+row.Registry+" "+strings.Join(row.Profiles, ",")+" "+strings.Join(row.Packs, ","))
 	}
+	// twoProfiles is the empty registry and the two profiles of a row of velero and of cilium.
+	const twoProfiles = "  " + testkit.DexProfile + ",gazoo-backup@1.2.0 "
 	want := []string{
-		"no-upstream-digest  fred-identity@2.3.0 addon/dex",
-		"no-upstream-digest  fred-identity@2.3.0,gazoo-backup@1.2.0 addon/velero",
+		"no-upstream-digest  " + testkit.DexProfile + " addon/dex",
+		"no-upstream-digest" + twoProfiles + "addon/velero",
 		"older-registry-copy Public Repo broken@1.0.0 k8s/kubernetes",
 		"read-error  broken@1.0.0 k8s/kubernetes,os/ubuntu",
 		"read-error  zz.json.gz ",
-		"pin-error  fred-identity@2.3.0,gazoo-backup@1.2.0 cni/cilium",
+		"pin-error" + twoProfiles + "cni/cilium",
 	}
 	// The rows keep the order of the table of the causes, and then the order of the group.
 	if !slices.Equal(got, want) {
@@ -286,7 +288,7 @@ func TestThePackRowJoinsTheRecordAndThePins(t *testing.T) {
 	r := drifted(rec("fred-identity", "2.3.0", docs.VerifyUnchanged, dex), &docs.Verify{}, "addon/dex")
 	r.Doc.Source.ProjectUID = "p1"
 	r.Row.Diff.Packs[0].Values.Diff = append(r.Row.Diff.Packs[0].Values.Diff, docs.Leaf{Path: testkit.ImageItem}, docs.Leaf{Path: dexTag})
-	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "2.44.0", "fred-identity@2.3.0")}}
+	v := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "2.44.0", testkit.DexProfile)}}
 	s := build(ptr(content(t, r)), v)
 	p := s.Profiles[0]
 	if p.Scope != ScopeProject || p.Status != StatusDrift {
@@ -597,6 +599,13 @@ func TestTheRowsOfAPackThatIsBehindNameItsCarrier(t *testing.T) {
 	}
 }
 
+// rowStatus is the failure of a check of the row of a profile version that has no newer version. packNewer is the
+// failure of a check of each pack of that row. The first value names the version.
+const (
+	rowStatus = "%s: status %q, newer version %+v, copy %+v"
+	packNewer = "%s: the pack %s has the newer version %q, the carrier %+v, and the status %q"
+)
+
 // Issue #834. The cluster ran fred-crossplane@1.3.1, and then moved to 2.0.0. The record of 1.3.1 stays,
 // so the versions cycle still names a newer version of its packs and of the profile. The row of 1.3.1
 // has the status not-on-this-cluster and no newer version. No count of the page and no newer row
@@ -615,11 +624,11 @@ func TestAVersionThatTheClusterNoLongerRunsHasAStatusOfItsOwnAndNoNewerVersion(t
 	s := build(ptr(content(t, old, moved)), v)
 	oldRow, newRow := s.Profiles[0], s.Profiles[1]
 	if oldRow.Version != "1.3.1" || oldRow.Status != StatusNotOnThisCluster || oldRow.NewerVersion != nil || oldRow.ClusterCopy.Status != CopyNotOnThisCluster {
-		t.Errorf("1.3.1: status %q, newer version %+v, copy %+v", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
+		t.Errorf(rowStatus, "1.3.1", oldRow.Status, oldRow.NewerVersion, oldRow.ClusterCopy)
 	}
 	for _, p := range oldRow.Packs {
 		if p.Newer != "" || p.Carried != nil || p.Status != StatusOK {
-			t.Errorf("1.3.1: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+			t.Errorf(packNewer, "1.3.1", p.Key, p.Newer, p.Carried, p.Status)
 		}
 	}
 	if newRow.Status != StatusNewer || newRow.Packs[1].Newer != "24.04" || newRow.Packs[1].Carried == nil {
@@ -658,11 +667,11 @@ func TestAVersionThatTheClusterDoesNotRunWithAFindingIsADriftWithNoNewerVersion(
 	s := build(ptr(content(t, old, runs)), v)
 	row := s.Profiles[0]
 	if row.Version != "1.0.0" || row.Status != StatusDrift || row.NewerVersion != nil || row.ClusterCopy.Status != CopyNotOnThisCluster {
-		t.Errorf("1.0.0: status %q, newer version %+v, copy %+v", row.Status, row.NewerVersion, row.ClusterCopy)
+		t.Errorf(rowStatus, "1.0.0", row.Status, row.NewerVersion, row.ClusterCopy)
 	}
 	for _, p := range row.Packs {
 		if p.Newer != "" || p.Carried != nil || p.Status == StatusNewer {
-			t.Errorf("1.0.0: the pack %s has the newer version %q, the carrier %+v, and the status %q", p.Key, p.Newer, p.Carried, p.Status)
+			t.Errorf(packNewer, "1.0.0", p.Key, p.Newer, p.Carried, p.Status)
 		}
 	}
 	want := Counts{Findings: 1, Drift: 1, Packs: 1, PacksInFull: 1, Profiles: 2}

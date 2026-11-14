@@ -13,8 +13,8 @@ import (
 newer version of it, and the record of the cluster. In the set ok, traefik of wilma-gateway@3.1.2 is behind 38.1.0, and
 wilma-gateway@3.2.0 carries that version. They need node, like the other tests of the page. */
 
-const (
-	carriedByWilma = `carried by <span class="m">wilma-gateway<span class="ver">@3.2.0</span></span>`
+var (
+	carriedByWilma = `carried by <span class="m">` + wilmaNewest + `</span>`
 	traefikSlab    = refSpan + traefikPin + `</span>`
 )
 
@@ -24,7 +24,7 @@ const (
 func TestThePackThatIsBehindNamesTheNewerProfileVersionThatCarriesIt(t *testing.T) {
 	pages := shown(t, devdata.StateOK, wilmaHash, "#newer", fredHash)
 	mustHold(t, "the slab of traefik", slabOf(t, pages[0], traefikSlab),
-		`newer: <span class="m">traefik<span class="ver">@38.1.0</span></span> · `+carriedByWilma+` · `)
+		`newer: <span class="m">`+ref("traefik", "38.1.0")+`</span> · `+carriedByWilma+` · `)
 	mustHold(t, "the row of traefik in the newer versions", rowWith(t, pages[1], `>traefik</a>`),
 		`<div class="mut small">`+carriedByWilma+`</div>`)
 	mustNotHold(t, "the row of dex, whose profile has no newer version", rowWith(t, pages[1], `>dex</a>`), "carried by")

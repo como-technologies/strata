@@ -89,7 +89,7 @@ func TestEachAssetIsServedWithItsType(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"index.html", "app.js", themeScript, "app.css", "favicon-light.svg", "favicon-dark.svg", "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
+	for _, want := range []string{"index.html", "app.js", themeScript, "app.css", testkit.FaviconLight, testkit.FaviconDark, "LICENSES.md", "fonts/public-sans-latin-wght-normal.woff2", "fonts/roboto-mono-latin-wght-normal.woff2"} {
 		if !slices.Contains(found, want) {
 			t.Errorf("assets/ has no %s", want)
 		}
@@ -149,7 +149,7 @@ func TestTheRouteOfThePageGivesTheIndexAndNoPathElseGivesAFile(t *testing.T) {
 	if rec := serve(t, "/favicon.ico"); rec.Code != http.StatusNoContent || rec.Body.Len() != 0 {
 		t.Errorf("/favicon.ico gave %d with %d bytes", rec.Code, rec.Body.Len())
 	}
-	for _, icon := range []string{"/favicon-light.svg", "/favicon-dark.svg"} {
+	for _, icon := range []string{"/" + testkit.FaviconLight, "/" + testkit.FaviconDark} {
 		if rec := serve(t, icon); rec.Code != http.StatusOK || rec.Body.Len() == 0 {
 			t.Errorf("%s gave %d with %d bytes", icon, rec.Code, rec.Body.Len())
 		}
@@ -429,11 +429,11 @@ const A = raw(" &rarr; ");`
 		{"a maximum width on a list of selectors", "app.css", `.x,.page{max-width:90vw}`, problemMaxWidth},
 		{"a maximum width in a media rule", "app.css", `@media (max-width:760px){.page{max-width:600px}}`, problemMaxWidth},
 		{"a maximum width on the app", "app.css", `.app{max-width:1400px;margin:auto}`, problemMaxWidth},
-		{"a script in an icon", "favicon-light.svg", `<svg ` + svgNamespace + `><script href="x.js"/></svg>`, "a script"},
-		{problemStyle + " in an icon", "favicon-light.svg", `<svg ` + svgNamespace + `><path style="fill:red" d="M0 0"/></svg>`, problemStyle},
-		{"a style tag in an icon", "favicon-light.svg", `<svg ` + svgNamespace + `><style>path{fill:red}</style></svg>`, problemStyle},
-		{"an address in an icon", "favicon-light.svg", `<svg ` + svgNamespace + `><image href="https://x.example/a.png"/></svg>`, problemAddress},
-		{"an event attribute in an icon", "favicon-light.svg", `<svg ` + svgNamespace + ` onload="go()"></svg>`, problemHandler},
+		{"a script in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><script href="x.js"/></svg>`, "a script"},
+		{problemStyle + " in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><path style="fill:red" d="M0 0"/></svg>`, problemStyle},
+		{"a style tag in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><style>path{fill:red}</style></svg>`, problemStyle},
+		{"an address in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + `><image href="https://x.example/a.png"/></svg>`, problemAddress},
+		{"an event attribute in an icon", testkit.FaviconLight, `<svg ` + svgNamespace + ` onload="go()"></svg>`, problemHandler},
 		{"innerHTML in the script of the theme", themeScript, `document.body.innerHTML = x;`, screensOnly},
 		{"an attribute that is not of the theme", themeScript, `el.setAttribute("onclick", v);`, problemAttribute},
 		{"an attribute with a name from a variable", themeScript, `el.setAttribute(name, v);`, problemAttribute},
@@ -622,8 +622,9 @@ func checkMarkup(t *testing.T, s screen) {
 
 // evil is a tag that runs a script, and injection is the same tag as the page must show it: as text.
 const (
-	evil      = "<img src=x onerror=alert(1)>"
-	injection = "&lt;img src=x onerror=alert(1)&gt;"
+	evilTag   = "img src=x onerror=alert(1)"
+	evil      = "<" + evilTag + ">"
+	injection = "&lt;" + evilTag + "&gt;"
 )
 
 // A name, a path, and a value with <img src=x> show as text on each screen of each set.
@@ -701,18 +702,28 @@ const (
 	imagesOn     = `<a href="#images" class="on">`
 	machineImage = "changed the machine image on this cluster."
 	// The words of the badges of an image and of a pack, and of a row of a profile with a newer version.
-	imageMoved     = "Image moved"
 	twoDigests     = "Two digests"
 	wordNotChecked = "Not checked"
 	newerProfile   = "Newer profile version"
-	// traefikPin is the pack of the row of wilma-gateway that has a newer version.
-	traefikPin = `traefik<span class="ver">@38.0.1</span>`
 	// wrapAnywhere is the declaration of a rule that lets a long word wrap.
 	wrapAnywhere = "overflow-wrap:anywhere;"
 	// podsFailed starts the words of a read of the pods that failed, and podsRefusedWords give the cause of a refusal.
 	podsFailed       = "The last read of the pods failed"
 	roleRefused      = "HTTP 403, the role of the observer was refused"
 	podsRefusedWords = podsFailed + ". <b>" + roleRefused + ".</b>"
+	// ranAnotherDigest and ranTwoDigests end the line of a profile for a finding of an image, after the names of the packs.
+	ranAnotherDigest = " ran another digest in pods than the first one seen."
+	ranTwoDigests    = " ran with two digests in pods at one time."
+)
+
+// ref gives the name and the version of a pack or of a profile, as ref of app.js writes them.
+func ref(name, version string) string { return name + `<span class="ver">@` + version + `</span>` }
+
+// traefikPin is the pack of the row of wilma-gateway that has a newer version, and wilmaNewest is the newer version of
+// wilma-gateway.
+var (
+	traefikPin  = ref("traefik", "38.0.1")
+	wilmaNewest = ref("wilma-gateway", "3.2.0")
 )
 
 // imageScreens name the overview, the list of the images, and the page of an image, for the failures of the tests below.
@@ -737,7 +748,7 @@ func TestEachSetShowsItsWords(t *testing.T) {
 		{devdata.StateLostUnchecked, []string{lostTitle, lostFact, keySecret}},
 		{devdata.StateStaleUnchecked, []string{stoppedTitle, noGoodCheck, kubeLogs}},
 		{devdata.StateReadError, []string{needsAttention, "This cluster runs other content than its record", "3 causes · 1 of 6 packs in full"}},
-		{devdata.StateImages, []string{needsAttention, imageMoved, tagMoved, movedOrSplit, imageChanges}},
+		{devdata.StateImages, []string{needsAttention, testkit.ImageMoved, tagMoved, movedOrSplit, imageChanges}},
 		{devdata.StateImagesSplit, []string{needsAttention, twoDigests, tagSplit, movedOrSplit, imageChanges}},
 		{devdata.StateImagesOff, []string{needsAttention, byNameAndTag}},
 		{devdata.StateImagesUnread, []string{imageChanges, notReadYet, "3 causes · " + okInFull, byNameAndTag}},
@@ -1273,8 +1284,8 @@ func TestEachCopyOfTheLogoIsItsSourceByteForByte(t *testing.T) {
 		name         string
 		source, copy []byte
 	}{
-		{"favicon-light.svg", light, readPage(t, "favicon-light.svg")},
-		{"favicon-dark.svg", dark, readPage(t, "favicon-dark.svg")},
+		{testkit.FaviconLight, light, readPage(t, testkit.FaviconLight)},
+		{testkit.FaviconDark, dark, readPage(t, testkit.FaviconDark)},
 		{"the favicon of the book", light, readFile(t, bookFavicon)},
 	} {
 		if problem := copyProblem(c.name, c.source, c.copy); problem != "" {
@@ -1495,10 +1506,8 @@ func TestTheFootOfTheNavHasTheControlOfTheTheme(t *testing.T) {
 	if !strings.Contains(head, `<script src="`+themeScript+`"></script>`) || strings.Contains(body, themeScript) {
 		t.Error(themeScript + " must be a plain script in the head, and only there")
 	}
-	for _, icon := range []string{
-		`<link rel="icon" type="image/svg+xml" href="favicon-light.svg" media="(` + schemeQuery + `: light)">`,
-		`<link rel="icon" type="image/svg+xml" href="favicon-dark.svg" media="(` + schemeQuery + `: dark)">`,
-	} {
+	for _, scheme := range [][2]string{{"light", testkit.FaviconLight}, {"dark", testkit.FaviconDark}} {
+		icon := `<link rel="icon" type="image/svg+xml" href="` + scheme[1] + `" media="(` + schemeQuery + `: ` + scheme[0] + `)">`
 		if !strings.Contains(head, icon) {
 			t.Errorf("the head has no %s", icon)
 		}
@@ -1637,7 +1646,7 @@ func mustNotHold(t *testing.T, where, html string, words ...string) {
 var (
 	imageBadges = map[model.ImageStatus]string{
 		model.ImageStatusSteady:     badge("g", "First digest"),
-		model.ImageStatusMoved:      badge("a", imageMoved),
+		model.ImageStatusMoved:      badge("a", testkit.ImageMoved),
 		model.ImageStatusSplit:      badge("r", twoDigests),
 		model.ImageStatusNotChecked: badge("y", wordNotChecked),
 	}
@@ -1667,6 +1676,12 @@ func packName(key string) string { _, name, _ := strings.Cut(key, "/"); return n
 // The sets that hold images that a pod runs.
 var imageSets = []devdata.State{devdata.StateOK, devdata.StateImages, devdata.StateImagesSplit}
 
+// sortHead starts the head of a column of the list of the images that sorts by text and is not sorted now. class is
+// the class of the head, col names the column, and label is its word.
+func sortHead(class, col, label string) string {
+	return `<th class="` + class + `" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="` + col + `">` + label + `<`
+}
+
 // The list shows the count line, and one row for each image: its status, its reference, its pack, the
 // number of its pods, and its digest. An image with no digest of a repo reads Not checked and never OK.
 func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.T) {
@@ -1676,8 +1691,8 @@ func TestTheListOfImagesShowsEachImageWithItsStatusPackPodsAndDigest(t *testing.
 			o := set.Images
 			list := pageOf(t, render(t, state, false), "#images", "")
 			mustHold(t, "the list", list, fmt.Sprintf(`<h2>Images <span class="sub">%d images. %d match a pack. %d do not.</span></h2>`, o.Counts.Images, o.Counts.Matched, o.Counts.Images-o.Counts.Matched),
-				`data-col="status">Status<`, `data-col="image">Image<`, `<th class="narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pack">Pack<`,
-				`<th class="n narrow-hide" aria-sort="none"><button type="button" class="sort" data-sort="it" data-col="pods">Pods<`, `<th>Digest</th></tr></thead>`)
+				`data-col="status">Status<`, `data-col="image">Image<`, sortHead("narrow-hide", "pack", "Pack"),
+				sortHead("n narrow-hide", "pods", "Pods"), `<th>Digest</th></tr></thead>`)
 			if got := strings.Count(list, linkRowStart); got != len(o.Images) {
 				t.Errorf("the list has %d rows for %d images", got, len(o.Images))
 			}
@@ -1835,7 +1850,7 @@ func TestTheTabWhatPodsDoCatchIsTheSameForEachImage(t *testing.T) {
 // of the image. The Drift tile does not count it.
 func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 	for state, c := range map[devdata.State]struct{ badge, title string }{
-		devdata.StateImages:      {badge("a", imageMoved), tagMoved},
+		devdata.StateImages:      {badge("a", testkit.ImageMoved), tagMoved},
 		devdata.StateImagesSplit: {badge("r", twoDigests), tagSplit},
 	} {
 		t.Run(string(state), func(t *testing.T) {
@@ -1855,7 +1870,7 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 func TestTheListOfProfilesSaysTheFindingOfAnImage(t *testing.T) {
 	profiles := pageOf(t, render(t, devdata.StateImages, false), "#profiles", "")
 	row := rowTo(t, profiles, wilmaHash)
-	mustHold(t, "the row", row, traefikPin, "<div>vendor-product ran another digest in pods than the first one seen.</div>")
+	mustHold(t, "the row", row, traefikPin, "<div>vendor-product"+ranAnotherDigest+"</div>")
 }
 
 // Issue #707. The row of a profile names the newer published version of the profile itself. Its words
@@ -1866,7 +1881,7 @@ func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T
 	profiles := pageOf(t, screens, "#profiles", "")
 	wilma := rowTo(t, profiles, wilmaHash)
 	mustHold(t, "the row of wilma-gateway", wilma,
-		newerProfile+` wilma-gateway<span class="ver">@3.2.0</span>. `+badge("fresh", "new"),
+		newerProfile+" "+wilmaNewest+". "+badge("fresh", "new"),
 		traefikPin)
 	// a profile with a pack that has a newer version, and no newer version of its own
 	barney := rowTo(t, profiles, barneyHash)
@@ -2179,14 +2194,14 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 	}{
 		{model.ImageIDChanged, []string{"addon/dex"}, "dex " + machineImage},
 		{model.ImageIDChanged, []string{"addon/dex", "addon/reloader"}, "dex, reloader " + machineImage},
-		{model.ImageMoved, []string{"addon/dex"}, "dex ran another digest in pods than the first one seen."},
-		{model.ImageMoved, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran another digest in pods than the first one seen."},
-		{model.ImageSplit, []string{"addon/dex"}, "dex ran with two digests in pods at one time."},
-		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader ran with two digests in pods at one time."},
+		{model.ImageMoved, []string{"addon/dex"}, "dex" + ranAnotherDigest},
+		{model.ImageMoved, []string{"addon/dex", "addon/reloader"}, "dex, reloader" + ranAnotherDigest},
+		{model.ImageSplit, []string{"addon/dex"}, "dex" + ranTwoDigests},
+		{model.ImageSplit, []string{"addon/dex", "addon/reloader"}, "dex, reloader" + ranTwoDigests},
 	} {
 		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
 			add := editJSON(t, func(v *api.FindingsView) {
-				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, dexSubject), Kind: c.kind, Profile: dexSubject, Packs: c.packs,
+				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, testkit.DexProfile), Kind: c.kind, Profile: testkit.DexProfile, Packs: c.packs,
 					Images: []string{"a/b:1"}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
 			})
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"findings.json": add})

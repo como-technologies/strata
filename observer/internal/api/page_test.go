@@ -10,14 +10,14 @@ import (
 
 func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 	h := (&Server{Source: stub{}, Page: Page(fstest.MapFS{
-		"index.html":       {Data: []byte("<title>page</title>")},
-		"app.js":           {Data: []byte("1")},
-		"app.css":          {Data: []byte("a{}")},
-		"fonts/a.woff2":    {Data: []byte("font")},
-		"LICENSES.md":      {Data: []byte("# licenses")},
-		"favicon-dark.svg": {Data: []byte("<svg/>")},
-		"secret.json":      {Data: []byte("{}")},
-		"fonts/readme.txt": {Data: []byte("text")},
+		"index.html":        {Data: []byte("<title>page</title>")},
+		"app.js":            {Data: []byte("1")},
+		"app.css":           {Data: []byte("a{}")},
+		"fonts/a.woff2":     {Data: []byte("font")},
+		"LICENSES.md":       {Data: []byte("# licenses")},
+		testkit.FaviconDark: {Data: []byte("<svg/>")},
+		"secret.json":       {Data: []byte("{}")},
+		"fonts/readme.txt":  {Data: []byte("text")},
 	})}).Handler()
 	for _, c := range []struct {
 		path, typ string
@@ -29,7 +29,7 @@ func TestPageServesEachFileWithTheTypeOfItsKind(t *testing.T) {
 		{"/app.css", testkit.PageTypes[".css"], 200},
 		{"/fonts/a.woff2", testkit.PageTypes[".woff2"], 200},
 		{"/LICENSES.md", testkit.PageTypes[".md"], 200},
-		{"/favicon-dark.svg", testkit.PageTypes[".svg"], 200},
+		{"/" + testkit.FaviconDark, testkit.PageTypes[".svg"], 200},
 		// A kind that has no type is not served, and nor is a file that does not exist.
 		{"/secret.json", testkit.JSONType, 404},
 		{"/fonts/readme.txt", testkit.JSONType, 404},

@@ -18,19 +18,21 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 		Page:    model.PageLost,
 		Content: model.ContentClock{Health: model.Health{FailedRuns: 3, LastError: &model.ErrorRef{Kind: docs.KindAPI, Status: 401}}},
 		Findings: []model.Finding{
-			{ID: "f1", Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}, FirstSeen: now},
+			{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}, FirstSeen: now},
 			{ID: "f2", Kind: model.ImageSplit, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Images: []string{"a/b:1"}},
 		},
-		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{"fred-identity@2.3.0", "barney-base@1.5.0"}}},
+		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile, "barney-base@1.5.0"}}},
 	}
 	got := SubjectsOf(sum)
 	if len(got) != 5 {
 		t.Fatalf("subjects %+v", got)
 	}
+	// dexNewer starts the id of the newer version of dex for a profile.
+	const dexNewer = "newer:r1" + testkit.DexMove + "|"
 	want := []struct {
 		id   string
 		news News
-	}{{"f1", NewsDrift}, {"f2", NewsImage}, {"newer:r1/dex@2.42.0->2.44.0|fred-identity@2.3.0", NewsNewer}, {"newer:r1/dex@2.42.0->2.44.0|barney-base@1.5.0", NewsNewer}, {lostID, NewsLost}}
+	}{{"f1", NewsDrift}, {"f2", NewsImage}, {dexNewer + testkit.DexProfile, NewsNewer}, {dexNewer + "barney-base@1.5.0", NewsNewer}, {lostID, NewsLost}}
 	for i, w := range want {
 		if got[i].ID != w.id || got[i].News != w.news {
 			t.Errorf("subject %d is %s %s, want %s %s", i, got[i].ID, got[i].News, w.id, w.news)
@@ -47,14 +49,14 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 // A message names a profile, its packs, a fixed sentence, and a time. It holds nothing else of a finding,
 // also what the summary tier carries: the writer, the images, and the impact.
 func TestAMessageHoldsNothingOfAFindingButItsProfilePacksSentenceAndFirstSight(t *testing.T) {
-	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}, Impact: "IMPACT-MARKER",
+	f := model.Finding{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}, Impact: "IMPACT-MARKER",
 		Images: []string{"IMAGE-MARKER:1"}, Who: []docs.Who{{Actor: "ACTOR-MARKER", Action: "ACTION-MARKER"}}, FirstSeen: now}
 	s := findingSubject(f)
 	for _, text := range []string{openText("quarry-1", s), clearText("quarry-1", s, now), digestText("quarry-1", []Subject{s})} {
 		if strings.Contains(text, "MARKER") {
 			t.Errorf("the message holds a marker: %s", text)
 		}
-		if !strings.Contains(text, "fred-identity@2.3.0") {
+		if !strings.Contains(text, testkit.DexProfile) {
 			t.Errorf("the message lacks the profile: %s", text)
 		}
 	}
@@ -128,7 +130,7 @@ func TestThePackageImportsNoPackageThatHoldsAValue(t *testing.T) {
 func TestAPackRuleThatNamesTheKeyCoversTheNewerVersionOfThatPack(t *testing.T) {
 	sum := model.Summary{
 		Profiles: []model.Profile{{Name: "fred-identity", Version: "2.3.0", Packs: []model.Pack{{Key: "addon/dex", Name: "dex", Version: "2.42.0"}}}},
-		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{"fred-identity@2.3.0"}}},
+		Newer:    []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile}}},
 	}
 	subjects := SubjectsOf(sum)
 	if len(subjects) != 1 || len(subjects[0].Packs) != 1 || subjects[0].Packs[0] != "addon/dex" {

@@ -232,7 +232,7 @@ func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
 	cycle(t, o)
 	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
-	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+"Image moved\naws-stack@1.1.0: ") {
+	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+testkit.ImageMoved+"\naws-stack@1.1.0: ") {
 		t.Fatalf("messages %q", sender.texts)
 	}
 	// a restart without the read of the pods finds no image finding, and that proves nothing
@@ -243,7 +243,7 @@ func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
 	// a restart that reads the pods and sees the first digest clears the finding
 	pods.set([]kube.Container{runs("web-1", testkit.Digest1)}, nil)
 	cycle(t, withRules(t, r, r.observer(w).WithPods(pods), sender, imageRules))
-	if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], "Image moved cleared") {
+	if len(sender.texts) != 2 || !strings.Contains(sender.texts[1], testkit.ImageMoved+" cleared") {
 		t.Errorf("messages %q", sender.texts)
 	}
 }

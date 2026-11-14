@@ -126,10 +126,10 @@ func TestALowerLevelOverridesAHigherOne(t *testing.T) {
 		ok   bool
 	}{
 		{"the cluster rule takes any other profile", Subject{News: NewsDrift, Profile: "barney-base@1.5.0", Packs: []string{"addon/kyverno"}}, 0, true},
-		{"the profile rule overrides the cluster rule", Subject{News: NewsDrift, Profile: "fred-identity@2.3.0", Packs: []string{"addon/cert"}}, 2, true},
-		{"the pack rule overrides the profile rule", Subject{News: NewsDrift, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}}, 1, true},
+		{"the profile rule overrides the cluster rule", Subject{News: NewsDrift, Profile: testkit.DexProfile, Packs: []string{"addon/cert"}}, 2, true},
+		{"the pack rule overrides the profile rule", Subject{News: NewsDrift, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}}, 1, true},
 		{"a pack rule takes a finding that names the pack among others", Subject{News: NewsDrift, Profile: "barney-base@1.5.0", Packs: []string{"addon/cert", "addon/dex"}}, 1, true},
-		{"a rule is about its own news", Subject{News: NewsImage, Profile: "fred-identity@2.3.0", Packs: []string{"addon/dex"}}, 0, false},
+		{"a rule is about its own news", Subject{News: NewsImage, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}}, 0, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -146,7 +146,7 @@ func TestAMuteHoldsThroughTheDayOfItsEndDateAndThenCountsAsNoMute(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := Subject{News: NewsDrift, Profile: "fred-identity@2.3.0"}
+	s := Subject{News: NewsDrift, Profile: testkit.DexProfile}
 	for _, c := range []struct {
 		at   time.Time
 		want int
@@ -163,8 +163,8 @@ func TestAMuteHoldsThroughTheDayOfItsEndDateAndThenCountsAsNoMute(t *testing.T) 
 }
 
 func TestAProfileRuleNamesTheProfileOrNameAndVersion(t *testing.T) {
-	r := Rule{Level: LevelProfile, Match: "fred-identity@2.3.0"}
-	if !r.covers(Subject{Profile: "fred-identity@2.3.0"}) || r.covers(Subject{Profile: "fred-identity@2.4.0"}) {
+	r := Rule{Level: LevelProfile, Match: testkit.DexProfile}
+	if !r.covers(Subject{Profile: testkit.DexProfile}) || r.covers(Subject{Profile: "fred-identity@2.4.0"}) {
 		t.Error("a rule with name@version covers that version only")
 	}
 	r.Match = "fred-identity"
@@ -183,7 +183,7 @@ func TestAMuteBesideASendRuleAtOneLevelParsesAndTheLiveMuteWins(t *testing.T) {
 		t.Fatal(err)
 	}
 	lost := Subject{News: NewsLost}
-	drift := Subject{News: NewsDrift, Profile: "fred-identity@2.3.0"}
+	drift := Subject{News: NewsDrift, Profile: testkit.DexProfile}
 	for _, c := range []struct {
 		name string
 		s    Subject

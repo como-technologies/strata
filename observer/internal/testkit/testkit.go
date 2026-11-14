@@ -35,6 +35,9 @@ const (
 	ClusterPayments = ClusterHead + `c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
 	// CompareSame is the answer of `compare` for two sides that are the same.
 	CompareSame = `{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}`
+	// KubernetesBehind is the answer of `behind` for the record of aws-stack@1.1.0. Its pack kubernetes 1.35.3 is behind
+	// 1.36.2.
+	KubernetesBehind = `{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}`
 )
 
 // The values of the test data that the tests of more than one package hold. The tests of docs hold their own copy,
@@ -44,10 +47,12 @@ const (
 	ClusterUID = "7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35"
 	// AddonsProfile is the second profile that the cluster payments runs.
 	AddonsProfile = "platform-addons@1.0.0"
-	// RecordFile is the file of the record aws-stack@1.1.0.
+	// RecordFile is the file of the record aws-stack@1.1.0, which AWSStack gives.
 	RecordFile = "aws-stack@1.1.0.json.gz"
-	// ApprovedMeta is the meta file of records that a pipeline approved.
-	ApprovedMeta = `{"baseline":"approved","revision":"4e1c7a2"}`
+	// Revision and NewRevision are two revisions of the records that a pipeline approved, in the meta file that
+	// ApprovedMeta gives. NewRevision comes after Revision.
+	Revision    = "4e1c7a2"
+	NewRevision = "5f2d8b1"
 	// FredCompositions is the key of the pack that the move of barney-addons changes.
 	FredCompositions = "addon/fred-compositions"
 	// SyncedAt is the time of the last sync of a registry.
@@ -55,9 +60,10 @@ const (
 	// Digest1 and Digest2 are two digests of an image.
 	Digest1 = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 	Digest2 = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-	// VendorRef is the image of the pack VendorPack that moves to another digest.
-	VendorRef  = "vendor.example/product:2026.2"
-	VendorPack = "addon/vendor-product"
+	// VendorRef is the image of the pack VendorPack that moves to another digest, and VendorImage is its name with no tag.
+	VendorImage = "vendor.example/product"
+	VendorRef   = VendorImage + ":2026.2"
+	VendorPack  = "addon/vendor-product"
 	// NoImage is an image that no pod runs.
 	NoImage = "nobody.example/none:0"
 	// ImageItem is the path of the first image of a pack, and ImagePath is the path of its name.
@@ -72,8 +78,10 @@ const (
 	AuditSentinel = "AUDIT-REASON-SENTINEL"
 	// AuditUnread is the message of an event when the observer could not read the audit log.
 	AuditUnread = "The audit log could not be read, so this does not say who made the change."
-	// DexAsk is the route of the question to Palette for the move of dex in the dev data.
-	DexAsk = "/v1/packs/fred-identity@2.3.0/addon/dex/ask"
+	// DexProfile is the profile of the pack dex in the dev data and in the tests of more than one package. DexAsk is the
+	// route of the question to Palette for the move of dex in the dev data.
+	DexProfile = "fred-identity@2.3.0"
+	DexAsk     = "/v1/packs/" + DexProfile + "/addon/dex/ask"
 	// AsksRoute is the route of the list of answers of Palette. NoAnswers is the list of an observer that holds none, in
 	// the JSON of the route. The list is empty, and not null.
 	AsksRoute = "/v1/asks"
@@ -90,6 +98,11 @@ const (
 	// its path from the directory of a package of internal/.
 	RecordsTool   = "scripts/ci/observer-records.sh"
 	RecordsScript = "../../../" + RecordsTool
+	// ImageMoved names an image that runs another digest: the badge of the page and the title of the alert.
+	ImageMoved = "Image moved"
+	// FaviconLight and FaviconDark are the icons of the page for the light and the dark scheme.
+	FaviconLight = "favicon-light.svg"
+	FaviconDark  = "favicon-dark.svg"
 	// JSONType is the Content-Type of a document of JSON.
 	JSONType = "application/json"
 	// HeaderPolicy and HeaderNoSniff are two headers that the server sets on each answer.
@@ -99,8 +112,10 @@ const (
 	NginxImage = "docker.io/library/nginx"
 	// DexExpiry is the path of the settings of the expiry of the tokens of dex, in the values of its pack.
 	DexExpiry = "charts.dex.config.expiry"
-	// KubernetesMove is the key of the move of kubernetes from 1.35.3 to 1.36.2, after the uid of its registry.
+	// KubernetesMove is the key of the move of kubernetes from 1.35.3 to 1.36.2, after the uid of its registry. DexMove
+	// is the key of the move of dex from 2.42.0 to 2.44.0.
 	KubernetesMove = "/kubernetes@1.35.3->1.36.2"
+	DexMove        = "/dex@2.42.0->2.44.0"
 	// KubernetesDiff ends the route of the diff of the pack kubernetes of a profile.
 	KubernetesDiff = "/k8s/kubernetes/diff"
 	// DexValuesHead is the head of the diff of the values of dex in the dev data. NoEOL is the note of a diff for a side
@@ -383,6 +398,13 @@ func ErrorLine(kind, fields string) string {
 	return `echo '{"error":{"kind":"` + kind + `",` + fields + `}}' >&2`
 }
 
+// ApprovedMeta gives the meta file of records that a pipeline approved at the revision. The word of the baseline is
+// baseline.Approved, and that of FirstSeenMeta is baseline.FirstSeen. testkit cannot import baseline, because the
+// tests of baseline import testkit.
+func ApprovedMeta(revision string) string {
+	return `{"baseline":"approved","revision":"` + revision + `"}`
+}
+
 // FirstSeenMeta gives the meta file of records that the observer took from the cluster from.
 func FirstSeenMeta(from string) string {
 	return `{"baseline":"first-seen","firstSeenFrom":"` + from + `"}`
@@ -392,4 +414,30 @@ func FirstSeenMeta(from string) string {
 // other members of the source, and rest the other members of the record, each after a comma.
 func Record(schema, name, version, source, rest string) string {
 	return `{"schema":"` + schema + `","source":{"name":"` + name + `","version":"` + version + `"` + source + `}` + rest + `}`
+}
+
+// ProfileRecord gives a record that strata 0.28.0 took of the cluster profile name@version, whose uid is u-<name>.
+// rest holds the other members of the record, each after a comma.
+func ProfileRecord(name, version, rest string) string {
+	return Record(docs.SnapshotSchema, name, version, `,"uid":"u-`+name+`","type":"cluster"`, `,"tool":{"version":"0.28.0"}`+rest)
+}
+
+// AWSStack gives the record of aws-stack@1.1.0, the profile that the cluster payments runs, with the root r1. rest
+// holds the other members of the record, each after a comma.
+func AWSStack(rest string) string {
+	return ProfileRecord("aws-stack", "1.1.0", `,"root":"r1"`+rest)
+}
+
+// Snapshot gives the record that a fake of strata writes for a snapshot of the profile name@version. Its root is
+// r-<name>, and it holds no pack.
+func Snapshot(name, version string) string {
+	return ProfileRecord(name, version, `,"root":"r-`+name+`","packs":[]`)
+}
+
+// RigRecord gives the record of name@version that a rig of the tests of api and of check writes. Its root is r1, it
+// holds the packs, and its one variable, team, holds the value.
+func RigRecord(t *testing.T, name, version string, packs []map[string]any, value string) string {
+	t.Helper()
+	variables := MustJSON(t, []map[string]string{{"name": "team", "value": value}})
+	return ProfileRecord(name, version, `,"root":"r1","packs":`+string(MustJSON(t, packs))+`,"variables":`+string(variables))
 }

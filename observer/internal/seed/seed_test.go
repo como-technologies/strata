@@ -16,7 +16,6 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
-	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/runner"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
@@ -29,10 +28,6 @@ func clusterJSON() string {
 		`{"name":"aws-stack","version":"1.0.0","type":"cluster"},{"name":"platform-addons","version":"2.3.0","type":"add-on"}]}}}`
 }
 
-func recordJSON(name, version string) string {
-	return testkit.Record(docs.SnapshotSchema, name, version, "", `,"root":"r-`+name+`"`)
-}
-
 // fakeStrata writes the documents of a snapshot into the file of -o, as strata does.
 type fakeStrata struct{ calls [][]string }
 
@@ -42,7 +37,7 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 	doc := clusterJSON()
 	if ref := args[1]; !strings.HasPrefix(ref, "cluster:") {
 		name, version, _ := strings.Cut(ref, "@")
-		doc = recordJSON(name, version)
+		doc = testkit.Snapshot(name, version)
 	}
 	return runner.Result{}, os.WriteFile(filepath.Join(dir, out), []byte(doc), 0o600)
 }
@@ -98,7 +93,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 	}
 	for _, p := range profiles {
 		key := p[0] + "_" + p[1] + ".json.gz"
-		if got := gunzip(t, first[key]); got != recordJSON(p[0], p[1]) {
+		if got := gunzip(t, first[key]); got != testkit.Snapshot(p[0], p[1]) {
 			t.Errorf("%s holds %s", key, got)
 		}
 	}
@@ -112,7 +107,7 @@ func TestARunWritesTheFirstSeenRecordsOnceAndThenKeepsThem(t *testing.T) {
 // A Secret that holds meta.json alone holds no record, so a run writes the records.
 func TestASecretWithMetaAloneIsNoRecord(t *testing.T) {
 	store := newStore()
-	store.data[Name(0)][MetaKey] = []byte(`{"baseline":"first-seen"}`)
+	store.data[Name(0)][MetaKey] = []byte(testkit.FirstSeenMeta(testkit.ClusterUID))
 	if res, err := Run(context.Background(), &fakeStrata{}, store, "ns", testkit.ClusterUID, t.TempDir()); err != nil || res.Kept {
 		t.Errorf(testkit.ResultAndError, res, err)
 	}
@@ -166,7 +161,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 	var cases strings.Builder
 	cases.WriteString("cluster:*) printf '%s' '" + clusterJSON() + "' > \"$out\" ;;\n")
 	for _, p := range profiles {
-		cases.WriteString(p[0] + "@" + p[1] + ") printf '%s' '" + recordJSON(p[0], p[1]) + "' > \"$out\" ;;\n")
+		cases.WriteString(p[0] + "@" + p[1] + ") printf '%s' '" + testkit.Snapshot(p[0], p[1]) + "' > \"$out\" ;;\n")
 	}
 	script := "#!/usr/bin/env bash\nout=\"\"\nprev=\"\"\nfor a in \"$@\"; do [ \"$prev\" = -o ] && out=$a; prev=$a; done\ncase \"$2\" in\n" + cases.String() + "esac\n"
 	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {

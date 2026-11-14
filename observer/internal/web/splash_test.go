@@ -61,8 +61,11 @@ func without(css, head string) string {
 	return css
 }
 
-// reducedMotion is the head of the block that stops each animation.
-const reducedMotion = "@media (prefers-reduced-motion:reduce)"
+// motionQuery is the media feature of less motion, and reducedMotion is the head of the block that stops each animation.
+const (
+	motionQuery   = "prefers-reduced-motion"
+	reducedMotion = "@media (" + motionQuery + ":reduce)"
+)
 
 // lostTop is the top slab of a lost mark, which is red and moves from its place.
 const lostTop = ".slabs.tone-lost .s0"
@@ -78,7 +81,7 @@ const (
 	lostMoved       = "{transform:translate(9px,-8px)}"
 	buildMark       = "a mark that builds does not hold its state"
 	lostMark        = "a lost mark does not hold its state"
-	noMotionRule    = "no rule for prefers-reduced-motion"
+	noMotionRule    = "no rule for " + motionQuery
 	slabsSVG        = `<svg class="slabs tone-`
 )
 
@@ -234,7 +237,7 @@ func TestThePolicyOfThePageStaysAndTheSplashAddsNoFileAndNoInlineStyle(t *testin
 	for _, e := range entries {
 		names = append(names, e.Name())
 	}
-	want := []string{"LICENSES.md", "app.css", "app.js", "favicon-dark.svg", "favicon-light.svg", "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", themeScript}
+	want := []string{"LICENSES.md", "app.css", "app.js", testkit.FaviconDark, testkit.FaviconLight, "fonts", "frame.js", "index.html", "pack.js", "routes.js", "screens.js", themeScript}
 	if !slices.Equal(names, want) {
 		t.Errorf("assets/ holds %v, want %v", names, want)
 	}

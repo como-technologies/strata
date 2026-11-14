@@ -55,7 +55,7 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	set := loadSet(t, devdata.StateAlerts)
 	screen := pageOf(t, render(t, devdata.StateAlerts, false), "#alerts", "")
 	mustHold(t, "the screen", screen,
-		`<div class="alertbar b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>`,
+		alertBar+`b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>`,
 		rulesHead+`7</span></h2>`,
 		`<th>State</th><th>Level</th><th>Applies to</th><th>News</th><th>Send</th><th>Where</th>`,
 		`<h2>Sample message</h2>`)

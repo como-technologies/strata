@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/como-technologies/strata/observer/internal/baseline"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
@@ -257,7 +258,7 @@ func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
 	var got ClusterView
 	decode(t, get(h, summaryRoutes[patternCluster]), &got)
 	if got.Cluster.Name != "payments" || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
-		got.Records.Baseline != "approved" || got.Records.Revision != "4e1c7a2" || got.Content.Every != "15m" || got.Versions.Every != "6h" ||
+		got.Records.Baseline != baseline.Approved || got.Records.Revision != testkit.Revision || got.Content.Every != "15m" || got.Versions.Every != "6h" ||
 		got.Counts.Findings != 2 || got.Counts.Newer != 1 {
 		t.Errorf("%+v", got)
 	}

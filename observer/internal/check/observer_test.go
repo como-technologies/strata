@@ -355,6 +355,7 @@ func (g *gatedStrata) Run(ctx context.Context, dir string, args ...string) (runn
 // summary shows the progress of the versions cycle while it runs, and drops it at the end. The log has
 // a line for the start and the end of each cycle, with the number of processes.
 func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.T) {
+	const stillRunning = "the %s cycle ended, and the summary still shows its progress"
 	r, w := withBehind(t)
 	g := gated(w)
 	o := r.observer(g)
@@ -370,14 +371,14 @@ func TestAContentCycleNeverWaitsForAVersionsCycleAndTheProgressShows(t *testing.
 		t.Fatalf("the progress of the versions cycle during its behind: %+v", running)
 	}
 	if o.Summary().Content.Running != nil {
-		t.Error("the content cycle ended, and the summary still shows its progress")
+		t.Errorf(stillRunning, "content")
 	}
 	close(g.gate)
 	if err := <-versions; err != nil {
 		t.Fatalf("the versions cycle: %v", err)
 	}
 	if o.Summary().Versions.Running != nil {
-		t.Error("the versions cycle ended, and the summary still shows its progress")
+		t.Errorf(stillRunning, "versions")
 	}
 	log := r.log.String()
 	for _, want := range []string{"cycle=versions phase=start", "cycle=content phase=start", "cycle=content phase=end verdict=ok processes=", "cycle=versions phase=end verdict=ok processes="} {

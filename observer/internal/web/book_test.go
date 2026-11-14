@@ -108,13 +108,16 @@ func TestTheBookQuotesTheHeadlinesAndTheWordsOfTheStatesOfThePage(t *testing.T) 
 			}
 		}
 	}
+	// The book quotes a next step of the page with a small first letter and no period.
+	quote := func(words string) string { return strings.ToLower(words[:1]) + strings.TrimSuffix(words[1:], ".") }
+	const refusal, other = "For HTTP 401 and 403, ", "For another error, "
 	for _, row := range rows {
 		switch row[0] {
 		case lostTitle:
-			mustHold(t, "the next step of the lost page", row[2], "For HTTP 401 and 403, check the key in the Secret `"+keySecret+"`", "For another error, check that the observer reaches Palette")
+			mustHold(t, "the next step of the lost page", row[2], refusal+quote(checkTheKey)+" `"+keySecret+"`", other+"check that the observer reaches Palette")
 			mustHold(t, "the scripts", script, checkTheKey, checkTheLink)
 		case podsTitle:
-			mustHold(t, "the next step of the pods", row[2], "For HTTP 401 and 403, ask the API server if the role of the observer can list pods", "For another error, read the log")
+			mustHold(t, "the next step of the pods", row[2], refusal+quote(askListPods), other+"read the log")
 			mustHold(t, "the scripts", script, askListPods, `next("Read the log."`)
 		}
 	}

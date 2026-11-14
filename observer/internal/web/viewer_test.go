@@ -254,14 +254,13 @@ func diffOf(t *testing.T, set *devdata.Set, profile, key string, side model.Side
 }
 
 const (
-	dexHash       = "#k-" + dexSubject + "/addon/dex"
-	dexPublished  = "side-" + dexSubject + "-addon/dex-published"
-	dexMove       = "move-" + dexSubject + "-addon/dex"
+	dexHash       = "#k-" + testkit.DexProfile + "/addon/dex"
+	dexPublished  = "side-" + testkit.DexProfile + "-addon/dex-published"
+	dexMove       = "move-" + testkit.DexProfile + "-addon/dex"
 	k8sHash       = "#k-" + k8sSubject + "/k8s/kubernetes"
 	k8sMove       = "move-" + k8sSubject + "-k8s/kubernetes"
 	traefikHash   = "#k-" + wilmaSubject + "/addon/traefik"
 	traefikMove   = "move-" + wilmaSubject + "-addon/traefik"
-	dexSubject    = "fred-identity@2.3.0"
 	k8sSubject    = "barney-base@1.5.0"
 	layoutUnified = "unified"
 	layoutSplit   = "split"
@@ -270,7 +269,7 @@ const (
 // fredHash is the hash of the page of the profile of dex. dexManifest is the head of the manifest of dex that the change of the
 // published version changes.
 const (
-	fredHash    = "#p-" + dexSubject
+	fredHash    = "#p-" + testkit.DexProfile
 	dexManifest = "manifest fred-realm-config"
 )
 
@@ -278,9 +277,9 @@ const (
 // for a move of the dev data.
 const (
 	csiHash      = "#k-" + k8sSubject + "/csi/csi-aws-ebs"
-	reloaderHash = "#k-" + dexSubject + "/addon/reloader"
+	reloaderHash = "#k-" + testkit.DexProfile + "/addon/reloader"
 	k8sClick     = `{"ask":"` + k8sSubject + `","pack":"k8s/kubernetes"}`
-	dexClick     = `{"ask":"` + dexSubject + `","pack":"addon/dex"}`
+	dexClick     = `{"ask":"` + testkit.DexProfile + `","pack":"addon/dex"}`
 	ubuntuClick  = `{"ask":"` + k8sSubject + `","pack":"os/ubuntu-aws"}`
 	csiClick     = `{"ask":"` + k8sSubject + `","pack":"csi/csi-aws-ebs"}`
 	// splitClick and unifiedClick are the clicks on the two layouts of a diff.
@@ -322,8 +321,8 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 		side                    model.Side
 		open                    string
 	}{
-		{dexHash, dexPublished, dexSubject, "addon/dex", model.SidePublished, ""},
-		{dexHash, dexMove, dexSubject, "addon/dex", model.SideNewer, "newer"},
+		{dexHash, dexPublished, testkit.DexProfile, "addon/dex", model.SidePublished, ""},
+		{dexHash, dexMove, testkit.DexProfile, "addon/dex", model.SideNewer, "newer"},
 		{k8sHash, k8sMove, k8sSubject, "k8s/kubernetes", model.SideNewer, ""},
 		{traefikHash, traefikMove, wilmaSubject, "addon/traefik", model.SideNewer, ""},
 	} {
@@ -355,6 +354,7 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 // The Manifests tab shows the text of each manifest with the operation in its head. A parameter has a row
 // in the small table, and a manifest with text has none.
 func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
+	const manifestLines = "%s manifest has %d added and %d removed lines"
 	set := loadSet(t, devdata.StateOK)
 	screens := render(t, devdata.StateOK, false)
 	for _, c := range []struct {
@@ -363,8 +363,8 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		table        []string
 		open         string
 	}{
-		{dexPublished, dexSubject, model.SidePublished, nil, ""},
-		{dexMove, dexSubject, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, "newer"},
+		{dexPublished, testkit.DexProfile, model.SidePublished, nil, ""},
+		{dexMove, testkit.DexProfile, model.SideNewer, []string{`<td class="m">added</td><td>Parameter</td><td class="m">dex_hostname</td>`}, "newer"},
 	} {
 		d := diffOf(t, set, c.profile, "addon/dex", c.side)
 		var want, wantSplit []string
@@ -399,18 +399,18 @@ func TestTheManifestsTabShowsTheTextOfEachManifestInBothLayouts(t *testing.T) {
 		}
 	}
 	// The ops of the manifests show in the heads: changed, added, and removed.
-	d := diffOf(t, set, dexSubject, "addon/dex", model.SideNewer)
+	d := diffOf(t, set, testkit.DexProfile, "addon/dex", model.SideNewer)
 	if len(d.Manifests) != 2 || d.Manifests[0].Op != "added" || d.Manifests[1].Op != "removed" {
 		t.Fatalf("the manifests of the newer side: %+v", d.Manifests)
 	}
 	// An added manifest is all added lines, and a removed manifest is all removed lines.
 	added, removed := headCounts(d.Manifests[0].Unified)
 	if added == 0 || removed != 0 {
-		t.Errorf("an added manifest has %d added and %d removed lines", added, removed)
+		t.Errorf(manifestLines, "an added", added, removed)
 	}
 	added, removed = headCounts(d.Manifests[1].Unified)
 	if added != 0 || removed == 0 {
-		t.Errorf("a removed manifest has %d added and %d removed lines", added, removed)
+		t.Errorf(manifestLines, "a removed", added, removed)
 	}
 }
 
@@ -423,7 +423,7 @@ func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
 		"@@ -7 +9,2 @@\n--- not a header\n+" + notAHeader + "\n+added\n" +
 		"@@ -20,3 +22,3 @@\n keep\n-old\n" + testkit.NoEOL + "\n+new\n" + testkit.NoEOL + "\n keep\n"
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished).Values.Unified = text
+		entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished).Values.Unified = text
 	})})
 	for _, layout := range []string{layoutUnified, layoutSplit} {
 		clicks := []string{}
@@ -484,6 +484,20 @@ func clickIn(t *testing.T, dir string, state devdata.State, hash, status string,
 	return nodeJSON[clicked](t, runNodeIn(t, dir, state, append([]string{"click", hash, status}, clicks...)...))
 }
 
+// onClass gives the class of a button that is on, or no class.
+func onClass(on bool) string {
+	if on {
+		return "on"
+	}
+	return ""
+}
+
+// pressedButton gives a button that sets how the page shows a view, with its label. The attribute data-<attr> names the
+// view, and the button is pressed when on is true.
+func pressedButton(attr, view, label string, on bool) string {
+	return `<button data-` + attr + `="` + view + `" aria-pressed="` + strconv.FormatBool(on) + `" class="` + onClass(on) + `">` + label + `</button>`
+}
+
 // Both layouts have the same control in the head of each diff, on the Values tab and on the Manifests
 // tab. One state serves the whole page: a click on Split changes each diff, and the choice stays when the
 // person changes the tab.
@@ -496,11 +510,11 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 		if heads == 0 || strings.Count(page, seg) != heads {
 			t.Errorf("%s: %d heads and %d controls", c.where, heads, strings.Count(page, seg))
 		}
-		mustHold(t, c.where, page, `<button data-view="unified" aria-pressed="true" class="on">Unified</button><button data-view="split" aria-pressed="false" class="">Split</button>`)
-		mustNotHold(t, c.where, page, `aria-pressed="true" class="on">Split`)
+		mustHold(t, c.where, page, pressedButton("view", layoutUnified, "Unified", true)+pressedButton("view", layoutSplit, "Split", false))
+		mustNotHold(t, c.where, page, pressedButton("view", layoutSplit, "Split", true))
 	}
 	split := pageOf(t, screens, dexHash, "split")
-	mustHold(t, "split", split, `<button data-view="unified" aria-pressed="false" class="">Unified</button><button `+splitPressed+` class="on">Split</button>`)
+	mustHold(t, "split", split, pressedButton("view", layoutUnified, "Unified", false)+pressedButton("view", layoutSplit, "Split", true))
 	mustNotHold(t, "split", split, `<td class="c">`)
 
 	// A click on Split changes each diff of the page and nothing else. A click on a tab keeps the layout.
@@ -527,7 +541,7 @@ func TestTheControlOfTheLayoutSitsInEachDiffHeadAndSetsOneLayoutForThePage(t *te
 // A line of a diff with the text of a tag shows as text, in both layouts, in a value and in a manifest.
 func TestALineOfADiffWithMarkupShowsAsText(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SidePublished)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SidePublished)
 		d.Values.Unified = strings.Replace(d.Values.Unified, idTokens, idTokens+"+"+evil+"\n-"+evil+"\n context "+evil+"\n", 1)
 		d.Manifests[0].Unified = strings.Replace(d.Manifests[0].Unified, "@@ -5,5 +5,5 @@\n", "@@ -5,5 +5,5 @@ "+evil+"\n+"+evil+"\n", 1) + "@@ -90 +90 @@ " + evil + "\n-" + evil + "\n+" + evil + "\n"
 	})})
@@ -598,12 +612,12 @@ func TestATextAboveTheCapShowsTheSplashAndTheCommandOfItsSide(t *testing.T) {
 func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 	set := loadSet(t, devdata.StateReadError)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SideCluster)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	command := compareCluster + set.Cluster.Cluster.Name + "/fred-identity"
 	r := clickIn(t, dir, "scratch", dexHash, "0")
-	card := cardOf(t, r.After, tabOf("side-"+dexSubject+"-addon/dex-cluster"))
+	card := cardOf(t, r.After, tabOf("side-"+testkit.DexProfile+"-addon/dex-cluster"))
 	mustHold(t, "the cluster side", card, tooLargeNote, "<code>"+command+" --full</code>")
 	mustNotHold(t, "the cluster side", card, diffHead)
 	// The profile page shows the same command, with the pack name left out and no flag.
@@ -616,7 +630,7 @@ func TestTheCommandOfTheClusterSideNamesTheCluster(t *testing.T) {
 func TestTheCommandOfATextAboveTheCapShowsNamesAsText(t *testing.T) {
 	swap := replaceText("quarry-1", evil)
 	dir := writeSet(t, devdata.StateReadError, map[string]func([]byte) []byte{"cluster.json": swap, "diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, dexSubject, "addon/dex", model.SideCluster)
+		d := entryOf(t, ds, testkit.DexProfile, "addon/dex", model.SideCluster)
 		d.Values.Unified, d.TextTooLarge = "", true
 	})})
 	page := clickIn(t, dir, "scratch", dexHash, "0").After
@@ -685,7 +699,7 @@ const (
 const (
 	cardButton     = `<button class="btn" data-ask="`
 	rowButton      = `<button class="lnk" data-ask="`
-	dexMoveAttrs   = dexSubject + `" data-pack="addon/dex"`
+	dexMoveAttrs   = testkit.DexProfile + `" data-pack="addon/dex"`
 	askThisMoveEnd = ">" + askThisMove + "</button>"
 	askAgainEnd    = ">" + askAgain + "</button>"
 	askingEnd      = " disabled>" + asking + "</button>"
@@ -895,7 +909,7 @@ func TestAnAnswerForANewerVersionThanTheRowShowsBesideTheMove(t *testing.T) {
 func TestAClickThatGetsAnAnswerWithoutAVersionEndsWithTheWordNoAnswer(t *testing.T) {
 	for _, newest := range []string{"2.44.0", ""} {
 		t.Run("newest "+newest, func(t *testing.T) {
-			reply := `{"asks":[{"profile":"` + dexSubject + `","key":"addon/dex","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
+			reply := `{"asks":[{"profile":"` + testkit.DexProfile + `","key":"addon/dex","newest":"` + newest + `",` + testkit.NoAnswerVerdict + `,"refusals":[],"status":502}]}`
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"replies.json": func([]byte) []byte { return []byte(reply) }})
 			r := clickIn(t, dir, "scratch", dexHash, "0", dexClick)
 			mustHold(t, "after", textOf(r.After), gaveNoAnswer+": HTTP 502.")
@@ -924,6 +938,7 @@ func TestAFailedListOfAnswersKeepsThePageOnlineAndTheLastList(t *testing.T) {
 // Nothing asks Palette by itself. A crawl of every screen of every set sends GET requests only, and the
 // question is sent in one place of the script: the function that a click calls.
 func TestNothingAsksWithoutAClick(t *testing.T) {
+	const usedTwice = "%s is called in %d places and defined once, want 2 uses"
 	for _, state := range []devdata.State{devdata.StateOK, devdata.StateAsks, devdata.StateTextTooLarge, devdata.StateReadError} {
 		t.Run(string(state), func(t *testing.T) {
 			var asks, diffs int
@@ -944,13 +959,13 @@ func TestNothingAsksWithoutAClick(t *testing.T) {
 		t.Errorf("the scripts hold %d POST requests, want 2: the clicks "+askButton+" and Check now", got)
 	}
 	if got := strings.Count(script, "checkNow("); got != 2 {
-		t.Errorf("checkNow is called in %d places and defined once, want 2 uses", got)
+		t.Errorf(usedTwice, "checkNow", got)
 	}
 	if !strings.Contains(script, "if (nw) { checkNow(nw.dataset.now); return; }") {
 		t.Error("the click handler does not call checkNow")
 	}
 	if got := strings.Count(script, "askPalette("); got != 2 {
-		t.Errorf("askPalette is called in %d places and defined once, want 2 uses", got)
+		t.Errorf(usedTwice, "askPalette", got)
 	}
 	if !strings.Contains(script, "if (q) { askPalette(q.dataset.ask, q.dataset.pack); return; }") {
 		t.Error("the click handler does not call askPalette")
