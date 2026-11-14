@@ -411,6 +411,12 @@ a note. A new id breaks each reader of the document, and the sum of `failed`, `p
 `warned` is the old value. [Release 0.34.0](#release-0340-changes-that-need-action) gives the
 action.
 
+One value changes after 0.33.0 with no new id. In `strata-snapshot/1`, the policy tier of a
+cluster names each role binding of the system in the new field `systemRbacs`, and not in `rbacs`.
+So the `hash` of the tier changes for a cluster with such a binding. The tier is not part of the root, so no root changes. A new id breaks each reader of
+the record, and the change touches only a cluster with such a binding.
+[Release 0.34.0](#release-0340-changes-that-need-action) gives the action.
+
 After 0.33.0, `strata-preflight/1` has four new fields: `sections[].probeFailed`,
 `sections[].warned`, `summary.counted`, and `checks[].failedRequest`. The id stays, and a
 reader that ignores unknown fields reads them.
@@ -1351,6 +1357,14 @@ field, a value, an input, or an option is in the sections above.
   of the scope. The message lists each version of the name and names `<name>@latest`. A name
   that no profile has keeps the error `api`. `snapshot`, `compare`, `same-release`, `candidate`,
   and `consumers` give it. See [A name with no version](./refs.md#a-name-with-no-version).
+- **A role binding of the system leaves the hash of the policy tier.** Its subjects depend on the
+  user of the key. So before, the keys of two users gave two hashes of the tier for one cluster. Now `rbacs` of `fields` does not
+  hold the binding, and the new field `systemRbacs` of the tier names it. `compare` and `verify`
+  do not compare it. See
+  [A role binding of the system](../commands/snapshot/cluster.md#a-role-binding-of-the-system).
+  - For a cluster with such a binding, `verify` of a record of 0.33.0 and before reports the
+    policy tier at the binding. The exit does not change. Record the cluster again.
+  - A script that reads the bindings of the system from `rbacs` must read `systemRbacs`.
 
 ### For a user of the CI drop-ins
 
@@ -1470,6 +1484,9 @@ field, a value, an input, or an option is in the sections above.
   `ops::consumers_with` give `Error::Usage` for a profile name in a ref with no version. Such a
   ref is `Ref::Uid`, or `Ref::Draft` with no version. Before, they gave the `Error::Api` of the
   404.
+- `snapshot::ClusterTier` has the new field `system_rbacs`, the role bindings of the system of
+  the policy tier. A struct literal must set it, and a pattern with no `..` must name it.
+  `snapshot::cluster_tiers` keeps these bindings out of `fields` and out of `hash`.
 
 ### For a user of the library of strata-preflight
 

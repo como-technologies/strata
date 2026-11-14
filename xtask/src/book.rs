@@ -29,6 +29,10 @@ pub(crate) use binaries::{built_examples, built_observer};
 /// two directories.
 static RUNNERS: AtomicU32 = AtomicU32::new(0);
 
+/// The key that the runner gives to each command of a chapter, in `PALETTE_API_KEY`. The stand-in
+/// takes any key.
+pub(crate) const EXAMPLE_KEY: &str = "docs-example-key";
+
 /// What the run is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -473,7 +477,7 @@ impl Runner {
         c.env("HOME", self.work.join("home"));
         c.env("LANG", "C.UTF-8");
         c.env("PALETTE_API", format!("http://127.0.0.1:{}", self.port));
-        c.env("PALETTE_API_KEY", "docs-example-key");
+        c.env("PALETTE_API_KEY", EXAMPLE_KEY);
         c.env("STRATA_REPORT_URL", self.report_endpoint());
         c.env("STRATA_BIN", &self.strata);
         // the git settings of the tests, before the chapter: a chapter adds the dates of its commits
@@ -688,7 +692,7 @@ impl Runner {
             "\nThe tenant of the chapter \"{chapter}\" is served on this machine. Export these, \
              and the commands of\nthe book run as the book prints them:\n\n\
              export PALETTE_API=http://127.0.0.1:{}\n\
-             export PALETTE_API_KEY=docs-example-key\n\
+             export PALETTE_API_KEY={EXAMPLE_KEY}\n\
              export STRATA_REPORT_URL={}   # the stand-in for the endpoint of the report\n{scope}\n\n\
              # every project of this tenant, for a page that reads more than one:\n{}\n\n\
              They beat a ~/.palette.env that names a real tenant. When a page describes a change \

@@ -438,9 +438,11 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
     notes
 }
 
-/// One note for each field of a cluster tier that strata could not read on a side: `strata could
-/// not read policy.rbacs of cluster fred (HTTP 403: forbidden), so it does not compare it`, in
-/// text order. Two sides that say the same get one note.
+/// One note for each field of a cluster tier that strata could not read on a side, in text order.
+/// Two sides that say the same get one note.
+///
+/// For example, for a key whose role does not give `cluster.get`:
+/// `strata could not read policy.rbacs of cluster fred (HTTP 500: {"code":"OperationForbidden",...}), so it does not compare it`.
 fn unread_notes(d: &Diff) -> Vec<String> {
     let notes: std::collections::BTreeSet<String> = [&d.a, &d.b]
         .into_iter()
