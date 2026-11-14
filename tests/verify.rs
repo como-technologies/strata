@@ -11,8 +11,9 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, OPERATION_FORBIDDEN_CODE, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE,
-    PROFILE_EXISTS_CODE, PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
+    CreateRule, INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, OPERATION_FORBIDDEN_CODE,
+    PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
@@ -20,6 +21,7 @@ use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
 use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::model::profile_type::ProfileType;
+use strata::model::update::MinorSkip;
 use strata::ops;
 use strata::reference::Ref;
 use strata::term::progress::Progress;
@@ -10888,6 +10890,95 @@ fn compare_validate_asks_the_route_of_the_profile_version_when_the_cluster_runs_
     assert_eq!(accepting.calls(&validate_packs_route()), 0);
 }
 
+#[test]
+fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_of_kubernetes() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    // fixture B adds the required variable db_password, with no default value. Here it also moves
+    // kubernetes from 1.29.4 to 1.31.2, and adds two more required variables: one with a default
+    // value, and one with none
+    let mut target = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let kubernetes = target
+        .packs
+        .iter_mut()
+        .find(|p| p.name == "kubernetes")
+        .unwrap();
+    kubernetes.version = "1.31.2".to_string();
+    let variable =
+        |fields: Value| -> strata::snapshot::Variable { serde_json::from_value(fields).unwrap() };
+    target.variables.extend([
+        variable(serde_json::json!({"name": "owner", "required": true})),
+        variable(serde_json::json!({"name": "region", "required": true, "defaultValue": "eu"})),
+    ]);
+    let api = cluster_api.with(post(&validate_packs_route()), serde_json::json!({}));
+
+    let mut d = ops::compare(&cluster, &target, "t1");
+    assert!(d.update_checks.is_empty(), "compare alone checks nothing");
+    d.palette_validation =
+        Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
+    d.update_checks = ops::update_checks(&cluster, &target).unwrap();
+    let required = d.update_checks.required_variables.as_ref().unwrap();
+    assert_eq!(required.names, ["db_password", "owner"]);
+    let skip = d.update_checks.skipped_minor.as_ref().unwrap();
+    assert_eq!(
+        (
+            skip.from.as_str(),
+            skip.to.as_str(),
+            skip.next_minor.as_str()
+        ),
+        ("1.29.4", "1.31.2", "1.30")
+    );
+    assert_eq!(skip.next_step, None, "compare reads no registry");
+    // the sides in the other order give the same checks, and two profile versions are a usage
+    // error, before any request
+    assert_eq!(
+        ops::update_checks(&target, &cluster).unwrap(),
+        d.update_checks
+    );
+    let err = ops::update_checks(&target, &target).unwrap_err();
+    assert!(matches!(err, Error::Usage { .. }), "{err}");
+
+    // each check is a note under the answer of Palette
+    let text = common::terminal()
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        text.contains(&format!(
+            "palette    accepts\nnote       the move adds the required variables db_password and owner \
+             with no default value: give each one a value at the update, or Palette refuses the \
+             update with {INVALID_VARIABLE_CODE}\nnote       kubernetes 1.29.4 -> 1.31.2 skips a minor \
+             version: Palette refuses the update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to \
+             a version of 1.30 first\n"
+        )),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &cluster, &target, false)
+        .unwrap();
+    assert!(
+        md.contains("**Note:** the move adds the required variables db_password and owner"),
+        "{md}"
+    );
+    let json: Value = serde_json::from_str(
+        &render::renderer(Format::Json, Paint::off(), false)
+            .render(&d, &cluster, &target, false)
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        json["updateChecks"],
+        serde_json::json!({"requiredVariables": {"code": INVALID_VARIABLE_CODE,
+            "names": ["db_password", "owner"]}, "skippedMinor": {
+            "code": K8S_UPGRADE_NOT_SUPPORTED_CODE, "pack": "kubernetes", "from": "1.29.4",
+            "to": "1.31.2", "nextMinor": "1.30"}})
+    );
+    // a comparison with nothing to check has no field
+    let plain: Value = serde_json::to_value(ops::compare(&cluster, &cluster, "t1")).unwrap();
+    assert!(plain.get("updateChecks").is_none());
+}
+
 // ---- the provider type of an OCI registry ---------------------------------------------------------
 
 #[test]
@@ -14878,16 +14969,37 @@ fn upgrade_refusal(message: &str) -> Value {
         "errors": [{"code": UPGRADE_NOT_SUPPORTED_CODE, "message": message}]}]}})
 }
 
-/// The record of a profile version that pins csi-aws-ebs 1.63.1: the record of the pack, with the
-/// uid and the name of a profile version.
-fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
-    let mut snap = snapshot_of(api, "pack:csi-aws-ebs@1.63.1").unwrap();
+/// The record of the profile version `uid`, `name` at `version`, of the type `kind`, that pins
+/// the pack of `pack_ref` (`pack:<name>@<version>`): the record of the pack from `api`, with the
+/// source of a profile version.
+fn version_pinning(
+    api: &MemoryApi,
+    pack_ref: &str,
+    uid: &str,
+    name: &str,
+    version: &str,
+    kind: ProfileType,
+) -> strata::snapshot::Snapshot {
+    let mut snap = snapshot_of(api, pack_ref).unwrap();
     snap.source.pack = None;
-    snap.source.uid = BUMP_PROFILE_UID.to_string();
-    snap.source.name = "csi-stack".to_string();
-    snap.source.version = "1.0.0".to_string();
-    snap.source.kind = ProfileType::AddOn.as_str().to_string();
+    snap.source.uid = uid.to_string();
+    snap.source.name = name.to_string();
+    snap.source.version = version.to_string();
+    snap.source.kind = kind.as_str().to_string();
     snap
+}
+
+/// The record of a profile version that pins csi-aws-ebs 1.63.1: the add-on profile csi-stack
+/// 1.0.0, with the uid `BUMP_PROFILE_UID`.
+fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
+    version_pinning(
+        api,
+        "pack:csi-aws-ebs@1.63.1",
+        BUMP_PROFILE_UID,
+        "csi-stack",
+        "1.0.0",
+        ProfileType::AddOn,
+    )
 }
 
 /// The record of the cluster `payments`, which runs `profile_pinning`: the same pack, in a record
@@ -15023,6 +15135,118 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
     // Palette gave no error, so strata read no document of the profile for the names. It reads
     // the document one time, for the versions of the profile
     assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 1);
+}
+
+/// The versions of kubernetes in the Public Repo of [`serve_kubernetes`], oldest first.
+const KUBERNETES_VERSIONS: [&str; 4] = ["1.34.9", "1.35.2", "1.35.6", "1.36.2"];
+
+/// The Public Repo with kubernetes at each version of [`KUBERNETES_VERSIONS`], for AWS. The uid of
+/// a version is `pk-k8s-<version>`.
+fn serve_kubernetes() -> MemoryApi {
+    let uids = KUBERNETES_VERSIONS.map(|v| format!("pk-k8s-{v}"));
+    let values = KUBERNETES_VERSIONS.map(|v| format!("version: {v}\n"));
+    let fixtures: Vec<PackFixture> = KUBERNETES_VERSIONS
+        .iter()
+        .zip(uids.iter().zip(&values))
+        .map(|(v, (uid, values))| PackFixture::public("kubernetes", "k8s", v, uid, "", values))
+        .collect();
+    let tags: Vec<Value> = KUBERNETES_VERSIONS
+        .iter()
+        .zip(&uids)
+        .map(|(v, uid)| serde_json::json!({"tag": v, "packUid": uid}))
+        .collect();
+    let api = MemoryApi::new().with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
+    );
+    serve_registry_pack(
+        api,
+        "kubernetes",
+        fixtures.iter().map(|f| f.summary(&["aws"])).collect(),
+        serde_json::json!({"layer": "k8s", "tags": tags}),
+        "reg-public",
+    )
+}
+
+#[test]
+fn behind_says_that_a_move_of_kubernetes_skips_a_minor_version_and_names_the_next_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let accepts = serde_json::json!({"packs": {"results": []}});
+    let base = serve_kubernetes();
+    let api = base
+        .clone()
+        .with(
+            post(&update_validate_packs_route("pr-skip")),
+            accepts.clone(),
+        )
+        .with(post(&update_validate_packs_route("pr-step")), accepts);
+    // the infrastructure profile k8s-stack, which pins kubernetes at the version of the profile
+    let records = [("pr-skip", "1.34.9"), ("pr-step", "1.35.2")].map(|(uid, version)| {
+        let pack = format!("pack:kubernetes@{version}");
+        let record = version_pinning(&base, &pack, uid, "k8s-stack", version, ProfileType::Infra);
+        let path = dir.path().join(format!("{uid}.json"));
+        common::write_snapshot(&path, &record, false);
+        path
+    });
+    let r = behind_of(&api, &records, &WITH_IMPACT);
+    let (skip, step) = (&r.pins[0], &r.pins[1]);
+    assert_eq!(
+        (skip.version.as_str(), step.version.as_str()),
+        ("1.34.9", "1.35.2")
+    );
+
+    // Palette accepts the packs of each move. The move from 1.34.9 to 1.36.2 skips 1.35, and the
+    // update refuses it. The next step is the newest version of 1.35 in the registry
+    let bump = skip.bump.as_ref().unwrap();
+    assert!(bump.palette_validation.as_ref().unwrap().accepts());
+    assert_eq!(
+        bump.update_checks.skipped_minor,
+        Some(MinorSkip {
+            code: K8S_UPGRADE_NOT_SUPPORTED_CODE.to_string(),
+            pack: "kubernetes".to_string(),
+            from: "1.34.9".to_string(),
+            to: "1.36.2".to_string(),
+            next_minor: "1.35".to_string(),
+            next_step: Some("1.35.6".to_string()),
+        })
+    );
+    assert!(bump.update_checks.required_variables.is_none());
+    // the move from 1.35.2 to 1.36.2 goes one minor version
+    let next = step.bump.as_ref().unwrap();
+    assert!(next.update_checks.is_empty(), "{:?}", next.update_checks);
+
+    let line = format!(
+        "kubernetes 1.34.9 -> 1.36.2 skips a minor version: Palette refuses the update with \
+         {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to 1.35.6 first"
+    );
+    let text = common::terminal().render_behind(&r, false).unwrap();
+    assert!(
+        text.contains(&format!("      palette accepts\n      {line}\n")),
+        "the line comes under the answer of Palette: {text}"
+    );
+    assert_eq!(text.matches("skips a minor version").count(), 1, "{text}");
+    let md = common::markdown().render_behind(&r, false).unwrap();
+    assert!(
+        md.contains(&format!("<br>palette accepts<br>{line} |")),
+        "{md}"
+    );
+
+    // --json carries the skip, and a pin with no skip has no field
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["bump"]["updateChecks"],
+        serde_json::json!({"skippedMinor": {"code": K8S_UPGRADE_NOT_SUPPORTED_CODE,
+            "pack": "kubernetes", "from": "1.34.9", "to": "1.36.2", "nextMinor": "1.35",
+            "nextStep": "1.35.6"}})
+    );
+    assert!(json["pins"][1]["bump"].get("updateChecks").is_none());
+    let back: ops::BehindReport = serde_json::from_value(json).unwrap();
+    assert_eq!(
+        back.pins[0].bump.as_ref().unwrap().update_checks,
+        bump.update_checks
+    );
+    // the check sends no request: the run asks the route of each version one time
+    assert_eq!(api.posted().len(), 2, "{:?}", api.posted());
 }
 
 #[test]

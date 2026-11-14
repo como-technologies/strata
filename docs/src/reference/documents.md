@@ -362,6 +362,18 @@ A comparison of two sides, `a` and `b`.
   the whole request has no `pack`. Strata sorts the errors and keeps one copy of
   each. Strata does not read a document that says `accepts` is `false` and
   gives no error, or that says `true` and gives an error.
+- `updateChecks`, only with `compare --validate`: what strata checks about the
+  move beside the answer of Palette. Palette checks these rules only at the
+  update, and no validate route checks them. Absent when strata finds nothing.
+  See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
+  - `requiredVariables`: the required variables with no default value that the
+    profile side adds. It has `code`, the code of the refusal of Palette,
+    `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
+    an update that gives such a variable no value.
+  - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a
+    minor version. It has `code`, the code of the refusal of Palette,
+    `K8sUpgradeNotSupported`. It also has `pack`, `from`, `to`, and `nextMinor`,
+    the minor version that Palette allows next, such as `1.35`.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
@@ -753,6 +765,13 @@ of the secret does not show, because the two sides hold the mask: see
     - `paletteValidationError`: the message, when a request to Palette failed or
       strata did not ask a record of another project. An example is
       `1 record of project prod was not asked`. The pin stays behind.
+    - `updateChecks`: what strata checks about the move beside the answer of
+      Palette, with the fields of `updateChecks` of
+      [strata-diff/1](#strata-diff1). For a pin of the `k8s` layer, it holds
+      `skippedMinor` when the move skips a minor version. `skippedMinor` then
+      also has `nextStep`: the newest version of `nextMinor` in the registry.
+      Absent when strata finds nothing. See
+      [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
   - `carriers[]`, for a pin that is behind: one entry for each profile version that
     holds the pin and has a newer version. A version holds the pin when a record of
     the pin holds the version, and its template holds the pack. Absent when there is
@@ -808,6 +827,9 @@ of the secret does not show, because the two sides hold the mask: see
       empty. `from` is absent for a pack that the move adds, and `to` for a pack
       that it removes.
       `valuesChanged` is there, only when true, for a pack whose values change.
+    - `updateChecks`: the required variables that the newest version adds, and
+      the skip of a minor version of Kubernetes, as for a pin. `skippedMinor`
+      has no `nextStep`. Absent when strata finds nothing.
     - A bump of a profile version has no `paletteValidation`: strata does not
       ask Palette about the move of a profile.
   - `gone`, only when true: Palette no longer holds the version.

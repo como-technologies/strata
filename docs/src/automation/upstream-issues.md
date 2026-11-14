@@ -47,9 +47,12 @@ lines that `strata behind` shows under the bump:
 - `palette accepts`.
 - `palette refuses`, with the code and the clusters. Each error has one line.
 - `palette gave no answer`, with the reason.
+- For a pin of the `k8s` layer, the line of strata that says that the move skips
+  a minor version, with the next step.
 
 See
-[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+and [A move that skips a minor version](../commands/behind.md#a-move-that-skips-a-minor-version).
 
 ## Two runs name what arrived
 

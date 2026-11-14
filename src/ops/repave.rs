@@ -313,6 +313,17 @@ pub(super) fn cluster_and_target<'a>(
     )
 }
 
+/// The record of the cluster side and the record of the profile side, as
+/// [`cluster_and_target`] chooses them.
+pub(super) fn cluster_record_and_target<'a>(
+    a: &'a Snapshot,
+    b: &'a Snapshot,
+    question: Question,
+) -> Result<(&'a Snapshot, &'a Snapshot)> {
+    let side = move_plan(&Role::of_record(a), &Role::of_record(b), question)?;
+    Ok(pick(side, a, b))
+}
+
 /// The cluster source and the profile side of two records, when `side` holds the cluster.
 fn moved<'a>(
     side: Side,

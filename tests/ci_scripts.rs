@@ -9,6 +9,7 @@ use std::process::{Command, Output};
 
 use common::*;
 use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
+use strata::model::update::MinorSkip;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
@@ -4823,13 +4824,32 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
             Some("1 record of project prod was not asked"),
         ),
     ];
-    for (validation, failed) in cases {
+    // the skip of a minor version of Kubernetes comes under the answer of Palette. It names the
+    // next step, or only the next minor version (#623)
+    let skip = MinorSkip::of("k8s", "kubernetes", "1.34.9", "1.36.2").unwrap();
+    let next = MinorSkip {
+        next_step: Some("1.35.6".to_string()),
+        ..skip.clone()
+    };
+    let checks = [skip, next];
+    let cases = cases
+        .into_iter()
+        .map(|(validation, failed)| (validation, failed, None))
+        .chain(
+            checks
+                .into_iter()
+                .map(|skip| (Some(serde_json::json!({"accepts": true})), None, Some(skip))),
+        );
+    for (validation, failed, skip) in cases {
         let mut report = read_json(&u.dir.path().join("report.json"));
         if let Some(validation) = validation {
             report["pins"][0]["bump"]["paletteValidation"] = validation;
         }
         if let Some(failed) = failed {
             report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!(failed);
+        }
+        if let Some(skip) = skip {
+            report["pins"][0]["bump"]["updateChecks"] = serde_json::json!({"skippedMinor": skip});
         }
         u.put("report.json", &report.to_string());
 
@@ -4853,6 +4873,10 @@ fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it(
 
     // the cell, word for word
     let mut report = read_json(&u.dir.path().join("report.json"));
+    report["pins"][0]["bump"]
+        .as_object_mut()
+        .unwrap()
+        .remove("updateChecks");
     report["pins"][0]["bump"]["paletteValidation"] =
         refuses(vec![upgrade(&["betty", "fred", "wilma"])]).unwrap();
     report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!("m");

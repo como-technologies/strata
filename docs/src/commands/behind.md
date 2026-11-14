@@ -227,6 +227,14 @@ on each side, its flags, and `valuesChanged` when its values change:
   profile version has no `palette accepts` line. To ask Palette about the move of
   a cluster, run `strata compare cluster:<cluster> <name>@<newest> --repave`. See
   [Ask Palette if the change repaves](./compare/repave.md).
+- **Strata names what the update checks.** A line names each required variable
+  with no default value that the newest version adds. Palette refuses an update
+  that gives such a variable no value, with `InvalidVariable`. The profile
+  version 1.0.0 in [The pins that are behind](#the-pins-that-are-behind) has
+  this line for `platform_owner`. Another line names a move of Kubernetes that
+  skips a minor version: see
+  [A move that skips a minor version](#a-move-that-skips-a-minor-version).
+  `bump.updateChecks` gives both.
 - **A comparison that fails** makes the profile version `not checked`. The line
   under it gives the error, and the exit is `2`.
 - `--no-impact` skips the comparison, as it skips the comparison of a pin.
@@ -362,7 +370,9 @@ version. The answer is under the `bump to` line:
 {{#include ../output/behind-refused.txt}}
 ```
 
-- `palette accepts`: Palette gives no error for the move.
+- `palette accepts`: Palette gives no error for the packs of the move. The route
+  does not check the version of Kubernetes, so a line of strata can follow: see
+  [A move that skips a minor version](#a-move-that-skips-a-minor-version).
 - `palette refuses: <code> on <clusters>`: Palette gives the error `<code>`, and
   names the clusters in its message. `DependencyPackUpgradeNotSupported` is the
   code of a move that the pack does not allow.
@@ -438,6 +448,44 @@ document of each cluster record one time. When Palette refuses a move, strata
 takes the names of the clusters from the document of the profile version. It
 reads that document one time in each project: see
 [Newer versions of a profile](#newer-versions-of-a-profile).
+
+## A move that skips a minor version
+
+`palette accepts` covers the packs of the move. Palette checks the version of
+Kubernetes only at the update, and no validate route checks it. One update moves
+the Kubernetes pack one minor version at most. So strata makes the check, and
+Palette is the owner of the rule: see
+[The gaps that strata fills](../internals/palette/profiles.md#the-checks-of-an-update).
+Here the record pins `kubernetes` 1.34.9, and the newest version is 1.36.2:
+
+```text
+{{#include ../output/behind-skip.txt}}
+```
+
+The line under the answer of Palette says that the move skips a minor version.
+Palette refuses the update with `K8sUpgradeNotSupported`, HTTP 400. The line
+names the next step: the newest version of the next minor version in the
+registry, here 1.35.6. When the registry has no such version, the line ends with
+`move to a version of 1.35 first`.
+
+- **The rule holds for each pack of the `k8s` layer**, on each cloud, such as
+  `kubernetes-eks`. A move of more than one minor version skips. A move to a
+  higher major version skips too.
+- **Palette compares the version that each cluster runs** with the version of
+  the move. Strata compares the pinned version.
+- **A version in which Palette reads no version**, such as `1.29.x`, gets no
+  check, as in Palette.
+
+`--json` gives the skip in `bump.updateChecks.skippedMinor`:
+
+```text
+{{#include ../output/behind-skip-json.txt}}
+```
+
+The check sends no request. `--no-impact` skips it with the bump. See
+[What the update checks](../internals/palette/validate-routes.md#what-the-update-checks)
+for the rule, and [validate-packs.sh](../development/live-runs.md#validate-packssh)
+for the live check.
 
 ## A pin that is current against an older copy
 

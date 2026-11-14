@@ -2,7 +2,7 @@
 
 use super::edits::{OCI_CSI, RETAIN};
 use super::ids::{
-    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118,
+    A100, A110, A110_PROD, A111, A111_PROD, A120_RC, A130_PROD, A200_TENANT, A1111, A1118, A1120,
     AWS_STANDARD, DEV, LEDGER, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION, SEARCH,
 };
 use super::{DEV_ENV, payments_addons, payments_cluster};
@@ -94,6 +94,7 @@ fn behind(r: &mut Runner) {
         "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run",
     );
     behind_refused(r);
+    behind_skip(r);
 }
 
 /// The steps of the chapter `behind` that show the line `next patch` and the option
@@ -168,6 +169,54 @@ fn behind_refused(r: &mut Runner) {
         1,
         false,
         "strata behind refused/payments.json",
+    );
+}
+
+/// The part of the chapter `behind` where a move of Kubernetes skips a minor version (#623).
+fn behind_skip(r: &mut Runner) {
+    // aws-stack@1.1.20 pins kubernetes 1.34.9, two minor versions below 1.36.2, and the cluster
+    // search runs it. The route of the version and the route of the cluster accept the packs of
+    // the move. The update of the cluster refuses it with K8sUpgradeNotSupported
+    r.profile(
+        DEV,
+        A1120,
+        "1.1.20",
+        "aws-stack@1.1.1",
+        &[Edit::Upgrade {
+            pack: "kubernetes",
+            version: "1.34.9",
+        }],
+    );
+    r.tenant(|t| {
+        t.cluster(DEV, SEARCH, "search", &[A1120], &[]);
+        t.profile_upgrade_answer(DEV, A1120, None);
+        t.packs_answer(DEV, SEARCH, None);
+    });
+    r.serve_here(); // state 4: search runs kubernetes 1.34.9, and Palette accepts the packs of each move
+    r.quiet("strata snapshot aws-stack@1.1.20 -o skip/dev.json");
+    r.step(
+        "behind-skip",
+        1,
+        false,
+        "strata behind skip/dev.json --pin k8s/kubernetes",
+    );
+    r.step(
+        "behind-skip-json",
+        1,
+        false,
+        "strata behind skip/dev.json --pin k8s/kubernetes --json | jq -c '.pins[] | select(.behind) | .bump.updateChecks'",
+    );
+    // compare --validate of a move of the cluster to aws-stack@1.1.1, which pins kubernetes 1.36.2
+    r.step(
+        "validate-skip",
+        1,
+        false,
+        "strata compare cluster:search aws-stack@1.1.1 --validate",
+    );
+    r.excerpt(
+        "validate-skip-lines",
+        "validate-skip",
+        r"^(aws-stack|root |palette|note|[ ~] \[k8s)",
     );
 }
 

@@ -3,6 +3,7 @@ aws-stack@1.1.0 on cluster payments (uid 64f1000000000000000000e1)  ->  aws-stac
 root       8a8a64d3f95d -> 088136c929bd   CHANGED
 palette    no repave
 palette    accepts
+note       the move adds the required variable platform_owner with no default value: give it a value at the update, or Palette refuses the update with InvalidVariable
 consumers  aws-stack@1.1.1 has 1 consumer; payments is not one of them
 
   variables CHANGED

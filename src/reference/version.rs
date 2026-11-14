@@ -99,6 +99,32 @@ pub fn line(v: &str, count: usize) -> Option<String> {
     Some(numbers.join("."))
 }
 
+/// True when `to` is more than `limit` minor versions above `from`, or has a higher major number.
+///
+/// Palette reads each of the two as a version that parses, or as the first three numbers of a
+/// text: see [`compare`]. It reads no version in one or two numbers with a tail, such as
+/// `1.2.develop`. When it reads no version in one of the two, it makes no check, so the answer is
+/// false. A move down is never above. So `1.36.2` is more than one minor version above `1.34.9`,
+/// and `1.35.6` is not.
+pub(crate) fn minor_above(from: &str, to: &str, limit: u64) -> bool {
+    match (Version::palette(from), Version::palette(to)) {
+        (Some(from), Some(to)) => {
+            let [major, minor, _] = to.numbers;
+            major > from.numbers[0]
+                || (major == from.numbers[0] && minor > from.numbers[1].saturating_add(limit))
+        }
+        _ => false,
+    }
+}
+
+/// The release line `steps` minor versions above `from`, as `<major>.<minor>`: `1.35` for
+/// `1.34.9` and one step. Palette reads `from` as [`minor_above`] says. None when it reads no
+/// version in `from`.
+pub(crate) fn minor_line_above(from: &str, steps: u64) -> Option<String> {
+    let [major, minor, _] = Version::palette(from)?.numbers;
+    Some(format!("{major}.{}", minor.saturating_add(steps)))
+}
+
 /// True when `v` is a pre-release, such as `1.0.1-rc.1`, `1.2.develop`, or `chart-1.2.3`.
 ///
 /// Five forms are a pre-release:
@@ -240,9 +266,13 @@ impl<'a> Version<'a> {
     /// The version that strata reads in `v`: the version that `v` parses as, the first three
     /// numbers of `v`, or the numbers at its start. None when `v` holds no version.
     fn read(v: &'a str) -> Option<Self> {
-        Self::parse(v)
-            .or_else(|| Self::three_numbers_of(v))
-            .or_else(|| Self::short(v))
+        Self::palette(v).or_else(|| Self::short(v))
+    }
+
+    /// The version that Palette reads in `v`: the version that `v` parses as, or the first three
+    /// numbers of `v`. None when Palette reads no version in `v`.
+    fn palette(v: &'a str) -> Option<Self> {
+        Self::parse(v).or_else(|| Self::three_numbers_of(v))
     }
 
     /// The first three numbers of `v` and the form around them, as Palette reads a version that
