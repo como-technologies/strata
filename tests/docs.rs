@@ -18,6 +18,10 @@ use common::{
 use strata::TOOL_NAME;
 use strata::api::codes::{INVALID_VARIABLE_CODE, K8S_UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute};
 use strata::content::canonical_json;
+use strata::ops::ConsumerKind;
+use strata::reference::{
+    APP_PROFILE_PREFIX, CLUSTER_GROUP_PREFIX, CLUSTER_PREFIX, EDGE_HOST_PREFIX, PACK_PREFIX,
+};
 use strata::render::palette_line;
 
 fn docs() -> PathBuf {
@@ -7382,11 +7386,11 @@ fn strata_runs() -> Vec<StrataRun> {
 /// The prefix of each ref of an object: a pack, a cluster, an edge host, a cluster group, and an
 /// app profile.
 const REF_PREFIXES: [&str; 5] = [
-    strata::reference::PACK_PREFIX,
-    strata::reference::CLUSTER_PREFIX,
-    strata::reference::EDGE_HOST_PREFIX,
-    strata::reference::CLUSTER_GROUP_PREFIX,
-    strata::reference::APP_PROFILE_PREFIX,
+    PACK_PREFIX,
+    CLUSTER_PREFIX,
+    EDGE_HOST_PREFIX,
+    CLUSTER_GROUP_PREFIX,
+    APP_PROFILE_PREFIX,
 ];
 
 /// Each ref that `line` prints as a word, as it prints it: in single quotes when it holds a space.
@@ -7472,7 +7476,8 @@ fn pack_row(line: &str) -> bool {
 fn kind_faults(run: &StrataRun) -> Vec<String> {
     let mut faults = Vec::new();
     let mut fault = |line: &str| faults.push(format!("{}: {line}", run.file));
-    let is_pack_ref = |cell: &str| cell.starts_with("pack:") || cell.starts_with("'pack:");
+    // a ref with a space starts with a quote, and the whitespace cuts the cell in two
+    let is_pack_ref = |cell: &str| cell.trim_start_matches('\'').starts_with(PACK_PREFIX);
     match run.args.first().map(String::as_str) {
         Some("list") => {
             let mut profiles = false;
@@ -7500,12 +7505,12 @@ fn kind_faults(run: &StrataRun) -> Vec<String> {
         Some("consumers") => {
             let rows = run.lines.iter().skip(1).take_while(|l| *l != "  searched:");
             for line in rows.filter(|l| l.starts_with("  ") && !l.starts_with("   ")) {
-                let named = ["  cluster:", "  edgehost:"]
+                let named = [CLUSTER_PREFIX, EDGE_HOST_PREFIX]
                     .iter()
-                    .any(|r| line.starts_with(r))
-                    || ["  cluster template", "  app deployment"]
+                    .any(|r| line.trim_start().starts_with(r))
+                    || [ConsumerKind::Template, ConsumerKind::App]
                         .iter()
-                        .any(|noun| line.contains(noun));
+                        .any(|kind| line.contains(&format!("  {}", kind.noun())));
                 if !named {
                     fault(line);
                 }

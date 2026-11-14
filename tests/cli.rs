@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use strata::diff::DIFF_SCHEMA;
 use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
+use strata::render::palette_line;
 use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
@@ -1117,7 +1118,10 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
         (r, out.to_str().unwrap().to_string())
     };
     let uid = common::CLUSTER_UID;
-    let (r, on_b) = cluster("cluster-b", &format!("cluster:{uid}"));
+    let (r, on_b) = cluster(
+        "cluster-b",
+        &strata::reference::Ref::cluster(uid).to_string(),
+    );
     assert_eq!(r.code, 0, "{}", r.err);
 
     let r = run(&["compare", &fx.b, &on_b]);
@@ -2696,7 +2700,11 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
     let mut routes = barney_tenant();
     routes.insert(validate_route.clone(), serde_json::json!({}));
     let stand = Stand::new(routes.clone(), "p-dev");
-    let sentence = "palette    accepts the packs of 'barney@1.0.0' as an update of itself\n";
+    let accepts = palette_line("accepts");
+    let sentence = format!(
+        "{}\n",
+        palette_line("accepts the packs of 'barney@1.0.0' as an update of itself")
+    );
 
     let (code, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "--validate"]);
     assert_eq!(code, 0, "{text}");
@@ -2704,23 +2712,16 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
         .rsplit_once("}\n")
         .unwrap_or_else(|| panic!("no record: {text}"));
     assert_eq!(last, sentence, "{text}");
-    assert!(!record.contains("palette    accepts"), "{text}");
+    assert!(!record.contains(&accepts), "{text}");
     for args in [&["-o", "barney.json"][..], &["-q"][..]] {
         let args = [&["snapshot", "barney@1.0.0", "--validate"][..], args].concat();
         let (code, text) = stand.run_joined(&args);
         assert_eq!(code, 0, "{args:?}: {text}");
-        assert!(text.ends_with(sentence), "{args:?}: {text}");
-        assert_eq!(
-            text.matches("palette    accepts").count(),
-            1,
-            "{args:?}: {text}"
-        );
+        assert!(text.ends_with(&sentence), "{args:?}: {text}");
+        assert_eq!(text.matches(&accepts).count(), 1, "{args:?}: {text}");
     }
     let (_, text) = stand.run_joined(&["snapshot", "barney@1.0.0", "-o", "barney.json"]);
-    assert!(
-        !text.contains("palette    accepts"),
-        "no question, no answer: {text}"
-    );
+    assert!(!text.contains(&accepts), "no question, no answer: {text}");
 
     routes.insert(
         validate_route,
@@ -2732,12 +2733,15 @@ fn snapshot_validate_prints_the_answer_of_palette_last_in_a_sentence() {
     assert_eq!(code, 2, "{text}");
     assert!(
         text.ends_with(&format!(
-            "palette    refuses: PackDependencyNotFound for pack cert-manager: a pack is missing\n{}\n",
+            "{}\n{}\n",
+            palette_line(
+                "refuses: PackDependencyNotFound for pack cert-manager: a pack is missing"
+            ),
             error_text("Palette refuses 'barney@1.0.0' with 1 error; strata wrote no record")
         )),
         "{text}"
     );
-    assert!(!text.contains("Palette accepts"), "{text}");
+    assert!(!text.contains(&accepts), "{text}");
 }
 
 /// Issue #625. `appprofile:<name>@latest` writes the note of the profile form, and names the

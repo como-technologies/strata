@@ -1409,11 +1409,7 @@ fn the_next_patch_of_a_registry_with_a_slash_in_its_name_gives_refs_that_parse_t
             .split(' ')
             .map(|word| Ref::parse_with(word, no_files))
             .collect();
-        let pack = |version: &str| Ref::Pack {
-            registry: Some(registry.to_string()),
-            name: name.to_string(),
-            version: version.to_string(),
-        };
+        let pack = |version: &str| Ref::pack(Some(registry), name, version);
         assert_eq!(refs, [pack("1.27.0"), pack("1.27.4")], "{line}");
     }
 }

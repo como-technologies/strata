@@ -67,7 +67,7 @@ pub enum ConsumerKind {
 
 impl ConsumerKind {
     /// The noun that names the kind in a report.
-    pub(crate) fn noun(self) -> &'static str {
+    pub fn noun(self) -> &'static str {
         match self {
             Self::Cluster => "cluster",
             Self::EdgeHost => "edge host",

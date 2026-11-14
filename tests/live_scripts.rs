@@ -14,6 +14,7 @@ use strata::api::codes::{
 use strata::api::{MASKED, PROJECT_UID_HEADER};
 use strata::model::pack_type::PackType;
 use strata::model::update::MinorSkip;
+use strata::render::palette_line;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -7965,7 +7966,7 @@ fn validate_packs_sh_stage_5_asks_the_two_routes_for_each_rule_that_they_answer(
         stage.strata_err(
             &format!("snapshot --from-candidate {file}.yaml --validate *"),
             2,
-            &format!("palette    refuses: {code}: {message}\n"),
+            &format!("{}\n", palette_line(&format!("refuses: {code}: {message}"))),
         );
     }
 
@@ -8052,7 +8053,7 @@ fn validate_packs_sh_stage_1_says_that_palette_accepts_the_candidate_in_the_line
     stage.strata_err(
         "snapshot --from-candidate strata-validate-barney.yaml --validate *",
         0,
-        "palette    accepts\n",
+        &format!("{}\n", palette_line("accepts")),
     );
     let (_, steps) = stage.run("validate-packs.sh", &["1"]);
     failed(&steps, &["validate-accepts-says"]);
@@ -8071,8 +8072,11 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
         "snapshot --from-candidate exists.yaml --validate *",
         2,
         &format!(
-            "palette    refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
-             'strata-live-profile' and version '1.0.0' already exists\n"
+            "{}\n",
+            palette_line(&format!(
+                "refuses: {PROFILE_EXISTS_CODE}: Cluster Profile with name \
+                 'strata-live-profile' and version '1.0.0' already exists"
+            ))
         ),
     );
 

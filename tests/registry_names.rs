@@ -67,15 +67,15 @@ fn names(snap: &Snapshot) -> Vec<(&str, &str)> {
         .collect()
 }
 
+/// The ref of `csi-aws-ebs` 1.28.0 in the registry `registry`.
+fn csi_ref(registry: &str) -> Ref {
+    Ref::pack(Some(registry), "csi-aws-ebs", "1.28.0")
+}
+
 /// The terminal row of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`: the
 /// layer and the ref of the pack, as a person types it in a shell.
 fn csi_row(registry: &str) -> String {
-    let pack = strata::reference::Ref::Pack {
-        registry: Some(registry.to_string()),
-        name: "csi-aws-ebs".to_string(),
-        version: "1.28.0".to_string(),
-    };
-    format!("    csi    {}\n", pack.shell_word())
+    format!("    csi    {}\n", csi_ref(registry).shell_word())
 }
 
 /// The markdown line of `csi-aws-ebs` 1.28.0 in `list --pack`, from the registry `registry`.
@@ -190,16 +190,8 @@ fn a_pack_row_of_list_gives_a_registry_with_a_slash_in_its_name_by_its_uid_and_t
         (&json!(PROD_REGISTRY), &json!(slashed))
     );
     // the text of the row parses as the registry of a pack ref
-    assert_eq!(
-        Ref::parse_with(&format!("pack:{PROD_REGISTRY}/csi-aws-ebs@1.28.0"), |_| {
-            false
-        }),
-        Ref::Pack {
-            registry: Some(PROD_REGISTRY.into()),
-            name: "csi-aws-ebs".into(),
-            version: "1.28.0".into(),
-        }
-    );
+    let csi = csi_ref(PROD_REGISTRY);
+    assert_eq!(Ref::parse_with(&csi.to_string(), |_| false), csi);
 }
 
 #[test]

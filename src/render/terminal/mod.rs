@@ -267,11 +267,12 @@ impl Renderer for TerminalRenderer {
             }
         }
         let verdict = chain_verdict(c);
-        out.push_str(&if c.same {
-            p.bgreen(&verdict)
+        let verdict = if c.same {
+            p.green(&verdict)
         } else {
-            p.bred(&verdict)
-        });
+            p.red(&verdict)
+        };
+        out.push_str(&p.line(LineClass::Answer, &verdict));
         out.push('\n');
         Ok(out)
     }

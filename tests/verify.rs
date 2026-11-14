@@ -337,7 +337,7 @@ fn a_record_of_each_kind_of_ref_holds_the_ref_as_typed() {
         (&profiles, "lab-profile@1.2.0@draft".to_string()),
         (&registry, "pack:csi-aws-ebs@1.65.0".to_string()),
         (&registry, "pack:reg-public/csi-aws-ebs@1.65.0".to_string()),
-        (&cluster, format!("cluster:{CLUSTER_UID}")),
+        (&cluster, Ref::cluster(CLUSTER_UID).to_string()),
         (&cluster, format!("cluster:{CLUSTER_UID}/lab-profile")),
         (&pending, format!("cluster:{CLUSTER_UID}@pending")),
         (&edge, "edgehost:e1".to_string()),
@@ -351,7 +351,10 @@ fn a_record_of_each_kind_of_ref_holds_the_ref_as_typed() {
         assert_eq!(snap.source.reference, *text, "{text}");
     }
     let trimmed = snapshot_of(&cluster, &format!("cluster:{CLUSTER_UID}/")).unwrap();
-    assert_eq!(trimmed.source.reference, format!("cluster:{CLUSTER_UID}"));
+    assert_eq!(
+        trimmed.source.reference,
+        Ref::cluster(CLUSTER_UID).to_string()
+    );
 }
 
 /// Each option of `snapshot` fits some kinds of ref. Another kind is a usage error before any
@@ -1120,7 +1123,10 @@ fn a_raw_directory_keeps_the_project_a_profile_or_cluster_was_fetched_in() {
         .unwrap()
         .save_dir(&saved, "t0")
         .unwrap();
-    assert_eq!(project_of(&saved, &format!("cluster:{CLUSTER_UID}")), "p1");
+    assert_eq!(
+        project_of(&saved, &Ref::cluster(CLUSTER_UID).to_string()),
+        "p1"
+    );
 
     let tenant = Palette::new(serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A));
     let saved = dir.path().join("raw-tenant");
@@ -1811,7 +1817,7 @@ fn a_cluster_running_the_recorded_version_is_identical_to_the_record() {
     );
     assert_eq!(c.profile, None);
     assert_eq!(on_b.source.template, Template::Applied);
-    assert_eq!(on_b.source.reference, format!("cluster:{CLUSTER_UID}"));
+    assert_eq!(on_b.source.reference, Ref::cluster(CLUSTER_UID).to_string());
     assert_eq!(
         (on_b.source.name.as_str(), on_b.source.version.as_str()),
         ("lab-profile", "1.3.0")
@@ -2818,7 +2824,7 @@ fn a_raw_directory_keeps_the_bindings_and_the_namespaces_so_the_record_is_the_sa
         .save_dir(&saved, "t0")
         .unwrap();
     assert!(saved.join("rbacs.json").is_file() && saved.join("namespaces.json").is_file());
-    let reference = format!("cluster:{CLUSTER_UID}");
+    let reference = Ref::cluster(CLUSTER_UID).to_string();
     let rebuilt = ops::snapshot_from_dir(&saved, &reference, "t0").unwrap();
     let fetched = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
     assert_eq!(policy_of(&rebuilt), policy_of(&fetched));
@@ -6575,7 +6581,12 @@ fn a_cluster_record_taken_by_name_verifies_by_uid_after_a_rename() {
 // ---- cluster variable values -------------------------------------------------------------------
 
 fn cluster_snapshot(raw_root: &Path, dir: &str) -> Snapshot {
-    ops::snapshot_from_dir(&raw_root.join(dir), &format!("cluster:{CLUSTER_UID}"), "t0").unwrap()
+    ops::snapshot_from_dir(
+        &raw_root.join(dir),
+        &Ref::cluster(CLUSTER_UID).to_string(),
+        "t0",
+    )
+    .unwrap()
 }
 
 #[test]
@@ -6810,7 +6821,7 @@ fn a_candidate_written_from_a_record_reproduces_its_root_inline_or_with_files() 
 
     let on_cluster = ops::snapshot_from_dir(
         &dir.path().join("cluster-b"),
-        &format!("cluster:{CLUSTER_UID}"),
+        &Ref::cluster(CLUSTER_UID).to_string(),
         "t0",
     )
     .unwrap();
@@ -8053,18 +8064,14 @@ fn the_refusal_names_a_registry_with_a_slash_in_its_name_by_its_uid_and_that_ref
     };
     assert_eq!(registries, &["Public Repo", "reg-mirror"], "{err}");
     // the ref that the refusal asks for parses, and records the pack of that registry
-    let named = format!("pack:{}/csi-aws-ebs@1.65.0", registries[1]);
+    let named = Ref::pack(Some(&registries[1]), "csi-aws-ebs", "1.65.0").to_string();
     let mirror = snapshot_of(&api, &named).unwrap();
     assert_eq!(mirror.packs[0].hash.upstream_raw, "sha256:ccc");
     assert_eq!(mirror.packs[0].registry_name, "team/mirror");
     // a ref ends the registry at the first `/`, because a pack name can hold one too
     assert_eq!(
         Ref::parse_with("pack:team/mirror/csi-aws-ebs@1.65.0", |_| false),
-        Ref::Pack {
-            registry: Some("team".into()),
-            name: "mirror/csi-aws-ebs".into(),
-            version: "1.65.0".into(),
-        }
+        Ref::pack(Some("team"), "mirror/csi-aws-ebs", "1.65.0")
     );
 }
 
@@ -10836,9 +10843,12 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(
-        text.contains(
-            "palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)\n"
-        ),
+        text.contains(&format!(
+            "{}\n",
+            render::palette_line(
+                "repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)"
+            )
+        )),
         "{text}"
     );
     assert!(
@@ -11036,13 +11046,16 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
-    assert!(!text.contains("palette    no repave"), "{text}");
+    assert!(!text.contains(&render::palette_line("no repave")), "{text}");
     assert!(
-        text.contains(
-            "palette    the cluster template tmpl-1 governs the cluster: Palette answers for the \
-             template, by profile uid\n\
-             palette    repave: PackUpgraded kubernetes\n"
-        ),
+        text.contains(&format!(
+            "{}\n{}\n",
+            render::palette_line(
+                "the cluster template tmpl-1 governs the cluster: Palette answers for the \
+                 template, by profile uid"
+            ),
+            render::palette_line("repave: PackUpgraded kubernetes")
+        )),
         "{text}"
     );
     let json: Value = serde_json::from_str(
@@ -11335,7 +11348,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         .unwrap();
     assert!(
         text.contains(&format!(
-            "palette    refuses: PackDependencyNotFound for pack strata-live-pack: {message}\n"
+            "{}\n",
+            render::palette_line(&format!(
+                "refuses: PackDependencyNotFound for pack strata-live-pack: {message}"
+            ))
         )),
         "{text}"
     );
@@ -11365,7 +11381,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
-    assert!(text.contains("palette    accepts\n"), "{text}");
+    assert!(
+        text.contains(&format!("{}\n", render::palette_line("accepts"))),
+        "{text}"
+    );
 
     // Palette refuses the whole request with HTTP 500 and a code of the route: an answer, with no
     // pack, the code, and the message, and the retry does not send it again
@@ -11560,7 +11579,7 @@ fn compare_validate_names_the_required_variables_that_the_move_adds_and_a_skip_o
              update with {INVALID_VARIABLE_CODE}\nnote       kubernetes 1.29.4 -> 1.31.2 skips a minor \
              version: Palette refuses the update with {K8S_UPGRADE_NOT_SUPPORTED_CODE}; move to \
              a version of 1.30 first\n"
-        )) && text.ends_with("\n\npalette    accepts\n"),
+        )) && text.ends_with(&format!("\n\n{}\n", render::palette_line("accepts"))),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
@@ -13794,7 +13813,7 @@ fn a_cluster_beside_a_profile_version_holds_only_the_profile_that_the_version_re
             covered(&side),
             (
                 vec![infra.clone(), addon.clone()],
-                format!("cluster:{CLUSTER_UID}")
+                Ref::cluster(CLUSTER_UID).to_string()
             )
         );
         assert!(!d.same);
@@ -17902,9 +17921,9 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     // the lines of the refusal come before its error, and no line of an accept follows
     assert_eq!(
         strata::render::refusal_lines(&snap),
-        [format!(
-            "palette    refuses: DependencyPackWithMinVersionRequired for pack kubernetes: {message}"
-        )]
+        [render::palette_line(&format!(
+            "refuses: DependencyPackWithMinVersionRequired for pack kubernetes: {message}"
+        ))]
     );
     assert_eq!(strata::render::acceptance_line(&snap), None);
 

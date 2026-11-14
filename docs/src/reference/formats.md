@@ -115,6 +115,8 @@ The answer of each check is the last line of the check:
   the lines of that pin.
 - `snapshot --validate`: the line `palette    accepts`, after the record. A
   refusal gives each `palette    refuses:` line, and then its error.
+- `strata-preflight`: the verdict, `OK:`, `FAIL:`, `NOT READY:`, or
+  `NOT COUNTED:`, after the scorecard.
 
 An error stops a check, so the error is the last line then.
 

@@ -317,10 +317,15 @@ of an accept. The command line prints the line of an accept last, after the reco
 After 0.33.0, `term::color::LineClass` and `term::color::Paint::line` are new. They give the
 look of each class of line: a note, the report, the answer of a check, a warning, and an
 error. `term::progress::Progress::painted` gives the notes and the warnings that look, and
-`term::progress::error_line` gives the line of an error. `reference::Ref::shell_word` gives a
-ref as a person types it in a shell, and `reference::Ref::cluster` gives `cluster:<uid>`. See
+`term::progress::error_line` gives the line of an error. See
 [The look of each line](./formats.md#the-look-of-each-line) and
 [Release 0.34.0](#release-0340-changes-that-need-action).
+
+After 0.33.0, `reference::Ref::shell_word` gives a ref as a person types it in a shell.
+`reference::Ref::cluster` gives `cluster:<uid>`, `reference::Ref::edge_host` gives
+`edgehost:<uid>`, and `reference::Ref::pack` gives a pack ref, with a registry or with none.
+`ops::ConsumerKind::noun` is public: the noun of the kind of a consumer in a report, such as
+`cluster template`. See [The kind of each thing](./formats.md#the-kind-of-each-thing).
 
 After 0.33.0, `ops::ProjectsRead`, `ops::UnreadProject`, and `render::Reading` are new.
 `ops::ProjectsRead` names the projects that `consumers` searched one by one, and

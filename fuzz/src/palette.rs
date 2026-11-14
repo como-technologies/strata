@@ -32,30 +32,19 @@ fn refs() -> Vec<Ref> {
             id: uid.clone(),
             version: None,
         },
-        Ref::Cluster {
-            uid: uid.clone(),
-            profile: None,
-            pending: false,
-        },
+        Ref::cluster(UID),
         Ref::Cluster {
             uid: uid.clone(),
             profile: Some("demo".to_string()),
             pending: true,
         },
-        Ref::EdgeHost {
-            uid: uid.clone(),
-            profile: None,
-        },
+        Ref::edge_host(UID),
         Ref::ClusterGroup { uid: uid.clone() },
         Ref::AppProfile {
             id: uid.clone(),
             version: None,
         },
-        Ref::Pack {
-            registry: None,
-            name: "demo".to_string(),
-            version: "1.0.0".to_string(),
-        },
+        Ref::pack(None, "demo", "1.0.0"),
         Ref::ClusterSet {
             tags: vec!["env=prod".to_string()],
             filter: None,

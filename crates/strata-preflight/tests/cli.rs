@@ -13,6 +13,7 @@ mod common;
 #[allow(dead_code)]
 mod process;
 use process::CommandExt;
+use strata::term::color::{ColorMode, LineClass, Paint, Stream};
 
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_strata-preflight"))
@@ -312,6 +313,19 @@ fn the_color_follows_the_order_of_strata_for_each_stream() {
     assert!(!painted(&out) && !painted(&err), "{out}{err}");
     let (out, err) = colors(&[("NO_COLOR", "1")], &["--color", "always"]);
     assert!(painted(&out) && painted(&err), "{out}{err}");
+}
+
+/// Issue #634: the verdict is the answer of the check. It is the last line of the report, and it
+/// is bold, as each verdict of `strata` is. With no color, the line keeps its text.
+#[test]
+fn the_verdict_is_the_last_line_and_bold_with_color_and_keeps_its_text_with_none() {
+    let (plain, _) = colors(&[], &[]);
+    let (painted, _) = colors(&[], &["--color", "always"]);
+    let verdict = plain.lines().last().expect("a report");
+    let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+    // the offline report of ENTITY counts no check, so its verdict is yellow
+    let answer = on.line(LineClass::Answer, &on.yellow(verdict));
+    assert_eq!(painted.lines().last(), Some(answer.as_str()), "{painted}");
 }
 
 #[test]

@@ -182,16 +182,29 @@ impl Ref {
         }
     }
 
-    /// `pack:<registry>/<name>@<version>`, with the registry as [`registry_in_ref`] names it.
-    /// `pack:<name>@<version>` when the pack names no registry.
-    pub(crate) fn pack_in(registry: &str, registry_uid: &str, name: &str, version: &str) -> Ref {
+    /// `edgehost:<uid>`: each profile that is bound to the edge host now.
+    pub fn edge_host(uid: &str) -> Ref {
+        Ref::EdgeHost {
+            uid: uid.to_string(),
+            profile: None,
+        }
+    }
+
+    /// `pack:<registry>/<name>@<version>`, or `pack:<name>@<version>` with no `registry`: the
+    /// version of the pack in any registry.
+    pub fn pack(registry: Option<&str>, name: &str, version: &str) -> Ref {
         Ref::Pack {
-            registry: Some(registry_in_ref(registry, registry_uid))
-                .filter(|r| !r.is_empty())
-                .map(str::to_string),
+            registry: registry.map(str::to_string),
             name: name.to_string(),
             version: version.to_string(),
         }
+    }
+
+    /// `pack:<registry>/<name>@<version>`, with the registry as [`registry_in_ref`] names it.
+    /// `pack:<name>@<version>` when the pack names no registry.
+    pub(crate) fn pack_in(registry: &str, registry_uid: &str, name: &str, version: &str) -> Ref {
+        let registry = registry_in_ref(registry, registry_uid);
+        Ref::pack(Some(registry).filter(|r| !r.is_empty()), name, version)
     }
 
     /// The ref as a person types it in a shell: in single quotes when it holds a space or another
@@ -222,11 +235,8 @@ fn pack_ref(text: &str) -> Option<Ref> {
     let registry = registry.filter(|r| !r.is_empty());
     // A pack ref with no registry prints with no `/` before the version. So a name with a `/` and
     // no registry is no pack ref: its text parses as another ref.
-    (!name.is_empty() && (registry.is_some() || !name.contains('/'))).then(|| Ref::Pack {
-        registry: registry.map(str::to_string),
-        name: name.to_string(),
-        version: version.to_string(),
-    })
+    (!name.is_empty() && (registry.is_some() || !name.contains('/')))
+        .then(|| Ref::pack(registry, name, version))
 }
 
 /// The text that names a registry in a pack ref: its name, or its uid when the name is empty or

@@ -164,11 +164,11 @@ fn profile_ref(unit: &UnitRef) -> Ref {
 
 /// The strata ref of a leaf: a pack version, in one registry or in any.
 fn pack_ref(unit: &UnitRef, registry: Option<String>) -> Ref {
-    Ref::Pack {
-        registry,
-        name: unit.name.to_string(),
-        version: unit.version.to_string(),
-    }
+    Ref::pack(
+        registry.as_deref(),
+        &unit.name.to_string(),
+        &unit.version.to_string(),
+    )
 }
 
 /// A digest of strata or of a registry, in the written form of knurl. A Helm digest is bare

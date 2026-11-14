@@ -5,6 +5,7 @@ use super::table::{column_widths, matched, painted_text, table_line};
 use crate::ops::{
     ListedCluster, ListedPack, ListedProfile, ListedProject, ListedRegistry, Listing, SavedFilter,
 };
+use crate::reference::name_version;
 use crate::render::consumers::consumer_count;
 use crate::render::list::{
     applied_ref, cluster_count, list_count, listed_pack_ref, profile_marks, project_label,
@@ -78,14 +79,16 @@ struct PackCell<'a> {
 
 impl<'a> PackCell<'a> {
     fn of(pack: &'a ListedPack) -> Self {
-        let (text, name_at) = match listed_pack_ref(pack) {
-            Some(r) => {
-                let text = r.shell_word();
-                let name_at = text.rfind(&format!("{}@{}", pack.name, pack.version));
-                (text, name_at)
-            }
-            None => (unregistered_pack(pack), Some("pack ".len())),
+        // the name and the version end the ref, and they come after the word `pack` in the words
+        // of a pack with no registry
+        let (text, named) = match listed_pack_ref(pack) {
+            Some(r) => (r.shell_word(), name_version(&pack.name, &pack.version)),
+            None => (
+                unregistered_pack(pack),
+                format!("{} {}", pack.name, pack.version),
+            ),
         };
+        let name_at = text.rfind(&named);
         PackCell {
             pack,
             text,
@@ -362,7 +365,7 @@ mod tests {
             .into_iter()
             .map(|state| {
                 serde_json::from_value(serde_json::json!({
-                    "ref": format!("cluster:{state}"),
+                    "ref": crate::reference::Ref::cluster(state).to_string(),
                     "name": state,
                     "uid": state,
                     "state": state,

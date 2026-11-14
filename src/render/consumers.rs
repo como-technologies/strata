@@ -43,10 +43,7 @@ pub(crate) fn consumer_ref(c: &Consumer) -> Option<Ref> {
     }
     match c.kind {
         ConsumerKind::Cluster => Some(Ref::cluster(&c.uid)),
-        ConsumerKind::EdgeHost => Some(Ref::EdgeHost {
-            uid: c.uid.clone(),
-            profile: None,
-        }),
+        ConsumerKind::EdgeHost => Some(Ref::edge_host(&c.uid)),
         ConsumerKind::Template | ConsumerKind::App => None,
     }
 }

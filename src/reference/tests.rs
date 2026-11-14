@@ -47,11 +47,7 @@ fn a_ref_shaped_like_a_path_is_a_file_even_when_the_file_is_not_there() {
     );
     assert_eq!(
         Ref::parse_with("pack:Public Repo/csi-aws-ebs@1.65.0", no_files),
-        Ref::Pack {
-            registry: Some("Public Repo".into()),
-            name: "csi-aws-ebs".into(),
-            version: "1.65.0".into()
-        }
+        Ref::pack(Some("Public Repo"), "csi-aws-ebs", "1.65.0")
     );
 }
 
@@ -130,20 +126,12 @@ fn pack_forms() {
     let no_files = |_: &Path| false;
     assert_eq!(
         Ref::parse_with("pack:csi-aws-ebs@1.65.0", no_files),
-        Ref::Pack {
-            registry: None,
-            name: "csi-aws-ebs".into(),
-            version: "1.65.0".into()
-        }
+        Ref::pack(None, "csi-aws-ebs", "1.65.0")
     );
     let with_registry = Ref::parse_with("pack:Public Repo/csi-aws-ebs@latest", no_files);
     assert_eq!(
         with_registry,
-        Ref::Pack {
-            registry: Some("Public Repo".into()),
-            name: "csi-aws-ebs".into(),
-            version: LATEST.into()
-        }
+        Ref::pack(Some("Public Repo"), "csi-aws-ebs", LATEST)
     );
     assert_eq!(
         with_registry.to_string(),
@@ -161,13 +149,16 @@ fn a_pack_ref_names_a_registry_by_its_uid_when_the_name_is_empty_or_holds_a_slas
     assert_eq!(registry_in_ref("Public Repo", "r1"), "Public Repo");
     assert_eq!(registry_in_ref("", "r1"), "r1");
     assert_eq!(registry_in_ref("team/charts", "r1"), "r1");
-    let read = Ref::parse_with(
-        &format!("pack:{}/nginx@1", registry_in_ref("team/charts", "r1")),
-        |_| false,
+    let written = Ref::pack_in("team/charts", "r1", "nginx", "1").to_string();
+    assert_eq!(
+        Ref::parse_with(&written, |_| false),
+        Ref::pack(Some("r1"), "nginx", "1"),
+        "{written}"
     );
-    assert!(
-        matches!(&read, Ref::Pack { registry: Some(r), name, .. } if r == "r1" && name == "nginx"),
-        "{read:?}"
+    // a pack with no registry has a ref with none
+    assert_eq!(
+        Ref::pack_in("", "", "nginx", "1"),
+        Ref::pack(None, "nginx", "1")
     );
 }
 
@@ -194,14 +185,7 @@ fn a_pack_ref_prints_as_the_pack_ref_that_it_is() {
 #[test]
 fn cluster_forms() {
     let no_files = |_: &Path| false;
-    assert_eq!(
-        Ref::parse_with("cluster:c1", no_files),
-        Ref::Cluster {
-            uid: "c1".into(),
-            profile: None,
-            pending: false,
-        }
-    );
+    assert_eq!(Ref::parse_with("cluster:c1", no_files), Ref::cluster("c1"));
     let selected = Ref::parse_with("cluster:c1/aws-stack", no_files);
     assert_eq!(
         selected,
@@ -335,13 +319,7 @@ fn a_tag_ref_with_no_label_is_no_set_of_clusters() {
 fn edge_host_forms() {
     let no_files = |_: &Path| false;
     let all = Ref::parse_with("edgehost:e1", no_files);
-    assert_eq!(
-        all,
-        Ref::EdgeHost {
-            uid: "e1".into(),
-            profile: None,
-        }
-    );
+    assert_eq!(all, Ref::edge_host("e1"));
     assert_eq!(all.to_string(), "edgehost:e1");
     let one = Ref::parse_with("edgehost:e1/edge-stack", no_files);
     assert_eq!(

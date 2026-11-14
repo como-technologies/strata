@@ -225,7 +225,7 @@ pub(crate) fn carrier_lines(pin: &Pin) -> Vec<String> {
                 (Some(by), _) => format!(
                     "{} carries {}",
                     name_version(&c.profile, &by.version),
-                    Ref::pack_in("", "", &pin.name, &by.pack_version).shell_word()
+                    Ref::pack(None, &pin.name, &by.pack_version).shell_word()
                 ),
                 (None, Some(msg)) => format!(
                     "strata could not read which newer version of {held} carries {newer} ({msg})"
@@ -254,10 +254,10 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 }
 
 /// The answer of Palette about the bump of a pin, one line each: `palette accepts`, or `palette
-/// refuses: DependencyPackUpgradeNotSupported on payments` for each error. An error that names no
-/// cluster gives its pack and its message. When a request failed, or strata did not ask a record of
-/// another project, a line gives the message: `palette gave no answer: <message>`. Empty when
-/// Palette was not asked.
+/// refuses: DependencyPackUpgradeNotSupported on cluster payments` for each error. An error that
+/// names no cluster gives its pack and its message. When a request failed, or strata did not ask a
+/// record of another project, a line gives the message: `palette gave no answer: <message>`. Empty
+/// when Palette was not asked.
 pub(crate) fn palette_lines(pin: &Pin) -> Vec<String> {
     let Some(bump) = pin.bump.as_ref() else {
         return Vec::new();
