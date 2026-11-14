@@ -127,8 +127,11 @@ person or the team. So the markdown writes the entity of a zero width space
 after each `@` that can start a mention: `@&#8203;name`. GitHub shows the same
 text, and the mention notifies nobody. A `@` after a letter or a digit of ASCII
 starts no mention, as in an address of mail or in `kubernetes@1.30.1`. Such a
-`@` stays as it is. A value in a code span shows no mention, so it stays as it
-is too.
+`@` stays as it is.
+
+A value in a code span shows no mention, so it stays as it is too. GitHub
+links a bare address with its text as it is. So in an address such as
+`https://example.com/@name`, the link shows the entity as text.
 
 Each fenced block has a fence of three backticks. When its text holds a run of
 three or more backticks, the fence is longer than each run. So a line of the
