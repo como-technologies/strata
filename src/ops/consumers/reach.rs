@@ -17,7 +17,6 @@ use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, ErrorDocument, Result, served};
 use crate::json::text;
 use crate::ops::client_for;
-use crate::ops::fleet::Resolved;
 use crate::ops::list::{ListedCluster, ListedProject, ProjectListings};
 use crate::term::progress::Progress;
 
@@ -110,33 +109,28 @@ where
     progress.note("searching the clusters that run the version");
     let mut projects = ProjectsRead::default();
     let mut found = Found::default();
-    let resolved = match search_or_listing(wide, name) {
-        Ok((clusters, resolved)) => {
-            found.clusters.extend(clusters);
-            resolved
-        }
-        Err(e) if e.denial().is_some() => {
-            projects.tenant_error = Some(e.to_json());
-            Resolved::Search
-        }
+    let Candidates { clusters, resolved } = search_or_listing(wide, name, progress);
+    match clusters {
+        Ok(clusters) => found.clusters.extend(clusters),
+        Err(e) if e.denial().is_some() => projects.tenant_error = Some(e.to_json()),
         Err(e) => {
             return EachProject {
                 candidates: Candidates {
                     clusters: Err(e),
-                    resolved: Resolved::Search,
+                    resolved,
                 },
                 hosts: Vec::new(),
                 projects,
             };
         }
-    };
+    }
     match listings.of(wide) {
         Ok(listed) => {
             progress.note("searching each project of the tenant");
             for project in listed {
                 projects.read += 1;
                 let searched = client_for(clients, home, &project.uid, connect)
-                    .and_then(|p| found.search(p, name));
+                    .and_then(|p| found.search(p, name, progress));
                 if let Err(e) = searched {
                     projects.unread.push(unread_project(project, &e));
                 }
@@ -186,8 +180,13 @@ impl Found {
     ///
     /// The error of the cluster search, of the listing, or of the edge host search. Then the
     /// project gives nothing.
-    fn search<A: PaletteApi>(&mut self, palette: &Palette<A>, name: &str) -> Result<()> {
-        let (clusters, _) = search_or_listing(palette, name)?;
+    fn search<A: PaletteApi>(
+        &mut self,
+        palette: &Palette<A>,
+        name: &str,
+        progress: &Progress,
+    ) -> Result<()> {
+        let clusters = search_or_listing(palette, name, progress).clusters?;
         let hosts = served(palette.edge_hosts())?.unwrap_or_default();
         self.clusters.extend(clusters);
         self.hosts = joined_hosts(Ok(std::mem::take(&mut self.hosts)), hosts)?;

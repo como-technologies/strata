@@ -224,35 +224,51 @@ where
             Err(_) => searched_consumers(home, name),
         }
     };
-    let (clusters, resolved) = match searched {
-        Ok(Some(found)) => (Ok(found), Resolved::Search),
-        Ok(None) => {
-            progress.note("reading each cluster for the profiles it applies");
-            let listing = wide_else_home(wide, home, Palette::cluster_listing);
-            (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
-        }
-        Err(e) => (Err(e), Resolved::Search),
-    };
-    Candidates { clusters, resolved }
+    let listing = || wide_else_home(wide, home, Palette::cluster_listing);
+    candidates_of(searched, listing, progress)
 }
 
-/// The clusters of the scope of `palette` that can run a version of the profile `name`. They come
-/// from the search, or from the listing when the search takes no profile. A search of one project for
+/// The clusters of the scope of `palette` that can run a version of the profile `name`, and how
+/// strata found them: see [`candidates_of`]. A search of one project for
 /// [`search_each_project`](super::reach::search_each_project).
-///
-/// # Errors
-///
-/// The error of the search, or of the listing.
 pub(super) fn search_or_listing<A: PaletteApi>(
     palette: &Palette<A>,
     name: &str,
-) -> Result<(Vec<ListedCluster>, Resolved)> {
-    match searched_consumers(palette, name)? {
-        Some(found) => Ok((found, Resolved::Search)),
-        None => Ok((
-            list_clusters(items(&palette.cluster_listing()?)),
-            Resolved::Listing,
-        )),
+    progress: &Progress,
+) -> Candidates {
+    candidates_of(
+        searched_consumers(palette, name),
+        || palette.cluster_listing(),
+        progress,
+    )
+}
+
+/// The clusters that `searched`, the answer of the search, names, and how strata found them.
+///
+/// When the search takes no profile, the clusters are each cluster of `listing`, the answer of
+/// the cluster listing. This is the one place that picks the search or the listing for the
+/// second reading.
+fn candidates_of(
+    searched: Result<Option<Vec<ListedCluster>>>,
+    listing: impl FnOnce() -> Result<Value>,
+    progress: &Progress,
+) -> Candidates {
+    match searched {
+        Ok(Some(found)) => Candidates {
+            clusters: Ok(found),
+            resolved: Resolved::Search,
+        },
+        Ok(None) => {
+            progress.note("reading each cluster for the profiles it applies");
+            Candidates {
+                clusters: listing().map(|l| list_clusters(items(&l))),
+                resolved: Resolved::Listing,
+            }
+        }
+        Err(e) => Candidates {
+            clusters: Err(e),
+            resolved: Resolved::Search,
+        },
     }
 }
 
