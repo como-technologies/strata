@@ -133,6 +133,7 @@ facts:
         - variables[].immutable
         - variables[].inputType
         - variables[].isSensitive
+        - variables[].options[].default
         - variables[].options[].description
         - variables[].options[].label
         - variables[].options[].value
@@ -1298,11 +1299,34 @@ facts:
       - repave.sh:var-default
       - repave.sh:var-control
       - repave.sh:var-control-says
+      - repave.sh:var-swap
     pages:
       - internals/palette/profiles.md#a-variable-in-a-field-that-repaves
     code:
       - src/ops/repave.rs
       - src/api/palette/clusters.rs
+
+  # The body of a swap: the whole list of the profiles of the cluster, and the earlier body of
+  # tenant.sh with replaceWithProfile.
+  - id: repave-swap-body
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+    stand_in: []
+    live:
+      - tag-only.sh:palette-repave-exact
+      - tag-only.sh:palette-repave-exact-replace
+      - tag-only.sh:palette-repave-floating
+      - tag-only.sh:palette-repave-floating-replace
+      - tag-only.sh:palette-repave-back
+      - tag-only.sh:palette-repave-back-replace
+      - repave.sh:var-swap
+    pages:
+      - internals/palette/profiles.md#the-body-of-a-swap
+    code:
+      - src/ops/repave.rs
 
   # Macros.
   - id: project-macros

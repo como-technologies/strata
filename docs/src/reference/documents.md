@@ -172,6 +172,12 @@ profile, or pack version.
   empty text for the rest. A variable with no `name` has an empty `name`. The
   schema requires `name` alone, so a candidate can give a variable with a
   `name` and a `defaultValue`.
+  - `options[].default`, only when it is `true`: the option is the default of
+    the variable. A dropdown variable with no default value takes the label of
+    this option. A record of strata 0.33 and before does not have the field.
+    It is outside the root, so the root of such a record stays. `behind` and
+    `compare --validate` read it: see
+    [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
 - `packs[]`: one entry for each pack, in the order the profile holds them. The
   diff document sorts its packs by layer and then by name; the snapshot does
   not.
@@ -367,7 +373,8 @@ A comparison of two sides, `a` and `b`.
   update, and no validate route checks them. Absent when strata finds nothing.
   See [What the route does not check](../commands/compare/validate.md#what-the-route-does-not-check).
   - `requiredVariables`: the required variables with no default value that the
-    profile side adds. It has `code`, the code of the refusal of Palette,
+    profile side adds. A dropdown variable counts only when no option has the
+    mark `default`. It has `code`, the code of the refusal of Palette,
     `InvalidVariable`, and `names[]`, the name of each variable. Palette refuses
     an update that gives such a variable no value.
   - `skippedMinor`: the move of the pack of the `k8s` layer, when it skips a

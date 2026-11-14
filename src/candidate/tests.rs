@@ -631,6 +631,15 @@ fn a_null_in_a_variable_is_the_default_of_the_field_as_a_variable_of_palette_has
             "options:\n  - label: ~\n    value: x",
             json!({"options": [{"value": "x"}]}),
         ),
+        (
+            "options:\n  - value: x\n    default: ~",
+            json!({"options": [{"value": "x", "default": null}]}),
+        ),
+        // a candidate keeps the default mark of an option, as a record does
+        (
+            "options:\n  - value: x\n    default: true",
+            json!({"options": [{"value": "x", "default": true}]}),
+        ),
     ] {
         let c = with_variables(&format!("- name: port\n  {field}\n"))
             .unwrap_or_else(|e| panic!("{field}: {e}"))

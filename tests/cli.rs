@@ -1474,7 +1474,7 @@ fn the_schema_of_a_record_and_of_a_candidate_name_the_twelve_fields_of_a_variabl
         let option = &v["$defs"]["VariableOption"];
         assert_eq!(
             property_names(option),
-            ["description", "label", "value"],
+            ["default", "description", "label", "value"],
             "{kind}: {option}"
         );
         assert_eq!(

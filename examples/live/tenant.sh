@@ -22,7 +22,14 @@
 #   tenant.sh repave CLUSTER_UID CURRENT_UID TARGET_UID [PACK FROM TO]
 #                              whether Palette would repave the cluster if it ran the profile
 #                              version TARGET_UID in place of CURRENT_UID: Palette's own check,
-#                              given TARGET_UID's pack values (not its manifests). With PACK FROM
+#                              given TARGET_UID's pack values (not its manifests). The body names
+#                              each profile of the cluster by its uid, with TARGET_UID in place of
+#                              CURRENT_UID. The route reads the body as the whole list of the
+#                              profiles, as a PUT of the profiles of a cluster does, and reads no
+#                              replaceWithProfile. REPAVE_FORM=replace sends the body of the
+#                              earlier script: CURRENT_UID alone, with replaceWithProfile
+#                              TARGET_UID and the pack values of TARGET_UID. Only the live check
+#                              that compares the two bodies sends it. With PACK FROM
 #                              TO, the text FROM in PACK's values is replaced by TO first, as a
 #                              control that changes what a node runs. REPAVE_VARIABLES, a JSON
 #                              list such as '[{"name": "x", "value": "1"}]', is the variables[]
@@ -133,10 +140,20 @@ updates() {
 
 repave() {
   local cluster=${1:-} current=${2:-} target=${3:-} pack=${4:-} from=${5:-} to=${6:-} tmp status what
+  local form=${REPAVE_FORM:-swap}
   [ -n "$target" ] || die "usage: tenant.sh repave CLUSTER_UID CURRENT_UID TARGET_UID [PACK FROM TO]"
+  case "$form" in swap|replace) ;; *) die "REPAVE_FORM is swap or replace, not $form" ;; esac
   tmp=$(mktemp -d); trap 'rm -rf "${tmp:-}"' RETURN EXIT
   status=$(get "/v1/clusterprofiles/$target" "$tmp/profile")
   [ "$status" = 200 ] || die "reading profile $target answered HTTP $status"
+  # the body of a swap names each profile of the cluster, so it reads the cluster first
+  echo '{}' > "$tmp/cluster"
+  if [ "$form" = swap ]; then
+    status=$(get "/v1/spectroclusters/$cluster" "$tmp/cluster")
+    [ "$status" = 200 ] || die "reading cluster $cluster answered HTTP $status"
+    jq -e --arg c "$current" '[(.spec.clusterProfileTemplates // [])[].uid] | index($c) != null' \
+      "$tmp/cluster" > /dev/null || die "cluster $cluster runs no profile $current"
+  fi
   what="cluster $cluster, profile $current -> $target"
   if [ -n "$pack" ]; then
     jq -e --arg p "$pack" --arg from "$from" \
@@ -144,11 +161,18 @@ repave() {
       "$tmp/profile" > /dev/null || die "pack $pack of $target has no values containing the text to replace"
     what="$what with $pack values edited"
   fi
-  jq --arg current "$current" --arg p "$pack" --arg from "$from" --arg to "$to" \
-    --argjson vars "${REPAVE_VARIABLES:-[]}" '
-    {profiles: [{uid: $current, replaceWithProfile: .metadata.uid, variables: $vars,
+  jq --arg current "$current" --arg p "$pack" --arg from "$from" --arg to "$to" --arg form "$form" \
+    --argjson vars "${REPAVE_VARIABLES:-[]}" --slurpfile cluster "$tmp/cluster" '
+    {variables: $vars,
       packValues: [.spec.published.packs[] | {name, tag, type, values: (.values // ""), manifests: []}
-        | if $p != "" and .name == $p then .values |= (split($from) | join($to)) else . end]}]}' \
+        | if $p != "" and .name == $p then .values |= (split($from) | join($to)) else . end]} as $values
+    | if $form == "replace" then
+        {profiles: [{uid: $current, replaceWithProfile: .metadata.uid} + $values]}
+      else
+        .metadata.uid as $target
+        | {profiles: [($cluster[0].spec.clusterProfileTemplates // [])[].uid
+            | if . == $current then {uid: $target} + $values else {uid: .} end]}
+      end' \
     "$tmp/profile" > "$tmp/body"
   status=$(palette_curl -sS -o "$tmp/answer" -w '%{http_code}' -X POST \
     -H 'Accept: application/json' -H 'Content-Type: application/json' \

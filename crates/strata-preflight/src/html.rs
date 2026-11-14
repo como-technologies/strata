@@ -116,10 +116,7 @@ fn tiles(r: &Report) -> String {
     let s = &r.summary;
     let mut h = String::from("<div class=\"tiles\">");
     for (n, what) in [
-        (
-            pct(s.readiness),
-            format!("readiness (tiers {})", r.options.tiers_text()),
-        ),
+        (pct(s.readiness), r.options.readiness_text("readiness")),
         (s.passed.to_string(), "passed".to_string()),
         (s.failed.to_string(), "failed".to_string()),
         (s.probe_failed.to_string(), "probes failed".to_string()),
@@ -546,6 +543,24 @@ mod tests {
             "{}",
             forms[2].1
         );
+    }
+
+    #[test]
+    fn the_tile_of_the_readiness_names_the_tiers_as_the_terminal_and_the_markdown_name_them() {
+        let mut report = report();
+        report.options.tiers = vec![Tier::Static, Tier::Palette, Tier::Cloud];
+        report.options.strict = true;
+        report.options.offline = true;
+        let tiers = "(tiers static, palette, cloud, strict, offline)";
+        let html = page(&report);
+        assert!(
+            html.contains(&format!("<b>0%</b><span>readiness {tiers}</span>")),
+            "{html}"
+        );
+        let text = terminal(&report, &strata::term::color::Paint::off());
+        assert!(text.contains(&format!("readiness 0% {tiers}")), "{text}");
+        let md = markdown(&report);
+        assert!(md.contains(&format!("readiness **0%** {tiers}")), "{md}");
     }
 
     #[test]
