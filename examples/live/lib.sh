@@ -195,14 +195,37 @@ check() {
   printf '%-4s  %-32s expected %s, got %s\n' "$verdict" "$id" "$want" "$got" | tee -a steps.log
 }
 
-# summary_table: the checks in steps.log as a markdown table, with what each shows
+# answered STATUS FILE...: the first line of each FILE, the output of api.sh get-status or
+# post-status, is HTTP STATUS
+answered() {
+  local status=$1 f
+  shift
+  for f in "$@"; do [ "$(head -n 1 "$f")" = "HTTP $status" ] || return 1; done
+}
+# body_of FILE: the body of the answer that FILE holds after its status line
+body_of() { sed 1d "$1"; }
+# answer_is STATUS FILE FILTER [OPTION...]: FILE holds HTTP STATUS, and the jq FILTER is true of
+# its body. Each OPTION goes to jq, such as --slurpfile d FILE.
+answer_is() {
+  local status=$1 file=$2 filter=$3
+  shift 3
+  answered "$status" "$file" && body_of "$file" | jq -e "$@" "$filter" > /dev/null
+}
+# refused STATUS CODE FILE: FILE holds HTTP STATUS and an answer with the code CODE
+refused() { answer_is "$1" "$3" '.code == $c' --arg c "$2"; }
+
+# summary_table: the checks in steps.log as a markdown table, with what each shows. The id is a
+# `code` of markdown_jq, and each other value is a `cell`. A SEEN line that a script writes itself
+# puts its own words in the place of the exit codes. So a `|` or a mark of markdown in a value
+# shows as text.
 summary_table() {
   echo "| result | check | expected exit | got | what it shows |"
   echo "|---|---|---|---|---|"
   [ -f steps.log ] || return 0
   command grep -E '^(PASS|FAIL|SEEN) ' steps.log | while read -r verdict id _ want _ got; do
     what=$(awk -F '\t' -v id="$id" '$1 == id { w = $2 } END { print w }' checks.tsv 2>/dev/null)
-    echo "| $verdict | \`$id\` | ${want%,} | $got | $what |"
+    jq -rn --arg v "$verdict" --arg id "$id" --arg want "${want%,}" --arg got "$got" --arg what "$what" \
+      "$markdown_jq"' "| \($v) | \($id | code) | \($want | cell) | \($got | cell) | \($what | cell) |"'
   done
 }
 
@@ -229,16 +252,37 @@ write_summary() {
 
 # The jq functions that write a text into markdown, as strata writes it. `html` is
 # `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
-# `text::markdown_cell`: `marks` puts a `\` before each mark of markdown, and `table` escapes each
-# `|` and writes a line break as a space. So a link, an emphasis, or a code span of the text shows
-# as text. A run of `_` with a letter or a digit on each side starts no emphasis, so `marks` keeps
-# it as it is. `span` is `text::code_span`: its fence is longer than each run of backticks in the
-# text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is the fence of
-# `text::code_block`, so that no line of the text ends the block.
+# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
+# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
+# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
+# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
+# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
+# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
+# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
+# the fence of `text::code_block`, so that no line of the text ends the block.
 markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
   def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
   def table: split("|") | join("\\|") | split("\n") | join(" ");
-  def cell: marks | html | table;
+  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
+  def quoted: marks | html | mentions;
+  def link_end: . as $t | ([scan("[(]")] | length) as $open
+    | def cut($end; $close): $t[$end - 1:$end] as $c
+        | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
+          elif $c == ";" and ($t[:$end] | test("&[A-Za-z]+;$")) then null
+          elif ($c | test("^[?!.,:*_~\\x27\";]$")) then cut($end - 1; $close)
+          else $end end;
+      cut(length; [scan("[)]")] | length);
+  def address($first): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
+    | (if test("^[!-~]*$") and (test("<") | not) then $rest | link_end else null end) as $e
+    | if $e == null
+        or ($rest[:$e] | test("^(https?://|www[.])[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+([/?#:]|$)") | not)
+        or (($rest | startswith("www.")) and (if $s == 0 then $first else (startswith("(") | not) end))
+      then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
+  def word($first): address($first) as $a
+    | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
+  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
   def backticks($n): [range($n)] | map("`") | join("");
   def ticks: [scan("`+") | length] | max // 0;
   def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p

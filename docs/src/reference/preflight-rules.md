@@ -288,12 +288,12 @@ never `FAILED`.
 
 A check of `POST /v1/spectroclusters/{cloudType}/validate` names no `refusal_codes`. The library
 lists the codes of the refusals of that route, and the check reads a 5xx with one of them as an
-answer. See
-[Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again).
-The codes are `ClusterProfilesNotSupported`, `InvalidDropDownVariable`, `InvalidVariable`,
-`K8SCidrOverlap`, `CidrParseError`, and `RequiredParam`. `palette-validate` gives each such refusal
-the verdict `FAILED`, with the message of Palette. Before release 0.33.0, a 500 with one of the
-last five codes was `ERROR`.
+answer. It also reads the refusals of the body and of the limits of the tenant with HTTP 403 as an
+answer. Each other 403 of the route, such as `AccessDenied`, refuses the key. See
+[Refusals that strata does not send again](./errors.md#refusals-that-strata-does-not-send-again)
+for each code. `palette-validate` gives each such refusal the verdict `FAILED`, with the message of
+Palette. Before release 0.34.0, a 500 or a 403 with a code that the library did not list was
+`ERROR`, such as `ControlPlanePoolRequired`.
 
 The backend keeps the answer of a request for the run. A rule that does not name the code
 reads the same 500 as an error. A fixture follows the same rule for each status

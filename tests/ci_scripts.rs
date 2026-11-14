@@ -4576,7 +4576,10 @@ fn verify_report_opens_the_issue_of_a_drifted_record_when_palette_refuses_the_au
     let (out, err) = (text(&o.stdout), text(&o.stderr));
     assert!(out.contains("**DRIFT**"), "{out}");
     assert!(
-        out.contains(&format!("who: not read: HTTP 403: {denied}")),
+        out.contains(&format!(
+            "who: not read: HTTP 403: {}",
+            Denial::Route.as_str()
+        )),
         "{out}"
     );
     assert!(
@@ -5366,9 +5369,10 @@ fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts()
     }
 }
 
-/// The criteria of #872: the jq functions of the scripts write each text as the helpers of
+/// The criteria of #872 and #890: the jq functions of the scripts write each text as the helpers of
 /// `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text, also two
-/// backticks. It keeps a run of `_` inside a word as it is.
+/// backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies nobody.
+/// It keeps each bare address that GitHub surely links as it is.
 #[test]
 fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
     use strata::text::{code_cell, code_span, html_text, markdown_cell};
@@ -5388,6 +5392,14 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         common::ANSWER_TAGS,
         common::ANSWER_MARKS,
         "``a`` ~~gone~~ ![i](x) a\\*b\\|c",
+        common::ANSWER_MENTIONS,
+        "(@a) @@b é@c _@d *@e\n@f|@g &@a <@b a@-b @",
+        common::ANSWER_ADDRESSES,
+        "www.a.example/@b x (www.a.example/@b) \"www.a.example/@b\" 'https://a.example/@b'",
+        "https://a.example/x_(y)) https://a.example/x_*~.\" http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
+        "https://-a.example/@b https://a_b.example/@b https://localhost/@b xhttps://a.example/@b",
+        "https://a.example/é@b https://a.example/<b> https://a.example/a&amp; https:// www. a|https://a.example/b|c",
+        " \thttps://a.example/@b\n www.a.example/@c\r\x0c@d  www.a.example/\x0b@e",
         "aws_stack LTS__24.x é_ü __init__ a_ _b a_-b",
         "first\nsecond | `x` &amp;",
         "",
@@ -5408,6 +5420,8 @@ fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
         }
     }
     common::assert_answer_marks_as_text(&markdown_cell(common::ANSWER_MARKS));
+    common::assert_answer_mentions_as_text(&markdown_cell(common::ANSWER_MENTIONS));
+    common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
@@ -6552,7 +6566,7 @@ fn observer_records_sh_accepts_the_folder_of_records_that_the_install_steps_name
         let file = format!("releases/{name}_{version}.json");
         job.file(&file, &profile_doc(name, version));
     }
-    let steps = page_section("docs/src/automation/observer.md", "## Install");
+    let steps = page_section("docs/src/automation/observer.md", "## Install with kubectl");
     let command = block_with(&steps, "bash", "observer-records.sh");
     let envs = [("GIT_SHA", "abc123")];
     let o = job.run_shell(&command, &envs);

@@ -29,18 +29,19 @@ use strata::term::progress::Progress;
 use common::CommandExt;
 use common::{
     APP_PROFILE_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID,
-    EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING,
-    PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A, UID_ADDONS, UID_B,
-    WITH_IMPACT, app_profile_route, app_tiers_route, behind_of, candidate_snapshot,
-    cluster_manifests_route, cluster_namespaces_route, cluster_rbacs_route, cluster_ref,
-    cluster_repave_route, cluster_resolved_values_route, cluster_route, cluster_variables_route,
-    clusters_denied, edge_host_route, error_body, fetch_examples, filters_denied,
-    group_resolved_values_route, group_route, listing, manifest_route, manifests_route,
-    no_manifests, no_roles_message, no_template, no_variables, operation_forbidden_message,
-    pack_entity_route, pack_listing_route, post, profile_document, profile_route, project_listing,
-    read_json, resolved_values_route, serve_cluster, serve_fixture, serve_pack_listing,
-    serve_profile, serve_registry_pack, snapshot_of, snapshot_of_at, snapshot_of_ref,
-    strata_command, template, variables_route, write_record, write_yaml,
+    EACH_SCOPE, EDGE_HOST_SEARCH, OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH,
+    PROJECT_LISTING, PackFixture, REGISTRY_LISTING, SECRET_VALUE, TAG_FILTER_LISTING, UID_A,
+    UID_ADDONS, UID_B, WITH_IMPACT, access_denied_message, app_profile_route, app_tiers_route,
+    behind_of, candidate_snapshot, cluster_manifests_route, cluster_namespaces_route,
+    cluster_rbacs_route, cluster_ref, cluster_repave_route, cluster_resolved_values_route,
+    cluster_route, cluster_variables_route, clusters_denied, edge_host_route, error_body,
+    fetch_examples, filters_denied, group_resolved_values_route, group_route, listing,
+    manifest_route, manifests_route, no_manifests, no_roles_message, no_template, no_variables,
+    operation_forbidden_message, pack_entity_route, pack_listing_route, post, profile_document,
+    profile_route, project_listing, rbacs_answer, read_json, resolved_values_route, serve_cluster,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_command, system_rbacs, template, variables_route,
+    write_record, write_yaml,
 };
 
 #[test]
@@ -163,6 +164,61 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
 
     let missing = snapshot_of(&api, "lab-profile@9.9.9").unwrap_err();
     assert!(matches!(missing, Error::ProfileNotFound { .. }));
+}
+
+#[test]
+fn a_profile_name_with_no_version_gives_its_versions_and_latest_in_each_command_that_reads_it() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+    ]});
+    let api =
+        serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A).with(PROFILE_LISTING, listing);
+    // the unit test of the read gives the whole message; each command gives the same refs
+    let words = |refs: &str, latest: &str| format!(": {refs}. Or give {latest}, the highest");
+    let plain = words(
+        "lab-profile@1.2.0, lab-profile@1.10.0",
+        "lab-profile@latest",
+    );
+    let draft = words(
+        "lab-profile@1.2.0@draft, lab-profile@1.10.0@draft",
+        "lab-profile@latest@draft",
+    );
+    let quiet = Progress::silent();
+    let consumers = |text: &str| {
+        ops::consumers_with(
+            &Ref::parse(text),
+            &ops::ConsumersOptions { list_only: true },
+            |_| Ok(Palette::new(api.clone())),
+            "t1",
+            &quiet,
+        )
+        .map(drop)
+    };
+    let candidate = |text: &str| {
+        ops::snapshot_for_candidate(text, || Ok(Palette::new(&api)), "t1", &quiet).map(drop)
+    };
+    // snapshot, compare, and same-release read a ref with snapshot_for
+    for (read, refs) in [
+        (snapshot_of(&api, "lab-profile").map(drop), &plain),
+        (snapshot_of(&api, "lab-profile@draft").map(drop), &draft),
+        (candidate("lab-profile"), &plain),
+        (consumers("lab-profile"), &plain),
+    ] {
+        let err = read.unwrap_err();
+        let message = err.to_string();
+        assert_eq!(err.kind(), "usage", "{err}");
+        assert!(
+            message.starts_with("'lab-profile' is a profile name with no version."),
+            "{message}"
+        );
+        assert!(message.contains(refs.as_str()), "{message}");
+    }
+    // a text that no profile has as its name keeps the 404 of Palette
+    let err = snapshot_of(&api, "barney").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
 }
 
 #[test]
@@ -2232,14 +2288,17 @@ fn barney() -> Value {
 }
 
 fn policy_of(s: &Snapshot) -> Value {
+    policy_tier(s).fields.clone()
+}
+
+/// The tier `policy` of the cluster record `s`.
+fn policy_tier(s: &Snapshot) -> &strata::snapshot::ClusterTier {
     s.source
         .cluster
         .as_ref()
         .unwrap()
         .tier(Tier::Policy)
         .unwrap()
-        .fields
-        .clone()
 }
 
 /// The comparison of the policy tiers in `d`.
@@ -2395,6 +2454,117 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
     assert!(!policy_diff(&ops::compare(&older, &live, "t1")).same);
 }
 
+/// The cluster of [`serve_policy`], whose role bindings Palette answers to the key of the user
+/// `user`: the bindings of [`system_rbacs`], with a binding of the system.
+fn serve_system_rbacs(dir: &Path, user: &str) -> MemoryApi {
+    serve_policy(dir, barney()).with(rbacs_route(), rbacs_answer(system_rbacs(), user))
+}
+
+/// The role and the subject names of each binding of the system that the record `s` names.
+fn system_subjects(s: &Snapshot) -> Vec<(String, Vec<String>)> {
+    let text = |v: &Value| v.as_str().unwrap().to_string();
+    let names = |b: &Value| -> Vec<String> {
+        let subjects = b["subjects"].as_array().unwrap();
+        subjects.iter().map(|s| text(&s["name"])).collect()
+    };
+    policy_tier(s)
+        .system_rbacs
+        .iter()
+        .map(|b| (text(&b["role"]["name"]), names(b)))
+        .collect()
+}
+
+/// #838, option 1 of #876: the root and the hash of the policy tier do not depend on the user of
+/// the key.
+#[test]
+fn a_cluster_with_a_role_binding_of_the_system_has_one_root_and_one_policy_hash_for_the_keys_of_two_users()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let fred = snapshot_cluster(&serve_system_rbacs(dir.path(), "fred@example.com"), None).unwrap();
+    let wilma_api = serve_system_rbacs(dir.path(), "wilma@example.com");
+    let wilma = snapshot_cluster(&wilma_api, None).unwrap();
+
+    assert_eq!(fred.root, wilma.root);
+    let (a, b) = (policy_tier(&fred), policy_tier(&wilma));
+    assert_eq!(
+        a.hash, b.hash,
+        "the hash does not cover the bindings of the system"
+    );
+    assert_eq!(a.fields, b.fields);
+    assert_eq!(
+        a.fields["rbacs"],
+        serde_json::json!([{"namespace": "", "role": {"kind": "ClusterRole", "name": "view"},
+            "subjects": [{"name": "platform", "namespace": "", "type": "Group"}],
+            "type": "ClusterRoleBinding"}]),
+        "the binding that is not of the system stays in the fields"
+    );
+    // each record names the binding of the system that its key reads, outside the hash
+    let one = |role: &str, user: &str| vec![(role.to_string(), vec![user.to_string()])];
+    assert_eq!(
+        system_subjects(&fred),
+        one("cluster-admin", "fred@example.com")
+    );
+    assert_eq!(system_subjects(&wilma), one("view", "wilma@example.com"));
+
+    // the record keeps them in the file
+    let saved = dir.path().join("fred.json");
+    common::write_snapshot(&saved, &fred, false);
+    let json = read_json(&saved);
+    let tier = &json["source"]["cluster"]["tiers"]["policy"];
+    assert_eq!(
+        tier["systemRbacs"][0]["subjects"][0]["name"],
+        "fred@example.com"
+    );
+    assert_eq!(policy_tier(&Snapshot::load(&saved).unwrap()), a);
+
+    // compare and verify find no change of the policy tier
+    assert!(policy_diff(&ops::compare(&fred, &wilma, "t1")).same);
+    let v = ops::verify(&fred, &Palette::new(wilma_api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert!(policy_diff(&v.diff).same);
+}
+
+/// A record of strata 0.33 and before holds each binding of the system in `rbacs` of the fields.
+/// Its policy tier differs one time from a new record, at the binding of the system.
+#[test]
+fn a_record_that_holds_a_binding_of_the_system_in_the_fields_names_the_policy_tier_at_that_binding()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_system_rbacs(dir.path(), "fred@example.com");
+    let mut older = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    // the policy tier as strata 0.33 wrote it: the binding of the system in the fields
+    let tier = &mut older["source"]["cluster"]["tiers"]["policy"];
+    let system = tier.as_object_mut().unwrap().remove("systemRbacs").unwrap();
+    tier["fields"]["rbacs"]
+        .as_array_mut()
+        .unwrap()
+        .extend(system.as_array().unwrap().iter().cloned());
+    let older: Snapshot = serde_json::from_value(older).unwrap();
+
+    let v = ops::verify(
+        &older,
+        &Palette::new(api.clone()),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(v.unchanged, "the verdict follows the release");
+    let tier = policy_diff(&v.diff);
+    assert!(!tier.same);
+    assert!(
+        tier.diff.iter().all(|l| l.path.starts_with("rbacs[")),
+        "{:?}",
+        tier.diff
+    );
+
+    // a new record of the cluster verifies with no change
+    let again = snapshot_cluster(&api, None).unwrap();
+    let v = ops::verify(&again, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(policy_diff(&v.diff).same);
+}
+
 #[test]
 fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field() {
     let dir = tempfile::tempdir().unwrap();
@@ -2412,13 +2582,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     // a 403 of the route of the role bindings does not stop the record
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(
         tier.fields.get("rbacs").is_none(),
         "an error is not a value"
@@ -2444,13 +2608,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     for status in [404, 405] {
         let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
         let m = snapshot_cluster(&missing, None).unwrap();
-        let missing_tier = &m
-            .source
-            .cluster
-            .as_ref()
-            .unwrap()
-            .tier(Tier::Policy)
-            .unwrap();
+        let missing_tier = policy_tier(&m);
         assert_eq!(missing_tier.fields["rbacs"], Value::Null, "HTTP {status}");
         assert_ne!(missing_tier.hash, tier.hash, "HTTP {status}");
         assert!(missing_tier.errors.is_empty(), "HTTP {status}");
@@ -2466,13 +2624,7 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
     let forbidden =
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
+    let tier = policy_tier(&s);
     assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
@@ -2547,6 +2699,54 @@ fn verify_and_compare_do_not_compare_a_policy_field_that_strata_could_not_read_a
         paths.iter().all(|p| p.starts_with("rbacs[")) && !paths.is_empty(),
         "{paths:?}"
     );
+}
+
+#[test]
+fn the_note_of_a_part_of_a_cluster_that_palette_refuses_gives_the_words_and_the_record_the_body() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let message = operation_forbidden_message("cluster.get");
+    let body = error_body(OPERATION_FORBIDDEN_CODE, &message);
+    let words = format!("HTTP 500: {OPERATION_FORBIDDEN_CODE}: {message}");
+    let text_of = |recorded: &Snapshot, api: MemoryApi| {
+        let v = ops::verify(recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+        common::terminal()
+            .render(&v.diff, recorded, &v.live, false)
+            .unwrap()
+    };
+
+    // the role bindings: the tier keeps the body, and the note gives the words
+    let recorded = snapshot_cluster(&serve_policy(dir.path(), barney()), None).unwrap();
+    let name = recorded.source.cluster.as_ref().unwrap().name.clone();
+    let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 500, body.as_str());
+    let live = snapshot_cluster(&forbidden, None).unwrap();
+    let tier = live.source.cluster.as_ref().unwrap().tier(Tier::Policy);
+    assert_eq!(tier.unwrap().errors["rbacs"], format!("HTTP 500: {body}"));
+    let text = text_of(&recorded, forbidden);
+    let note = format!(
+        "note       strata could not read policy.rbacs of cluster {name} ({words}), so it does \
+         not compare it\n"
+    );
+    assert!(text.contains(&note), "{text}");
+
+    // the reasons of a repave that waits
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
+        repave_route(),
+        500,
+        body.as_str(),
+    );
+    let recorded = snapshot_cluster(&api, None).unwrap();
+    let c = recorded.source.cluster.as_ref().unwrap();
+    assert_eq!(
+        c.pending_repave_error(),
+        Some(format!("HTTP 500: {body}").as_str())
+    );
+    let text = text_of(&recorded, api);
+    assert!(
+        text.contains(&format!("(strata could not read its reasons: {words})")),
+        "{text}"
+    );
+    assert!(!text.contains('{'), "no JSON of the body: {text}");
 }
 
 #[test]
@@ -5625,14 +5825,17 @@ fn list_prints_the_profiles_that_it_read_and_names_the_clusters_that_palette_den
 
     let text = common::terminal().render_list(&l).unwrap();
     assert!(text.contains("\n  lab-profile@1.9.0"), "{text}");
+    // the line gives the code and the message of Palette, and not the JSON of the body
     assert!(
         text.ends_with(&format!(
-            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}; \
+            "\nclusters: not read (GET {CLUSTER_LISTING} failed with HTTP 500: {}: {}; \
              no role of the key in the project gives the access of the request)\n",
-            clusters_denied()
+            Denial::Project.as_str(),
+            common::project_denied_message("lab")
         )),
         "{text}"
     );
+    assert_eq!(error["body"], clusters_denied());
     let json = serde_json::to_value(&l).unwrap();
     assert_eq!(json["errors"]["clusters"]["status"], 500);
     assert!(json.get("clusters").is_none(), "{json}");
@@ -8553,9 +8756,15 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let denied = error_body(Denial::Route.as_str(), "no permission");
+    let message = access_denied_message("audit.list", EACH_SCOPE);
+    let denied = error_body(Denial::Route.as_str(), &message);
     let fault = r#"{"code":"InternalError"}"#;
-    for (status, body) in [(403, denied.as_str()), (500, fault)] {
+    let denied_words = format!("HTTP 403: AccessDenied: {message}");
+    for (status, body, words) in [
+        (403, denied.as_str(), denied_words.as_str()),
+        // a body with a code and no message gives the code
+        (500, fault, "HTTP 500: InternalError"),
+    ] {
         // Palette ends a body with a newline: the reason has none
         let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
             profile_audits("t0"),
@@ -8577,22 +8786,80 @@ fn verify_who_keeps_the_verdict_when_palette_refuses_the_audit_read_with_403_or_
         assert_eq!(ver.status, VerifyStatus::Drifted, "{status}");
         assert!(ver.who.is_none(), "{status}");
         assert_eq!(ver.who_error.as_deref(), Some(reason.as_str()));
+        // the text gives the words of Palette, and not the JSON of the body
         let line = verdict_of(&v);
         assert!(line.starts_with("DRIFT: "), "{line}");
         assert!(
-            line.ends_with(&format!("\nwho: not read: {reason}")),
+            line.ends_with(&format!("\nwho: not read: {words}")),
             "the verdict ends with the one line: {line}"
         );
         let markdown = common::markdown().verdict(&v.diff).unwrap();
         assert!(
-            markdown.contains(&format!("\n\nwho: not read: {reason}")),
+            markdown.contains(&format!("\n\nwho: not read: {words}")),
             "{markdown}"
         );
+        for text in [&line, &markdown] {
+            assert!(!text.contains('{'), "no JSON of the body: {text}");
+        }
         let json = serde_json::to_value(&v.diff).unwrap();
         assert_eq!(json["verify"]["whoError"], reason.as_str());
         assert_eq!(json["verify"]["status"], "drifted");
         assert!(json["verify"].get("who").is_none(), "{json}");
     }
+}
+
+/// The criterion of #887: a record and a verdict keep the reason of a read that failed as
+/// `HTTP <status>: <body>`, with the body as Palette sent it. Only a text form gives the words.
+#[test]
+fn a_record_and_a_verdict_keep_the_reason_of_a_read_that_failed_with_the_body_of_the_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let body = error_body("InternalError", "Internal server error");
+    // Palette ends a body with a newline: the reason has none
+    let sent = format!("{body}\n");
+    let reason = format!("HTTP 500: {body}");
+
+    // verify.whoError
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
+        profile_audits("t0"),
+        500,
+        sent.as_str(),
+    );
+    let v = ops::verify_with(
+        &recorded,
+        &Palette::new(&api),
+        "t1",
+        &who_options(),
+        &Progress::silent(),
+    )
+    .unwrap();
+    let json = serde_json::to_value(&v.diff).unwrap();
+    assert_eq!(json["verify"]["whoError"], reason.as_str());
+
+    // the error of the notifications in a cluster record
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a").failing(
+        notifications_route(),
+        500,
+        sent.as_str(),
+    );
+    let json = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    assert_eq!(
+        json["source"]["cluster"]["errors"]["updatesPending"],
+        reason.as_str()
+    );
+
+    // the error of the sync of a registry, in the verdict of a pack record and in a pin of behind
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let recorded = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let (_, json) = verify_pack_on(
+        &recorded,
+        api.failing(PACK_REGISTRY_SUMMARY, 500, sent.as_str()),
+    );
+    assert_eq!(json["verify"]["registrySyncError"], reason.as_str());
+    let api = serve_behind().failing(PACK_REGISTRY_SUMMARY, 500, sent.as_str());
+    let json = serde_json::to_value(behind_current_on(&api).0).unwrap();
+    assert_eq!(json["pins"][0]["registrySyncError"], reason.as_str());
 }
 
 #[test]
@@ -8620,8 +8887,11 @@ fn verify_who_counts_a_drifted_record_with_a_refused_audit_read_as_drifted_over_
     let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         text.starts_with("DRIFT  ")
-            && text.contains(&format!("; who: not read: HTTP 403: {denied}\n")),
-        "{text}"
+            && text.contains(&format!(
+                "; who: not read: HTTP 403: {}\n",
+                Denial::Route.as_str()
+            )),
+        "the line gives the code of the body: {text}"
     );
     let json = serde_json::to_value(&s).unwrap();
     assert_eq!(
@@ -8680,7 +8950,7 @@ fn verify_who_drops_the_writes_already_read_when_the_log_of_an_overwritten_profi
         ver.who_error.as_deref(),
         Some(r#"HTTP 500: {"code":"InternalError"}"#)
     );
-    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: {\"code\":\"InternalError\"}"));
+    assert!(verdict_of(&v).ends_with("\nwho: not read: HTTP 500: InternalError"));
 }
 
 #[test]
@@ -9081,6 +9351,10 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
+    // two records of one cluster that is behind get one note
+    let d = ops::compare(&now, &now, "t1");
+    let text = common::terminal().render(&d, &now, &now, false).unwrap();
+    assert_eq!(text.matches("is behind").count(), 1, "{text}");
 }
 
 /// The repave status of the cluster fixture.
@@ -11930,6 +12204,43 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
         )),
         "{text}"
     );
+}
+
+#[test]
+fn compare_and_verify_of_one_cluster_that_runs_behind_print_its_note_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    // the cluster runs its first pack at another version than its profile declares
+    let path = dir.path().join("cluster-a").join("cluster.json");
+    let mut doc = read_json(&path);
+    doc["status"]["packs"][0]["version"] = Value::from("0.0.1");
+    let first = doc["status"]["packs"][0]["name"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let a = snapshot_cluster(&api, None).unwrap();
+    let b = snapshot_cluster(&api, None).unwrap();
+    let note = format!("runs {first} 0.0.1, and its profile declares");
+
+    // each side runs the pack behind its profile, and the report names it one time
+    let d = ops::compare(&a, &b, "t1");
+    let sides: Vec<Side> = d.running_behind.iter().map(|r| r.side).collect();
+    assert_eq!(sides, [Side::A, Side::B]);
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
+    assert_eq!(md.matches(&note).count(), 1, "{md}");
+
+    // a record of the cluster when it already ran behind, against the cluster now
+    let v = ops::verify(&a, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert_eq!(v.diff.running_behind.len(), 2);
+    let text = common::terminal()
+        .render(&v.diff, &a, &v.live, false)
+        .unwrap();
+    assert_eq!(text.matches(&note).count(), 1, "{text}");
 }
 
 #[test]
@@ -18327,35 +18638,33 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
 
 // ---- a text of an answer in the markdown -----------------------------------------------------
 
-/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
-/// tag of HTML as text in the markdown of a pull request comment.
-#[test]
-fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+/// The markdown of `verify` that quotes the message of Palette `message`, in three places: a note
+/// of a diff, a verdict, and the sync of a registry in a verdict. Each one holds `start`, the start
+/// of the message as the markdown writes it, after the words of strata.
+fn markdown_that_quotes(message: &str, start: &str) -> [String; 3] {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the note of a cluster whose repave strata could not read
-    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
-        repave_route(),
-        403,
-        common::ANSWER_TAGS,
-    );
+    let api =
+        serve_repave(dir.path(), "cluster-merged", "Pending").failing(repave_route(), 403, message);
     let recorded = snapshot_cluster(&api, None).unwrap();
     let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
-    let md = common::markdown()
+    let note = common::markdown()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(
-        md.contains("(strata could not read its reasons: HTTP 403: &lt;a href="),
-        "{md}"
+        note.contains(&format!(
+            "(strata could not read its reasons: HTTP 403: {start}"
+        )),
+        "{note}"
     );
-    common::assert_answer_tags_as_text(&md);
 
     // the verdict of a record whose audit log Palette refuses
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
         profile_audits("t0"),
         403,
-        common::ANSWER_TAGS,
+        message,
     );
     let v = ops::verify_with(
         &recorded,
@@ -18365,25 +18674,33 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
         &Progress::silent(),
     )
     .unwrap();
-    let md = common::markdown().verdict(&v.diff).unwrap();
+    let verdict = common::markdown().verdict(&v.diff).unwrap();
     assert!(
-        md.contains("\n\nwho: not read: HTTP 403: &lt;a href="),
-        "{md}"
+        verdict.contains(&format!("\n\nwho: not read: HTTP 403: {start}")),
+        "{verdict}"
     );
-    common::assert_answer_tags_as_text(&md);
 
     // the verdict also names the message of the last sync of a registry
     let mut doc = serde_json::to_value(&v.diff).unwrap();
     doc["verify"]["registrySync"] = serde_json::json!({
-        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_TAGS
+        "lastSyncedTime": "", "status": "Failed", "message": message
     });
     let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
-    let md = common::markdown().verdict(&synced).unwrap();
+    let sync = common::markdown().verdict(&synced).unwrap();
     assert!(
-        md.contains("; the last sync of the registry failed: &lt;a href="),
-        "{md}"
+        sync.contains(&format!("; the last sync of the registry failed: {start}")),
+        "{sync}"
     );
-    common::assert_answer_tags_as_text(&md);
+    [note, verdict, sync]
+}
+
+/// The criterion of #832: a message of Palette in a note of a diff, and in a verdict, shows each
+/// tag of HTML as text in the markdown of a pull request comment.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() {
+    for md in markdown_that_quotes(common::ANSWER_TAGS, "&lt;a href=") {
+        common::assert_answer_tags_as_text(&md);
+    }
 }
 
 /// The criteria of #872: a message of Palette with a link, an emphasis, and two backticks shows
@@ -18391,53 +18708,27 @@ fn the_markdown_of_a_note_and_of_a_verdict_shows_a_message_of_palette_as_text() 
 /// tag between them shows as text.
 #[test]
 fn the_markdown_of_a_note_and_of_a_verdict_shows_the_marks_of_markdown_of_a_message_as_text() {
-    let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    let api = serve_repave(dir.path(), "cluster-merged", "Pending").failing(
-        repave_route(),
-        403,
-        common::ANSWER_MARKS,
-    );
-    let recorded = snapshot_cluster(&api, None).unwrap();
-    let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
-    let md = common::markdown()
-        .render(&v.diff, &recorded, &v.live, false)
-        .unwrap();
-    assert!(
-        md.contains("(strata could not read its reasons: HTTP 403: \\[x\\]"),
-        "{md}"
-    );
-    common::assert_answer_marks_as_text(&md);
+    for md in markdown_that_quotes(common::ANSWER_MARKS, "\\[x\\]") {
+        common::assert_answer_marks_as_text(&md);
+    }
+}
 
-    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).failing(
-        profile_audits("t0"),
-        403,
-        common::ANSWER_MARKS,
-    );
-    let v = ops::verify_with(
-        &recorded,
-        &Palette::new(&api),
-        "t1",
-        &who_options(),
-        &Progress::silent(),
-    )
-    .unwrap();
-    let md = common::markdown().verdict(&v.diff).unwrap();
-    assert!(md.contains("\n\nwho: not read: HTTP 403: \\[x\\]"), "{md}");
-    common::assert_answer_marks_as_text(&md);
+/// The criterion of #890: a bare address in a message of Palette stays as it is in a note and in
+/// a verdict. So the link that GitHub makes of it holds no escape, and keeps its target.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_keeps_a_bare_address_of_a_message_as_it_is() {
+    for md in markdown_that_quotes(common::ANSWER_ADDRESSES, common::ANSWER_ADDRESSES) {
+        common::assert_answer_addresses_as_they_are(&md);
+    }
+}
 
-    let mut doc = serde_json::to_value(&v.diff).unwrap();
-    doc["verify"]["registrySync"] = serde_json::json!({
-        "lastSyncedTime": "", "status": "Failed", "message": common::ANSWER_MARKS
-    });
-    let synced: strata::diff::Diff = serde_json::from_value(doc).unwrap();
-    let md = common::markdown().verdict(&synced).unwrap();
-    assert!(
-        md.contains("; the last sync of the registry failed: \\[x\\]"),
-        "{md}"
-    );
-    common::assert_answer_marks_as_text(&md);
+/// The criterion of #890: a `@name` in a message of Palette notifies nobody in a note and in a
+/// verdict. So an issue or a pull request comment that quotes the message mentions no person.
+#[test]
+fn the_markdown_of_a_note_and_of_a_verdict_holds_no_mention_of_github_from_a_message() {
+    for md in markdown_that_quotes(common::ANSWER_MENTIONS, "@&#8203;octocat") {
+        common::assert_answer_mentions_as_text(&md);
+    }
 }
 
 /// The criterion of #832: the error of a search of the edge hosts shows each tag of HTML as text
@@ -18597,8 +18888,11 @@ fn the_markdown_of_the_consumers_line_shows_the_name_of_the_profile_as_text() {
         .render(&d, &recorded, &on_cluster, false)
         .unwrap();
     let tags = strata::text::html_text(common::ANSWER_TAGS);
+    // the name ends with a `>`, so the `@` of the version can start a mention, and it gets a space
     assert!(
-        md.contains(&format!("\n**Consumers:** {tags}@1.3.0 has 2 consumers;")),
+        md.contains(&format!(
+            "\n**Consumers:** {tags}@&#8203;1.3.0 has 2 consumers;"
+        )),
         "{md}"
     );
     common::assert_only_strata_tags(&common::outside_code_blocks(&md));

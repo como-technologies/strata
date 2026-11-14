@@ -428,9 +428,10 @@ where
 /// a record of a cluster or of a pack. [`NoUid`](crate::Error::NoUid) for a record with no uid.
 /// The error of `connect` for the scope of the profile, and the error of the read of the profile:
 /// [`ProfileNotFound`](crate::Error::ProfileNotFound) and
-/// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name. A cluster that cannot be
-/// read stays in the report with its error. A tenant client that `connect` cannot give is no error:
-/// the second reading then uses the client of the profile.
+/// [`ProfileNameAmbiguous`](crate::Error::ProfileNameAmbiguous) for a name, and `Usage` for a uid
+/// that is the name of a profile with no version. A cluster that cannot be read stays in the report
+/// with its error. A tenant client that `connect` cannot give is no error: the second reading then
+/// uses the client of the profile.
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -460,7 +461,7 @@ where
     let home = connect(profile_scope.as_deref())?;
     let uid = uid_of_ref(reference, uid_hint, &home, progress)?;
     progress.note(&format!("listing consumers of profile {uid}"));
-    let doc = home.profile_document(&uid)?;
+    let doc = home.or_name_with_no_version(reference, home.profile_document(&uid))?;
 
     let mut list = listed_consumers(&doc, &uid, &home, &mut clients, &mut connect);
     // The list above can omit a cluster: see `second_reading`, which adds it.

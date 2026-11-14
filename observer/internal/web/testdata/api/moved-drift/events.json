@@ -1,0 +1,7 @@
+{
+  "events": [
+    {"type":"drift","reason":"DriftFound","time":"2026-11-03T08:21:00Z","object":"wilma-gateway@3.0.4","message":"The published version differs from its record."},
+    {"type":"info","reason":"ProfileUpdated","time":"2026-11-03T08:12:00Z","object":"wilma-gateway@3.0.4","message":"Wilma Flintstone (user) made this change: updated the version."},
+    {"type":"newer","reason":"NewVersion","time":"2026-11-01T12:00:00Z","object":"wilma-gateway@3.1.2","message":"traefik@38.1.0 is listed."}
+  ]
+}

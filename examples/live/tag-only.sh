@@ -8,7 +8,9 @@
 #      A's machines
 #   2  publish 1.0.2 with the same OS pack under the exact tag LTS__24.04, and 1.0.3 under the
 #      floating tag LTS__24.x; record both, compare them with 1.0.0, and ask Palette whether a
-#      move to either repaves cluster A, with a values change that does as the control
+#      move to either repaves cluster A, with a values change that does as the control. Each
+#      question goes with the body of a swap, and again with the earlier body of tenant.sh
+#      (#864)
 #   3  move cluster A to 1.0.2 and watch until it runs 1.0.2 and has stayed Running for 15
 #      minutes: were its instances replaced (a repave) or kept?
 #   4  move cluster A back to 1.0.0 and watch the same way
@@ -129,8 +131,12 @@ if stage 2 "publish 1.0.2 and 1.0.3, which differ only in the OS pack's tag"; th
     "$strata" same-release release1.json exact1.json floating1.json
   check palette-repave-exact 0 "Palette: a move from 1.0.0 to 1.0.2 repaves nothing" -- \
     "$live/tenant.sh" repave "$C" "$P" "$EXACT"
+  check palette-repave-exact-replace ? "#864: the earlier body of the same move: 1.0.0 alone, with replaceWithProfile 1.0.2" -- \
+    env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$P" "$EXACT"
   check palette-repave-floating 0 "Palette: a move from 1.0.0 to 1.0.3 repaves nothing" -- \
     "$live/tenant.sh" repave "$C" "$P" "$FLOATING"
+  check palette-repave-floating-replace ? "#864: the earlier body of the same move: 1.0.0 alone, with replaceWithProfile 1.0.3" -- \
+    env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$P" "$FLOATING"
   check palette-repave-control 1 "the control: 1.0.0 with one more kubeadm command repaves" -- \
     "$live/tenant.sh" repave "$C" "$P" "$P" kubernetes $'postKubeadmCommands:\n' $'postKubeadmCommands:\n    - \'echo strata control\'\n'
 fi
@@ -148,6 +154,8 @@ fi
 if stage 4 "move cluster A back to 1.0.0"; then
   check palette-repave-back 0 "Palette: a move from 1.0.2 back to 1.0.0 repaves nothing" -- \
     "$live/tenant.sh" repave "$C" "$EXACT" "$P"
+  check palette-repave-back-replace ? "#864: the earlier body of the move back: 1.0.2 alone, with replaceWithProfile 1.0.0" -- \
+    env REPAVE_FORM=replace "$live/tenant.sh" repave "$C" "$EXACT" "$P"
   apply -var "tag_only_versions=$versions"
   watch to-release release1.json
   check a3 0 "record cluster A's release selection" -- "$strata" snapshot "cluster:$C/$N" --raw-dir raw/a3 -o a3.json

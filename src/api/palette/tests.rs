@@ -5,7 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::api::{MemoryApi, RawCluster, ReadErrors};
 use crate::model::scope::ProfileScope;
-use crate::reference::LATEST;
+use crate::reference::{LATEST, Ref};
 
 fn listing() -> Value {
     json!({"items": [
@@ -816,4 +816,71 @@ fn latest_of_a_profile_and_of_an_app_profile_names_the_pre_release_that_it_skips
     assert_eq!(pick(p.app_profile_at("hotfix", LATEST).unwrap()), hotfix);
     let exact = p.app_profile_at("barney", "1.0.0").unwrap();
     assert_eq!(pick(exact), want("u1", "1.0.0", None));
+}
+
+#[test]
+fn a_uid_that_palette_does_not_have_and_that_is_a_profile_name_gives_its_versions_and_latest() {
+    // a profile of the tenant and a profile of the project hold 1.0.0, and the versions read in the
+    // order of a version
+    let api = MemoryApi::new()
+        .with(
+            PROFILE_LISTING,
+            json!({"items": [
+                {"metadata": {"name": "aws-stack", "uid": "u3"}, "spec": {"version": "1.10.0"}},
+                {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.0.0"}},
+                {"metadata": {"name": "aws-stack", "uid": "u4"}, "spec": {"version": "1.0.0"}},
+                {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.9.0"}},
+                {"metadata": {"name": "other", "uid": "u5"}, "spec": {"version": "2.0.0"}},
+            ]}),
+        )
+        .with("/v1/clusterprofiles/u1", json!({"metadata": {"uid": "u1"}}));
+    let p = Palette::new(&api);
+    let read =
+        |reference: &Ref, id: &str| p.or_name_with_no_version(reference, p.profile_document(id));
+    let uid = |id: &str| Ref::Uid(id.to_string());
+    let draft = |id: &str| Ref::Draft {
+        id: id.to_string(),
+        version: None,
+    };
+    for (reference, refs, latest) in [
+        (
+            uid("aws-stack"),
+            "aws-stack@1.0.0, aws-stack@1.9.0, aws-stack@1.10.0",
+            "aws-stack@latest",
+        ),
+        (
+            draft("aws-stack"),
+            "aws-stack@1.0.0@draft, aws-stack@1.9.0@draft, aws-stack@1.10.0@draft",
+            "aws-stack@latest@draft",
+        ),
+    ] {
+        let err = read(&reference, "aws-stack").unwrap_err();
+        assert_eq!(err.kind(), "usage", "{err}");
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "'aws-stack' is a profile name with no version. Strata reads a ref with no version \
+                 as a uid, and Palette has no profile with that uid. Give one of the versions: \
+                 {refs}. Or give {latest}, the highest version that is not a pre-release"
+            )
+        );
+    }
+    assert_eq!(api.calls(PROFILE_LISTING), 2);
+    // a name that no profile has keeps the 404 of Palette
+    let err = read(&uid("barney"), "barney").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    // a uid that Palette has, a 404 of another route, and a ref with a version read no listing
+    assert_eq!(read(&uid("u1"), "u1").unwrap()["metadata"]["uid"], "u1");
+    let manifests = p.profile_pack_manifests("aws-stack");
+    let err = p
+        .or_name_with_no_version(&uid("aws-stack"), manifests)
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    let named = Ref::NameVersion {
+        name: "aws-stack".into(),
+        version: "9.9.9".into(),
+    };
+    let err = read(&named, "aws-stack").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    assert_eq!(api.calls(PROFILE_LISTING), 3);
 }
