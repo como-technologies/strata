@@ -2,7 +2,8 @@ name: codeql
 
 # The advanced setup of CodeQL (#843). It analyzes the four languages of the repository with the
 # default queries. For Rust, the config .github/codeql/rust.yml gives the rule rust/cleartext-logging
-# of strata in place of the rule of CodeQL: it reads no uid and no name of Palette as sensitive.
+# of strata in place of the rule of CodeQL. The rule of strata reads no uid and no name of Palette
+# as sensitive.
 # The job `the test of the rule` runs that rule on a small crate. See "CodeQL" in
 # docs/src/development/build-test.md.
 #
