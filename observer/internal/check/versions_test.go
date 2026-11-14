@@ -195,7 +195,7 @@ func TestTheVersionsCycleComparesTheRecordOfAProfileWithItsNewestVersion(t *test
 	w.profileMoves = map[string]docs.Diff{"barney-addons@1.3.1 u-140": {Summary: docs.DiffSummary{MaxImpact: "in-place"}, Packs: []docs.Pack{fred}}}
 	w.profileMoveErrs = map[string]error{"barney-base@1.5.0 u-160": failure(docs.KindAPI)}
 	// the cluster runs the three versions: a version that it does not run gets no newer version
-	w.cluster = testkit.Cluster("payments", "barney-addons@1.3.1", "barney-base@1.5.0", "wilma-gateway@3.1.2")
+	w.cluster = testkit.Cluster(testkit.PaymentsName, "barney-addons@1.3.1", "barney-base@1.5.0", "wilma-gateway@3.1.2")
 	o := r.observer(w)
 	ctx := context.Background()
 	// the rows of the profiles come from a content cycle

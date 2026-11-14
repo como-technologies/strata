@@ -27,9 +27,9 @@ func TestOutFileGivesTheArgumentAfterTheFlagAndAnErrorWhenThereIsNone(t *testing
 }
 
 func TestClusterRunsTheProfilesThatTheCallGives(t *testing.T) {
-	c := Cluster("payments", "aws-stack@1.1.0", AddonsProfile)
+	c := Payments(AddonsProfile)
 	got := c.Source.Cluster
-	if got.UID != "c1" || got.Name != "payments" || !got.UpdatesPending || len(got.Profiles) != 2 {
+	if got.UID != PaymentsUID || got.Name != PaymentsName || !got.UpdatesPending || len(got.Profiles) != 2 {
 		t.Fatalf("cluster %+v", got)
 	}
 	if p := got.Profiles[1]; p.Name != "platform-addons" || p.Version != "1.0.0" || p.Type != "cluster" {

@@ -8,7 +8,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
-	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // otherSchema is the id of a document that another binary can write. `--strata` can name any binary,
@@ -54,10 +53,7 @@ func TestADocumentWithAnotherSchemaIsAFailedReadWithTheKindSchemaAndMakesNoFindi
 }
 
 func TestACompareWithAnotherSchemaBesideGoodSidesIsAProfileThatTheCycleDidNotRead(t *testing.T) {
-	r, w := oneRecord(t, unchanged())
-	r.record("platform-addons", "1.0.0", "addon/cert-manager")
-	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
+	r, w := twoRecords(t)
 	// The compare would make a finding, if the cycle read it.
 	w.compares = map[int]docs.Diff{0: {Schema: otherSchema, RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
 	o := r.observer(w)

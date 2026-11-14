@@ -25,7 +25,7 @@ var (
 // with no default value that the move adds. The answer keeps each check of the bump beside the verdict of Palette, also
 // beside a request that failed. A pin with an error, or with no bump, has no check.
 func TestAnswerOfReadsEachVerdictFromThePinThatBehindGives(t *testing.T) {
-	refusal := docs.Refusal{Code: testkit.CodeDependency, Message: "SENTINEL", Clusters: []string{"payments"}}
+	refusal := docs.Refusal{Code: testkit.CodeDependency, Message: "SENTINEL", Clusters: []string{testkit.PaymentsName}}
 	for _, c := range []struct {
 		name    string
 		pin     docs.Pin
@@ -45,11 +45,11 @@ func TestAnswerOfReadsEachVerdictFromThePinThatBehindGives(t *testing.T) {
 		{"a pin with no bump", pinWith(nil, nil), VerdictNoAnswer, "1.36.2", 0, 0, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			a := AnswerOf("aws-stack@1.1.0", "k8s/kubernetes", c.pin)
+			a := AnswerOf(testkit.AWSStackProfile, "k8s/kubernetes", c.pin)
 			if a.Verdict != c.verdict || a.Newest != c.newest || a.Status != c.status || len(a.Refusals) != c.refuses || a.Refusals == nil {
 				t.Errorf("%+v", a)
 			}
-			if a.Profile != "aws-stack@1.1.0" || a.Key != "k8s/kubernetes" || a.Answered() != (c.verdict != VerdictNoAnswer) {
+			if a.Profile != testkit.AWSStackProfile || a.Key != "k8s/kubernetes" || a.Answered() != (c.verdict != VerdictNoAnswer) {
 				t.Errorf("%+v", a)
 			}
 			if !reflect.DeepEqual(a.UpdateChecks, c.checks) {

@@ -18,17 +18,17 @@ func TestPackDiffGivesThePackOfEachSideWithItsValues(t *testing.T) {
 	r, w := edited(t)
 	o := r.observer(w)
 	ctx := context.Background()
-	if _, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SidePublished); ok || err != nil {
+	if _, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SidePublished); ok || err != nil {
 		t.Fatalf("before a cycle: %v %v", ok, err)
 	}
 	if err := o.RunContent(ctx); err != nil {
 		t.Fatal(err)
 	}
-	published, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SidePublished)
+	published, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SidePublished)
 	if err != nil || !ok || published.Key != "csi/csi-aws-ebs" || len(published.Values.Diff) == 0 {
 		t.Fatalf("published %+v %v %v", published, ok, err)
 	}
-	cluster, ok, err := o.PackDiff(ctx, "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster)
+	cluster, ok, err := o.PackDiff(ctx, testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster)
 	if err != nil || !ok || cluster.Values.Diff[0].Old != sentinel {
 		t.Fatalf("cluster %+v %v %v", cluster, ok, err)
 	}
@@ -38,9 +38,9 @@ func TestPackDiffGivesThePackOfEachSideWithItsValues(t *testing.T) {
 	}{
 		{"a profile that is not known", "nope@1.0.0", "csi/csi-aws-ebs", model.SidePublished},
 		{"a version that is not known", "aws-stack@9.9.9", "csi/csi-aws-ebs", model.SidePublished},
-		{"a pack that is not in the diff", "aws-stack@1.1.0", "os/ubuntu", model.SidePublished},
-		{"a pack that is not known", "aws-stack@1.1.0", "csi/nope", model.SideCluster},
-		{"the newer side with no versions cycle", "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideNewer},
+		{"a pack that is not in the diff", testkit.AWSStackProfile, "os/ubuntu", model.SidePublished},
+		{"a pack that is not known", testkit.AWSStackProfile, "csi/nope", model.SideCluster},
+		{"the newer side with no versions cycle", testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideNewer},
 	} {
 		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, c.side); ok || err != nil {
 			t.Errorf("%s: %v %v", c.name, ok, err)
@@ -55,7 +55,7 @@ func TestPackDiffOfARecordWithNoSideReadsNothing(t *testing.T) {
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, err := o.PackDiff(context.Background(), "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster); ok || err != nil {
+	if _, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster); ok || err != nil {
 		t.Errorf("%v %v", ok, err)
 	}
 }

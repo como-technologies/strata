@@ -120,7 +120,7 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[0] = drift(t)
 	o := r.observer(w)
-	id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+	id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 	if s := at(t, o, t0); len(s.Findings) != 1 || !s.Findings[0].FirstSeen.Equal(t0) {
 		t.Fatalf("findings %+v", s.Findings)
 	}
@@ -130,7 +130,7 @@ func TestAVerifyRowThatFailsKeepsTheDriftAndItsFirstSight(t *testing.T) {
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Counts.Drift != 1 || s.Profiles[0].Status != model.StatusDrift {
 		t.Fatalf("a failed read cleared the drift: "+testkit.FindingsCounts, s.Findings, s.Counts)
 	}
-	readErrorNames(t, s, "aws-stack@1.1.0")
+	readErrorNames(t, s, testkit.AWSStackProfile)
 	keepsFirstSight(t, r, id)
 	// A later read that shows the drift keeps the first sight, and the cause goes.
 	w.rows[0] = drift(t)
@@ -148,7 +148,7 @@ func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
 	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Summary: docs.DiffSummary{MaxImpact: "cluster-wide"}, Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
 	fails := &failOnce{world: w, name: ""}
 	o := r.observer(fails)
-	id := model.FindingID(model.ClusterDiffers, "aws-stack@1.1.0")
+	id := model.FindingID(model.ClusterDiffers, testkit.AWSStackProfile)
 	if s := at(t, o, t0); len(s.Findings) != 1 || s.Findings[0].ID != id {
 		t.Fatalf("findings %+v", s.Findings)
 	}
@@ -158,7 +158,7 @@ func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
 	if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Profiles[0].Status != model.StatusDrift {
 		t.Fatalf("a failed side cleared the drift: findings %+v", s.Findings)
 	}
-	readErrorNames(t, s, "aws-stack@1.1.0")
+	readErrorNames(t, s, testkit.AWSStackProfile)
 	keepsFirstSight(t, r, id)
 	fails.name = ""
 	s = at(t, o, t0.Add(2*time.Hour))
@@ -172,14 +172,14 @@ func TestASideThatFailsKeepsTheClusterDifferenceAndItsFirstSight(t *testing.T) {
 func TestAFailedReadAfterARestartKeepsTheFirstSightInTheState(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[0] = drift(t)
-	id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+	id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 	at(t, r.observer(w), t0)
 	// The new process has no last answer in memory.
 	o := r.restart(w)
 	w.rows[0] = notRead()
 	s := at(t, o, t0.Add(time.Hour))
 	inventsNoFinding(t, s)
-	readErrorNames(t, s, "aws-stack@1.1.0")
+	readErrorNames(t, s, testkit.AWSStackProfile)
 	if s.Profiles[0].Status != model.StatusNotChecked {
 		t.Errorf("profile %q", s.Profiles[0].Status)
 	}
@@ -195,8 +195,8 @@ func TestAFailedReadKeepsTheFirstSightOfThePartThatFailedOnly(t *testing.T) {
 	r, w := twoRecords(t)
 	w.rows[0] = drift(t)
 	w.compares = map[int]docs.Diff{0: {RootB: "e06b", Packs: []docs.Pack{changedPack("csi/csi-aws-ebs")}}}
-	published := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
-	cluster := model.FindingID(model.ClusterDiffers, "aws-stack@1.1.0")
+	published := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
+	cluster := model.FindingID(model.ClusterDiffers, testkit.AWSStackProfile)
 	at(t, r.observer(w), t0)
 	// After a restart the row fails, and the side works and shows no change.
 	o := r.restart(w)
@@ -342,9 +342,7 @@ func breakRecord(t *testing.T, r *rig, how string) {
 	t.Helper()
 	switch how {
 	case "a bad gzip":
-		if err := os.WriteFile(filepath.Join(r.records, testkit.RecordFile), []byte("not gzip"), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, filepath.Join(r.records, testkit.RecordFile), "not gzip")
 	default:
 		testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.Record("strata-snapshot/2", "aws-stack", "1.1.0", "", ""))
 	}
@@ -362,7 +360,7 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			w.rows[0] = drift(t)
 			sender := &capture{}
 			o := alerting(t, r, w, sender)
-			id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+			id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 			at(t, o, t0)
 			if len(sender.texts) != 1 {
 				t.Fatalf(testkit.OpenMessage, sender.texts)
@@ -374,7 +372,7 @@ func TestAnUnreadableRecordKeepsItsFindingAndItsFirstSightAndSendsNoClear(t *tes
 			if len(s.Findings) != 1 || s.Findings[0].ID != id || !s.Findings[0].FirstSeen.Equal(t0) || s.Profiles[0].Status != model.StatusDrift {
 				t.Fatalf("an unreadable record cleared the finding: findings %+v", s.Findings)
 			}
-			readErrorNames(t, s, "aws-stack@1.1.0", testkit.RecordFile)
+			readErrorNames(t, s, testkit.AWSStackProfile, testkit.RecordFile)
 			keepsFirstSight(t, r, id)
 			if len(sender.texts) != 1 {
 				t.Fatalf("an unreadable record sent %q", sender.texts[1:])
@@ -396,7 +394,7 @@ func TestAnUnreadableRecordWithNoLastRecordKeepsTheFirstSightsAndSendsNoClear(t 
 	w.rows = []docs.VerifyRow{drift(t), drift(t)}
 	sender := &capture{}
 	at(t, alerting(t, r, w, sender), t0)
-	broken := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+	broken := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 	readable := model.FindingID(model.PublishedChanged, testkit.AddonsProfile)
 	if len(sender.texts) != 2 {
 		t.Fatalf("the open messages %q", sender.texts)
@@ -437,7 +435,7 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 		t.Fatalf("findings %v", got)
 	}
 	// The file is gone for one cycle, as when the kubelet updates the Secret.
-	if err := os.Remove(filepath.Join(r.records, "meta.json")); err != nil {
+	if err := os.Remove(filepath.Join(r.records, testkit.MetaFile)); err != nil {
 		t.Fatal(err)
 	}
 	cycle(t, o)

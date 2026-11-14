@@ -28,7 +28,7 @@ func TestTheRunnerAcceptsEveryCommandAndFlagOfACycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Page != model.PageOK || len(s.Newer) != 1 || s.Profiles[0].ClusterCopy.Status != model.CopySame || s.Cluster.Name != "payments" {
+	if s.Page != model.PageOK || len(s.Newer) != 1 || s.Profiles[0].ClusterCopy.Status != model.CopySame || s.Cluster.Name != testkit.PaymentsName {
 		t.Errorf("summary %+v", s)
 	}
 	if names := entries(t, r.work); len(names) != 0 {

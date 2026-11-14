@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/docs"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 func who() []docs.Who {
@@ -60,7 +61,7 @@ func TestFindingsOfEachKind(t *testing.T) {
 			if f.Kind != c.kind || !slices.Equal(f.Packs, c.packs) || f.AlsoOnCluster != c.also || len(f.Who) != c.whoLen || f.Impact != c.impact {
 				t.Errorf("finding %+v", f)
 			}
-			if f.Profile != "aws-stack@1.1.0" || f.ID != FindingID(c.kind, "aws-stack@1.1.0") {
+			if f.Profile != testkit.AWSStackProfile || f.ID != FindingID(c.kind, testkit.AWSStackProfile) {
 				t.Errorf("profile %q, id %q", f.Profile, f.ID)
 			}
 		})
@@ -87,7 +88,7 @@ func TestACompareThatIsDifferentAndHasAnImageIDGivesBothFindings(t *testing.T) {
 func TestEachFindingHasAUniqueIDOfSixteenHexDigits(t *testing.T) {
 	seen := map[string]bool{}
 	for _, k := range allKinds {
-		for _, subject := range []string{"aws-stack@1.1.0", "aws-stack@1.1.1"} {
+		for _, subject := range []string{testkit.AWSStackProfile, "aws-stack@1.1.1"} {
 			id := FindingID(k, subject)
 			if len(id) != 16 || strings.Trim(id, "0123456789abcdef") != "" || seen[id] || id != FindingID(k, subject) {
 				t.Errorf("id %q of %s %s", id, k, subject)

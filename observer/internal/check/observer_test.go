@@ -111,9 +111,7 @@ func TestADirectoryThatAStoppedProcessLeftIsRemovedAtTheStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	keep := filepath.Join(r.work, "other")
-	if err := os.WriteFile(keep, []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, keep, "x")
 	r.observer(&world{})
 	if got := entries(t, r.work); len(got) != 1 || got[0] != "other" {
 		t.Errorf("work holds %v", got)
@@ -127,7 +125,7 @@ func TestTheStateHoldsTheFirstSightAndNoValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	stateHoldsNone(t, r, sentinel, "charts.a.b", "Betty", "John", "csi-aws-ebs")
-	id := model.FindingID(model.PublishedChanged, "aws-stack@1.1.0")
+	id := model.FindingID(model.PublishedChanged, testkit.AWSStackProfile)
 	state, err := loadState(r.state)
 	if err != nil || state.Findings[id].FirstSeen != t0 || state.StartedAt != t0 {
 		t.Errorf("state %+v, error %v", state, err)
@@ -190,9 +188,7 @@ func TestAStateThatCannotBeReadIsALogLineAndAnEmptyState(t *testing.T) {
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(r.state, stateFile), []byte("{"+sentinel), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(r.state, stateFile), "{"+sentinel)
 	o := r.observer(&world{})
 	if !strings.Contains(r.log.String(), "the state cannot be read") || strings.Contains(r.log.String(), sentinel) {
 		t.Errorf("log %q", r.log.String())

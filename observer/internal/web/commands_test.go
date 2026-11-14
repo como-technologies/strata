@@ -77,9 +77,7 @@ func fakeKubectl(t *testing.T, bin, secrets string) {
   || { echo "kubectl: the page gave a call that this test does not know: $*" >&2; exit 1; }
 cat "` + secrets + `/$5.json"
 `
-	if err := os.WriteFile(filepath.Join(bin, "kubectl"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteExec(t, filepath.Join(bin, "kubectl"), script)
 }
 
 // runBash runs a command of the card in a directory, with the stand-in for kubectl first on the PATH. It gives the exit code and
@@ -138,9 +136,7 @@ func secretsOf(t *testing.T, record string) string {
 	}
 	for _, s := range readSecrets(t, string(yaml)) {
 		raw := testkit.MustJSON(t, map[string]any{"data": s.data})
-		if err := os.WriteFile(filepath.Join(secrets, s.name+".json"), raw, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, filepath.Join(secrets, s.name+".json"), string(raw))
 	}
 	return secrets
 }
@@ -156,9 +152,7 @@ func TestTheCommandOfTheFirstRowReadsARecordOutOfTheSecretsOfTheRecordsScript(t 
 	}
 	record := filepath.Join(t.TempDir(), "release.json")
 	body := testkit.Record(docs.SnapshotSchema, "fred identity!", "2.3.0", `,"cluster":null`, `,"packs":[1,2,3]`)
-	if err := os.WriteFile(record, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, record, body)
 	bin, dir := checkWork(t, "")
 	fakeKubectl(t, bin, secretsOf(t, record))
 	key := regexp.MustCompile(`[^A-Za-z0-9._-]`).ReplaceAllString("fred identity!_2.3.0.json.gz", "_")
@@ -293,9 +287,7 @@ func TestEachCommandOfCheckThisYourselfRunsAgainstTheStandIn(t *testing.T) {
 			if len(rows) != 2 {
 				t.Fatalf("the page of kubernetes gives %d rows for the move, want 2: %+v", len(rows), rows)
 			}
-			if err := os.WriteFile(filepath.Join(dir, "record.json"), want, 0o644); err != nil {
-				t.Fatal(err)
-			}
+			testkit.WriteFile(t, filepath.Join(dir, "record.json"), string(want))
 			for _, r := range rows {
 				code, out := runBash(t, dir, bin, r.command)
 				mustAnswer(t, r.command, code, out)

@@ -288,8 +288,9 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}}
-	r.cfg = Config{ClusterUID: "c1", Records: r.records, Work: r.work, State: r.state, ContentEvery: 15 * time.Minute, VersionsEvery: 6 * time.Hour}
+	d := testkit.NewRigDirs(t)
+	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}}
+	r.cfg = Config{ClusterUID: testkit.PaymentsUID, Records: r.records, Work: r.work, State: r.state, ContentEvery: testkit.ContentEvery, VersionsEvery: testkit.VersionsEvery}
 	return r
 }
 
@@ -306,9 +307,7 @@ func (r *rig) record(name, version string, keys ...string) {
 
 func (r *rig) meta(body string) {
 	r.t.Helper()
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(body), 0o600); err != nil {
-		r.t.Fatal(err)
-	}
+	testkit.WriteMeta(r.t, r.records, body)
 }
 
 // observer makes an observer with the clock at now. A test changes o.now to move the clock.

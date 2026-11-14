@@ -33,7 +33,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 func TestVersionPrintsTheName(t *testing.T) {
 	var out, errs bytes.Buffer
 	if code := run([]string{"version"}, &out, &errs); code != 0 {
-		t.Fatalf("exit %d, stderr %q", code, errs.String())
+		t.Fatalf(testkit.ExitStderr, code, errs.String())
 	}
 	if !strings.HasPrefix(out.String(), "strata-observer ") {
 		t.Fatalf("stdout %q", out.String())
@@ -41,13 +41,7 @@ func TestVersionPrintsTheName(t *testing.T) {
 }
 
 func TestAnUnknownCommandExitsTwo(t *testing.T) {
-	var out, errs bytes.Buffer
-	if code := run([]string{"nope"}, &out, &errs); code != 2 {
-		t.Fatalf("exit %d", code)
-	}
-	if !strings.Contains(errs.String(), "usage:") {
-		t.Fatalf("stderr %q", errs.String())
-	}
+	exitsTwoSaying(t, []string{"nope"}, "usage:")
 }
 
 // exitsTwoSaying runs the observer with args, and fails when it does not exit 2 with each of the words on stderr and
@@ -56,14 +50,20 @@ func exitsTwoSaying(t *testing.T, args []string, words ...string) string {
 	t.Helper()
 	var out, errs bytes.Buffer
 	code := run(args, &out, &errs)
-	ok := code == 2 && out.Len() == 0
-	for _, w := range words {
-		ok = ok && strings.Contains(errs.String(), w)
-	}
-	if !ok {
-		t.Errorf("exit %d, stdout %q, stderr %q", code, out.String(), errs.String())
-	}
+	testkit.ExitsTwo(t, code, out.String(), errs.String(), words...)
 	return errs.String()
+}
+
+// runOnce runs the observer with args, and reads the summary that it prints on stdout. It gives the exit code, the
+// summary, and the text of stdout and of stderr.
+func runOnce(t *testing.T, args []string) (code int, s model.Summary, stdout, stderr string) {
+	t.Helper()
+	var out, errs bytes.Buffer
+	code = run(args, &out, &errs)
+	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
+		t.Fatalf(testkit.ExitStderr+", stdout %q: %v", code, errs.String(), out.String(), err)
+	}
+	return code, s, out.String(), errs.String()
 }
 
 const (
@@ -94,48 +94,33 @@ func onceArgs(t *testing.T, bin string) []string {
 	t.Helper()
 	records := t.TempDir()
 	testkit.WriteGzip(t, records, testkit.RecordFile, testkit.AWSStack(`,"packs":[]`))
-	return []string{"once", "--strata", bin, "--cluster-uid", "c1", "--records", records, "--work", t.TempDir(), "--state", filepath.Join(t.TempDir(), "state")}
+	return []string{"once", "--strata", bin, "--cluster-uid", testkit.PaymentsUID, "--records", records, "--work", t.TempDir(), "--state", filepath.Join(t.TempDir(), "state")}
 }
 
 func TestOnceExitsZeroWithNoFindingAndPrintsTheSummary(t *testing.T) {
-	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), &out, &errs)
+	code, s, _, errs := runOnce(t, onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)))
 	if code != 0 {
-		t.Fatalf("exit %d, stderr %q", code, errs.String())
+		t.Fatalf(testkit.ExitStderr, code, errs)
 	}
-	var s model.Summary
-	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-		t.Fatalf("stdout %q: %v", out.String(), err)
-	}
-	if s.Page != model.PageOK || s.Cluster.Name != "payments" || len(s.Findings) != 0 || s.Records.Count != 1 {
+	if s.Page != model.PageOK || s.Cluster.Name != testkit.PaymentsName || len(s.Findings) != 0 || s.Records.Count != 1 {
 		t.Errorf("summary %+v", s)
 	}
 }
 
 func TestOnceExitsOneWhenAFindingExists(t *testing.T) {
-	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, drifting, 0, false)), &out, &errs)
-	var s model.Summary
-	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-		t.Fatalf("stdout %q: %v", out.String(), err)
-	}
+	code, s, _, _ := runOnce(t, onceArgs(t, fakeStrata(t, drifting, 0, false)))
 	if code != 1 || len(s.Findings) != 1 || s.Findings[0].Kind != model.ClusterDiffers {
 		t.Fatalf(exitFindings, code, s.Findings)
 	}
 }
 
 func TestOnceExitsTwoWhenACycleFailsAndStillPrintsTheSummary(t *testing.T) {
-	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, testkit.CompareSame, 2, false)), &out, &errs)
-	var s model.Summary
-	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-		t.Fatalf("stdout %q: %v", out.String(), err)
-	}
+	code, s, out, errs := runOnce(t, onceArgs(t, fakeStrata(t, testkit.CompareSame, 2, false)))
 	if code != 2 || s.Content.FailedRuns != 1 || s.Content.LastError == nil || s.Content.LastError.Kind != docs.KindTransport {
 		t.Fatalf("exit %d, content %+v", code, s.Content)
 	}
-	if strings.Contains(out.String()+errs.String(), "SENTINEL") {
-		t.Errorf("the message of strata left the process: %s %s", out.String(), errs.String())
+	if strings.Contains(out+errs, "SENTINEL") {
+		t.Errorf("the message of strata left the process: %s %s", out, errs)
 	}
 }
 
@@ -373,12 +358,7 @@ func TestNoLocalNameHidesAPackageThatItsFileImports(t *testing.T) {
 }
 
 func TestOnceExitsOneWhenAFindingExistsAlsoIfTheOtherCycleFailed(t *testing.T) {
-	var out, errs bytes.Buffer
-	code := run(onceArgs(t, fakeStrata(t, drifting, 0, true)), &out, &errs)
-	var s model.Summary
-	if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-		t.Fatalf("stdout %q: %v", out.String(), err)
-	}
+	code, s, _, _ := runOnce(t, onceArgs(t, fakeStrata(t, drifting, 0, true)))
 	if code != 1 || len(s.Findings) != 1 || s.Versions.FailedRuns != 1 || s.Versions.LastError == nil || s.Versions.LastError.Status != 404 {
 		t.Fatalf(exitFindings+", versions %+v", code, s.Findings, s.Versions)
 	}
@@ -451,7 +431,7 @@ func TestServeAnswersOnTheLoopbackAddressAndStopsWithItsContext(t *testing.T) {
 		t.Errorf("Host: evil.example gave %d", resp.StatusCode)
 	}
 	if code := stop(); code != 0 {
-		t.Errorf("exit %d, stderr %s", code, stderr.String())
+		t.Errorf(testkit.ExitStderr, code, stderr.String())
 	}
 	if strings.Contains(stderr.String(), "SENTINEL") {
 		t.Errorf("stderr %s", stderr.String())
@@ -474,22 +454,19 @@ func TestHealthExitsZeroWithTheServerUpAndOneWithNone(t *testing.T) {
 	addr, stop, _ := startServe(t, args)
 	var errs bytes.Buffer
 	if code := run([]string{"health", "--listen", addr}, io.Discard, &errs); code != 0 {
-		t.Errorf("with the server up: exit %d, stderr %q", code, errs.String())
+		t.Errorf("with the server up: "+testkit.ExitStderr, code, errs.String())
 	}
 	stop()
 	// The check asks testkit.PortZero, because another process can take the port of the stopped server.
 	errs.Reset()
 	if code := run([]string{"health", "--listen", testkit.PortZero}, io.Discard, &errs); code != 1 || errs.Len() == 0 {
-		t.Errorf("with no server: exit %d, stderr %q", code, errs.String())
+		t.Errorf("with no server: "+testkit.ExitStderr, code, errs.String())
 	}
 }
 
 func TestHealthRefusesAWrongFlagAndAnAddressThatIsNotLoopback(t *testing.T) {
 	for _, args := range [][]string{{"health", "--nope"}, {"health", "--listen", "10.0.0.5:8080"}, {"health", "--listen", "evil.example:80"}} {
-		var errs bytes.Buffer
-		if code := run(args, io.Discard, &errs); code != 2 {
-			t.Errorf("%v: exit %d, stderr %q", args, code, errs.String())
-		}
+		t.Run(strings.Join(args, " "), func(t *testing.T) { exitsTwoSaying(t, args) })
 	}
 }
 
@@ -537,7 +514,7 @@ func newerRows(addr string) int {
 // After a restart the memory holds no values for a move, so a request of the newer side starts one
 // compare. A stop during that request must cancel it: the server exits 0, and no process stays.
 func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T) {
-	const subject = "aws-stack@1.1.0"
+	const subject = testkit.AWSStackProfile
 	dir := t.TempDir()
 	hold, pids := filepath.Join(dir, "hold"), filepath.Join(dir, "pids")
 	args := serveArgs(t, holdingStrata(t, hold, pids))
@@ -551,9 +528,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 
 	// The restart: the state holds the counts of the move, and the compare waits. The server gets a
 	// new port.
-	if err := os.WriteFile(hold, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, hold, "")
 	addr, stop, stderr := startServe(t, args)
 	// The detail route finds the pin in the versions cycle and the profile in the content cycle. The
 	// two cycles end in either order, so the wait reads both.
@@ -580,7 +555,7 @@ func TestAStopWithADetailRequestRunningExitsZeroAndLeavesNoProcess(t *testing.T)
 	})
 
 	if code := stop(); code != 0 {
-		t.Errorf("exit %d, stderr %s", code, stderr.String())
+		t.Errorf(testkit.ExitStderr, code, stderr.String())
 	}
 	if err := syscall.Kill(pid, 0); !errors.Is(err, syscall.ESRCH) {
 		t.Errorf("the process %d of the compare is still there: %v", pid, err)
@@ -606,13 +581,9 @@ func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Chdir(dir)
 			t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
-			var out, errs bytes.Buffer
-			if code := run(onceArgs(t, c.path), &out, &errs); code != 0 {
-				t.Fatalf("exit %d, stderr %q", code, errs.String())
-			}
-			var s model.Summary
-			if err := json.Unmarshal(out.Bytes(), &s); err != nil {
-				t.Fatalf("stdout %q: %v", out.String(), err)
+			code, s, _, errs := runOnce(t, onceArgs(t, c.path))
+			if code != 0 {
+				t.Fatalf(testkit.ExitStderr, code, errs)
 			}
 			if s.Page != model.PageOK || s.Content.FailedRuns != 0 {
 				t.Errorf("summary %+v", s)
@@ -639,7 +610,7 @@ func TestWithoutReadPodsTheObserverMakesNoKubernetesCall(t *testing.T) {
 	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
-		t.Fatalf("exit %d, stderr %s", code, errs.String())
+		t.Fatalf(testkit.ExitStderr, code, errs.String())
 	}
 	if n := len(kubeAPI.Requests()); n != 0 {
 		t.Errorf(kubeRequests, n)
@@ -666,7 +637,7 @@ func TestWithReadPodsTheContentCycleReadsThePodsOnceAndNoValueOfAPodLeaves(t *te
 	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, testkit.CompareSame, 0, false)), "--read-pods", "--kube-dir", kubeAPI.Dir())
 	if code := run(args, &out, &errs); code != 0 {
-		t.Fatalf("exit %d, stderr %s", code, errs.String())
+		t.Fatalf(testkit.ExitStderr, code, errs.String())
 	}
 	seen := kubeAPI.Requests()
 	if len(seen) != 1 || seen[0].Method != http.MethodGet || seen[0].Path != "/api/v1/pods" || seen[0].Auth != "Bearer token-1" {
@@ -706,13 +677,7 @@ func TestReadPodsNeedsTheVariablesOfTheKubelet(t *testing.T) {
 // The seed needs the uid of the cluster, and the variables that the kubelet gives a pod. Outside a pod
 // it stops with the kind of the error, and it runs no strata.
 func TestSeedNeedsTheClusterAndThePod(t *testing.T) {
-	var out, errs strings.Builder
-	if code := runContext(context.Background(), []string{"seed"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), "--cluster-uid is empty") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
-	errs.Reset()
+	exitsTwoSaying(t, []string{"seed"}, "--cluster-uid is empty")
 	t.Setenv(testkit.KubeHost, "")
-	if code := runContext(context.Background(), []string{"seed", "--cluster-uid", "c1", "--namespace", "strata-observer", "--strata", "/no/strata"}, &out, &errs); code != 2 || !strings.Contains(errs.String(), docs.KindKubeConfig) {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwoSaying(t, []string{"seed", "--cluster-uid", testkit.PaymentsUID, "--namespace", "strata-observer", "--strata", "/no/strata"}, docs.KindKubeConfig)
 }

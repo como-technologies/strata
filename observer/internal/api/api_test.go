@@ -225,7 +225,7 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 	now := time.Date(2026, 11, 3, 14, 0, 0, 0, time.UTC)
 	good := now.Add(-time.Minute)
 	old := now.Add(-time.Hour)
-	every := 15 * time.Minute
+	every := testkit.ContentEvery
 	cases := []struct {
 		page  model.Page
 		files int
@@ -241,7 +241,7 @@ func TestTheClusterRouteGivesEachValueOfThePage(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(string(c.page), func(t *testing.T) {
-			sum := model.Build(model.Input{Now: now, ClusterUID: "c1", StartedAt: now.Add(-time.Hour), Files: c.files, FilesKnown: true, ContentClock: c.clock})
+			sum := model.Build(model.Input{Now: now, ClusterUID: testkit.PaymentsUID, StartedAt: now.Add(-time.Hour), Files: c.files, FilesKnown: true, ContentClock: c.clock})
 			var got ClusterView
 			rec := get(handlerOf(stub{sum}), summaryRoutes[patternCluster])
 			decode(t, rec, &got)
@@ -257,7 +257,7 @@ func TestClusterGivesTheFieldsUpToTheCounts(t *testing.T) {
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var got ClusterView
 	decode(t, get(h, summaryRoutes[patternCluster]), &got)
-	if got.Cluster.Name != "payments" || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
+	if got.Cluster.Name != testkit.PaymentsName || got.Page != model.PageOK || got.StrataVersion != "0.29.0" || got.Records.Count != 1 ||
 		got.Records.Baseline != baseline.Approved || got.Records.Revision != testkit.Revision || got.Content.Every != "15m" || got.Versions.Every != "6h" ||
 		got.Counts.Findings != 2 || got.Counts.Newer != 1 {
 		t.Errorf("%+v", got)
@@ -323,7 +323,7 @@ func TestTheDetailRouteSplitsTheValuesInThreeLists(t *testing.T) {
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var got PackDiff
 	decode(t, get(h, pathPublished), &got)
-	if got.Profile != "aws-stack@1.1.0" || got.Key != "csi/csi-aws-ebs" || got.Side != model.SidePublished || got.Status != "changed" || got.Impact.Level != "cluster-wide" {
+	if got.Profile != testkit.AWSStackProfile || got.Key != "csi/csi-aws-ebs" || got.Side != model.SidePublished || got.Status != "changed" || got.Impact.Level != "cluster-wide" {
 		t.Errorf("%+v", got)
 	}
 	v := got.Values
@@ -391,9 +391,7 @@ func TestAMarkerInAChangedPathReachesNoSummaryRouteAndNotOnce(t *testing.T) {
 	if planted == string(raw) {
 		t.Fatal("the fixture holds no path to change")
 	}
-	if err := os.WriteFile(filepath.Join(r.fixtures, "verify.json"), []byte(planted), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(r.fixtures, "verify.json"), planted)
 	o := r.observer(&fakeStrata{dir: r.fixtures})
 	once, err := o.Once(context.Background())
 	if err != nil {
@@ -432,9 +430,7 @@ func TestAnUnreadAuditLogKeepsTheFindingAndTheRoutesCarryAFlagAndNotTheText(t *t
 	if unread == string(raw) {
 		t.Fatal("the fixture holds no who")
 	}
-	if err := os.WriteFile(filepath.Join(r.fixtures, "verify.json"), []byte(unread), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(r.fixtures, "verify.json"), unread)
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	var findings FindingsView
 	decode(t, get(h, summaryRoutes[patternFindings]), &findings)

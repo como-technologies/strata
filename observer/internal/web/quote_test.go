@@ -112,9 +112,7 @@ func writeTool(t *testing.T, path, body string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteExec(t, path, body)
 }
 
 // needBash skips the test when bash is not on the PATH.

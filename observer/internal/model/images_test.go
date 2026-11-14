@@ -46,6 +46,13 @@ func firstOf(ref, digest string) map[string]string {
 	return map[string]string{ImageKey(ref): digest}
 }
 
+// podsInput is the input of a build of c at t0 that reads the pods. The first digest of testkit.VendorRef is
+// testkit.Digest1.
+func podsInput(c *Content) Input {
+	return Input{Now: t0, ClusterUID: testkit.PaymentsUID, StartedAt: t0, Files: 1, FilesKnown: true, Content: c, ContentClock: goodClock(testkit.ContentEvery, t0),
+		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
+}
+
 func kindsOf(findings []Finding) []Kind {
 	out := []Kind{}
 	for _, f := range findings {
@@ -325,8 +332,7 @@ func TestTheCausePodsNotReadNamesNoProfileAndChangesNoStatus(t *testing.T) {
 
 func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 	c := podsOf(t, ran("a", testkit.VendorRef, testkit.Digest2))
-	in := Input{Now: t0, ClusterUID: "c1", StartedAt: t0, Files: 1, FilesKnown: true, Content: &c, ContentClock: goodClock(15*60e9, t0),
-		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
+	in := podsInput(&c)
 	s := Build(in)
 	if len(s.Findings) != 1 || s.Findings[0].Kind != ImageMoved || s.Counts.Findings != 1 {
 		t.Fatalf(testkit.FindingsCounts, s.Findings, s.Counts)
@@ -342,8 +348,7 @@ func TestAnImageFindingIsNotADriftOfTheContent(t *testing.T) {
 func TestNoAnswerOfThePodsCarriesAPodNameOrANamespace(t *testing.T) {
 	marker := kube.Container{Pod: "POD-NAMESPACE-MARKER/POD-NAME-MARKER", Image: testkit.VendorRef, ImageID: testkit.VendorRef + "@" + testkit.Digest2}
 	c := podsOf(t, marker)
-	in := Input{Now: t0, ClusterUID: "c1", StartedAt: t0, Files: 1, FilesKnown: true, Content: &c, ContentClock: goodClock(15*60e9, t0),
-		ReadPods: true, FirstDigests: firstOf(testkit.VendorRef, testkit.Digest1)}
+	in := podsInput(&c)
 	for name, v := range map[string]any{"summary": Build(in), "observed": ObservedOf(in)} {
 		raw := testkit.MustJSON(t, v)
 		if strings.Contains(string(raw), "MARKER") {

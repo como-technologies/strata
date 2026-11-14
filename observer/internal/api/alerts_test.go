@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -24,9 +23,7 @@ const addressMarker = "TOKEN-SECRET"
 func alerting(t *testing.T, r *rig, w *testkit.Receiver, s check.Strata) *check.Observer {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "oncall")
-	if err := os.WriteFile(file, []byte(w.URL+"/"+addressMarker+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, file, w.URL+"/"+addressMarker+"\n")
 	rules, err := alert.Parse([]byte(testkit.OncallRules(file, testkit.DriftNow, `{"level": "cluster", "news": "newer", "send": "digest", "to": "oncall"},
 		{"level": "profile", "match": "other-profile", "news": "drift", "muteUntil": "2099-01-01"}`)))
 	if err != nil {
@@ -81,7 +78,7 @@ func TestAMessageThatReachesTheReceiverHoldsNoValueAndTheAddressReachesNoRouteNo
 		t.Fatal(err)
 	}
 	got := strings.Join(w.Bodies(), "\n")
-	if !strings.Contains(got, "Drift") || !strings.Contains(got, "aws-stack@1.1.0") {
+	if !strings.Contains(got, "Drift") || !strings.Contains(got, testkit.AWSStackProfile) {
 		t.Fatalf("the receiver got %q", got)
 	}
 	h, host := handlerOf(o), strings.TrimPrefix(w.URL, "http://")

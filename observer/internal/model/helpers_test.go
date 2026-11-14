@@ -75,17 +75,22 @@ func content(t *testing.T, records ...Record) Content {
 			profiles = append(profiles, r.subject())
 		}
 	}
-	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster("payments", profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: testkit.Revision}, Records: records}
+	return Content{At: t0, Strata: "0.29.0", Cluster: testkit.Cluster(testkit.PaymentsName, profiles...), Meta: baseline.Meta{Baseline: baseline.Approved, Revision: testkit.Revision}, Records: records}
 }
 
 func goodClock(every time.Duration, at time.Time) Clock {
 	return Clock{Every: every, Last: &at}
 }
 
+// goodInput is the input of a build at t0 plus one minute, with good clocks.
+func goodInput(c *Content, v *Versions) Input {
+	return Input{Now: t0.Add(time.Minute), ClusterUID: testkit.PaymentsUID, StartedAt: t0, Files: 2, FilesKnown: true, Content: c, Versions: v,
+		ContentClock: goodClock(testkit.ContentEvery, t0), VersionsClock: goodClock(testkit.VersionsEvery, t0)}
+}
+
 // build builds a summary at t0 plus one minute, with good clocks.
 func build(c *Content, v *Versions) Summary {
-	return Build(Input{Now: t0.Add(time.Minute), ClusterUID: "c1", StartedAt: t0, Files: 2, FilesKnown: true, Content: c, Versions: v,
-		ContentClock: goodClock(15*time.Minute, t0), VersionsClock: goodClock(6*time.Hour, t0)})
+	return Build(goodInput(c, v))
 }
 
 func ptr[T any](v T) *T { return &v }

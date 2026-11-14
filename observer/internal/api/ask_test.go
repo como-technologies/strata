@@ -70,7 +70,7 @@ func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing
 	var first model.Answer
 	rec := click(h, pathAsk)
 	decode(t, rec, &first)
-	if rec.Code != http.StatusOK || first.Verdict != model.VerdictNoError || first.Profile != "aws-stack@1.1.0" || first.Key != "k8s/kubernetes" || first.Newest != "1.36.2" || first.Refusals == nil {
+	if rec.Code != http.StatusOK || first.Verdict != model.VerdictNoError || first.Profile != testkit.AWSStackProfile || first.Key != "k8s/kubernetes" || first.Newest != "1.36.2" || first.Refusals == nil {
 		t.Fatalf(statusAndAnswer, rec.Code, first)
 	}
 	// One question: the behind run of one record, for one pack, which asks about no other pin.
@@ -101,7 +101,7 @@ func TestARefusalHoldsTheCodeTheMessageAndTheClustersOnTheDetailTierAndOnNoOther
 		t.Fatalf("answer %+v", got)
 	}
 	f := got.Refusals[0]
-	if f.Code != testkit.CodeDependency || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{"payments"}) {
+	if f.Code != testkit.CodeDependency || !strings.Contains(f.Message, sentinelValue) || !slices.Equal(f.Clusters, []string{testkit.PaymentsName}) {
 		t.Fatalf("refusal %+v", f)
 	}
 	noSummaryRouteStateOrLogHolds(t, r, h, f.Code, "SENTINEL")
@@ -320,9 +320,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 		if moved == string(raw) {
 			t.Fatalf("%s holds no newer version to change", name)
 		}
-		if err := os.WriteFile(filepath.Join(r.fixtures, name), []byte(moved), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, filepath.Join(r.fixtures, name), moved)
 	}
 	if err := o.RunVersions(t.Context()); err != nil {
 		t.Fatal(err)

@@ -11,7 +11,6 @@ import (
 	"errors"
 	"math/big"
 	"net/http"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -92,9 +91,7 @@ func TestTheCAIsReadAtEachCall(t *testing.T) {
 	if _, err := c.Pods(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(a.CAFile, []byte("not a certificate"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, a.CAFile, "not a certificate")
 	if _, err := c.Pods(context.Background()); kindOf(err) != docs.KindKubeConfig {
 		t.Errorf("a CA that is not a certificate: %v", err)
 	}
@@ -183,9 +180,7 @@ func anotherCA(t *testing.T) []byte {
 func TestAServerThatTheCADoesNotSignIsATransportFailure(t *testing.T) {
 	a := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(testkit.PodList(""))) })
 	other := filepath.Join(t.TempDir(), "ca.crt")
-	if err := os.WriteFile(other, anotherCA(t), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, other, string(anotherCA(t)))
 	cfg := cfgOf(a)
 	cfg.CAFile = other
 	if _, err := New(cfg).Pods(context.Background()); kindOf(err) != docs.KindKubeTransport {
@@ -205,9 +200,7 @@ func TestACredentialThatIsMissingIsAConfigFailure(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := os.WriteFile(a.TokenFile, []byte(" \n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, a.TokenFile, " \n")
 	if _, err := New(cfgOf(a)).Pods(context.Background()); kindOf(err) != docs.KindKubeConfig {
 		t.Errorf("an empty token: %v", err)
 	}

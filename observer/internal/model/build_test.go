@@ -104,7 +104,7 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 	drift := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")), &docs.Verify{}, "csi/csi-aws-ebs")
 	unverified := rec("aws-stack", "1.1.0", docs.VerifyUnverified, pk("csi", "csi-aws-ebs", "1.65.0"))
 	ok := rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"))
-	newer := pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.1.0")
+	newer := pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.AWSStackProfile)
 	cases := []struct {
 		name    string
 		record  Record
@@ -118,7 +118,7 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 		{"newer beats not checked", unverified, pins(newer), StatusNewer, StatusNewer},
 		{"not checked", unverified, nil, StatusNotChecked, StatusNotChecked},
 		{"ok", ok, nil, StatusOK, StatusOK},
-		{"a pin that is current is no newer", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "", "aws-stack@1.1.0")), StatusOK, StatusOK},
+		{"a pin that is current is no newer", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "", testkit.AWSStackProfile)), StatusOK, StatusOK},
 		{"a pin of another profile", ok, pins(pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "other@1.0.0")), StatusOK, StatusOK},
 	}
 	for _, c := range cases {
@@ -136,7 +136,7 @@ func TestAProfileTakesTheFirstStatusThatHolds(t *testing.T) {
 
 func TestAProfileThatTheClusterRunsWithNoRecordIsNoRecord(t *testing.T) {
 	c := content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0")))
-	c.Cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
+	c.Cluster = testkit.Payments(testkit.AddonsProfile)
 	s := build(&c, nil)
 	if len(s.Profiles) != 2 || s.Profiles[1].Name != "platform-addons" || s.Profiles[1].Status != StatusNoRecord || s.Profiles[1].Published != nil || s.Profiles[1].ClusterCopy != nil {
 		t.Fatalf("profiles %+v", s.Profiles)
@@ -229,8 +229,8 @@ func TestACountIsTheNumberOfRowsOfItsList(t *testing.T) {
 	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged, pk("csi", "csi-aws-ebs", "1.65.0"), pk("k8s", "kubernetes", "1.35.3")), &docs.Verify{}, "csi/csi-aws-ebs")
 	other := rec("other", "1.0.0", docs.VerifyUnchanged, pk("k8s", "kubernetes", "1.35.3"))
 	versions := &Versions{At: t0, Strata: "0.29.0", Moves: map[string]Move{}, Pins: []docs.Pin{
-		pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.1.0", "other@1.0.0"),
-		pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", "aws-stack@1.1.0"),
+		pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.AWSStackProfile, "other@1.0.0"),
+		pin("csi-aws-ebs", "csi", "1.65.0", "1.66.0", testkit.AWSStackProfile),
 	}}
 	s := build(ptr(content(t, r, other)), versions)
 	want := Counts{Findings: 1, Drift: 1, Newer: 2, NewerProfiles: 2, NotChecked: 0, Packs: 3, PacksInFull: 3, Profiles: 2}
@@ -318,7 +318,7 @@ func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *te
 	csi := pk("csi", "csi-aws-ebs", "1.65.0")
 	csi.RegistryUID, csi.RegistryName = "reg2", "Palette Registry"
 	// behind pins another pack of another registry, so no pin names reg2
-	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", "aws-stack@1.1.0")}}
+	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{pin("dex", "addon", "2.42.0", "", testkit.AWSStackProfile)}}
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
 	if got := s.Profiles[0].Packs[0].Registry; got != "Palette Registry" {
 		t.Errorf("registry %q", got)
@@ -330,7 +330,7 @@ func TestThePackRowNamesTheRegistryThatTheRecordNamesWhenNoPinHoldsThePack(t *te
 func TestThePackRowAndItsNewerRowNameTheRegistryOfTheRecord(t *testing.T) {
 	csi := pk("csi", "csi-aws-ebs", "1.63.1")
 	csi.RegistryName = "Palette Registry"
-	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", "aws-stack@1.1.0")
+	behind := pin("csi-aws-ebs", "csi", "1.63.1", "1.65.0", testkit.AWSStackProfile)
 	behind.Registry = ""
 	v := &Versions{At: t0, Strata: "0.34.0", Moves: map[string]Move{}, Pins: []docs.Pin{behind}}
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnchanged, csi))), v)
@@ -354,7 +354,7 @@ func TestTheLimitsCountMaskedPathsOfEachDiff(t *testing.T) {
 func TestAFindingStartsAtTheStateOrAtTheCycle(t *testing.T) {
 	r := drifted(rec("aws-stack", "1.1.0", docs.VerifyUnchanged), &docs.Verify{Who: who()})
 	c := content(t, r)
-	id := FindingID(PublishedChanged, "aws-stack@1.1.0")
+	id := FindingID(PublishedChanged, testkit.AWSStackProfile)
 	earlier := t0.Add(-48 * time.Hour)
 	in := Input{Now: t0, Content: &c, ContentClock: goodClock(time.Minute, t0), FirstSeen: map[string]time.Time{id: earlier}, FilesKnown: true, Files: 1}
 	f := Build(in).Findings[0]
@@ -400,8 +400,8 @@ func TestTheRecordsPartSaysWhereTheBaselineCameFrom(t *testing.T) {
 }
 
 func TestTheClocksShowThePeriodAndTheLastError(t *testing.T) {
-	in := Input{Now: t0, ContentClock: Clock{Every: 15 * time.Minute, FailedRuns: 1, LastError: &ErrorRef{Kind: docs.KindAPI, Status: 401}},
-		VersionsClock: Clock{Every: 6 * time.Hour, Last: ptr(t0)}}
+	in := Input{Now: t0, ContentClock: Clock{Every: testkit.ContentEvery, FailedRuns: 1, LastError: &ErrorRef{Kind: docs.KindAPI, Status: 401}},
+		VersionsClock: Clock{Every: testkit.VersionsEvery, Last: ptr(t0)}}
 	out := string(testkit.MustJSON(t, Build(in)))
 	for _, want := range []string{
 		`"content":{"checkedAt":null,"every":"15m","failedRuns":1,"lastError":{"kind":"` + docs.KindAPI + `","status":401}}`,
@@ -447,7 +447,7 @@ func TestTheRegistryOfARowIsTheUidWhenNoPinNamesIt(t *testing.T) {
 
 func TestAnUnverifiedRecordThatNamesNoPackStillShowsItsProfile(t *testing.T) {
 	s := build(ptr(content(t, rec("aws-stack", "1.1.0", docs.VerifyUnverified, pk("csi", "csi-aws-ebs", "1.65.0")))), nil)
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != NoUpstreamDigest || !slices.Equal(s.NotChecked[0].Profiles, []string{"aws-stack@1.1.0"}) || s.Profiles[0].Status != StatusNotChecked {
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != NoUpstreamDigest || !slices.Equal(s.NotChecked[0].Profiles, []string{testkit.AWSStackProfile}) || s.Profiles[0].Status != StatusNotChecked {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }

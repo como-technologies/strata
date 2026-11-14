@@ -105,7 +105,7 @@ func TestTheFlagsOfTheClickAreAllowedForTheirCommandsOnly(t *testing.T) {
 		{[]string{CmdBehind, "a.json", "b.json", "--json", "-q"}, false},
 		{[]string{CmdBehind, FlagNoImpact}, true},
 		{[]string{CmdBehind, "a.json", FlagFull, FlagNoImpact}, false},
-		{[]string{CmdSnapshot, "cluster:c1", FlagPin, "k8s/kubernetes"}, false},
+		{[]string{CmdSnapshot, "cluster:" + testkit.PaymentsUID, FlagPin, "k8s/kubernetes"}, false},
 	} {
 		_, err := x.Run(context.Background(), c.args...)
 		if (err == nil) != c.ok {

@@ -11,25 +11,24 @@ import (
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
-func TestAnUnknownStateExitsTwoAndNamesTheSets(t *testing.T) {
+// exitsTwo runs the server with args, and fails when it does not exit 2 with each of the words on stderr.
+func exitsTwo(t *testing.T, args []string, words ...string) {
+	t.Helper()
 	var errs bytes.Buffer
-	if code := run(context.Background(), []string{"-state", "nope"}, &errs); code != 2 || !strings.Contains(errs.String(), "first-seen") {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	code := run(context.Background(), args, &errs)
+	testkit.ExitsTwo(t, code, "", errs.String(), words...)
+}
+
+func TestAnUnknownStateExitsTwoAndNamesTheSets(t *testing.T) {
+	exitsTwo(t, []string{"-state", "nope"}, "first-seen")
 }
 
 func TestAnAddressThatIsNotLoopbackExitsTwo(t *testing.T) {
-	var errs bytes.Buffer
-	if code := run(context.Background(), []string{"-data", "../testdata/api", "-listen", "0.0.0.0:0"}, &errs); code != 2 {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwo(t, []string{"-data", "../testdata/api", "-listen", "0.0.0.0:0"})
 }
 
 func TestADirectoryWithNoSetExitsTwo(t *testing.T) {
-	var errs bytes.Buffer
-	if code := run(context.Background(), []string{"-data", t.TempDir()}, &errs); code != 2 {
-		t.Errorf("exit %d, stderr %q", code, errs.String())
-	}
+	exitsTwo(t, []string{"-data", t.TempDir()})
 }
 
 // The server gives the page and the routes, with the headers of the real server.

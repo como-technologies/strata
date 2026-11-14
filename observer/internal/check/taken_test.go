@@ -19,9 +19,9 @@ import (
 func firstSeenWithANewProfile(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r, w := oneRecord(t, unchanged())
-	r.meta(testkit.FirstSeenMeta("c1"))
+	r.meta(testkit.FirstSeenMeta(testkit.PaymentsUID))
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", "fred-edge@1.0.0")
+	w.cluster = testkit.Payments("fred-edge@1.0.0")
 	return r, w
 }
 

@@ -117,7 +117,7 @@ func TestAskRunsBehindForOnePackOnTheRecordOfTheProfileAndKeepsTheAnswer(t *test
 }
 
 func TestAskReadsARefusalAndAFailedRequestAsTheirVerdicts(t *testing.T) {
-	refusal := docs.Refusal{Pack: "kubernetes", Code: testkit.CodeDependency, Message: "SENTINEL-MESSAGE", Clusters: []string{"payments"}}
+	refusal := docs.Refusal{Pack: "kubernetes", Code: testkit.CodeDependency, Message: "SENTINEL-MESSAGE", Clusters: []string{testkit.PaymentsName}}
 	for _, c := range []struct {
 		name    string
 		bump    docs.Bump
@@ -234,7 +234,7 @@ func TestAPackAboveTheCapKeepsNoTextOnAnySideAndSaysSo(t *testing.T) {
 	moved.Packs[0].Values.Unified = bigText()
 	moved.Packs[0].Manifests = []docs.Manifest{{Op: "added", Name: "m", Unified: "small"}}
 	w.moves[key] = moved
-	w.cluster = testkit.Cluster("payments", moveSubject)
+	w.cluster = testkit.Cluster(testkit.PaymentsName, moveSubject)
 	o := r.observer(w)
 	if _, err := o.Once(context.Background()); err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestAPackAtTheCapKeepsItsText(t *testing.T) {
 	if err := o.RunContent(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	pack, ok, err := o.PackDiff(context.Background(), "aws-stack@1.1.0", "csi/csi-aws-ebs", model.SideCluster)
+	pack, ok, err := o.PackDiff(context.Background(), testkit.AWSStackProfile, "csi/csi-aws-ebs", model.SideCluster)
 	if err != nil || !ok || pack.TextTooLarge || pack.Values.Unified != text {
 		t.Errorf("%v %v too large %v, %d bytes", ok, err, pack.TextTooLarge, len(pack.Values.Unified))
 	}

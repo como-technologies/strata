@@ -1,7 +1,6 @@
 package baseline
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -21,15 +20,11 @@ func TestMarkChangesWithTheRecordsAndMetaJSONAndNotWithAnotherFile(t *testing.T)
 	if first == "" {
 		t.Fatal("no mark")
 	}
-	if err := os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("x"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(dir, "notes.txt"), "x")
 	if Mark(dir) != first {
 		t.Error("a file that is no record changed the mark")
 	}
-	if err := os.WriteFile(filepath.Join(dir, metaFile), []byte(testkit.ApprovedMeta(testkit.Revision)), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
 	second := Mark(dir)
 	if second == first {
 		t.Error("a new meta.json kept the mark")

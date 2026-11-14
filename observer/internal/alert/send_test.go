@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,9 +19,7 @@ import (
 func hook(t *testing.T, addr string, allowHTTP bool, srv *httptest.Server) (*Webhook, string) {
 	t.Helper()
 	file := filepath.Join(t.TempDir(), "platform-oncall")
-	if err := os.WriteFile(file, []byte(addr+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, file, addr+"\n")
 	w := NewWebhook(map[string]Channel{"platform-oncall": {URLFile: file}}, allowHTTP)
 	if srv != nil {
 		w.client.Transport = srv.Client().Transport
@@ -50,9 +47,7 @@ func TestTheAddressIsReadAgainAtEachSendBecauseTheKubeletRenewsASecret(t *testin
 	if err := w.Send(context.Background(), "platform-oncall", "one"); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(file, []byte(second.URL), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, file, second.URL)
 	if err := w.Send(context.Background(), "platform-oncall", "two"); err != nil {
 		t.Fatal(err)
 	}
@@ -126,9 +121,7 @@ func TestACheckGivesTheFirstChannelWhoseAddressCannotBeUsedAndNamesNoAddress(t *
 	dir := t.TempDir()
 	write := func(name, text string) string {
 		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, path, text)
 		return path
 	}
 	cases := []struct {

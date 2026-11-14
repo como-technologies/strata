@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -50,9 +49,7 @@ exit 3`)
 
 func marker(t *testing.T, fixtures, name string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(fixtures, name), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(fixtures, name), "")
 }
 
 // scripted makes the strata of a test from the script, with the real runner.

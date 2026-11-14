@@ -3,7 +3,6 @@ package check
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,7 +29,7 @@ func oneRecord(t *testing.T, row docs.VerifyRow) (*rig, *world) {
 	r := newRig(t)
 	r.record("aws-stack", "1.1.0", "csi/csi-aws-ebs", "os/ubuntu")
 	r.meta(testkit.ApprovedMeta(testkit.Revision))
-	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
+	return r, &world{rows: []docs.VerifyRow{row}, verifyTool: "0.29.0", cluster: testkit.Payments()}
 }
 
 // addPlatformAddons adds a second record that the cluster runs, platform-addons@1.0.0, with a good row.
@@ -39,7 +38,7 @@ func addPlatformAddons(t *testing.T, r *rig, w *world) {
 	t.Helper()
 	r.record("platform-addons", "1.0.0", "addon/cert-manager")
 	w.rows = []docs.VerifyRow{unchanged(), unchanged()}
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
+	w.cluster = testkit.Payments(testkit.AddonsProfile)
 }
 
 // twoRecords makes a world with the two records aws-stack@1.1.0 and platform-addons@1.0.0.
@@ -115,7 +114,7 @@ func TestContentCases(t *testing.T) {
 			if len(s.Findings) > 0 && (s.Findings[0].AlsoOnCluster != c.also || len(s.Findings[0].Who) != c.who) {
 				t.Errorf("finding %+v", s.Findings[0])
 			}
-			if s.Page != model.PageOK || s.Cluster.Name != "payments" || s.StrataVersion != "0.29.0" {
+			if s.Page != model.PageOK || s.Cluster.Name != testkit.PaymentsName || s.StrataVersion != "0.29.0" {
 				t.Errorf("page %q, cluster %+v, strata %q", s.Page, s.Cluster, s.StrataVersion)
 			}
 		})
@@ -138,7 +137,7 @@ func TestARecordForAVersionThatTheClusterDoesNotRunHasNoSide(t *testing.T) {
 
 func TestAProfileWithNoRecordIsACauseAndAddsNoPack(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	w.cluster = testkit.Cluster("payments", "aws-stack@1.1.0", testkit.AddonsProfile)
+	w.cluster = testkit.Payments(testkit.AddonsProfile)
 	s, _ := r.observer(w).Once(context.Background())
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.NoRecord || s.Profiles[1].Status != model.StatusNoRecord || s.Counts.Packs != 2 {
 		t.Errorf("notChecked %+v, profiles %+v, counts %+v", s.NotChecked, s.Profiles, s.Counts)
@@ -160,9 +159,7 @@ func TestAnOlderToolVersionNeedsARebaseline(t *testing.T) {
 
 func TestAnUnreadableRecordIsACauseAndStopsNoOther(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	if err := os.WriteFile(filepath.Join(r.records, "zz.json.gz"), []byte("not gzip"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(r.records, "zz.json.gz"), "not gzip")
 	s, _ := r.observer(w).Once(context.Background())
 	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.ReadError || s.NotChecked[0].Profiles[0] != "zz.json.gz" || s.Records.Count != 1 || s.Page != model.PageOK {
 		t.Errorf("summary %+v", s)
@@ -180,7 +177,7 @@ func TestARowWithAnErrorBesideGoodRowsIsACauseAndNotAFailedCycle(t *testing.T) {
 
 func TestNoRecordRunsNoVerifyAndNoBehind(t *testing.T) {
 	r := newRig(t)
-	w := &world{cluster: testkit.Cluster("payments", "aws-stack@1.1.0")}
+	w := &world{cluster: testkit.Payments()}
 	s, err := r.observer(w).Once(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -286,8 +283,7 @@ func TestASnapshotThatFailsWithAPlainLineTakesTheKindOfTheRowsOfTheVerify(t *tes
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r, w := oneRecord(t, unchanged())
-			r.record("platform-addons", "1.0.0", "addon/cert-manager")
+			r, w := twoRecords(t)
 			w.rows, w.clusterErr = c.rows, plain
 			o := r.observer(w)
 			_ = o.RunContent(context.Background())
@@ -377,7 +373,7 @@ func TestADriftedRecordWhoseAuditLogCouldNotBeReadIsAFindingWithNoReadError(t *t
 		t.Errorf("the summary holds the text of the error: %s", raw)
 	}
 	// the log of the pod names the status and the profile, and never the body of the answer
-	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile=aws-stack@1.1.0") {
+	if line := r.log.String(); !strings.Contains(line, "the audit log could not be read") || !strings.Contains(line, `reason="HTTP 403"`) || !strings.Contains(line, "profile="+testkit.AWSStackProfile) {
 		t.Errorf("log %q", line)
 	}
 }

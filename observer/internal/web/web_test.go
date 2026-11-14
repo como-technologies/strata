@@ -1247,9 +1247,7 @@ func copyScripts(t *testing.T, change func(string) string) string {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name, text string) {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, filepath.Join(dir, name), text)
 	}
 	write("index.html", string(readPage(t, "index.html")))
 	for _, name := range screenScripts(t) {
@@ -2085,9 +2083,7 @@ func writeSet(t *testing.T, from devdata.State, edit map[string]func([]byte) []b
 		if f := edit[name]; f != nil {
 			raw = f(raw)
 		}
-		if err := os.WriteFile(path.Join(dir, "scratch", name), raw, 0o644); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, path.Join(dir, "scratch", name), string(raw))
 	}
 	return dir
 }

@@ -12,20 +12,13 @@ import (
 
 const marker = "SENTINEL-MUST-NOT-LEAVE"
 
-func write(t *testing.T, dir, name, body string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // aws is the record of aws-stack@1.1.0 that the tests of Load read.
 var aws = testkit.AWSStack(`,"packs":[]`)
 
 func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, testkit.RecordFile, aws)
-	write(t, dir, "meta.json", testkit.ApprovedMeta(testkit.Revision))
+	testkit.WriteMeta(t, dir, testkit.ApprovedMeta(testkit.Revision))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +36,7 @@ func TestTheRecordsAndTheMetaAreRead(t *testing.T) {
 
 func TestTheMetaOfAFirstSeenBaselineNamesTheCluster(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "meta.json", testkit.FirstSeenMeta("64f1"))
+	testkit.WriteMeta(t, dir, testkit.FirstSeenMeta("64f1"))
 	set, err := Load(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -63,7 +56,7 @@ func TestABaselineWithNoMetaOrABadMetaIsUnknown(t *testing.T) {
 	} {
 		dir := t.TempDir()
 		if body != "" {
-			write(t, dir, "meta.json", body)
+			testkit.WriteMeta(t, dir, body)
 		}
 		set, err := Load(dir)
 		if err != nil || set.Meta.Baseline != Unknown {
@@ -78,9 +71,9 @@ const otherSchema = "c-other-schema.json.gz"
 func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 	dir := t.TempDir()
 	testkit.WriteGzip(t, dir, "a-good.json.gz", aws)
-	write(t, dir, "b-plain.json.gz", aws)
+	testkit.WriteFile(t, filepath.Join(dir, "b-plain.json.gz"), aws)
 	testkit.WriteGzip(t, dir, otherSchema, `{"schema":"`+docs.DiffSchema+`"}`)
-	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterHead+`c1"}}}`)
+	testkit.WriteGzip(t, dir, "d-cluster.json.gz", testkit.ClusterHead+testkit.PaymentsUID+`"}}}`)
 	testkit.WriteGzip(t, dir, "e-not-json.json.gz", `not json`)
 	testkit.WriteGzip(t, dir, "f-good.json.gz", aws)
 	set, err := Load(dir)
@@ -101,8 +94,8 @@ func TestAFileThatIsNoProfileRecordDoesNotStopTheOthers(t *testing.T) {
 
 func TestOnlyAFileWithTheSuffixOfARecordIsRead(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "README", "x")
-	write(t, dir, "aws.json", aws)
+	testkit.WriteFile(t, filepath.Join(dir, "README"), "x")
+	testkit.WriteFile(t, filepath.Join(dir, "aws.json"), aws)
 	if err := os.Mkdir(filepath.Join(dir, "..data"), 0o700); err != nil {
 		t.Fatal(err)
 	}

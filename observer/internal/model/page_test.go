@@ -10,7 +10,7 @@ import (
 )
 
 func TestThePageStateFollowsTheFirstRowThatMatches(t *testing.T) {
-	every := 15 * time.Minute
+	every := testkit.ContentEvery
 	now := t0.Add(time.Hour)
 	fresh, old := now.Add(-time.Minute), now.Add(-31*time.Minute)
 	e := func(kind string, status int) *ErrorRef { return &ErrorRef{Kind: kind, Status: status} }

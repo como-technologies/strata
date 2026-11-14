@@ -36,8 +36,8 @@ var everyone = testkit.OncallRules("f", testkit.DriftNow, testkit.LostNow)
 // payments starts the head of a message of the cluster payments of the rig. paymentsCleared is in the message when the
 // drift of aws-stack@1.1.0 clears.
 const (
-	payments        = "strata · payments · "
-	paymentsCleared = "Drift cleared\naws-stack@1.1.0"
+	payments        = "strata · " + testkit.PaymentsName + " · "
+	paymentsCleared = "Drift cleared\n" + testkit.AWSStackProfile
 )
 
 // alerting gives the observer of a rig that sends the alerts of the rules to the sender.
@@ -56,10 +56,10 @@ func TestOneMessageWhenAFindingOpensNoneOnTheNextCycleAndOneWhenItClears(t *test
 	sender := &capture{}
 	o := alerting(t, r, w, sender)
 	at(t, o, t0)
-	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+"Drift\naws-stack@1.1.0: ") {
+	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+"Drift\n"+testkit.AWSStackProfile+": ") {
 		t.Fatalf(testkit.OpenMessage, sender.texts)
 	}
-	at(t, o, t0.Add(15*time.Minute))
+	at(t, o, t0.Add(testkit.ContentEvery))
 	if len(sender.texts) != 1 {
 		t.Fatalf(testkit.NextCycle, len(sender.texts))
 	}
@@ -111,7 +111,7 @@ func TestTheLossOfContactSendsOneMessageAndOneClear(t *testing.T) {
 	at(t, o, t0)
 	w.verifyErr = &runner.RunError{Kind: docs.KindAPI, Status: 401}
 	for i := 1; i <= 4; i++ {
-		o.now = func() time.Time { return t0.Add(time.Duration(i) * 15 * time.Minute) }
+		o.now = func() time.Time { return t0.Add(time.Duration(i) * testkit.ContentEvery) }
 		_ = o.RunContent(context.Background())
 	}
 	lost := sender.texts[1:]
@@ -152,7 +152,7 @@ func TestAFailedSendKeepsTheMessageInTheStateAndSendsItOnceAfterItWorks(t *testi
 	sender := &capture{down: true}
 	o := alerting(t, r, w, sender)
 	at(t, o, t0)
-	at(t, o, t0.Add(15*time.Minute))
+	at(t, o, t0.Add(testkit.ContentEvery))
 	if len(sender.texts) != 0 || o.Alerts().Waiting != 1 {
 		t.Fatalf("sent %q, waiting %d", sender.texts, o.Alerts().Waiting)
 	}
@@ -203,9 +203,7 @@ func TestTheStateThatAnOlderObserverWroteLoadsWithAnEmptyStoreOfAlerts(t *testin
 	if err := os.MkdirAll(r.state, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(r.state, stateFile), []byte(`{"startedAt":"2026-11-03T14:00:00Z"}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(r.state, stateFile), `{"startedAt":"2026-11-03T14:00:00Z"}`)
 	s, err := loadState(r.state)
 	if err != nil || s.Alerts.Items == nil || s.Alerts.Outbox == nil {
 		t.Errorf("state %+v, error %v", s.Alerts, err)
@@ -232,7 +230,7 @@ func TestAnImageFindingClearsOnlyAfterACycleThatReadThePods(t *testing.T) {
 	cycle(t, o)
 	pods.set([]kube.Container{runs("web-1", testkit.Digest2)}, nil)
 	cycle(t, o)
-	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+testkit.ImageMoved+"\naws-stack@1.1.0: ") {
+	if len(sender.texts) != 1 || !strings.HasPrefix(sender.texts[0], payments+testkit.ImageMoved+"\n"+testkit.AWSStackProfile+": ") {
 		t.Fatalf("messages %q", sender.texts)
 	}
 	// a restart without the read of the pods finds no image finding, and that proves nothing

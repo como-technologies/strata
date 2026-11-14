@@ -80,8 +80,8 @@ func TestAPackWithChangesUnderAFindingWithNoPackKeyDoesNotReadOK(t *testing.T) {
 }
 
 func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
-	read := pin("kubernetes", "k8s", "1.35.3", "1.36.2", "aws-stack@1.1.0")
-	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
+	read := pin("kubernetes", "k8s", "1.35.3", "1.36.2", testkit.AWSStackProfile)
+	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", testkit.AWSStackProfile)
 	move := Move{Impact: "repave", Flags: []string{docs.FlagIdentity}, Fold: Fold{Settings: 2}, Images: 8}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{read, unread},
 		Moves: map[string]Move{MoveKey(read): move}, Unread: map[string]bool{MoveKey(unread): true}}
@@ -96,14 +96,14 @@ func TestAMoveThatWasNotReadIsACauseAndKeepsItsRow(t *testing.T) {
 	if got := s.Newer[1]; got.Name != "cert-manager" || got.Newest != "1.21.1" || got.Impact != "" || got.Images != 0 || got.Fold != (Fold{}) {
 		t.Errorf("the move that was not read has counts: %+v", got)
 	}
-	want := NotChecked{Cause: PinError, Profiles: []string{"aws-stack@1.1.0"}, Packs: []string{"addon/cert-manager"}}
+	want := NotChecked{Cause: PinError, Profiles: []string{testkit.AWSStackProfile}, Packs: []string{"addon/cert-manager"}}
 	if len(s.NotChecked) != 1 || !equalRow(s.NotChecked[0], want) {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }
 
 func TestAMoveThatWasNotReadKeepsTheCauseOfAnOlderRegistryCopy(t *testing.T) {
-	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", "aws-stack@1.1.0")
+	unread := pin("cert-manager", "addon", "1.20.3", "1.21.1", testkit.AWSStackProfile)
 	unread.RegistrySync = &docs.RegistrySync{LastSyncedTime: testkit.SyncedAt}
 	v := &Versions{At: t0, Strata: "0.29.0", Pins: []docs.Pin{unread}, Moves: map[string]Move{}, Unread: map[string]bool{MoveKey(unread): true}}
 	var causes []Cause

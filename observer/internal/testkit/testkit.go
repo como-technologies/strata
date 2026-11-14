@@ -29,15 +29,15 @@ import (
 const (
 	// VerifyUnchanged is the answer of `verify` for one record, record-0.json, that did not change.
 	VerifyUnchanged = `{"schema":"` + docs.VerifySummarySchema + `","tool":{"version":"0.29.0"},"records":[{"path":"record-0.json","status":"unchanged","name":"aws-stack","version":"1.1.0"}]}`
-	// ClusterHead starts the snapshot of a cluster, before its uid. ClusterPayments is the snapshot of the cluster c1,
-	// named payments, that runs aws-stack@1.1.0.
+	// ClusterHead starts the snapshot of a cluster, before its uid. ClusterPayments is the snapshot of the cluster
+	// payments, that runs aws-stack@1.1.0.
 	ClusterHead     = `{"schema":"` + docs.SnapshotSchema + `","source":{"cluster":{"uid":"`
-	ClusterPayments = ClusterHead + `c1","name":"payments","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
+	ClusterPayments = ClusterHead + PaymentsUID + `","name":"` + PaymentsName + `","profiles":[{"name":"aws-stack","version":"1.1.0","type":"cluster"}]}}}`
 	// CompareSame is the answer of `compare` for two sides that are the same.
 	CompareSame = `{"schema":"` + docs.DiffSchema + `","same":true,"sameContent":true}`
 	// KubernetesBehind is the answer of `behind` for the record of aws-stack@1.1.0. Its pack kubernetes 1.35.3 is behind
 	// 1.36.2.
-	KubernetesBehind = `{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"aws-stack@1.1.0"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}`
+	KubernetesBehind = `{"schema":"` + docs.BehindSchema + `","tool":{"version":"0.29.0"},"pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"reg1","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"subject":"` + AWSStackProfile + `"}],"newer":[{"version":"1.36.2","listed":"2026-11-01T00:00:00Z","drops":[]}],"behind":true}]}`
 )
 
 // The values of the test data that the tests of more than one package hold. The tests of docs hold their own copy,
@@ -45,10 +45,20 @@ const (
 const (
 	// ClusterUID is the uid of a cluster: of quarry-1 in the dev data, and of the cluster of the tests of the seed.
 	ClusterUID = "7b1f3c9e-5a42-4d8e-9a67-0c2e4f1a8b35"
-	// AddonsProfile is the second profile that the cluster payments runs.
-	AddonsProfile = "platform-addons@1.0.0"
-	// RecordFile is the file of the record aws-stack@1.1.0, which AWSStack gives.
-	RecordFile = "aws-stack@1.1.0.json.gz"
+	// PaymentsName and PaymentsUID are the name and the uid of the cluster payments, whose read Payments gives.
+	// AWSStackProfile is the profile that it runs, and AddonsProfile is its second profile in some tests.
+	PaymentsName    = "payments"
+	PaymentsUID     = "c1"
+	AWSStackProfile = "aws-stack@1.1.0"
+	AddonsProfile   = "platform-addons@1.0.0"
+	// RecordFile is the file of the record of AWSStackProfile, which AWSStack gives. MetaFile is the meta file of the
+	// records, which WriteMeta writes.
+	RecordFile = AWSStackProfile + ".json.gz"
+	MetaFile   = "meta.json"
+	// ContentEvery and VersionsEvery are the periods of the content cycle and of the versions cycle of an observer of a
+	// test.
+	ContentEvery  = 15 * time.Minute
+	VersionsEvery = 6 * time.Hour
 	// Revision and NewRevision are two revisions of the records that a pipeline approved, in the meta file that
 	// ApprovedMeta gives. NewRevision comes after Revision.
 	Revision    = "4e1c7a2"
@@ -162,7 +172,22 @@ const (
 	HeadersMissing = "%s: the headers of the server are missing"
 	// FirstCycles names the wait for the first cycle of each timer of the observer.
 	FirstCycles = "the first cycle of each timer"
+	// ExitStderr is the failure of a check of the exit code of a command, with the text of its stderr.
+	ExitStderr = "exit %d, stderr %q"
 )
+
+// ExitsTwo fails the test when a command did not exit 2, with nothing on stdout and each of the words on stderr. code,
+// stdout, and stderr are what the command gave.
+func ExitsTwo(t *testing.T, code int, stdout, stderr string, words ...string) {
+	t.Helper()
+	ok := code == 2 && stdout == ""
+	for _, w := range words {
+		ok = ok && strings.Contains(stderr, w)
+	}
+	if !ok {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
+	}
+}
 
 // AskFlow checks the click "Ask Palette" on the move of dex of the dev data ok. get sends a GET to a path of the
 // server of the set. post sends a POST, with the header of the page when page is true. Each gives the status and the
@@ -276,9 +301,7 @@ done
 func Script(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "strata")
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	WriteExec(t, path, "#!/bin/sh\n"+body+"\n")
 	return path
 }
 
@@ -288,6 +311,22 @@ func Script(t *testing.T, body string) string {
 func Strata(t *testing.T, body string) string {
 	t.Helper()
 	return Script(t, preamble+body)
+}
+
+// WriteFile writes body to the file at path, which only the user can read and write, and fails the test on an error.
+func WriteFile(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// WriteExec writes body to the file at path as a program that each user can run, and fails the test on an error.
+func WriteExec(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // WriteGzip writes body, compressed, to the file name of dir.
@@ -301,21 +340,41 @@ func WriteGzip(t *testing.T, dir, name, body string) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), buf.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	WriteFile(t, filepath.Join(dir, name), buf.String())
 }
 
-// Cluster makes the read of the cluster c1 that runs the given profiles, each as name@version. The
+// Cluster makes the read of the cluster PaymentsUID that runs the given profiles, each as name@version. The
 // cluster has an update pending.
 func Cluster(name string, profiles ...string) docs.ClusterRead {
 	var c docs.ClusterRead
-	c.Source.Cluster.UID, c.Source.Cluster.Name, c.Source.Cluster.UpdatesPending = "c1", name, true
+	c.Source.Cluster.UID, c.Source.Cluster.Name, c.Source.Cluster.UpdatesPending = PaymentsUID, name, true
 	for _, p := range profiles {
 		n, v, _ := strings.Cut(p, "@")
 		c.Source.Cluster.Profiles = append(c.Source.Cluster.Profiles, docs.ClusterProfile{Name: n, Version: v, Type: "cluster"})
 	}
 	return c
+}
+
+// Payments makes the read of the cluster payments, which runs AWSStackProfile and then the more profiles.
+func Payments(more ...string) docs.ClusterRead {
+	return Cluster(PaymentsName, append([]string{AWSStackProfile}, more...)...)
+}
+
+// RigDirs holds the directories of an observer of the tests of api and of check: its records, its work, and its
+// state. testkit cannot give the check.Config of the observer, because the tests of check import testkit. So each rig
+// writes the config from RigDirs, PaymentsUID, ContentEvery, and VersionsEvery.
+type RigDirs struct{ Records, Work, State string }
+
+// NewRigDirs makes the directories of an observer in new directories of the test. The observer makes the state.
+func NewRigDirs(t *testing.T) RigDirs {
+	t.Helper()
+	return RigDirs{Records: t.TempDir(), Work: t.TempDir(), State: filepath.Join(t.TempDir(), "state")}
+}
+
+// WriteMeta writes body to the meta file of the records in dir.
+func WriteMeta(t *testing.T, dir, body string) {
+	t.Helper()
+	WriteFile(t, filepath.Join(dir, MetaFile), body)
 }
 
 // DecodeFile reads the JSON file at path into v, and fails the test on an error.

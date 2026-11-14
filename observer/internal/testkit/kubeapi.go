@@ -4,7 +4,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -48,9 +47,7 @@ func NewKubeAPI(t *testing.T, handler func(w http.ResponseWriter, r *http.Reques
 	dir := t.TempDir()
 	a.Host, a.TokenFile, a.CAFile = a.srv.Listener.Addr().String(), filepath.Join(dir, "token"), filepath.Join(dir, "ca.crt")
 	ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: a.srv.Certificate().Raw})
-	if err := os.WriteFile(a.CAFile, ca, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	WriteFile(t, a.CAFile, string(ca))
 	a.SetToken("token-1")
 	return a
 }
@@ -58,9 +55,7 @@ func NewKubeAPI(t *testing.T, handler func(w http.ResponseWriter, r *http.Reques
 // SetToken replaces the token file, as the kubelet does when it rotates the token.
 func (a *KubeAPI) SetToken(text string) {
 	a.t.Helper()
-	if err := os.WriteFile(a.TokenFile, []byte(text+"\n"), 0o600); err != nil {
-		a.t.Fatal(err)
-	}
+	WriteFile(a.t, a.TokenFile, text+"\n")
 }
 
 // Close stops the server.

@@ -55,7 +55,7 @@ const (
 // The paths of the routes, with the profile aws-stack@1.1.0 of testdata/. awsPacks starts the route of a pack of the
 // profile, and kubernetesDiff is the route of the diff of its pack kubernetes, with no side.
 const (
-	awsPacks       = "/v1/packs/aws-stack@1.1.0"
+	awsPacks       = "/v1/packs/" + testkit.AWSStackProfile
 	kubernetesDiff = awsPacks + testkit.KubernetesDiff
 	pathHealth     = "/healthz"
 	pathPublished  = awsPacks + "/csi/csi-aws-ebs/diff?side=published"
@@ -86,9 +86,7 @@ func fixtures(t *testing.T) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, e.Name()), []byte(times.Replace(string(raw))), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, filepath.Join(dir, e.Name()), times.Replace(string(raw)))
 	}
 	return dir
 }
@@ -203,20 +201,19 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, records: t.TempDir(), work: t.TempDir(), state: filepath.Join(t.TempDir(), "state"), log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
+	d := testkit.NewRigDirs(t)
+	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
 	packs := []map[string]any{
 		{"key": "k8s/kubernetes", "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{"a/b:1"}},
 		{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{"a/c@sha256:abc"}},
 	}
 	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
-	if err := os.WriteFile(filepath.Join(r.records, "meta.json"), []byte(testkit.ApprovedMeta(testkit.Revision)), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
 	return r
 }
 
 func (r *rig) config() check.Config {
-	return check.Config{ClusterUID: "c1", Records: r.records, Work: r.work, State: r.state, ContentEvery: 15 * time.Minute, VersionsEvery: 6 * time.Hour}
+	return check.Config{ClusterUID: testkit.PaymentsUID, Records: r.records, Work: r.work, State: r.state, ContentEvery: testkit.ContentEvery, VersionsEvery: testkit.VersionsEvery}
 }
 
 // stateText gives the text of the state file that the observer wrote.

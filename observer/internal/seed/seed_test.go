@@ -164,9 +164,7 @@ func TestTheSeedWritesWhatTheScriptOfThePipelineWrites(t *testing.T) {
 		cases.WriteString(p[0] + "@" + p[1] + ") printf '%s' '" + testkit.Snapshot(p[0], p[1]) + "' > \"$out\" ;;\n")
 	}
 	script := "#!/usr/bin/env bash\nout=\"\"\nprev=\"\"\nfor a in \"$@\"; do [ \"$prev\" = -o ] && out=$a; prev=$a; done\ncase \"$2\" in\n" + cases.String() + "esac\n"
-	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteExec(t, fake, script)
 	cmd := exec.Command("bash", testkit.RecordsScript, "--first-seen", testkit.ClusterUID)
 	cmd.Env = append(os.Environ(), "STRATA_BIN="+fake)
 	out, err := cmd.Output()

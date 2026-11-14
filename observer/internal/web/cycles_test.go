@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/baseline"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -104,7 +105,7 @@ func TestTheButtonWaitsTheSecondsOfA429AndSaysWhenARequestFailed(t *testing.T) {
 // cannot: the row says so.
 func TestARowOfNoRecordSaysWhatAddsTheRecordForEachBaseline(t *testing.T) {
 	row := `D.notChecked = [{cause: "no-record", profiles: ["fred-edge@1.0.0"], packs: [], registry: ""}];`
-	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "`+baseline.FirstSeen+`", firstSeenFrom: "c1"}`)
+	firstSeen := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row+`D.cluster.records = {baseline: "`+baseline.FirstSeen+`", firstSeenFrom: "`+testkit.PaymentsUID+`"}`)
 	mustHold(t, "first-seen", firstSeen, "No record holds this profile version yet. The records are first-seen, so "+recordsIt+" at its next content check.")
 	approved := pageWith(t, "testdata/api", devdata.StateOK, "#notchecked", row)
 	mustHold(t, "approved", approved, "No record holds this profile version, so strata cannot say that anything changed. Your pipeline must publish its record: a check cannot add one.")

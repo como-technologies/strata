@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,14 +18,10 @@ func rulesFile(t *testing.T, w *testkit.Receiver) string {
 	t.Helper()
 	dir := t.TempDir()
 	address := filepath.Join(dir, "oncall")
-	if err := os.WriteFile(address, []byte(w.URL+"/TOKEN-SECRET\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, address, w.URL+"/TOKEN-SECRET\n")
 	path := filepath.Join(dir, "alerts.json")
 	rules := testkit.OncallRules(address, testkit.DriftNow, testkit.LostNow)
-	if err := os.WriteFile(path, []byte(rules), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, path, rules)
 	return path
 }
 
@@ -38,7 +33,7 @@ func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 	var out, errs bytes.Buffer
 	args := append(onceArgs(t, fakeStrata(t, drifting, 0, false)), "--alerts", rulesFile(t, w), "--alerts-allow-http")
 	if code := run(args, &out, &errs); code != 1 {
-		t.Fatalf("exit %d, stderr %q", code, errs.String())
+		t.Fatalf(testkit.ExitStderr, code, errs.String())
 	}
 	if w.Count() != 0 {
 		t.Errorf("once sent %d messages", w.Count())
@@ -49,21 +44,13 @@ func TestOnceAndServeStopAtTheStartWithAFileOfRulesThatCannotBeUsed(t *testing.T
 	for _, c := range []testkit.BadRule{testkit.NoEndDate, testkit.NewerNow} {
 		bad := filepath.Join(t.TempDir(), "alerts.json")
 		file := testkit.OncallRules("f", c.Rule)
-		if err := os.WriteFile(bad, []byte(file), 0o600); err != nil {
-			t.Fatal(err)
-		}
+		testkit.WriteFile(t, bad, file)
 		for _, command := range []string{"once", "serve"} {
-			var out, errs bytes.Buffer
-			args := append(onceArgs(t, "strata"), "--alerts", bad)
-			args[0] = command
-			if code := run(args, &out, &errs); code != 2 || out.Len() != 0 {
-				t.Fatalf("%s, %s: exit %d, stdout %q", c.Name, command, code, out.String())
-			}
-			for _, want := range []string{"--alerts", "alerts.json", "line 4", "rule 1", c.Want} {
-				if !strings.Contains(errs.String(), want) {
-					t.Errorf("%s, %s: stderr lacks %q: %s", c.Name, command, want, errs.String())
-				}
-			}
+			t.Run(c.Name+", "+command, func(t *testing.T) {
+				args := append(onceArgs(t, "strata"), "--alerts", bad)
+				args[0] = command
+				exitsTwoSaying(t, args, "--alerts", "alerts.json", "line 4", "rule 1", c.Want)
+			})
 		}
 	}
 }
@@ -74,13 +61,9 @@ func TestAFileOfRulesThatIsAbsentStopsTheStart(t *testing.T) {
 
 func TestServeStopsAtTheStartWhenTheAddressOfAChannelCannotBeUsedAndNamesNoAddress(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "oncall"), []byte("http://hooks.example/TOKEN-SECRET"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, filepath.Join(dir, "oncall"), "http://hooks.example/TOKEN-SECRET")
 	rules := filepath.Join(dir, "alerts.json")
-	if err := os.WriteFile(rules, []byte(testkit.OncallRules(filepath.Join(dir, "oncall"))), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testkit.WriteFile(t, rules, testkit.OncallRules(filepath.Join(dir, "oncall")))
 	if stderr := exitsTwoSaying(t, append(serveArgs(t, "strata"), "--alerts", rules), `channel "oncall"`, "https"); strings.Contains(stderr, "TOKEN-SECRET") {
 		t.Errorf("the error names the address: %s", stderr)
 	}
@@ -103,7 +86,7 @@ func TestServeWithAlertsSendsOneMessageForAFindingAndShowsItsRuleAsFiring(t *tes
 	// the send, and the count does.
 	testkit.WaitFor(t, "the message of the drift", func() bool { return w.Count() > 0 })
 	stop()
-	if got := w.Bodies(); len(got) != 1 || !strings.Contains(got[0], "Drift") || !strings.Contains(got[0], "payments") {
+	if got := w.Bodies(); len(got) != 1 || !strings.Contains(got[0], "Drift") || !strings.Contains(got[0], testkit.PaymentsName) {
 		t.Errorf("the receiver got %d messages: %q", len(got), got)
 	}
 	if strings.Contains(stderr.String(), "TOKEN-SECRET") || !strings.Contains(stderr.String(), "channel=oncall") {
