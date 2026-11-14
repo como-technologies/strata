@@ -5196,6 +5196,51 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
     );
 }
 
+/// The criterion of #854: the issue of a pin that is behind a newer minor version names the next
+/// patch, from `nextPatch` of `strata behind`. The script splits no version. The patch is a text of
+/// an answer, so each tag of HTML in it shows as text.
+#[test]
+fn upstream_report_names_the_next_patch_of_a_pin_that_is_behind_a_newer_minor_version() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0", "1.63.4"], None);
+    let issue_with = |patch: &str| {
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        report["pins"][0]["nextPatch"] = serde_json::json!(patch);
+        u.put("report.json", &report.to_string());
+        let o = u.run(&["releases/*.json", "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+        text(&o.stdout)
+    };
+    let body = issue_with("1.63.4");
+    assert!(
+        body.contains(
+            "| `1.63.1` | 1.65.0, 1.63.4; next patch 1.63.4 | 1.65.0: cluster-wide IDENTITY \
+             AUTHORED | - |"
+        ),
+        "{body}"
+    );
+    // the state line keeps the field, so the next run gives it to `--since`
+    assert!(
+        body.lines()
+            .nth(1)
+            .unwrap()
+            .contains("\"nextPatch\":\"1.63.4\""),
+        "{body}"
+    );
+
+    let body = issue_with(common::ANSWER_TAGS);
+    let cell = strata::text::markdown_cell(&format!(
+        "1.65.0, 1.63.4; next patch {}",
+        common::ANSWER_TAGS
+    ));
+    assert!(
+        body.contains(&format!("| `1.63.1` | {cell} |")),
+        "{cell}\n{body}"
+    );
+    let shown: Vec<&str> = body.lines().skip(2).collect();
+    common::assert_answer_tags_as_text(&shown.join("\n"));
+}
+
 /// A dry run calls no host, so it needs no token. The three scripts that have a host agree on
 /// this on GitLab too, where the token is the only credential.
 #[test]
@@ -5283,6 +5328,97 @@ fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_o
         assert_eq!(v, u, "the layers differ at line {} of the layer", i + 1);
     }
     assert_eq!(verify.len(), upstream.len(), "one layer is longer");
+}
+
+/// The lines of the jq functions of markdown in the script `path`: from their comment to `md`.
+fn markdown_layer(path: &str) -> Vec<String> {
+    repo_file(path)
+        .lines()
+        .skip_while(|l| !l.starts_with("# The jq functions that write a text into markdown"))
+        .scan(false, |done, l| {
+            let line = (!*done).then(|| l.to_string());
+            *done = *done || l.starts_with("md() {");
+            line
+        })
+        .collect()
+}
+
+/// The jq functions of markdown of `observer-propose.sh` and of `lib.sh` of the live example are
+/// those of the two report scripts, line for line. Each script stands alone, so the copy is on
+/// purpose, and a change to one copy must reach the others.
+#[test]
+fn each_script_that_writes_markdown_has_the_jq_functions_of_the_report_scripts() {
+    let layer = markdown_layer("scripts/ci/verify-report.sh");
+    assert!(
+        layer.len() > 10 && layer.last().is_some_and(|l| l.starts_with("md() {")),
+        "the functions are not found: {layer:#?}"
+    );
+    for path in [
+        "scripts/ci/upstream-report.sh",
+        "scripts/ci/observer-propose.sh",
+        "examples/live/lib.sh",
+    ] {
+        assert_eq!(
+            markdown_layer(path),
+            layer,
+            "the functions differ in {path}"
+        );
+    }
+}
+
+/// The criteria of #872 and #890: the jq functions of the scripts write each text as the helpers of
+/// `strata::text` do. So `cell` shows each mark of markdown of a quoted text as text, also two
+/// backticks. It keeps a run of `_` inside a word as it is. A `@name` of the text notifies nobody.
+/// It keeps each bare address that GitHub surely links as it is.
+#[test]
+fn the_jq_functions_of_markdown_write_each_text_as_the_helpers_of_strata() {
+    use strata::text::{code_cell, code_span, html_text, markdown_cell};
+    let script = repo_file("scripts/ci/verify-report.sh");
+    let program = script
+        .split_once("markdown_jq='")
+        .and_then(|(_, rest)| rest.split_once("'\n"))
+        .map(|(program, _)| program)
+        .expect("the script holds markdown_jq");
+    let helpers = [
+        ("html", html_text as fn(&str) -> String),
+        ("cell", markdown_cell),
+        ("span", code_span),
+        ("code", code_cell),
+    ];
+    for t in [
+        common::ANSWER_TAGS,
+        common::ANSWER_MARKS,
+        "``a`` ~~gone~~ ![i](x) a\\*b\\|c",
+        common::ANSWER_MENTIONS,
+        "(@a) @@b é@c _@d *@e\n@f|@g &@a <@b a@-b @",
+        common::ANSWER_ADDRESSES,
+        "www.a.example/@b x (www.a.example/@b) \"www.a.example/@b\" 'https://a.example/@b'",
+        "https://a.example/x_(y)) https://a.example/x_*~.\" http://A.b-c.example:8080/x?y=@z#`f`[g](h)",
+        "https://-a.example/@b https://a_b.example/@b https://localhost/@b xhttps://a.example/@b",
+        "https://a.example/é@b https://a.example/<b> https://a.example/a&amp; https:// www. a|https://a.example/b|c",
+        " \thttps://a.example/@b\n www.a.example/@c\r\x0c@d  www.a.example/\x0b@e",
+        "aws_stack LTS__24.x é_ü __init__ a_ _b a_-b",
+        "first\nsecond | `x` &amp;",
+        "",
+    ] {
+        for (function, helper) in helpers {
+            let o = Command::new("jq")
+                .args([
+                    "-njr",
+                    "--arg",
+                    "t",
+                    t,
+                    &format!("{program} $t | {function}"),
+                ])
+                .output_locked()
+                .unwrap();
+            assert!(o.status.success(), "{}", text(&o.stderr));
+            assert_eq!(text(&o.stdout), helper(t), "{function} of {t:?}");
+        }
+    }
+    common::assert_answer_marks_as_text(&markdown_cell(common::ANSWER_MARKS));
+    common::assert_answer_mentions_as_text(&markdown_cell(common::ANSWER_MENTIONS));
+    common::assert_answer_addresses_as_they_are(&markdown_cell(common::ANSWER_ADDRESSES));
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
@@ -7016,6 +7152,41 @@ fn observer_propose_opens_one_pull_request_with_the_first_seen_records_and_leave
         "no second request and no edit: {calls:#?}"
     );
     assert_eq!(p.commits_of(branch), 3, "the commit of the reviewer stays");
+}
+
+/// The criterion of #872: the body writes the name of the cluster and the path of each record
+/// with the code span of strata. The span counts the backticks. So a backtick in a name or a path
+/// does not end the span, and GitHub shows each one whole.
+#[test]
+fn observer_propose_writes_a_name_and_a_path_with_a_backtick_in_a_code_span_of_strata() {
+    let p = Propose::new();
+    p.secrets_of(&["--first-seen", "c-`1"]);
+    let dir = "releases/ob`server";
+    let o = p.run(&["--dir", dir], &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let body = p.body();
+    let files: Vec<String> = RECORD_FILES
+        .iter()
+        .map(|f| f.replace("releases/observer", dir))
+        .collect();
+    assert!(
+        body.contains(&format!(
+            "the cluster {} recorded",
+            strata::text::code_span("c-`1")
+        )),
+        "{body}"
+    );
+    for file in &files {
+        assert!(
+            body.contains(&format!("- {}\n", strata::text::code_span(file))),
+            "{body}"
+        );
+    }
+    assert_eq!(
+        common::code_spans(&body),
+        ["c-`1", files[0].as_str(), files[1].as_str()],
+        "{body}"
+    );
 }
 
 /// Approved records need no review, and records that the base holds need no request.

@@ -37,12 +37,20 @@ profiles, the line names the profile that holds the pack: see
 
 The line `next patch` names the newest patch of the minor version of the pin. It
 comes when the newest version is of another minor version, as `1.36.2` is for the
-pin `1.35.3`. A team can take the patch before the move. The line gives the
+pin `1.35.3`. A pin with no newer patch of its own minor version has no line
+`next patch`. A team can take the patch before the move. The line gives the
 command that says what the move to the patch does, and strata sends no request for
 it. Run the command:
 
 ```text
 {{#include ../output/behind-next-patch.txt}}
+```
+
+`--json` gives the patch in `pins[].nextPatch`. A script reads the patch there,
+and does not split a version:
+
+```text
+{{#include ../output/behind-next-patch-json.txt}}
 ```
 
 - **A newer version** is one that a person can move to. A version that Spectro

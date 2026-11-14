@@ -15,7 +15,7 @@ The Palette platform
 
 Requests that failed
   ERROR         POST /v1/spectroclusters/aws/validate
-                POST /v1/spectroclusters/aws/validate failed with HTTP 403: {"code":"AccessDenied","message":"cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system"}; the role of the key does not give the permission 'cluster.create'
+                POST /v1/spectroclusters/aws/validate failed with HTTP 403: AccessDenied: cluster.create operation is not permitted, required permissions 'cluster.create' in the scope(s) project or tenant or system; the role of the key does not give the permission 'cluster.create'
                 stopped 3 checks: worker-cpu-floor, pack-dependency, palette-validate
                 reproduce: jq '.validateBody' $OUT/world.json > $OUT/request.json
                 reproduce: code=$({ [[ $PALETTE_API_KEY != *[$'\r\n']* ]] || ! echo 'the key of Palette holds a line break' >&2; } && curl -s --config <(k=${PALETTE_API_KEY//\\/\\\\}; k=${k//\"/\\\"}; printf 'header = "ApiKey: %s"\n' "$k") -H "ProjectUid: $PALETTE_PROJECT_UID" -o $OUT/body.json -w '%{http_code}' -X POST -H 'Content-Type: application/json' --data @$OUT/request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")

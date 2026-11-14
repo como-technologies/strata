@@ -39,6 +39,49 @@ quietly() {
   out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
 }
 
+# The jq functions that write a text into markdown, as strata writes it. `html` is
+# `text::html_text`: each `&`, `<`, and `>` is an entity, so a tag of HTML shows as text. `cell` is
+# `text::markdown_cell`, and `quoted` writes each word of it. `marks` puts a `\` before each mark
+# of markdown, and `mentions` puts a zero width space after each `@` that can start a mention of
+# GitHub. So a link, an emphasis, a code span, or a `@name` of the text shows as text. A run of `_`
+# with a letter or a digit on each side starts no emphasis, so `marks` keeps it as it is.
+# `address` is `text::bare_address`: a bare address that GitHub surely links stays as it is.
+# `link_end` is `text::link_end`, where GitHub ends the link. `table` escapes each `|` and writes
+# a line break as a space. `span` is `text::code_span`: its fence is longer than each run of
+# backticks in the text. `code` is `text::code_cell`, a `span` in a cell of a table. `fence` is
+# the fence of `text::code_block`, so that no line of the text ends the block.
+markdown_jq='def html: split("&") | join("&amp;") | split("<") | join("&lt;") | split(">") | join("&gt;");
+  def marks: gsub("(?<m>[\\\\`*\\[\\]~]|(?<![[:alnum:]_])_+|_+(?![[:alnum:]_]))"; .m | explode | map(92, .) | implode);
+  def table: split("|") | join("\\|") | split("\n") | join(" ");
+  def mentions: gsub("(?<![A-Za-z0-9])@(?=[A-Za-z0-9])"; "@&#8203;");
+  def quoted: marks | html | mentions;
+  def link_end: . as $t | ([scan("[(]")] | length) as $open
+    | def cut($end; $close): $t[$end - 1:$end] as $c
+        | if $c == ")" and $close > $open then cut($end - 1; $close - 1)
+          elif $c == ";" and ($t[:$end] | test("&[A-Za-z]+;$")) then null
+          elif ($c | test("^[?!.,:*_~\\x27\";]$")) then cut($end - 1; $close)
+          else $end end;
+      cut(length; [scan("[)]")] | length);
+  def address($first): (if test("^[(\"\\x27]") then 1 else 0 end) as $s | .[$s:] as $rest
+    | (if test("^[!-~]*$") and (test("<") | not) then $rest | link_end else null end) as $e
+    | if $e == null
+        or ($rest[:$e] | test("^(https?://|www[.])[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?([.][A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+([/?#:]|$)") | not)
+        or (($rest | startswith("www.")) and (if $s == 0 then $first else (startswith("(") | not) end))
+      then null else [.[:$s], $rest[:$e], $rest[$e:]] end;
+  def word($first): address($first) as $a
+    | if $a then ($a[0] | quoted) + $a[1] + ($a[2] | gsub("[*]"; "&ast;") | gsub("_"; "&lowbar;")) else quoted end;
+  def cell: [scan("[^ \t\n\f\r]+|[ \t\n\f\r]+")] | to_entries
+    | map(.key as $k | .value | if test("^[ \t\n\f\r]") then . else word($k == 0) end) | join("") | table;
+  def backticks($n): [range($n)] | map("`") | join("");
+  def ticks: [scan("`+") | length] | max // 0;
+  def span: backticks(ticks + 1) as $f | (if startswith("`") or endswith("`") then " " else "" end) as $p
+    | $f + $p + . + $p + $f;
+  def code: span | table;
+  def fence: backticks([ticks + 1, 3] | max);'
+
+# md FUNCTION TEXT: TEXT through the function FUNCTION of markdown_jq, such as `cell` or `span`
+md() { jq -rn --arg t "$2" "$markdown_jq \$t | $1"; }
+
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
 # set of the chosen host.
@@ -183,12 +226,12 @@ fi
 title="Approve the first-seen records of the observer"
 {
   printf '<!-- strata-observer-records -->\n'
-  printf 'The observer of the cluster `%s` recorded what each of its profiles holds, ' "$cluster"
+  printf 'The observer of the cluster %s recorded what each of its profiles holds, ' "$(md span "$cluster")"
   printf 'when it first saw the cluster. No person approved that content.\n\n'
   printf 'Review each record. Merge this request to approve the records. Then the pipeline '
   printf 'publishes them with the revision of the merge, and the page of the observer removes '
   printf 'the notice.\n\nThe records:\n\n'
-  for f in "${files[@]}"; do printf -- '- `%s`\n' "$f"; done
+  for f in "${files[@]}"; do printf -- '- %s\n' "$(md span "$f")"; done
 } > "$work/body.md"
 
 quietly git add -- "${files[@]}" || die "git cannot add the records"
