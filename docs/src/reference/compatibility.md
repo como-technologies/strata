@@ -1142,10 +1142,11 @@ field, a value, an input, or an option is in the sections above.
   - A program that reads `status` of `/v1/profiles` must know the new value.
   - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
     `counts.profiles`.
-- **A pack of `/v1/profiles` names the registry of the record.** Before, `registry` held the
-  uid for a pack that no pin of `behind` holds. A record of strata 0.33.0
-  and before names no registry, so its packs keep the earlier value. A program that reads the
-  uid there must read `packs[].registryUid` of the record. See
+- **The rows of the observer name the registry of the record.** Before, `registry` held the
+  name in a pin of `behind`, or the uid. This holds for a pack of `/v1/profiles` and a row of
+  `/v1/newer`. A record of strata 0.33.0 and before names no registry, so its rows keep the
+  earlier value. A program that reads the uid there must read `registryUid` of the row of
+  `/v1/newer`, or `packs[].registryUid` of the record. See
   [The summary](../development/observer.md#the-summary).
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
