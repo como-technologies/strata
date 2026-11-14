@@ -88,7 +88,7 @@ func TestEachFieldOfTheAllowListHasAReader(t *testing.T) {
 		switch {
 		case err != nil:
 			return err
-		case d.IsDir() && d.Name() == "testdata":
+		case d.IsDir() && d.Name() == testdata:
 			return filepath.SkipDir
 		case d.IsDir():
 			dirs = append(dirs, path)

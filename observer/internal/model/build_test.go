@@ -195,8 +195,8 @@ func TestNotCheckedGroupsEachCause(t *testing.T) {
 	want := []string{
 		"no-upstream-digest  " + testkit.DexProfile + " addon/dex",
 		"no-upstream-digest" + twoProfiles + "addon/velero",
-		"older-registry-copy Public Repo broken@1.0.0 k8s/kubernetes",
-		"read-error  broken@1.0.0 k8s/kubernetes,os/ubuntu",
+		"older-registry-copy Public Repo broken@1.0.0 " + testkit.KubernetesKey,
+		"read-error  broken@1.0.0 " + testkit.KubernetesKey + ",os/ubuntu",
 		"read-error  zz.json.gz ",
 		"pin-error" + twoProfiles + "cni/cilium",
 	}

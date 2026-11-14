@@ -163,7 +163,8 @@ func TestOnceRefusesAMissingFlagAndAPeriodThatIsNotPositive(t *testing.T) {
 //
 // Only internal/api, internal/kube, and internal/alert import a package of the network. So do the stand-in
 // for the API server and the webhook of the tests in internal/testkit, which only test files import. Only
-// internal/alert/send.go names the method for the webhook.
+// internal/alert/send.go names the method for the webhook. testkit.Serve gives a request to a handler with
+// httptest.NewRequest, which sends nothing on the network, so the rule bans http.NewRequest.
 func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnlyThePageAndTheAlertsPost(t *testing.T) {
 	rules := []struct {
 		banned []string
@@ -173,7 +174,7 @@ func TestOnlyTheHealthCheckTheReadOfThePodsTheSeedAndTheAlertsSendARequestAndOnl
 		{[]string{`"POST"`, `http.Post(`, `.PostForm(`}, nil},
 		{[]string{`http.MethodPost`}, []string{"internal/api/api.go", alertSend}},
 		{[]string{`"net/http"`, `"net"`}, []string{"internal/api/", "internal/kube/", alertSend, "internal/testkit/"}},
-		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", alertSend}},
+		{[]string{`http.Client`, `http.Get(`, `http.Head(`, `http.NewRequest`, `http.DefaultClient`, `net.Dial`}, []string{"internal/api/health.go", "internal/kube/kube.go", "internal/kube/secrets.go", alertSend}},
 	}
 	for path, raw := range goFiles(t) {
 		if strings.HasSuffix(path, "_test.go") {
@@ -478,7 +479,7 @@ func holdingStrata(t *testing.T, hold, pids string) string {
 	t.Helper()
 	return testkit.Strata(t, testkit.VerifyFirst+`  if [ -e '`+hold+`' ]; then sleep 0.2; fi
 `+testkit.VerifyAndSnapshot+testkit.PacksFirst+`    if [ -e '`+hold+`' ]; then echo $$ > '`+pids+`'; exec sleep 60; fi
-    echo '{"schema":"`+docs.DiffSchema+`","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"k8s/kubernetes","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
+    echo '{"schema":"`+docs.DiffSchema+`","same":false,"sameContent":false,"summary":{"packsChanged":1,"maxImpact":"in-place"},"packs":[{"key":"`+testkit.KubernetesKey+`","name":"kubernetes","layer":"k8s","status":"changed","authored":true,"impact":{"level":"in-place","text":"x"},"values":{"parseable":true,"changedCount":1,"diff":[{"op":"changed","path":"a.b","old":"1","new":"2"}]}}]}'
     exit 1 ;;
   *) echo '`+testkit.CompareSame+`' ;;
   esac ;;
@@ -596,9 +597,7 @@ func TestARelativeStrataPathAndANameOnThePathRunInEachCycle(t *testing.T) {
 // of the kubelet at it. The pod holds a marker in its environment.
 func podsAPI(t *testing.T) *testkit.KubeAPI {
 	t.Helper()
-	kubeAPI := testkit.NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", "a/b:1", "a/b@sha256:"+strings.Repeat("1", 64)))))
-	})
+	kubeAPI := testkit.MarkerPods(t)
 	for name, value := range kubeAPI.Env() {
 		t.Setenv(name, value)
 	}

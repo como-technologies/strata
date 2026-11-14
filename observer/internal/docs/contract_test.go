@@ -170,7 +170,7 @@ func TestTheDocumentsOfTheBinaryDecode(t *testing.T) {
 		t.Errorf("drift: %+v", drift.Records)
 	}
 	var behind Behind
-	decodeFile(t, dir, "behind.json", &behind)
+	decodeFile(t, dir, behindFile, &behind)
 	if behind.Schema != BehindSchema {
 		t.Errorf("behind states %q", behind.Schema)
 	}

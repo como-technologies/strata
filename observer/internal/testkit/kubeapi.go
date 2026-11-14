@@ -16,6 +16,24 @@ import (
 // can.
 const EnvMarker = "ENV-MARKER-VALUE"
 
+// The images of the packs and of the pods of the tests. ImageRef names the image ImageName by a tag, and ImageRan is
+// the id of the image that its pod runs. DigestImage names an image by a digest.
+const (
+	ImageName   = "a/b"
+	ImageRef    = ImageName + ":1"
+	ImageRan    = ImageName + "@" + Digest1
+	DigestImage = "a/c@sha256:abc"
+)
+
+// MarkerPods starts a stand-in for the API server of Kubernetes with one pod, whose namespace and name are
+// markers. The pod runs ImageRef, with the image id ImageRan.
+func MarkerPods(t *testing.T) *KubeAPI {
+	t.Helper()
+	return NewKubeAPI(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(PodList("", PodJSON("NS-MARKER", "POD-MARKER", ImageRef, ImageRan))))
+	})
+}
+
 // KubeRequest is a request that the stand-in saw.
 type KubeRequest struct {
 	Method, Path, Query, Auth string

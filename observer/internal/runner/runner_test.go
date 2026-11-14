@@ -75,8 +75,8 @@ func TestACommandOrAFlagOutsideTheListIsRefused(t *testing.T) {
 		{CmdCompare, "a", "b", "--repave"},
 		{CmdBehind, "a.json", FlagFull},
 		{CmdSnapshot, "x", FlagFull},
-		{CmdCompare, "a", "b", FlagPin, "k8s/kubernetes"},
-		{CmdVerify, "a.json", FlagPin, "k8s/kubernetes"},
+		{CmdCompare, "a", "b", FlagPin, testkit.KubernetesKey},
+		{CmdVerify, "a.json", FlagPin, testkit.KubernetesKey},
 		{CmdBehind, "a.json", "--validate"},
 		{CmdSnapshot, "x", "--validate"},
 	} {
@@ -100,12 +100,12 @@ func TestTheFlagsOfTheClickAreAllowedForTheirCommandsOnly(t *testing.T) {
 		{[]string{CmdCompare, "a", "b", FlagFull, "--json", "-q"}, true},
 		{[]string{CmdVerify, "a.json", "--summary", FlagFull, "--json", "-q"}, true},
 		{[]string{CmdBehind, "a.json", FlagNoImpact, "--json", "-q"}, true},
-		{[]string{CmdBehind, "a.json", FlagPin, "k8s/kubernetes", "--json", "-q"}, true},
+		{[]string{CmdBehind, "a.json", FlagPin, testkit.KubernetesKey, "--json", "-q"}, true},
 		{[]string{CmdBehind, "a.json", "--json", "-q"}, false},
 		{[]string{CmdBehind, "a.json", "b.json", "--json", "-q"}, false},
 		{[]string{CmdBehind, FlagNoImpact}, true},
 		{[]string{CmdBehind, "a.json", FlagFull, FlagNoImpact}, false},
-		{[]string{CmdSnapshot, "cluster:" + testkit.PaymentsUID, FlagPin, "k8s/kubernetes"}, false},
+		{[]string{CmdSnapshot, "cluster:" + testkit.PaymentsUID, FlagPin, testkit.KubernetesKey}, false},
 	} {
 		_, err := x.Run(context.Background(), c.args...)
 		if (err == nil) != c.ok {

@@ -57,7 +57,7 @@ func checkAnswers(t *testing.T) (k8s, traefik model.Answer) {
 	t.Helper()
 	asks := loadSet(t, devdata.StateUpdateChecks).Asks.Asks
 	k8s, traefik = asks[0], asks[1]
-	if k8s.Key != "k8s/kubernetes" || k8s.UpdateChecks == nil || k8s.UpdateChecks.SkippedMinor == nil ||
+	if k8s.Key != testkit.KubernetesKey || k8s.UpdateChecks == nil || k8s.UpdateChecks.SkippedMinor == nil ||
 		traefik.Key != "addon/traefik" || traefik.UpdateChecks == nil || traefik.UpdateChecks.RequiredVariables == nil {
 		t.Fatalf("the set %s changed: %+v", devdata.StateUpdateChecks, asks)
 	}

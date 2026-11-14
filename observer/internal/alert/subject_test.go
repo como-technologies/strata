@@ -19,7 +19,7 @@ func TestTheSubjectsOfASummaryAreItsFindingsItsNewerVersionsForEachProfileAndThe
 		Content: model.ContentClock{Health: model.Health{FailedRuns: 3, LastError: &model.ErrorRef{Kind: docs.KindAPI, Status: 401}}},
 		Findings: []model.Finding{
 			{ID: "f1", Kind: model.PublishedChanged, Profile: testkit.DexProfile, Packs: []string{"addon/dex"}, FirstSeen: now},
-			{ID: "f2", Kind: model.ImageSplit, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Images: []string{"a/b:1"}},
+			{ID: "f2", Kind: model.ImageSplit, Profile: "wilma-gateway@3.1.2", Packs: []string{"addon/traefik"}, Images: []string{testkit.ImageRef}},
 		},
 		Newer: []model.Newer{{Name: "dex", RegistryUID: "r1", Version: "2.42.0", Newest: "2.44.0", Profiles: []string{testkit.DexProfile, "barney-base@1.5.0"}}},
 	}

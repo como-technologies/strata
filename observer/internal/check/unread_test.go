@@ -237,7 +237,7 @@ func TestOneMoveThatFailsLeavesTheOtherPinsComparedAndTheListNew(t *testing.T) {
 		t.Fatalf(versionsNewer+", compares %d", s.Versions, len(s.Newer), w.countMoves())
 	}
 	countsAllButKubernetes(t, s)
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" || s.NotChecked[0].Profiles[0] != moveSubject {
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != testkit.KubernetesKey || s.NotChecked[0].Profiles[0] != moveSubject {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 	// The cache holds the three moves that worked. The next cycle asks for the one that failed.
@@ -443,7 +443,7 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 		t.Errorf("a failed read of meta.json leaves the findings %v", got)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest1 {
+	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 {
 		t.Errorf("a failed read of meta.json reset the state: %+v", st.Images)
 	}
 	// The file comes back with the same revision, and the finding holds.
@@ -456,7 +456,7 @@ func TestAFailedReadOfMetaJSONKeepsEachFirstDigestAndARealNewRevisionResetsThem(
 	r.meta(testkit.ApprovedMeta(testkit.NewRevision))
 	cycle(t, o)
 	st = readState(t, r)
-	if got := imageKindsOf(o.Summary()); len(got) != 0 || st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest2 {
+	if got := imageKindsOf(o.Summary()); len(got) != 0 || st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest2 {
 		t.Errorf("findings %v, state %+v", got, st.Images)
 	}
 }

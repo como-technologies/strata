@@ -43,7 +43,7 @@ func TestThePageOfAProfileListsWhatTheMoveToItsNewestVersionChanges(t *testing.T
 	// a pack that the move adds is in no record, so it has no page
 	added := rowWith(t, card, "addon/aws-load-balancer-controller")
 	mustHold(t, "the added pack", added, `<td>Added</td>`, `>2.14.0</td>`)
-	mustNotHold(t, "the added pack", added, "data-go=", "<a ")
+	mustNotHold(t, "the added pack", added, goToStart, "<a ")
 
 	var found bool
 	for _, r := range termRows(t, page) {

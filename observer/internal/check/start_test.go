@@ -154,7 +154,7 @@ func TestTheLookAtTheRecordsComparesWithTheMarkOfTheStartOfRun(t *testing.T) {
 // The versions cycle runs `behind` on each record by itself, so the progress counts the records.
 func TestTheVersionsCycleRunsBehindOnEachRecord(t *testing.T) {
 	r, w := withBehind(t)
-	r.record("aws-stack", "1.1.0", "k8s/kubernetes")
+	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	o := r.observer(w)
 	if err := o.RunVersions(context.Background()); err != nil {
 		t.Fatal(err)

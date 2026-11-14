@@ -42,7 +42,7 @@ behind)
   case "$*" in
   *--pin*) cat '`+fixtures+`/`+pin+`'; exit 1 ;;
   esac
-  cat '`+fixtures+`/behind.json'; exit 1 ;;
+  cat '`+fixtures+`/`+testkit.BehindDoc+`'; exit 1 ;;
 esac
 exit 3`)
 }
@@ -52,10 +52,10 @@ func marker(t *testing.T, fixtures, name string) {
 	testkit.WriteFile(t, filepath.Join(fixtures, name), "")
 }
 
-// scripted makes the strata of a test from the script, with the real runner.
-func scripted(t *testing.T, r *rig) check.Strata {
+// scripted makes the strata of a test from script, with the real runner. log and pin go to script.
+func scripted(t *testing.T, r *rig, log, pin string) check.Strata {
 	t.Helper()
-	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures, "", "behind.json"), Timeout: time.Minute}}
+	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures, log, pin), Timeout: time.Minute}}
 }
 
 // requestEverything calls each route, so that the log holds the lines of a full run.
@@ -79,7 +79,7 @@ func TestTheLogHoldsNoSentinelThroughAFullCycleThatFails(t *testing.T) {
 	t.Run("a versions cycle that fails", func(t *testing.T) {
 		r := newRig(t)
 		marker(t, r.fixtures, "fail-behind")
-		o := r.observer(scripted(t, r))
+		o := r.observer(scripted(t, r, "", testkit.BehindDoc))
 		if _, err := o.Once(context.Background()); err == nil {
 			t.Fatal("the versions cycle did not fail")
 		}
@@ -88,9 +88,9 @@ func TestTheLogHoldsNoSentinelThroughAFullCycleThatFails(t *testing.T) {
 	})
 	t.Run("a compare for a request that fails after a restart", func(t *testing.T) {
 		r := newRig(t)
-		r.cycled(scripted(t, r))
+		r.cycled(scripted(t, r, "", testkit.BehindDoc))
 		marker(t, r.fixtures, "fail-moves")
-		o := r.cycled(scripted(t, r))
+		o := r.cycled(scripted(t, r, "", testkit.BehindDoc))
 		h := handlerOf(o)
 		rec := get(h, pathNewer)
 		if rec.Code != http.StatusBadGateway {
@@ -104,9 +104,9 @@ func TestTheLogHoldsNoSentinelThroughAFullCycleThatFails(t *testing.T) {
 	})
 	t.Run("a content cycle that fails", func(t *testing.T) {
 		r := newRig(t)
-		r.cycled(scripted(t, r))
+		r.cycled(scripted(t, r, "", testkit.BehindDoc))
 		marker(t, r.fixtures, "fail-verify")
-		o := r.observer(scripted(t, r))
+		o := r.observer(scripted(t, r, "", testkit.BehindDoc))
 		if err := o.RunContent(context.Background()); err == nil {
 			t.Fatal("the content cycle did not fail")
 		}

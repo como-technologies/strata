@@ -2,7 +2,6 @@ package check
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,8 +14,6 @@ import (
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/testkit"
 )
-
-const imageRef = "a/b:1"
 
 // fakePods answers the read of the pods with a list or an error, and counts the calls.
 type fakePods struct {
@@ -41,7 +38,7 @@ func (f *fakePods) set(containers []kube.Container, err error) {
 
 // runs makes a container of a pod that runs the image of the records with the digest.
 func runs(pod, digest string) kube.Container {
-	return kube.Container{Pod: "ns/" + pod, Image: imageRef, ImageID: "a/b@" + digest}
+	return kube.Container{Pod: "ns/" + pod, Image: testkit.ImageRef, ImageID: testkit.ImageName + "@" + digest}
 }
 
 // podRig is a world with one record whose two packs name a/b:1, an observer that reads the pods, and
@@ -125,10 +122,10 @@ func TestAGoodReadFillsTheDocumentAndTheStateKeepsTheFirstDigestByIdOnly(t *test
 		t.Fatalf("document %+v", doc)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
+	if st.Images.Revision != testkit.Revision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest1 || len(st.Images.First) != 1 {
 		t.Errorf("state %+v", st.Images)
 	}
-	stateHoldsNone(t, r, imageRef, "web-1", "ns/")
+	stateHoldsNone(t, r, testkit.ImageRef, "web-1", "ns/")
 }
 
 func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.T) {
@@ -143,7 +140,7 @@ func TestADigestOtherThanTheFirstIsImageMovedUntilTheDigestComesBack(t *testing.
 	if got := imageKindsOf(s); !slices.Equal(got, []model.Kind{model.ImageMoved}) || s.Counts.Findings != 1 || s.Counts.Drift != 0 {
 		t.Fatalf("findings %v, counts %+v", got, s.Counts)
 	}
-	if f := s.Findings[0]; f.Profile != testkit.AWSStackProfile || !slices.Equal(f.Packs, []string{"csi/csi-aws-ebs", "os/ubuntu"}) || !slices.Equal(f.Images, []string{imageRef}) {
+	if f := s.Findings[0]; f.Profile != testkit.AWSStackProfile || !slices.Equal(f.Packs, []string{"csi/csi-aws-ebs", "os/ubuntu"}) || !slices.Equal(f.Images, []string{testkit.ImageRef}) {
 		t.Errorf("finding %+v", f)
 	}
 	if doc := o.Observed(); doc.Counts.Changed != 1 || doc.Images[0].Status != model.ImageStatusMoved || doc.Images[0].Digests[0].Status != model.AnotherDigest {
@@ -183,7 +180,7 @@ func TestANewRevisionOfTheRecordsResetsTheFirstDigest(t *testing.T) {
 		t.Errorf("a new revision leaves the findings %v", got)
 	}
 	st := readState(t, r)
-	if st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(imageRef)] != testkit.Digest2 {
+	if st.Images.Revision != testkit.NewRevision || st.Images.First[model.ImageKey(testkit.ImageRef)] != testkit.Digest2 {
 		t.Errorf("state %+v", st.Images)
 	}
 	_ = w
@@ -201,8 +198,8 @@ func TestARestartKeepsTheFirstDigestsOfTheState(t *testing.T) {
 }
 
 func TestAnImageWithNoRepoDigestAndAContainerThatNeverStartedReadNotCheckedAndMakeNoFinding(t *testing.T) {
-	local := kube.Container{Pod: "ns/a", Image: imageRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
-	never := kube.Container{Pod: "ns/b", Image: imageRef}
+	local := kube.Container{Pod: "ns/a", Image: testkit.ImageRef, ImageID: "sha256:" + strings.Repeat("e", 64)}
+	never := kube.Container{Pod: "ns/b", Image: testkit.ImageRef}
 	_, _, o, _ := podRig(t, local, never)
 	cycle(t, o)
 	doc := o.Observed()
@@ -263,9 +260,7 @@ func TestAFailedReadKeepsTheLastGoodImagesAndTheFindings(t *testing.T) {
 
 func TestTheRealClientFeedsTheCycleAndNoValueOfAPodReachesTheOutput(t *testing.T) {
 	r, w := oneRecord(t, unchanged())
-	kubeAPI := testkit.NewKubeAPI(t, func(rw http.ResponseWriter, _ *http.Request) {
-		_, _ = rw.Write([]byte(testkit.PodList("", testkit.PodJSON("NS-MARKER", "POD-MARKER", imageRef, "a/b@"+testkit.Digest1))))
-	})
+	kubeAPI := testkit.MarkerPods(t)
 	client := kube.New(kube.Config{Host: kubeAPI.Host, TokenFile: kubeAPI.TokenFile, CAFile: kubeAPI.CAFile})
 	o := r.observer(w).WithPods(client)
 	cycle(t, o)

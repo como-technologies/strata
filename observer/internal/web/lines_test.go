@@ -12,6 +12,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/api"
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 	"github.com/como-technologies/strata/observer/internal/web/devdata"
 )
 
@@ -43,7 +44,7 @@ func lineValue(n, first, last int, tag string) string {
 func longSet(t *testing.T, leaf docs.Leaf, edit ...func(*api.PackDiff)) string {
 	t.Helper()
 	return writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
-		d := entryOf(t, ds, k8sSubject, "k8s/kubernetes", model.SideNewer)
+		d := entryOf(t, ds, k8sSubject, testkit.KubernetesKey, model.SideNewer)
 		d.Values.Settings = []docs.Leaf{leaf}
 		for _, f := range edit {
 			f(d)
@@ -177,7 +178,7 @@ func rowIsShort(t *testing.T, before, after []string) {
 // three changed versions. A line that holds the same text on both sides, between two changed lines, is not marked.
 func TestTheRealKubeadmFileOfKubernetesShowsItsThreeChangedLines(t *testing.T) {
 	set := loadSet(t, devdata.StateOK)
-	leaf := entryOf(t, set.Diffs, k8sSubject, "k8s/kubernetes", model.SideNewer).Values.Settings[0]
+	leaf := entryOf(t, set.Diffs, k8sSubject, testkit.KubernetesKey, model.SideNewer).Values.Settings[0]
 	if old, _ := leaf.Old.(string); leaf.Path != contentPath || strings.Count(old, "\n") != 21 {
 		t.Fatalf("the set ok must hold the real file of 21 lines as the first setting of kubernetes, not %q", leaf.Path)
 	}

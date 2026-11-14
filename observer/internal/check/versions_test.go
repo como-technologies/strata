@@ -25,10 +25,10 @@ func move(name, from, to string) string {
 func withBehind(t *testing.T) (*rig, *world) {
 	t.Helper()
 	r := newRig(t)
-	r.record("aws-stack", "1.0.0", "k8s/kubernetes", "cni/cni-cilium-oss", "csi/csi-aws-ebs", "os/ubuntu-aws", "addon/cert-manager")
+	r.record("aws-stack", "1.0.0", testkit.KubernetesKey, "cni/cni-cilium-oss", "csi/csi-aws-ebs", "os/ubuntu-aws", "addon/cert-manager")
 	r.meta(testkit.ApprovedMeta(testkit.Revision))
 	w := &world{moves: map[string]docs.Diff{}, behindExit: 1}
-	testkit.ReadDoc(t, "behind.json", &w.behind)
+	testkit.ReadDoc(t, testkit.BehindDoc, &w.behind)
 	var kubernetes, cilium, other docs.Diff
 	testkit.ReadDoc(t, testkit.MoveKubernetes, &kubernetes)
 	testkit.ReadDoc(t, testkit.MoveCilium, &cilium)

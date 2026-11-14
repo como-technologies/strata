@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/como-technologies/strata/observer/internal/check"
 	"github.com/como-technologies/strata/observer/internal/docs"
@@ -22,20 +21,7 @@ import (
 
 // click sends the POST that the page sends: a fetch from the page itself.
 func click(h http.Handler, path string) *httptest.ResponseRecorder {
-	return clickWith(h, path, "127.0.0.1:8080", sameOrigin)
-}
-
-// clickWith sends a POST with the Host and the Sec-Fetch-Site that the test names. An empty site sends
-// no header.
-func clickWith(h http.Handler, path, host, site string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodPost, path, nil)
-	req.Host = host
-	if site != "" {
-		req.Header.Set(headerFetchSite, site)
-	}
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
+	return testkit.Serve(h, http.MethodPost, path, testkit.LoopbackHost, sameOrigin)
 }
 
 // answersOf gives the list of answers that the server holds.
@@ -70,12 +56,12 @@ func TestTheClickAsksPaletteOnceForOneMoveAndASecondClickSendsNothing(t *testing
 	var first model.Answer
 	rec := click(h, pathAsk)
 	decode(t, rec, &first)
-	if rec.Code != http.StatusOK || first.Verdict != model.VerdictNoError || first.Profile != testkit.AWSStackProfile || first.Key != "k8s/kubernetes" || first.Newest != "1.36.2" || first.Refusals == nil {
+	if rec.Code != http.StatusOK || first.Verdict != model.VerdictNoError || first.Profile != testkit.AWSStackProfile || first.Key != testkit.KubernetesKey || first.Newest != "1.36.2" || first.Refusals == nil {
 		t.Fatalf(statusAndAnswer, rec.Code, first)
 	}
 	// One question: the behind run of one record, for one pack, which asks about no other pin.
 	q := fake.questions()
-	if len(q) != 1 || !slices.Contains(q[0], "record-0.json") || len(q[0]) != 7 || q[0][2] != runner.FlagPin || q[0][3] != "k8s/kubernetes" || slices.Contains(q[0], runner.FlagNoImpact) {
+	if len(q) != 1 || !slices.Contains(q[0], "record-0.json") || len(q[0]) != 7 || q[0][2] != runner.FlagPin || q[0][3] != testkit.KubernetesKey || slices.Contains(q[0], runner.FlagNoImpact) {
 		t.Fatalf("the questions %v", q)
 	}
 	var second model.Answer
@@ -199,7 +185,7 @@ func TestAPostNeedsTheHeaderOfARequestFromThePageItself(t *testing.T) {
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
 	for _, site := range []string{"", "cross-site", "same-site", "none", "Same-Origin ", "same-origin; x"} {
-		if rec := clickWith(h, pathAsk, "127.0.0.1:8080", site); rec.Code != http.StatusForbidden {
+		if rec := testkit.Serve(h, http.MethodPost, pathAsk, testkit.LoopbackHost, site); rec.Code != http.StatusForbidden {
 			t.Errorf("Sec-Fetch-Site %q gave %d", site, rec.Code)
 		} else if strings.Contains(rec.Body.String(), site) && site != "" {
 			t.Errorf("the refusal echoes the header: %s", rec.Body.String())
@@ -209,7 +195,7 @@ func TestAPostNeedsTheHeaderOfARequestFromThePageItself(t *testing.T) {
 		t.Errorf("a refused request sent %d questions", len(fake.questions()))
 	}
 	// The Host comes first: a page that reaches the port after a DNS rebinding gets 421 whatever it sends.
-	if rec := clickWith(h, pathAsk, "evil.example", sameOrigin); rec.Code != http.StatusMisdirectedRequest {
+	if rec := testkit.Serve(h, http.MethodPost, pathAsk, "evil.example", sameOrigin); rec.Code != http.StatusMisdirectedRequest {
 		t.Errorf("a Host that is not loopback gave %d", rec.Code)
 	}
 	if rec := click(h, pathAsk); rec.Code != http.StatusOK || len(fake.questions()) != 1 {
@@ -232,15 +218,11 @@ func TestEachMethodButTheOneOfARouteGets405WithItsAllowHeader(t *testing.T) {
 		if route.Method == http.MethodPost {
 			other = http.MethodGet
 		}
-		req := httptest.NewRequest(other, path, nil)
-		req.Host = "127.0.0.1:8080"
-		req.Header.Set(headerFetchSite, sameOrigin)
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
+		rec := testkit.Serve(h, other, path, testkit.LoopbackHost, sameOrigin)
 		refusedWithAllow(t, rec, other+" "+path, route.Method)
 	}
 	// The POSTs of the server are the two clicks: a POST with the header to a route that takes GET is refused.
-	if rec := clickWith(h, summaryRoutes[patternCluster], "127.0.0.1:8080", sameOrigin); rec.Code != http.StatusMethodNotAllowed {
+	if rec := click(h, summaryRoutes[patternCluster]); rec.Code != http.StatusMethodNotAllowed {
 		t.Errorf("a POST to a summary route gave %d", rec.Code)
 	}
 	if len(fake.questions()) != 0 {
@@ -252,7 +234,7 @@ func TestTheClickAnswers404ForAProfileAPackOrAMoveThatIsNotKnownAndSendsNothing(
 	_, o, fake := asked(t, askNoError)
 	h := handlerOf(o)
 	for _, path := range []string{
-		"/v1/packs/nope@1/k8s/kubernetes/ask",
+		"/v1/packs/nope@1/" + testkit.KubernetesKey + "/ask",
 		awsPacks + "/k8s/nope/ask",
 		// cert-manager is current: no move exists for it
 		awsPacks + "/addon/cert-manager/ask",
@@ -310,7 +292,7 @@ func TestAnAnswerIsDroppedWhenThePinMovesAndTheNextClickAsksAgain(t *testing.T) 
 		t.Fatalf("%d questions", len(fake.questions()))
 	}
 	// The registry has a newer version now, so the move is another move.
-	for _, name := range []string{"behind.json", askNoError} {
+	for _, name := range []string{testkit.BehindDoc, askNoError} {
 		raw, err := os.ReadFile(filepath.Join(r.fixtures, name))
 		if err != nil {
 			t.Fatal(err)
@@ -350,18 +332,12 @@ func TestTheTextOfADiffIsOnTheDetailTierAndOnNoSummaryRouteNorInTheStateNorInThe
 	noSummaryRouteStateOrLogHolds(t, r, h, sentinelText)
 }
 
-// recorded makes the strata of a test from a script that keeps the command line of each call in calls.log.
-// The real runner runs it, so a call that the runner refuses does not reach the log.
-func recorded(t *testing.T, r *rig) (check.Strata, string) {
-	t.Helper()
-	log := filepath.Join(r.fixtures, "calls.log")
-	return check.InDir{Runner: runner.Runner{Binary: script(t, r.fixtures, log, askRefuses), Timeout: time.Minute}}, log
-}
-
 func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.T) {
+	// The script keeps the command line of each call in calls.log. The real runner runs it, so a call that the runner
+	// refuses does not reach the log.
 	r := newRig(t)
-	strata, log := recorded(t, r)
-	o := r.cycled(strata)
+	log := filepath.Join(r.fixtures, "calls.log")
+	o := r.cycled(scripted(t, r, log, askRefuses))
 	lines := func() []string {
 		raw, err := os.ReadFile(log)
 		if err != nil {
@@ -394,7 +370,7 @@ func TestNoCycleAsksPaletteAndTheClickDoesThroughTheRunnerWithOnePin(t *testing.
 		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 	after := lines()[len(cycles):]
-	if len(after) != 1 || after[0] != "behind record-0.json --pin k8s/kubernetes --json --compact -q" {
+	if len(after) != 1 || after[0] != "behind record-0.json --pin "+testkit.KubernetesKey+" --json --compact -q" {
 		t.Errorf("the click ran %v", after)
 	}
 }

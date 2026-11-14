@@ -21,7 +21,7 @@ var allKinds = []Kind{PublishedChanged, Overwritten, Renamed, Gone, ClusterDiffe
 // pk makes a pack of a record: layer/name.
 func pk(layer, name, version string) docs.RecordPack {
 	return docs.RecordPack{Key: layer + "/" + name, Layer: layer, Name: name, Version: version, Type: "spectro", RegistryUID: "reg1",
-		RegistryProviderType: "spectro", Images: []string{"a/b:1", "a/c@sha256:abc"}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
+		RegistryProviderType: "spectro", Images: []string{testkit.ImageRef, testkit.DigestImage}, Hash: docs.PackHash{UpstreamRaw: "sha256:" + name, UpstreamSource: "packRef.digest"}}
 }
 
 // rec makes a record that the cluster runs, with a `verify` row of the given status. The compare with

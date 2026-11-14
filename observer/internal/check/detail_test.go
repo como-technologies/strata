@@ -70,14 +70,14 @@ func TestPackDiffOfTheNewerSideComesFromMemoryAfterAFreshCompare(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := w.countMoves()
-	pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
-	if err != nil || !ok || pack.Key != "k8s/kubernetes" || len(pack.Values.Diff) != 11 {
+	pack, ok, err := o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer)
+	if err != nil || !ok || pack.Key != testkit.KubernetesKey || len(pack.Values.Diff) != 11 {
 		t.Fatalf("%+v %v %v", pack.Key, ok, err)
 	}
 	if w.countMoves() != before {
 		t.Errorf("the request ran a compare, and the cycle had the values")
 	}
-	for _, c := range []struct{ subject, key string }{{"other@1.0.0", "k8s/kubernetes"}, {moveSubject, "k8s/nope"}, {moveSubject, "addon/cert-manager"}} {
+	for _, c := range []struct{ subject, key string }{{"other@1.0.0", testkit.KubernetesKey}, {moveSubject, "k8s/nope"}, {moveSubject, "addon/cert-manager"}} {
 		if _, ok, err := o.PackDiff(ctx, c.subject, c.key, model.SideNewer); ok || err != nil {
 			t.Errorf("%v: %v %v", c, ok, err)
 		}
@@ -96,7 +96,7 @@ func TestAfterARestartTheNewerSideAsksForOneCompareAtATimeAndKeepsTheAnswer(t *t
 	}
 	cycle := w.countMoves()
 	for i := range 3 {
-		pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+		pack, ok, err := o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer)
 		if err != nil || !ok || len(pack.Values.Diff) != 11 {
 			t.Fatalf("request %d: %v %v", i, ok, err)
 		}
@@ -128,13 +128,13 @@ func TestACompareThatFailsForTheNewerSideIsNotKept(t *testing.T) {
 	}
 	key := move("kubernetes", "1.35.3", "1.36.2")
 	w.moveErrs[key] = &runner.RunError{Kind: docs.KindAPI, Status: 500}
-	_, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+	_, ok, err := o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer)
 	var re *runner.RunError
 	if ok || !errors.As(err, &re) || re.Kind != docs.KindAPI {
 		t.Fatalf("%v %v", ok, err)
 	}
 	delete(w.moveErrs, key)
-	if pack, ok, err := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer); err != nil || !ok || len(pack.Values.Diff) != 11 {
+	if pack, ok, err := o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer); err != nil || !ok || len(pack.Values.Diff) != 11 {
 		t.Errorf("the next request asks again: %v %v", ok, err)
 	}
 	if entries := entries(t, r.work); len(entries) != 0 {
@@ -154,7 +154,7 @@ func TestAMoveThatTheNextCycleDropsLeavesTheMemory(t *testing.T) {
 	if err := o.RunVersions(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok, _ := o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer); ok {
+	if _, ok, _ := o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer); ok {
 		t.Error("a pin that is gone still has a diff")
 	}
 	o.mu.Lock()
@@ -183,7 +183,7 @@ func TestTheCyclesAndARequestShareThePoolOfProcesses(t *testing.T) {
 	go func() { defer wg.Done(); _ = o.RunContent(ctx) }()
 	go func() {
 		defer wg.Done()
-		_, _, _ = o.PackDiff(ctx, moveSubject, "k8s/kubernetes", model.SideNewer)
+		_, _, _ = o.PackDiff(ctx, moveSubject, testkit.KubernetesKey, model.SideNewer)
 	}()
 	wg.Wait()
 	if most := w.overlap.Most(); most != 2 {
@@ -213,7 +213,7 @@ func TestARequestThatWaitsEndsWithItsContext(t *testing.T) {
 	}()
 	short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 	defer cancel()
-	if _, ok, err := o.PackDiff(short, moveSubject, "k8s/kubernetes", model.SideNewer); ok || !errors.Is(err, context.DeadlineExceeded) {
+	if _, ok, err := o.PackDiff(short, moveSubject, testkit.KubernetesKey, model.SideNewer); ok || !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("%v %v", ok, err)
 	}
 }

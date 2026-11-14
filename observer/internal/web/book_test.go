@@ -157,7 +157,7 @@ func TestTheThirdFactOfAllQuietIsASingleShortLabel(t *testing.T) {
 	for _, c := range []struct {
 		newer int
 		want  string
-	}{{0, newerFact}, {1, "<span>newer version</span>"}, {3, newerFact}} {
+	}{{0, newerFact}, {1, span("newer version")}, {3, newerFact}} {
 		dir := writeSet(t, devdata.StateQuiet, map[string]func([]byte) []byte{
 			"cluster.json": editJSON(t, func(v *api.ClusterView) { v.Counts.Newer = c.newer }),
 		})

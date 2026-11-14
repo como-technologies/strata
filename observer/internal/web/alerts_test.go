@@ -1,7 +1,6 @@
 package web
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -14,7 +13,7 @@ import (
 const rulesHead = `<h2>Alert rules <span class="sub">`
 
 // navOfAlerts finds the nav item Alerts and its count.
-var navOfAlerts = regexp.MustCompile(`<a href="#alerts" class="[^"]*"><span>Alerts</span><span class="cnt( r)?">([^<]*)</span></a>`)
+var navOfAlerts = navItem("#alerts", "Alerts", "( r)?")
 
 // The badge of each state of a rule, as the page draws it.
 var alertBadges = map[alert.State]string{
@@ -55,7 +54,7 @@ func TestTheScreenOfTheAlertsShowsEachRuleWithItsStateAndTheSampleMessage(t *tes
 	set := loadSet(t, devdata.StateAlerts)
 	screen := pageOf(t, render(t, devdata.StateAlerts, false), "#alerts", "")
 	mustHold(t, "the screen", screen,
-		alertBar+`b">One message when a finding opens, and one when it clears. <span>A lower level overrides a higher one. A mute always has an end date. Messages hold no values.</span></div>`,
+		alertBar+`b">One message when a finding opens, and one when it clears. `+span("A lower level overrides a higher one. A mute always has an end date. Messages hold no values.")+`</div>`,
 		rulesHead+`7</span></h2>`,
 		`<th>State</th><th>Level</th><th>Applies to</th><th>News</th><th>Send</th><th>Where</th>`,
 		`<h2>Sample message</h2>`)
@@ -104,7 +103,7 @@ func TestAMuteThatEndedAndAMessageThatWaitsShowTheirWords(t *testing.T) {
 		}),
 	})
 	screen := pagesOf(t, dir, "#alerts")[0]
-	mustHold(t, "the screen", screen, amberBar+`2 messages wait for a retry. <span>The log names the channel and the status. It never holds the address.</span></div>`,
+	mustHold(t, "the screen", screen, amberBar+`2 messages wait for a retry. `+span("The log names the channel and the status. It never holds the address.")+`</div>`,
 		`<td>Mute ended 2026-10-01</td>`)
 	mustNotHold(t, "the screen", screen, "Muted until 2026-10-01")
 	one := writeSet(t, devdata.StateAlerts, map[string]func([]byte) []byte{

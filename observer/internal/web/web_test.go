@@ -57,11 +57,7 @@ func (noSource) StartCycle(string) (model.Start, bool) { return model.Start{}, f
 func serve(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	h := (&api.Server{Source: noSource{}, Page: api.Page(files(t))}).Handler()
-	req := httptest.NewRequest(http.MethodGet, target, nil)
-	req.Host = "127.0.0.1:8080"
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
+	return testkit.Serve(h, http.MethodGet, target, testkit.LoopbackHost, "")
 }
 
 func TestEachAssetIsServedWithItsType(t *testing.T) {
@@ -695,11 +691,10 @@ const (
 	whenThisHappens = "<b>When this happens</b>"
 	// dexIDTokens is the path of a value of dex that its change sets.
 	dexIDTokens = testkit.DexExpiry + ".idTokens"
-	// mutedCell starts a muted cell of the table of the images, catchTab ends the tab of what the pods catch, imagesOn is
-	// the nav item Images when it is on, and machineImage ends the sentence of a finding of an image id.
+	// mutedCell starts a muted cell of the table of the images, catchTab ends the tab of what the pods catch, and
+	// machineImage ends the sentence of a finding of an image id.
 	mutedCell    = `<td class="m nw"><span class="mut">`
 	catchTab     = "What pods do catch</button>"
-	imagesOn     = `<a href="#images" class="on">`
 	machineImage = "changed the machine image on this cluster."
 	// The words of the badges of an image and of a pack, and of a row of a profile with a newer version.
 	twoDigests     = "Two digests"
@@ -715,6 +710,9 @@ const (
 	ranAnotherDigest = " ran another digest in pods than the first one seen."
 	ranTwoDigests    = " ran with two digests in pods at one time."
 )
+
+// imagesOn is the start of the nav item Images when it is on.
+var imagesOn = navLink("#images") + `"on">`
 
 // ref gives the name and the version of a pack or of a profile, as ref of app.js writes them.
 func ref(name, version string) string { return name + `<span class="ver">@` + version + `</span>` }
@@ -946,7 +944,7 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 			if len(want) != c.count || set.Cluster.Counts.NewerProfiles != c.count {
 				t.Fatalf("the set has %d profiles with a newer pack and %d in the tile, want %d", len(want), set.Cluster.Counts.NewerProfiles, c.count)
 			}
-			button := regexp.MustCompile(`data-filter="newer"[^>]*>Newer ` + strconv.Itoa(c.count) + `<`)
+			button := filterButton("newer", "Newer "+strconv.Itoa(c.count), false)
 			var shown bool
 			for _, s := range render(t, c.state, false) {
 				if s.Hash != "#profiles" {
@@ -954,12 +952,12 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 				}
 				switch s.Variant {
 				case "":
-					if !button.MatchString(s.HTML) {
+					if !strings.Contains(s.HTML, button) {
 						t.Errorf("the button of the filter does not say Newer %d", c.count)
 					}
 				case "filter newer":
 					shown = true
-					if rows := strings.Count(s.HTML, `data-go="#p-`); rows != len(want) {
+					if rows := strings.Count(s.HTML, goToStart+"#p-"); rows != len(want) {
 						t.Errorf("the filter shows %d profiles, want %d", rows, len(want))
 					}
 					var links []string
@@ -979,8 +977,8 @@ func TestTheFilterNewerHoldsEachProfileWithANewerPack(t *testing.T) {
 	}
 }
 
-// chipCount reads the number of a chip of the filter: <button data-filter="drift">Drift 2</button>.
-var chipCount = regexp.MustCompile(`data-filter="[a-z-]+"[^>]*>[A-Za-z ]+ ([^<]*)</button>`)
+// chipCount reads the number of a chip of the filter: <button data-filter="drift" class="">Drift 2</button>.
+var chipCount = regexp.MustCompile(filterButtonClass(`[a-z-]+`, `[A-Za-z ]+ ([^<]*)`, `[^"]*`))
 
 // The chips of the filter show a number after a good check. A page with nothing read shows a splash in place of the table of
 // profiles, so it shows no chip, and a count of 0 would claim a check that did not happen.
@@ -1102,6 +1100,14 @@ func ruleProblem(css, selector, want string) string {
 	return ""
 }
 
+// lackProblem gives the problem of the rule of the selector in css when it lacks the declaration want, or "".
+func lackProblem(css, selector, want string) string {
+	if got := ruleOf(css, selector); !strings.Contains(got, want) {
+		return fmt.Sprintf("the rule of %s is %q, and it lacks %s", selector, got, want)
+	}
+	return ""
+}
+
 // ruleIs fails when the rule of the selector in css does not hold exactly the declarations want.
 func ruleIs(t *testing.T, css, selector, want string) {
 	t.Helper()
@@ -1114,10 +1120,9 @@ func ruleIs(t *testing.T, css, selector, want string) {
 func rulesHold(t *testing.T, css string, rules map[string][]string) {
 	t.Helper()
 	for selector, want := range rules {
-		got := ruleOf(css, selector)
 		for _, w := range want {
-			if !strings.Contains(got, w) {
-				t.Errorf("the rule of %s is %q, and it lacks %s", selector, got, w)
+			if p := lackProblem(css, selector, w); p != "" {
+				t.Error(p)
 			}
 		}
 	}
@@ -1127,10 +1132,9 @@ func rulesHold(t *testing.T, css string, rules map[string][]string) {
 // the row overflows on the vertical axis, and a scrollbar shows. The row scrolls sideways on a phone.
 func tabRowProblems(css string) []string {
 	var out []string
-	rule := ruleOf(css, ".tabs")
 	for _, want := range []string{"overflow-x:auto;", "overflow-y:hidden;"} {
-		if !strings.Contains(rule, want) {
-			out = append(out, "the rule of .tabs has no "+strings.TrimSuffix(want, ";"))
+		if p := lackProblem(css, ".tabs", want); p != "" {
+			out = append(out, p)
 		}
 	}
 	return out
@@ -1143,7 +1147,7 @@ func TestTheRowOfTabsHasNoVerticalScrollbar(t *testing.T) {
 	}
 	noProblems(t, "app.css", tabRowProblems(string(css)))
 	// The check can fail.
-	const noX, noY = "no overflow-x:auto", "no overflow-y:hidden"
+	const noX, noY = "lacks overflow-x:auto;", "lacks overflow-y:hidden;"
 	for css, want := range map[string]string{
 		`.tabs{display:flex;overflow-x:auto}`:                         noY,
 		`.tabs{display:flex;overflow-y:hidden}`:                       noX,
@@ -1380,11 +1384,12 @@ const (
 	darkTheme   = `:root[data-theme="dark"]`
 	schemeQuery = "prefers-color-scheme"
 	twoColors   = "does not hold two colors that differ"
-	// schemeOfRoot is the scheme that the root sets, and lightChoice the rule of the choice of light. noSchemeOnRoot and
-	// notAChoice are the problems of a root with no scheme and of a rule of a theme that sets more than its scheme.
+	// schemeOfRoot is the scheme that the root sets, and noSchemeOnRoot is that scheme as ruleOf gives it, which a
+	// root with no scheme lacks. lightChoice is the rule of the choice of light. notAChoice is the problem of a rule of a
+	// theme that sets more than its scheme.
 	schemeOfRoot   = "color-scheme:light dark;"
 	lightChoice    = "{color-scheme:light}"
-	noSchemeOnRoot = "does not set color-scheme to light dark"
+	noSchemeOnRoot = "color-scheme:lightdark;"
 	notAChoice     = "is not a choice of color-scheme"
 )
 
@@ -1397,8 +1402,8 @@ func themeProblems(css string) []string {
 	if strings.Contains(css, schemeQuery) {
 		out = append(out, "it has a "+schemeQuery+" rule: a color would have a second copy")
 	}
-	if !strings.Contains(ruleOf(css, ":root"), "color-scheme:lightdark;") {
-		out = append(out, "the rule of :root "+noSchemeOnRoot)
+	if p := lackProblem(css, ":root", noSchemeOnRoot); p != "" {
+		out = append(out, p)
 	}
 	choices := map[string]string{
 		lightTheme: "color-scheme:light;",
@@ -1597,7 +1602,10 @@ const linkRowStart = `<tr class="link"`
 func linkRow(hash string) string { return linkRowStart + ` ` + goTo(hash) + `>` }
 
 // goTo gives the data attribute of an element that leads to the screen hash.
-func goTo(hash string) string { return `data-go="` + hash + `"` }
+func goTo(hash string) string { return goToStart + hash + `"` }
+
+// goToStart starts the data attribute of an element that leads to a screen, before the hash.
+const goToStart = `data-go="`
 
 // rowTo finds the row of a table that leads to the screen hash.
 func rowTo(t *testing.T, html, hash string) string {
@@ -1607,12 +1615,19 @@ func rowTo(t *testing.T, html, hash string) string {
 
 // tileLabel gives the label of a tile of the overview. tileLink gives the start of the link of a tile to the screen hash, up
 // to its label.
-func tileLabel(label string) string { return `<div class="l">` + label + `</div>` }
+func tileLabel(label string) string { return tileLabelStart + label + `</div>` }
 
-func tileLink(hash, label string) string { return `href="` + hash + `"><div class="l">` + label }
+func tileLink(hash, label string) string { return `href="` + hash + `">` + tileLabelStart + label }
 
-// tileValue gives the value of a tile of the overview.
+// tileLabelStart starts the label of a tile. tileStart starts the link of a tile of the tone, before its address.
+const tileLabelStart = `<div class="l">`
+
+func tileStart(tone string) string { return `<a class="tile ` + tone + `" ` }
+
+// tileValue gives the value of a tile of the overview, and tileSub gives the line under the value.
 func tileValue(value string) string { return `<div class="v">` + value + `</div>` }
+
+func tileSub(sub string) string { return `<div class="s">` + sub + `</div>` }
 
 // badgeOf is the start of a badge of the class, and badge is the badge of the class with its word.
 func badgeOf(class string) string { return `<span class="badge ` + class + `">` }
@@ -1621,6 +1636,20 @@ func badge(class, word string) string { return badgeOf(class) + word + "</span>"
 
 // navLink is the start of the link of the nav to the screen hash.
 func navLink(hash string) string { return `<a href="` + hash + `" class=` }
+
+// navCount gives the label and the count of an item of the nav. class follows the class cnt of the count, such as " r".
+func navCount(label, class, count string) string { return span(label) + countSpan(class, count) }
+
+// countSpan gives the count of an item of the nav. class follows the class cnt, such as " r".
+func countSpan(class, count string) string {
+	return `<span class="cnt` + class + `">` + count + `</span>`
+}
+
+// navItem gives the pattern of the item of the nav to the screen hash, with its label. The count is a group of the
+// pattern, and class follows the class cnt of the count.
+func navItem(hash, label, class string) *regexp.Regexp {
+	return regexp.MustCompile(navLink(hash) + `"[^"]*">` + navCount(label, class, `([^<]*)`) + `</a>`)
+}
 
 func mustHold(t *testing.T, where, html string, words ...string) {
 	t.Helper()
@@ -1770,8 +1799,8 @@ func TestThePageOfAnImageShowsTheRecordAndEachDigestOfThePods(t *testing.T) {
 				case model.MatchNone:
 					match = "No pack"
 				}
-				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], "<span>Named by</span>"+named+"</div>", "<span>Match</span>"+match+"</div>",
-					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> <span>/</span> <b>`+img.Ref+`</b></nav>`,
+				mustHold(t, img.Ref, page, `<h1 class="m h1m">`+img.Ref+`</h1>`+imageBadges[img.Status], labelRow("Named by", named), labelRow("Match", match),
+					`<nav class="crumbs" aria-label="Where you are"><a href="#images">Images</a> `+span("/")+` <b>`+img.Ref+`</b></nav>`,
 					`data-k="this">This image</button>`, `data-k="catch">`+catchTab,
 					`<th>Where</th><th class="narrow-hide">Reference</th><th>Digest</th><th>Status</th>`)
 				mustNotHold(t, img.Ref, page, "Your real case", "With a source read")
@@ -1858,8 +1887,8 @@ func TestTheFindingOfAnImageHasItsOwnBadgeAndOpensTheImage(t *testing.T) {
 			mustHold(t, "the finding", row, `<td class="w90">`+c.badge+`</td>`, `<a href="`+href+`">`+c.title+`</a>`,
 				`<span class="lab"><i>profile=</i>"`+wilmaSubject+`"</span>`, `<span class="lab wrap"><i>image=</i>"`+testkit.VendorRef+`"</span>`)
 			mustNotHold(t, "the finding", row, ">Drift<")
-			mustHold(t, "the tile", overview, `<a class="tile r" `+tileLink("#findings", "Drift")+"</div>"+tileValue("1"))
-			mustHold(t, "the nav", overview, `<span class="cnt r">2</span>`)
+			mustHold(t, "the tile", overview, tileStart("r")+tileLink("#findings", "Drift")+"</div>"+tileValue("1"))
+			mustHold(t, "the nav", overview, countSpan(" r", "2"))
 		})
 	}
 }
@@ -1889,8 +1918,8 @@ func TestTheRowOfAProfileNamesItsNewerProfileVersionInWordsOfItsOwn(t *testing.T
 }
 
 var (
-	tileOfImages = regexp.MustCompile(`<a class="tile (\w+)" ` + tileLink("#images", imageChanges) + `</div><div class="v">([^<]*)</div><div class="s">([^<]*)</div></a>`)
-	navOfImages  = regexp.MustCompile(`<a href="#images" class="[^"]*"><span>Images</span><span class="cnt">([^<]*)</span></a>`)
+	tileOfImages = regexp.MustCompile(tileStart(`(\w+)`) + tileLink("#images", imageChanges) + `</div>` + tileValue(`([^<]*)`) + tileSub(`([^<]*)`) + `</a>`)
+	navOfImages  = navItem("#images", "Images", "")
 )
 
 // The tile "Image changes" sits between Drift and Newer versions. The nav item Images sits between Newer
@@ -1976,7 +2005,7 @@ func TestWithNoReadOfThePodsTheTileIsGoneAndTheNavItemSaysOff(t *testing.T) {
 			if n := navOfImages.FindStringSubmatch(overview); n == nil || n[1] != "Off" {
 				t.Errorf("the nav item is %q, want the count Off", n)
 			}
-			mustHold(t, "the images", pageOf(t, screens, "#images", ""), podsOffTitle, imagesOn+`<span>Images</span><span class="cnt">Off</span></a>`)
+			mustHold(t, "the images", pageOf(t, screens, "#images", ""), podsOffTitle, imagesOn+navCount("Images", "", "Off")+`</a>`)
 		})
 	}
 }
@@ -2123,7 +2152,7 @@ func TestAReadThatFailedAfterAGoodOneShowsAnAmberBarOnEachScreen(t *testing.T) {
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{
 		"images.json": podsRefused(t),
 	})
-	const bar = amberBar + podsFailed + `: ` + roleRefused + `. <span>The list shows the read of 11:54Z.</span></div>`
+	bar := amberBar + podsFailed + `: ` + roleRefused + `. ` + span("The list shows the read of 11:54Z.") + `</div>`
 	pages := pagesOf(t, dir, "#overview", "#images", imageHash(testkit.VendorRef))
 	for i, page := range pages {
 		mustHold(t, imageScreens[i], page, bar)
@@ -2198,7 +2227,7 @@ func TestTheLineOfAFindingReadsRightForOneOrManyPacks(t *testing.T) {
 		t.Run(string(c.kind)+strconv.Itoa(len(c.packs)), func(t *testing.T) {
 			add := editJSON(t, func(v *api.FindingsView) {
 				v.Findings = append(v.Findings, model.Finding{ID: model.FindingID(c.kind, testkit.DexProfile), Kind: c.kind, Profile: testkit.DexProfile, Packs: c.packs,
-					Images: []string{"a/b:1"}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
+					Images: []string{testkit.ImageRef}, FirstSeen: devdata.Reference, LastSeen: devdata.Reference, Who: []docs.Who{}})
 			})
 			dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"findings.json": add})
 			row := rowTo(t, pagesOf(t, dir, "#profiles")[0], fredHash)

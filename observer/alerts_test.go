@@ -26,7 +26,7 @@ func rulesFile(t *testing.T, w *testkit.Receiver) string {
 }
 
 // drifting is the answer of `compare` for a record whose pack kubernetes changed.
-const drifting = `{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"rootB":"x","packs":[{"key":"k8s/kubernetes","status":"changed"}]}`
+const drifting = `{"schema":"` + docs.DiffSchema + `","same":false,"sameContent":false,"rootB":"x","packs":[{"key":"` + testkit.KubernetesKey + `","status":"changed"}]}`
 
 func TestOnceSendsNothingAlsoWithTheFlagAlerts(t *testing.T) {
 	w := testkit.NewReceiver(t)

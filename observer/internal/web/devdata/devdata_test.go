@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
@@ -141,10 +140,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 		s := load(t, state)
 		h := (&api.Server{Source: s}).Handler()
 		get := func(path string) (int, any) {
-			req := httptest.NewRequest(http.MethodGet, path, nil)
-			req.Host = "127.0.0.1:8080"
-			rec := httptest.NewRecorder()
-			h.ServeHTTP(rec, req)
+			rec := testkit.Serve(h, http.MethodGet, path, testkit.LoopbackHost, "")
 			var v any
 			_ = json.Unmarshal(rec.Body.Bytes(), &v)
 			return rec.Code, v
@@ -153,7 +149,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 		serves := func(path string, want any) {
 			t.Helper()
 			if code, got := get(path); code != http.StatusOK || !reflect.DeepEqual(got, want) {
-				t.Errorf("%s: %s gave %d and\n%v\nthe file holds\n%v", state, path, code, got, want)
+				t.Errorf("%s: %s gave %d and\n%v\nwant\n%v", state, path, code, got, want)
 			}
 		}
 		for route, file := range map[string]string{"/v1/cluster": fileCluster, "/v1/findings": fileFindings, "/v1/profiles": fileProfiles,
@@ -164,9 +160,7 @@ func TestTheRoutesServeTheFilesOfEachSet(t *testing.T) {
 			}
 			serves(route, normal(t, raw))
 		}
-		if code, got := get("/v1/alerts"); code != http.StatusOK || !reflect.DeepEqual(got, encoded(t, s.AlertRules)) {
-			t.Errorf("%s: /v1/alerts gave %d and\n%v\nthe set holds\n%v", state, code, got, encoded(t, s.AlertRules))
-		}
+		serves("/v1/alerts", encoded(t, s.AlertRules))
 		for _, img := range s.Images.Images {
 			view, _ := s.Images.ImageOf(img.Ref)
 			path := "/v1/images/" + url.PathEscape(img.Ref)
@@ -703,7 +697,7 @@ func TestTheOKSetHoldsTheTextOfTheViewer(t *testing.T) {
 		len(dex.Manifests) != 1 || dex.Manifests[0].Name != "fred-realm-config" || !strings.Contains(dex.Manifests[0].Unified, "+  sessionIdleMinutes: \"480\"\n") {
 		t.Errorf("the text of dex: %+v", dex)
 	}
-	if k := find("barney-base@1.5.0", "k8s/kubernetes", model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
+	if k := find("barney-base@1.5.0", testkit.KubernetesKey, model.SideNewer); strings.Count(k.Values.Unified, "\n@@ ") != 3 {
 		t.Errorf(testkit.KubernetesValues+" hold %d hunks, want 3", strings.Count(k.Values.Unified, "\n@@ "))
 	}
 	ops := map[string]bool{}
@@ -851,7 +845,7 @@ func TestTheSetUpdateChecksHoldsEachCheckOfStrataBesideAnAnswer(t *testing.T) {
 		}
 		if s := a.UpdateChecks.SkippedMinor; s != nil {
 			skips++
-			if a.Key != "k8s/kubernetes" || s.Code != testkit.CodeMinorSkip || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
+			if a.Key != testkit.KubernetesKey || s.Code != testkit.CodeMinorSkip || s.To != a.Newest || s.NextStep != moves[row].Newest || a.Newest == moves[row].Newest {
 				t.Errorf("the skip %+v of %s %s, the row gives %s", s, a.Profile, a.Key, moves[row].Newest)
 			}
 		} else if a.Newest != moves[row].Newest {
@@ -945,13 +939,11 @@ func TestThePostOfTheAskRouteGivesTheReplyAndTheListShowsIt(t *testing.T) {
 	s := load(t, StateOK)
 	h := (&api.Server{Source: s}).Handler()
 	do := func(method, path string, page bool) (int, string) {
-		req := httptest.NewRequest(method, path, nil)
-		req.Host = "127.0.0.1:8080"
+		site := ""
 		if page {
-			req.Header.Set("Sec-Fetch-Site", "same-origin")
+			site = testkit.SameOrigin
 		}
-		rec := httptest.NewRecorder()
-		h.ServeHTTP(rec, req)
+		rec := testkit.Serve(h, method, path, testkit.LoopbackHost, site)
 		return rec.Code, rec.Body.String()
 	}
 	testkit.AskFlow(t, func(path string) (int, string) { return do(http.MethodGet, path, false) },

@@ -95,14 +95,16 @@ func readUnified(text string) []diffLine {
 }
 
 // The words of a diff that more than one test reads. manifestCell starts the cell of a manifest in the table of the
-// changes. notAHeader is a line of a hunk that looks like a header. splitPressed is the button of the layout split when
-// it is on. idTokens is a line of the values of dex that its change adds.
+// changes. notAHeader is a line of a hunk that looks like a header. idTokens is a line of the values of dex that its change
+// adds.
 const (
 	manifestCell = `<td>Manifest</td><td class="m">`
 	notAHeader   = "++ not a header either"
-	splitPressed = `data-view="split" aria-pressed="true"`
 	idTokens     = "+        idTokens: 168h\n"
 )
+
+// splitPressed is the part of the button of the layout split that says that it is on.
+var splitPressed = pressedAttrs("view", layoutSplit, true)
 
 // rowString writes a row of a diff table as the tests compare it: the class of the row, then the class and
 // the text of each cell.
@@ -257,8 +259,8 @@ const (
 	dexHash       = "#k-" + testkit.DexProfile + "/addon/dex"
 	dexPublished  = "side-" + testkit.DexProfile + "-addon/dex-published"
 	dexMove       = "move-" + testkit.DexProfile + "-addon/dex"
-	k8sHash       = "#k-" + k8sSubject + "/k8s/kubernetes"
-	k8sMove       = "move-" + k8sSubject + "-k8s/kubernetes"
+	k8sHash       = "#k-" + k8sSubject + "/" + testkit.KubernetesKey
+	k8sMove       = "move-" + k8sSubject + "-" + testkit.KubernetesKey
 	traefikHash   = "#k-" + wilmaSubject + "/addon/traefik"
 	traefikMove   = "move-" + wilmaSubject + "-addon/traefik"
 	k8sSubject    = "barney-base@1.5.0"
@@ -278,7 +280,7 @@ const (
 const (
 	csiHash      = "#k-" + k8sSubject + "/csi/csi-aws-ebs"
 	reloaderHash = "#k-" + testkit.DexProfile + "/addon/reloader"
-	k8sClick     = `{"ask":"` + k8sSubject + `","pack":"k8s/kubernetes"}`
+	k8sClick     = `{"ask":"` + k8sSubject + `","pack":"` + testkit.KubernetesKey + `"}`
 	dexClick     = `{"ask":"` + testkit.DexProfile + `","pack":"addon/dex"}`
 	ubuntuClick  = `{"ask":"` + k8sSubject + `","pack":"os/ubuntu-aws"}`
 	csiClick     = `{"ask":"` + k8sSubject + `","pack":"csi/csi-aws-ebs"}`
@@ -323,7 +325,7 @@ func TestTheValuesTabShowsTheRawTextInBothLayouts(t *testing.T) {
 	}{
 		{dexHash, dexPublished, testkit.DexProfile, "addon/dex", model.SidePublished, ""},
 		{dexHash, dexMove, testkit.DexProfile, "addon/dex", model.SideNewer, "newer"},
-		{k8sHash, k8sMove, k8sSubject, "k8s/kubernetes", model.SideNewer, ""},
+		{k8sHash, k8sMove, k8sSubject, testkit.KubernetesKey, model.SideNewer, ""},
 		{traefikHash, traefikMove, wilmaSubject, "addon/traefik", model.SideNewer, ""},
 	} {
 		text := diffOf(t, set, c.profile, c.key, c.side).Values.Unified
@@ -432,7 +434,7 @@ func TestTheReadingOfTheTextFollowsTheRulesOfTheIssue(t *testing.T) {
 		}
 		card := cardOf(t, clickIn(t, dir, "scratch", dexHash, "0", clicks...).After, tabOf(dexPublished))
 		sameRows(t, layout, diffRowsOf(card), layoutRows(layout, text))
-		mustHold(t, layout, card, `<span class="now">+5</span> <span class="was">-2</span>`)
+		mustHold(t, layout, card, fmt.Sprintf(countsFormat, 5, 2))
 	}
 	// The reference reading follows the rules too, so the two readings do not agree by accident.
 	lines := readUnified(text)
@@ -495,7 +497,12 @@ func onClass(on bool) string {
 // pressedButton gives a button that sets how the page shows a view, with its label. The attribute data-<attr> names the
 // view, and the button is pressed when on is true.
 func pressedButton(attr, view, label string, on bool) string {
-	return `<button data-` + attr + `="` + view + `" aria-pressed="` + strconv.FormatBool(on) + `" class="` + onClass(on) + `">` + label + `</button>`
+	return `<button ` + pressedAttrs(attr, view, on) + ` class="` + onClass(on) + `">` + label + `</button>`
+}
+
+// pressedAttrs gives the attributes of pressedButton that name the view and say if the button is pressed.
+func pressedAttrs(attr, view string, on bool) string {
+	return `data-` + attr + `="` + view + `" aria-pressed="` + strconv.FormatBool(on) + `"`
 }
 
 // Both layouts have the same control in the head of each diff, on the Values tab and on the Manifests
@@ -653,7 +660,7 @@ func TestTheNewerTableAndTheCardOfAMoveOfferTheQuestion(t *testing.T) {
 	mustHold(t, "the table", table, `<tr class="g"><td colspan="8">`)
 	mustNotHold(t, "the table", table, `colspan="7"`)
 	for _, row := range strings.Split(table, "</tr>") {
-		if strings.Contains(row, `data-go="#k-`) && !strings.Contains(row, narrowCell+rowButton) {
+		if strings.Contains(row, goToStart+"#k-") && !strings.Contains(row, narrowCell+rowButton) {
 			t.Errorf("a row has no button in a cell of the class narrow-hide: %s", row)
 		}
 	}

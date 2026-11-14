@@ -45,18 +45,18 @@ func TestEachAnswerHasTheFourHeaders(t *testing.T) {
 		name, method, path, host string
 		status                   int
 	}{
-		{"health", "GET", pathHealth, "127.0.0.1:8080", 200},
-		{"a summary route", "GET", summaryRoutes[patternCluster], "127.0.0.1:8080", 200},
+		{"health", "GET", pathHealth, testkit.LoopbackHost, 200},
+		{"a summary route", "GET", summaryRoutes[patternCluster], testkit.LoopbackHost, 200},
 		{"the detail route", "GET", pathPublished, "localhost:1", 200},
-		{"a profile that does not exist", "GET", "/v1/profiles/nope", "127.0.0.1:8080", 404},
-		{noSuchSide, "GET", "/v1/packs/aws-stack" + testkit.KubernetesDiff + "?side=x", "127.0.0.1:8080", 400},
-		{"the page", "GET", "/", "127.0.0.1:8080", 404},
-		{"a post", "POST", summaryRoutes[patternCluster], "127.0.0.1:8080", 405},
+		{"a profile that does not exist", "GET", "/v1/profiles/nope", testkit.LoopbackHost, 404},
+		{noSuchSide, "GET", "/v1/packs/aws-stack" + testkit.KubernetesDiff + "?side=x", testkit.LoopbackHost, 400},
+		{"the page", "GET", "/", testkit.LoopbackHost, 404},
+		{"a post", "POST", summaryRoutes[patternCluster], testkit.LoopbackHost, 405},
 		{"a host that is not loopback", "GET", summaryRoutes[patternCluster], "evil.example", 421},
-		{"a path that the mux redirects", "GET", "/v1//cluster", "127.0.0.1:8080", http.StatusTemporaryRedirect},
+		{"a path that the mux redirects", "GET", "/v1//cluster", testkit.LoopbackHost, http.StatusTemporaryRedirect},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			rec := do(h, c.method, c.path, c.host)
+			rec := testkit.Serve(h, c.method, c.path, c.host, "")
 			if rec.Code != c.status {
 				t.Fatalf("status %d, want %d", rec.Code, c.status)
 			}
@@ -77,7 +77,7 @@ func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
 		want int
 	}{
 		{"127.0.0.1", 200},
-		{"127.0.0.1:8080", 200},
+		{testkit.LoopbackHost, 200},
 		{"127.0.0.1:54321", 200},
 		{"localhost", 200},
 		{"localhost:1", 200},
@@ -94,7 +94,7 @@ func TestARequestWithAHostThatIsNotLoopbackGets421(t *testing.T) {
 		{"192.168.1.1", 421},
 		{"", 421},
 	} {
-		rec := do(h, "GET", summaryRoutes[patternCluster], c.host)
+		rec := testkit.Serve(h, http.MethodGet, summaryRoutes[patternCluster], c.host, "")
 		if rec.Code != c.want {
 			t.Errorf("Host %q gave %d, want %d", c.host, rec.Code, c.want)
 		}
@@ -109,7 +109,7 @@ func TestOnlyGetIsServed(t *testing.T) {
 	h := handlerOf(r.cycled(&fakeStrata{dir: r.fixtures}))
 	for _, method := range []string{"POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT"} {
 		for _, path := range []string{summaryRoutes[patternCluster], pathHealth, pathPublished, "/nowhere"} {
-			rec := do(h, method, path, "127.0.0.1:8080")
+			rec := testkit.Serve(h, method, path, testkit.LoopbackHost, "")
 			refusedWithAllow(t, rec, method+" "+path, http.MethodGet)
 		}
 	}
@@ -120,7 +120,7 @@ func TestListenTakesOnlyALoopbackAddress(t *testing.T) {
 		addr string
 		ok   bool
 	}{
-		{"127.0.0.1:8080", true},
+		{testkit.LoopbackHost, true},
 		{"127.0.0.1:0", true},
 		{"127.1.2.3:8080", true},
 		{"[::1]:8080", true},

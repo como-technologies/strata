@@ -8,6 +8,7 @@ import (
 	"github.com/como-technologies/strata/observer/internal/docs"
 	"github.com/como-technologies/strata/observer/internal/model"
 	"github.com/como-technologies/strata/observer/internal/runner"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // otherSchema is the id of a document that another binary can write. `--strata` can name any binary,
@@ -97,7 +98,7 @@ func TestAMoveWithAnotherSchemaIsAMoveThatWasNotRead(t *testing.T) {
 		t.Fatalf(versionsNewer, s.Versions, len(s.Newer))
 	}
 	countsAllButKubernetes(t, s)
-	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != "k8s/kubernetes" {
+	if len(s.NotChecked) != 1 || s.NotChecked[0].Cause != model.PinError || s.NotChecked[0].Packs[0] != testkit.KubernetesKey {
 		t.Errorf("notChecked %+v", s.NotChecked)
 	}
 }

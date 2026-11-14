@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
@@ -115,6 +116,12 @@ const (
 	FaviconDark  = "favicon-dark.svg"
 	// JSONType is the Content-Type of a document of JSON.
 	JSONType = "application/json"
+	// LoopbackHost is the Host of a request to the server of the page through a port-forward. FetchSite is the header
+	// that a browser sets on a fetch, and SameOrigin is its value on a fetch of the page itself. The server refuses a
+	// POST with no SameOrigin.
+	LoopbackHost = "127.0.0.1:8080"
+	FetchSite    = "Sec-Fetch-Site"
+	SameOrigin   = "same-origin"
 	// HeaderPolicy and HeaderNoSniff are two headers that the server sets on each answer.
 	HeaderPolicy  = "Content-Security-Policy"
 	HeaderNoSniff = "X-Content-Type-Options"
@@ -126,8 +133,9 @@ const (
 	// is the key of the move of dex from 2.42.0 to 2.44.0.
 	KubernetesMove = "/kubernetes@1.35.3->1.36.2"
 	DexMove        = "/dex@2.42.0->2.44.0"
-	// KubernetesDiff ends the route of the diff of the pack kubernetes of a profile.
-	KubernetesDiff = "/k8s/kubernetes/diff"
+	// KubernetesKey is the key of the pack kubernetes, and KubernetesDiff ends the route of its diff in a profile.
+	KubernetesKey  = "k8s/kubernetes"
+	KubernetesDiff = "/" + KubernetesKey + "/diff"
 	// DexValuesHead is the head of the diff of the values of dex in the dev data. NoEOL is the note of a diff for a side
 	// with no newline at its end.
 	DexValuesHead = "--- a: addon/dex values\n+++ b: addon/dex values\n"
@@ -144,9 +152,11 @@ var PageTypes = map[string]string{
 	".md":    "text/markdown; charset=utf-8",
 }
 
-// The documents of the real binary in the test data of internal/docs, which ReadDoc reads.
+// The documents of the real binary in the test data of internal/docs, which ReadDoc reads. The test data of
+// internal/api also holds a document of `behind` in BehindDoc.
 const (
 	DriftSummary    = "verify-summary-drift.json"
+	BehindDoc       = "behind.json"
 	MoveKubernetes  = "move-kubernetes.json"
 	MoveCertManager = "move-cert-manager.json"
 	MoveCilium      = "move-cni-cilium-oss.json"
@@ -187,6 +197,19 @@ func ExitsTwo(t *testing.T, code int, stdout, stderr string, words ...string) {
 	if !ok {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, stdout, stderr)
 	}
+}
+
+// Serve sends a request of the method for path to the handler h, with the Host host, and gives the answer. A site
+// that is not empty is the value of the header FetchSite.
+func Serve(h http.Handler, method, path, host, site string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	req.Host = host
+	if site != "" {
+		req.Header.Set(FetchSite, site)
+	}
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
 }
 
 // AskFlow checks the click "Ask Palette" on the move of dex of the dev data ok. get sends a GET to a path of the

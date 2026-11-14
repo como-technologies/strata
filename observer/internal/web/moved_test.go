@@ -26,7 +26,12 @@ const (
 // filterButton gives the button of the filter of the table of the profiles, with its words. The filter is on when on is
 // true.
 func filterButton(filter, words string, on bool) string {
-	return `<button data-filter="` + filter + `" class="` + onClass(on) + `">` + words + `</button>`
+	return filterButtonClass(filter, words, onClass(on))
+}
+
+// filterButtonClass gives the button of the filter of the table of the profiles, with its words and its class.
+func filterButtonClass(filter, words, class string) string {
+	return `<button data-filter="` + filter + `" class="` + class + `">` + words + `</button>`
 }
 
 // versionPageOfMoved checks the page of the version moved. It must hold the badge of the status and the fact of a version

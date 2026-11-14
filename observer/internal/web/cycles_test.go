@@ -21,15 +21,13 @@ func failPost(answer string) string {
 }
 
 // The markup and the scripts of the menus of the cycles that more than one test reads. cycleMenu starts the menu of a
-// cycle, and chipSummary follows its name. openContent opens the menu of the content cycle, and checkContent also clicks
-// its button. nowButton starts the button of a cycle in its menu, and contentNow ends the button of the content cycle.
+// cycle, and chipSummary follows its name. nowButton starts the button of a cycle in its menu, and contentNow ends the
+// button of the content cycle.
 // contentButton is that button, contentOff is the button when it is off, and checkingVersions is the pill of the
 // versions while they are read.
 const (
 	cycleMenu        = `<details class="cyclemenu" data-open="cycle-`
 	chipSummary      = `"><summary class="chip"`
-	openContent      = `S.open["cycle-content"] = true`
-	checkContent     = openContent + `; checkNow("content")`
 	nowButton        = `<button class="btn" data-now="`
 	contentNow       = "Check the content now</button>"
 	contentButton    = nowButton + `content">` + contentNow
@@ -37,6 +35,15 @@ const (
 	checkingVersions = "Versions <b>checking</b>"
 	panelOfVersions  = "the panel of versions"
 	recordsIt        = "the observer records it"
+)
+
+// openCycle gives the script that opens the menu of the cycle name. openContent opens the menu of the content cycle,
+// and checkContent also clicks its button.
+func openCycle(name string) string { return `S.open["cycle-` + name + `"] = true` }
+
+var (
+	openContent  = openCycle("content")
+	checkContent = openContent + `; checkNow("content")`
 )
 
 // The pill of each cycle is a menu. A closed menu draws no panel, so the words of the panel are on no
@@ -59,8 +66,8 @@ func TestAnOpenMenuShowsTheTimerOfItsCycleAndTheButtonThatStartsIt(t *testing.T)
 		"Compares the records with the cluster and with Palette.", contentButton} {
 		mustHold(t, "the panel of content", page, want)
 	}
-	mustNotHold(t, "one panel", page, `data-now="versions"`)
-	versions := overviewWith(t, `S.open["cycle-versions"] = true`)
+	mustNotHold(t, "one panel", page, nowButton+`versions"`)
+	versions := overviewWith(t, openCycle("versions"))
 	mustHold(t, panelOfVersions, versions, nowButton+`versions">Read the versions now</button>`)
 	mustHold(t, panelOfVersions, versions, "Reads the registries for newer versions of each pack.")
 }
@@ -72,7 +79,7 @@ func TestTheButtonIsOffWhileItsCycleRuns(t *testing.T) {
 	mustHold(t, "the pill", page, `Content <b>checking 3 of 12</b>`)
 	mustHold(t, "the panel", page, labelRow("Now", "checking 3 of 12"))
 	mustHold(t, "the panel", page, contentOff+`<span class="sub">A cycle runs now. The pill shows its progress.</span>`)
-	mustNotHold(t, "a running cycle", page, `<span>Next</span>`)
+	mustNotHold(t, "a running cycle", page, span("Next"))
 }
 
 // A click asks once, also when the person clicks twice, and the pill shows the cycle at once.

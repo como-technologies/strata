@@ -21,7 +21,7 @@ esac`)
 
 func TestTheRunnerAcceptsEveryCommandAndFlagOfACycle(t *testing.T) {
 	r := newRig(t)
-	r.record("aws-stack", "1.1.0", "k8s/kubernetes")
+	r.record("aws-stack", "1.1.0", testkit.KubernetesKey)
 	strata := InDir{Runner: runner.Runner{Binary: script(t), Timeout: 10 * time.Second}}
 	o := newObserver(r.cfg, strata, slog.New(slog.DiscardHandler), time.Now)
 	s, err := o.Once(context.Background())

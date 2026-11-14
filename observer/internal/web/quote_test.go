@@ -210,7 +210,7 @@ func TestEachCommandThatThePageShowsPastesAsTheArgumentsItMeans(t *testing.T) {
 			}
 
 			// The splash of a text above the cap: the published side of dex, and the move of kubernetes.
-			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"k8s/kubernetes"`, "k8s/" + kubernetes}})
+			large := renamedSet(t, devdata.StateTextTooLarge, [][2]string{{"fred-identity", profile}, {`"dex"`, pack}, {`"addon/dex"`, "addon/" + pack}, {`"kubernetes"`, kubernetes}, {`"` + testkit.KubernetesKey + `"`, "k8s/" + kubernetes}})
 			splashes := pagesOf(t, large, packPage(subject, "addon", pack), packPage(k8sSubject, "k8s", kubernetes))
 			check("the splash of dex", commandAfter(t, splashes[0], tooLargeTitle), []string{"compare", "record.json", subject, "--full"})
 			check("the splash of kubernetes", commandAfter(t, splashes[1], tooLargeTitle),

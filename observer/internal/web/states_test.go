@@ -73,8 +73,11 @@ func retryButton(what string) string {
 	return `<button type="button" class="btn" data-retry="` + what + `">Try now</button>`
 }
 
+// span gives a span of the text with no class, such as the label of a row or of an item of the nav.
+func span(text string) string { return "<span>" + text + "</span>" }
+
 // labelStart starts a row of a header or of a panel with its label.
-func labelStart(label string) string { return "<div><span>" + label + "</span>" }
+func labelStart(label string) string { return "<div>" + span(label) }
 
 // labelRow gives a row of a header or of a panel with its label and its value.
 func labelRow(label, value string) string { return labelStart(label) + value + "</div>" }
@@ -143,32 +146,36 @@ const (
 	alertsOffTitle = "Nobody gets paged yet"
 	hiddenTitle    = "Part of this layer is hidden"
 	sameFact       = "The published version holds what the record holds."
-	samePublished  = sameBadge + publishedNow
-	sameCopy       = sameBadge + clusterCopy
-	noNewerVersion = `<b class="ok">Current</b><span>No newer version</span>`
 	dexCompare     = compareRecord + testkit.DexProfile + " --full"
 	dexFullCompare = "<code>" + dexCompare + "</code>"
 	checkTheKey    = "Check the key in the Secret"
 	reachPalette   = "Check that the observer can reach Palette"
 	checkTheLink   = reachPalette + readTheLog
-	newerFact      = "<span>newer versions</span>"
+)
+
+// The markup of the page with a span that the tests of more than one file read. publishedNow and clusterCopy name the
+// published side and the side of the cluster in the card of a pack.
+var (
+	publishedNow   = span("Published now")
+	clusterCopy    = span("This cluster&#39;s copy")
+	newerSpan      = span("Newer version")
+	samePublished  = sameBadge + publishedNow
+	sameCopy       = sameBadge + clusterCopy
+	noNewerVersion = `<b class="ok">Current</b>` + span("No newer version")
+	newerFact      = span("newer versions")
 )
 
 // The words and the markup of the page that the tests of more than one file read.
 const (
-	sameBadge = `<b class="ok">Same</b>`
-	// publishedNow and clusterCopy name the published side and the side of the cluster in the card of a pack.
-	publishedNow = "<span>Published now</span>"
-	clusterCopy  = "<span>This cluster&#39;s copy</span>"
-	coverJump    = "What a check does not cover"
-	lostContact  = "Lost contact with Palette"
-	repaveHint   = "is a hint from strata"
+	sameBadge   = `<b class="ok">Same</b>`
+	coverJump   = "What a check does not cover"
+	lostContact = "Lost contact with Palette"
+	repaveHint  = "is a hint from strata"
 	// alertBar starts the bar of an alert, before the letter of its tone. amberBar starts an amber bar.
 	alertBar    = `<div class="alertbar `
 	amberBar    = alertBar + `a">`
 	linkButton  = `<button type="button" class="lnk" `
-	changedHere = " changed here.</span>"
-	newerSpan   = "<span>Newer version</span>"
+	changedHere = " changed here."
 	refSpan     = `<span class="m ref">`
 	flagWrap    = `<span class="flagw">`
 	// checkCard is the head of the card "Check this yourself", qaRow starts a row of it, and codeOf finds a command.
@@ -222,7 +229,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 			[]string{`<span class="m">old-profile@1.0.0</span> is in no record now. A new revision of the records can remove it.`}, []string{`<a class="btn" href="#profiles">All profiles</a>`}},
 		{"no findings", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#findings", "") }, "calm", "md", quietTitle,
 			[]string{calmNothing + ". <b>29 of 29 packs</b> were checked in full, ", " ago."},
-			[]string{"<span>profiles match their records</span>", "<span>not checked</span>", newerFact}},
+			[]string{span("profiles match their records"), span("not checked"), newerFact}},
 		{"no newer versions", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#newer", "") }, "calm", "md", "Nothing newer to dig up",
 			[]string{calmCurrent + ". The registries list nothing newer than what you pin. Read ", " ago, every 6h."}, nil},
 		{"nothing unchecked", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#notchecked", "") }, "calm", "md", "Every layer was read",
@@ -258,7 +265,7 @@ func TestEachPlaceHasItsToneItsTitleItsFactAndItsNextStep(t *testing.T) {
 		{"an empty tab", func(t *testing.T) string {
 			return pageWith(t, "testdata/api", devdata.StateOK, dexHash, `S.tabs["`+dexPublished+`"] = "images"`)
 		}, "same", "inl", "",
-			[]string{"<span>No image" + changedHere, tabLink(dexPublished, "values", "Values")}, nil},
+			[]string{span("No image" + changedHere), tabLink(dexPublished, "values", "Values")}, nil},
 		{"a filter with no match", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateOK), "#profiles", "search none") }, "off", "inl", "",
 			[]string{`<span>No profile matches <span class="m">no profile has this name</span>.</span>`, linkButton + `data-clear="filter">Clear the filter</button>`}, nil},
 		{"no events", func(t *testing.T) string { return pageOf(t, crawl(t, devdata.StateQuiet), "#overview", "") }, "calm", "inl", "",
@@ -655,7 +662,7 @@ func TestThePackPageOpensOnTheFirstTabWithAChange(t *testing.T) {
 	// The card of the move says the same, and it gives no count of 0 of 0.
 	ubuntu := pageOf(t, screens, packPage(k8sSubject, "os", "ubuntu-aws"), "")
 	where := "the move of ubuntu-aws"
-	mustHold(t, where, ubuntu, "<span>Content</span><b>The same</b>", "<span>Changes</span>Only the build of the pack", "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
+	mustHold(t, where, ubuntu, labelRow("Content", "<b>The same</b>"), labelRow("Changes", "Only the build of the pack"), "Repave "+repaveHint+"&#39;s table: node repave (OS image change).")
 	mustNotHold(t, where, ubuntu, "of 0 values")
 	// A pack whose change is in a manifest alone opens on Manifests.
 	dir := writeSet(t, devdata.StateOK, map[string]func([]byte) []byte{"diffs.json": editDiffs(t, func(ds []api.PackDiff) {
@@ -675,10 +682,10 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	})})
 	empty := pageWith(t, dir, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
 	link := tabLink(dexPublished, "manifests", "Manifests")
-	mustHold(t, "the empty Values tab", empty, "<span>No value"+changedHere, link)
+	mustHold(t, "the empty Values tab", empty, span("No value"+changedHere), link)
 	for _, c := range []struct{ tab, noun string }{{"images", "image"}, {"charts", "chart"}} {
 		page := pageWith(t, dir, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "`+c.tab+`"`)
-		mustHold(t, "the empty tab "+c.tab, page, "<span>No "+c.noun+changedHere, link)
+		mustHold(t, "the empty tab "+c.tab, page, span("No "+c.noun+changedHere), link)
 	}
 	r := clickIn(t, dir, "scratch", dexHash, "0", tabClick(dexPublished, "values"), tabClick(dexPublished, "manifests"))
 	mustHold(t, "after the link", r.After, tabOn(dexPublished, "manifests"), dexManifest)
@@ -689,7 +696,7 @@ func TestAnEmptyTabSaysSoAndLinksToTheTabWithTheChange(t *testing.T) {
 	})})
 	page := pageWith(t, none, "scratch", dexHash, `S.tabs["`+dexPublished+`"] = "values"`)
 	where := "a card with no change"
-	mustHold(t, where, page, "<span>No value changed.</span>")
+	mustHold(t, where, page, span("No value changed."))
 	mustNotHold(t, where, page, "The change is on")
 }
 
@@ -978,7 +985,7 @@ func TestNoInlineStyleReachesAScreenOfAnySet(t *testing.T) {
 
 // ---- The stack of the packs ----
 
-var slabPattern = regexp.MustCompile(`<li class="pslab t-([rbgy])( here)?"><a href="([^"]*)"(?: aria-current="page")?><span class="layer">([^<]*)</span><span class="who">` + refSpan + `([^<]*)<span class="ver">@([^<]*)</span></span>`)
+var slabPattern = regexp.MustCompile(`<li class="pslab t-([rbgy])( here)?"><a href="([^"]*)"(?: aria-current="page")?><span class="layer">([^<]*)</span><span class="who">` + refSpan + ref(`([^<]*)`, `([^<]*)`) + `</span>`)
 
 // The page of a profile lists its packs as a stack, from the top layer to the bottom one: each slab
 // is a link to its pack, with the ref of the pack and the color of its status. The page of a pack
@@ -1029,7 +1036,7 @@ func newerOrder(page, subject string) []string {
 		rest = rest[:end+1]
 	}
 	var out []string
-	for _, m := range regexp.MustCompile(linkRowStart+` data-go="[^"]*"><td class="m"><a href="[^"]*">([^<]+)</a>`).FindAllStringSubmatch(rest, -1) {
+	for _, m := range regexp.MustCompile(linkRow(`[^"]*`)+`<td class="m"><a href="[^"]*">([^<]+)</a>`).FindAllStringSubmatch(rest, -1) {
 		out = append(out, m[1])
 	}
 	return out
@@ -1178,10 +1185,10 @@ func TestThePillOfACycleThatRunsShowsItsProgress(t *testing.T) {
 // dash and say why: a count of 0 would read as "every pack is current".
 func TestNewerVersionsShowADashUntilTheFirstReadOfTheVersions(t *testing.T) {
 	unread := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+"D.cluster.versions.running = null;")
-	mustHold(t, "unread", unread, tileLabel(newerVersions)+tileValue("-")+`<div class="s">`+notReadYet+`</div>`,
-		`<span>`+newerVersions+`</span><span class="cnt">-</span>`)
+	mustHold(t, "unread", unread, tileLabel(newerVersions)+tileValue("-")+tileSub(notReadYet),
+		navCount(newerVersions, "", "-"))
 	reading := pageWith(t, "testdata/api", devdata.StateOK, "#overview", versionsUnread+runningJS("versions", "", 0, 1))
-	mustHold(t, "reading", reading, tileValue("-")+`<div class="s">Reading the registries</div>`)
+	mustHold(t, "reading", reading, tileValue("-")+tileSub("Reading the registries"))
 	read := pageWith(t, "testdata/api", devdata.StateOK, "#overview", "")
 	mustNotHold(t, "read", read, tileLabel(newerVersions)+tileValue("-"))
 }

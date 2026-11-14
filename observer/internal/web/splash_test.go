@@ -75,12 +75,10 @@ const lostTop = ".slabs.tone-lost .s0"
 // top slab of a lost mark off its place. slabsSVG starts the markup of a mark.
 const (
 	noAnimation     = "animation:none!important"
-	wantNoAnimation = "want " + noAnimation + ";"
+	wantNoAnimation = `want "` + noAnimation + `;"`
 	buildSlabs      = ".slabs.tone-build .s"
 	buildHeld       = buildSlabs + "{opacity:.7}"
 	lostMoved       = "{transform:translate(9px,-8px)}"
-	buildMark       = "a mark that builds does not hold its state"
-	lostMark        = "a lost mark does not hold its state"
 	noMotionRule    = "no rule for " + motionQuery
 	slabsSVG        = `<svg class="slabs tone-`
 )
@@ -109,14 +107,10 @@ func motionProblems(css string) []string {
 			}
 		}
 	}
-	if got := ruleOf(still, ".slabs .s"); got != noAnimation+";" {
-		out = append(out, "the rule for less motion gives the slabs "+got+", "+wantNoAnimation)
-	}
-	if !strings.Contains(ruleOf(still, buildSlabs), "opacity:") {
-		out = append(out, buildMark+" for less motion")
-	}
-	if !strings.Contains(ruleOf(still, lostTop), "transform:") {
-		out = append(out, lostMark+" for less motion")
+	for _, p := range []string{ruleProblem(still, ".slabs .s", noAnimation+";"), lackProblem(still, buildSlabs, "opacity:"), lackProblem(still, lostTop, "transform:")} {
+		if p != "" {
+			out = append(out, p)
+		}
 	}
 	return out
 }
@@ -145,8 +139,8 @@ func TestTheCheckOfMotionFindsEachProblem(t *testing.T) {
 		{"an animation on a card", good + ".card{animation:breathe 1s infinite}", "the rule of .card runs an animation"},
 		{"a spinner in a list of selectors", good + ".slabs.tone-calm .s,.spin{animation:rise 1s infinite}", "the rule of .spin runs an animation"},
 		{"no important", strings.Replace(good, noAnimation, "animation:none", 1), wantNoAnimation},
-		{"the build slabs vanish", strings.Replace(good, buildHeld, "", 1), buildMark},
-		{"the lost slab comes back", strings.Replace(good, lostTop+lostMoved, "", 1), lostMark},
+		{"the build slabs vanish", strings.Replace(good, buildHeld, "", 1), "the rule of " + buildSlabs + ` is "", and it lacks opacity:`},
+		{"the lost slab comes back", strings.Replace(good, lostTop+lostMoved, "", 1), "the rule of " + lostTop + ` is "", and it lacks transform:`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) { findsProblem(t, c.name, motionProblems(c.css), c.want) })

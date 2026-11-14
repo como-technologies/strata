@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/como-technologies/strata/observer/internal/model"
+	"github.com/como-technologies/strata/observer/internal/testkit"
 )
 
 // pathCycle is the click "Check now" on the content cycle.
@@ -71,11 +72,11 @@ func TestTheClickCheckNowRefusesAnotherNameAndAPostThatThePageDidNotSend(t *test
 		host, site string
 		code       int
 	}{
-		{"127.0.0.1:8080", "", http.StatusForbidden},
-		{"127.0.0.1:8080", "cross-site", http.StatusForbidden},
+		{testkit.LoopbackHost, "", http.StatusForbidden},
+		{testkit.LoopbackHost, "cross-site", http.StatusForbidden},
 		{"evil.example", sameOrigin, http.StatusMisdirectedRequest},
 	} {
-		if rec := clickWith(h, pathCycle, tc.host, tc.site); rec.Code != tc.code {
+		if rec := testkit.Serve(h, http.MethodPost, pathCycle, tc.host, tc.site); rec.Code != tc.code {
 			t.Errorf("host %s, site %q: %d", tc.host, tc.site, rec.Code)
 		}
 	}

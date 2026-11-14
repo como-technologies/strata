@@ -85,7 +85,7 @@ func send(t *testing.T, method, url string, fromPage bool) (int, string) {
 		t.Fatal(err)
 	}
 	if fromPage {
-		req.Header.Set("Sec-Fetch-Site", "same-origin")
+		req.Header.Set(testkit.FetchSite, testkit.SameOrigin)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

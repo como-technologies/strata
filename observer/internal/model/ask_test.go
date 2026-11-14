@@ -45,11 +45,11 @@ func TestAnswerOfReadsEachVerdictFromThePinThatBehindGives(t *testing.T) {
 		{"a pin with no bump", pinWith(nil, nil), VerdictNoAnswer, "1.36.2", 0, 0, nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			a := AnswerOf(testkit.AWSStackProfile, "k8s/kubernetes", c.pin)
+			a := AnswerOf(testkit.AWSStackProfile, testkit.KubernetesKey, c.pin)
 			if a.Verdict != c.verdict || a.Newest != c.newest || a.Status != c.status || len(a.Refusals) != c.refuses || a.Refusals == nil {
 				t.Errorf("%+v", a)
 			}
-			if a.Profile != testkit.AWSStackProfile || a.Key != "k8s/kubernetes" || a.Answered() != (c.verdict != VerdictNoAnswer) {
+			if a.Profile != testkit.AWSStackProfile || a.Key != testkit.KubernetesKey || a.Answered() != (c.verdict != VerdictNoAnswer) {
 				t.Errorf("%+v", a)
 			}
 			if !reflect.DeepEqual(a.UpdateChecks, c.checks) {
@@ -88,7 +88,7 @@ func TestTheAnswerOfARealMoveThatSkipsAMinorVersionNamesTheNextStep(t *testing.T
 	if len(doc.Pins) != 1 {
 		t.Fatalf("%d pins", len(doc.Pins))
 	}
-	a := AnswerOf("aws-stack@1.1.20", "k8s/kubernetes", doc.Pins[0])
+	a := AnswerOf("aws-stack@1.1.20", testkit.KubernetesKey, doc.Pins[0])
 	if a.Verdict != VerdictNoError || a.UpdateChecks == nil || a.UpdateChecks.SkippedMinor == nil || a.UpdateChecks.RequiredVariables != nil {
 		t.Fatalf("answer %+v", a)
 	}

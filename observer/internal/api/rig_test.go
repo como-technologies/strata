@@ -61,7 +61,7 @@ const (
 	pathPublished  = awsPacks + "/csi/csi-aws-ebs/diff?side=published"
 	pathCluster    = kubernetesDiff + "?side=cluster"
 	pathNewer      = kubernetesDiff + "?side=newer"
-	pathAsk        = awsPacks + "/k8s/kubernetes/ask"
+	pathAsk        = awsPacks + "/" + testkit.KubernetesKey + "/ask"
 	// pathProfileByName names the profile with no version.
 	pathProfileByName = "/v1/profiles/aws-stack"
 )
@@ -158,7 +158,7 @@ func (f *fakeStrata) Run(_ context.Context, dir string, args ...string) (runner.
 		if f.failBehind {
 			return runner.Result{}, &runner.RunError{Kind: docs.KindAPI, Status: 500}
 		}
-		return f.answer(1, "behind.json")
+		return f.answer(1, testkit.BehindDoc)
 	}
 	return runner.Result{}, testkit.Unknown(args)
 }
@@ -204,8 +204,8 @@ func newRig(t *testing.T) *rig {
 	d := testkit.NewRigDirs(t)
 	r := &rig{t: t, records: d.Records, work: d.Work, state: d.State, log: &bytes.Buffer{}, fixtures: fixtures(t), pods: oneImage}
 	packs := []map[string]any{
-		{"key": "k8s/kubernetes", "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{"a/b:1"}},
-		{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{"a/c@sha256:abc"}},
+		{"key": testkit.KubernetesKey, "layer": "k8s", "name": "kubernetes", "version": "1.35.3", "registryUid": "reg1", "images": []string{testkit.ImageRef}},
+		{"key": "csi/csi-aws-ebs", "layer": "csi", "name": "csi-aws-ebs", "version": "1.63.1", "registryUid": "reg1", "images": []string{testkit.DigestImage}},
 	}
 	testkit.WriteGzip(t, r.records, testkit.RecordFile, testkit.RigRecord(t, "aws-stack", "1.1.0", packs, sentinelVariable))
 	testkit.WriteMeta(t, r.records, testkit.ApprovedMeta(testkit.Revision))
@@ -238,7 +238,7 @@ func (r *rig) observer(s check.Strata) *check.Observer {
 
 // oneImage is a read of the pods with one pod that runs a/b:1, the image that the record names, with testkit.Digest1.
 var oneImage = check.PodsFunc(func(context.Context) ([]kube.Container, error) {
-	return []kube.Container{{Pod: "ns/web-1", Image: "a/b:1", ImageID: "a/b@" + testkit.Digest1}}, nil
+	return []kube.Container{{Pod: "ns/web-1", Image: testkit.ImageRef, ImageID: testkit.ImageRan}}, nil
 })
 
 // cycled makes an observer that ran one content cycle and one versions cycle.
@@ -253,15 +253,7 @@ func (r *rig) cycled(s check.Strata) *check.Observer {
 
 // get makes a request to the handler. The Host is a loopback address, as a port-forward gives.
 func get(h http.Handler, path string) *httptest.ResponseRecorder {
-	return do(h, http.MethodGet, path, "127.0.0.1:8080")
-}
-
-func do(h http.Handler, method, path, host string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, path, nil)
-	req.Host = host
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	return rec
+	return testkit.Serve(h, http.MethodGet, path, testkit.LoopbackHost, "")
 }
 
 func handlerOf(src Source) http.Handler {

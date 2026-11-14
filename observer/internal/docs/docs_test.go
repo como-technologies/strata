@@ -3,25 +3,20 @@ package docs
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
 
 const sentinel = "SENTINEL-MUST-NOT-LEAVE"
 
-// driftSummary is the document of `verify` for a drift, in testdata/. testkit.DriftSummary names the same file for the
-// tests of other packages, and the tests of docs cannot read it, because testkit imports docs.
-const driftSummary = "verify-summary-drift.json"
-
-func read(t *testing.T, name string) []byte {
-	t.Helper()
-	b, err := os.ReadFile("testdata/" + name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
+// testdata is the directory of the documents of the real binary. driftSummary is the document of `verify` for a drift
+// in it, and behindFile the document of `behind`. testkit.DriftSummary names the same file for the tests of other
+// packages, and the tests of docs cannot read it, because testkit imports docs.
+const (
+	testdata     = "testdata"
+	driftSummary = "verify-summary-drift.json"
+	behindFile   = "behind.json"
+)
 
 // encode encodes v, and fails the test on an error. It does the job of testkit.MustJSON for the tests of docs, because
 // testkit imports docs.
@@ -67,9 +62,7 @@ func plant(t *testing.T, node any, path []string, v any) int {
 
 func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 	var doc map[string]any
-	if err := json.Unmarshal(read(t, driftSummary), &doc); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, driftSummary, &doc)
 	for _, p := range []string{
 		"records.*.diff.a.cluster.variables",
 		"records.*.diff.b.cluster.variables",
@@ -100,9 +93,7 @@ func TestFieldsOutsideTheAllowListDoNotSurvive(t *testing.T) {
 
 func TestTheDriftDocumentDecodes(t *testing.T) {
 	var got VerifySummary
-	if err := json.Unmarshal(read(t, driftSummary), &got); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, driftSummary, &got)
 	if got.Schema != VerifySummarySchema || len(got.Records) != 1 {
 		t.Fatalf("schema %q, %d records", got.Schema, len(got.Records))
 	}
@@ -133,12 +124,10 @@ func TestTheSchemaIdsAreThoseOfTheDocumentsOfTheBinary(t *testing.T) {
 		want string
 	}{
 		{driftSummary, &VerifySummary{}, VerifySummarySchema},
-		{"behind.json", &Behind{}, BehindSchema},
+		{behindFile, &Behind{}, BehindSchema},
 		{"move-kubernetes.json", &Diff{}, DiffSchema},
 	} {
-		if err := json.Unmarshal(read(t, c.file), c.doc); err != nil {
-			t.Fatal(err)
-		}
+		decodeFile(t, testdata, c.file, c.doc)
 		if got := c.doc.SchemaID(); got != c.want {
 			t.Errorf("%s states %q, want %q", c.file, got, c.want)
 		}
@@ -147,9 +136,7 @@ func TestTheSchemaIdsAreThoseOfTheDocumentsOfTheBinary(t *testing.T) {
 
 func TestBehindDecodes(t *testing.T) {
 	var got Behind
-	if err := json.Unmarshal(read(t, "behind.json"), &got); err != nil {
-		t.Fatal(err)
-	}
+	decodeFile(t, testdata, behindFile, &got)
 	behind := 0
 	for _, p := range got.Pins {
 		if p.Behind {
