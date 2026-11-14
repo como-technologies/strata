@@ -12,7 +12,12 @@ use super::routes::{
     PROFILES, REGISTRY_LISTING, audit_log_file, empty_audit_log, export_file, manifest_route,
     manifests_route, profile_route, variables_route,
 };
+use super::times::minutes_after;
 use super::{TENANT, Tenant};
+
+/// The time of the first entry of the audit log of a resource. Each later entry takes the next
+/// minute.
+const FIRST_AUDIT_ENTRY: &str = "2026-09-18T14:02:11.482Z";
 
 impl Tenant {
     /// Publish a copy of the example profile `example`, such as `aws-stack@1.1.1`, in `project`
@@ -340,7 +345,7 @@ impl Tenant {
         let items = log["items"].as_array_mut().expect("an audit log has items");
         let n = items.len();
         let name = doc["metadata"]["name"].as_str().unwrap_or_default();
-        let at = format!("2026-09-18T14:{:02}:11.482Z", 2 + n);
+        let at = minutes_after(FIRST_AUDIT_ENTRY, n);
         items.insert(
             0,
             json!({

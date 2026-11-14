@@ -90,8 +90,8 @@ const ARCHIVE_SAME: &str = "archive: same files";
 /// The fact of a renumber whose two archives differ in another file. A reason names the file.
 const ARCHIVE_CHANGED: &str = "archive: other files";
 
-/// The fact of a renumber whose file in a download is no archive. A reason names the version and
-/// what the file holds.
+/// The fact of a renumber whose file in a download is no archive, or is not in the download. A
+/// reason names the version and what the file holds.
 const ARCHIVE_NOT_READABLE: &str = "archive: not readable";
 
 /// The fact of a renumber whose two archives strata did not compare.

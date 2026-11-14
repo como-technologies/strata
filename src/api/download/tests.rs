@@ -1,8 +1,10 @@
 //! The tests of the download: the files of two builds, the packs with no archive, a pack file that
-//! is no archive and its reason, and the refusals of the whole download.
+//! is no archive or that the download does not hold and its reason, and the refusals of the whole
+//! download.
 
 use super::written::{
-    DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download, tgz,
+    DownloadPack, archive_top, chart_archive, chart_file, pack_archive, profile_download,
+    profile_download_without, tgz,
 };
 use super::*;
 use crate::api::download_path;
@@ -259,24 +261,35 @@ fn a_file_that_is_not_a_download_is_refused_with_what_strata_cannot_read() {
         refusal(&no_list),
         "metadata.json names 0 lists of packs, and not one"
     );
-    // the list names an archive that the download does not hold
-    let list = format!("profiles/{UID}/packs-metadata.json");
-    let missing = tgz(&[
-        (
-            format!("{UID}/metadata.json"),
-            json_bytes(&serde_json::json!({"profiles": [{"packsMetaFilePath": list}]})),
+}
+
+/// The criterion of #833: the list names the file of a pack that the download does not hold.
+/// Strata gives that pack no archive and a reason that names the path, and the other packs keep
+/// their archives. Before, strata refused the whole download.
+#[test]
+fn a_pack_file_that_the_download_does_not_hold_gets_a_reason_and_the_other_packs_keep_their_archives()
+ {
+    let packs = [
+        built(
+            "kubernetes",
+            "1.36.2",
+            "kubernetes-0123456789ab",
+            &[("values.yaml", "a: 1\n")],
         ),
-        (
-            format!("{UID}/{list}"),
-            json_bytes(&serde_json::json!({"packs": {"kubernetes":
-            {"name": "kubernetes", "version": "1.36.2", "type": PackType::Spectro,
-                "filePath": "packs/kubernetes/kubernetes-1.36.2.tar.gz"}}})),
-        ),
-    ]);
+        chart_file_of(&chart_archive("nginx", &[("values.yaml", "a: 1\n")])),
+    ];
+    let file = profile_download_without(UID, "aws-stack", &packs, &["nginx"]);
+    let download = ProfileDownload::read(&download_path(UID), &file).unwrap();
+    let k8s = download.pack("kubernetes").unwrap().archive().unwrap();
+    let paths: Vec<&str> = k8s.files().map(|(path, _)| path).collect();
+    assert_eq!(paths, ["pack.json", "values.yaml"]);
+    let nginx = download.pack("nginx").unwrap();
+    assert_eq!(nginx.version, "25.1.5");
+    assert_eq!(nginx.archive(), None);
     assert_eq!(
-        refusal(&missing),
-        format!(
-            "{list} names packs/kubernetes/kubernetes-1.36.2.tar.gz, which the download does not hold"
+        nginx.file,
+        PackFile::NotReadable(
+            "the download does not hold packs/nginx/nginx-25.1.5.tgz".to_string()
         )
     );
 }
@@ -356,7 +369,8 @@ fn the_text_of_a_reason_is_one_line_of_120_characters_at_most_with_no_control_ch
 }
 
 /// The budget covers the files of each pack archive too. A pack archive that holds more bytes
-/// than the budget has left refuses the whole download, and gets no reason.
+/// than the budget has left refuses the whole download, and gets no reason. The message names
+/// the limit of the read (#833).
 #[test]
 fn a_pack_archive_over_the_budget_refuses_the_whole_download() {
     let large = "a".repeat(100_000);
@@ -374,22 +388,23 @@ fn a_pack_archive_over_the_budget_refuses_the_whole_download() {
     let message = read_download(&file, 50_000).unwrap_err();
     assert_eq!(
         message,
-        "packs/kubernetes/kubernetes-1.36.2.tar.gz: the files hold more than 1024 MiB"
+        "packs/kubernetes/kubernetes-1.36.2.tar.gz: the files hold more than 50000 bytes"
     );
     assert!(read_download(&file, UNPACKED_LIMIT).is_ok());
 }
 
+/// The fault names the limit of the read: in MiB when the limit is whole MiB, else in bytes.
 #[test]
-fn the_budget_refuses_more_bytes_than_it_has() {
-    let mut budget = Budget(10);
+fn the_budget_refuses_more_bytes_than_it_has_and_names_its_limit() {
+    let mut budget = Budget::new(10);
     assert!(budget.take(6).is_ok());
-    assert_eq!(budget.take(5), Err(Fault::Limit));
-    assert_eq!(
-        Fault::Limit.to_string(),
-        "the files hold more than 1024 MiB"
-    );
-}
-
-fn json_bytes(v: &serde_json::Value) -> Vec<u8> {
-    v.to_string().into_bytes()
+    assert_eq!(budget.take(5), Err(Fault::Limit(10)));
+    for (limit, message) in [
+        (UNPACKED_LIMIT, "the files hold more than 1024 MiB"),
+        (2 * MIB, "the files hold more than 2 MiB"),
+        (10, "the files hold more than 10 bytes"),
+        (1, "the files hold more than 1 byte"),
+    ] {
+        assert_eq!(Fault::Limit(limit).to_string(), message);
+    }
 }

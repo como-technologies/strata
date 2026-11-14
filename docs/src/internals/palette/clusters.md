@@ -167,6 +167,11 @@ gives it. So the copy of a profile with a variable has the variables hash of the
 profile, and its root equals the root of the profile. The value that a cluster
 gives is in the record, under `source.cluster.variables`, and not in the root.
 
+The endpoint gives `********` in place of the value of a sensitive variable,
+when the value is not empty. The code of Palette shows it; no live run shows it
+yet. A record holds no value of a sensitive variable: see
+[What a cluster record holds](../../commands/snapshot/cluster.md#what-a-cluster-record-holds).
+
 A change of that value is a change to the cluster, and not to the copy. The
 Spectro Cloud provider sends it as `variables` of the profile on the cluster
 resource. The audit log gets a new entry for the cluster, and its action says

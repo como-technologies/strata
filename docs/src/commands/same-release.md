@@ -131,7 +131,7 @@ strata found:
 | --- | --- |
 | `archive: same files` | The two archives hold the same files. `pack.json` differs only by its `version`, or `Chart.yaml` only by its line `version`. `pairs[].archivesCompared` names the pack. |
 | `archive: other files` | Another file differs. The pair fails, and a reason names the file. `pairs[].archivesChanged` names the pack and each file. |
-| `archive: not readable` | The file of the pack in the download of a side is no archive. The pair fails, and a reason names the version and what the file holds. `pairs[].archivesNotReadable` names the pack, the version, and the reason. |
+| `archive: not readable` | The file of the pack in the download of a side is no archive, or is not in the download. The pair fails, and a reason names the version and what the file holds. `pairs[].archivesNotReadable` names the pack, the version, and the reason. |
 | `archive: not compared` | Palette serves no archive of the pack, or a record is not a published version. `pairs[].archivesNotCompared` names the pack. |
 
 A new build of a pack can change a file that the profile does not show, such
@@ -172,6 +172,10 @@ pull request comment: see [The markdown comment](../reference/formats.md#the-mar
 ```text
 {{#include ../output/renumber-not-readable-markdown.txt}}
 ```
+
+The list of the download can name the file of a pack that the download does not
+hold. That pack gets the fact `archive: not readable`, and its reason is
+`the download does not hold <path>`.
 
 Strata reads the other packs of the download as before. A pack whose version
 stays has no compare, so such a file does not change its pair. Get the chart
