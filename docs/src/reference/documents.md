@@ -620,7 +620,7 @@ of the secret does not show, because the two sides hold the mask: see
   - `unread`: the clusters of those that strata could not read.
   - `error`: why strata could not read the search or the cluster listing. Then
     `read` is `0`. For an app profile of the tenant or of the system, it is the
-    error of the page of the search at tenant scope, and strata listed no
+    error of the page of the search at tenant scope. Then strata listed no
     project.
   - `groups`, only when not zero: the cluster groups that pin the version,
     whose virtual clusters strata read.

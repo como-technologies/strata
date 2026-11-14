@@ -141,8 +141,8 @@ where
 /// [`ProjectsRead::unread`]. `--list-only` asks for none of it.
 ///
 /// For an app profile of the tenant or of the system, strata also sends one page of the cluster
-/// search at tenant scope, as [`tenant_search`] reads it for a profile of the tenant. A denial
-/// shows a key that cannot list each project. Each other error of the search stops the listings,
+/// search at tenant scope. [`tenant_search`] reads its answer, as for a profile of the tenant. A
+/// denial shows a key that cannot list each project. Each other error of the search stops the listings,
 /// and it is the error of [`ClustersRead`].
 #[allow(clippy::too_many_arguments)]
 fn app_readings<A, F>(

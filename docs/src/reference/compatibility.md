@@ -1478,7 +1478,7 @@ field, a value, an input, or an option is in the sections above.
     project. For an app profile of the tenant or of the system, it lists them in
     each project of the tenant listing. That is one more request for each 50 app
     deployments of a project, one for the project listing, and one for the
-    page of the cluster search.
+    cluster search.
   - An app deployment that runs the version and that the consumer list does not
     name joins the answer with `unlisted`, and the exit is `1`. The row
     `app deployments` counts them. Before, it said `not searched (an app profile:
