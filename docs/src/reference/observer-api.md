@@ -73,6 +73,13 @@ plain text. The route `/` serves the page of the dashboard.
 - A profile holds `status`, `published` and `clusterCopy` with their roots, its packs
   with their `status` and `flags`, its `findings`, and `who`. A profile with a newer
   published version also holds `newerVersion`: `version`, `created`, and `new`.
+- A record of a profile version that the cluster does not run has the `status`
+  `not-on-this-cluster`, unless a finding names it. Also with a finding, it has no
+  `newerVersion`, its packs have no `newer` and no `carried`, and no row of `/v1/newer`
+  names it. `counts.profiles` does not count a record with the status
+  `not-on-this-cluster`. An observer of 0.33.0 and before gives it a
+  status such as `ok` or `newer`, and counts it. See [A version that the cluster no
+  longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
 - `newerVersion.move` is what a move from the record to that version changes, from
   the compare of the two: `impact`, `flags`, and `packs[]`. Each pack that the move
   changes, adds, or removes has `key`, `status`, `from`, `to`, `flags`, and

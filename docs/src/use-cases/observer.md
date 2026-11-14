@@ -41,6 +41,10 @@ the records into the cluster as Secrets. The observer reads them as files:
 
 At this time, nobody has edited a version. The page shows no finding.
 
+`payments` does not run `aws-stack@1.1.0`. So its page lists that record in a fold
+under the table of the profiles, as "Not on this cluster", and counts 2 profiles. See [A
+version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+
 ## 2. A person edits the version
 
 A person changes the CSI reclaim policy of `aws-stack@1.0.0` from `Delete` to

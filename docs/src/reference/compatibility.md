@@ -1129,6 +1129,15 @@ field, a value, an input, or an option is in the sections above.
 - **The message of `pack-in-several-registries` names `strata list --pack <name>`.** It ends
   with one more sentence. The kind and the fields stay. A script that matches the whole message
   must match the new text.
+- **A record of a version that the cluster does not run is `not-on-this-cluster`.** Before,
+  it had a status such as `ok` or `newer`. A finding still wins, and the record then stays a
+  `drift`. In each case, the record and its packs have no newer version. No row of `/v1/newer`,
+  and no event or alert of a newer version, names the record. `counts.profiles` of `/v1/cluster`
+  does not count a record with the new status. See
+  [A version that the cluster no longer runs](../automation/observer.md#a-version-that-the-cluster-no-longer-runs).
+  - A program that reads `status` of `/v1/profiles` must know the new value.
+  - A program that counts the profiles of `/v1/profiles` must skip the new value, or read
+    `counts.profiles`.
 - **The markdown form writes each `&`, `<`, and `>` of a text as an entity.** It writes
   `&amp;`, `&lt;`, and `&gt;`, and GitHub shows the same characters. So a job summary or a pull
   request comment shows a tag in a message of Palette as text. The reason of

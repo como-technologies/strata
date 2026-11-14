@@ -1,5 +1,5 @@
 $ strata-observer once --cluster-uid 64f1000000000000000000e1 --records records --work work --state state 2>/dev/null | jq -c '.limits, (.profiles[] | {name, version, status, published: .published.status, clusterCopy: .clusterCopy.status})'
 {"imagesNamedByATag":38,"helmPacks":0,"maskedPaths":0}
 {"name":"aws-stack","version":"1.0.0","status":"drift","published":"drifted","clusterCopy":"same"}
-{"name":"aws-stack","version":"1.1.0","status":"ok","published":"unchanged","clusterCopy":"not-on-this-cluster"}
+{"name":"aws-stack","version":"1.1.0","status":"not-on-this-cluster","published":"unchanged","clusterCopy":"not-on-this-cluster"}
 {"name":"platform-addons","version":"1.0.0","status":"ok","published":"unchanged","clusterCopy":"same"}

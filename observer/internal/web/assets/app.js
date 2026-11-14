@@ -26,9 +26,10 @@ const REFRESH_MS = 30000;
 const REFRESH_WORDS = `each ${REFRESH_MS / 1000} seconds`;
 const PAGE = {OK: "ok", FIRST_LOAD: "first-load", NO_RECORDS: "no-records", STALE: "stale", LOST: "lost"};
 const BASELINE = {APPROVED: "approved", FIRST_SEEN: "first-seen", UNKNOWN: "unknown"};
-const STATUS = {DRIFT: "drift", NEWER: "newer", NOT_CHECKED: "not-checked", OK: "ok", NO_RECORD: "no-record"};
-const VERIFY = {UNCHANGED: "unchanged", DRIFTED: "drifted", UNVERIFIED: "unverified", ERROR: "error"};
 const COPY = {SAME: "same", SAME_CONTENT: "same-content", DIFFERS: "differs", NOT_ON_CLUSTER: "not-on-this-cluster", NOT_READ: "not-read"};
+// A record of a profile version that the cluster does not run takes the word of its cluster copy as its status.
+const STATUS = {DRIFT: "drift", NOT_ON_CLUSTER: COPY.NOT_ON_CLUSTER, NEWER: "newer", NOT_CHECKED: "not-checked", OK: "ok", NO_RECORD: "no-record"};
+const VERIFY = {UNCHANGED: "unchanged", DRIFTED: "drifted", UNVERIFIED: "unverified", ERROR: "error"};
 // A copy that strata read matches the record, also by content, or it differs.
 const COPY_KEPT = [COPY.SAME, COPY.SAME_CONTENT];
 const COPY_READ = [...COPY_KEPT, COPY.DIFFERS];
@@ -104,7 +105,7 @@ const RECORD_FILE = "record.json";
 // The color class and the word of a status, a kind of news, and an impact level.
 const BADGE = {
   [STATUS.DRIFT]: ["r", "Drift"], [STATUS.NEWER]: ["b", "Newer"], [STATUS.NOT_CHECKED]: ["y", "Not checked"],
-  [STATUS.OK]: ["g", "OK"], [STATUS.NO_RECORD]: ["y", "No record"],
+  [STATUS.OK]: ["g", "OK"], [STATUS.NO_RECORD]: ["y", "No record"], [STATUS.NOT_ON_CLUSTER]: ["y", "Not on this cluster"],
 };
 const EVENT_BADGE = {
   [EVENT.DRIFT]: ["r", "Drift"], [EVENT.NEWER]: ["b", "Newer"], [EVENT.NOT_CHECKED]: ["y", "Not checked"], [EVENT.INFO]: ["y", "Info"],
@@ -112,13 +113,13 @@ const EVENT_BADGE = {
 // The badge of the copy of this cluster. The row of the card and the head of the version card both read this table.
 const COPY_BADGE = {
   [COPY.SAME]: BADGE[STATUS.OK], [COPY.SAME_CONTENT]: ["g", "Same content"], [COPY.DIFFERS]: BADGE[STATUS.DRIFT],
-  [COPY.NOT_ON_CLUSTER]: ["y", "Not on this cluster"], [COPY.NOT_READ]: ["y", "Not read"],
+  [COPY.NOT_ON_CLUSTER]: BADGE[STATUS.NOT_ON_CLUSTER], [COPY.NOT_READ]: ["y", "Not read"],
 };
 const IMPACT = {
   "repave": ["a", "Repave"], "may-repave": ["a", "May repave"], "cluster-wide": ["b", "Cluster-wide"],
   "in-place": ["y", "In place"], "sync": ["y", "Sync"], "none": ["y", "None"],
 };
-const SEVERITY = [STATUS.DRIFT, STATUS.NEWER, STATUS.NOT_CHECKED, STATUS.NO_RECORD, STATUS.OK];
+const SEVERITY = [STATUS.DRIFT, STATUS.NEWER, STATUS.NOT_CHECKED, STATUS.NO_RECORD, STATUS.OK, STATUS.NOT_ON_CLUSTER];
 // The words of the five change flags: when each one lights, and what that means. They come from the table in
 // docs/src/reference/impact.md, and this table is their one copy on the page.
 const FLAG_WORDS = {
@@ -501,6 +502,21 @@ const root = r => r ? h`<span title="${r}">${hex12(r)}</span>` : "";
 
 // newerRowOf finds the row of /v1/newer that a pack of a profile belongs to.
 const newerRowOf = (subject, p) => D.newer.find(r => r.profiles.includes(subject) && r.name === p.name && r.version === p.version && r.registry === p.registry);
+// copyStatusOf gives the status of the cluster copy of the profile x. It is undefined when the summary holds no cluster copy.
+const copyStatusOf = x => x.clusterCopy && x.clusterCopy.status;
+// notRunHere says that the cluster does not run the profile version x: its cluster copy is not on this cluster. The summary uses the
+// same rule, and gives such a record no newer version. A record with a finding has the status drift, and the rule holds for it too.
+const notRunHere = x => copyStatusOf(x) === COPY.NOT_ON_CLUSTER;
+// NEWER_STATE is what strata knows of a newer version of a pack. Strata does not look for a newer version of a pack of a profile version
+// that the cluster does not run, so such a pack is NOT_RUN, and never CURRENT. Each screen reads the state from newerStateOf. The state
+// is no word of the API, so its values are numbers.
+const NEWER_STATE = {NEWER: 0, NOT_CHECKED: 1, NOT_READ: 2, CURRENT: 3, NOT_RUN: 4};
+function newerStateOf(x, p) {
+  if (notRunHere(x)) return NEWER_STATE.NOT_RUN;
+  if (p.newer) return NEWER_STATE.NEWER;
+  if (p.status === STATUS.NOT_CHECKED) return NEWER_STATE.NOT_CHECKED;
+  return versionsRead() ? NEWER_STATE.CURRENT : NEWER_STATE.NOT_READ;
+}
 // movePackOf finds a pack in the move of a profile to its newest version. It is undefined when the move does not change the pack, and
 // when strata did not compare the record with that version.
 const movePackOf = (x, key) => x.newerVersion && x.newerVersion.move ? x.newerVersion.move.packs.find(q => q.key === key) : undefined;
@@ -516,8 +532,8 @@ const impactCell = (subject, p, row) => moveUnread(subject, p) ? badge("y", "Not
 const readErrorOf = subject => causeNames(CAUSE.READ_ERROR, subject);
 // CARRIED_WORDS tells why a side with no change reads as not checked.
 const CARRIED_WORDS = "The last read failed, so strata cannot say that nothing changed.";
-// worstOf gives the status that wins in a list of statuses.
-const worstOf = list => SEVERITY.find(s => list.includes(s)) || STATUS.OK;
+// NOT_ON_CLUSTER_WORDS tell a record of a profile version that the cluster does not run, on its row and on its card of the cluster copy.
+const NOT_ON_CLUSTER_WORDS = "This cluster does not run this version.";
 // orNone shows a blank value as the word none.
 const orNone = v => v || "none";
 // clusterName names the cluster of the page.

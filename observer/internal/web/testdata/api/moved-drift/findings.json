@@ -1,0 +1,5 @@
+{
+  "findings": [
+    {"id":"138aeeacaeece422","kind":"published-changed","profile":"wilma-gateway@3.0.4","packs":["addon/traefik"],"impact":"in-place","alsoOnCluster":false,"reBaselineNeeded":false,"firstSeen":"2026-11-03T08:21:00Z","lastSeen":"2026-11-03T11:54:00Z","who":[{"time":"2026-11-03T08:12:00Z","actor":"Wilma Flintstone","actorType":"user","action":"updated the version"}],"whoUnread":false}
+  ]
+}
